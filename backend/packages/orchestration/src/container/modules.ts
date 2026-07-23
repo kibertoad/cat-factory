@@ -24,9 +24,7 @@ import {
   DocumentLinkService,
   DocumentPlannerService,
   EnvironmentConnectionService,
-  EnvironmentProvisioningService,
   EnvironmentTeardownService,
-  EnvironmentUserHandlerService,
   GitHubInstallationService,
   GitHubService,
   GitHubSyncService,
@@ -52,8 +50,12 @@ import { BoardService } from '../modules/board/BoardService.js'
 import { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { BootstrapService } from '../modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from '../modules/envConfigRepair/EnvConfigRepairService.js'
-import { EnvironmentTestService } from '../modules/environments/EnvironmentTestService.js'
 import { RequirementReviewService } from '../modules/requirements/RequirementReviewService.js'
+import {
+  buildEnvironmentProvisioningService,
+  buildEnvironmentTestService,
+  buildEnvironmentUserHandlerService,
+} from './environmentsModule.factory.js'
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
@@ -434,20 +436,7 @@ export function createEnvironmentsModule(
   // local-mode-only, with no runtime branch in shared code). Its `resolveOverrides` is the
   // `resolveUserHandlerOverrides` seam the provisioning service layers over the workspace
   // handlers for the run initiator.
-  const userHandlerService = deps.environmentUserHandlerRepository
-    ? new EnvironmentUserHandlerService({
-        userHandlerRepository: deps.environmentUserHandlerRepository,
-        environmentBackendRegistry:
-          deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),
-        secretCipher,
-        clock: deps.clock,
-        ...(deps.environmentCustomTlsSupported !== undefined
-          ? { customTlsSupported: deps.environmentCustomTlsSupported }
-          : {}),
-        ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
-        ...(deps.logger ? { logger: deps.logger } : {}),
-      })
-    : undefined
+  const userHandlerService = buildEnvironmentUserHandlerService(deps, secretCipher)
   // Built BEFORE the provisioning service so it can be injected as `environmentTeardown` there:
   // a deployer re-run that supersedes a prior env with a DIFFERENT provider identity tears the old
   // infra down through this service (best-effort; the TTL reaper is the backstop).
@@ -458,62 +447,26 @@ export function createEnvironmentsModule(
     clock: deps.clock,
     ...(provisioningLog ? { provisioningLog } : {}),
   })
-  const provisioningService = new EnvironmentProvisioningService({
+  const provisioningService = buildEnvironmentProvisioningService({
+    deps,
     connectionService,
     environmentRegistryRepository,
     secretCipher,
-    idGenerator: deps.idGenerator,
-    clock: deps.clock,
-    environmentTeardown: teardownService,
-    ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
-    ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
-    ...(deps.resolveRepoFilesForCoords
-      ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
-      : {}),
-    ...(userHandlerService
-      ? {
-          resolveUserHandlerOverrides: (userId, ws) =>
-            userHandlerService.resolveOverrides(userId, ws),
-        }
-      : {}),
-    // The async, container-backed deploy lifecycle (kustomize/helm) is wired when the facade
-    // supplies the runner transport + the clone-target resolver; absent ⇒ only the synchronous
-    // raw-manifest REST path runs (a render-needing config fails loudly).
-    ...(deps.deployJobClient ? { deployJobClient: deps.deployJobClient } : {}),
-    ...(deps.resolveDeployCloneTarget
-      ? { resolveDeployCloneTarget: deps.resolveDeployCloneTarget }
-      : {}),
-    // A compose stack recipe's `sharedStackRefs` are brought up (provider-before-consumer) through
-    // the shared-stack service, whose managed networks the compose provider attaches the per-PR
-    // project to. Wired only when the shared-stacks module exists (its repository is present on
-    // every facade); the lifecycle itself refuses without a host daemon.
-    ...(sharedStackService
-      ? { ensureSharedStacks: (ws, refs) => sharedStackService.ensureRefsUp(ws, refs) }
-      : {}),
-    // A compose stack recipe's `prerequisites` are re-run at provision start through the preflight
-    // service, whose host probes exist only on the local facade; absent ⇒ a recipe that declares
-    // them fails loudly instead of silently skipping a machine-prerequisite gate.
-    ...(preflightService ? { runPreflights: (_ws, refs) => preflightService.run(refs) } : {}),
-    ...(provisioningLog ? { provisioningLog } : {}),
+    teardownService,
+    userHandlerService,
+    sharedStackService,
+    preflightService,
+    provisioningLog,
   })
   // The ephemeral-environment self-test: needs its own run store + a git provider (to
   // create/delete the throwaway branch). Absent either ⇒ no self-test (the controller 503s).
-  const environmentTest =
-    deps.environmentTestRunRepository && deps.resolveRunRepoContext
-      ? new EnvironmentTestService({
-          environmentTestRunRepository: deps.environmentTestRunRepository,
-          workspaceRepository: deps.workspaceRepository,
-          blockRepository: deps.blockRepository,
-          provisioning: provisioningService,
-          teardown: teardownService,
-          environmentRegistry: environmentRegistryRepository,
-          resolveRunRepoContext: deps.resolveRunRepoContext,
-          idGenerator: deps.idGenerator,
-          clock: deps.clock,
-          ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
-          ...(eventPublisher ? { eventPublisher } : {}),
-        })
-      : undefined
+  const environmentTest = buildEnvironmentTestService({
+    deps,
+    provisioningService,
+    teardownService,
+    environmentRegistryRepository,
+    eventPublisher,
+  })
 
   return {
     connectionService,

@@ -135,44 +135,54 @@ async function ensureDatabase(baseUrl: string, dbName: string): Promise<void> {
   }
 }
 
+/** The optional per-app knobs the conformance suites pass into {@link makeConformanceApp}. */
+type ConformanceAppOpts = {
+  cloudflareModelsEnabled?: boolean
+  resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+  resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
+  gateProviders?: GateProviderOverrides
+  environmentProvider?: CoreDependencies['environmentProvider']
+  resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+  deployJobClient?: CoreDependencies['deployJobClient']
+  resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
+  backendRegistries?: BackendRegistries
+  agentKindRegistry?: AgentKindRegistry
+  gateRegistry?: CoreDependencies['gateRegistry']
+  stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
+  initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+  taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  taskSourceProviders?: CoreDependencies['taskSourceProviders']
+  detectionConventions?: CoreDependencies['detectionConventions']
+}
+
+/** Copy only the truthy-valued keys of `obj` — the object-literal form of `...(v ? { k: v } : {})`. */
+function onlyTruthy<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    if (obj[key]) out[key] = obj[key]
+  }
+  return out
+}
+
 /**
- * Build one app over the shared Postgres with a deterministic agent + no-op durable
- * runner (the suite advances runs itself via `drive`). Mirrors the Worker test
- * helper's `makeApp`, so the shared conformance harness is a thin adapter.
+ * The core-dependency overrides, split out of {@link makeConformanceApp} to keep it within the
+ * complexity budget. Behaviour-neutral: each optional override still lands only when the suite
+ * supplies it (the `onlyTruthy` filter mirrors the prior `...(v ? {} : {})` spreads).
  */
-export function makeConformanceApp(
-  db: DrizzleDb,
-  agentOptions?: FakeAgentOptions,
-  opts?: {
-    cloudflareModelsEnabled?: boolean
-    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
-    resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
-    gateProviders?: GateProviderOverrides
-    environmentProvider?: CoreDependencies['environmentProvider']
-    resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
-    deployJobClient?: CoreDependencies['deployJobClient']
-    resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
-    backendRegistries?: BackendRegistries
-    agentKindRegistry?: AgentKindRegistry
-    gateRegistry?: CoreDependencies['gateRegistry']
-    stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
-    initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
-    taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
-    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
-    taskSourceProviders?: CoreDependencies['taskSourceProviders']
-    detectionConventions?: CoreDependencies['detectionConventions']
-  },
-): ConformanceApp {
+function buildConformanceOverrides(
+  recorder: RecordingEventPublisher,
+  agentOptions: FakeAgentOptions | undefined,
+  opts: ConformanceAppOpts | undefined,
+): Partial<CoreDependencies> {
+  const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
   // (so it detects the custom kind's structured output) and the container (prompts + snapshot).
   const agentExecutorOptions: FakeAgentOptions = {
     ...agentOptions,
-    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(o.agentKindRegistry ? { agentKindRegistry: o.agentKindRegistry } : {}),
   }
-  // Record emitted run snapshots so the suite can assert intermediate transitions
-  // (e.g. the model present on the first "spinning up container" emit).
-  const recorder = new RecordingEventPublisher()
-  const overrides: Partial<CoreDependencies> = {
+  return {
     agentExecutor: agentOptions?.asyncKinds?.length
       ? new AsyncFakeAgentExecutor(agentExecutorOptions)
       : new FakeAgentExecutor(agentExecutorOptions),
@@ -195,40 +205,59 @@ export function makeConformanceApp(
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
     // Postgres without hitting the network. Override wins over the config providers.
-    taskSourceProviders: opts?.taskSourceProviders ?? [
+    taskSourceProviders: o.taskSourceProviders ?? [
       new FakeTaskSourceProvider('jira'),
       new FakeTaskSourceProvider('linear'),
     ],
-    // Inject the engine's run-repo resolver (a fake in the suite) so the registered
-    // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
-    ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),
-    // Inject the binary-artifact store resolver so the suite drives the start-time
-    // binary-storage gate deterministically (Node defaults storage OFF, so a non-null
-    // resolver is needed to assert a storage-reliant pipeline starts).
-    ...(opts?.resolveBinaryArtifactStore
-      ? { resolveBinaryArtifactStore: opts.resolveBinaryArtifactStore }
-      : {}),
-    // Inject a fake environment provider (the internal override) + the block-less coords
-    // resolver (both fakes in the suite) so the on-demand repo-config validate route is
-    // asserted end-to-end against real Postgres, identically to the Worker.
-    ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
-    ...(opts?.resolveRepoFilesForCoords
-      ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
-      : {}),
-    // Inject the deployment-level detection-convention extensions (a fake in the suite) so
-    // convention-honouring service-provisioning detection is asserted against real Postgres,
-    // identically to the Worker — catching a facade that forgot the config→deps threading.
-    ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
-    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
-    // full QC loop is driven against real Postgres without a model, identically to the Worker.
-    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
-    // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
-    // the suite drives the container render path through Node's wiring, identically to the Worker.
-    ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
-    ...(opts?.resolveDeployCloneTarget
-      ? { resolveDeployCloneTarget: opts.resolveDeployCloneTarget }
-      : {}),
+    // Each override below lands only when the suite supplies it (mirrors the prior
+    // `...(v ? { k: v } : {})` spreads): the engine's run-repo resolver, the binary-artifact
+    // store resolver, a fake env provider + block-less coords resolver, detection-convention
+    // extensions, the QC companion's inline reviewer, and the async deploy lifecycle (a fake
+    // deploy-job client + clone-target resolver).
+    ...onlyTruthy({
+      resolveRunRepoContext: o.resolveRunRepoContext,
+      resolveBinaryArtifactStore: o.resolveBinaryArtifactStore,
+      environmentProvider: o.environmentProvider,
+      resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
+      detectionConventions: o.detectionConventions,
+      testerQualityReviewer: o.testerQualityReviewer,
+      deployJobClient: o.deployJobClient,
+      resolveDeployCloneTarget: o.resolveDeployCloneTarget,
+    }),
   }
+}
+
+/**
+ * The app-owned registry options threaded into `buildNodeContainer`, split out of
+ * {@link makeConformanceApp}. Each lands only when the matching suite supplies it, so the
+ * container resolves it by reference — the SAME instance the fake executor got.
+ */
+function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
+  const o = opts ?? {}
+  return onlyTruthy({
+    backendRegistries: o.backendRegistries,
+    agentKindRegistry: o.agentKindRegistry,
+    gateRegistry: o.gateRegistry,
+    stepResolverRegistry: o.stepResolverRegistry,
+    initiativePresetRegistry: o.initiativePresetRegistry,
+    taskTypeRegistry: o.taskTypeRegistry,
+  })
+}
+
+/**
+ * Build one app over the shared Postgres with a deterministic agent + no-op durable
+ * runner (the suite advances runs itself via `drive`). Mirrors the Worker test
+ * helper's `makeApp`, so the shared conformance harness is a thin adapter.
+ */
+export function makeConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: ConformanceAppOpts,
+): ConformanceApp {
+  // Record emitted run snapshots so the suite can assert intermediate transitions
+  // (e.g. the model present on the first "spinning up container" emit).
+  const recorder = new RecordingEventPublisher()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
   const container = buildNodeContainer({
     db,
     env: TEST_ENV,
@@ -241,22 +270,9 @@ export function makeConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     // Re-wire any faked gate providers after the build's reset (the suite drives the CI gate).
     gateProviders: opts?.gateProviders,
-    // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
-    // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
-    ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
-    // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the custom-kind
-    // suite) so the container resolves it by reference — the SAME instance the fake executor got.
-    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
-    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
-    ...(opts?.stepResolverRegistry ? { stepResolverRegistry: opts.stepResolverRegistry } : {}),
-    // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
-    // custom-preset suite) so the container resolves it by reference on this runtime.
-    ...(opts?.initiativePresetRegistry
-      ? { initiativePresetRegistry: opts.initiativePresetRegistry }
-      : {}),
-    // Inject the app-owned task-type registry (pre-loaded with a custom task type in the
-    // custom-task-type suite) so the container resolves it by reference on this runtime.
-    ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
+    // Inject the app-owned registries (pre-loaded with custom kinds/preset/task-type in the
+    // matching suites) so each is resolved by reference — the SAME instance the fake executor got.
+    ...buildContainerRegistryOptions(opts),
   })
   const app = createApp(container, TEST_ENV)
 

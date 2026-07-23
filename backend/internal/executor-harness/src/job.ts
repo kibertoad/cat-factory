@@ -1124,6 +1124,24 @@ function isReservedEnvName(key: string): boolean {
   return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
 }
 
+/**
+ * Collect only string→string entries from a raw `env` bag. A non-string value is dropped so a
+ * malformed binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved
+ * names that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
+ * dropped too: they are spread over `process.env` at build time, so a binding named `PATH` would
+ * replace it with a URL and the build would no longer find its tools. Extracted from the infra
+ * parsers to keep their cyclomatic complexity down.
+ */
+function parseInfraEnv(raw: unknown): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (typeof raw === 'object' && raw !== null) {
+    for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
+    }
+  }
+  return env
+}
+
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
 function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const packageManager =
@@ -1133,17 +1151,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const serveMode = o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
   const envInjection =
     o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
-  // Only string→string entries survive; a non-string value is dropped so a malformed
-  // binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved names
-  // that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
-  // dropped too: they are spread over `process.env` at build time, so a binding named `PATH`
-  // would replace it with a URL and the build would no longer find its tools.
-  const env: Record<string, string> = {}
-  if (typeof o.env === 'object' && o.env !== null) {
-    for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
-      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
-    }
-  }
+  const env = parseInfraEnv(o.env)
   const servePort = port(o.servePort)
   const wiremockPort = port(o.wiremockPort)
   // The app's monorepo subdirectory becomes the install/build/serve cwd, so it goes through the
@@ -1376,11 +1384,7 @@ function assembleAgentJob(
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),
     branch: str(o.branch, 'branch'),
-    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
-    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
-    ...(o.webSearch === true ? { webSearch: true } : {}),
-    ...(o.full === true ? { full: true } : {}),
-    ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
+    ...collectOptionalRequestFields(o),
     ...(bootstrap ? { bootstrap } : {}),
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
@@ -1388,20 +1392,36 @@ function assembleAgentJob(
     ...(skill ? { skill } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
     ...(infra ? { infra } : {}),
-    ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
-    ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
-    ...(typeof o.commitMessage === 'string' && o.commitMessage
-      ? { commitMessage: o.commitMessage }
-      : {}),
     ...(pr ? { pr } : {}),
     ...(peerRepos.length ? { peerRepos } : {}),
     ...(referenceRepos.length ? { referenceRepos } : {}),
     ...(referenceBranches.length ? { referenceBranches } : {}),
     ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
+    ...(guardLimits ? { guardLimits } : {}),
+    ...(validation ? { validation } : {}),
+  }
+}
+
+/**
+ * The optional {@link AgentJob} fields read directly off the request `o` (booleans + trimmed
+ * strings). Extracted from {@link assembleAgentJob} to keep its cyclomatic complexity down; every
+ * key is unique so grouping the conditional spreads is behaviour-neutral (spread order is
+ * irrelevant with no colliding keys).
+ */
+function collectOptionalRequestFields(o: Record<string, unknown>): Partial<AgentJob> {
+  return {
+    ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
+    ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
+    ...(o.webSearch === true ? { webSearch: true } : {}),
+    ...(o.full === true ? { full: true } : {}),
+    ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
+    ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
+    ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),
+    ...(typeof o.commitMessage === 'string' && o.commitMessage
+      ? { commitMessage: o.commitMessage }
+      : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
-    ...(guardLimits ? { guardLimits } : {}),
-    ...(validation ? { validation } : {}),
   }
 }

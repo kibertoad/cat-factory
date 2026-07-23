@@ -722,6 +722,71 @@ export function buildContextSource(build: unknown): string | null {
 }
 
 /**
+ * Collect the unsupported / host-escape issues a single compose `service` raises: cross-file
+ * `extends.file`, a `build:` context, `privileged: true`, bind mounts, and `env_file`s.
+ * `refuseHostPath` encodes the mode's host-path policy (identical to the caller's).
+ */
+function collectServiceComposeIssues(
+  name: string,
+  service: ComposeService,
+  build: boolean,
+  baseDepth: number,
+  refuseHostPath: (source: string) => boolean,
+): string[] {
+  const issues: string[] = []
+  // Cross-file `extends: { file }` merges another file from disk — same bypass as include.
+  const extendsFile =
+    service.extends && typeof service.extends === 'object'
+      ? (service.extends as Record<string, unknown>).file
+      : undefined
+  if (typeof extendsFile === 'string') {
+    issues.push(
+      `service '${name}' uses extends.file ('${extendsFile}') — unsupported (the referenced file is merged by the daemon and bypasses the isolation / host-escape checks)`,
+    )
+  }
+  const buildContext = buildContextSource(service.build)
+  if (buildContext !== null) {
+    if (!build) {
+      issues.push(
+        `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
+      )
+    } else if (escapesCheckout(buildContext, baseDepth)) {
+      issues.push(
+        `service '${name}' builds from a context outside the checkout ('${buildContext}') — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  if (service.privileged === true) {
+    issues.push(`service '${name}' requests privileged: true — refused on the shared host daemon`)
+  }
+  for (const volume of asArray(service.volumes)) {
+    const source = bindMountSource(volume)
+    if (source === null) continue
+    if (!build) {
+      issues.push(
+        `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
+      )
+    } else if (escapesCheckout(source, baseDepth)) {
+      issues.push(
+        `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  for (const entry of asArray(service.env_file)) {
+    const path = typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
+    if (typeof path !== 'string') continue
+    if (refuseHostPath(path)) {
+      issues.push(
+        build
+          ? `service '${name}' reads an env_file outside the checkout ('${path}') — refused (host-filesystem escape)`
+          : `service '${name}' reads an env_file ('${path}') — unsupported (no repo on disk)`,
+      )
+    }
+  }
+  return issues
+}
+
+/**
  * Collect references this backend cannot honor or must refuse, so a provision fails fast with a
  * clear reason instead of silently mis-mounting / over-privileging. The stack runs on the
  * operator's shared host daemon, so host access is a safety concern in BOTH modes.
@@ -766,56 +831,7 @@ export function collectUnsupportedComposeRefs(
   }
   for (const [name, service] of Object.entries(servicesOf(doc))) {
     if (!service || typeof service !== 'object') continue
-    // Cross-file `extends: { file }` merges another file from disk — same bypass as include.
-    const extendsFile =
-      service.extends && typeof service.extends === 'object'
-        ? (service.extends as Record<string, unknown>).file
-        : undefined
-    if (typeof extendsFile === 'string') {
-      issues.push(
-        `service '${name}' uses extends.file ('${extendsFile}') — unsupported (the referenced file is merged by the daemon and bypasses the isolation / host-escape checks)`,
-      )
-    }
-    const buildContext = buildContextSource(service.build)
-    if (buildContext !== null) {
-      if (!build) {
-        issues.push(
-          `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
-        )
-      } else if (escapesCheckout(buildContext, baseDepth)) {
-        issues.push(
-          `service '${name}' builds from a context outside the checkout ('${buildContext}') — refused (host-filesystem escape)`,
-        )
-      }
-    }
-    if (service.privileged === true) {
-      issues.push(`service '${name}' requests privileged: true — refused on the shared host daemon`)
-    }
-    for (const volume of asArray(service.volumes)) {
-      const source = bindMountSource(volume)
-      if (source === null) continue
-      if (!build) {
-        issues.push(
-          `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
-        )
-      } else if (escapesCheckout(source, baseDepth)) {
-        issues.push(
-          `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
-        )
-      }
-    }
-    for (const entry of asArray(service.env_file)) {
-      const path =
-        typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
-      if (typeof path !== 'string') continue
-      if (refuseHostPath(path)) {
-        issues.push(
-          build
-            ? `service '${name}' reads an env_file outside the checkout ('${path}') — refused (host-filesystem escape)`
-            : `service '${name}' reads an env_file ('${path}') — unsupported (no repo on disk)`,
-        )
-      }
-    }
+    issues.push(...collectServiceComposeIssues(name, service, build, baseDepth, refuseHostPath))
   }
   // Top-level `secrets:` / `configs:` with a host `file:` source are mounted into the service — the
   // same host-path escape surface as a bind mount, so judge them the same way.

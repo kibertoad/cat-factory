@@ -50,6 +50,11 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
  * Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its post-op to
  * coerce/render from. Called only when `result.custom !== undefined`.
  */
+/** The job summary trimmed, or a kind-specific fallback when the model returned none. */
+function summaryOr(result: RunnerJobResult, fallback: string): string {
+  return result.summary?.trim() || fallback
+}
+
 function coerceCustomResult(
   result: RunnerJobResult,
   agentKind: string | undefined,
@@ -59,7 +64,7 @@ function coerceCustomResult(
   if (agentKind === BLUEPRINTS_AGENT_KIND) {
     const service = coerceBlueprintService(result.custom, '')
     return {
-      output: result.summary?.trim() || 'Service blueprint updated.',
+      output: summaryOr(result, 'Service blueprint updated.'),
       ...(service ? { blueprintService: service } : {}),
     }
   }
@@ -75,15 +80,16 @@ function coerceCustomResult(
     const custom = result.custom as Record<string, unknown> | null
     if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
       return {
-        output:
-          result.summary?.trim() ||
+        output: summaryOr(
+          result,
           'No business requirements to specify — this is a technical task.',
+        ),
         noBusinessSpecs: true,
       }
     }
     const spec = coerceSpecDoc(result.custom, '')
     return {
-      output: result.summary?.trim() || 'Service specification updated.',
+      output: summaryOr(result, 'Service specification updated.'),
       ...(spec ? { spec } : {}),
     }
   }
@@ -93,19 +99,19 @@ function coerceCustomResult(
   if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
     const plan = coerceInitiativePlan(result.custom)
     return {
-      output: result.summary?.trim() || 'Initiative plan drafted.',
+      output: summaryOr(result, 'Initiative plan drafted.'),
       ...(plan ? { initiativePlan: plan } : {}),
     }
   }
   if (agentKind === MERGER_AGENT_KIND) {
     return {
-      output: result.summary?.trim() || 'Pull request assessed.',
+      output: summaryOr(result, 'Pull request assessed.'),
       mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
     }
   }
   if (agentKind === ON_CALL_AGENT_KIND) {
     return {
-      output: result.summary?.trim() || 'Release regression investigated.',
+      output: summaryOr(result, 'Release regression investigated.'),
       onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
     }
   }
@@ -114,7 +120,7 @@ function coerceCustomResult(
   // `coerceTestReport`, re-applied defensively by the TesterController).
   if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
     return {
-      output: result.summary?.trim() || 'Testing complete.',
+      output: summaryOr(result, 'Testing complete.'),
       testReport: coerceTestReport(result.custom, result.summary),
       // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
       // the engine can persist its captured logs on the Tester step. Harness-produced, so
@@ -123,7 +129,7 @@ function coerceCustomResult(
     }
   }
   return {
-    output: result.summary?.trim() || 'Agent run complete.',
+    output: summaryOr(result, 'Agent run complete.'),
     custom: result.custom,
   }
 }

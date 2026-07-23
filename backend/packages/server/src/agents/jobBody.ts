@@ -290,6 +290,39 @@ function buildRegisteredAgentBody(
 }
 
 /**
+ * The optional sibling-checkout legs of a coding job: the multi-repo peer repos (each opening the
+ * SAME work branch + an equivalent PR when this kind opens PRs, otherwise resumed in place / seeded
+ * with no PR), the read-only reference repos (forwarded as-is — `{ repo }`-shaped, no branch/PR, so
+ * the harness clones and skips them in the push phase), and the read-only reference branches. Each
+ * is `undefined` when empty so the body spreads read cleanly. Extracted from
+ * {@link buildCodingAgentBody} to keep it under the complexity ceiling — behaviour is byte-identical.
+ */
+function buildCodingRepoLegs(
+  parts: KindBodyParts,
+  args: { opensPr: boolean; workBranch: string; pr: { title: string; body: string } },
+): {
+  peerRepos?: Record<string, unknown>[]
+  referenceRepos?: { repo: Record<string, unknown> }[]
+  referenceBranches?: string[]
+} {
+  const { opensPr, workBranch, pr } = args
+  // The peer set is gated upstream (see MULTI_REPO_FANOUT_KINDS / a registered kind's
+  // `fanOutMultiRepo`); the conflict-resolver never reaches here with peers set (it stays
+  // single-repo). A peer leg carries `pr` only when this kind opens PRs.
+  const peerRepos = parts.peerRepos?.length
+    ? parts.peerRepos.map((p) => ({
+        repo: p.repo,
+        ...(p.frameId ? { frameId: p.frameId } : {}),
+        newBranch: workBranch,
+        ...(opensPr ? { pr } : {}),
+      }))
+    : undefined
+  const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
+  const referenceBranches = parts.referenceBranches?.length ? parts.referenceBranches : undefined
+  return { peerRepos, referenceRepos, referenceBranches }
+}
+
+/**
  * The `container-coding` job body: branch off base onto the deterministic work branch, push it and
  * open a PR (coder-like); or, when the kind targets the PR branch, work in place and push back with
  * no new PR (fixer-like). Extracted verbatim from {@link buildRegisteredAgentBody} so each function
@@ -325,27 +358,11 @@ function buildCodingAgentBody(
     // `not_reproducible`) treats it as a clean non-event.
     const opensPr = !onPr && step.opensPr !== false
     const noChangesIsError = !onPr && step.noChangesTolerated !== true
-    // Multi-repo fan-out (service-connections phases 3–4): clone each connected involved-service
-    // repo as a sibling. A PR-opening implementer (`opensPr`) opens the SAME work branch + an
-    // equivalent PR in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push
-    // fixes onto the existing peer PRs, and a seed-only kind (`repro-test`) pushes the work branch
-    // per repo with no PR — so a peer leg carries `pr` only when this kind opens PRs. The peer set
-    // is gated upstream (see MULTI_REPO_FANOUT_KINDS / a registered kind's `fanOutMultiRepo`); the
-    // conflict-resolver never reaches here with peers set (it stays single-repo).
-    const peerRepos = parts.peerRepos?.length
-      ? parts.peerRepos.map((p) => ({
-          repo: p.repo,
-          ...(p.frameId ? { frameId: p.frameId } : {}),
-          newBranch: workBranch,
-          ...(opensPr ? { pr } : {}),
-        }))
-      : undefined
-    // Read-only reference repos (doc-writer): forwarded as-is — already `{ repo }`-shaped with NO
-    // branch/PR fields (unlike the peer legs above, which add `newBranch`/`pr`), so the harness
-    // clones each and skips it in the push phase. Kept as its own binding so the `undefined`-when-
-    // empty spread below reads the same as `peerRepos`.
-    const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
-    const referenceBranches = parts.referenceBranches?.length ? parts.referenceBranches : undefined
+    const { peerRepos, referenceRepos, referenceBranches } = buildCodingRepoLegs(parts, {
+      opensPr,
+      workBranch,
+      pr,
+    })
     return {
       kind: 'agent',
       body: {

@@ -150,65 +150,9 @@ export class WebhookService {
         )
         return
       }
-      case 'push': {
-        const repoId = this.repoIdOf(root)
-        if (repoId === null) return
-        // Update the pushed branch head and project the new commits.
-        const ref = typeof root.ref === 'string' ? root.ref : ''
-        const after = typeof root.after === 'string' ? root.after : ''
-        const commits = Array.isArray(root.commits) ? (root.commits as GhCommitPayload[]) : []
-        await this.forEachLinkedWorkspace(installationId, repoId, async (ws) => {
-          if (ref.startsWith('refs/heads/') && after) {
-            await this.deps.branchProjectionRepository.upsertMany(ws, [
-              {
-                repoGithubId: repoId,
-                name: ref.slice('refs/heads/'.length),
-                headSha: after,
-                protected: false,
-                syncedAt: now,
-              },
-            ])
-          }
-          if (commits.length > 0) {
-            await this.deps.commitProjectionRepository.upsertMany(
-              ws,
-              commits.map((c) => toCommitProjection(c, repoId, now)),
-            )
-          }
-        })
-        // The remaining freshness fan-outs are branch-head concerns (skill sources track a
-        // branch ref; a tag push never moves it), and need the repo's owner/name.
-        const repo = asObject(root.repository)
-        const owner = asObject(repo?.owner)?.login
-        const name = repo?.name
-        if (!ref.startsWith('refs/heads/') || typeof owner !== 'string' || typeof name !== 'string')
-          return
-        // Drop the pushed branch's cached RepoFiles reads (slice 4). Workspace-independent —
-        // the cache is grouped by installation+repo+branch — so one call, outside the fan-out.
-        if (this.deps.repoFilesCache) {
-          await this.deps.repoFilesCache.invalidateGroup(
-            repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
-          )
-        }
-        // Skill-source freshness fan-out (slice 4): a branch push may have changed a linked skill
-        // directory, so resync every skill source that TRACKS the pushed branch. One indexed
-        // lookup, then a targeted async resync per matching source (typically zero or one). Sources
-        // that track a different branch are skipped here — a source's dir can't have moved on a
-        // branch it doesn't follow, so enqueuing them would only queue guaranteed no-op resyncs.
-        // Skipping is always safe: the dispatch-time head-commit probe is the correctness backstop,
-        // so a missed enqueue costs at most a warm-up, never a stale run.
-        if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
-          const pushedBranch = ref.slice('refs/heads/'.length)
-          const defaultBranch =
-            typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
-          const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
-          for (const source of sources) {
-            if (!pushAffectsSkillSource(source.gitRef, pushedBranch, defaultBranch)) continue
-            await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
-          }
-        }
+      case 'push':
+        await this.handlePush(installationId, root, now)
         return
-      }
       case 'check_run': {
         const check = asObject(root.check_run) as GhCheckRunPayload | null
         const repoId = this.repoIdOf(root)
@@ -223,6 +167,66 @@ export class WebhookService {
       default:
         // Unhandled event kind: nothing to project incrementally.
         return
+    }
+  }
+
+  /** Project a `push` delivery: update the pushed branch head + commits, then run the branch-head freshness fan-outs. */
+  private async handlePush(installationId: number, root: Json, now: number): Promise<void> {
+    const repoId = this.repoIdOf(root)
+    if (repoId === null) return
+    // Update the pushed branch head and project the new commits.
+    const ref = typeof root.ref === 'string' ? root.ref : ''
+    const after = typeof root.after === 'string' ? root.after : ''
+    const commits = Array.isArray(root.commits) ? (root.commits as GhCommitPayload[]) : []
+    await this.forEachLinkedWorkspace(installationId, repoId, async (ws) => {
+      if (ref.startsWith('refs/heads/') && after) {
+        await this.deps.branchProjectionRepository.upsertMany(ws, [
+          {
+            repoGithubId: repoId,
+            name: ref.slice('refs/heads/'.length),
+            headSha: after,
+            protected: false,
+            syncedAt: now,
+          },
+        ])
+      }
+      if (commits.length > 0) {
+        await this.deps.commitProjectionRepository.upsertMany(
+          ws,
+          commits.map((c) => toCommitProjection(c, repoId, now)),
+        )
+      }
+    })
+    // The remaining freshness fan-outs are branch-head concerns (skill sources track a
+    // branch ref; a tag push never moves it), and need the repo's owner/name.
+    const repo = asObject(root.repository)
+    const owner = asObject(repo?.owner)?.login
+    const name = repo?.name
+    if (!ref.startsWith('refs/heads/') || typeof owner !== 'string' || typeof name !== 'string')
+      return
+    // Drop the pushed branch's cached RepoFiles reads (slice 4). Workspace-independent —
+    // the cache is grouped by installation+repo+branch — so one call, outside the fan-out.
+    if (this.deps.repoFilesCache) {
+      await this.deps.repoFilesCache.invalidateGroup(
+        repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
+      )
+    }
+    // Skill-source freshness fan-out (slice 4): a branch push may have changed a linked skill
+    // directory, so resync every skill source that TRACKS the pushed branch. One indexed
+    // lookup, then a targeted async resync per matching source (typically zero or one). Sources
+    // that track a different branch are skipped here — a source's dir can't have moved on a
+    // branch it doesn't follow, so enqueuing them would only queue guaranteed no-op resyncs.
+    // Skipping is always safe: the dispatch-time head-commit probe is the correctness backstop,
+    // so a missed enqueue costs at most a warm-up, never a stale run.
+    if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
+      const pushedBranch = ref.slice('refs/heads/'.length)
+      const defaultBranch =
+        typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
+      const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
+      for (const source of sources) {
+        if (!pushAffectsSkillSource(source.gitRef, pushedBranch, defaultBranch)) continue
+        await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
+      }
     }
   }
 

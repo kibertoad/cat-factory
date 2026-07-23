@@ -1777,19 +1777,19 @@ async function buildSecretInjections(
  * `manifestRootCandidates`, overlays as `overlayCandidates`, and any monorepo slices as
  * `serviceDirCandidates` — none auto-applied beyond the pre-selected one.
  */
-async function buildKubernetesRecommendation(
+/**
+ * Resolve the deployable roots from `roots` (roots[0] is the chosen one). A Kustomize Component
+ * isn't independently deployable (`kustomize build` rejects it), so if the chosen slice is one,
+ * prefer the overlay that aggregates it (its `components:` parent); when no aggregator references
+ * it, keep the component but warn. Pushes the explanatory note(s) onto `notes`.
+ */
+async function resolveDeployableRoots(
   scanner: BudgetedRepoScanner,
   roots: KubernetesRoot[],
-  lookupRoot: string,
-  opts: KubernetesBuildOptions,
-): Promise<ProvisioningRecommendation> {
-  const notes: ProvisioningDetectionNote[] = []
+  notes: ProvisioningDetectionNote[],
+): Promise<{ effectiveRoots: KubernetesRoot[]; chosen: KubernetesRoot }> {
   let effectiveRoots = roots
   let chosen = effectiveRoots[0]!
-
-  // A Kustomize Component isn't independently deployable (`kustomize build` rejects it). If the chosen
-  // slice is one, prefer the overlay that aggregates it (its `components:` parent) so the recommended
-  // source actually renders; when no aggregator references it, keep the component but warn clearly.
   if (chosen.isComponent) {
     const aggregator = await resolveComponentAggregator(scanner, chosen.dir)
     if (aggregator) {
@@ -1808,7 +1808,18 @@ async function buildKubernetesRecommendation(
       })
     }
   }
+  return { effectiveRoots, chosen }
+}
 
+/**
+ * Push the service-directory provenance note: which shared-deploy slice was matched (when
+ * `opts.chosenSlice` is set), or — when only sibling slice candidates exist — that the colocated
+ * manifests were used with the shared slice offered as an alternative.
+ */
+function pushServiceDirNote(
+  notes: ProvisioningDetectionNote[],
+  opts: KubernetesBuildOptions,
+): void {
   if (opts.chosenSlice) {
     notes.push({
       field: 'serviceDir',
@@ -1826,6 +1837,18 @@ async function buildKubernetesRecommendation(
       message: `A root shared deploy directory also holds a slice named after this service; the colocated manifests were used. Pick the shared slice below if that is the deploy target instead.`,
     })
   }
+}
+
+async function buildKubernetesRecommendation(
+  scanner: BudgetedRepoScanner,
+  roots: KubernetesRoot[],
+  lookupRoot: string,
+  opts: KubernetesBuildOptions,
+): Promise<ProvisioningRecommendation> {
+  const notes: ProvisioningDetectionNote[] = []
+  const { effectiveRoots, chosen } = await resolveDeployableRoots(scanner, roots, notes)
+
+  pushServiceDirNote(notes, opts)
 
   const { path, renderer, overlayCandidates } = await resolveManifestSource(scanner, chosen)
 

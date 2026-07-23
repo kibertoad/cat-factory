@@ -43,7 +43,6 @@ import type {
 import {
   ConflictError,
   DEFAULT_RISK_POLICY,
-  failureKindFromHarnessCause,
   getErrorMessage,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -67,13 +66,7 @@ import type {
   EnvironmentProvisioningService,
 } from '@cat-factory/integrations'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
-import {
-  ANALYSIS_AGENT_KIND,
-  CONFLICTS_AGENT_KIND,
-  HUMAN_TEST_AGENT_KIND,
-  isTesterKind,
-  VISUAL_CONFIRM_AGENT_KIND,
-} from './ci.logic.js'
+import { ANALYSIS_AGENT_KIND, CONFLICTS_AGENT_KIND, HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
 import {
   classifyDispatchFailure,
   MAX_EVICTION_RECOVERIES,
@@ -92,6 +85,7 @@ import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
+import { PollCompletionController } from './PollCompletionController.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   resolveForkTriState,
@@ -276,6 +270,8 @@ export class RunDispatcher {
   private readonly repoOps: RunRepoOpsController
   /** Driver-side PR deep-review resolution (`fix` / `post`), extracted as a cohesive collaborator. */
   private readonly prReviewResolution: PrReviewResolutionController
+  /** Settled-agent-poll completion (helper-phase branches + `failed` handling), extracted collaborator. */
+  private readonly pollCompletion: PollCompletionController
   /**
    * The Follow-up companion gate (the future-looking Coder's streamed items, the
    * park-until-decided gate, and the human-action API), extracted to
@@ -385,6 +381,20 @@ export class RunDispatcher {
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       handleAgentStep: (ctx, dispatchKind, augment) =>
         this.handleAgentStep(ctx, dispatchKind, augment),
+    })
+    this.pollCompletion = new PollCompletionController({
+      blockRepository: deps.blockRepository,
+      clock: deps.clock,
+      runStateMachine: deps.runStateMachine,
+      testerController: deps.testerController,
+      humanTestController: deps.humanTestController,
+      visualConfirmationController: deps.visualConfirmationController,
+      prReviewController: deps.prReviewController,
+      recordBackendDiagnostics: (instance, backend) =>
+        this.recordBackendDiagnostics(instance, backend),
+      recoverContainerEviction: (ws, instance, step, error, evicted) =>
+        this.recoverContainerEviction(ws, instance, step, error, evicted),
+      markContainerErrored: (ws, instance, step) => this.markContainerErrored(ws, instance, step),
     })
     // Assemble the seam the extracted dispatch-registry builders close over: the collaborators
     // above + bound call-backs into this dispatcher's completion / gate / phase methods, so the
@@ -817,112 +827,19 @@ export class RunDispatcher {
       return this.reprobeGateAfterHelper(reprobeGate, { workspaceId, instance, step, update })
     }
 
-    // A `tester` step in its `fixing` phase has a Fixer job in flight, NOT the
-    // step's own work: when it finishes (or fails) we drop the handle, return to
-    // `testing`, and re-dispatch the Tester against the (now-fixed) branch — its
-    // fresh report then drives greenlight-or-loop again. Mirrors the CI gate.
-    if (isTesterKind(step.agentKind) && step.test?.phase === 'fixing') {
-      // Record this fixer round (what it was handed + how it ended) so the test window can
-      // show an inspectable timeline of the otherwise-opaque fixer sub-jobs. Persisted as
-      // part of the re-dispatch below.
-      this.testerController.recordFixerOutcome(
-        step,
-        update.state === 'done'
-          ? { state: 'done', output: update.result.output ?? null }
-          : { state: 'failed', error: update.error ?? null },
-        this.clock.now(),
-      )
-      step.jobId = undefined
-      step.subtasks = undefined
-      step.test.phase = 'testing'
-      const block = await this.blockRepository.get(workspaceId, instance.blockId)
-      if (!block) return { kind: 'noop' }
-      // Reclaim the finished Fixer container before re-dispatching the Tester so it
-      // boots fresh against the just-pushed fixes (rather than re-attaching to the
-      // completed job by run id).
-      await this.runStateMachine.stopRunContainer(workspaceId, instance)
-      return this.testerController.dispatchTester(workspaceId, instance, step, block)
-    }
-
-    // A `human-test` gate in its `fixing` / `resolving_conflicts` phase has a helper job
-    // (fixer / conflict-resolver) in flight, NOT the step's own work: when it settles —
-    // done OR failed — record the round's outcome, rebuild the environment against the
-    // (now-updated) branch and re-park the human. We never fail the run here; the human is
-    // in control. Mirrors the Tester→Fixer loop.
-    if (
-      step.agentKind === HUMAN_TEST_AGENT_KIND &&
-      (step.humanTest?.phase === 'fixing' || step.humanTest?.phase === 'resolving_conflicts')
-    ) {
-      return this.humanTestController.onHelperComplete(workspaceId, instance, step, {
-        state: update.state === 'failed' ? 'failed' : 'done',
-      })
-    }
-
-    // A `visual-confirmation` gate in its `fixing` phase has a `fixer` job in flight: when it
-    // settles, record the round, refresh the screenshot pairs, and re-park the human.
-    if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND && step.visualConfirm?.phase === 'fixing') {
-      return this.visualConfirmationController.onHelperComplete(workspaceId, instance, step, {
-        state: update.state === 'failed' ? 'failed' : 'done',
-      })
-    }
+    // A helper job (Fixer / conflict-resolver) in flight for a tester / human-test /
+    // visual-confirmation gate is NOT the step's own work: settle that round and re-park/re-dispatch
+    // instead of recording a step result. Returns null when this step has no such helper in flight.
+    const phased = await this.pollCompletion.resolveHelperPhaseCompletion(
+      workspaceId,
+      instance,
+      step,
+      update,
+    )
+    if (phased) return phased
 
     if (update.state === 'failed') {
-      // Preserve the transport-reported backend (native host process vs. sandboxed container)
-      // BEFORE branching on eviction: a first-poll failure/eviction may never have hit the
-      // running branch that normally records it, and an evicted run is exactly the case a
-      // post-mortem inspects ("which backend evicted this?"). Idempotent, so it's harmless when
-      // the running branch already stamped it; whichever path upserts below persists it — the
-      // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
-      // on a genuine failure (failRun then re-reads from storage).
-      this.recordBackendDiagnostics(instance, update.backend)
-      // A container eviction (the per-run container vanished, its in-memory job is gone) is
-      // usually transient. The shared recovery drops the dead handle and returns `continue` so
-      // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
-      // budget (transient infra churn vs a crash/OOM); once the budget is spent it fails the run
-      // as `evicted`. Returns null for a genuine agent/job failure, handled below.
-      const recovered = await this.recoverContainerEviction(
-        workspaceId,
-        instance,
-        step,
-        update.error,
-        update.evicted,
-      )
-      if (recovered) return recovered
-      // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
-      // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK
-      // the review — a non-critical second opinion crashing must not fail the human's in-flight
-      // curation. Mirrors the human-test / visual-confirmation helper-failure branches above.
-      if (step.agentKind === PR_REVIEWER_KIND && step.prReview?.status === 'challenging') {
-        const settled = await this.prReviewController.recordChallengeFailure(
-          workspaceId,
-          instance,
-          step,
-          update.error,
-        )
-        if (settled) return settled
-      }
-      // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
-      // to classify it (→ AgentFailureKind), falling back to the error-string regex when an
-      // older image (or a pool transport that doesn't forward the cause) reported none — the
-      // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
-      // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
-      // Mark the container errored and persist so the failed details show it (failRun
-      // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
-      // the terminal frame, so markContainerErrored deliberately doesn't).
-      await this.markContainerErrored(workspaceId, instance, step)
-      return {
-        kind: 'job_failed',
-        error: update.error,
-        // Prefer the harness's structured cause; default to the coarse `agent` when it reported
-        // none (the watchdog-phrase string fallback is gone — current images always emit a cause).
-        failureKind: failureKindFromHarnessCause(update.failureCause) ?? 'agent',
-        detail: update.detail ?? update.error,
-        // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
-        // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
-        // machine-readable `reason` so a post-mortem sees it was e.g. a `git` push failure, not
-        // a generic agent error, without regrepping the transcript.
-        ...(update.failureCause ? { reason: update.failureCause } : {}),
-      }
+      return this.pollCompletion.handleFailedPoll(workspaceId, instance, step, update)
     }
 
     const block = await this.blockRepository.get(workspaceId, instance.blockId)

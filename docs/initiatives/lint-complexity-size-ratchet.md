@@ -1,11 +1,11 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `complexity` at **step 1.5 (40)**; `max-statements` at **step 2 (50)**;
+targets (4 / 4 / **6**); `complexity` at **step 2 (30)**; `max-statements` at **step 2 (50)**;
 `max-lines-per-function` at **step 1.5 (632)** for product code (test suites carved off into an
-`overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` / `max-statements` /
-`max-lines` / `max-lines-per-function` still need the remaining god-file refactors to reach their
-final targets · **Owner:** core · **Started:** 2026-07-20
+`overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` (→20) / `max-statements`
+(→30) / `max-lines` / `max-lines-per-function` still need the remaining god-file refactors to reach
+their final targets · **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -79,16 +79,41 @@ node scripts/lint-limits-report.mjs --top 15   # more offenders per rule
 Every rule below currently passes with **zero** violations because its `max` equals the
 worst offender. These are the starting ceilings, not the goal.
 
-| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                        |
-| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------- |
-| `complexity`             |      **40** |            **20** | at step 1.5 — floor 40 (`cli/args.ts`, `orchestration/container/modules.ts`)                |
-| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)  |
-| `max-lines-per-function` |     **632** |           **150** | product floor: `cloudflare/container.ts` (`buildContainer`, 631); tests: 2453 (`overrides`) |
-| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                            |
-| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                             |
-| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
-| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
+| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                                   |
+| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------------ |
+| `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
+| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)             |
+| `max-lines-per-function` |     **632** |           **150** | product floor: `cloudflare/container.ts` (`buildContainer`, 631); tests: 2453 (`overrides`)            |
+| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                       |
+| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                        |
+| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
+| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 
+> **Ninth pass (landed):** `complexity` reached **step 2 (40 → 30)** by splitting every one of the
+> ~34 functions above 30 along cohesive, behaviour-neutral seams (verified by the server /
+> orchestration / integrations / agents / cli unit suites, the executor-harness suite, and the Node
+> conformance suite on real Postgres; the Worker/conformance suites cover the rest in CI). The
+> god-file offenders drove three sibling-collaborator extractions that ALSO shrink their hosts: the
+> Worker `buildContainer`'s app-owned-registry resolution (38) → `container-registries.ts`
+> (`resolveWorkerRegistries`, container.ts 2719 → 2679); `RunDispatcher.pollAgentJobInner` (39) → a
+> new `PollCompletionController` holding the settled-poll branch tree (`resolveHelperPhaseCompletion`
+> and `handleFailedPoll`, RunDispatcher.ts 2491 → 2408); and `ExecutionService.stepInstance` (32) → a
+> `reentrancy.logic.ts` sibling (`isReentrantDecisionResume`, ExecutionService.ts 2792 → 2752). The
+> rest were in-file / options-object extractions across `cli/args.ts` (40), `orchestration`
+> `container/modules.ts` (40) plus `validateRegistrations`/`CompanionController`/`PipelineService`/
+> `BoardService`/`PrReviewResolutionController`, `server` `ContainerAgentExecutor`×2/`rpc.ts`/
+> `containerAgentResult`/`jobBody`, `integrations` `WebhookService`/`compose`/
+> `EnvironmentConnectionService`/`provision-detect`, `frontend` `usePipelineErrorToast`/
+> `KubernetesEnvironmentForm`, `node` `config.ts`, `local` `container.ts`, Worker
+> `WorkersAiLlmUpstream`, and the test harnesses (`conformance.spec.ts`, node/local `harness.ts`,
+> `FakeAgentExecutor`, `docs-refresh/preset.test.ts`). Three near-budget files that grew from
+> in-file helpers (`ContainerAgentExecutor.ts`, `rpc.ts`, `container/modules.ts`) had those helpers
+> relocated to sibling files rather than raising their `check-file-size.mjs` allowances. The
+> executor-harness image was bumped (harness `src/**` changed). The floor is now **30** (`buildContext`
+> / `RunnerPoolConnectionService` / the exactly-30 tail), so 30 lands with zero violations. **Why 30,
+> not step 3's 20:** the 20–30 band is the ~102-function long tail — a separate slice.
+> `max-statements` / `max-lines` / `max-lines-per-function` unchanged.
+>
 > **Eighth pass (landed):** `complexity` moved from **step 1 (60) to an intermediate step 1.5
 > (40)** by extracting cohesive helpers from the ten functions above 40 (all behaviour-neutral;
 > verified by the server / orchestration / agents unit suites + node config specs, with the
@@ -222,8 +247,8 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 | baseline  |   141 | —                                                                                                                                                                                                                                                                              | ✅ landed |
 | 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass                                                                             | ✅ landed |
 | 1.5       |    40 | (10) `jobBody` 54, `toRunResult` 53, `FakeAgentExecutor.run` 53, `ContainerAgentExecutor.pollJob` 47, harness `parseAgentJob` 47, node `buildAuthConfig` 46, `buildContext` 45, Worker auth 44, `coerceInitiativePlan` 42, `WorkspaceController` snapshot 42 — see eighth pass | ✅ landed |
-| 2         |    30 | (~44) — the 30–40 tail: Worker `buildContainer` 38 (blocked by its `max-lines` file split), `RunDispatcher` methods 39, `toRunResult`-shaped coercers, …                                                                                                                       | ☐ todo    |
-| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                                                                                                                                         | ☐ todo    |
+| 2         |    30 | (~34) — the 30–40 tail, incl. the god-files: Worker `buildContainer` 38 → `container-registries.ts`, `RunDispatcher.pollAgentJobInner` 39 → `PollCompletionController`, `ExecutionService.stepInstance` 32 → `reentrancy.logic.ts` — see ninth pass                            | ✅ landed |
+| 3 (final) |    20 | (~102) — ESLint's default; the 20–30 long tail                                                                                                                                                                                                                                 | ☐ todo    |
 
 ### `max-statements` — 157 → 30
 

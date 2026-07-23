@@ -160,26 +160,28 @@ describe('preset_docs_refresh — seedPlan (spawn decoration)', () => {
 
   it('derives placement paths and types per doc kind', () => {
     const items = new Map(seed(FULL_INPUTS).items.map((i) => [i.id, i]))
+    // Resolve the spawn / taskTypeFields once per id so the per-assertion optional chains stay
+    // shallow (behaviour-neutral: an absent item still short-circuits to `undefined`).
+    const spawnOf = (id: string) => items.get(id)?.spawn
+    const fieldsOf = (id: string) => items.get(id)?.spawn?.taskTypeFields
     // Foundations → a doc under the docs root.
-    expect(items.get('f1')?.spawn?.taskType).toBe('document')
-    expect(items.get('f1')?.spawn?.taskTypeFields?.targetPath).toBe('docs/create-docs-index.md')
+    expect(spawnOf('f1')?.taskType).toBe('document')
+    expect(fieldsOf('f1')?.targetPath).toBe('docs/create-docs-index.md')
     // Diagrams → a doc under the diagrams dir, docKind `other` (no `diagrams` DocKind).
-    expect(items.get('d1')?.spawn?.taskTypeFields?.docKind).toBe('other')
-    expect(items.get('d1')?.spawn?.taskTypeFields?.targetPath).toBe(
-      'docs/diagrams/billing-architecture.md',
-    )
+    expect(fieldsOf('d1')?.docKind).toBe('other')
+    expect(fieldsOf('d1')?.targetPath).toBe('docs/diagrams/billing-architecture.md')
     // README → a document task, docKind `reference`, but NO derived target path (writer-placed
     // beside the code from the description); the planner-authored agentConfig is preserved.
-    expect(items.get('r1')?.spawn?.taskType).toBe('document')
-    expect(items.get('r1')?.spawn?.taskTypeFields?.docKind).toBe('reference')
-    expect(items.get('r1')?.spawn?.taskTypeFields?.targetPath).toBeUndefined()
-    expect(items.get('r1')?.spawn?.agentConfig).toEqual({ 'playwright.e2eTarget': 'ci' })
+    expect(spawnOf('r1')?.taskType).toBe('document')
+    expect(fieldsOf('r1')?.docKind).toBe('reference')
+    expect(fieldsOf('r1')?.targetPath).toBeUndefined()
+    expect(spawnOf('r1')?.agentConfig).toEqual({ 'playwright.e2eTarget': 'ci' })
     // Comments → code edit, NOT a document task, and no `.md` target path.
-    expect(items.get('c1')?.spawn?.taskType).toBeUndefined()
-    expect(items.get('c1')?.spawn?.taskTypeFields).toBeUndefined()
+    expect(spawnOf('c1')?.taskType).toBeUndefined()
+    expect(fieldsOf('c1')).toBeUndefined()
     // Business rules → a document task, but no single target (multi-doc under a dir).
-    expect(items.get('b1')?.spawn?.taskType).toBe('document')
-    expect(items.get('b1')?.spawn?.taskTypeFields?.targetPath).toBeUndefined()
+    expect(spawnOf('b1')?.taskType).toBe('document')
+    expect(fieldsOf('b1')?.targetPath).toBeUndefined()
   })
 
   it('stamps the chosen writing-style fragments on every decorated item', () => {

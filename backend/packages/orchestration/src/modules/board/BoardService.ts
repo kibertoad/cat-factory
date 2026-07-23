@@ -614,6 +614,30 @@ export class BoardService {
     )
   }
 
+  /**
+   * For a REVIEW task, fold the target PR reference (URL / #number) and any review focus into the
+   * description so the read-only `pr-reviewer` (which clones the base branch and fetches the PR
+   * head by number) knows WHICH PR to review from its prompt. Returns the description unchanged
+   * for non-review tasks or when there is nothing to prepend. Split out of {@link addTask} to keep
+   * it under the complexity ceiling.
+   */
+  private buildReviewDescription(
+    taskType: Block['taskType'],
+    fields: Block['taskTypeFields'],
+    description: string,
+  ): string {
+    if (taskType !== 'review') return description
+    const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
+    const focus = fields?.reviewFocus?.trim()
+    const preamble = [
+      ref ? `Review pull request ${ref}.` : '',
+      focus ? `Review focus: ${focus}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+    return preamble ? [preamble, description].filter(Boolean).join('\n\n') : description
+  }
+
   /** Add a task inside a container (a service frame or a module). */
   async addTask(
     workspaceId: string,
@@ -657,23 +681,14 @@ export class BoardService {
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
     }
-    // A REVIEW task targets an existing open PR — fold its reference (URL / #number) and any
-    // review focus into the description so the read-only `pr-reviewer` (which clones the base
-    // branch and fetches the PR head by number) knows WHICH PR to review from its prompt.
-    if (taskType === 'review') {
-      const fields = block.taskTypeFields
-      const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
-      const focus = fields?.reviewFocus?.trim()
-      const preamble = [
-        ref ? `Review pull request ${ref}.` : '',
-        focus ? `Review focus: ${focus}` : '',
-      ]
-        .filter(Boolean)
-        .join(' ')
-      if (preamble) {
-        block.description = [preamble, block.description].filter(Boolean).join('\n\n')
-      }
-    }
+    // A REVIEW task targets an existing open PR — fold its reference + focus into the description
+    // so the read-only `pr-reviewer` knows WHICH PR to review from its prompt (see
+    // {@link buildReviewDescription}).
+    block.description = this.buildReviewDescription(
+      taskType,
+      block.taskTypeFields,
+      block.description,
+    )
     // Best-practice fragments the task OWNS from creation. A task owns its selection outright —
     // the engine folds these and does NOT re-union the service's fragments at run time, so a
     // per-task removal actually takes effect. The SERVICE-inherited set is the create form's
@@ -1023,61 +1038,24 @@ export class BoardService {
       const { serviceFragmentIds: _ignored, ...rest } = patch
       effective = rest
     }
-    // `serviceConnections` lives only on service-type frames (the consumer end of each
-    // edge); dropped elsewhere for the same never-persist-dead-data reason as above.
-    if (effective.serviceConnections !== undefined) {
-      if (block.level !== 'frame' || block.type !== 'service') {
-        const { serviceConnections: _ignored, ...rest } = effective
-        effective = rest
-      } else if (effective.serviceConnections.length) {
-        // Resolve targets from ONE home-workspace read; only ids not homed here (a
-        // service mounted from another workspace) fall back to the cross-home-aware
-        // per-id resolve — a bounded user-authored list, not a data-sized loop.
-        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-        const byId = new Map(homeBlocks.map((b) => [b.id, b]))
-        const resolved = new Map<string, Block>()
-        for (const { serviceBlockId } of effective.serviceConnections) {
-          if (byId.has(serviceBlockId) || resolved.has(serviceBlockId)) continue
-          const found = await this.resolveBlock(workspaceId, serviceBlockId).catch(() => null)
-          if (found) resolved.set(serviceBlockId, found.block)
-        }
-        const error = serviceConnectionsError(
-          id,
-          effective.serviceConnections,
-          (targetId) => byId.get(targetId) ?? resolved.get(targetId),
-        )
-        if (error) throw new ValidationError(error)
-      }
-    }
-    // `involvedServiceIds` is a task-level selection drawn from the enclosing service
-    // frame's connection neighbors; dropped on non-tasks, validated on tasks.
-    if (effective.involvedServiceIds !== undefined) {
-      if (block.level !== 'task') {
-        const { involvedServiceIds: _ignored, ...rest } = effective
-        effective = rest
-      } else if (effective.involvedServiceIds.length) {
-        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-        // A connection neighbor can be a service mounted from another workspace — the SPA
-        // offers those (it computes neighbors over the composed board), so validate against
-        // the same universe: resolve each selected id not homed here (cross-home aware) and
-        // fold its block in, so an INCOMING edge from a mounted foreign consumer counts as a
-        // neighbor too. A bounded user-authored list (contract-capped), not a data-sized loop.
-        const byId = new Set(homeBlocks.map((b) => b.id))
-        const foreign: Block[] = []
-        for (const sid of effective.involvedServiceIds) {
-          if (byId.has(sid)) continue
-          byId.add(sid)
-          const found = await this.resolveBlock(workspaceId, sid).catch(() => null)
-          if (found) foreign.push(found.block)
-        }
-        const error = involvedServiceIdsError(
-          [...homeBlocks, ...foreign],
-          block,
-          effective.involvedServiceIds,
-        )
-        if (error) throw new ValidationError(error)
-      }
-    }
+    // `serviceConnections` lives only on service-type frames; dropped elsewhere and validated on
+    // a service frame with edges (see {@link applyServiceConnectionsPatch}).
+    effective = await this.applyServiceConnectionsPatch(
+      effective,
+      block,
+      id,
+      homeWorkspaceId,
+      workspaceId,
+    )
+    // `involvedServiceIds` is a task-level selection drawn from the enclosing service frame's
+    // connection neighbors; dropped on non-tasks, validated on tasks (see
+    // {@link applyInvolvedServiceIdsPatch}).
+    effective = await this.applyInvolvedServiceIdsPatch(
+      effective,
+      block,
+      homeWorkspaceId,
+      workspaceId,
+    )
     // `referenceRepos` is a DOCUMENT-task-only attachment (read-only reference repos for the
     // `doc-writer` agent): the inspector shows the picker only for `taskType === 'document'`, and
     // the executor consumes it only for the doc-writer kind. Dropped on any other block (a frame, a
@@ -1118,6 +1096,88 @@ export class BoardService {
     // subscriber still receives the signal and refreshes.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id, originConnectionId)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+  }
+
+  /**
+   * Validate + narrow the `serviceConnections` patch field. It lives only on service-type frames
+   * (the consumer end of each edge), so it is dropped on any other block for the same
+   * never-persist-dead-data reason as `serviceFragmentIds`. On a service frame with edges each
+   * target is resolved from ONE home-workspace read — only ids not homed here (a service mounted
+   * from another workspace) fall back to the cross-home-aware per-id resolve, a bounded
+   * user-authored list, not a data-sized loop — and the edge list validated. Returns the
+   * (possibly-narrowed) patch; throws {@link ValidationError} on an invalid edge. Split out of
+   * {@link updateBlock} to keep it under the complexity ceiling.
+   */
+  private async applyServiceConnectionsPatch(
+    effective: UpdateBlockInput,
+    block: Block,
+    id: string,
+    homeWorkspaceId: string,
+    workspaceId: string,
+  ): Promise<UpdateBlockInput> {
+    if (effective.serviceConnections === undefined) return effective
+    if (block.level !== 'frame' || block.type !== 'service') {
+      const { serviceConnections: _ignored, ...rest } = effective
+      return rest
+    }
+    if (effective.serviceConnections.length) {
+      const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+      const byId = new Map(homeBlocks.map((b) => [b.id, b]))
+      const resolved = new Map<string, Block>()
+      for (const { serviceBlockId } of effective.serviceConnections) {
+        if (byId.has(serviceBlockId) || resolved.has(serviceBlockId)) continue
+        const found = await this.resolveBlock(workspaceId, serviceBlockId).catch(() => null)
+        if (found) resolved.set(serviceBlockId, found.block)
+      }
+      const error = serviceConnectionsError(
+        id,
+        effective.serviceConnections,
+        (targetId) => byId.get(targetId) ?? resolved.get(targetId),
+      )
+      if (error) throw new ValidationError(error)
+    }
+    return effective
+  }
+
+  /**
+   * Validate + narrow the `involvedServiceIds` patch field: a task-level selection drawn from the
+   * enclosing service frame's connection neighbors, dropped on non-tasks. On a task each selected
+   * id is validated against the same universe the SPA offers — a connection neighbor can be a
+   * service mounted from another workspace, so each id not homed here is resolved (cross-home
+   * aware) and folded in, making an INCOMING edge from a mounted foreign consumer count as a
+   * neighbor too. A bounded user-authored list (contract-capped), not a data-sized loop. Returns
+   * the (possibly-narrowed) patch; throws {@link ValidationError} on an invalid selection. Split
+   * out of {@link updateBlock} to keep it under the complexity ceiling.
+   */
+  private async applyInvolvedServiceIdsPatch(
+    effective: UpdateBlockInput,
+    block: Block,
+    homeWorkspaceId: string,
+    workspaceId: string,
+  ): Promise<UpdateBlockInput> {
+    if (effective.involvedServiceIds === undefined) return effective
+    if (block.level !== 'task') {
+      const { involvedServiceIds: _ignored, ...rest } = effective
+      return rest
+    }
+    if (effective.involvedServiceIds.length) {
+      const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+      const byId = new Set(homeBlocks.map((b) => b.id))
+      const foreign: Block[] = []
+      for (const sid of effective.involvedServiceIds) {
+        if (byId.has(sid)) continue
+        byId.add(sid)
+        const found = await this.resolveBlock(workspaceId, sid).catch(() => null)
+        if (found) foreign.push(found.block)
+      }
+      const error = involvedServiceIdsError(
+        [...homeBlocks, ...foreign],
+        block,
+        effective.involvedServiceIds,
+      )
+      if (error) throw new ValidationError(error)
+    }
+    return effective
   }
 
   /** Move a block into a new container at a new local position. */

@@ -329,6 +329,46 @@ function buildGithubConfig(env: NodeJS.ProcessEnv): AppConfig['github'] {
  * builder stays within the cyclomatic-complexity budget. Behaviour is byte-identical: the checks,
  * throws, and derivations moved verbatim.
  */
+/**
+ * The two fail-fast auth boot guards, extracted from {@link resolveNodeAuthEnablement} to keep it
+ * within the cyclomatic-complexity budget. Behaviour is byte-identical — the checks, throws, and
+ * their order are moved verbatim (`authEnabled` is a pure derivation, so computing it before the
+ * first guard changes nothing).
+ */
+function assertNodeAuthConfigured(params: {
+  clientId: string
+  clientSecret: string
+  sessionSecret: string
+  devOpen: boolean
+  authEnabled: boolean
+}): void {
+  const { clientId, clientSecret, sessionSecret, devOpen, authEnabled } = params
+
+  // Fail fast on the silent-brick footgun: OAuth credentials are set (so real auth is
+  // intended) but the session secret is missing/too short, which would disable the auth
+  // gate and — with no dev-open fallback — make it fail closed, 503-ing every protected
+  // route with no hint why. Refuse to boot with a clear message instead.
+  if (
+    clientId !== '' &&
+    clientSecret !== '' &&
+    sessionSecret.length < MIN_SESSION_SECRET_LENGTH &&
+    !devOpen
+  ) {
+    throw configProblem({
+      key: 'AUTH_SESSION_SECRET',
+      summary: ENV_HELP.AUTH_SESSION_SECRET.summary,
+      remedy:
+        `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
+        `(got ${sessionSecret.length}). ${ENV_HELP.AUTH_SESSION_SECRET.remedy} Or enable AUTH_DEV_OPEN in a non-production ENVIRONMENT.`,
+      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
+    })
+  }
+
+  if (!authEnabled && !devOpen) {
+    throw configProblem({ key: 'AUTH_PROVIDER', ...ENV_HELP.AUTH_PROVIDER })
+  }
+}
+
 function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   clientId: string
   clientSecret: string
@@ -362,30 +402,8 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
   const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
 
-  // Fail fast on the silent-brick footgun: OAuth credentials are set (so real auth is
-  // intended) but the session secret is missing/too short, which would disable the auth
-  // gate and — with no dev-open fallback — make it fail closed, 503-ing every protected
-  // route with no hint why. Refuse to boot with a clear message instead.
-  if (
-    clientId !== '' &&
-    clientSecret !== '' &&
-    sessionSecret.length < MIN_SESSION_SECRET_LENGTH &&
-    !devOpen
-  ) {
-    throw configProblem({
-      key: 'AUTH_SESSION_SECRET',
-      summary: ENV_HELP.AUTH_SESSION_SECRET.summary,
-      remedy:
-        `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
-        `(got ${sessionSecret.length}). ${ENV_HELP.AUTH_SESSION_SECRET.remedy} Or enable AUTH_DEV_OPEN in a non-production ENVIRONMENT.`,
-      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
-    })
-  }
-
   const authEnabled = githubEnabled || googleEnabled || passwordEnabled
-  if (!authEnabled && !devOpen) {
-    throw configProblem({ key: 'AUTH_PROVIDER', ...ENV_HELP.AUTH_PROVIDER })
-  }
+  assertNodeAuthConfigured({ clientId, clientSecret, sessionSecret, devOpen, authEnabled })
 
   return {
     clientId,
