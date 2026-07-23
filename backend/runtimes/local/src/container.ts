@@ -423,6 +423,76 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
   }
 }
 
+/**
+ * Assemble the local-mode {@link AppConfig} from the base Node config plus the resolved local
+ * flags (PAT/delegation, the native + inline harness sets, mothership, the PAT-login registry).
+ * Extracted from {@link buildLocalContainer} to keep it within the cyclomatic-complexity budget —
+ * the spread-conditionals + their rationale comments are moved verbatim.
+ */
+function buildLocalAppConfig(params: {
+  base: AppConfig
+  env: NodeJS.ProcessEnv
+  gitToken: ReturnType<typeof resolveLocalVcs>['gitToken']
+  delegatedGitHub: ReturnType<typeof resolveLocalVcs>['delegatedGitHub']
+  nativeAgents: boolean
+  nativeHarnesses: HarnessKind[]
+  inlineAgents: boolean
+  inlineHarnesses: HarnessKind[]
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  configured: VcsProvider[]
+}): AppConfig {
+  const {
+    base,
+    env,
+    gitToken,
+    delegatedGitHub,
+    nativeAgents,
+    nativeHarnesses,
+    inlineAgents,
+    inlineHarnesses,
+    mothership,
+    configured,
+  } = params
+  return {
+    ...base,
+    // Enable the (provider-neutral) source-control integration for EITHER PAT — or for
+    // mothership-delegated GitHub: the read/link endpoints + gates are served through
+    // `vcsClient`, PAT- or delegation-backed alike.
+    ...(gitToken || delegatedGitHub ? { github: { ...base.github, enabled: true } } : {}),
+    ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
+    // Inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document kinds)
+    // run on a subscription model through the developer's ambient `claude`/`codex` CLI — so a
+    // subscription-only preset no longer strands them (or trips the preset-satisfiability guard).
+    // Gated by `LOCAL_NATIVE_INLINE` (default on), NOT `LOCAL_NATIVE_AGENTS`: the inline predicate
+    // matches the ambient-native vendors in that set, and `wrapModelProviderResolver` below serves
+    // those refs via the CLI. Off (`LOCAL_NATIVE_INLINE=off`) → inline steps degrade to a
+    // provider model as on stock Node, and the start guard refuses a subscription-only inline step.
+    ...(inlineAgents
+      ? {
+          agents: {
+            ...base.agents,
+            inlineHarnessRef: makeInlineHarnessPredicate(inlineHarnesses),
+          },
+        }
+      : {}),
+    localMode: {
+      enabled: true,
+      // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
+      // to the mothership (org/durable state), and (in mothership mode) where to send the user
+      // to sign in. Off → the standard siloed-Postgres local mode.
+      ...(mothership ? { mothership: true, mothershipUrl: env.LOCAL_MOTHERSHIP_URL?.trim() } : {}),
+      // No "create a PAT" banner when GitHub rides mothership delegation — a PAT is optional there.
+      ...(gitToken || delegatedGitHub ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
+      // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
+      // the developer straight to the right token page (scopes differ per provider).
+      patLogin: {
+        configured,
+        setupUrls: { github: githubPatCreationUrl(), gitlab: gitlabPatCreationUrl() },
+      },
+    },
+  }
+}
+
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
   // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
@@ -478,44 +548,18 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // credential. Advertised on `localMode.patLogin` so the login screen renders the right
   // buttons, and exposed on the container for the `/auth/pat` endpoint.
   const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
-  const config: AppConfig = {
-    ...base,
-    // Enable the (provider-neutral) source-control integration for EITHER PAT — or for
-    // mothership-delegated GitHub: the read/link endpoints + gates are served through
-    // `vcsClient`, PAT- or delegation-backed alike.
-    ...(gitToken || delegatedGitHub ? { github: { ...base.github, enabled: true } } : {}),
-    ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
-    // Inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document kinds)
-    // run on a subscription model through the developer's ambient `claude`/`codex` CLI — so a
-    // subscription-only preset no longer strands them (or trips the preset-satisfiability guard).
-    // Gated by `LOCAL_NATIVE_INLINE` (default on), NOT `LOCAL_NATIVE_AGENTS`: the inline predicate
-    // matches the ambient-native vendors in that set, and `wrapModelProviderResolver` below serves
-    // those refs via the CLI. Off (`LOCAL_NATIVE_INLINE=off`) → inline steps degrade to a
-    // provider model as on stock Node, and the start guard refuses a subscription-only inline step.
-    ...(inlineAgents
-      ? {
-          agents: {
-            ...base.agents,
-            inlineHarnessRef: makeInlineHarnessPredicate(inlineHarnesses),
-          },
-        }
-      : {}),
-    localMode: {
-      enabled: true,
-      // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
-      // to the mothership (org/durable state), and (in mothership mode) where to send the user
-      // to sign in. Off → the standard siloed-Postgres local mode.
-      ...(mothership ? { mothership: true, mothershipUrl: env.LOCAL_MOTHERSHIP_URL?.trim() } : {}),
-      // No "create a PAT" banner when GitHub rides mothership delegation — a PAT is optional there.
-      ...(gitToken || delegatedGitHub ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
-      // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
-      // the developer straight to the right token page (scopes differ per provider).
-      patLogin: {
-        configured,
-        setupUrls: { github: githubPatCreationUrl(), gitlab: gitlabPatCreationUrl() },
-      },
-    },
-  }
+  const config: AppConfig = buildLocalAppConfig({
+    base,
+    env,
+    gitToken,
+    delegatedGitHub,
+    nativeAgents,
+    nativeHarnesses,
+    inlineAgents,
+    inlineHarnesses,
+    mothership,
+    configured,
+  })
 
   // Local mode has no GitHub-App connect flow, so a workspace's installation is conjured
   // from the PAT on first read (see AutoProvisioningInstallationRepository): the synthetic

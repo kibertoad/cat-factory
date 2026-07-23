@@ -424,21 +424,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     await writeNativeSkill(skillsRoot, opts.skill).catch(() => {})
   }
 
-  // Anthropic itself authenticates with the subscription OAuth token; a
-  // non-Anthropic Claude-Code vendor (GLM via Z.ai, Kimi via Moonshot, DeepSeek)
-  // points Claude Code at its Anthropic-compatible endpoint with an auth-token key.
-  // Ambient mode injects neither — the CLI uses the developer's logged-in `~/.claude`.
-  const env: Record<string, string> = opts.ambientAuth
-    ? {}
-    : {
-        CLAUDE_CONFIG_DIR: configHome!,
-        ...(opts.subscriptionBaseUrl
-          ? {
-              ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
-              ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken!,
-            }
-          : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
-      }
+  const env = buildClaudeEnv(opts, configHome)
 
   // ADR 0026 D3 (path corrected by ADR 0027 Defect A): while the run is live, tail the CLI's
   // subagent `*.jsonl` transcripts so a parallel-subagent review keeps the inactivity
@@ -484,39 +470,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
-    // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
-    // subagent calls, which carry their own per-turn tokens, are concatenated).
-    attributeCumulativeUsage(calls, usage)
-    // Final drain of any subagent transcript writes that landed after the last poll, then
-    // fold the subagents' usage + per-call telemetry into the run's outcome — their tokens
-    // never appear on the parent stream, so this is the only place they are accounted.
-    await subagents?.stop()
-    const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
-    const subCalls = subagents?.calls() ?? []
-    const mergedCalls = [...calls, ...subCalls]
-    // INVARIANT (do not "fix" this into a double count): the run total is the parent usage
-    // PLUS the subagent usage because the two are disjoint sources. The parent `usage` here
-    // is the terminal `result` event's cumulative, which covers ONLY the parent loop — the
-    // ADR 0026 incident is itself the proof: a heavily subagent-parallelised review reported
-    // ~0 tokens, i.e. the parent stream (and its `result` total) never included the subagent
-    // spend. The subagent tokens live exclusively in the per-session `subagents/*.jsonl`
-    // transcripts, which the watcher reads and nothing else does; it deliberately EXCLUDES the
-    // sibling parent session transcript (whose usage `result` already totals), so neither
-    // `calls` nor `usage` can already contain the subagent spend.
-    const mergedUsage =
-      usage || subUsage.inputTokens || subUsage.outputTokens
-        ? {
-            inputTokens: (usage?.inputTokens ?? 0) + subUsage.inputTokens,
-            outputTokens: (usage?.outputTokens ?? 0) + subUsage.outputTokens,
-          }
-        : undefined
-    return {
-      summary,
-      stats,
-      stderrTail,
-      ...(mergedUsage ? { usage: mergedUsage } : {}),
-      ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
-    }
+    return await assembleClaudeOutcome({ summary, stats, stderrTail, calls, usage, subagents })
   } finally {
     await subagents?.stop()
     if (configHome) {
@@ -530,6 +484,71 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       // Never leave the config dir (and any cached credential) on disk past the run.
       await rm(configHome, { recursive: true, force: true }).catch(() => {})
     }
+  }
+}
+
+/**
+ * Build the child-process env for the `claude` CLI: an isolated config home plus subscription
+ * auth (Anthropic OAuth token, or an Anthropic-compatible base URL + auth token for a
+ * non-Anthropic Claude-Code vendor like GLM/Kimi/DeepSeek), or an empty env in ambient mode
+ * (the developer's own logged-in `~/.claude` is used). Extracted from {@link runClaudeCode} to
+ * keep its cyclomatic complexity down; behaviour is a straight move of the original expression.
+ */
+function buildClaudeEnv(
+  opts: SubscriptionRunOptions,
+  configHome: string | undefined,
+): Record<string, string> {
+  if (opts.ambientAuth) return {}
+  return {
+    CLAUDE_CONFIG_DIR: configHome!,
+    ...(opts.subscriptionBaseUrl
+      ? {
+          ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
+          ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken!,
+        }
+      : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
+  }
+}
+
+/**
+ * Merge the parent-loop telemetry with the subagents' out-of-band usage + per-call metrics into
+ * the run outcome. INVARIANT (do not "fix" this into a double count): the run total is the parent
+ * usage PLUS the subagent usage because the two are disjoint sources — the parent `usage` (the
+ * terminal `result` event's cumulative) covers ONLY the parent loop, and the subagent tokens live
+ * exclusively in the per-session `subagents/*.jsonl` transcripts the watcher reads. Extracted from
+ * {@link runClaudeCode} verbatim to keep its cyclomatic complexity down.
+ */
+async function assembleClaudeOutcome(args: {
+  summary: string
+  stats: PiRunStats
+  stderrTail: string
+  calls: HarnessCallMetric[]
+  usage: { inputTokens: number; outputTokens: number } | undefined
+  subagents: ReturnType<typeof startSubagentWatcher> | undefined
+}): Promise<PiRunOutcome> {
+  const { summary, stats, stderrTail, calls, usage, subagents } = args
+  // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
+  // subagent calls, which carry their own per-turn tokens, are concatenated).
+  attributeCumulativeUsage(calls, usage)
+  // Final drain of any subagent transcript writes that landed after the last poll, then
+  // fold the subagents' usage + per-call telemetry into the run's outcome.
+  await subagents?.stop()
+  const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
+  const subCalls = subagents?.calls() ?? []
+  const mergedCalls = [...calls, ...subCalls]
+  const mergedUsage =
+    usage || subUsage.inputTokens || subUsage.outputTokens
+      ? {
+          inputTokens: (usage?.inputTokens ?? 0) + subUsage.inputTokens,
+          outputTokens: (usage?.outputTokens ?? 0) + subUsage.outputTokens,
+        }
+      : undefined
+  return {
+    summary,
+    stats,
+    stderrTail,
+    ...(mergedUsage ? { usage: mergedUsage } : {}),
+    ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
   }
 }
 

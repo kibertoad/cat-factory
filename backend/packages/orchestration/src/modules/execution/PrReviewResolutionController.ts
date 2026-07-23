@@ -5,6 +5,7 @@ import type {
   CreateReviewResult,
   ExecutionInstance,
   PipelineStep,
+  RepoFiles,
   ResolveRunRepoContext,
   RunInitiatorScope,
 } from '@cat-factory/kernel'
@@ -237,36 +238,12 @@ export class PrReviewResolutionController {
 
     // Detect branch DRIFT: if the PR head moved since the review started, the findings' frozen
     // line numbers may now point at shifted/different code, so posting inline comments would
-    // anchor them to the wrong lines. Re-read the current head and compare to the sha captured at
-    // review start. Best-effort: an unknown sha on either side (no capability / older run / read
-    // blip) leaves `staleHead` false, so the pre-existing per-line diff filtering still applies.
-    let staleHead = false
-    if (review.reviewedHeadSha && repo.pullRequestHeadSha) {
-      try {
-        const headSha = repo.pullRequestHeadSha
-        const currentHeadSha = await this.deps.runInitiatorScope(instance.initiatedBy, () =>
-          headSha(prNumber),
-        )
-        staleHead = currentHeadSha != null && currentHeadSha !== review.reviewedHeadSha
-      } catch {
-        staleHead = false
-      }
-    }
+    // anchor them to the wrong lines (see {@link detectStaleHead}).
+    const staleHead = await this.detectStaleHead(review, repo, prNumber, instance.initiatedBy)
 
     // Pre-filter against the actual PR diff so out-of-diff lines are folded into the summary
-    // rather than sent as inline comments GitHub would 422. Best-effort: if the changed-file
-    // read fails or isn't wired, we skip the filter and let per-comment posting report failures.
-    // Skipped when the head drifted — `staleHead` already folds every finding, so the diff read
-    // would be wasted work against a diff the findings no longer map onto cleanly.
-    let commentable: ReturnType<typeof computeCommentableLines> | undefined
-    if (!staleHead) {
-      try {
-        const files = await repo.listChangedFiles?.(prNumber)
-        if (files) commentable = computeCommentableLines(files)
-      } catch {
-        commentable = undefined
-      }
-    }
+    // rather than sent as inline comments GitHub would 422 (see {@link computeCommentable}).
+    const commentable = await this.computeCommentable(staleHead, repo, prNumber)
 
     const bodyAlreadyPosted = review.postedBody === true
     const built = buildPrReviewPost(selected, review.summary, commentable, {
@@ -327,5 +304,48 @@ export class PrReviewResolutionController {
     // what posted / what failed and the human can retry only the posting (re-`post`).
     step.prReview = { ...step.prReview, status: 'awaiting_selection', resolution: null }
     return this.deps.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * Detect PR head DRIFT since the review started: re-read the current head and compare it to the
+   * sha captured at review start. Best-effort — an unknown sha on either side (no capability /
+   * older run / read blip) yields `false`, so the pre-existing per-line diff filtering still
+   * applies. Split out of {@link post} to keep it under the complexity ceiling.
+   */
+  private async detectStaleHead(
+    review: NonNullable<PipelineStep['prReview']>,
+    repo: RepoFiles,
+    prNumber: number,
+    initiatedBy: ExecutionInstance['initiatedBy'],
+  ): Promise<boolean> {
+    if (!review.reviewedHeadSha || !repo.pullRequestHeadSha) return false
+    try {
+      const headSha = repo.pullRequestHeadSha
+      const currentHeadSha = await this.deps.runInitiatorScope(initiatedBy, () => headSha(prNumber))
+      return currentHeadSha != null && currentHeadSha !== review.reviewedHeadSha
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Pre-filter the findings against the actual PR diff so out-of-diff lines are folded into the
+   * summary rather than sent as inline comments GitHub would 422. Best-effort: a failed or unwired
+   * changed-file read skips the filter. Skipped under a stale head (every finding is folded
+   * already, so the diff read would be wasted work against a diff the findings no longer map onto
+   * cleanly). Split out of {@link post} to keep it under the complexity ceiling.
+   */
+  private async computeCommentable(
+    staleHead: boolean,
+    repo: RepoFiles,
+    prNumber: number,
+  ): Promise<ReturnType<typeof computeCommentableLines> | undefined> {
+    if (staleHead) return undefined
+    try {
+      const files = await repo.listChangedFiles?.(prNumber)
+      return files ? computeCommentableLines(files) : undefined
+    } catch {
+      return undefined
+    }
   }
 }

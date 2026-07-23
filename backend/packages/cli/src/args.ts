@@ -63,13 +63,6 @@ export function parseArgs(argv: string[]): CliOptions {
   const opts: CliOptions = { command: 'init', ...DEFAULTS }
   let commandSet = false
 
-  const takeValue = (flag: string, inline: string | undefined, rest: string[]): string => {
-    if (inline !== undefined) return inline
-    const next = rest.shift()
-    if (next === undefined) throw new ArgError(`Missing value for ${flag}`)
-    return next
-  }
-
   const queue = [...argv]
   while (queue.length > 0) {
     const raw = queue.shift() as string
@@ -77,102 +70,132 @@ export function parseArgs(argv: string[]): CliOptions {
     const flag = raw.startsWith('--') && eq !== -1 ? raw.slice(0, eq) : raw
     const inline = raw.startsWith('--') && eq !== -1 ? raw.slice(eq + 1) : undefined
 
-    switch (flag) {
-      case 'init':
-        if (!commandSet) {
-          opts.command = 'init'
-          commandSet = true
-        }
-        break
-      case 'env':
-        if (!commandSet) {
-          opts.command = 'env'
-          commandSet = true
-        }
-        break
-      case 'k3s':
-        if (!commandSet) {
-          opts.command = 'k3s'
-          commandSet = true
-        }
-        break
-      case 'help':
-      case '--help':
-      case '-h':
-        opts.command = 'help'
-        commandSet = true
-        break
-      case 'version':
-      case '--version':
-      case '-v':
-        opts.command = 'version'
-        commandSet = true
-        break
-      case '--dir':
-      case '-d':
-        opts.dir = takeValue(flag, inline, queue)
-        break
-      case '--name':
-        opts.projectName = takeValue(flag, inline, queue)
-        break
-      case '--title':
-        opts.appTitle = takeValue(flag, inline, queue)
-        break
-      case '--provider':
-        opts.provider = parseProvider(takeValue(flag, inline, queue))
-        break
-      case '--token':
-        opts.token = takeValue(flag, inline, queue)
-        break
-      case '--db-url':
-        opts.databaseUrl = takeValue(flag, inline, queue)
-        break
-      case '--api-base':
-        opts.apiBase = takeValue(flag, inline, queue)
-        break
-      case '--port':
-        opts.port = parsePort(takeValue(flag, inline, queue))
-        break
-      case '--harness-image':
-        opts.harnessImage = takeValue(flag, inline, queue)
-        break
-      case '--container-runtime':
-        opts.containerRuntime = parseContainerRuntime(takeValue(flag, inline, queue))
-        break
-      case '--execution-mode':
-        opts.executionMode = parseExecutionMode(takeValue(flag, inline, queue))
-        break
-      case '--native-harnesses':
-        opts.nativeHarnesses = parseNativeHarnesses(takeValue(flag, inline, queue))
-        break
-      case '--harness-entry':
-        opts.harnessEntry = takeValue(flag, inline, queue)
-        break
-      case '--cluster-name':
-        opts.clusterName = takeValue(flag, inline, queue)
-        break
-      case '--runtime':
-        opts.k3sRuntime = parseK3sRuntime(takeValue(flag, inline, queue))
-        break
-      case '--app-url':
-        opts.appUrl = parseAppUrl(takeValue(flag, inline, queue))
-        break
-      case '--no-open':
-        opts.noOpen = true
-        break
-      case '--yes':
-      case '-y':
-        opts.yes = true
-        break
-      case '--force':
-      case '-f':
-        opts.force = true
-        break
-      default:
-        throw new ArgError(`Unknown argument: ${raw}`)
+    const command = applyCommandToken(flag, opts, commandSet)
+    if (command.handled) {
+      commandSet = command.commandSet
+      continue
+    }
+
+    const take = (f: string): string => takeOptionValue(f, inline, queue)
+    if (!applyOptionFlag(flag, opts, take)) {
+      throw new ArgError(`Unknown argument: ${raw}`)
     }
   }
   return opts
+}
+
+/** Resolve a flag's value: the inline `--flag=value` form, else the next queued token. */
+function takeOptionValue(flag: string, inline: string | undefined, rest: string[]): string {
+  if (inline !== undefined) return inline
+  const next = rest.shift()
+  if (next === undefined) throw new ArgError(`Missing value for ${flag}`)
+  return next
+}
+
+/**
+ * Apply a leading subcommand token (`init`/`env`/`k3s`/`help`/`version` + their aliases).
+ * Returns whether the token was a command and the resulting `commandSet` gate (only the first
+ * positional `init`/`env`/`k3s` wins; `help`/`version` always latch).
+ */
+function applyCommandToken(
+  flag: string,
+  opts: CliOptions,
+  commandSet: boolean,
+): { handled: boolean; commandSet: boolean } {
+  switch (flag) {
+    case 'init':
+    case 'env':
+    case 'k3s':
+      if (!commandSet) {
+        opts.command = flag
+        commandSet = true
+      }
+      return { handled: true, commandSet }
+    case 'help':
+    case '--help':
+    case '-h':
+      opts.command = 'help'
+      return { handled: true, commandSet: true }
+    case 'version':
+    case '--version':
+    case '-v':
+      opts.command = 'version'
+      return { handled: true, commandSet: true }
+    default:
+      return { handled: false, commandSet }
+  }
+}
+
+/**
+ * Apply a single option flag, consuming its value from the queue (via `take`) where one is
+ * required. Returns `false` for an unrecognised flag so the caller can raise the error.
+ */
+function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) => string): boolean {
+  switch (flag) {
+    case '--dir':
+    case '-d':
+      opts.dir = take(flag)
+      break
+    case '--name':
+      opts.projectName = take(flag)
+      break
+    case '--title':
+      opts.appTitle = take(flag)
+      break
+    case '--provider':
+      opts.provider = parseProvider(take(flag))
+      break
+    case '--token':
+      opts.token = take(flag)
+      break
+    case '--db-url':
+      opts.databaseUrl = take(flag)
+      break
+    case '--api-base':
+      opts.apiBase = take(flag)
+      break
+    case '--port':
+      opts.port = parsePort(take(flag))
+      break
+    case '--harness-image':
+      opts.harnessImage = take(flag)
+      break
+    case '--container-runtime':
+      opts.containerRuntime = parseContainerRuntime(take(flag))
+      break
+    case '--execution-mode':
+      opts.executionMode = parseExecutionMode(take(flag))
+      break
+    case '--native-harnesses':
+      opts.nativeHarnesses = parseNativeHarnesses(take(flag))
+      break
+    case '--harness-entry':
+      opts.harnessEntry = take(flag)
+      break
+    case '--cluster-name':
+      opts.clusterName = take(flag)
+      break
+    case '--runtime':
+      opts.k3sRuntime = parseK3sRuntime(take(flag))
+      break
+    case '--app-url':
+      opts.appUrl = parseAppUrl(take(flag))
+      break
+    case '--no-open':
+      opts.noOpen = true
+      break
+    case '--yes':
+    case '-y':
+      opts.yes = true
+      break
+    case '--force':
+    case '-f':
+      opts.force = true
+      break
+    default:
+      return false
+  }
+  return true
 }
 
 function parseProvider(value: string): VcsProvider {

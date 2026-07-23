@@ -59,6 +59,30 @@ export interface PipelineServiceDependencies {
   pipelineScheduleRepository?: PipelineScheduleRepository
 }
 
+/**
+ * Resolve each updatable pipeline field to its new value: a supplied field wins, else the
+ * existing one is preserved. `description` is explicit-undefined (not `??`) so a blank string
+ * CLEARS it while omitting the field keeps the existing one. Split out of {@link
+ * PipelineService.update} to keep it under the complexity ceiling.
+ */
+function resolveUpdatedPipelineFields(input: UpdatePipelineInput, existing: Pipeline) {
+  return {
+    agentKinds: input.agentKinds ?? existing.agentKinds,
+    gates: input.gates ?? existing.gates,
+    thresholds: input.thresholds ?? existing.thresholds,
+    enabled: input.enabled ?? existing.enabled,
+    consensus: input.consensus ?? existing.consensus,
+    gating: input.gating ?? existing.gating,
+    followUps: input.followUps ?? existing.followUps,
+    testerQuality: input.testerQuality ?? existing.testerQuality,
+    stepOptions: input.stepOptions ?? existing.stepOptions,
+    labels: input.labels ?? existing.labels,
+    availability: input.availability ?? existing.availability,
+    purpose: input.purpose ?? existing.purpose,
+    description: input.description !== undefined ? input.description : existing.description,
+  }
+}
+
 /** Saved, reusable pipelines (the pipeline palette). */
 export class PipelineService {
   private readonly workspaceRepository: WorkspaceRepository
@@ -219,21 +243,21 @@ export class PipelineService {
         'Built-in pipelines are read-only. Clone it to make an editable copy.',
       )
     }
-    const agentKinds = input.agentKinds ?? existing.agentKinds
-    const gates = input.gates ?? existing.gates
-    const thresholds = input.thresholds ?? existing.thresholds
-    const enabled = input.enabled ?? existing.enabled
-    const consensus = input.consensus ?? existing.consensus
-    const gating = input.gating ?? existing.gating
-    const followUps = input.followUps ?? existing.followUps
-    const testerQuality = input.testerQuality ?? existing.testerQuality
-    const stepOptions = input.stepOptions ?? existing.stepOptions
-    const labels = input.labels ?? existing.labels
-    const availability = input.availability ?? existing.availability
-    const purpose = input.purpose ?? existing.purpose
-    // Explicit-undefined (not `??`): the builder sends the full description (possibly blank) so a
-    // blank string CLEARS it, while omitting the field preserves the existing one.
-    const description = input.description !== undefined ? input.description : existing.description
+    const {
+      agentKinds,
+      gates,
+      thresholds,
+      enabled,
+      consensus,
+      gating,
+      followUps,
+      testerQuality,
+      stepOptions,
+      labels,
+      availability,
+      purpose,
+      description,
+    } = resolveUpdatedPipelineFields(input, existing)
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
     // while leaving its companion on would orphan the companion, and adding gating (step or
