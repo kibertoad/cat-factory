@@ -26,7 +26,12 @@ Copy this shape for every window. The pilot commit is the worked example.
    `#header-extras` slot / opt-in `StepRestartControl` / close) and calls the upstream
    `useModalBehavior({ active: () => props.open, onClose })` for focus-trap + focus-return,
    body-scroll lock, and the **shared overlay stack** (top overlay closes first on Escape).
-   It emits `close`; state stays app-owned.
+   It emits `close`; state stays app-owned. It also renders the one **shared trailing
+   section** every window carries — the agent's effort self-assessment
+   (`step.effortReport`), as a collapsible footer under the window body. The shell resolves
+   that step from `ui.resultView` itself rather than a prop, so a window can neither opt out
+   nor drift in where it puts it; an off-path (block-keyed) open resolves no step and the
+   footer disappears.
 2. **Selection is unchanged.** `StepResultViewHost.vue` still pick-one-selects the active
    window via the slice-2 `resolveComponentRegistry` — the shell is per-window chrome, so
    windows convert independently with **no host or registry changes** (the shell uses
