@@ -2907,7 +2907,8 @@
       "toast": {
         "connected": "API キーを接続しました",
         "connectFailed": "キーを接続できませんでした",
-        "removeFailed": "キーを削除できませんでした"
+        "removeFailed": "キーを削除できませんでした",
+        "updateFailed": "キーを更新できませんでした"
       },
       "providers": {
         "openai": {
@@ -2946,7 +2947,11 @@
           "step2": "ゲートウェイのベース URL は、ここではなくデプロイ運用者が設定します (LITELLM_BASE_URL)。"
         }
       },
-      "keyNoun": "この API キー"
+      "keyNoun": "この API キー",
+      "defaultBadge": "デフォルト",
+      "pinDefault": "デフォルトに設定",
+      "disabledBadge": "無効",
+      "enableToggle": "このキーを有効または無効にする"
     },
     "vendorCredentials": {
       "title": "LLM ベンダー",
@@ -2969,7 +2974,8 @@
       "toast": {
         "connected": "トークンを接続しました",
         "connectFailed": "トークンを接続できませんでした",
-        "removeFailed": "トークンを削除できませんでした"
+        "removeFailed": "トークンを削除できませんでした",
+        "updateFailed": "トークンを更新できませんでした"
       },
       "vendors": {
         "kimi": {
@@ -2988,7 +2994,11 @@
       "confirmRemove": {
         "title": "この認証情報を削除しますか？",
         "body": "「{name}」が削除されます。 この操作は取り消せません。"
-      }
+      },
+      "defaultBadge": "デフォルト",
+      "pinDefault": "デフォルトに設定",
+      "disabledBadge": "無効",
+      "enableToggle": "このトークンを有効または無効にする"
     }
   },
   "github": {

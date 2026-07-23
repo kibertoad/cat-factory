@@ -6,7 +6,7 @@ import type {
   SecretCipher,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import { SUBSCRIPTION_VENDORS, isIndividualVendor } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -54,6 +54,8 @@ export interface VendorCredentialSummary {
   inputTokens: number
   outputTokens: number
   requestCount: number
+  enabled: boolean
+  isDefault: boolean
 }
 
 /** A leased credential: the decrypted secret plus the row id (for usage attribution). */
@@ -115,6 +117,8 @@ export class ProviderSubscriptionService {
       inputTokens: 0,
       outputTokens: 0,
       requestCount: 0,
+      enabled: true,
+      isDefault: false,
       deletedAt: null,
     }
     await this.deps.providerSubscriptionTokenRepository.add(record)
@@ -146,7 +150,37 @@ export class ProviderSubscriptionService {
       workspaceId,
       vendor,
     )
-    return rows.length > 0
+    // Only ENABLED tokens make a vendor "configured": an all-disabled pool would fail
+    // the lease, so it must not report as available to the executor's routing.
+    return rows.some((r) => r.enabled)
+  }
+
+  /**
+   * Enable/disable and/or (un)pin the default of a pool token. Both flags are optional;
+   * pinning a default clears any prior default of the same vendor, and un-pinning clears
+   * it only when THIS token was the default (so toggling an unrelated token off never
+   * disturbs the group's default). Returns the updated metadata.
+   */
+  async updateToken(
+    workspaceId: string,
+    id: string,
+    patch: { enabled?: boolean; isDefault?: boolean },
+  ): Promise<VendorCredentialSummary> {
+    const repo = this.deps.providerSubscriptionTokenRepository
+    const existing = await repo.getById(workspaceId, id)
+    if (!existing) {
+      throw new NotFoundError('Subscription token', id)
+    }
+    if (patch.enabled !== undefined) {
+      await repo.setEnabled(workspaceId, id, patch.enabled)
+    }
+    if (patch.isDefault === true) {
+      await repo.setDefault(workspaceId, existing.vendor, id)
+    } else if (patch.isDefault === false && existing.isDefault) {
+      await repo.setDefault(workspaceId, existing.vendor, null)
+    }
+    const updated = await repo.getById(workspaceId, id)
+    return toSummary(updated ?? existing)
   }
 
   /** Remove a token from the pool. */
@@ -221,5 +255,7 @@ function toSummary(record: ProviderSubscriptionTokenRecord): VendorCredentialSum
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     requestCount: record.requestCount,
+    enabled: record.enabled,
+    isDefault: record.isDefault,
   }
 }

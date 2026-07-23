@@ -15,6 +15,7 @@ import {
   revokeInvitationContract,
   setMemberRolesContract,
   testEmailContract,
+  updateAccountApiKeyContract,
   updateAccountContract,
   updateAccountSettingsContract,
 } from '@cat-factory/contracts'
@@ -179,6 +180,17 @@ export function accountController(): Hono<AppEnv> {
     await container.accountService.requireAdmin(accountId, user.id)
     const summary = await container.apiKeys.addKey('account', accountId, c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
+  })
+
+  buildHonoRoute(app, updateAccountApiKeyContract, async (c) => {
+    const user = accountUser(c)
+    if (!user) return signInRequired(c)
+    const container = c.get('container')
+    if (!container.apiKeys) return apiKeysUnavailable(c)
+    const { accountId, id } = c.req.valid('param')
+    await container.accountService.requireAdmin(accountId, user.id)
+    const summary = await container.apiKeys.updateKey('account', accountId, id, c.req.valid('json'))
+    return c.json(apiKeyToWire(summary), 200)
   })
 
   buildHonoRoute(app, removeAccountApiKeyContract, async (c) => {

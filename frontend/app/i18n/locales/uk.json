@@ -2895,7 +2895,8 @@
       "toast": {
         "connected": "Ключ API підключено",
         "connectFailed": "Не вдалося підключити ключ",
-        "removeFailed": "Не вдалося видалити ключ"
+        "removeFailed": "Не вдалося видалити ключ",
+        "updateFailed": "Не вдалося оновити ключ"
       },
       "providers": {
         "openai": {
@@ -2934,7 +2935,11 @@
           "step2": "Базову URL-адресу шлюзу задає оператор вашого розгортання (LITELLM_BASE_URL), а не тут."
         }
       },
-      "keyNoun": "цей ключ API"
+      "keyNoun": "цей ключ API",
+      "defaultBadge": "За замовчуванням",
+      "pinDefault": "Зробити за замовчуванням",
+      "disabledBadge": "Вимкнено",
+      "enableToggle": "Увімкнути або вимкнути цей ключ"
     },
     "vendorCredentials": {
       "title": "Постачальники LLM",
@@ -2957,7 +2962,8 @@
       "toast": {
         "connected": "Токен підключено",
         "connectFailed": "Не вдалося підключити токен",
-        "removeFailed": "Не вдалося видалити токен"
+        "removeFailed": "Не вдалося видалити токен",
+        "updateFailed": "Не вдалося оновити токен"
       },
       "vendors": {
         "kimi": {
@@ -2976,7 +2982,11 @@
       "confirmRemove": {
         "title": "Прибрати ці облікові дані?",
         "body": "\"{name}\" буде видалено. Цю дію не можна скасувати."
-      }
+      },
+      "defaultBadge": "За замовчуванням",
+      "pinDefault": "Зробити за замовчуванням",
+      "disabledBadge": "Вимкнено",
+      "enableToggle": "Увімкнути або вимкнути цей токен"
     }
   },
   "github": {

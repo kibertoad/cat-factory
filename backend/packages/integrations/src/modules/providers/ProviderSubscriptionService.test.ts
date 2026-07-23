@@ -66,6 +66,15 @@ class FakeRepo implements ProviderSubscriptionTokenRepository {
     row.outputTokens = (active ? row.outputTokens : 0) + usage.outputTokens
     row.requestCount = (active ? row.requestCount : 0) + 1
   }
+  async setEnabled(workspaceId: string, id: string, enabled: boolean) {
+    const row = await this.getById(workspaceId, id)
+    if (row) row.enabled = enabled
+  }
+  async setDefault(workspaceId: string, vendor: SubscriptionVendor, id: string | null) {
+    for (const r of this.live(workspaceId, vendor)) {
+      r.isDefault = id !== null && r.id === id
+    }
+  }
   async softDelete(workspaceId: string, id: string, at: number) {
     const row = await this.getById(workspaceId, id)
     if (row) row.deletedAt = at
@@ -114,6 +123,39 @@ describe('ProviderSubscriptionService', () => {
   it('throws a ConflictError when the pool is empty', async () => {
     const svc = makeService(new FakeRepo(), () => 0)
     await expect(svc.leaseToken('ws', 'kimi')).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('skips a disabled token for lease/hasToken but keeps it listed', async () => {
+    const repo = new FakeRepo()
+    const svc = makeService(repo, () => 1000)
+    const a = await svc.addToken('ws', { vendor: 'kimi', label: 'a', token: 'tok-a' })
+    await svc.addToken('ws', { vendor: 'kimi', label: 'b', token: 'tok-b' })
+    const updated = await svc.updateToken('ws', a.id, { enabled: false })
+    expect(updated.enabled).toBe(false)
+    // Still listed, but never leased (only `b` is eligible).
+    expect((await svc.listTokens('ws', 'kimi')).map((c) => c.id)).toContain(a.id)
+    expect((await svc.leaseToken('ws', 'kimi')).secret).toBe('tok-b')
+    // Disabling the last enabled token makes the vendor unavailable.
+    await svc.updateToken('ws', a.id, { enabled: true })
+    const b = (await svc.listTokens('ws', 'kimi')).find((c) => c.label === 'b')!
+    await svc.updateToken('ws', a.id, { enabled: false })
+    await svc.updateToken('ws', b.id, { enabled: false })
+    expect(await svc.hasToken('ws', 'kimi')).toBe(false)
+    await expect(svc.leaseToken('ws', 'kimi')).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('leases a pinned default over the least-loaded token, and clears it on unpin', async () => {
+    const repo = new FakeRepo()
+    const svc = makeService(repo, () => 1000)
+    const busy = await svc.addToken('ws', { vendor: 'kimi', label: 'busy', token: 'tok-busy' })
+    await svc.addToken('ws', { vendor: 'kimi', label: 'idle', token: 'tok-idle' })
+    await svc.recordTokenUsage('ws', busy.id, { inputTokens: 900, outputTokens: 100 })
+    // Pin the busy token: it now wins despite rotation preferring the idle one.
+    await svc.updateToken('ws', busy.id, { isDefault: true })
+    expect((await svc.leaseToken('ws', 'kimi')).tokenId).toBe(busy.id)
+    // Unpin → rotation resumes and the idle token wins.
+    await svc.updateToken('ws', busy.id, { isDefault: false })
+    expect((await svc.leaseToken('ws', 'kimi')).secret).toBe('tok-idle')
   })
 
   it('accumulates usage within a window and resets once it ages out', async () => {

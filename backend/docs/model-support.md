@@ -186,10 +186,16 @@ pool** — each is licensed for individual use only and stored per-user (see bel
   **encrypted at rest** under an `ENCRYPTION_KEY`-derived key; tokens are write-only
   (only metadata + rolling usage is returned). Managed by `ProviderSubscriptionService`
   ([integrations](../packages/integrations/src/modules/providers/ProviderSubscriptionService.ts)),
-  exposed at `GET|POST|DELETE /workspaces/:ws/vendor-credentials` and the
+  exposed at `GET|POST|PATCH|DELETE /workspaces/:ws/vendor-credentials` and the
   **LLM Vendors** navbar UI.
 - **Rotation**: leasing is usage-aware (least-loaded token wins, round-robin by
   `lastUsedAt`); the pool is capped per vendor.
+- **Enable/disable + default** (`PATCH …/vendor-credentials/:id`, `{ enabled?, isDefault? }`):
+  a token can be taken **out of rotation** without deleting it (`enabled: false` — still
+  listed and re-enablable, but never leased and not counted as "configured"), and one token
+  can be **pinned as the vendor's default** (`isDefault: true`) so it is leased in preference
+  to usage-aware rotation. At most one default per (workspace, vendor); a disabled default is
+  ignored (leasing falls back to rotation among the remaining enabled tokens).
 - **What each vendor is**: `kimi`/`deepseek` — a coding-plan API key driven by Claude
   Code against the vendor's Anthropic-compatible endpoint (Moonshot / DeepSeek).
 - `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly`

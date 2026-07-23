@@ -44,6 +44,13 @@ export const apiKeySchema = v.object({
   inputTokens: v.number(),
   outputTokens: v.number(),
   requestCount: v.number(),
+  /** Whether this key is eligible for leasing. A disabled key stays in the pool (visible +
+   * re-enablable) but is never leased and doesn't make its provider "configured". */
+  enabled: v.boolean(),
+  /** Whether this key is the pinned default for its provider within its scope: preferred at
+   * lease time over usage-aware rotation. At most one default per (scope, scopeId, provider);
+   * a disabled default is ignored (leasing falls back to rotation among the enabled keys). */
+  isDefault: v.boolean(),
 })
 export type ApiKey = v.InferOutput<typeof apiKeySchema>
 
@@ -61,3 +68,15 @@ export const addApiKeySchema = v.object({
   key: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type AddApiKeyInput = v.InferOutput<typeof addApiKeySchema>
+
+/**
+ * Update a pool key's lifecycle flags. Both fields are optional — only the supplied ones
+ * change. `enabled: false` takes the key out of rotation without deleting it; `isDefault:
+ * true` pins it as the provider's default within its scope (clearing any prior default),
+ * and `isDefault: false` un-pins it (the provider reverts to usage-aware rotation).
+ */
+export const updateApiKeySchema = v.object({
+  enabled: v.optional(v.boolean()),
+  isDefault: v.optional(v.boolean()),
+})
+export type UpdateApiKeyInput = v.InferOutput<typeof updateApiKeySchema>
