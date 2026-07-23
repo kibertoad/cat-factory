@@ -1,5 +1,50 @@
 # @cat-factory/worker
 
+## 0.98.0
+
+### Minor Changes
+
+- 15249df: Opt-in, per-workspace review-debt friction on task creation.
+
+  When a workspace enables it, authoring a new task is frictioned while finished work sits unreviewed:
+  past a soft warn threshold (count of tasks parked on human review) creating a task requires an
+  explicit acknowledgement, and in `enforce` mode it is refused outright once too many tasks are in
+  review (by count) or one has waited too long (by age). Off by default — zero behaviour change for
+  workspaces that don't enable it.
+
+  - **Debt is derived from the existing open-notification signal** — no new "in review" state. A new
+    closed `REVIEW_WAIT_NOTIFICATION_TYPES` constant + the pure `assessReviewFriction` verdict live in
+    `@cat-factory/contracts`, so the SPA pre-warns with the SAME function the backend enforces with.
+  - **Enforced server-side** in `BoardService.addTask` behind optional settings/notifications seams
+    (pass-through when unwired or off); a `review_debt_warn` / `review_debt_blocked` 409 drives the
+    friction dialog, and an acknowledgement can never tunnel through a hard block.
+  - **Four new `workspace_settings` fields** (mode + warn count + two nullable hard-block triggers),
+    mirrored across D1 and Drizzle with cross-runtime conformance coverage.
+  - **Frontend**: a "Review friction" settings group, the friction dialog (with a "go review" deep
+    link), a pre-warn debt badge on the add-task affordance, and copy localized in every locale.
+
+  Full design: `backend/docs/review-debt-friction.md`.
+
+### Patch Changes
+
+- Updated dependencies [15249df]
+  - @cat-factory/contracts@0.159.0
+  - @cat-factory/kernel@0.153.0
+  - @cat-factory/orchestration@0.134.0
+  - @cat-factory/agents@0.68.3
+  - @cat-factory/consensus@0.11.27
+  - @cat-factory/eks@0.1.127
+  - @cat-factory/gates@0.7.19
+  - @cat-factory/gitlab@0.11.19
+  - @cat-factory/integrations@0.91.2
+  - @cat-factory/observability-otel@0.2.33
+  - @cat-factory/prompt-fragments@0.14.6
+  - @cat-factory/server@0.143.2
+  - @cat-factory/spend@0.12.76
+  - @cat-factory/caching@0.10.32
+  - @cat-factory/observability-langfuse@0.7.250
+  - @cat-factory/provider-cloudflare@0.7.277
+
 ## 0.97.1
 
 ### Patch Changes
