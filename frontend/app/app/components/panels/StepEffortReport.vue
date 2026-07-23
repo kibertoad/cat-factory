@@ -3,9 +3,18 @@
 // (1..10), what reduced its effectiveness, and the key obstacles it hit. Populated by the harness
 // from the agent's sentinel file and recorded on the step (`step.effortReport`). Rendered only when
 // present, so a run on an older harness image (or an agent that wrote none) shows nothing.
+//
+// Two callers, one renderer: the generic step-detail panel drops it in as a `card` (its own
+// heading + border, sitting among the other detail sections), and `ResultWindowShell`'s
+// collapsible footer embeds it `flat` — the disclosure row is already the heading there, so a
+// second one plus a nested border would just be chrome inside chrome.
 import type { AgentEffortReport } from '~/types/execution'
+import { effortBand } from '~/utils/effort'
 
-const props = defineProps<{ report: AgentEffortReport }>()
+const props = withDefaults(
+  defineProps<{ report: AgentEffortReport; variant?: 'card' | 'flat' }>(),
+  { variant: 'card' },
+)
 const { t } = useI18n()
 
 // Clamp for the bar width; the schema already bounds 1..10 but be defensive against a stray value.
@@ -13,21 +22,19 @@ const difficultyPct = computed(() =>
   Math.min(100, Math.max(0, (props.report.difficulty / 10) * 100)),
 )
 // Colour the difficulty by band: easy (emerald) → moderate (amber) → hard (rose).
-const difficultyClass = computed(() =>
-  props.report.difficulty >= 8
-    ? 'bg-rose-400'
-    : props.report.difficulty >= 5
-      ? 'bg-amber-400'
-      : 'bg-emerald-400',
-)
+const BAR_CLASS = { easy: 'bg-emerald-400', moderate: 'bg-amber-400', hard: 'bg-rose-400' } as const
+const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficulty)])
 </script>
 
 <template>
   <section
     data-testid="step-effort-report"
-    class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+    :class="
+      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4' : ''
+    "
   >
     <div
+      v-if="variant === 'card'"
       class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
     >
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />

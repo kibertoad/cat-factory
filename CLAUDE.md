@@ -1931,6 +1931,12 @@ auth-enabled or it passes vacuously.
   `AGENT_BY_KIND` const is frozen (never mutated), and `agentKindMeta` resolves custom kinds
   through a slot-sourced reactive projection.
   `requirements-review` is the first consumer (the review window).
+  **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the windows.**
+  The shell already owns the chrome + modal behaviour; it also renders the shared trailing
+  section (today: the agent's effort self-assessment, `step.effortReport`, as a collapsible
+  footer), resolving the step from `ui.resultView` itself rather than a per-window prop — so a
+  window can't opt out, forget to pass it, or place it differently. Adding a second such
+  universal section is one edit there, not eighteen.
 - **Inspector panel seam (frontend):** the block inspector's body is a **subject-keyed panel
   group** (slice 4 of the modular-vue adoption), not a `v-if` monolith. Each body sub-panel is a
   `PanelEntry<Block>` (`{ id, component, when(block), order }`) contributed to the `inspectorPanels`
