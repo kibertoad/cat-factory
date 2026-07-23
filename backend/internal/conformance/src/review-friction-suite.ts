@@ -77,7 +77,10 @@ export function defineReviewFrictionSuite(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const wsId = (await app.createWorkspace()).workspace.id
       const frameId = await makeFrame(app, wsId)
-      expect((await setFriction(app, wsId, { reviewFrictionMode: 'warn', reviewFrictionWarnCount: 2 })).status).toBe(200)
+      expect(
+        (await setFriction(app, wsId, { reviewFrictionMode: 'warn', reviewFrictionWarnCount: 2 }))
+          .status,
+      ).toBe(200)
 
       // One card < warn count ⇒ still allowed.
       await seedDebt(app, wsId, `b1-${uniq()}`, 1)

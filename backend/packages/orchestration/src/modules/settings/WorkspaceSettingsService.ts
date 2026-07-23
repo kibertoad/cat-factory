@@ -117,10 +117,7 @@ export class WorkspaceSettingsService {
     // knobs persist across mode switches so toggling back to `enforce` restores them; the verdict
     // function only consults them in `enforce`, so a warn/off mode never reads a stale threshold.
     if (next.reviewFrictionMode === 'enforce') {
-      if (
-        next.reviewFrictionBlockCount == null &&
-        next.reviewFrictionBlockStuckMinutes == null
-      ) {
+      if (next.reviewFrictionBlockCount == null && next.reviewFrictionBlockStuckMinutes == null) {
         throw new ValidationError(
           'Enforce mode requires at least one hard-block threshold (a block count or a stuck-minutes limit).',
         )

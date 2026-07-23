@@ -71,9 +71,7 @@ describe('assessReviewFriction', () => {
 
   it('warn tier fires at (not below) the warn count', () => {
     const two = [card({ blockId: 'a' }), card({ blockId: 'b' })]
-    expect(
-      assessReviewFriction(two, settings({ reviewFrictionWarnCount: 3 }), NOW).kind,
-    ).toBe('ok')
+    expect(assessReviewFriction(two, settings({ reviewFrictionWarnCount: 3 }), NOW).kind).toBe('ok')
 
     const three = [...two, card({ blockId: 'c' })]
     const verdict = assessReviewFriction(three, settings({ reviewFrictionWarnCount: 3 }), NOW)
@@ -85,7 +83,11 @@ describe('assessReviewFriction', () => {
     const open = [card({ blockId: 'a' }), card({ blockId: 'b' })]
     const verdict = assessReviewFriction(
       open,
-      settings({ reviewFrictionMode: 'enforce', reviewFrictionWarnCount: 1, reviewFrictionBlockCount: 2 }),
+      settings({
+        reviewFrictionMode: 'enforce',
+        reviewFrictionWarnCount: 1,
+        reviewFrictionBlockCount: 2,
+      }),
       NOW,
     )
     expect(verdict).toMatchObject({ kind: 'block', reason: 'count' })
