@@ -150,6 +150,26 @@ describe('createTaskPlanTracker', () => {
     t.onAssistant([{ type: 'tool_use', name: 'TaskCreate', id: 'c1', input: {} }])
     expect(t.progress()?.items?.[0]?.label).toBe('Task 1')
   })
+
+  it('drops a task whose delete raced ahead of its create bind', () => {
+    const t = createTaskPlanTracker()
+    t.onAssistant([create('c1', 'keep'), create('c2', 'doomed')])
+    t.onAssistant([update('2', 'deleted')]) // delete for id 2 before c2's result binds it
+    t.onUser([created('c1', '1'), created('c2', '2')])
+    // The tombstone is replayed on bind, so 'doomed' never sticks in the plan.
+    expect(t.progress()).toMatchObject({ total: 1, items: [{ label: 'keep', status: 'pending' }] })
+  })
+
+  it('keeps total honest when two creates resolve to the same task id', () => {
+    const t = createTaskPlanTracker()
+    t.onAssistant([create('c1', 'first'), create('c2', 'second')])
+    // A duplicate / misparsed id: both results claim task 1. The second must not overwrite the
+    // first (which would silently drop a row); it stays under its synthetic key.
+    t.onUser([created('c1', '1'), created('c2', '1')])
+    expect(t.progress()?.total).toBe(2)
+    t.onAssistant([update('1', 'completed')])
+    expect(t.progress()).toMatchObject({ total: 2, completed: 1 })
+  })
 })
 
 describe('pickProgress (ADR 0027 Defect B)', () => {

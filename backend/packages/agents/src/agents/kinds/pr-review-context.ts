@@ -6,6 +6,10 @@ import type {
   RepoOpResult,
 } from '@cat-factory/kernel'
 import type { ComposableFragment } from '../runtime/fragments.js'
+import {
+  STANDARDS_CONTEXT_FILE_PREFIX,
+  STANDARDS_CONTEXT_INDEX_FILE,
+} from '../runtime/fragments.js'
 
 // ---------------------------------------------------------------------------
 // What the `pr-reviewer` is handed UP FRONT, as `.cat-context/*.md` files.
@@ -42,8 +46,13 @@ export const PR_DIFF_CONTEXT_FILE = 'pr-diff.md'
 /** The injected context file listing the PR's already-posted review comments (for de-dup). */
 export const PR_EXISTING_COMMENTS_CONTEXT_FILE = 'pr-existing-comments.md'
 
-/** Filename prefix for the per-standard context files the standards preOp writes. */
-export const PR_STANDARD_CONTEXT_PREFIX = 'standard-'
+/**
+ * Filename prefix for the per-standard context files the standards preOp writes. Re-exports the
+ * SHARED convention (`@cat-factory/agents` `fragments.ts`) so `standardsDeliveredAsFiles` — which
+ * decides whether to fold standards into the prompt as a fallback — recognises what this preOp
+ * writes without knowing anything pr-review-specific.
+ */
+export const PR_STANDARD_CONTEXT_PREFIX = STANDARDS_CONTEXT_FILE_PREFIX
 
 /**
  * Total inlined-patch budget. Under it, the WHOLE diff is inlined and a small PR is reviewable
@@ -250,6 +259,10 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
   )
   const inlineBytes = inlinable.reduce((sum, f) => sum + enc.encode(f.patch ?? '').length, 0)
   const inlinePatches = inlineBytes <= MAX_INLINE_DIFF_BYTES
+  // The manifest-only header reports the WHOLE patch size (incl. over-cap blobs), not just the
+  // inlinable slice, so the "~N KiB of patch" figure matches the diff the reviewer is told to
+  // read from git rather than understating it by the size of the excluded lockfile/snapshot.
+  const totalPatchBytes = files.reduce((sum, f) => sum + enc.encode(f.patch ?? '').length, 0)
 
   const header =
     `# Pull request #${number} — changed files and diff\n\n` +
@@ -273,7 +286,7 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
   ]
 
   if (!inlinePatches) {
-    sections.push(largePrGuidance(files.length, inlineBytes))
+    sections.push(largePrGuidance(files.length, totalPatchBytes))
     return `${sections.join('\n')}\n`
   }
 
@@ -379,14 +392,32 @@ export function renderExistingReviewComments(
 // `.cat-context/standard-<id>.md`
 // ---------------------------------------------------------------------------
 
+/** A short, stable base36 hash of a string — enough to disambiguate a sanitized-name collision. */
+function shortHash(value: string): string {
+  let h = 2166136261 // FNV-1a
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return (h >>> 0).toString(36)
+}
+
 /**
  * The `.cat-context/` filename a resolved best-practice standard is written to. Non-portable
- * characters are stripped to match the harness's context-file sanitizer exactly (it keeps only
- * `[A-Za-z0-9._-]` and flattens any directory), so the name in the index is the name on disk.
+ * characters are replaced with `-` so the name survives the harness's context-file sanitizer
+ * (it keeps only `[A-Za-z0-9._-]` and flattens any directory) unchanged — the name in the index
+ * is then the name on disk.
+ *
+ * When sanitizing ALTERS the id, two distinct ids can sanitize to the same slug (`org/team` and
+ * `org team` both → `org-team`); the harness drops the duplicate path, silently losing the second
+ * standard while the index still advertises it. So a short hash of the ORIGINAL id is appended
+ * whenever the slug differs from the id, making the filename unique per id. An already-safe id is
+ * left untouched (no suffix), so the common case stays readable.
  */
 export function standardsContextFileName(fragmentId: string): string {
   const slug = fragmentId.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[.-]+/, '') || 'unnamed'
-  return `${PR_STANDARD_CONTEXT_PREFIX}${slug}.md`
+  const suffix = slug === fragmentId ? '' : `-${shortHash(fragmentId)}`
+  return `${PR_STANDARD_CONTEXT_PREFIX}${slug}${suffix}.md`
 }
 
 /** Render one standard as its own context file, with the title the reviewer cites it by. */
@@ -420,8 +451,8 @@ export function renderStandardsIndex(fragments: ComposableFragment[]): string {
   )
 }
 
-/** The index file listing every injected standard. */
-export const PR_STANDARDS_INDEX_CONTEXT_FILE = 'standards.md'
+/** The index file listing every injected standard (the shared `context-files` convention). */
+export const PR_STANDARDS_INDEX_CONTEXT_FILE = STANDARDS_CONTEXT_INDEX_FILE
 
 // ---------------------------------------------------------------------------
 // PreOps

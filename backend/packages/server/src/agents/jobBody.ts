@@ -8,6 +8,7 @@ import {
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
   resolvePrNumber,
+  standardsDeliveredAsFiles,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -132,6 +133,7 @@ export function buildKindBody(
     systemPromptFor(context.agentKind, registry),
     context.block,
     registry.standardsDelivery(context.agentKind),
+    standardsDeliveredAsFiles(context.injectedContextFiles),
   )
   // Every container agent is asked to end its run by writing a short effort self-assessment
   // (how hard the work was, what reduced its effectiveness, the obstacles) to a sentinel file
@@ -877,7 +879,12 @@ function buildMigratedBuiltInBody(
           clone: { branch: 'base', full: true },
           output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
         },
-        composeBlockSystemPrompt(ON_CALL_SYSTEM_PROMPT, context.block),
+        composeBlockSystemPrompt(
+          ON_CALL_SYSTEM_PROMPT,
+          context.block,
+          registry.standardsDelivery(context.agentKind),
+          standardsDeliveredAsFiles(context.injectedContextFiles),
+        ),
         registry,
         onCallUserPrompt(context, repo, registry),
       )

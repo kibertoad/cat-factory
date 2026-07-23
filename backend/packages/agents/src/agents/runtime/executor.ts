@@ -5,7 +5,7 @@ import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/regis
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
-import { composeBlockSystemPrompt } from './fragments.js'
+import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
 import {
   type InlineWebSearchOptions,
   providerWebSearchTools,
@@ -179,6 +179,7 @@ export class AiAgentExecutor implements AgentExecutor {
       baseSystem,
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
+      standardsDeliveredAsFiles(context.injectedContextFiles),
     )
 
     // Provider-hosted web search for the allow-listed design/research kinds, when

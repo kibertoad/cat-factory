@@ -140,6 +140,17 @@ image bump**, and is runtime-symmetric (the shared `ContainerAgentExecutor` + th
 - **Never let the parent paraphrase a standard.** A summary in a subagent prompt is not the
   standard, and `fragmentAdherence` ratings derived from it are not grounded. Route subagents to
   the `.cat-context/standard-<id>.md` files and have them read the text.
+- **`context-files` delivery has TWO halves that must agree.** Suppressing the fold
+  (`composeBlockSystemPrompt`) is only safe once the files were actually written. So: (1) the
+  reviewer's adherence guidance must point at `.cat-context/standards.md`, NOT "folded into this
+  prompt above" — the wrong variant tells the model to return an empty `fragmentAdherence` on
+  every run; (2) if the standards preOp can't run (run-repo resolver unwired), the engine falls
+  back to folding via `standardsDeliveredAsFiles`, so the standards are never lost through both
+  channels. The delivery argument is required, so a missed call site can't silently re-fold.
+- **Sanitized standard filenames must be unique.** `standard-<id>.md` replaces unsafe chars with
+  `-`, so two ids can collide to one filename and the harness (which dedupes context files by
+  path) drops the second — losing a standard while the index still lists it. A short hash of the
+  raw id is appended whenever sanitizing changed it.
 - **Pass-through when unwired.** No `listChangedFiles` on the bound client, no resolvable PR
   number, or an empty PR ⇒ inject nothing and let the prompt's git path run. Tests / GitHub-off
   deployments are unaffected.

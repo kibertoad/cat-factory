@@ -2,6 +2,7 @@
 '@cat-factory/executor-harness': patch
 '@cat-factory/local-server': patch
 '@cat-factory/agents': minor
+'@cat-factory/consensus': patch
 '@cat-factory/server': patch
 ---
 
@@ -22,7 +23,13 @@ turns × context, so anything loaded early is re-paid on every later turn.
   one `.cat-context/standard-<id>.md` file each. Folding charged the parent for every standard on
   every turn (~3.7M tokens) while the slice subagents that actually review the code never received
   them and worked from the parent's paraphrase — so `fragmentAdherence` was rated from a summary
-  rather than the standard's text.
+  rather than the standard's text. The reviewer's adherence guidance now points at those files
+  (not "folded into this prompt above"), and if the standards preOp couldn't run (GitHub unwired)
+  the engine falls back to folding so a review never loses its standards through both channels.
+  `composeBlockSystemPrompt`'s delivery argument is now required, so no call site (consensus
+  included) can silently re-fold a `context-files` kind's standards. Two standard ids that
+  sanitize to the same filename no longer collide (a short id hash disambiguates), so the harness
+  can't drop one.
 - `pr-diff.md` now leads with a change-shape rollup and a deterministic suggested slicing
   (`planSlices`, size-capped), and inlines patches only when the whole diff fits one pass. A
   partially-inlined large diff was carried on every turn and bypassed anyway — the slice subagents

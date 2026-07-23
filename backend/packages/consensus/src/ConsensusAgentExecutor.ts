@@ -22,6 +22,7 @@ import {
   defaultAgentKindRegistry,
   resolveAgentConfig,
   resolveInlineModelRef,
+  standardsDeliveredAsFiles,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -191,6 +192,8 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const baseSystem = composeBlockSystemPrompt(
       config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry),
       context.block,
+      this.agentKindRegistry.standardsDelivery(context.agentKind),
+      standardsDeliveredAsFiles(context.injectedContextFiles),
     )
     const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 

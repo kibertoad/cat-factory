@@ -68,24 +68,47 @@ export const EFFORT_REPORT_GUIDANCE =
 
 /**
  * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per
- * best-practice standard folded into its prompt (the delimited `<best-practice-standard>` blocks),
- * how well the reviewed object adheres — a 1..10 rating plus the specific issues that standard
- * surfaced — as a `fragmentAdherence` array in its JSON output. The standards are fed as separate
- * labelled blocks precisely so this can be per-standard. If NO best-practice standards were folded
- * in (none selected / the library isn't configured), the reviewer must say so rather than invent
- * ratings.
+ * best-practice standard, how well the reviewed object adheres — a 1..10 rating plus the specific
+ * issues that standard surfaced — as a `fragmentAdherence` array in its JSON output. The standards
+ * are labelled per-standard precisely so this can be per-standard. If NO best-practice standards
+ * were provided, the reviewer must say so rather than invent ratings.
+ *
+ * The standards reach the reviewer one of two ways (see {@link AgentKindDefinition.standardsDelivery}),
+ * so the "where are the standards" sentence differs:
+ *  - {@link FRAGMENT_ADHERENCE_GUIDANCE} — folded into THIS prompt as `<best-practice-standard>`
+ *    blocks (the default, for a kind that does the review itself in one context).
+ *  - {@link FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES} — delivered as `.cat-context/standard-*.md`
+ *    files (for a kind that DELEGATES the review to per-slice subagents; folding the standards into
+ *    the delegating prompt charges it for every standard on every turn while the subagents that
+ *    apply them never receive them — the pr-reviewer case). The rating still comes from the real
+ *    standard text, just read from the file rather than the prompt.
  */
-export const FRAGMENT_ADHERENCE_GUIDANCE =
-  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are folded into ' +
-  'this prompt above as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
-  'title. In your JSON output include a `fragmentAdherence` array with ONE entry per standard you ' +
+const FRAGMENT_ADHERENCE_REPORT_SHAPE =
+  'In your JSON output include a `fragmentAdherence` array with ONE entry per standard you ' +
   'used, of shape {"title":"<the standard\'s title>","fragmentId":"<its id>","rating":<1-10>,' +
   '"assessment":"<how well the reviewed change adheres to this standard and why>",' +
   '"relatedFindings":["<short reference to each issue this standard surfaced>"]}. `rating` is 1 ' +
   '(the change flatly violates the standard) to 10 (it fully adheres). Refer to each standard by ' +
-  'its TITLE. If NO best-practice standards were provided (the array of blocks above is empty), ' +
+  'its TITLE.'
+
+export const FRAGMENT_ADHERENCE_GUIDANCE =
+  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are folded into ' +
+  'this prompt above as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
+  'title. ' +
+  FRAGMENT_ADHERENCE_REPORT_SHAPE +
+  ' If NO best-practice standards were provided (the array of blocks above is empty), ' +
   'return `fragmentAdherence` as an empty array AND state explicitly in your summary that no ' +
   'best-practice standards were available to review against — do not invent any.'
+
+export const FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES =
+  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are NOT in this ' +
+  'prompt; they are the `.cat-context/standard-<id>.md` files listed in `.cat-context/standards.md`. ' +
+  'Each `fragmentAdherence` rating MUST come from the real standard text (yours or a slice ' +
+  "subagent's read of the file), never a paraphrase. " +
+  FRAGMENT_ADHERENCE_REPORT_SHAPE +
+  ' If `.cat-context/standards.md` is absent or lists no standards, return `fragmentAdherence` as ' +
+  'an empty array AND state explicitly in your summary that no best-practice standards were ' +
+  'available to review against — do not invent any.'
 
 export const FOLLOW_UP_GUIDANCE =
   'FORWARD-LOOKING FOLLOW-UPS — be future-looking as you work. Whenever you notice a ' +

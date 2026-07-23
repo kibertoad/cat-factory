@@ -2,7 +2,7 @@ import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
-import { FRAGMENT_ADHERENCE_GUIDANCE } from '../prompts/shared.js'
+import { FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES } from '../prompts/shared.js'
 import {
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
@@ -171,7 +171,7 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   '  }],\n' +
   '  "fragmentAdherence": [{ "title": "standard title", "fragmentId": "its id", "rating": 8, "assessment": "how well the PR adheres to this standard", "relatedFindings": ["short reference to each issue this standard surfaced"] }]\n' +
   '}\n\n' +
-  FRAGMENT_ADHERENCE_GUIDANCE
+  FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES
 
 export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
   {

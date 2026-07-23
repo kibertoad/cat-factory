@@ -112,10 +112,20 @@ export function createTaskPlanTracker(): TaskPlanTracker {
   const pendingCreates = new Map<string, string>()
   // Updates that arrived before their target was bound (the CLI can interleave), replayed on bind.
   const orphanUpdates = new Map<string, Partial<PlannedTask>>()
+  // `deleted` tombstones for a task id whose create has not bound yet, replayed on bind — else a
+  // delete that races ahead of its create leaves the task in the plan forever.
+  const pendingDeletes = new Set<string>()
 
   const apply = (task: PlannedTask, patch: Partial<PlannedTask>): void => {
     if (patch.label) task.label = patch.label
     if (patch.status) task.status = patch.status
+  }
+
+  // Drop a tombstoned task. When it isn't present yet (its create hasn't bound), remember the
+  // tombstone so the bind drops it rather than leaving it stuck in the plan forever.
+  const markDeleted = (taskId: string): void => {
+    if (!tasks.delete(taskId)) pendingDeletes.add(taskId)
+    orphanUpdates.delete(taskId)
   }
 
   return {
@@ -140,15 +150,12 @@ export function createTaskPlanTracker(): TaskPlanTracker {
           const patch: Partial<PlannedTask> = {}
           if (typeof input.subject === 'string' && input.subject.trim())
             patch.label = input.subject.trim()
-          if (input.status !== undefined) {
+          if (input.status === 'deleted') {
             // `deleted` is a tombstone, not a status — drop the task from the live list.
-            if (input.status === 'deleted') {
-              tasks.delete(taskId)
-              orphanUpdates.delete(taskId)
-              continue
-            }
-            patch.status = normalizeStatus(input.status)
+            markDeleted(taskId)
+            continue
           }
+          if (input.status !== undefined) patch.status = normalizeStatus(input.status)
           const task = tasks.get(taskId)
           if (task) apply(task, patch)
           else orphanUpdates.set(taskId, { ...orphanUpdates.get(taskId), ...patch })
@@ -166,14 +173,23 @@ export function createTaskPlanTracker(): TaskPlanTracker {
         pendingCreates.delete(toolUseId!)
         const task = tasks.get(key)
         // No parsable id ⇒ leave it filed under its synthetic key: it still counts toward the
-        // plan total, it just can never be advanced by a later `TaskUpdate`.
-        if (!taskId || !task || taskId === key) continue
+        // plan total, it just can never be advanced by a later `TaskUpdate`. A parsed id that
+        // already names a live task (a duplicate / misparse) is also left under the synthetic key
+        // rather than overwriting that task — the rebuild below would otherwise drop a row and
+        // undercount `total`.
+        if (!taskId || !task || taskId === key || tasks.has(taskId)) continue
         // Re-key in place. Rebuilding the map preserves insertion order, which `items` relies on.
         const entries = [...tasks.entries()]
         tasks.clear()
         for (const [k, v] of entries) {
           if (k !== key) tasks.set(k, v)
           else tasks.set(taskId, { ...v, id: taskId })
+        }
+        // A tombstone that raced ahead of this bind drops the task now that it exists.
+        if (pendingDeletes.delete(taskId)) {
+          tasks.delete(taskId)
+          orphanUpdates.delete(taskId)
+          continue
         }
         const pendingPatch = orphanUpdates.get(taskId)
         if (pendingPatch) {

@@ -8,10 +8,12 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, hasTrait } from './traits.js'
+import { composeBlockSystemPrompt } from '../runtime/fragments.js'
 import {
   PR_DIFF_CONTEXT_FILE,
   PR_EXISTING_COMMENTS_CONTEXT_FILE,
   PR_REVIEWER_KIND,
+  PR_REVIEWER_SYSTEM_PROMPT,
   planSlices,
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
@@ -311,12 +313,22 @@ describe('standards as context files', () => {
   const fragment = (id: string, title?: string) => ({ id, title, body: `body of ${id}` })
 
   it('names each file so it survives the harness context-file sanitizer verbatim', () => {
+    // An already-safe id keeps a clean, readable filename (no hash suffix).
     expect(standardsContextFileName('idiomatic-csharp')).toBe('standard-idiomatic-csharp.md')
     // The harness keeps only [A-Za-z0-9._-] and flattens directories, so the name generated
     // here must already be in that alphabet or the prompt would point at a file that isn't there.
     const name = standardsContextFileName('org/team scoped:standard')
-    expect(name).toBe('standard-org-team-scoped-standard.md')
+    expect(name).toMatch(/^standard-org-team-scoped-standard-[a-z0-9]+\.md$/)
     expect(name).toMatch(/^[A-Za-z0-9._-]+$/)
+  })
+
+  it('disambiguates two ids that sanitize to the same slug (else the harness drops one)', () => {
+    // `org/team` and `org team` both sanitize to `org-team`; the harness dedupes by path, so
+    // without the hash suffix the second standard would silently vanish from the injected set.
+    const a = standardsContextFileName('org/team')
+    const b = standardsContextFileName('org team')
+    expect(a).not.toBe(b)
+    expect(a).toMatch(/^standard-org-team-[a-z0-9]+\.md$/)
   })
 
   it('renders one file per standard with its citable title', () => {
@@ -424,6 +436,27 @@ describe('pr-reviewer kind registration', () => {
     // for every standard on every turn (145 KB / ~36k tokens × 96 turns on the measured run)
     // while the subagents that apply them never received them.
     expect(defaultAgentKindRegistry().standardsDelivery(PR_REVIEWER_KIND)).toBe('context-files')
+  })
+
+  it('composes the reviewer prompt WITHOUT folding the standards once they are delivered as files', () => {
+    // The saving only materialises if the compose layer actually honours `context-files`: with the
+    // standards delivered as `.cat-context/` files, the reviewer's own prompt must carry none of
+    // the `<best-practice-standard>` blocks that would be re-sent on every turn.
+    const registry = defaultAgentKindRegistry()
+    const composed = composeBlockSystemPrompt(
+      PR_REVIEWER_SYSTEM_PROMPT,
+      {
+        resolvedFragments: [
+          { id: 'idiomatic-csharp', title: 'Idiomatic C#', body: 'x'.repeat(500) },
+        ],
+      },
+      registry.standardsDelivery(PR_REVIEWER_KIND),
+      true, // standards delivered as files
+    )
+    expect(composed).toBe(PR_REVIEWER_SYSTEM_PROMPT)
+    expect(composed).not.toContain('<best-practice-standard')
+    // ...and the adherence guidance points at the files, not "folded into this prompt above".
+    expect(composed).toContain('.cat-context/standards.md')
   })
 
   it('requests the PR-head prefetch (clone.prHead) so the engine resolves reviewPrNumber', () => {

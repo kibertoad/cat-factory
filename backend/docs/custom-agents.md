@@ -86,15 +86,24 @@ pipelineRegistry.register({
 
 ### `AgentKindDefinition` (in `@cat-factory/agents`)
 
-| Field                                                 | Purpose                                                                                                          |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                           |
-| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                      |
-| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                          |
-| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM. |
-| `preOps?` / `postOps?`                                | `RepoOp[]` — deterministic backend hooks over `RepoFiles`.                                                       |
-| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`resultView`.                                                         |
-| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                          |
+| Field                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                                                                                                                                                                                                                                                                                      |
+| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                                                                                                                                                                                                                                                                                 |
+| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                                                                                                                                                                                                                                                                                     |
+| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM.                                                                                                                                                                                                                                                            |
+| `preOps?` / `postOps?`                                | `RepoOp[]` — deterministic backend hooks over `RepoFiles`.                                                                                                                                                                                                                                                                                                                  |
+| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`resultView`.                                                                                                                                                                                                                                                                                                                    |
+| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                     |
+| `standardsDelivery?`                                  | `'prompt'` (default) folds a `code-aware`/`doc-aware` kind's resolved standards into its system prompt; `'context-files'` skips that fold — the kind's own preOp MUST write them as `.cat-context/standard-<id>.md` files (see `pr-reviewer`). Right for a kind that DELEGATES review to subagents, so the delegating agent isn't charged for every standard on every turn. |
+
+**`standardsDelivery: 'context-files'`** is for a kind that fans work out to subagents. Because an
+agentic loop re-sends its whole prompt every turn, folding the standards into a delegating agent's
+prompt pays for them on every turn while the subagents that actually apply them never receive them.
+Declaring `'context-files'` stops the fold; the kind's preOp writes the standards as
+`.cat-context/` files (index `standards.md` + one `standard-<id>.md` each) and its prompt points the
+agent at them. If that preOp does not run (e.g. GitHub unwired, so the engine skips the kind's repo
+hooks) the engine falls back to folding, so the standards are never lost through both channels.
 
 A `container-*` surface implies the container requirement automatically
 (`registeredKindRequiresContainer`), so `requiresContainer` need not be set alongside it.
