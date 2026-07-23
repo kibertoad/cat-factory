@@ -19,10 +19,10 @@ import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './
 // subagent parallelism:
 //
 //  - {@link createSliceTracker} derives the slice plan + per-slice progress from the
-//    PARENT stream alone — the `Task` tool_use dispatch and its terminal tool_result
+//    PARENT stream alone — the subagent-dispatch tool_use and its terminal tool_result
 //    DO appear there (only the subagent's intermediate turns don't), so slices/progress
-//    need no file watching (D2.1). {@link pickProgress} reconciles it with any parent
-//    TodoWrite plan (ADR 0027 Defect B);
+//    need no file watching (D2.1). `pickProgress` (./progress.ts) reconciles it with the
+//    parent's own plan (ADR 0027 Defect B);
 //  - {@link startSubagentWatcher} tails the `subagents/*.jsonl` transcripts for the
 //    heartbeat (any new bytes ⇒ `onActivity`) and sums each subagent turn's usage into
 //    the run's telemetry (D3).
@@ -42,17 +42,26 @@ import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './
 // Slice / progress tracking off the PARENT stream (D2.1)
 // ---------------------------------------------------------------------------
 
+/**
+ * The tool names the Claude Code CLI dispatches a parallel subagent under. `Agent` is what the
+ * shipped schema declares (`AgentInput` in `sdk-tools.d.ts`, carrying `description` / `prompt` /
+ * `subagent_type`); `Task` is the older name for the same dispatch. Both are matched because the
+ * harness runs against whatever CLI the image happens to bundle, and matching only the old name
+ * is what left a CLI 2.1.x pr-review reporting no slices at all.
+ */
+const SUBAGENT_TOOL_NAMES = new Set(['Agent', 'Task'])
+
 interface TrackedSlice {
-  /** The `Task` tool_use id, used to pair the terminal tool_result. */
+  /** The dispatch's tool_use id, used to pair the terminal tool_result. */
   toolUseId: string
   /** The subagent's description (`Review <slice> slice`), rendered as the progress label. */
   description: string
   done: boolean
 }
 
-/** Tracks parallel `Task` subagents seen on the parent stream to derive slice progress. */
+/** Tracks parallel subagents seen on the parent stream to derive slice progress. */
 export interface SliceTracker {
-  /** Feed an `assistant` message's content blocks: registers any `Task` dispatches. */
+  /** Feed an `assistant` message's content blocks: registers any subagent dispatches. */
   onAssistant(content: unknown[]): void
   /** Feed a `user` message's content blocks: marks the paired subagent(s) complete. */
   onUser(content: unknown[]): void
@@ -60,8 +69,8 @@ export interface SliceTracker {
   hasSlices(): boolean
   /**
    * Progress derived from the dispatched subagents (completed / in-flight / total),
-   * or undefined when none have been dispatched. Reconciled with any parent TodoWrite
-   * plan by {@link pickProgress} — it is NOT gated off by the presence of a todo plan
+   * or undefined when none have been dispatched. Reconciled with the parent's own plan
+   * by `pickProgress` (./progress.ts) — it is NOT gated off by the presence of a plan
    * (that gate was ADR 0027 Defect B: the pr-reviewer prompt writes the plan ONCE at
    * grouping time and never marks it done, which used to permanently mask this signal).
    */
@@ -76,7 +85,8 @@ export function createSliceTracker(): SliceTracker {
     onAssistant(content) {
       if (!Array.isArray(content)) return
       for (const block of content) {
-        if (!isObject(block) || block.type !== 'tool_use' || block.name !== 'Task') continue
+        if (!isObject(block) || block.type !== 'tool_use') continue
+        if (typeof block.name !== 'string' || !SUBAGENT_TOOL_NAMES.has(block.name)) continue
         const id = typeof block.id === 'string' ? block.id : undefined
         if (!id || slices.has(id)) continue
         const input = isObject(block.input) ? block.input : {}
@@ -114,31 +124,6 @@ export function createSliceTracker(): SliceTracker {
       }
     },
   }
-}
-
-/**
- * Reconcile the two redundant views of the same slice work into the one to surface
- * (ADR 0027 Defect B). A pr-reviewer run has BOTH a parent `TodoWrite` plan (the slices,
- * written once at grouping time) and the {@link SliceTracker}'s `Task`-dispatch view. The
- * sequential shape advances the todo plan; the parallel-subagent shape advances ONLY the
- * slice tracker (the CLI writes the plan once and never marks it done, while the parallel
- * `Task`s report in-flight/complete). Neither alone covers both shapes, and gating the
- * slice tracker OFF whenever a todo plan exists (the old behaviour) pinned parallel runs
- * at 0%. So prefer whichever view is further along: more `completed`, then more
- * `inProgress` (an all-pending todo plan must not beat live in-flight slices), then more
- * `total` (the richer view — the todo plan can carry an extra "aggregate" entry), else the
- * todo plan. Pure + total; returns whichever single input is present when only one is.
- */
-export function pickProgress(
-  todo: TodoProgress | undefined,
-  slice: TodoProgress | undefined,
-): TodoProgress | undefined {
-  if (!todo) return slice
-  if (!slice) return todo
-  if (slice.completed !== todo.completed) return slice.completed > todo.completed ? slice : todo
-  if (slice.inProgress !== todo.inProgress) return slice.inProgress > todo.inProgress ? slice : todo
-  if (slice.total !== todo.total) return slice.total > todo.total ? slice : todo
-  return todo
 }
 
 // ---------------------------------------------------------------------------

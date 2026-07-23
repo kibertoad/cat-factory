@@ -131,6 +131,7 @@ export function buildKindBody(
   const baseRoleSystemPrompt = composeBlockSystemPrompt(
     systemPromptFor(context.agentKind, registry),
     context.block,
+    registry.standardsDelivery(context.agentKind),
   )
   // Every container agent is asked to end its run by writing a short effort self-assessment
   // (how hard the work was, what reduced its effectiveness, the obstacles) to a sentinel file

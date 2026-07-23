@@ -90,6 +90,22 @@ export interface AgentKindDefinition {
    */
   traits?: AgentTrait[]
   /**
+   * How this kind receives the best-practice standards its `code-aware`/`doc-aware` trait
+   * resolved.
+   *
+   * - `prompt` (default) — folded into the system prompt, so they are always in context. Right
+   *   for a kind that does the work itself, in one context.
+   * - `context-files` — NOT folded; the kind's own preOp writes them as `.cat-context/` files
+   *   and its prompt points the agent at them. Right for a kind that DELEGATES the work to
+   *   subagents: an agentic loop re-sends its prompt on every turn, so folding charges the
+   *   delegating agent for every standard on every one of its turns while the subagents that
+   *   actually apply them never receive them. A kind choosing this MUST write the files itself
+   *   (see `prReviewerStandardsPreOp`) and say where they are — the engine only stops folding.
+   *
+   * Omitted ⇒ `prompt`.
+   */
+  standardsDelivery?: 'prompt' | 'context-files'
+  /**
    * Per-kind execution tuning folded into a container dispatch's job body (today the
    * progress-guard knobs). Lets a custom kind whose normal pattern differs from the
    * default loosen a guard so it isn't killed mid-progress. The knobs are loosen-only:
@@ -242,6 +258,15 @@ export class AgentKindRegistry {
   /** A registered kind's execution tuning, or undefined when unregistered / not supplied. */
   tuning(kind: AgentKind): AgentTuning | undefined {
     return this.registry.get(kind)?.tuning
+  }
+
+  /**
+   * Whether this kind's resolved best-practice standards are folded into its system prompt
+   * (the default) or delivered as `.cat-context/` files by its own preOp. See
+   * {@link AgentKindDefinition.standardsDelivery}.
+   */
+  standardsDelivery(kind: AgentKind): 'prompt' | 'context-files' {
+    return this.registry.get(kind)?.standardsDelivery ?? 'prompt'
   }
 
   /** A registered kind's contributed config descriptors, or an empty array when none. */

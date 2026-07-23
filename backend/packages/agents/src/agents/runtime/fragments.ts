@@ -79,8 +79,18 @@ export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = 
  * catalog bodies when present and otherwise falling back to static id resolution.
  * Both inline and container executors use this so the fragment-library feature
  * applies uniformly to every agent kind, not just the reviewer.
+ *
+ * `delivery: 'context-files'` returns the base prompt UNCHANGED: that kind's own preOp writes
+ * the standards as `.cat-context/` files and its prompt points the agent at them, because
+ * folding them in would charge a delegating agent for every standard on every turn of its loop.
+ * See {@link AgentKindDefinition.standardsDelivery}.
  */
-export function composeBlockSystemPrompt(baseSystem: string, block: ComposableBlock): string {
+export function composeBlockSystemPrompt(
+  baseSystem: string,
+  block: ComposableBlock,
+  delivery: 'prompt' | 'context-files' = 'prompt',
+): string {
+  if (delivery === 'context-files') return baseSystem
   if (block.resolvedFragments && block.resolvedFragments.length > 0) {
     return foldStandards(baseSystem, block.resolvedFragments)
   }

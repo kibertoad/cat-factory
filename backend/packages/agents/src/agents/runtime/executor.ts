@@ -175,7 +175,11 @@ export class AiAgentExecutor implements AgentExecutor {
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
     const baseSystem = config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)
-    const composed = composeBlockSystemPrompt(baseSystem, context.block)
+    const composed = composeBlockSystemPrompt(
+      baseSystem,
+      context.block,
+      this.agentKindRegistry.standardsDelivery(context.agentKind),
+    )
 
     // Provider-hosted web search for the allow-listed design/research kinds, when
     // enabled AND the resolved provider has one. The usage nudge is appended only

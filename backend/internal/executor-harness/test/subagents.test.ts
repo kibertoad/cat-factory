@@ -2,23 +2,22 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, appendFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createSliceTracker, pickProgress, startSubagentWatcher } from '../src/subagents.js'
-import type { TodoProgress } from '../src/pi.js'
+import { createSliceTracker, startSubagentWatcher } from '../src/subagents.js'
 
 // D2.1 (slice progress off the parent stream) + D3 (subagent usage off the transcripts),
 // corrected by ADR 0027: the watcher walks the `projects` tree for `**/subagents/*.jsonl`
-// (Defect A), and `pickProgress` reconciles the todo-plan + slice-tracker views (Defect B).
+// (Defect A). The plan/slice reconciliation lives in ./progress.test.ts.
 
 describe('createSliceTracker', () => {
-  const taskBlock = (id: string, description: string) => ({
+  const taskBlock = (id: string, description: string, name = 'Agent') => ({
     type: 'tool_use',
-    name: 'Task',
+    name,
     id,
     input: { description, subagent_type: 'general-purpose' },
   })
   const toolResult = (id: string) => ({ type: 'tool_result', tool_use_id: id, content: 'done' })
 
-  it('derives slices + progress from Task dispatches and their tool_results', () => {
+  it('derives slices + progress from subagent dispatches and their tool_results', () => {
     const t = createSliceTracker()
     expect(t.hasSlices()).toBe(false)
     expect(t.progress()).toBeUndefined()
@@ -44,54 +43,32 @@ describe('createSliceTracker', () => {
     expect(t.progress()).toMatchObject({ completed: 2, inProgress: 0, total: 2 })
   })
 
-  it('ignores non-Task tool_use and is idempotent on a repeated id', () => {
+  it('ignores non-dispatch tool_use and is idempotent on a repeated id', () => {
     const t = createSliceTracker()
     t.onAssistant([{ type: 'tool_use', name: 'Bash', id: 'b1', input: {} }])
+    t.onAssistant([{ type: 'tool_use', name: 'TaskCreate', id: 'tc1', input: { subject: 'x' } }])
     expect(t.hasSlices()).toBe(false)
     t.onAssistant([taskBlock('t1', 'slice')])
     t.onAssistant([taskBlock('t1', 'slice again')]) // same id — no double count
     expect(t.progress()?.total).toBe(1)
   })
 
-  it('labels a description-less Task by position', () => {
+  it('labels a description-less dispatch by position', () => {
     const t = createSliceTracker()
-    t.onAssistant([{ type: 'tool_use', name: 'Task', id: 't1', input: {} }])
+    t.onAssistant([{ type: 'tool_use', name: 'Agent', id: 't1', input: {} }])
     expect(t.progress()?.items?.[0]?.label).toBe('Subagent 1')
   })
-})
 
-describe('pickProgress (ADR 0027 Defect B)', () => {
-  const p = (completed: number, inProgress: number, total: number): TodoProgress => ({
-    completed,
-    inProgress,
-    total,
-    items: [],
-  })
-
-  it('returns whichever single source is present (or neither)', () => {
-    expect(pickProgress(undefined, undefined)).toBeUndefined()
-    expect(pickProgress(p(1, 0, 3), undefined)).toEqual(p(1, 0, 3))
-    expect(pickProgress(undefined, p(0, 2, 2))).toEqual(p(0, 2, 2))
-  })
-
-  it('prefers the slice tracker when the once-written todo plan is stale', () => {
-    // The pr-reviewer shape: the todo plan is written ONCE (5 slices + an aggregate entry),
-    // all pending, and never marked done. The parallel Task slices are what actually advance
-    // — first in flight, then all returned — so the slice tracker must win in both states.
-    const stalePlan = p(0, 0, 6)
-    expect(pickProgress(stalePlan, p(0, 4, 4))).toEqual(p(0, 4, 4)) // in-flight beats all-pending
-    expect(pickProgress(stalePlan, p(4, 0, 4))).toEqual(p(4, 0, 4)) // all returned beats 0 done
-  })
-
-  it('prefers the advancing todo plan for the sequential shape', () => {
-    expect(pickProgress(p(3, 1, 6), undefined)).toEqual(p(3, 1, 6))
-    expect(pickProgress(p(3, 1, 6), p(0, 2, 2))).toEqual(p(3, 1, 6)) // more completed wins
-  })
-
-  it('breaks a completed+inProgress tie toward the richer (more total) view, else the todo plan', () => {
-    expect(pickProgress(p(1, 1, 6), p(1, 1, 4))).toEqual(p(1, 1, 6))
-    const todo = p(2, 1, 5)
-    expect(pickProgress(todo, p(2, 1, 5))).toBe(todo) // full tie keeps the todo plan
+  // The CLI renamed the subagent-dispatch tool `Task` -> `Agent`; the shipped schema
+  // (`sdk-tools.d.ts`) declares `AgentInput` and no `TaskInput`. Matching only the old name
+  // is what left a CLI 2.1.x pr-review reporting zero slices for its whole run.
+  it('tracks both the current `Agent` and the legacy `Task` dispatch names', () => {
+    const t = createSliceTracker()
+    t.onAssistant([taskBlock('a1', 'Review DB slice', 'Agent')])
+    t.onAssistant([taskBlock('t1', 'Review auth slice', 'Task')])
+    expect(t.progress()).toMatchObject({ completed: 0, inProgress: 2, total: 2 })
+    t.onUser([toolResult('a1')])
+    expect(t.progress()).toMatchObject({ completed: 1, inProgress: 1, total: 2 })
   })
 })
 
