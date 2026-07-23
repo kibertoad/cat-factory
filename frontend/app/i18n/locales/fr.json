@@ -457,6 +457,22 @@
       "mergeFailed": "Échec de la fusion",
       "restartFailed": "Échec du redémarrage"
     },
+    "reviewFriction": {
+      "warnTitle": "Tâches en attente de revue",
+      "blockedTitle": "Trop de tâches en attente de revue",
+      "warnToast": "Des tâches attendent une revue humaine. Pensez à les revoir avant de créer plus de travail.",
+      "blockedToast": "La création de tâches est bloquée jusqu’à résorption de la file de revue.",
+      "warnBody": "{count} tâche(s) attendent une revue humaine. Pensez à les revoir avant de créer plus de travail.",
+      "blockedCountBody": "Création bloquée : {count} tâche(s) attendent une revue humaine (limite {threshold}). Résorbez d’abord la file de revue.",
+      "blockedStuckBody": "Création bloquée : une tâche attend une revue humaine depuis plus de {minutes} minute(s). Résorbez d’abord la file de revue.",
+      "waitingHeading": "En attente de revue",
+      "waiting": "{minutes} min d’attente",
+      "untitled": "Tâche sans titre",
+      "close": "Fermer",
+      "createAnyway": "Créer quand même",
+      "goReview": "Aller revoir",
+      "badge": "{count} tâche(s) en attente de revue"
+    },
     "conflict": {
       "title": {
         "dependencies_unmet": "Bloqué par des dépendances",
@@ -2568,6 +2584,23 @@
         "spike": "spike",
         "review": "revue",
         "ralph": "Boucle Ralph"
+      },
+      "reviewFriction": {
+        "heading": "Friction de dette de revue",
+        "body": "Décourage la création de nouvelles tâches tant que du travail terminé attend une revue humaine. Désactivé par défaut. « Avertir » ajoute une confirmation ; « Imposer » refuse la création au-delà d’une limite stricte.",
+        "mode": "Mode",
+        "modes": {
+          "off": "Désactivé",
+          "warn": "Avertir (confirmer pour continuer)",
+          "enforce": "Imposer (blocage strict)"
+        },
+        "warnCount": "Avertir à partir de (tâches en revue)",
+        "enforceHint": "« Imposer » refuse la création de tâches. Activez au moins un déclencheur strict ci-dessous.",
+        "blockCountToggle": "Bloquer quand trop de tâches sont en revue",
+        "blockCount": "Bloquer à partir de (tâches en revue)",
+        "blockStuckToggle": "Bloquer quand une tâche attend depuis trop longtemps",
+        "blockStuckMinutes": "Bloquer après (minutes d’attente)",
+        "needsTrigger": "Le mode « Imposer » nécessite au moins un déclencheur strict activé (un nombre ou un temps d’attente)."
       },
       "observability": {
         "heading": "Observabilité de l'agent",

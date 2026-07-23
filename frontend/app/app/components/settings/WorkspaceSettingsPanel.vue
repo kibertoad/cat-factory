@@ -8,7 +8,7 @@
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
-import type { TaskLimitMode } from '~/types/domain'
+import type { ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
@@ -129,6 +129,12 @@ const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
   { value: 'per_type', label: t('settings.workspaceSettings.taskLimit.modes.per_type') },
 ])
 
+const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: string }[]>(() => [
+  { value: 'off', label: t('settings.workspaceSettings.reviewFriction.modes.off') },
+  { value: 'warn', label: t('settings.workspaceSettings.reviewFriction.modes.warn') },
+  { value: 'enforce', label: t('settings.workspaceSettings.reviewFriction.modes.enforce') },
+])
+
 /** The localized "Max {type} tasks" label for a per-type running-task limit input. */
 function maxTaskTypeLabel(type: LimitTaskType): string {
   const key = TASK_TYPE_KEYS[type]
@@ -145,6 +151,12 @@ const draft = reactive({
   storeAgentContext: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
+  reviewFrictionMode: 'off' as ReviewFrictionMode,
+  reviewFrictionWarnCount: 3,
+  reviewFrictionBlockCountEnabled: false,
+  reviewFrictionBlockCount: 10 as number,
+  reviewFrictionBlockStuckEnabled: false,
+  reviewFrictionBlockStuckMinutes: 1440 as number,
 })
 
 function hydrate() {
@@ -157,6 +169,14 @@ function hydrate() {
   draft.storeAgentContext = s.storeAgentContext
   draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
+  draft.reviewFrictionMode = s.reviewFrictionMode
+  draft.reviewFrictionWarnCount = s.reviewFrictionWarnCount
+  // The hard-block knobs are nullable (null ⇒ that trigger is off); a per-trigger checkbox is
+  // enabled from whether a value is stored, defaulting the input to a sensible starting number.
+  draft.reviewFrictionBlockCountEnabled = s.reviewFrictionBlockCount != null
+  draft.reviewFrictionBlockCount = s.reviewFrictionBlockCount ?? 10
+  draft.reviewFrictionBlockStuckEnabled = s.reviewFrictionBlockStuckMinutes != null
+  draft.reviewFrictionBlockStuckMinutes = s.reviewFrictionBlockStuckMinutes ?? 1440
 }
 
 // `store.settings` is always replaced wholesale (store hydrate/update reassign the ref),
@@ -166,6 +186,25 @@ watch(() => store.settings, hydrate, { immediate: true })
 const saving = ref(false)
 
 async function save() {
+  // The hard-block triggers only apply in `enforce` mode; a disabled trigger sends null.
+  const blockCount =
+    draft.reviewFrictionMode === 'enforce' && draft.reviewFrictionBlockCountEnabled
+      ? draft.reviewFrictionBlockCount
+      : null
+  const blockStuckMinutes =
+    draft.reviewFrictionMode === 'enforce' && draft.reviewFrictionBlockStuckEnabled
+      ? draft.reviewFrictionBlockStuckMinutes
+      : null
+  // Mirror the backend's enforce-mode validation client-side so the user gets an immediate,
+  // localized message instead of the raw 422 (enforce needs at least one hard trigger).
+  if (draft.reviewFrictionMode === 'enforce' && blockCount == null && blockStuckMinutes == null) {
+    toast.add({
+      title: t('settings.workspaceSettings.reviewFriction.needsTrigger'),
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+    })
+    return
+  }
   saving.value = true
   try {
     await store.update({
@@ -185,6 +224,10 @@ async function save() {
       storeAgentContext: draft.storeAgentContext,
       artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
+      reviewFrictionMode: draft.reviewFrictionMode,
+      reviewFrictionWarnCount: draft.reviewFrictionWarnCount,
+      reviewFrictionBlockCount: blockCount,
+      reviewFrictionBlockStuckMinutes: blockStuckMinutes,
     })
     toast.add({
       title: t('settings.workspaceSettings.toast.saved'),
@@ -280,6 +323,80 @@ async function save() {
                   </span>
                   <UInput
                     v-model.number="draft.perType[taskType]"
+                    type="number"
+                    :min="1"
+                    size="sm"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <!-- Review-debt friction on task creation -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.reviewFriction.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.reviewFriction.body') }}
+              </p>
+              <label class="block w-64">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                  t('settings.workspaceSettings.reviewFriction.mode')
+                }}</span>
+                <USelect
+                  v-model="draft.reviewFrictionMode"
+                  :items="REVIEW_FRICTION_MODES"
+                  value-key="value"
+                  size="sm"
+                  class="w-full"
+                />
+              </label>
+
+              <label v-if="draft.reviewFrictionMode !== 'off'" class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  {{ t('settings.workspaceSettings.reviewFriction.warnCount') }}
+                </span>
+                <UInput
+                  v-model.number="draft.reviewFrictionWarnCount"
+                  type="number"
+                  :min="1"
+                  size="sm"
+                />
+              </label>
+
+              <div v-if="draft.reviewFrictionMode === 'enforce'" class="space-y-2">
+                <p class="text-[11px] text-slate-400">
+                  {{ t('settings.workspaceSettings.reviewFriction.enforceHint') }}
+                </p>
+                <label class="flex items-center gap-2">
+                  <USwitch v-model="draft.reviewFrictionBlockCountEnabled" size="sm" />
+                  <span class="text-[13px] text-slate-300">{{
+                    t('settings.workspaceSettings.reviewFriction.blockCountToggle')
+                  }}</span>
+                </label>
+                <label v-if="draft.reviewFrictionBlockCountEnabled" class="block w-48">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                    {{ t('settings.workspaceSettings.reviewFriction.blockCount') }}
+                  </span>
+                  <UInput
+                    v-model.number="draft.reviewFrictionBlockCount"
+                    type="number"
+                    :min="1"
+                    size="sm"
+                  />
+                </label>
+                <label class="flex items-center gap-2">
+                  <USwitch v-model="draft.reviewFrictionBlockStuckEnabled" size="sm" />
+                  <span class="text-[13px] text-slate-300">{{
+                    t('settings.workspaceSettings.reviewFriction.blockStuckToggle')
+                  }}</span>
+                </label>
+                <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block w-48">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                    {{ t('settings.workspaceSettings.reviewFriction.blockStuckMinutes') }}
+                  </span>
+                  <UInput
+                    v-model.number="draft.reviewFrictionBlockStuckMinutes"
                     type="number"
                     :min="1"
                     size="sm"

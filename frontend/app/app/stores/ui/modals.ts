@@ -25,6 +25,29 @@ export interface K3sSetupPrefill {
   insecureSkipTlsVerify?: boolean
 }
 
+/** One task waiting on human review, as carried on a review-debt friction 409's details. */
+export interface ReviewDebtRow {
+  blockId: string
+  /** The task's title, joined in server-side; null when it couldn't be resolved. */
+  title: string | null
+  /** How long the task has been waiting on review, in minutes. */
+  waitingMinutes: number
+}
+
+/** The context a review-debt friction dialog renders + acts on (from the parsed 409). */
+export interface ReviewFrictionModalContext {
+  /** `warn` = soft friction (the human may proceed); `blocked` = hard block (they may not). */
+  kind: 'warn' | 'blocked'
+  /** Which hard trigger fired (`count` / `stuck`), for the blocked-tier message. */
+  reason?: 'count' | 'stuck'
+  /** The count / stuck-minutes threshold that fired, for the message. */
+  threshold?: number | null
+  /** The waiting tasks, worst-first, each deep-linkable to its block. */
+  debt: ReviewDebtRow[]
+  /** Retry the create with `acknowledgeReviewDebt` — present only for the soft `warn` tier. */
+  onConfirm: (() => void) | null
+}
+
 /** Clears both hub came-from markers; injected into the slices whose `open*` handlers reset them. */
 type ResetHubReturn = () => void
 
@@ -167,6 +190,14 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // linked context). The user still confirms pipeline / preset before adding.
   const addTaskPrefill = ref<AddTaskPrefill | null>(null)
 
+  // Review-debt friction dialog: opened when a task-create request is refused by the opt-in
+  // friction gate (`review_debt_warn` / `review_debt_blocked` 409). Carries the parsed conflict
+  // details the backend supplied (the waiting tasks + the trigger) so the dialog can list exactly
+  // what is in review, and — for the soft `warn` tier — an `onConfirm` the "Create anyway" button
+  // runs to retry the create with `acknowledgeReviewDebt`. Null when closed. See
+  // backend/docs/review-debt-friction.md.
+  const reviewFrictionContext = ref<ReviewFrictionModalContext | null>(null)
+
   // Add-recurring-pipeline modal: the service frame a new recurring pipeline is
   // being added to, or null when closed (mirrors the add-task flow — a button on
   // the frame opens it, scoped to that frame).
@@ -232,6 +263,12 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     addTaskContainerId.value = null
     addTaskPrefill.value = null
   }
+  function openReviewFriction(ctx: ReviewFrictionModalContext) {
+    reviewFrictionContext.value = ctx
+  }
+  function closeReviewFriction() {
+    reviewFrictionContext.value = null
+  }
   function openAddRecurring(frameId: string) {
     addRecurringFrameId.value = frameId
   }
@@ -254,6 +291,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     taskImport,
     addTaskContainerId,
     addTaskPrefill,
+    reviewFrictionContext,
     addRecurringFrameId,
     createInitiativeFrameId,
     openDocumentConnect,
@@ -270,6 +308,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskImport,
     openAddTask,
     closeAddTask,
+    openReviewFriction,
+    closeReviewFriction,
     openAddRecurring,
     closeAddRecurring,
     openCreateInitiative,

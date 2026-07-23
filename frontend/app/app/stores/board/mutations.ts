@@ -73,6 +73,9 @@ export function createBoardMutations(ctx: BoardWriteContext) {
       agentConfig?: Record<string, string>
       fragmentIds?: string[]
       technical?: boolean
+      // Opt-in review-debt friction: set on the retry after the human confirms the friction
+      // dialog, so a soft `review_debt_warn` 409 is tunnelled through (never a hard block).
+      acknowledgeReviewDebt?: boolean
     },
   ): Promise<Block | undefined> {
     if (!getBlock(containerId)) return
@@ -90,6 +93,7 @@ export function createBoardMutations(ctx: BoardWriteContext) {
       // when a caller doesn't manage fragments at all (then the backend seeds from the service).
       ...(options?.fragmentIds !== undefined ? { fragmentIds: options.fragmentIds } : {}),
       ...(options?.technical ? { technical: true } : {}),
+      ...(options?.acknowledgeReviewDebt ? { acknowledgeReviewDebt: true } : {}),
     })
     upsert(block)
     return block

@@ -738,6 +738,23 @@
         "review": "revisione",
         "ralph": "Ciclo Ralph"
       },
+      "reviewFriction": {
+        "heading": "Attrito per revisioni in sospeso",
+        "body": "Scoraggia la creazione di nuove attività mentre il lavoro completato attende la revisione umana. Disattivato per impostazione predefinita. «Avvisa» aggiunge una conferma; «Imponi» rifiuta la creazione oltre un limite rigido.",
+        "mode": "Modalità",
+        "modes": {
+          "off": "Disattivato",
+          "warn": "Avvisa (conferma per procedere)",
+          "enforce": "Imponi (blocco rigido)"
+        },
+        "warnCount": "Avvisa da (attività in revisione)",
+        "enforceHint": "«Imponi» rifiuta la creazione di attività. Attiva almeno un trigger rigido qui sotto.",
+        "blockCountToggle": "Blocca quando troppe attività sono in revisione",
+        "blockCount": "Blocca da (attività in revisione)",
+        "blockStuckToggle": "Blocca quando un’attività attende da troppo tempo",
+        "blockStuckMinutes": "Blocca dopo (minuti di attesa)",
+        "needsTrigger": "La modalità «Imponi» richiede almeno un trigger rigido attivo (un conteggio o un tempo di attesa)."
+      },
       "observability": {
         "heading": "Osservabilita degli agenti",
         "body": "Memorizza il contesto completo fornito a ogni agente: i prompt composti, i frammenti di best practice inclusi e il contenuto completo dei file iniettati nel suo container, cosicche possa essere ispezionato in seguito nella vista di osservabilita. I corpi vengono conservati per la stessa finestra della telemetria LLM per chiamata. Disattiva per interrompere la memorizzazione (gli snapshot esistenti vengono eliminati dalla retention).",
@@ -4049,6 +4066,22 @@
       "startFailed": "Avvio non riuscito",
       "mergeFailed": "Merge non riuscito",
       "restartFailed": "Riavvio non riuscito"
+    },
+    "reviewFriction": {
+      "warnTitle": "Attività in attesa di revisione",
+      "blockedTitle": "Troppe attività in attesa di revisione",
+      "warnToast": "Alcune attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
+      "blockedToast": "La creazione di attività è bloccata finché non si riduce la coda di revisione.",
+      "warnBody": "{count} attività attendono la revisione umana. Valuta di revisionarle prima di creare altro lavoro.",
+      "blockedCountBody": "Creazione bloccata: {count} attività attendono la revisione umana (limite {threshold}). Riduci prima la coda di revisione.",
+      "blockedStuckBody": "Creazione bloccata: un’attività attende la revisione umana da oltre {minutes} minuto/i. Riduci prima la coda di revisione.",
+      "waitingHeading": "In attesa di revisione",
+      "waiting": "{minutes} min di attesa",
+      "untitled": "Attività senza titolo",
+      "close": "Chiudi",
+      "createAnyway": "Crea comunque",
+      "goReview": "Vai a revisionare",
+      "badge": "{count} attività in attesa di revisione"
     },
     "conflict": {
       "title": {

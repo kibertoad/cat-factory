@@ -28,6 +28,7 @@ import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
+import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 
 const ui = useUiStore()
@@ -678,8 +679,7 @@ const canAdd = computed(() => {
 })
 
 async function add() {
-  const containerId = ui.addTaskContainerId
-  if (!containerId || !canAdd.value) return
+  if (!canAdd.value) return
   // Recurring tasks are created via a schedule on the service frame — hand off to the
   // existing recurring-pipeline modal (which carries the cadence + prompt).
   if (isRecurring.value) {
@@ -689,6 +689,17 @@ async function add() {
     ui.openAddRecurring(frameId)
     return
   }
+  await submitCreate(false)
+}
+
+/**
+ * Create the task, optionally acknowledging review-debt friction. A `review_debt_*` 409 opens the
+ * friction dialog instead of a bare error toast: the soft `warn` tier's dialog can retry via
+ * `submitCreate(true)` (the `onConfirm`), while a hard `blocked` tier only offers "Go review".
+ */
+async function submitCreate(acknowledgeReviewDebt: boolean) {
+  const containerId = ui.addTaskContainerId
+  if (!containerId) return
   saving.value = true
   try {
     const typeFields = buildTypeFields()
@@ -718,6 +729,7 @@ async function add() {
       // re-seeded from the service. The task owns its fragments from here.
       fragmentIds: [...fragmentIds.value],
       ...(technical.value ? { technical: true } : {}),
+      ...(acknowledgeReviewDebt ? { acknowledgeReviewDebt: true } : {}),
     })
     if (block) {
       // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
@@ -725,8 +737,14 @@ async function add() {
       // one-click "Copy details" for a bug report.
       presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
     }
+    ui.closeReviewFriction()
     ui.closeAddTask()
   } catch (e) {
+    const conflict = parseConflict(e)
+    if (conflict?.reason === 'review_debt_warn' || conflict?.reason === 'review_debt_blocked') {
+      openReviewFrictionDialog(conflict)
+      return
+    }
     toast.add({
       title: t('board.addTask.addFailedTitle'),
       description: e instanceof Error ? e.message : String(e),
@@ -736,6 +754,29 @@ async function add() {
   } finally {
     saving.value = false
   }
+}
+
+/** Turn a parsed review-debt friction 409 into the dialog context (see ReviewFrictionDialog.vue). */
+function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseConflict>>) {
+  const details = conflict.details
+  const rawDebt = Array.isArray(details.debt) ? details.debt : []
+  const debt = rawDebt.map((d) => {
+    const row = (d ?? {}) as { blockId?: unknown; title?: unknown; waitingMinutes?: unknown }
+    return {
+      blockId: typeof row.blockId === 'string' ? row.blockId : '',
+      title: typeof row.title === 'string' ? row.title : null,
+      waitingMinutes: typeof row.waitingMinutes === 'number' ? row.waitingMinutes : 0,
+    }
+  })
+  const isWarn = conflict.reason === 'review_debt_warn'
+  ui.openReviewFriction({
+    kind: isWarn ? 'warn' : 'blocked',
+    reason:
+      details.friction === 'count' || details.friction === 'stuck' ? details.friction : undefined,
+    threshold: typeof details.threshold === 'number' ? details.threshold : null,
+    debt,
+    onConfirm: isWarn ? () => void submitCreate(true) : null,
+  })
 }
 </script>
 
