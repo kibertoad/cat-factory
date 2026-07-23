@@ -1,5 +1,6 @@
 ---
 '@cat-factory/executor-harness': patch
+'@cat-factory/local-server': patch
 '@cat-factory/agents': minor
 '@cat-factory/server': patch
 ---
