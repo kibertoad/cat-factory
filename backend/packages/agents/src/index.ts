@@ -107,7 +107,11 @@ export { KAIZEN_SYSTEM_PROMPT } from './agents/prompts/kaizen.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
+  standardsDeliveredAsFiles,
+  STANDARDS_CONTEXT_INDEX_FILE,
+  STANDARDS_CONTEXT_FILE_PREFIX,
   type ComposableBlock,
+  type StandardsDelivery,
 } from './agents/runtime/fragments.js'
 export {
   type StandardPhase,

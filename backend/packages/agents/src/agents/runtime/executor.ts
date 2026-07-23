@@ -5,7 +5,7 @@ import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/regis
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
-import { composeBlockSystemPrompt } from './fragments.js'
+import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
 import {
   type InlineWebSearchOptions,
   providerWebSearchTools,
@@ -175,7 +175,12 @@ export class AiAgentExecutor implements AgentExecutor {
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
     const baseSystem = config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)
-    const composed = composeBlockSystemPrompt(baseSystem, context.block)
+    const composed = composeBlockSystemPrompt(
+      baseSystem,
+      context.block,
+      this.agentKindRegistry.standardsDelivery(context.agentKind),
+      standardsDeliveredAsFiles(context.injectedContextFiles),
+    )
 
     // Provider-hosted web search for the allow-listed design/research kinds, when
     // enabled AND the resolved provider has one. The usage nudge is appended only

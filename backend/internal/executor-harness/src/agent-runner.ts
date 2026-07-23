@@ -21,7 +21,14 @@ import {
 } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
-import { createSliceTracker, pickProgress, startSubagentWatcher } from './subagents.js'
+import { createSliceTracker, startSubagentWatcher } from './subagents.js'
+import {
+  createTaskPlanTracker,
+  normalizeStatus,
+  pickProgress,
+  toProgress,
+  todosToProgress,
+} from './progress.js'
 import { assertOnboardingKeysCurrent, writeOnboardingPreseed } from './onboarding-preseed.js'
 import { retainSessionTranscripts } from './transcript-retention.js'
 
@@ -343,17 +350,26 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
 
   // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
-  // sources. The parent's `Task` dispatches + their terminal tool_results DO appear on this
+  // sources. The parent's subagent dispatches + their terminal tool_results DO appear on this
   // stream (only a subagent's intermediate turns don't), so `sliceTracker` derives per-slice
-  // progress for the parallel-subagent shape; a parent `TodoWrite` plan (the sequential
-  // shape) is tracked in `lastTodo`. `pickProgress` picks whichever is further along on each
-  // update, so neither masks the other — the pr-reviewer prompt writes its todo plan ONCE
-  // and never marks it done, which used to gate the slice signal off and pin progress at 0%.
+  // progress for the parallel shape; the parent's own plan (the sequential shape) is tracked
+  // by `planTracker` + `lastTodo`. `pickProgress` picks whichever is further along on each
+  // update, so neither masks the other — the pr-reviewer prompt writes its plan ONCE and never
+  // marks it done, which used to gate the slice signal off and pin progress at 0%.
+  //
+  // The plan arrives in one of two tool vocabularies depending on the bundled CLI build:
+  // `TodoWrite` (whole-list snapshots, tracked in `lastTodo`) or the incremental
+  // `TaskCreate`/`TaskUpdate` pair (tracked by `planTracker`, which needs the tool RESULTS too
+  // because the task id is minted there). Both are read — see ./progress.ts.
   const sliceTracker = createSliceTracker()
+  const planTracker = createTaskPlanTracker()
   let lastTodo: TodoProgress | undefined
   const emitProgress = (): void => {
     if (!opts.onProgress) return
-    const progress = pickProgress(lastTodo, sliceTracker.progress())
+    const progress = pickProgress(
+      pickProgress(lastTodo, planTracker.progress()),
+      sliceTracker.progress(),
+    )
     if (progress) opts.onProgress(progress)
   }
 
@@ -372,6 +388,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         }
       }
       sliceTracker.onAssistant(content)
+      planTracker.onAssistant(content)
       emitProgress()
       // Record this call BEFORE appending its turn: the prompt is the history that
       // produced this response. The append-only array keeps each call's prompt a strict
@@ -394,6 +411,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       const content = (event.message as Record<string, unknown>).content
       if (Array.isArray(content)) {
         sliceTracker.onUser(content)
+        planTracker.onUser(content)
         emitProgress()
         messages.push({ role: 'tool', content })
       }
@@ -582,24 +600,6 @@ async function assembleClaudeOutcome(args: {
     ...(mergedUsage ? { usage: mergedUsage } : {}),
     ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
   }
-}
-
-/** Map Claude Code's `TodoWrite` todos array onto subtask counts. */
-function todosToProgress(todos: unknown): TodoProgress | undefined {
-  if (!Array.isArray(todos)) return undefined
-  const items = todos.filter(isObject).map((t) => ({
-    label: typeof t.content === 'string' ? t.content : String(t.content ?? ''),
-    status: normalizeStatus(t.status),
-  }))
-  const completed = items.filter((i) => i.status === 'completed').length
-  const inProgress = items.filter((i) => i.status === 'in_progress').length
-  return { completed, inProgress, total: items.length, items }
-}
-
-function normalizeStatus(status: unknown): 'pending' | 'in_progress' | 'completed' {
-  if (status === 'completed') return 'completed'
-  if (status === 'in_progress') return 'in_progress'
-  return 'pending'
 }
 
 function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
@@ -829,9 +829,7 @@ function codexPlanProgress(event: Record<string, unknown>): TodoProgress | undef
     status: normalizeStatus(s.status),
   }))
   if (items.length === 0) return undefined
-  const completed = items.filter((i) => i.status === 'completed').length
-  const inProgress = items.filter((i) => i.status === 'in_progress').length
-  return { completed, inProgress, total: items.length, items }
+  return toProgress(items)
 }
 
 /**

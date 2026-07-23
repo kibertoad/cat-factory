@@ -74,13 +74,52 @@ export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = 
   return foldStandards(baseSystem, fragments)
 }
 
+/** How a kind's resolved best-practice standards reach the agent. See {@link composeBlockSystemPrompt}. */
+export type StandardsDelivery = 'prompt' | 'context-files'
+
+/** The index file a `context-files` kind writes listing every injected standard. */
+export const STANDARDS_CONTEXT_INDEX_FILE = 'standards.md'
+/** Filename prefix for the per-standard `.cat-context/` files a `context-files` kind writes. */
+export const STANDARDS_CONTEXT_FILE_PREFIX = 'standard-'
+
+/**
+ * Whether a `context-files` kind's standards were ACTUALLY delivered as injected context files.
+ * The fold in {@link composeBlockSystemPrompt} is suppressed for `context-files` delivery, so the
+ * standards must have landed some other way (the kind's preOp writing them). When that preOp did
+ * not run — e.g. the run-repo resolver is unwired, so the engine skipped ALL of a kind's repo
+ * hooks — no files were injected, and folding into the prompt is the correct fallback rather than
+ * losing the standards through both channels. Keyed off the shared filename convention so generic
+ * prompt composition never has to know a specific kind's constants.
+ */
+export function standardsDeliveredAsFiles(injectedContextFiles?: { path: string }[]): boolean {
+  return !!injectedContextFiles?.some(
+    (f) =>
+      f.path === STANDARDS_CONTEXT_INDEX_FILE || f.path.startsWith(STANDARDS_CONTEXT_FILE_PREFIX),
+  )
+}
+
 /**
  * Compose the system prompt for a block, preferring the engine-resolved tenant
  * catalog bodies when present and otherwise falling back to static id resolution.
  * Both inline and container executors use this so the fragment-library feature
  * applies uniformly to every agent kind, not just the reviewer.
+ *
+ * `delivery: 'context-files'` returns the base prompt UNCHANGED **once the standards have actually
+ * been delivered as files** (`standardsDelivered`): that kind's own preOp writes them as
+ * `.cat-context/` files and its prompt points the agent at them, because folding them in would
+ * charge a delegating agent for every standard on every turn of its loop. But if that preOp did
+ * NOT run (`standardsDelivered === false`), fall back to folding so a `code-aware` kind never ends
+ * up with its resolved standards in NEITHER channel. `delivery` is required so no call site can
+ * silently fold for a `context-files` kind (the missing-argument bug this guards against).
+ * See {@link AgentKindDefinition.standardsDelivery}.
  */
-export function composeBlockSystemPrompt(baseSystem: string, block: ComposableBlock): string {
+export function composeBlockSystemPrompt(
+  baseSystem: string,
+  block: ComposableBlock,
+  delivery: StandardsDelivery,
+  standardsDelivered = false,
+): string {
+  if (delivery === 'context-files' && standardsDelivered) return baseSystem
   if (block.resolvedFragments && block.resolvedFragments.length > 0) {
     return foldStandards(baseSystem, block.resolvedFragments)
   }
