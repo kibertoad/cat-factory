@@ -45,9 +45,11 @@ export interface FragmentSelector {
   select(candidates: SelectableFragment[], context: FragmentSelectionContext): Promise<string[]>
 }
 
-/** A fragment resolved for injection: just the id and the body to fold in. */
+/** A fragment resolved for injection: the id, its human title (when it has one), and the body to fold in. */
 export interface ResolvedRunFragment {
   id: string
+  /** The fragment's human title, so the prompt composer can label each standard and a reviewer can cite it. */
+  title?: string
   body: string
 }
 

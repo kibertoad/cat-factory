@@ -73,7 +73,8 @@
       "body": "Has hecho cambios que no se han guardado. ¿Cerrar y perderlos?",
       "confirm": "Descartar",
       "keep": "Seguir editando"
-    }
+    },
+    "edit": "Editar"
   },
   "access": {
     "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",
@@ -1194,7 +1195,20 @@
       "confirmReject": "Confirmar rechazo",
       "requestChanges": "Solicitar cambios",
       "reject": "Rechazar",
-      "requestChangesHint": "Solicitar cambios vuelve a ejecutar este paso con tus comentarios y observaciones. Rechazar detiene la ejecución por completo."
+      "requestChangesHint": "Solicitar cambios vuelve a ejecutar este paso con tus comentarios y observaciones. Rechazar detiene la ejecución por completo.",
+      "effort": {
+        "heading": "Esfuerzo del agente",
+        "difficulty": "Dificultad",
+        "outOfTen": "{value}/10",
+        "reduced": "Qué redujo la efectividad",
+        "obstacles": "Obstáculos clave"
+      },
+      "adherence": {
+        "heading": "Cumplimiento de buenas prácticas",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Hallazgos relacionados",
+        "unnamed": "Estándar"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4389,7 +4403,10 @@
       "summaryPlaceholder": "Resumen de una línea (usado por el selector)",
       "bodyPlaceholder": "Cuerpo de la guía (inyectado en el prompt)",
       "tagsPlaceholder": "Etiquetas, separadas por comas (p. ej., backend, db)",
-      "add": "Añadir fragmento"
+      "add": "Añadir fragmento",
+      "generateTitle": "Generar",
+      "generateTitleHint": "Sugerir un título a partir del contenido del fragmento",
+      "titleGenFailed": "No se pudo generar un título"
     },
     "documents": {
       "intro": "Vincula una página de Confluence/Notion o un archivo de GitHub como fragmento de buenas prácticas. Su guía se vuelve a resolver desde la fuente en tiempo de ejecución: edita el documento y la siguiente ejecución del agente sigue la nueva versión (sin reimportar).",
@@ -4439,7 +4456,9 @@
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",
       "unlinkSourceFailed": "No se pudo desvincular el origen",
-      "documentsLinked": "{count} documento vinculado como fragmento vivo | {count} documentos vinculados como fragmentos vivos"
+      "documentsLinked": "{count} documento vinculado como fragmento vivo | {count} documentos vinculados como fragmentos vivos",
+      "updated": "Fragmento actualizado",
+      "updateFailed": "No se pudo actualizar el fragmento"
     },
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",

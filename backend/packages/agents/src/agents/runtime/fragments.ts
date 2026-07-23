@@ -16,30 +16,62 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 // Unknown ids (e.g. a fragment removed from the catalog after selection) are
 // skipped so a stale selection never breaks a run.
 
+/** One resolved best-practice standard to fold into the prompt: its body + reference label. */
+export interface ComposableFragment {
+  id: string
+  /** The fragment's human title, used as the citation label when present (else the id). */
+  title?: string
+  body: string
+}
+
 /** A block's fragment selection, as the prompt composer needs it. */
 export interface ComposableBlock {
   fragmentIds?: string[]
-  resolvedFragments?: { id: string; body: string }[]
+  resolvedFragments?: ComposableFragment[]
 }
 
-/** Fold a set of fragment bodies into the base system prompt under a header. */
-function foldStandards(baseSystem: string, bodies: string[]): string {
-  if (bodies.length === 0) return baseSystem
+/**
+ * Neutralise the characters that would break the single-line `<best-practice-standard …>` tag —
+ * quotes and angle brackets become apostrophes, and any run of whitespace (incl. newlines) collapses
+ * to a single space — so an arbitrary fragment title always yields a well-formed attribute value.
+ */
+function escapeAttr(value: string): string {
+  return value.replace(/["<>]/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Fold the selected best-practice standards into the base system prompt. Each standard is
+ * wrapped in its OWN delimited, labelled block — carrying a stable `id` and its human `title`
+ * — rather than concatenated into one blob, so the agent can tell the standards apart and cite
+ * a specific one by title (what the code/PR reviewers' adherence report relies on).
+ */
+function foldStandards(baseSystem: string, fragments: ComposableFragment[]): string {
+  if (fragments.length === 0) return baseSystem
+  const blocks = fragments.map((fragment) => {
+    const label = fragment.title?.trim() || fragment.id
+    return [
+      `<best-practice-standard id="${escapeAttr(fragment.id)}" title="${escapeAttr(label)}">`,
+      fragment.body.trim(),
+      '</best-practice-standard>',
+    ].join('\n')
+  })
   return [
     baseSystem,
     '',
-    'Follow these standards while doing the work:',
+    'Follow these standards while doing the work. Each best-practice standard is delimited below',
+    'as its own block with a stable id and title — treat each as a SEPARATE standard, and when you',
+    'need to cite one refer to it by its title.',
     '',
-    bodies.join('\n\n'),
+    blocks.join('\n\n'),
   ].join('\n')
 }
 
 export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = []): string {
-  const bodies = fragmentIds
+  const fragments = fragmentIds
     .map((id) => getFragment(id))
     .filter((fragment): fragment is NonNullable<typeof fragment> => fragment !== undefined)
-    .map((fragment) => fragment.body)
-  return foldStandards(baseSystem, bodies)
+    .map((fragment) => ({ id: fragment.id, title: fragment.title, body: fragment.body }))
+  return foldStandards(baseSystem, fragments)
 }
 
 /**
@@ -50,10 +82,7 @@ export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = 
  */
 export function composeBlockSystemPrompt(baseSystem: string, block: ComposableBlock): string {
   if (block.resolvedFragments && block.resolvedFragments.length > 0) {
-    return foldStandards(
-      baseSystem,
-      block.resolvedFragments.map((f) => f.body),
-    )
+    return foldStandards(baseSystem, block.resolvedFragments)
   }
   return composeSystemPrompt(baseSystem, block.fragmentIds)
 }

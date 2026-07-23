@@ -54,6 +54,24 @@ export const updatePromptFragmentSchema = v.object({
 export type UpdatePromptFragmentInput = v.InferOutput<typeof updatePromptFragmentSchema>
 
 /**
+ * Ask the backend to suggest a concise title for a hand-authored fragment from its
+ * content — an INLINE LLM call surfaced as the "auto-generate title" button in the
+ * fragment editor. The body is required (the title is derived from it); the summary is
+ * folded in when present for extra signal.
+ */
+export const generateFragmentTitleSchema = v.object({
+  body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000)),
+  summary: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+})
+export type GenerateFragmentTitleInput = v.InferOutput<typeof generateFragmentTitleSchema>
+
+/** The suggested title the auto-generate endpoint returns. */
+export const generatedFragmentTitleSchema = v.object({
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+})
+export type GeneratedFragmentTitle = v.InferOutput<typeof generatedFragmentTitleSchema>
+
+/**
  * Link an external document (a Confluence/Notion page or a GitHub file) as a
  * **living** best-practice fragment: its title/body are fetched from the source
  * now (to seed the catalog entry) and re-resolved at run time. The caller-facing

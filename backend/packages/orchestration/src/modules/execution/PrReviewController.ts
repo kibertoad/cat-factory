@@ -107,6 +107,11 @@ export class PrReviewController {
       () => this.deps.idGenerator.next('prs'),
       () => this.deps.idGenerator.next('prf'),
     )
+    // Record the reviewer's per-best-practice-standard adherence report on the step (surfaced in
+    // run details + the PR-review window), when it produced one. Empty/absent ⇒ leave it unset.
+    step.fragmentAdherence = output?.fragmentAdherence?.length
+      ? output.fragmentAdherence
+      : undefined
 
     if (findings.length === 0) {
       // A clean PR (or an unwired/degenerate reviewer): nothing to select. Record the review in

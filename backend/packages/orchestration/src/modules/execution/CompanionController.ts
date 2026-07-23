@@ -287,6 +287,13 @@ export class CompanionController {
     if (step.agentKind === 'spec-companion' && assessment) {
       step.technicalCorroborated = assessment.technicalCorroborated
     }
+    // Record the code reviewer's per-best-practice-standard adherence report on the step
+    // (surfaced in run details), on both the pass and rework branches, whenever it produced one.
+    if (step.agentKind === 'reviewer') {
+      step.fragmentAdherence = assessment?.fragmentAdherence?.length
+        ? assessment.fragmentAdherence
+        : undefined
+    }
 
     // PASS: the producer cleared the bar (and was not force-looped on its first batch).
     if (passed) {

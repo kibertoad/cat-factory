@@ -31,6 +31,7 @@ import {
   unmergedPaths,
 } from './git.js'
 import type { PiRunStats, RunDiagnostics } from './pi.js'
+import type { EffortReport } from './effort.js'
 import {
   makeDirClaimer,
   noChangesReason,
@@ -312,6 +313,15 @@ async function cloneServiceCheckout(
   return deriveWorkDir(dir, job.repo.serviceDirectory)
 }
 
+/**
+ * Fold an agent's effort self-assessment (lifted from its sentinel file by `runAgentInWorkspace`)
+ * onto its final result. Every container mode routes its result through this so the report reaches
+ * the backend uniformly. A run that wrote no report passes through unchanged.
+ */
+function mergeEffort(result: AgentResult, effortReport: EffortReport | undefined): AgentResult {
+  return effortReport ? { ...result, effortReport } : result
+}
+
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
   // Private-registry auth first, before any mode runs: every mode with a checkout may
@@ -558,6 +568,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           usage,
           callMetrics,
           diagnostics: runDiag,
+          effortReport,
         } = await runAgentInWorkspace(
           {
             dir: workDir,
@@ -582,10 +593,13 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           opts,
         )
 
-        return await finalizeExploreResult(
-          job,
-          { summary, stats, stderrTail, usage, callMetrics, runDiag },
-          { infra, infraSetupFields, logger, signal: opts.signal },
+        return mergeEffort(
+          await finalizeExploreResult(
+            job,
+            { summary, stats, stderrTail, usage, callMetrics, runDiag },
+            { infra, infraSetupFields, logger, signal: opts.signal },
+          ),
+          effortReport,
         )
       } finally {
         restoreSecrets()
@@ -808,17 +822,20 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
       },
       opts,
     )
-    return finalizeExploreResult(
-      job,
-      {
-        summary: run.summary,
-        stats: run.stats,
-        stderrTail: run.stderrTail,
-        usage: run.usage,
-        callMetrics: run.callMetrics,
-        runDiag: run.diagnostics,
-      },
-      { infraSetupFields: {}, logger, signal: opts.signal },
+    return mergeEffort(
+      await finalizeExploreResult(
+        job,
+        {
+          summary: run.summary,
+          stats: run.stats,
+          stderrTail: run.stderrTail,
+          usage: run.usage,
+          callMetrics: run.callMetrics,
+          runDiag: run.diagnostics,
+        },
+        { infraSetupFields: {}, logger, signal: opts.signal },
+      ),
+      run.effortReport,
     )
   })
 }
@@ -894,7 +911,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
  */
 async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
-  const { summary, stats, stderrTail, pushed, usage, callMetrics, validation } =
+  const { summary, stats, stderrTail, pushed, usage, callMetrics, validation, effortReport } =
     await runCodingAgent(
       {
         kind: 'agent',
@@ -939,6 +956,8 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
   // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
   const ralphVerdict = validation ? { ralphVerdict: validation } : {}
+  // The agent's effort self-assessment, spread onto every result path below (mirrors ralphVerdict).
+  const effort = effortReport ? { effortReport } : {}
 
   if (!pushed) {
     // A no-op: a failure for the implementer, a clean non-event for the fixers.
@@ -951,6 +970,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
         ...ralphVerdict,
+        ...effort,
       }
     }
     return {
@@ -962,6 +982,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       failureCause: 'no-changes',
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...effort,
     }
   }
 
@@ -995,6 +1016,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
           stats,
           ...(usage ? { usage } : {}),
           ...(callMetrics ? { callMetrics } : {}),
+          ...effort,
         }
       }
       return {
@@ -1010,6 +1032,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         failureCause: 'no-changes',
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
+        ...effort,
       }
     }
     return {
@@ -1021,6 +1044,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
       ...ralphVerdict,
+      ...effort,
     }
   }
   return {
@@ -1031,6 +1055,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     ...(usage ? { usage } : {}),
     ...(callMetrics ? { callMetrics } : {}),
     ...ralphVerdict,
+    ...effort,
   }
 }
 
@@ -1100,23 +1125,24 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     const diff = await conflictDiff(dir, conflicted, signal)
     const userPrompt = buildConflictPrompt(mergeBase, job.branch, conflicted, diff, job.userPrompt)
 
-    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
-      {
-        dir,
-        systemPrompt: job.systemPrompt,
-        userPrompt,
-        model: job.model,
-        harness: job.harness,
-        subscriptionToken: job.subscriptionToken,
-        subscriptionBaseUrl: job.subscriptionBaseUrl,
-        ambientAuth: job.ambientAuth,
-        proxyBaseUrl: job.proxyBaseUrl,
-        sessionToken: job.sessionToken,
-        contextFiles: job.contextFiles,
-        guardLimits: job.guardLimits,
-      },
-      opts,
-    )
+    const { summary, stats, stderrTail, usage, callMetrics, effortReport } =
+      await runAgentInWorkspace(
+        {
+          dir,
+          systemPrompt: job.systemPrompt,
+          userPrompt,
+          model: job.model,
+          harness: job.harness,
+          subscriptionToken: job.subscriptionToken,
+          subscriptionBaseUrl: job.subscriptionBaseUrl,
+          ambientAuth: job.ambientAuth,
+          proxyBaseUrl: job.proxyBaseUrl,
+          sessionToken: job.sessionToken,
+          contextFiles: job.contextFiles,
+          guardLimits: job.guardLimits,
+        },
+        opts,
+      )
 
     // Never push a half-resolved tree: if any conflict markers / unmerged paths remain,
     // the PR would still be broken. Fail so the engine can retry / notify.
@@ -1125,30 +1151,36 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
       logger.error('agent(conflict): unresolved conflicts remain, refusing to push', {
         unresolved: unresolved.length,
       })
-      return {
-        pushed: false,
-        branch: job.branch,
-        summary,
-        stats,
-        error: unresolvedReason(unresolved, stats, stderrTail),
-        failureCause: 'agent',
-        ...(usage ? { usage } : {}),
-        ...(callMetrics ? { callMetrics } : {}),
-      }
+      return mergeEffort(
+        {
+          pushed: false,
+          branch: job.branch,
+          summary,
+          stats,
+          error: unresolvedReason(unresolved, stats, stderrTail),
+          failureCause: 'agent',
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+        },
+        effortReport,
+      )
     }
     // Complete the merge commit with the agent's resolution staged, then push.
     await commitAll(dir, `Merge ${mergeBase} into ${job.branch}`, signal)
     opts.onPhase?.('push')
     logger.info('agent(conflict): pushing resolved branch', { ...stats })
     await pushBranch(dir, job.branch, job.ghToken, signal)
-    return {
-      pushed: true,
-      branch: job.branch,
-      summary,
-      stats,
-      ...(usage ? { usage } : {}),
-      ...(callMetrics ? { callMetrics } : {}),
-    }
+    return mergeEffort(
+      {
+        pushed: true,
+        branch: job.branch,
+        summary,
+        stats,
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      },
+      effortReport,
+    )
   })
 }
 
@@ -1239,22 +1271,23 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
 
     opts.onPhase?.('agent')
     logger.info('agent(bootstrap): running agent')
-    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
-      {
-        dir,
-        systemPrompt: job.systemPrompt,
-        userPrompt: job.userPrompt,
-        model: job.model,
-        harness: job.harness,
-        subscriptionToken: job.subscriptionToken,
-        subscriptionBaseUrl: job.subscriptionBaseUrl,
-        ambientAuth: job.ambientAuth,
-        proxyBaseUrl: job.proxyBaseUrl,
-        sessionToken: job.sessionToken,
-        guardLimits: job.guardLimits,
-      },
-      opts,
-    )
+    const { summary, stats, stderrTail, usage, callMetrics, effortReport } =
+      await runAgentInWorkspace(
+        {
+          dir,
+          systemPrompt: job.systemPrompt,
+          userPrompt: job.userPrompt,
+          model: job.model,
+          harness: job.harness,
+          subscriptionToken: job.subscriptionToken,
+          subscriptionBaseUrl: job.subscriptionBaseUrl,
+          ambientAuth: job.ambientAuth,
+          proxyBaseUrl: job.proxyBaseUrl,
+          sessionToken: job.sessionToken,
+          guardLimits: job.guardLimits,
+        },
+        opts,
+      )
 
     // Guard against a no-op run: Pi can exit cleanly having done nothing (e.g. it never
     // reached the model), and a force-push would then publish an empty tree — leaving the
@@ -1263,14 +1296,17 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
     if (!(await producedRepoContent(dir, !fromScratch, signal))) {
       const error = bootstrapNoOpReason(!fromScratch, stats, summary, stderrTail)
       logger.error('agent(bootstrap): agent produced no content, refusing to push', { ...stats })
-      return {
-        summary,
-        stats,
-        error,
-        failureCause: 'agent',
-        ...(usage ? { usage } : {}),
-        ...(callMetrics ? { callMetrics } : {}),
-      }
+      return mergeEffort(
+        {
+          summary,
+          stats,
+          error,
+          failureCause: 'agent',
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+        },
+        effortReport,
+      )
     }
 
     opts.onPhase?.('push')
@@ -1286,13 +1322,16 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         : `Bootstrap from ${job.repo.owner}/${job.repo.name}`,
     })
     logger.info('agent(bootstrap): complete', { defaultBranch: boot.target.defaultBranch })
-    return {
-      defaultBranch: boot.target.defaultBranch,
-      summary,
-      stats,
-      ...(usage ? { usage } : {}),
-      ...(callMetrics ? { callMetrics } : {}),
-    }
+    return mergeEffort(
+      {
+        defaultBranch: boot.target.defaultBranch,
+        summary,
+        stats,
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      },
+      effortReport,
+    )
   })
 }
 

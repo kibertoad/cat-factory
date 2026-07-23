@@ -9,6 +9,7 @@ import type {
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
+import { FRAGMENT_ADHERENCE_GUIDANCE } from '../prompts/shared.js'
 
 // ---------------------------------------------------------------------------
 // The `pr-reviewer` agent kind — a deep, token-bounded review of an EXISTING open
@@ -118,8 +119,10 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   '    "title": "short headline",\n' +
   '    "detail": "the full finding, in prose",\n' +
   '    "suggestedFix": "a concrete suggested change, when applicable"\n' +
-  '  }]\n' +
-  '}'
+  '  }],\n' +
+  '  "fragmentAdherence": [{ "title": "standard title", "fragmentId": "its id", "rating": 8, "assessment": "how well the PR adheres to this standard", "relatedFindings": ["short reference to each issue this standard surfaced"] }]\n' +
+  '}\n\n' +
+  FRAGMENT_ADHERENCE_GUIDANCE
 
 // ---------------------------------------------------------------------------
 // PreOp: hand the reviewer the PR diff up front.

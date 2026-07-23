@@ -1471,6 +1471,10 @@ export class RunDispatcher {
     // `generic-structured` result view can render it (a post-op consumes the same value
     // server-side). Built-in / prose kinds leave it undefined.
     if (result.custom !== undefined) step.custom = result.custom
+    // The container agent's effort self-assessment (how hard the work was, what reduced its
+    // effectiveness, the obstacles) — surfaced in run details for every container step. Absent
+    // for inline agents / older harness images.
+    if (result.effortReport) step.effortReport = result.effortReport
     if (result.model) step.model = result.model
     step.progress = 1
     this.stepGraph.finishStep(step)

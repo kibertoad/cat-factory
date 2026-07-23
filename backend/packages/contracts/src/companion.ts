@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { stepReviewCommentSchema } from './execution.js'
+import { fragmentAdherenceSchema } from './fragment-adherence.js'
 
 // ---------------------------------------------------------------------------
 // Companion-agent wire contracts. A companion agent reviews the outcome of an
@@ -43,6 +44,14 @@ export const companionAssessmentSchema = v.object({
    * `noBusinessSpecs` signal — to infer the block's `technical` label.
    */
   technicalCorroborated: v.optional(v.boolean()),
+  /**
+   * A code reviewer's per-best-practice-standard adherence report: for each best-practice
+   * fragment folded into its prompt, a 1..10 rating of how well the reviewed change adheres
+   * and the issues that standard surfaced (see {@link fragmentAdherenceSchema}). Only the
+   * code `reviewer` companion sets it; the other companions omit it. Empty/absent when no
+   * best-practice standards were reachable for the run.
+   */
+  fragmentAdherence: v.optional(fragmentAdherenceSchema),
 })
 export type CompanionAssessment = v.InferOutput<typeof companionAssessmentSchema>
 

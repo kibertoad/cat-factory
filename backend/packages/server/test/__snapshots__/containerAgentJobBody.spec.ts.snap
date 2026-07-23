@@ -39,7 +39,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Map this repository into the canonical service → modules blueprint, anchored to real file/directory references.
 
 If a blueprint already exists in the repository (read \`blueprints/blueprint.json\` and \`blueprints/overview.md\`), UPDATE it to reflect the current code: keep accurate modules, add new ones, and refine summaries + references. Otherwise create it from scratch. Return the COMPLETE tree (not a diff).
@@ -91,7 +93,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.
@@ -148,7 +152,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Task: Add widget
 
 Implement the widget feature.",
@@ -230,7 +236,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.
@@ -297,7 +305,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.
@@ -461,7 +471,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.
@@ -513,7 +525,9 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
 
 IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in the repository, but you MUST NOT modify, create or delete files, run commands that change the repository, commit, or open a pull request. Your written report is the only deliverable; return it as your response.
 
-Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.",
+Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Apply this ONE task as an INCREMENT onto the service specification.
 
 First READ the specification already committed to the repository under \`spec/\` (the baseline as merged before this task): open \`spec/overview.md\` for the module → feature index, then the relevant \`spec/modules/<module>/<feature>.json\` shards. Keep every part of the baseline this task does not touch exactly as-is, preserving its \`sourceBlockIds\`; adjust an existing requirement only where this task changes its behaviour. Map each new requirement/rule into the closest-fitting EXISTING module and feature, reusing its EXACT name — create a new module or feature ONLY when nothing fits (never a near-duplicate). If no spec exists yet, start one as a module (domain) → feature (group) taxonomy.
@@ -614,7 +628,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
 - \`spec/modules/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
-Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.",
+Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
+
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.

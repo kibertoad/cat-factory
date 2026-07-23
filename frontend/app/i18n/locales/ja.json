@@ -73,7 +73,8 @@
       "body": "保存されていない変更があります。閉じて破棄しますか？",
       "confirm": "破棄",
       "keep": "編集を続ける"
-    }
+    },
+    "edit": "編集"
   },
   "access": {
     "noBoardWrite": "読み取り専用アクセス: このボードは閲覧できますが編集はできません。",
@@ -1194,7 +1195,20 @@
       "confirmReject": "却下を確定",
       "requestChanges": "変更を依頼",
       "reject": "却下",
-      "requestChangesHint": "変更を依頼すると、フィードバックとコメントを反映してこのステップを再実行します。却下すると実行を完全に停止します。"
+      "requestChangesHint": "変更を依頼すると、フィードバックとコメントを反映してこのステップを再実行します。却下すると実行を完全に停止します。",
+      "effort": {
+        "heading": "エージェントの労力",
+        "difficulty": "難易度",
+        "outOfTen": "{value}/10",
+        "reduced": "効果を下げた要因",
+        "obstacles": "主な障害"
+      },
+      "adherence": {
+        "heading": "ベストプラクティスの遵守",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "関連する指摘",
+        "unnamed": "基準"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4401,7 +4415,10 @@
       "summaryPlaceholder": "1行の要約 (セレクターで使用)",
       "bodyPlaceholder": "ガイダンス本文 (プロンプトに挿入)",
       "tagsPlaceholder": "タグ、カンマ区切り (例: backend, db)",
-      "add": "フラグメントを追加"
+      "add": "フラグメントを追加",
+      "generateTitle": "生成",
+      "generateTitleHint": "フラグメントの内容からタイトルを提案",
+      "titleGenFailed": "タイトルを生成できませんでした"
     },
     "documents": {
       "intro": "Confluence/Notion ページまたは GitHub ファイルをベストプラクティスのフラグメントとしてリンクします。そのガイダンスは実行時にソースから再解決されます。ドキュメントを編集すると、次のエージェント実行は新しいバージョンに従います (再インポート不要)。",
@@ -4451,7 +4468,9 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした",
-      "documentsLinked": "{count}件のドキュメントをリビングフラグメントとしてリンクしました | {count}件のドキュメントをリビングフラグメントとしてリンクしました"
+      "documentsLinked": "{count}件のドキュメントをリビングフラグメントとしてリンクしました | {count}件のドキュメントをリビングフラグメントとしてリンクしました",
+      "updated": "フラグメントを更新しました",
+      "updateFailed": "フラグメントを更新できませんでした"
     },
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",

@@ -483,6 +483,17 @@ async function copyOutput() {
                    it raised and the greenlight verdict; plus the fixer-loop phase -->
               <StepTestReport v-if="testReport" :report="testReport" :phase="testPhase" />
 
+              <!-- code/PR reviewer's best-practice adherence: per standard, a 1..10 rating of how
+                   well the change adheres + the issues it surfaced. Only on a review step. -->
+              <StepFragmentAdherence
+                v-if="step.fragmentAdherence?.length"
+                :items="step.fragmentAdherence"
+              />
+
+              <!-- container agent's effort self-assessment (how hard it was, what reduced its
+                   effectiveness, key obstacles). Only when the agent reported one. -->
+              <StepEffortReport v-if="step.effortReport" :report="step.effortReport" />
+
               <!-- edit-then-approve: a direct editor over the raw conclusions; the
                    edits become the approved proposal that flows to the next step -->
               <section v-if="editing" class="scroll-mt-4">

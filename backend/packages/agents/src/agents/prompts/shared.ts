@@ -39,6 +39,54 @@ export const FINAL_ANSWER_IN_REPLY =
  * is a SIDE channel — the Coder still finishes its actual task; it does not wait for
  * answers (an answer arrives later as a fresh task if the human sends one back).
  */
+/**
+ * The sentinel file every CONTAINER agent writes its effort self-assessment to. Kept in sync
+ * with the harness's own constant (executor-harness has no dependency on this package), exactly
+ * like `CONTEXT_DIR` / the follow-ups sentinel. The harness reads + removes it after the run and
+ * keeps it out of any commit.
+ */
+export const EFFORT_REPORT_FILE = '.cat-effort.json'
+
+/**
+ * Appended to EVERY container-agent system prompt (at the container-dispatch chokepoint, see
+ * `buildKindBody`). It asks the agent to end its work by writing a short, honest self-assessment
+ * of the effort to a sentinel file — how hard/easy the work was, what reduced its effectiveness,
+ * and the key obstacles it hit — which the harness lifts onto the result and the platform surfaces
+ * in run details. This is a SIDE channel: it is kept out of the commit/PR, so writing it never
+ * affects the deliverable, and the agent still completes its actual task regardless.
+ */
+export const EFFORT_REPORT_GUIDANCE =
+  'EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a ' +
+  `file named \`${EFFORT_REPORT_FILE}\` in your working directory containing a SINGLE compact ` +
+  'JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this ' +
+  'was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — ' +
+  'unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key ' +
+  'obstacle you hit>"]}. `difficulty` is 1 (trivial) to 10 (extremely hard). Be honest and ' +
+  'specific — this is feedback for the humans running you, not part of the deliverable. It is a ' +
+  'side channel only: it is kept out of the commit, so never reference it in code and never add ' +
+  'it to git. Write it exactly once, at the end.'
+
+/**
+ * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per
+ * best-practice standard folded into its prompt (the delimited `<best-practice-standard>` blocks),
+ * how well the reviewed object adheres — a 1..10 rating plus the specific issues that standard
+ * surfaced — as a `fragmentAdherence` array in its JSON output. The standards are fed as separate
+ * labelled blocks precisely so this can be per-standard. If NO best-practice standards were folded
+ * in (none selected / the library isn't configured), the reviewer must say so rather than invent
+ * ratings.
+ */
+export const FRAGMENT_ADHERENCE_GUIDANCE =
+  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are folded into ' +
+  'this prompt above as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
+  'title. In your JSON output include a `fragmentAdherence` array with ONE entry per standard you ' +
+  'used, of shape {"title":"<the standard\'s title>","fragmentId":"<its id>","rating":<1-10>,' +
+  '"assessment":"<how well the reviewed change adheres to this standard and why>",' +
+  '"relatedFindings":["<short reference to each issue this standard surfaced>"]}. `rating` is 1 ' +
+  '(the change flatly violates the standard) to 10 (it fully adheres). Refer to each standard by ' +
+  'its TITLE. If NO best-practice standards were provided (the array of blocks above is empty), ' +
+  'return `fragmentAdherence` as an empty array AND state explicitly in your summary that no ' +
+  'best-practice standards were available to review against — do not invent any.'
+
 export const FOLLOW_UP_GUIDANCE =
   'FORWARD-LOOKING FOLLOW-UPS — be future-looking as you work. Whenever you notice a ' +
   'genuine loose end, useful follow-up or side-task you are NOT acting on in this pass, ' +

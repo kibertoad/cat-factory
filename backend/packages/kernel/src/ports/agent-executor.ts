@@ -23,7 +23,7 @@ import type {
 } from '../domain/types.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
-import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
+import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -159,9 +159,12 @@ export interface AgentRunContext {
      * Fragment bodies the engine pre-resolved from the tenant fragment-library
      * (the merged catalog + relevance selection; ADR 0006). When present these
      * are folded into the system prompt verbatim, superseding `fragmentIds`'
-     * static resolution. Absent when the library module is not configured.
+     * static resolution. Absent when the library module is not configured. Each
+     * carries the fragment's human `title` (when it has one) so the prompt composer
+     * can render each standard as its own labelled block and a reviewer can cite it
+     * by title.
      */
-    resolvedFragments?: { id: string; body: string }[]
+    resolvedFragments?: { id: string; title?: string; body: string }[]
     /**
      * The task's resolved BUSINESS-vs-TECHNICAL label, when determined. `true` ⇒ purely
      * TECHNICAL (a refactor / non-functional / internal change): the implementer treats the
@@ -584,6 +587,13 @@ export interface AgentRunResult {
    * manifest-driven structured agent uses.
    */
   custom?: unknown
+  /**
+   * The container agent's self-assessment of the work it did — how hard/easy it was, what
+   * reduced its effectiveness, the key obstacles — lifted by the harness from the agent's
+   * sentinel-file report. The engine records it on the step (`PipelineStep.effortReport`) for
+   * run details. Absent for inline agents / when the agent wrote no report / older harness.
+   */
+  effortReport?: AgentEffortReport
   /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
    * the spend safeguard can meter usage; absent for the PROXY-metered container path

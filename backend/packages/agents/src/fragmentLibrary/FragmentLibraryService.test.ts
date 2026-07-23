@@ -190,7 +190,7 @@ describe('FragmentLibraryService — document-backed fragments', () => {
 
     // A run in workspace 'wsB' (no connection of its own) resolves the fragment.
     const bodies = await svc.resolveBodiesForRun('wsB', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'ACCOUNT-V2' }])
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'ACCOUNT-V2' }])
     // Re-read through the linked 'wsA', NOT the run's 'wsB'.
     expect(resolver.vias).toEqual(['wsA'])
   })
@@ -213,9 +213,9 @@ describe('FragmentLibraryService — document-backed fragments', () => {
     resolver.calls = 0
 
     const first = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(first).toEqual([{ id: created.id, body: 'BODY-V2' }])
+    expect(first).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
     const second = await svc.resolveBodiesForRun('ws1', [created.id])
-    expect(second).toEqual([{ id: created.id, body: 'BODY-V2' }])
+    expect(second).toEqual([{ id: created.id, title: 'Doc', body: 'BODY-V2' }])
     // Fetched once on the miss; the second read probed the version (unchanged) and
     // reused the cached body instead of re-fetching the whole page.
     expect(resolver.calls).toBe(1)
@@ -324,7 +324,7 @@ describe('FragmentLibraryService — document-backed fragments', () => {
       documentBodyCache: fakeBodyCache(),
     })
     const bodies = await svc2.resolveBodiesForRun('ws1', [created.id])
-    expect(bodies).toEqual([{ id: created.id, body: 'CACHED' }])
+    expect(bodies).toEqual([{ id: created.id, title: 'Doc', body: 'CACHED' }])
     expect(down.calls).toBe(1) // it tried the live fetch, then degraded
   })
 
@@ -404,7 +404,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'OVERRIDDEN-PERF-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['node.performance'])
-    expect(bodies).toEqual([{ id: 'node.performance', body: 'OVERRIDDEN-PERF-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'node.performance', title: 'Our perf rules', body: 'OVERRIDDEN-PERF-BODY' },
+    ])
 
     const catalog = await svc.resolvedCatalog('ws1')
     const entry = catalog.find((f) => f.id === 'node.performance')
@@ -422,7 +424,9 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
       body: 'ORG-BODY',
     })
     const bodies = await svc.resolveBodiesForRun('ws1', ['org.review-standard'])
-    expect(bodies).toEqual([{ id: 'org.review-standard', body: 'ORG-BODY' }])
+    expect(bodies).toEqual([
+      { id: 'org.review-standard', title: 'Org review standard', body: 'ORG-BODY' },
+    ])
     const catalog = await svc.resolvedCatalog('ws1')
     expect(catalog.find((f) => f.id === 'org.review-standard')?.tier).toBe('builtin')
 

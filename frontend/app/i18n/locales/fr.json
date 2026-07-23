@@ -73,7 +73,8 @@
       "body": "Vous avez effectué des modifications non enregistrées. Fermer et les perdre ?",
       "confirm": "Ignorer",
       "keep": "Continuer l'édition"
-    }
+    },
+    "edit": "Modifier"
   },
   "access": {
     "noBoardWrite": "Accès en lecture seule : vous pouvez consulter ce tableau mais pas le modifier.",
@@ -1194,7 +1195,20 @@
       "confirmReject": "Confirmer le rejet",
       "requestChanges": "Demander des modifications",
       "reject": "Rejeter",
-      "requestChangesHint": "Demander des modifications relance cette étape avec votre retour et vos commentaires. Rejeter arrête complètement l'exécution."
+      "requestChangesHint": "Demander des modifications relance cette étape avec votre retour et vos commentaires. Rejeter arrête complètement l'exécution.",
+      "effort": {
+        "heading": "Effort de l'agent",
+        "difficulty": "Difficulté",
+        "outOfTen": "{value}/10",
+        "reduced": "Ce qui a réduit l'efficacité",
+        "obstacles": "Principaux obstacles"
+      },
+      "adherence": {
+        "heading": "Respect des bonnes pratiques",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Constats associés",
+        "unnamed": "Standard"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4389,7 +4403,10 @@
       "summaryPlaceholder": "Résumé en une ligne (utilisé par le sélecteur)",
       "bodyPlaceholder": "Corps de la consigne (injecté dans le prompt)",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (par ex. backend, db)",
-      "add": "Ajouter le fragment"
+      "add": "Ajouter le fragment",
+      "generateTitle": "Générer",
+      "generateTitleHint": "Proposer un titre à partir du contenu du fragment",
+      "titleGenFailed": "Impossible de générer un titre"
     },
     "documents": {
       "intro": "Liez une page Confluence/Notion ou un fichier GitHub comme fragment de bonnes pratiques. Sa consigne est re-résolue depuis la source à l'exécution : modifiez le document et la prochaine exécution d'agent suit la nouvelle version (sans réimport).",
@@ -4439,7 +4456,9 @@
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
       "unlinkSourceFailed": "Impossible de dissocier la source",
-      "documentsLinked": "{count} document lié comme fragment vivant | {count} documents liés comme fragments vivants"
+      "documentsLinked": "{count} document lié comme fragment vivant | {count} documents liés comme fragments vivants",
+      "updated": "Fragment mis à jour",
+      "updateFailed": "Impossible de mettre à jour le fragment"
     },
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",

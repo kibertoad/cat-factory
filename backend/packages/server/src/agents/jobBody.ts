@@ -3,6 +3,7 @@ import {
   type AgentKindRegistry,
   bugFixGuidanceFor,
   composeBlockSystemPrompt,
+  EFFORT_REPORT_GUIDANCE,
   FOLLOW_UP_GUIDANCE,
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
@@ -131,13 +132,19 @@ export function buildKindBody(
     systemPromptFor(context.agentKind, registry),
     context.block,
   )
+  // Every container agent is asked to end its run by writing a short effort self-assessment
+  // (how hard the work was, what reduced its effectiveness, the obstacles) to a sentinel file
+  // the harness reads and surfaces in run details. Appended here — the single container-dispatch
+  // chokepoint — so it reaches EVERY container kind (built-in and registered) uniformly, exactly
+  // like the read-only/final-answer directives reach every kind via `applySurfaceDirectives`.
+  const withEffort = `${baseRoleSystemPrompt}\n\n${EFFORT_REPORT_GUIDANCE}`
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
   // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
   // sentinel file the harness tails. Only when enabled, so a disabled companion (or any
   // other kind) never writes the file.
   const withFollowUp = context.followUpCompanion
-    ? `${baseRoleSystemPrompt}\n\n${FOLLOW_UP_GUIDANCE}`
-    : baseRoleSystemPrompt
+    ? `${withEffort}\n\n${FOLLOW_UP_GUIDANCE}`
+    : withEffort
   // Bug-triage (phase G): when a prior `repro-test` step ran, augment the CODER's prompt with
   // BUG_FIX_GUIDANCE — fix the reported issue, don't merely make the reproduction test pass.
   // `bugFixGuidanceFor` returns '' for every other kind / when no repro-test preceded, so this

@@ -11,6 +11,8 @@ export type {
   FragmentTier,
   CreatePromptFragmentInput,
   UpdatePromptFragmentInput,
+  GenerateFragmentTitleInput,
+  GeneratedFragmentTitle,
   CreateDocumentFragmentInput,
   ResolvedFragment,
   FragmentSource,

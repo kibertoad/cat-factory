@@ -73,7 +73,8 @@
       "body": "Kaydedilmemiş değişiklikleriniz var. Kapatıp bunları kaybedecek misiniz?",
       "confirm": "At",
       "keep": "Düzenlemeye devam et"
-    }
+    },
+    "edit": "Düzenle"
   },
   "access": {
     "noBoardWrite": "Salt okunur erişim: bu panoyu görüntüleyebilirsiniz ancak düzenleyemezsiniz.",
@@ -1194,7 +1195,20 @@
       "confirmReject": "Reddetmeyi onayla",
       "requestChanges": "Değişiklik iste",
       "reject": "Reddet",
-      "requestChangesHint": "Değişiklik iste bu adımı geri bildiriminiz ve yorumlarınızla yeniden çalıştırır. Reddet çalıştırmayı tamamen durdurur."
+      "requestChangesHint": "Değişiklik iste bu adımı geri bildiriminiz ve yorumlarınızla yeniden çalıştırır. Reddet çalıştırmayı tamamen durdurur.",
+      "effort": {
+        "heading": "Aracı eforu",
+        "difficulty": "Zorluk",
+        "outOfTen": "{value}/10",
+        "reduced": "Etkinliği azaltan etkenler",
+        "obstacles": "Başlıca engeller"
+      },
+      "adherence": {
+        "heading": "En iyi uygulamalara uyum",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "İlgili bulgular",
+        "unnamed": "Standart"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4401,7 +4415,10 @@
       "summaryPlaceholder": "Tek satırlık özet (seçici tarafından kullanılır)",
       "bodyPlaceholder": "Yönerge gövdesi (prompt'a enjekte edilir)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (örn. backend, db)",
-      "add": "Parça ekle"
+      "add": "Parça ekle",
+      "generateTitle": "Oluştur",
+      "generateTitleHint": "Parça içeriğinden bir başlık öner",
+      "titleGenFailed": "Başlık oluşturulamadı"
     },
     "documents": {
       "intro": "Bir Confluence/Notion sayfasını veya GitHub dosyasını en iyi uygulama parçası olarak bağlayın. Yönergesi, çalıştırma sırasında kaynaktan yeniden çözümlenir: belgeyi düzenleyin ve sonraki aracı çalıştırması yeni sürümü izlesin (yeniden içe aktarma yok).",
@@ -4451,7 +4468,9 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı",
-      "documentsLinked": "{count} belge canlı parça olarak bağlandı | {count} belge canlı parça olarak bağlandı"
+      "documentsLinked": "{count} belge canlı parça olarak bağlandı | {count} belge canlı parça olarak bağlandı",
+      "updated": "Parça güncellendi",
+      "updateFailed": "Parça güncellenemedi"
     },
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",

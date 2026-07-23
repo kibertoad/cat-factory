@@ -31,13 +31,15 @@ import {
  * (the coder), or just `pushed` (the in-place fixers / conflict-resolver). No `model` here:
  * the proxy meters tokens and the async path doesn't carry the provider ref to the poll
  * site; `usage` is likewise omitted (metered by the proxy).
+ *
+ * The container agent's effort self-assessment (`result.effortReport`, lifted by the harness
+ * from the agent's sentinel file) is attached to EVERY mapped result — it is orthogonal to
+ * the kind-specific channels — so the engine records it on the step for run details.
  */
 export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
-  // Split by the one boundary that decides the whole shape — a structured `agent` job returns
-  // parsed JSON as `custom`; a coding/fixer job returns a PR / push instead — so each coercer
-  // stays within the cyclomatic-complexity budget. Behaviour is byte-identical.
-  if (result.custom !== undefined) return coerceCustomResult(result, agentKind)
-  return mapPushOrPrResult(result)
+  const mapped =
+    result.custom !== undefined ? coerceCustomResult(result, agentKind) : mapPushOrPrResult(result)
+  return result.effortReport ? { ...mapped, effortReport: result.effortReport } : mapped
 }
 
 /**

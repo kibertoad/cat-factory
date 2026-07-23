@@ -82,7 +82,8 @@
       "body": "You've made changes that haven't been saved. Close this and lose them?",
       "confirm": "Discard",
       "keep": "Keep editing"
-    }
+    },
+    "edit": "Edit"
   },
   "access": {
     "noBoardWrite": "Read-only access: you can view this board but can't edit it.",
@@ -1251,7 +1252,20 @@
       "confirmReject": "Confirm reject",
       "requestChanges": "Request changes",
       "reject": "Reject",
-      "requestChangesHint": "Request changes re-runs this step with your feedback & comments. Reject stops the run entirely."
+      "requestChangesHint": "Request changes re-runs this step with your feedback & comments. Reject stops the run entirely.",
+      "effort": {
+        "heading": "Agent effort",
+        "difficulty": "Difficulty",
+        "outOfTen": "{value}/10",
+        "reduced": "What reduced effectiveness",
+        "obstacles": "Key obstacles"
+      },
+      "adherence": {
+        "heading": "Best-practice adherence",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Related findings",
+        "unnamed": "Standard"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4565,7 +4579,10 @@
       "summaryPlaceholder": "One-line summary (used by the selector)",
       "bodyPlaceholder": "Guidance body (injected into the prompt)",
       "tagsPlaceholder": "Tags, comma-separated (e.g. backend, db)",
-      "add": "Add fragment"
+      "add": "Add fragment",
+      "generateTitle": "Generate",
+      "generateTitleHint": "Suggest a title from the fragment's content",
+      "titleGenFailed": "Couldn't generate a title"
     },
     "documents": {
       "intro": "Link a Confluence/Notion page or a GitHub file as a best-practice fragment. Its guidance is re-resolved from the source at run time: edit the doc and the next agent run follows the new version (no re-import).",
@@ -4615,7 +4632,9 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source",
-      "documentsLinked": "Linked {count} document as a living fragment | Linked {count} documents as living fragments"
+      "documentsLinked": "Linked {count} document as a living fragment | Linked {count} documents as living fragments",
+      "updated": "Fragment updated",
+      "updateFailed": "Couldn't update the fragment"
     },
     "confirmRemove": {
       "title": "Delete this fragment?",

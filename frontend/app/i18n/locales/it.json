@@ -1476,7 +1476,20 @@
       "confirmReject": "Conferma il rifiuto",
       "requestChanges": "Richiedi modifiche",
       "reject": "Rifiuta",
-      "requestChangesHint": "Richiedi modifiche riesegue questo passaggio con il tuo feedback e i tuoi commenti. Rifiuta arresta completamente l'esecuzione."
+      "requestChangesHint": "Richiedi modifiche riesegue questo passaggio con il tuo feedback e i tuoi commenti. Rifiuta arresta completamente l'esecuzione.",
+      "effort": {
+        "heading": "Sforzo dell'agente",
+        "difficulty": "Difficoltà",
+        "outOfTen": "{value}/10",
+        "reduced": "Cosa ha ridotto l'efficacia",
+        "obstacles": "Ostacoli principali"
+      },
+      "adherence": {
+        "heading": "Aderenza alle best practice",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Rilievi correlati",
+        "unnamed": "Standard"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -3565,7 +3578,10 @@
       "summaryPlaceholder": "Riepilogo su una riga (usato dal selettore)",
       "bodyPlaceholder": "Corpo delle indicazioni (iniettato nel prompt)",
       "tagsPlaceholder": "Tag, separati da virgola (es. backend, db)",
-      "add": "Aggiungi frammento"
+      "add": "Aggiungi frammento",
+      "generateTitle": "Genera",
+      "generateTitleHint": "Suggerisci un titolo dal contenuto del frammento",
+      "titleGenFailed": "Impossibile generare un titolo"
     },
     "documents": {
       "intro": "Collega una pagina Confluence/Notion o un file GitHub come frammento di best practice. Le sue indicazioni vengono ri-risolte dalla sorgente in fase di esecuzione: modifica il documento e la successiva esecuzione dell'agente seguira la nuova versione (nessuna re-importazione).",
@@ -3615,7 +3631,9 @@
       "checkSourceFailed": "Impossibile controllare la sorgente",
       "sourceUnlinked": "Sorgente scollegata",
       "unlinkSourceFailed": "Impossibile scollegare la sorgente",
-      "documentsLinked": "{count} documento collegato come frammento vivente | {count} documenti collegati come frammenti viventi"
+      "documentsLinked": "{count} documento collegato come frammento vivente | {count} documenti collegati come frammenti viventi",
+      "updated": "Frammento aggiornato",
+      "updateFailed": "Impossibile aggiornare il frammento"
     },
     "confirmRemove": {
       "title": "Eliminare questo frammento?",
@@ -3984,7 +4002,8 @@
       "body": "Hai apportato modifiche non salvate. Chiudere e perderle?",
       "confirm": "Ignora",
       "keep": "Continua a modificare"
-    }
+    },
+    "edit": "Modifica"
   },
   "access": {
     "noBoardWrite": "Accesso in sola lettura: puoi visualizzare questa board ma non modificarla.",
