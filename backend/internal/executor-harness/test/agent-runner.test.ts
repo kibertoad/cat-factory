@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { carryClaudeSystemPrompt, runClaudeCode, runCodex } from '../src/agent-runner.js'
+import type { HarnessCallMetric } from '../src/pi.js'
 
 // These drive the REAL `runClaudeCode` / `runCodex` against a FAKE `claude` / `codex`
 // binary placed on PATH — the whole path (streamCli + the per-call accumulator) runs, so
@@ -188,6 +189,84 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
       'assistant',
       'tool',
     ])
+  })
+
+  it('streams every costed call live, with the same objects the terminal list carries', async () => {
+    // The point of the live channel: a run killed mid-flight never returns a result, so
+    // telemetry batched to the end reports nothing for a run that spent real tokens.
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 100, output_tokens: 20 },
+          content: [{ type: 'text', text: 'first' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 200, output_tokens: 30 },
+          content: [{ type: 'text', text: 'second' }],
+        },
+      }),
+      JSON.stringify({ type: 'result', result: 'done' }),
+    ])
+    const streamed: HarnessCallMetric[] = []
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      onCallMetric: (call) => streamed.push(call),
+    })
+
+    expect(streamed.map((c) => c.responseText)).toEqual(['first', 'second'])
+    // The SAME instances, not copies: the job registry stamps `seq` on the object it is handed,
+    // and the terminal list must carry that stamp so both channels mint one row id per call.
+    expect(streamed[0]).toBe(outcome.callMetrics?.[0])
+    expect(streamed[1]).toBe(outcome.callMetrics?.[1])
+  })
+
+  it('withholds an un-costed call from the live stream until the cumulative fallback costs it', async () => {
+    // A CLI/version that reports only a cumulative total leaves every turn at zero tokens until
+    // `attributeCumulativeUsage` runs at the end. Streaming such a call early would record a
+    // zero-token row, and the backend ignores the terminal repeat (first write wins) — so the
+    // attributed numbers would never land. It is held back until it is final instead. (The
+    // withholding rule itself is unit-tested in `call-metrics.test.ts`; this is the wiring.)
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'uncosted' }] },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        usage: { input_tokens: 300, output_tokens: 50 },
+      }),
+    ])
+    // Snapshot the tokens AS PUBLISHED (the object is mutated by attribution afterwards), which
+    // is what the backend would have stored.
+    const asPublished: Array<{ text: string; inputTokens: number; outputTokens: number }> = []
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      onCallMetric: (call) => {
+        asPublished.push({
+          text: call.responseText,
+          inputTokens: call.inputTokens,
+          outputTokens: call.outputTokens,
+        })
+      },
+    })
+
+    expect(asPublished).toEqual([{ text: 'uncosted', inputTokens: 300, outputTokens: 50 }])
+    expect(outcome.callMetrics?.[0]?.inputTokens).toBe(300)
   })
 
   it('seeds telemetry as a single folded user turn (no phantom system) when the prompt overflows argv', async () => {

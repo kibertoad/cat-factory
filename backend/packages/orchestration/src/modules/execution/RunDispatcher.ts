@@ -69,6 +69,7 @@ import { ANALYSIS_AGENT_KIND, CONFLICTS_AGENT_KIND, HUMAN_TEST_AGENT_KIND } from
 import {
   classifyDispatchFailure,
   type ContainerFailureView,
+  evictionFailureDetail,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
   shouldPersistActivity,
@@ -1145,6 +1146,11 @@ export class RunDispatcher {
     if (recoveries < limit) {
       if (transient) step.transientEvictionRecoveries = recoveries + 1
       else step.evictionRecoveries = recoveries + 1
+      // Retain the FIRST death's post-mortem before re-dispatching: the dead container is
+      // removed right now, so this recovery is the last moment its evidence exists — and it is
+      // usually the informative one (the retry is a fresh container hitting the same wall).
+      // `evictionFailureDetail` folds it into the failure if the budget later runs out.
+      if (detail && !step.firstEvictionDetail) step.firstEvictionDetail = detail
       if (onBeforeRedispatch) await onBeforeRedispatch()
       step.jobId = undefined
       step.subtasks = undefined
@@ -1161,15 +1167,16 @@ export class RunDispatcher {
     // in-memory-only mutation would be lost; it emits the terminal frame, so markContainerErrored
     // deliberately doesn't).
     await this.markContainerErrored(workspaceId, instance, step)
+    // The transports' post-mortems of the containers that died (exit state + log tail). Each
+    // container is reclaimed as the run settles or re-dispatches, so this is the only place the
+    // cause survives — carry it onto the failure rather than reporting a bare "still evicting".
+    const evictionDetail = evictionFailureDetail(step.firstEvictionDetail, detail)
     return {
       kind: 'job_evicted',
       error: transient
         ? `${error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
         : `${error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
-      // The transport's post-mortem of the LAST container to die (exit state + log tail). The
-      // container itself is reclaimed when the run settles, so this is the only place the cause
-      // survives — carry it onto the failure rather than reporting a bare "still evicting".
-      ...(detail ? { detail } : {}),
+      ...(evictionDetail ? { detail: evictionDetail } : {}),
     }
   }
 

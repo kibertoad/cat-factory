@@ -27,7 +27,7 @@ import type {
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
-import { and, asc, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   agentContextSnapshots,
@@ -272,6 +272,11 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     agentKind: string,
   ): Promise<LlmPromptChainTip | null> {
     // The newest call for the conversation; one indexed row, no text columns.
+    // `message_count > 0` skips rows that can never BE a tip: a subagent call carries no
+    // re-sendable prompt chain (empty prompt, count 0), and such calls interleave with the
+    // parent's in real time now that telemetry streams. Letting one become the tip makes the
+    // next parent call unchainable, so it stores its whole prompt instead of a delta — the
+    // compression this chain exists for, lost for the rest of the run. Mirrors the D1 repo.
     const rows = await this.db
       .select({
         messageCount: llmCallMetrics.message_count,
@@ -283,6 +288,7 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
           eq(llmCallMetrics.workspace_id, workspaceId),
           eq(llmCallMetrics.execution_id, executionId),
           eq(llmCallMetrics.agent_kind, agentKind),
+          gt(llmCallMetrics.message_count, 0),
         ),
       )
       // message_count breaks a same-millisecond createdAt tie in chain order (it grows

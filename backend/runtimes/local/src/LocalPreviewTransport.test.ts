@@ -32,6 +32,9 @@ function fakeAdapter(overrides: Partial<ContainerRuntimeAdapter> = {}): {
     async isRunning() {
       return true
     },
+    async exitState() {
+      return undefined
+    },
     async logs() {
       return ''
     },

@@ -138,6 +138,12 @@ export interface ContainerRuntimeAdapter {
    * A fault against a container that is still RUNNING is a different thing (a daemon blip, a
    * misconfigured publish) and SHOULD throw: the spin-up path folds it into its fail-fast
    * diagnostic, and swallowing it there would replace a real cause with a bare timeout.
+   *
+   * When a runtime can't tell the two apart from what its CLI reports, prefer `undefined`: the
+   * cost is a lost diagnostic on the spin-up path (which times out and says so), where the cost
+   * of throwing is a wedged run that can never replace its own dead container. The Apple adapter
+   * is in that position — `container inspect` faults identically for a reaped container and for a
+   * runtime problem — while the docker adapter re-checks liveness and honours both halves.
    */
   endpoint(
     exec: ContainerExec,

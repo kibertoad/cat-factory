@@ -21,6 +21,23 @@ export interface ContainerFailureView {
 }
 
 /**
+ * Compose the failure `detail` for a step whose eviction budget is spent, from the post-mortem
+ * of the FIRST container that died on it (retained across recoveries on
+ * `PipelineStep.firstEvictionDetail`, since a re-dispatch removes the dead container at once)
+ * and that of the LAST. Both are kept when they differ — the first death normally explains the
+ * run, while the last is what the operator would otherwise be handed — and collapsed to one when
+ * only one exists or the two say the same thing.
+ */
+export function evictionFailureDetail(
+  first: string | undefined,
+  last: string | undefined,
+): string | undefined {
+  if (!first || first === last) return last
+  if (!last) return first
+  return `First eviction:\n${first}\n\nFinal eviction:\n${last}`
+}
+
+/**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is
  * recovered automatically by re-dispatching a fresh container for the same step.
  * Set to 1: one blip is recovered silently; a second crash of the same step is

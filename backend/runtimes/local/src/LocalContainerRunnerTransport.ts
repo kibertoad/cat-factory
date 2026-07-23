@@ -8,6 +8,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { redactSecrets } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -858,7 +859,10 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (reason.trim()) parts.push(`Last error: ${reason.trim()}`)
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)
-    return parts.join('\n')
+    // The container's own output is free text that can echo a token it was handed; this string
+    // is persisted on the run and rendered in its details, so scrub known secret shapes first
+    // (the same defence the harness applies to its structured failure messages).
+    return redactSecrets(parts.join('\n')) ?? ''
   }
 
   /**
@@ -871,14 +875,24 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * Distinct from {@link startupFailure}, which explains a container that never came up: this
    * one lands on the failure's `detail`, not its `error`, so the eviction classification and
    * its fresh-container recovery are unaffected.
+   *
+   * Only claims the container EXITED when the runtime says so. The other eviction branch is a
+   * 404 from a container that answered the poll (its harness restarted and no longer knows the
+   * job), and asserting an exit there would put a wrong cause of death on the run.
    */
   private async containerPostMortem(containerId: string): Promise<string | undefined> {
     const exit = await this.adapter.exitState(this.exec, containerId)
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
-    const parts = [`Container ${containerId} exited while the job was running.`]
-    if (exit) parts.push(`Exit: ${exit}`)
+    if (!exit && !logs) return undefined
+    const parts = [
+      exit
+        ? `Container ${containerId} exited while the job was running. Exit: ${exit}`
+        : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
+    ]
     if (logs) parts.push(`Container logs:\n${logs}`)
-    return parts.length > 1 ? parts.join('\n') : undefined
+    // Persisted on the run and rendered in its details, so scrub known secret shapes out of the
+    // container's own output first.
+    return redactSecrets(parts.join('\n')) ?? undefined
   }
 }
 

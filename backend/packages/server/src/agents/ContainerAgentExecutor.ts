@@ -584,6 +584,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private readonly recordedCallMetricJobs = new Set<string>()
 
   /**
+   * Per-job set of harness call `seq`s this process already recorded from the LIVE poll drain,
+   * so the terminal write can skip them. Without it the terminal pass re-walks the job's WHOLE
+   * list, and each already-stored call costs a chain-tip read plus an ignored insert — hundreds
+   * of pointless round-trips at the end of a long run (and, on the Worker, hundreds of
+   * subrequests inside one Workflow step).
+   *
+   * A set of the seqs actually recorded, not a high-water mark: a drained batch whose write
+   * failed is swallowed (telemetry never fails a run), and those calls must still be picked up
+   * by the terminal write rather than skipped as "already done". Dropped once the job records
+   * terminally, and bounded by the same wholesale clear as {@link recordedCallMetricJobs} — a
+   * lost entry only costs the redundant write it was there to avoid.
+   */
+  private readonly recordedCallSeqs = new Map<string, Set<number>>()
+
+  /**
    * Job ids whose subscription usage has already been folded into the modeled quota
    * cycle. Separate from {@link recordedUsageJobs} because quota tracking counts BOTH
    * pooled and personal runs (not gated on a pooled token id). Same replay-safety
@@ -809,6 +824,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         jobId: handle.jobId,
         calls,
       })
+      this.markCallSeqsRecorded(handle.jobId, calls)
     } catch {
       // Swallowed: telemetry is observability, never a reason to fail (or fail to
       // complete) a run.
@@ -816,19 +832,46 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
+   * Remember which `seq`s of a job landed, so {@link recordHarnessCallsOnce} can skip them.
+   * Only called after the batch was written. A call with no `seq` (an older harness image,
+   * which streams nothing) is not tracked: there the terminal list is the only channel.
+   */
+  private markCallSeqsRecorded(jobId: string, calls: HarnessCallMetric[]): void {
+    const seqs = calls.map((c) => c.seq).filter((seq): seq is number => seq !== undefined)
+    if (seqs.length === 0) return
+    if (this.recordedCallSeqs.size >= 10_000) this.recordedCallSeqs.clear()
+    const known = this.recordedCallSeqs.get(jobId) ?? new Set<number>()
+    for (const seq of seqs) known.add(seq)
+    this.recordedCallSeqs.set(jobId, known)
+  }
+
+  /**
    * The TERMINAL record of a job's full call list (see {@link recordHarnessCalls}). An
    * in-memory once-per-job guard skips the redundant walk within this process; the recorder
    * additionally mints deterministic per-call ids, so even a durable-driver replay in a fresh
    * isolate (empty guard) re-records idempotently rather than duplicating rows.
+   *
+   * Calls this process already recorded from the live drain are filtered out first: the store
+   * would ignore them anyway, but only after a chain-tip read + an insert each, which on a long
+   * run is hundreds of round-trips for no new rows. Anything the drain never delivered (a lost
+   * poll response, a transport that forwards no drain, a replay in a fresh isolate) still goes
+   * through.
    */
   private async recordHarnessCallsOnce(
     handle: AgentJobHandle,
     result: { callMetrics?: HarnessCallMetric[] },
   ): Promise<void> {
     if (this.recordedCallMetricJobs.has(handle.jobId)) return
-    await this.recordHarnessCalls(handle, result.callMetrics)
+    const recorded = this.recordedCallSeqs.get(handle.jobId)
+    const pending = recorded
+      ? result.callMetrics?.filter((c) => c.seq === undefined || !recorded.has(c.seq))
+      : result.callMetrics
+    await this.recordHarnessCalls(handle, pending)
     if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
     this.recordedCallMetricJobs.add(handle.jobId)
+    // The job is settled: its per-seq bookkeeping can go (the once-per-job guard covers a
+    // repeat poll of the same terminal state from here on).
+    this.recordedCallSeqs.delete(handle.jobId)
   }
 
   /**

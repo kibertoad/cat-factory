@@ -304,7 +304,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         }),
       )
       // Each call's prompt extends the previous one, so the delta chain has something to
-      // compress and a rewritten row would show it.
+      // compress and a rewritten row would show it. `seq` is the harness's job-scoped sequence:
+      // it — NOT the position in the batch — is what makes the two channels agree on a row id.
       const call = (seq: number, responseText: string): HarnessCallMetric => ({
         model: 'claude-opus-4-8',
         promptText: JSON.stringify(
@@ -317,6 +318,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         cachedInputTokens: 0,
         outputTokens: 5,
         finishReason: 'end_turn',
+        seq,
       })
       const base = {
         workspaceId: ws,
@@ -328,10 +330,12 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       }
       // The live drain records calls 0 and 1 as they happen...
       await record({ ...base, calls: [call(0, 'first'), call(1, 'second')] })
-      // ...then the terminal write re-offers them ALONGSIDE the ones that never streamed.
+      // ...then the terminal write re-offers them ALONGSIDE the ones that never streamed —
+      // deliberately NOT in `seq` order, so a recorder that fell back to the batch index would
+      // mint `-hc-0` for 'third' and see it swallowed as a duplicate of 'first'.
       await record({
         ...base,
-        calls: [call(0, 'first'), call(1, 'second'), call(2, 'third'), call(3, 'fourth')],
+        calls: [call(2, 'third'), call(0, 'first'), call(3, 'fourth'), call(1, 'second')],
       })
 
       const rows = await repo.listByExecution(ws, e1)
@@ -340,10 +344,73 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(rows).toHaveLength(4)
       expect(rows.map((r) => r.responseText).sort()).toEqual(['first', 'fourth', 'second', 'third'])
       // First write wins: the chain each row was stored against is intact, not recomputed
-      // against a later tip.
+      // against a later tip, and the newly-landed calls chained onto it in order.
       const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
       expect(byResponse['first']!.promptPrefixCount).toBe(0)
       expect(byResponse['second']!.promptPrefixCount).toBe(1)
+      expect(byResponse['third']!.promptPrefixCount).toBe(2)
+      expect(byResponse['fourth']!.promptPrefixCount).toBe(3)
+    })
+
+    it('keeps a promptless subagent call out of the prompt-delta chain', async () => {
+      // Subagent calls carry no re-sendable request transcript (empty prompt, messageCount 0),
+      // and they interleave with the parent's in RECORD order now that telemetry streams live.
+      // If one becomes the chain tip, the next parent call can't chain onto it and stores its
+      // whole prompt — so a subagent-heavy run loses the compression this chain exists for. The
+      // clock advances per call here, which is what makes the subagent row the newest.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      let n = 0
+      let t = 0
+      const record = makeHarnessCallRecorder(
+        new LlmObservabilityService({
+          llmCallMetricRepository: repo,
+          idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+          clock: { now: () => (t += 1) },
+        }),
+      )
+      const base = {
+        workspaceId: ws,
+        executionId: e1,
+        agentKind: 'pr-reviewer',
+        provider: 'claude',
+        model: 'claude:claude-opus-4-8',
+      }
+      const tokens = { inputTokens: 10, cachedInputTokens: 0, outputTokens: 5 }
+      const parent = (messageCount: number, responseText: string): HarnessCallMetric => ({
+        model: 'claude-opus-4-8',
+        promptText: JSON.stringify(
+          Array.from({ length: messageCount }, () => ({ role: 'user', content: 'u' })),
+        ),
+        messageCount,
+        responseText,
+        reasoningText: '',
+        ...tokens,
+        finishReason: 'end_turn',
+      })
+      const subagent = (responseText: string): HarnessCallMetric => ({
+        model: 'claude-opus-4-8',
+        promptText: '',
+        messageCount: 0,
+        responseText,
+        reasoningText: '',
+        ...tokens,
+        finishReason: 'end_turn',
+      })
+
+      await record({ ...base, calls: [parent(1, 'p1')] })
+      await record({ ...base, calls: [subagent('s1')] })
+      await record({ ...base, calls: [parent(2, 'p2')] })
+
+      const rows = await repo.listByExecution(ws, e1)
+      const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
+      // The subagent row lands, as its own chain-less entry.
+      expect(byResponse['s1']!.promptPrefixCount).toBe(0)
+      // The parent call after it still chained onto the previous PARENT call (prefix 1), rather
+      // than falling back to storing its whole prompt (prefix 0) — so what it stores is the ONE
+      // new message, and the chain it hangs off is the parent's.
+      expect(byResponse['p2']!.promptPrefixCount).toBe(1)
+      expect(JSON.parse(byResponse['p2']!.promptText)).toHaveLength(1)
     })
 
     it('prunes rows older than a cutoff', async () => {

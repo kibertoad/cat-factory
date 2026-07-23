@@ -43,6 +43,11 @@ still reported the tool spans it ran and the model calls it paid for. Each drain
 `callMetrics` entry carries a job-scoped `seq`, and the terminal result repeats the
 complete list, so the backend can take both channels without double-counting a call.
 
+Because the backend records a call as soon as it drains it (and ignores the terminal
+repeat), a drained call is FINAL. A call whose tokens are still open — a CLI that reports
+only a cumulative total, costed at the end — is withheld from the drain until it is
+complete; see `createCallMetricPublisher` in `src/pi.ts`.
+
 ## What a job does
 
 The implementation job (`POST /run`) is the canonical sequence:

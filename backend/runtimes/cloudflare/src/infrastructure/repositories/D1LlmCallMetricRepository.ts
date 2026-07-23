@@ -82,21 +82,25 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
   }
 
   async record(metric: LlmCallMetric): Promise<void> {
-    // `OR IGNORE`: first write wins (see the port). The harness-call recorder deliberately
-    // re-offers a deterministic id — the terminal write repeats calls the live poll drain
-    // already stored, and a durable-driver replay repeats the lot — so ignoring the repeat is
-    // what makes those paths idempotent. Never an UPSERT: overwriting would invalidate the
-    // row's stored prompt delta, which is only meaningful against the chain tip that preceded
-    // its FIRST write. Mirrors the Drizzle repo's `onConflictDoNothing`.
+    // First write wins (see the port). The harness-call recorder deliberately re-offers a
+    // deterministic id — the terminal write repeats calls the live poll drain already stored,
+    // and a durable-driver replay repeats the lot — so ignoring the repeat is what makes those
+    // paths idempotent. Never an UPSERT: overwriting would invalidate the row's stored prompt
+    // delta, which is only meaningful against the chain tip that preceded its FIRST write.
+    // `ON CONFLICT(id)`, NOT `INSERT OR IGNORE`: the latter also swallows NOT NULL/CHECK
+    // violations, so a malformed metric would vanish here while still throwing on Postgres.
+    // This mirrors the Drizzle repo's `onConflictDoNothing({ target: id })` exactly — only a
+    // duplicate id is ignored.
     await this.db
       .prepare(
-        `INSERT OR IGNORE INTO llm_call_metrics
+        `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
             streaming, message_count, tool_count, request_max_tokens,
             prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
       )
       .bind(
         metric.id,
@@ -140,8 +144,14 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       .prepare(
         // message_count breaks a same-millisecond createdAt tie in chain order (it
         // grows monotonically as the conversation appends); id is the last resort.
+        // `message_count > 0` skips rows that can never BE a tip: a subagent call carries no
+        // re-sendable prompt chain (empty prompt, count 0), and such calls interleave with the
+        // parent's in real time now that telemetry streams. Letting one become the tip makes
+        // the next parent call unchainable, so it stores its whole prompt instead of a delta —
+        // the compression this chain exists for, lost for the rest of the run. Mirrors the
+        // Drizzle repo.
         `SELECT message_count, prompt_hash FROM llm_call_metrics
-         WHERE workspace_id = ? AND execution_id = ? AND agent_kind = ?
+         WHERE workspace_id = ? AND execution_id = ? AND agent_kind = ? AND message_count > 0
          ORDER BY created_at DESC, message_count DESC, id DESC
          LIMIT 1`,
       )
