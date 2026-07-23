@@ -1,5 +1,27 @@
 # @cat-factory/worker
 
+## 0.97.1
+
+### Patch Changes
+
+- 8254367: Lint tightening: ratchet oxlint `complexity` from 40 to its step-2 target of 30.
+
+  Refactored every function above complexity 30 along cohesive, behaviour-neutral seams (helper
+  extractions / options-object bundles), including the god-file offenders: the Worker
+  `buildContainer` registry resolution → a `container-registries.ts` sibling, `RunDispatcher`'s
+  settled-poll branch tree → a new `PollCompletionController`, and `ExecutionService.stepInstance`'s
+  re-entrancy predicate → a `reentrancy.logic.ts` sibling (both of which also shrink their host
+  god-files). The executor-harness image tag is bumped (harness `src/**` changed).
+
+- Updated dependencies [8254367]
+  - @cat-factory/orchestration@0.133.2
+  - @cat-factory/integrations@0.91.1
+  - @cat-factory/server@0.143.1
+  - @cat-factory/agents@0.68.2
+  - @cat-factory/eks@0.1.126
+  - @cat-factory/consensus@0.11.26
+  - @cat-factory/provider-cloudflare@0.7.276
+
 ## 0.97.0
 
 ### Minor Changes
