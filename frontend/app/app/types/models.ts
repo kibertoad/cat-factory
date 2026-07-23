@@ -15,6 +15,8 @@ export type {
   ApiKeyProvider,
   ApiKey,
   AddApiKeyInput,
+  UpdateApiKeyInput,
   VendorCredential,
+  UpdateVendorCredentialInput,
   PromptFragment,
 } from '@cat-factory/contracts'

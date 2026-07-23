@@ -2928,7 +2928,8 @@
       "toast": {
         "connected": "Clave de API conectada",
         "connectFailed": "No se pudo conectar la clave",
-        "removeFailed": "No se pudo eliminar la clave"
+        "removeFailed": "No se pudo eliminar la clave",
+        "updateFailed": "No se pudo actualizar la clave"
       },
       "providers": {
         "openai": {
@@ -2967,7 +2968,11 @@
           "step2": "La URL base de la pasarela la establece el operador de tu despliegue (LITELLM_BASE_URL), no aquí."
         }
       },
-      "keyNoun": "esta clave de API"
+      "keyNoun": "esta clave de API",
+      "defaultBadge": "Predeterminada",
+      "pinDefault": "Establecer como predeterminada",
+      "disabledBadge": "Desactivada",
+      "enableToggle": "Activar o desactivar esta clave"
     },
     "vendorCredentials": {
       "title": "Proveedores de LLM",
@@ -2990,7 +2995,8 @@
       "toast": {
         "connected": "Token conectado",
         "connectFailed": "No se pudo conectar el token",
-        "removeFailed": "No se pudo eliminar el token"
+        "removeFailed": "No se pudo eliminar el token",
+        "updateFailed": "No se pudo actualizar el token"
       },
       "vendors": {
         "kimi": {
@@ -3009,7 +3015,11 @@
       "confirmRemove": {
         "title": "¿Quitar esta credencial?",
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
-      }
+      },
+      "defaultBadge": "Predeterminada",
+      "pinDefault": "Establecer como predeterminada",
+      "disabledBadge": "Desactivada",
+      "enableToggle": "Activar o desactivar este token"
     }
   },
   "github": {

@@ -2,6 +2,7 @@ import {
   addVendorCredentialContract,
   listVendorCredentialsContract,
   removeVendorCredentialContract,
+  updateVendorCredentialContract,
   type VendorCredential,
 } from '@cat-factory/contracts'
 import type { VendorCredentialSummary } from '@cat-factory/integrations'
@@ -40,6 +41,8 @@ function toWire(summary: VendorCredentialSummary): VendorCredential {
     inputTokens: summary.inputTokens,
     outputTokens: summary.outputTokens,
     requestCount: summary.requestCount,
+    enabled: summary.enabled,
+    isDefault: summary.isDefault,
   }
 }
 
@@ -60,6 +63,17 @@ export function vendorCredentialController(): Hono<AppEnv> {
     const input = c.req.valid('json')
     const summary = await subscriptions.addToken(param(c, 'workspaceId'), input)
     return c.json(toWire(summary), 201)
+  })
+
+  buildHonoRoute(app, updateVendorCredentialContract, async (c) => {
+    const subscriptions = c.get('container').subscriptions
+    if (!subscriptions) return unavailable(c)
+    const summary = await subscriptions.updateToken(
+      param(c, 'workspaceId'),
+      c.req.valid('param').id,
+      c.req.valid('json'),
+    )
+    return c.json(toWire(summary), 200)
   })
 
   buildHonoRoute(app, removeVendorCredentialContract, async (c) => {

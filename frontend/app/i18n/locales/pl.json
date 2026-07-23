@@ -2928,7 +2928,8 @@
       "toast": {
         "connected": "Klucz API podłączony",
         "connectFailed": "Nie udało się podłączyć klucza",
-        "removeFailed": "Nie udało się usunąć klucza"
+        "removeFailed": "Nie udało się usunąć klucza",
+        "updateFailed": "Nie udało się zaktualizować klucza"
       },
       "providers": {
         "openai": {
@@ -2967,7 +2968,11 @@
           "step2": "Bazowy URL bramy ustawia operator Twojego wdrożenia (LITELLM_BASE_URL), nie tutaj."
         }
       },
-      "keyNoun": "ten klucz API"
+      "keyNoun": "ten klucz API",
+      "defaultBadge": "Domyślny",
+      "pinDefault": "Ustaw jako domyślny",
+      "disabledBadge": "Wyłączony",
+      "enableToggle": "Włącz lub wyłącz ten klucz"
     },
     "vendorCredentials": {
       "title": "Dostawcy LLM",
@@ -2990,7 +2995,8 @@
       "toast": {
         "connected": "Token podłączony",
         "connectFailed": "Nie udało się podłączyć tokenu",
-        "removeFailed": "Nie udało się usunąć tokenu"
+        "removeFailed": "Nie udało się usunąć tokenu",
+        "updateFailed": "Nie udało się zaktualizować tokena"
       },
       "vendors": {
         "kimi": {
@@ -3009,7 +3015,11 @@
       "confirmRemove": {
         "title": "Usunąć te dane logowania?",
         "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
-      }
+      },
+      "defaultBadge": "Domyślny",
+      "pinDefault": "Ustaw jako domyślny",
+      "disabledBadge": "Wyłączony",
+      "enableToggle": "Włącz lub wyłącz ten token"
     }
   },
   "github": {

@@ -56,13 +56,16 @@ class FakeRepo implements ProviderApiKeyRepository {
   }
   async listForPool(scopes: ApiKeyScopeRef[], provider: ApiKeyProvider) {
     return this.rows
-      .filter((r) => r.deletedAt === null && r.provider === provider && this.matches(r, scopes))
+      .filter(
+        (r) =>
+          r.deletedAt === null && r.enabled && r.provider === provider && this.matches(r, scopes),
+      )
       .sort((a, b) => a.createdAt - b.createdAt)
   }
   async listConfiguredProviders(scopes: ApiKeyScopeRef[]) {
     const set = new Set<ApiKeyProvider>()
     for (const r of this.rows) {
-      if (r.deletedAt === null && this.matches(r, scopes)) set.add(r.provider)
+      if (r.deletedAt === null && r.enabled && this.matches(r, scopes)) set.add(r.provider)
     }
     return [...set]
   }
@@ -107,6 +110,24 @@ class FakeRepo implements ProviderApiKeyRepository {
     row.inputTokens = (active ? row.inputTokens : 0) + usage.inputTokens
     row.outputTokens = (active ? row.outputTokens : 0) + usage.outputTokens
     row.requestCount = (active ? row.requestCount : 0) + 1
+  }
+  async setEnabled(scope: ApiKeyScope, scopeId: string, id: string, enabled: boolean) {
+    const row = this.rows.find(
+      (r) => r.id === id && r.scope === scope && r.scopeId === scopeId && !r.deletedAt,
+    )
+    if (row) row.enabled = enabled
+  }
+  async setDefault(
+    scope: ApiKeyScope,
+    scopeId: string,
+    provider: ApiKeyProvider,
+    id: string | null,
+  ) {
+    for (const r of this.rows) {
+      if (r.scope === scope && r.scopeId === scopeId && r.provider === provider && !r.deletedAt) {
+        r.isDefault = id !== null && r.id === id
+      }
+    }
   }
   async softDelete(scope: ApiKeyScope, scopeId: string, id: string, at: number) {
     const row = this.rows.find(
@@ -232,5 +253,40 @@ describe('ApiKeyService', () => {
     await service.removeKey('workspace', WS, k.id)
     expect(await service.listKeys('workspace', WS)).toEqual([])
     expect(await service.hasKey(WS, 'qwen')).toBe(false)
+  })
+
+  it('a disabled key is skipped by lease/hasKey but stays listed and re-enablable', async () => {
+    const { service } = build()
+    const k = await service.addKey('workspace', WS, { provider: 'qwen', label: 'ws', key: '1' })
+    const updated = await service.updateKey('workspace', WS, k.id, { enabled: false })
+    expect(updated.enabled).toBe(false)
+    // Still visible in the management list, but not leasable / not "configured".
+    expect((await service.listKeys('workspace', WS)).map((x) => x.id)).toEqual([k.id])
+    expect(await service.hasKey(WS, 'qwen')).toBe(false)
+    await expect(service.lease(WS, 'qwen')).rejects.toBeInstanceOf(ConflictError)
+    // Re-enabling brings it back.
+    await service.updateKey('workspace', WS, k.id, { enabled: true })
+    expect(await service.hasKey(WS, 'qwen')).toBe(true)
+    expect((await service.lease(WS, 'qwen')).secret).toBe('1')
+  })
+
+  it('a pinned default wins over usage-aware rotation until unpinned', async () => {
+    const { service } = build()
+    const a = await service.addKey('workspace', WS, { provider: 'qwen', label: 'a', key: '1' })
+    const b = await service.addKey('workspace', WS, { provider: 'qwen', label: 'b', key: '2' })
+    // Load up `a` so rotation would prefer `b`.
+    await service.recordUsage(a.id, { inputTokens: 5000, outputTokens: 5000 })
+    // Pin `a` as default → it is leased despite its heavier load.
+    await service.updateKey('workspace', WS, a.id, { isDefault: true })
+    expect((await service.lease(WS, 'qwen')).keyId).toBe(a.id)
+    // Pinning `b` clears `a`'s default (at most one per group).
+    await service.updateKey('workspace', WS, b.id, { isDefault: true })
+    expect((await service.listKeys('workspace', WS)).find((k) => k.id === a.id)!.isDefault).toBe(
+      false,
+    )
+    expect((await service.lease(WS, 'qwen')).keyId).toBe(b.id)
+    // Unpinning reverts to usage-aware rotation (the least-loaded `b`).
+    await service.updateKey('workspace', WS, b.id, { isDefault: false })
+    expect((await service.lease(WS, 'qwen')).keyId).toBe(b.id)
   })
 })

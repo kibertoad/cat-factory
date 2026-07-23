@@ -171,6 +171,8 @@ describe('composeMothership', () => {
         inputTokens: 0,
         outputTokens: 0,
         requestCount: 0,
+        enabled: true,
+        isDefault: false,
         deletedAt: null,
       })
       const keys = await credentialStore.providerApiKeyRepository.listByScope('workspace', 'ws_1')

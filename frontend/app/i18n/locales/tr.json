@@ -2940,7 +2940,8 @@
       "toast": {
         "connected": "API anahtarı bağlandı",
         "connectFailed": "Anahtar bağlanamadı",
-        "removeFailed": "Anahtar kaldırılamadı"
+        "removeFailed": "Anahtar kaldırılamadı",
+        "updateFailed": "Anahtar güncellenemedi"
       },
       "providers": {
         "openai": {
@@ -2979,7 +2980,11 @@
           "step2": "Ağ geçidinin temel URL'si burada değil, dağıtım operatörünüz tarafından ayarlanır (LITELLM_BASE_URL)."
         }
       },
-      "keyNoun": "bu API anahtarı"
+      "keyNoun": "bu API anahtarı",
+      "defaultBadge": "Varsayılan",
+      "pinDefault": "Varsayılan yap",
+      "disabledBadge": "Devre dışı",
+      "enableToggle": "Bu anahtarı etkinleştir veya devre dışı bırak"
     },
     "vendorCredentials": {
       "title": "LLM Sağlayıcıları",
@@ -3002,7 +3007,8 @@
       "toast": {
         "connected": "Token bağlandı",
         "connectFailed": "Token bağlanamadı",
-        "removeFailed": "Token kaldırılamadı"
+        "removeFailed": "Token kaldırılamadı",
+        "updateFailed": "Belirteç güncellenemedi"
       },
       "vendors": {
         "kimi": {
@@ -3021,7 +3027,11 @@
       "confirmRemove": {
         "title": "Bu kimlik bilgisi kaldırılsın mı?",
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-      }
+      },
+      "defaultBadge": "Varsayılan",
+      "pinDefault": "Varsayılan yap",
+      "disabledBadge": "Devre dışı",
+      "enableToggle": "Bu belirteci etkinleştir veya devre dışı bırak"
     }
   },
   "github": {

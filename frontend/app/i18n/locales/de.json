@@ -2469,7 +2469,8 @@
       "toast": {
         "connected": "API-Schlüssel verbunden",
         "connectFailed": "Schlüssel konnte nicht verbunden werden",
-        "removeFailed": "Schlüssel konnte nicht entfernt werden"
+        "removeFailed": "Schlüssel konnte nicht entfernt werden",
+        "updateFailed": "Schlüssel konnte nicht aktualisiert werden"
       },
       "providers": {
         "openai": {
@@ -2508,7 +2509,11 @@
           "step2": "Die Basis-URL des Gateways wird von Ihrem Deployment-Betreiber festgelegt (LITELLM_BASE_URL), nicht hier."
         }
       },
-      "keyNoun": "diesen API-Schlüssel"
+      "keyNoun": "diesen API-Schlüssel",
+      "defaultBadge": "Standard",
+      "pinDefault": "Als Standard festlegen",
+      "disabledBadge": "Deaktiviert",
+      "enableToggle": "Diesen Schlüssel aktivieren oder deaktivieren"
     },
     "vendorCredentials": {
       "title": "LLM-Vendors",
@@ -2531,7 +2536,8 @@
       "toast": {
         "connected": "Token verbunden",
         "connectFailed": "Token konnte nicht verbunden werden",
-        "removeFailed": "Token konnte nicht entfernt werden"
+        "removeFailed": "Token konnte nicht entfernt werden",
+        "updateFailed": "Token konnte nicht aktualisiert werden"
       },
       "vendors": {
         "kimi": {
@@ -2550,7 +2556,11 @@
       "confirmRemove": {
         "title": "Diese Zugangsdaten entfernen?",
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
-      }
+      },
+      "defaultBadge": "Standard",
+      "pinDefault": "Als Standard festlegen",
+      "disabledBadge": "Deaktiviert",
+      "enableToggle": "Dieses Token aktivieren oder deaktivieren"
     }
   },
   "github": {

@@ -19,6 +19,8 @@ interface ProviderSubscriptionTokenRow {
   input_tokens: number
   output_tokens: number
   request_count: number
+  enabled: number
+  is_default: number
   deleted_at: number | null
 }
 
@@ -39,6 +41,8 @@ function rowToRecord(row: ProviderSubscriptionTokenRow): ProviderSubscriptionTok
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
@@ -81,8 +85,8 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
       .prepare(
         `INSERT INTO provider_subscription_tokens
           (id, workspace_id, vendor, label, token_cipher, created_at, last_used_at,
-           window_started_at, input_tokens, output_tokens, request_count, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+           window_started_at, input_tokens, output_tokens, request_count, enabled, is_default, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(
         record.id,
@@ -96,6 +100,8 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
         record.inputTokens,
         record.outputTokens,
         record.requestCount,
+        record.enabled ? 1 : 0,
+        record.isDefault ? 1 : 0,
       )
       .run()
   }
@@ -147,6 +153,38 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
         workspaceId,
       )
       .run()
+  }
+
+  async setEnabled(workspaceId: string, id: string, enabled: boolean): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE provider_subscription_tokens SET enabled = ? WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL',
+      )
+      .bind(enabled ? 1 : 0, id, workspaceId)
+      .run()
+  }
+
+  async setDefault(
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+    id: string | null,
+  ): Promise<void> {
+    // Clear the group's default first (at most one default per workspace+vendor), then pin
+    // the chosen row. D1 serialises writes, so the two statements settle atomically enough.
+    await this.db
+      .prepare(
+        'UPDATE provider_subscription_tokens SET is_default = 0 WHERE workspace_id = ? AND vendor = ? AND deleted_at IS NULL AND is_default = 1',
+      )
+      .bind(workspaceId, vendor)
+      .run()
+    if (id !== null) {
+      await this.db
+        .prepare(
+          'UPDATE provider_subscription_tokens SET is_default = 1 WHERE id = ? AND workspace_id = ? AND vendor = ? AND deleted_at IS NULL',
+        )
+        .bind(id, workspaceId, vendor)
+        .run()
+    }
   }
 
   async softDelete(workspaceId: string, id: string, at: number): Promise<void> {

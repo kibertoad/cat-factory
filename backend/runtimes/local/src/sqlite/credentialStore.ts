@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS provider_api_keys (
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   request_count INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  is_default INTEGER NOT NULL DEFAULT 0,
   deleted_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS provider_api_keys_pool
@@ -93,6 +95,8 @@ CREATE TABLE IF NOT EXISTS provider_subscription_tokens (
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   request_count INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  is_default INTEGER NOT NULL DEFAULT 0,
   deleted_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS provider_subscription_tokens_pool
@@ -147,6 +151,8 @@ interface ApiKeyRow {
   input_tokens: number
   output_tokens: number
   request_count: number
+  enabled: number
+  is_default: number
   deleted_at: number | null
 }
 
@@ -164,13 +170,15 @@ function apiKeyRowToRecord(row: ApiKeyRow): ProviderApiKeyRecord {
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
 
 const API_KEY_COLUMNS =
   'id, scope, scope_id, provider, label, key_cipher, created_at, last_used_at, ' +
-  'window_started_at, input_tokens, output_tokens, request_count, deleted_at'
+  'window_started_at, input_tokens, output_tokens, request_count, enabled, is_default, deleted_at'
 
 /** Build an `(scope = ? AND scope_id = ?) OR …` predicate plus its flattened params. */
 function scopeMatch(scopes: ApiKeyScopeRef[]): { sql: string; params: string[] } {
@@ -208,7 +216,7 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     const rows = this.db
       .prepare(
         `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
-         WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL
+         WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL AND enabled = 1
          ORDER BY created_at ASC`,
       )
       .all(...match.params, provider) as unknown as ApiKeyRow[]
@@ -221,7 +229,7 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     const rows = this.db
       .prepare(
         `SELECT DISTINCT provider FROM provider_api_keys
-         WHERE ${match.sql} AND deleted_at IS NULL`,
+         WHERE ${match.sql} AND deleted_at IS NULL AND enabled = 1`,
       )
       .all(...match.params) as unknown as { provider: string }[]
     return rows.map((r) => r.provider as ApiKeyProvider)
@@ -249,7 +257,7 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
       .prepare(
         `INSERT INTO provider_api_keys
            (${API_KEY_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .run(
         record.id,
@@ -264,6 +272,8 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
         record.inputTokens,
         record.outputTokens,
         record.requestCount,
+        record.enabled ? 1 : 0,
+        record.isDefault ? 1 : 0,
       )
   }
 
@@ -288,8 +298,8 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     const picked = this.db
       .prepare(
         `SELECT id FROM provider_api_keys
-         WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL
-         ORDER BY (${usage}) ASC, last_used_at ASC NULLS FIRST, created_at ASC
+         WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL AND enabled = 1
+         ORDER BY is_default DESC, (${usage}) ASC, last_used_at ASC NULLS FIRST, created_at ASC
          LIMIT 1`,
       )
       .get(...match.params, provider, now, windowMs) as { id: string } | undefined
@@ -328,6 +338,43 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
         outTokens: usage.outputTokens,
         id,
       })
+  }
+
+  async setEnabled(
+    scope: ApiKeyScope,
+    scopeId: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
+    this.db
+      .prepare(
+        `UPDATE provider_api_keys SET enabled = ?
+         WHERE id = ? AND scope = ? AND scope_id = ? AND deleted_at IS NULL`,
+      )
+      .run(enabled ? 1 : 0, id, scope, scopeId)
+  }
+
+  async setDefault(
+    scope: ApiKeyScope,
+    scopeId: string,
+    provider: ApiKeyProvider,
+    id: string | null,
+  ): Promise<void> {
+    // Clear the group's default first (at most one per scope+scope_id+provider), then pin it.
+    this.db
+      .prepare(
+        `UPDATE provider_api_keys SET is_default = 0
+         WHERE scope = ? AND scope_id = ? AND provider = ? AND deleted_at IS NULL AND is_default = 1`,
+      )
+      .run(scope, scopeId, provider)
+    if (id !== null) {
+      this.db
+        .prepare(
+          `UPDATE provider_api_keys SET is_default = 1
+           WHERE id = ? AND scope = ? AND scope_id = ? AND provider = ? AND deleted_at IS NULL`,
+        )
+        .run(id, scope, scopeId, provider)
+    }
   }
 
   async softDelete(scope: ApiKeyScope, scopeId: string, id: string, at: number): Promise<void> {
@@ -455,6 +502,8 @@ interface SubscriptionTokenRow {
   input_tokens: number
   output_tokens: number
   request_count: number
+  enabled: number
+  is_default: number
   deleted_at: number | null
 }
 
@@ -471,13 +520,15 @@ function subscriptionTokenRowToRecord(row: SubscriptionTokenRow): ProviderSubscr
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
 
 const SUBSCRIPTION_TOKEN_COLUMNS =
   'id, workspace_id, vendor, label, token_cipher, created_at, last_used_at, ' +
-  'window_started_at, input_tokens, output_tokens, request_count, deleted_at'
+  'window_started_at, input_tokens, output_tokens, request_count, enabled, is_default, deleted_at'
 
 /**
  * The per-workspace subscription-token pool over `node:sqlite` — the local-sqlite mirror of
@@ -520,7 +571,7 @@ class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionT
       .prepare(
         `INSERT INTO provider_subscription_tokens
            (${SUBSCRIPTION_TOKEN_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .run(
         record.id,
@@ -534,6 +585,8 @@ class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionT
         record.inputTokens,
         record.outputTokens,
         record.requestCount,
+        record.enabled ? 1 : 0,
+        record.isDefault ? 1 : 0,
       )
   }
 
@@ -573,6 +626,37 @@ class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionT
         id,
         workspaceId,
       })
+  }
+
+  async setEnabled(workspaceId: string, id: string, enabled: boolean): Promise<void> {
+    this.db
+      .prepare(
+        `UPDATE provider_subscription_tokens SET enabled = ?
+         WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL`,
+      )
+      .run(enabled ? 1 : 0, id, workspaceId)
+  }
+
+  async setDefault(
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+    id: string | null,
+  ): Promise<void> {
+    // Clear the group's default first (at most one per workspace+vendor), then pin it.
+    this.db
+      .prepare(
+        `UPDATE provider_subscription_tokens SET is_default = 0
+         WHERE workspace_id = ? AND vendor = ? AND deleted_at IS NULL AND is_default = 1`,
+      )
+      .run(workspaceId, vendor)
+    if (id !== null) {
+      this.db
+        .prepare(
+          `UPDATE provider_subscription_tokens SET is_default = 1
+           WHERE id = ? AND workspace_id = ? AND vendor = ? AND deleted_at IS NULL`,
+        )
+        .run(id, workspaceId, vendor)
+    }
   }
 
   async softDelete(workspaceId: string, id: string, at: number): Promise<void> {

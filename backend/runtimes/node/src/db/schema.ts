@@ -1811,6 +1811,10 @@ export const providerSubscriptionTokens = pgTable(
     input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
     output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
     request_count: integer('request_count').notNull().default(0),
+    // Lifecycle flags (0/1): `enabled` gates leasing, `is_default` pins the preferred token
+    // for a (workspace, vendor). Mirror of D1 migration 0058.
+    enabled: integer('enabled').notNull().default(1),
+    is_default: integer('is_default').notNull().default(0),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
@@ -1865,6 +1869,10 @@ export const providerApiKeys = pgTable(
     input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
     output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
     request_count: integer('request_count').notNull().default(0),
+    // Lifecycle flags (0/1): `enabled` gates leasing, `is_default` pins the preferred key
+    // for a (scope, scope_id, provider). Mirror of D1 migration 0058.
+    enabled: integer('enabled').notNull().default(1),
+    is_default: integer('is_default').notNull().default(0),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [index('idx_provider_api_keys_pool').on(t.scope, t.scope_id, t.provider, t.deleted_at)],

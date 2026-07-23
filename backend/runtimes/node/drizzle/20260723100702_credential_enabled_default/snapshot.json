@@ -1,10 +1,10 @@
 {
-  "dialect": "postgres",
-  "id": "8589c5a0-99d6-43f6-9d75-325ff8ce3751",
-  "prevIds": [
-    "e6eb1e52-2379-4fb2-8a0a-188f8b2715e9"
-  ],
   "version": "8",
+  "dialect": "postgres",
+  "id": "e6eb1e52-2379-4fb2-8a0a-188f8b2715e9",
+  "prevIds": [
+    "e2141b81-7786-4be1-831b-ff057ab36cb1"
+  ],
   "ddl": [
     {
       "name": "provisioning",
@@ -12365,58 +12365,6 @@
       "generated": null,
       "identity": null,
       "name": "delegate_agents_to_runner_pool",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'off'",
-      "generated": null,
-      "identity": null,
-      "name": "review_friction_mode",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_settings"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "3",
-      "generated": null,
-      "identity": null,
-      "name": "review_friction_warn_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_settings"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "review_friction_block_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_settings"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "review_friction_block_stuck_minutes",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_settings"

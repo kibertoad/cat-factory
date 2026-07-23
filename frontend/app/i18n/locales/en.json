@@ -3012,7 +3012,8 @@
       "toast": {
         "connected": "API key connected",
         "connectFailed": "Could not connect key",
-        "removeFailed": "Could not remove key"
+        "removeFailed": "Could not remove key",
+        "updateFailed": "Could not update key"
       },
       "providers": {
         "openai": {
@@ -3051,7 +3052,11 @@
           "step2": "The gateway's base URL is set by your deployment operator (LITELLM_BASE_URL), not here."
         }
       },
-      "keyNoun": "this API key"
+      "keyNoun": "this API key",
+      "defaultBadge": "Default",
+      "pinDefault": "Set as default",
+      "disabledBadge": "Disabled",
+      "enableToggle": "Enable or disable this key"
     },
     "vendorCredentials": {
       "title": "LLM Vendors",
@@ -3077,7 +3082,8 @@
       "toast": {
         "connected": "Token connected",
         "connectFailed": "Could not connect token",
-        "removeFailed": "Could not remove token"
+        "removeFailed": "Could not remove token",
+        "updateFailed": "Could not update token"
       },
       "vendors": {
         "kimi": {
@@ -3096,7 +3102,11 @@
       "confirmRemove": {
         "title": "Remove this credential?",
         "body": "\"{name}\" will be removed. This can't be undone."
-      }
+      },
+      "defaultBadge": "Default",
+      "pinDefault": "Set as default",
+      "disabledBadge": "Disabled",
+      "enableToggle": "Enable or disable this token"
     }
   },
   "github": {

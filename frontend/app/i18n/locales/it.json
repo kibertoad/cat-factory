@@ -2469,7 +2469,8 @@
       "toast": {
         "connected": "Chiave API collegata",
         "connectFailed": "Impossibile collegare la chiave",
-        "removeFailed": "Impossibile rimuovere la chiave"
+        "removeFailed": "Impossibile rimuovere la chiave",
+        "updateFailed": "Impossibile aggiornare la chiave"
       },
       "providers": {
         "openai": {
@@ -2508,7 +2509,11 @@
           "step2": "L'URL di base del gateway viene impostato dall'operatore del tuo deployment (LITELLM_BASE_URL), non qui."
         }
       },
-      "keyNoun": "questa chiave API"
+      "keyNoun": "questa chiave API",
+      "defaultBadge": "Predefinita",
+      "pinDefault": "Imposta come predefinita",
+      "disabledBadge": "Disattivata",
+      "enableToggle": "Attiva o disattiva questa chiave"
     },
     "vendorCredentials": {
       "title": "Vendor LLM",
@@ -2531,7 +2536,8 @@
       "toast": {
         "connected": "Token collegato",
         "connectFailed": "Impossibile collegare il token",
-        "removeFailed": "Impossibile rimuovere il token"
+        "removeFailed": "Impossibile rimuovere il token",
+        "updateFailed": "Impossibile aggiornare il token"
       },
       "vendors": {
         "kimi": {
@@ -2550,7 +2556,11 @@
       "confirmRemove": {
         "title": "Rimuovere questa credenziale?",
         "body": "\"{name}\" verrà rimossa. Questa operazione non può essere annullata."
-      }
+      },
+      "defaultBadge": "Predefinita",
+      "pinDefault": "Imposta come predefinita",
+      "disabledBadge": "Disattivata",
+      "enableToggle": "Attiva o disattiva questo token"
     }
   },
   "github": {

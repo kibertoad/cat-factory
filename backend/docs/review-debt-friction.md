@@ -43,7 +43,7 @@ queue is worked down.
 
 - **No auto-actions on the debt itself.** This feature never merges, dismisses, escalates,
   or times out a waiting run — that remains the human's job (and the existing severity
-  escalation's signal). Friction only shapes *new* work.
+  escalation's signal). Friction only shapes _new_ work.
 - **Not a run-start gate.** `RunAdmission` already owns start-time admission
   (`assertWithinTaskLimit`, dependency and budget gates). Extending the same verdict to
   run start is a listed possible extension, not part of this design — the user-visible
@@ -65,7 +65,7 @@ The single existing, already-battle-tested signal for "a run is waiting on a hum
 "open card older than the workspace threshold" as "a human is overdue" — this design
 reuses exactly that interpretation rather than inventing a second one.
 
-**Definition.** A task is *in human review* iff it has at least one **open** notification
+**Definition.** A task is _in human review_ iff it has at least one **open** notification
 whose type is in a new closed constant `REVIEW_WAIT_NOTIFICATION_TYPES`
 (`@cat-factory/contracts`, alongside `notificationTypeSchema`):
 
@@ -88,7 +88,7 @@ Rules on top of the raw rows:
 - **Deduplicate per `blockId`.** One task = one unit of debt no matter how many open cards
   it holds (a task can have e.g. a `pr_review_ready` and a `followup_pending` at once).
 - **Age** of a debt item = `now - min(createdAt)` over its open review-wait cards — the
-  moment the task *first* started waiting in its current park.
+  moment the task _first_ started waiting in its current park.
 - **Dismissal clears debt.** Dismissing a card is a deliberate human decision ("we are not
   going to act on this"), and the existing lifecycle already treats it as terminal. No
   special casing.
@@ -99,7 +99,7 @@ Rules on top of the raw rows:
 
 Why not derive it from execution state (parked steps / `pr_ready` blocks) instead? The
 run's `blocked` status conflates human parks with other waits, `pr_ready` misses mid-run
-parks (requirements review is the *first* step), and reconstructing "when did it start
+parks (requirements review is the _first_ step), and reconstructing "when did it start
 waiting" would need new persisted state. The notification row already has the right
 scope, the right timestamp, the right lifecycle, and batched reads
 (`NotificationRepository.listOpen`) on both runtimes.
@@ -127,7 +127,9 @@ reviewFrictionBlockCount: v.nullable(limitSchema)
 
 /** Hard block: refuse task creation while ANY task has been in human review longer
  *  than this many minutes. Null ⇒ the age trigger is off. */
-reviewFrictionBlockStuckMinutes: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000)))
+reviewFrictionBlockStuckMinutes: v.nullable(
+  v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000)),
+)
 ```
 
 - Defaults (in `DEFAULT_WORKSPACE_SETTINGS`, kernel `catalog.ts`): `mode: 'off'`,
@@ -163,9 +165,13 @@ export type ReviewFrictionVerdict =
 
 export function assessReviewFriction(
   openNotifications: readonly Pick<Notification, 'type' | 'status' | 'blockId' | 'createdAt'>[],
-  settings: Pick<WorkspaceSettings,
-    'reviewFrictionMode' | 'reviewFrictionWarnCount' |
-    'reviewFrictionBlockCount' | 'reviewFrictionBlockStuckMinutes'>,
+  settings: Pick<
+    WorkspaceSettings,
+    | 'reviewFrictionMode'
+    | 'reviewFrictionWarnCount'
+    | 'reviewFrictionBlockCount'
+    | 'reviewFrictionBlockStuckMinutes'
+  >,
   now: number,
 ): ReviewFrictionVerdict
 ```
@@ -175,7 +181,7 @@ Semantics, in precedence order:
 1. `mode === 'off'` → `ok`.
 2. Build the deduplicated debt list from `REVIEW_WAIT_NOTIFICATION_TYPES` as defined above.
 3. `mode === 'enforce'` and `blockStuckMinutes` set and any item's age exceeds it →
-   `block { reason: 'stuck' }` (age wins over count so the error names the *actual* worst
+   `block { reason: 'stuck' }` (age wins over count so the error names the _actual_ worst
    offender).
 4. `mode === 'enforce'` and `blockCount` set and `debt.length >= blockCount` →
    `block { reason: 'count' }`.
@@ -209,7 +215,7 @@ verdict   = assessReviewFriction(open, settings, now)
   `acknowledgeReviewDebt: true` (added to `addTaskSchema`). The SPA turns the 409 into
   the friction dialog (below) and retries with the flag once the human confirms. The
   server re-evaluates on the retry, so an acknowledgement can never tunnel through a
-  *hard* verdict that raced in between (hard is checked first and ignores the flag).
+  _hard_ verdict that raced in between (hard is checked first and ignores the flag).
 - `ok` → create as today.
 
 Both service dependencies are **optional seams** (the `RunAdmission` convention): when the
@@ -220,8 +226,8 @@ Deliberately **not** gated:
 
 - **Non-task blocks** (frames, modules, epics, initiatives) — structure, not work items.
 - **Engine-internal creation** (`BoardService.createInternalTask` — initiative-loop
-  spawns, bug-triage follow-ups, blueprint reconciliation): friction targets a *human
-  choosing to author new work*; silently breaking the engine's own follow-up spawning
+  spawns, bug-triage follow-ups, blueprint reconciliation): friction targets a _human
+  choosing to author new work_; silently breaking the engine's own follow-up spawning
   would corrupt running flows, and those tasks are consequences of work already admitted.
 - **Recurring pipelines** run existing blocks, not new ones — no interaction.
 - **No admin bypass.** Admins feel the same friction; their escape hatch is editing the
@@ -257,8 +263,8 @@ invariant (same stance as the task-limit gate).
 
 - Four new columns on `workspace_settings`, mirrored on both runtimes:
   - D1: a new numbered migration (`ALTER TABLE workspace_settings ADD COLUMN
-    review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
-    INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
+review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
+INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
     `review_friction_block_stuck_minutes INTEGER`) — the `0012_store_agent_context.sql`
     shape.
   - Node: the same fields on the Drizzle `workspaceSettings` table in `db/schema.ts` +
@@ -297,7 +303,7 @@ invariant (same stance as the task-limit gate).
 
 ## Alternatives considered
 
-- **Gate run *start* instead of task creation.** Rejected as the primary lever: the ask is
+- **Gate run _start_ instead of task creation.** Rejected as the primary lever: the ask is
   friction on authoring new work; start-gating punishes tasks that already exist and
   interleaves badly with retries/restarts (which deliberately skip start-only gates).
   Cheap to add later as one more `RunAdmission` start-only guard reusing the same verdict.
