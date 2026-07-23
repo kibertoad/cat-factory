@@ -27,15 +27,10 @@ import {
   type WebSearchAvailability,
   type WorkRunner,
   type ProviderRegistry,
-  defaultProviderRegistry,
-  defaultStepResolverRegistry,
-  defaultVcsRegistry,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
   type AgentKindRegistry,
-  defaultAgentKindRegistry,
-  defaultInitiativePresetRegistry,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -51,7 +46,6 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  createBackendRegistries,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
   NotionProvider,
@@ -86,7 +80,7 @@ import {
 // A real EKS cluster's private-CA apiserver is only reachable from a runtime that can pin a
 // custom CA (Node/local) — exactly like a private-CA `kubernetes` connection — so on the Worker
 // the kind is offered but a connection to such a cluster fails TLS at run time, not silently.
-import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
+import { resolveWorkerRegistries } from './container-registries.js'
 import {
   AgentContextObservabilityService,
   SearchQueryObservabilityService,
@@ -253,7 +247,6 @@ import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFra
 import {
   type GateProviderOverrides,
   applyGateProviders,
-  gateRegistryWithBuiltins,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -2134,58 +2127,25 @@ export function buildContainer(
   // account-policy read the capability resolver runs, AND handed to `createCore`.
   const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
 
-  // The app-owned backend registries (env + runner kind → provider), built once and injected
-  // into the engine + surfaced on the container for the snapshot's backend-kind selectors. A
-  // deployment registers a custom backend by reference; the conformance suite injects a
-  // pre-loaded registry via `overrides`. Defaults to the built-in `manifest`/`kubernetes` kinds.
-  const defaultRegistries = createBackendRegistries()
-  const environmentBackendRegistry =
-    overrides.environmentBackendRegistry ?? defaultRegistries.environmentBackendRegistry
-  const runnerBackendRegistry =
-    overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
-  const customManifestTypeRegistry =
-    overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
-  const userSecretKindRegistry =
-    overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
-  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
-  // The SAME instance is threaded into the executors, createCore, the boot-time
-  // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
-  // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
-  const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
-  // The app-owned gate registry: the injected instance (the module-scope one in `index.ts`, or
-  // the conformance suite's pre-loaded one via `overrides`), else a fresh one with the built-in
-  // `@cat-factory/gates` suite installed via `gateRegistryWithBuiltins()` — so a container built
-  // directly for a scheduled/cron sweep (no overrides) still has the gates its re-driven runs
-  // need. Threaded into createCore (the engine's gate machine) and re-exposed on Core for the
-  // boot-time validation.
-  const gateRegistry = overrides.gateRegistry ?? gateRegistryWithBuiltins()
-  // The app-owned step-resolver registry: the injected instance else an empty default (the
-  // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
-  const stepResolverRegistry = overrides.stepResolverRegistry ?? defaultStepResolverRegistry()
-  // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
-  // any a deployment registered by reference). Threaded into createCore (initiative services +
-  // spawned-run preset context) and re-exposed on the ServerContainer for the snapshot descriptors
-  // + preset probe; the conformance suite injects a pre-loaded one via `overrides`.
-  const initiativePresetRegistry =
-    overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
-  // The app-owned VCS provider registry: a fresh instance per build (the injected one via
-  // `overrides`, else empty). The GitLab provider is registered onto it below when configured;
-  // surfaced on the ServerContainer for the neutral webhook route. Unlike the gate providers, a
-  // fresh instance per build means there is no module-global to reset — the phantom-`Map` hazard
-  // for the separately-published `@cat-factory/gitlab` adapter is gone.
-  const vcsRegistry = overrides.vcsRegistry ?? defaultVcsRegistry()
-  // The app-owned provider registry the built-in gates probe through: a fresh instance per build
-  // (the injected one via `overrides`, else empty). The GitHub CI/mergeability/review/doc-quality
-  // + release-health + incident providers are wired onto it below when configured; injected into
-  // `createCore` so the engine's gate machine reads the SAME instance. Fresh-per-build means the
-  // former `clearGateProviders()` reset is unnecessary — nothing leaks from a prior build.
-  const providerRegistry = overrides.providerRegistry ?? defaultProviderRegistry()
-
-  // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
-  // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
-  // by `kind`), so a re-used injected registry (the conformance harness) is safe.
-  runnerBackendRegistry.register(eksRunnerBackend)
-  environmentBackendRegistry.register(eksEnvironmentBackend)
+  // The app-owned backend registries (env + runner kind → provider, agent-kind, gate,
+  // step-resolver, initiative-preset, VCS, gate-provider): the injected instance via `overrides`
+  // (a deployment's custom backend by reference, or the conformance suite's pre-loaded one), else
+  // the built-in default. The SAME instances are threaded into the executors / createCore / the
+  // boot-time `validateRegistrationsOnce` / the ServerContainer snapshot projection. The GitLab
+  // VCS provider + the gate providers are wired onto `vcsRegistry` / `providerRegistry` below when
+  // configured (fresh-per-build, so no module-global reset is needed).
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    vcsRegistry,
+    providerRegistry,
+  } = resolveWorkerRegistries(overrides)
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can

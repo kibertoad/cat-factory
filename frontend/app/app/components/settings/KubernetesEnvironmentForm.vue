@@ -77,6 +77,44 @@ const schemeItems = computed(() => [
   { label: 'http', value: 'http' },
 ])
 
+// A stored non-secret value is `unknown`; coerce it to the string the form field holds,
+// defaulting a missing/wrong-typed value to '' (the same `typeof … === 'string' ? … : ''`
+// each field used inline before).
+function readString(v: unknown): string {
+  return typeof v === 'string' ? v : ''
+}
+
+// Prefill the manifest-source fields from the stored discriminated config.
+function applyManifestSource(k: Record<string, unknown>): void {
+  const src = k.manifestSource as Record<string, unknown> | undefined
+  if (src?.type === 'separate') {
+    form.manifestSourceType = 'separate'
+    form.manifestRepo = readString(src.repo)
+    form.manifestRef = readString(src.ref)
+    form.manifestPath = readString(src.path)
+  } else if (src?.type === 'colocated') {
+    form.manifestSourceType = 'colocated'
+    form.manifestPath = readString(src.path)
+  }
+}
+
+// Prefill the URL-derivation fields (+ scheme) from the stored discriminated config.
+function applyUrl(k: Record<string, unknown>): void {
+  const url = k.url as Record<string, unknown> | undefined
+  if (url?.source === 'ingressTemplate') {
+    form.urlSource = 'ingressTemplate'
+    form.hostTemplate = readString(url.hostTemplate)
+  } else if (url?.source === 'ingressStatus') {
+    form.urlSource = 'ingressStatus'
+    form.ingressName = readString(url.ingressName)
+  } else if (url?.source === 'serviceStatus') {
+    form.urlSource = 'serviceStatus'
+    form.serviceName = readString(url.serviceName)
+    form.servicePort = typeof url.port === 'number' ? String(url.port) : ''
+  }
+  form.urlScheme = url && (url.scheme === 'http' || url.scheme === 'https') ? url.scheme : 'default'
+}
+
 // A registered k8s env connection exposes its non-secret config, so prefill every
 // non-secret field from it (never the token — secrets are write-only and re-entered on
 // update). This lets an edit change one field without re-typing the whole form.
@@ -89,36 +127,14 @@ watch(
         ? (c.config as { kubernetes: Record<string, unknown> }).kubernetes
         : undefined
     if (!k) return
-    form.label = typeof k.label === 'string' ? k.label : ''
-    form.apiServerUrl = typeof k.apiServerUrl === 'string' ? k.apiServerUrl : ''
-    form.caCertPem = typeof k.caCertPem === 'string' ? k.caCertPem : ''
+    form.label = readString(k.label)
+    form.apiServerUrl = readString(k.apiServerUrl)
+    form.caCertPem = readString(k.caCertPem)
     form.insecureSkipTlsVerify = k.insecureSkipTlsVerify === true
-    form.namespaceTemplate = typeof k.namespaceTemplate === 'string' ? k.namespaceTemplate : ''
-    form.imageTemplate = typeof k.imageTemplate === 'string' ? k.imageTemplate : ''
-    const src = k.manifestSource as Record<string, unknown> | undefined
-    if (src?.type === 'separate') {
-      form.manifestSourceType = 'separate'
-      form.manifestRepo = typeof src.repo === 'string' ? src.repo : ''
-      form.manifestRef = typeof src.ref === 'string' ? src.ref : ''
-      form.manifestPath = typeof src.path === 'string' ? src.path : ''
-    } else if (src?.type === 'colocated') {
-      form.manifestSourceType = 'colocated'
-      form.manifestPath = typeof src.path === 'string' ? src.path : ''
-    }
-    const url = k.url as Record<string, unknown> | undefined
-    if (url?.source === 'ingressTemplate') {
-      form.urlSource = 'ingressTemplate'
-      form.hostTemplate = typeof url.hostTemplate === 'string' ? url.hostTemplate : ''
-    } else if (url?.source === 'ingressStatus') {
-      form.urlSource = 'ingressStatus'
-      form.ingressName = typeof url.ingressName === 'string' ? url.ingressName : ''
-    } else if (url?.source === 'serviceStatus') {
-      form.urlSource = 'serviceStatus'
-      form.serviceName = typeof url.serviceName === 'string' ? url.serviceName : ''
-      form.servicePort = typeof url.port === 'number' ? String(url.port) : ''
-    }
-    form.urlScheme =
-      url && (url.scheme === 'http' || url.scheme === 'https') ? url.scheme : 'default'
+    form.namespaceTemplate = readString(k.namespaceTemplate)
+    form.imageTemplate = readString(k.imageTemplate)
+    applyManifestSource(k)
+    applyUrl(k)
   },
   { immediate: true },
 )

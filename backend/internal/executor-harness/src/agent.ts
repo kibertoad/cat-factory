@@ -904,6 +904,55 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
 }
 
 /**
+ * Assemble the {@link runCodingAgent} spec for the ordinary single-repo coding flow. Extracted
+ * from {@link runSingleRepoCoding} so the many optional-field spreads don't inflate that
+ * function's cyclomatic complexity; the mapping is a straight field copy off `job`.
+ */
+function buildSingleRepoCodingSpec(
+  job: AgentJob,
+  pushBranch: string,
+): Parameters<typeof runCodingAgent>[0] {
+  return {
+    kind: 'agent',
+    jobId: job.jobId,
+    repo: job.repo,
+    cloneBranch: job.branch,
+    ...(job.newBranch ? { newBranch: job.newBranch } : {}),
+    pushBranch,
+    ghToken: job.ghToken,
+    systemPrompt: job.systemPrompt,
+    userPrompt: job.userPrompt,
+    model: job.model,
+    harness: job.harness,
+    subscriptionToken: job.subscriptionToken,
+    subscriptionBaseUrl: job.subscriptionBaseUrl,
+    ambientAuth: job.ambientAuth,
+    proxyBaseUrl: job.proxyBaseUrl,
+    sessionToken: job.sessionToken,
+    commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
+    webToolsGuidance: job.webToolsGuidance,
+    webSearchProxy: job.webSearch,
+    guardLimits: job.guardLimits,
+    ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
+    ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+    ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
+    // Repo-sourced skill (slice 2): installed harness-aware by runAgentInWorkspace.
+    ...(job.skill ? { skill: job.skill } : {}),
+    // Ralph loop: run the completion command after the agent commits and report its verdict.
+    ...(job.validation
+      ? {
+          validation: {
+            command: job.validation.command,
+            ...(job.validation.iteration !== undefined
+              ? { iteration: job.validation.iteration }
+              : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+/**
  * The ordinary single-repo coding flow: clone `branch` (or resume `newBranch`), run the agent,
  * commit + push to `pushBranch`, and open `pr` when one is set and the run produced changes. A
  * no-op is a failure for the implementer (`noChangesIsError` default) and a non-fatal no-op for
@@ -912,47 +961,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
 async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
   const { summary, stats, stderrTail, pushed, usage, callMetrics, validation, effortReport } =
-    await runCodingAgent(
-      {
-        kind: 'agent',
-        jobId: job.jobId,
-        repo: job.repo,
-        cloneBranch: job.branch,
-        ...(job.newBranch ? { newBranch: job.newBranch } : {}),
-        pushBranch,
-        ghToken: job.ghToken,
-        systemPrompt: job.systemPrompt,
-        userPrompt: job.userPrompt,
-        model: job.model,
-        harness: job.harness,
-        subscriptionToken: job.subscriptionToken,
-        subscriptionBaseUrl: job.subscriptionBaseUrl,
-        ambientAuth: job.ambientAuth,
-        proxyBaseUrl: job.proxyBaseUrl,
-        sessionToken: job.sessionToken,
-        commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
-        webToolsGuidance: job.webToolsGuidance,
-        webSearchProxy: job.webSearch,
-        guardLimits: job.guardLimits,
-        ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
-        ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
-        ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
-        // Repo-sourced skill (slice 2): installed harness-aware by runAgentInWorkspace.
-        ...(job.skill ? { skill: job.skill } : {}),
-        // Ralph loop: run the completion command after the agent commits and report its verdict.
-        ...(job.validation
-          ? {
-              validation: {
-                command: job.validation.command,
-                ...(job.validation.iteration !== undefined
-                  ? { iteration: job.validation.iteration }
-                  : {}),
-              },
-            }
-          : {}),
-      },
-      opts,
-    )
+    await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
   // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
   const ralphVerdict = validation ? { ralphVerdict: validation } : {}

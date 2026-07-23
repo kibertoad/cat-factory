@@ -218,17 +218,13 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
   const run = binding.run as (model: string, inputs: unknown) => Promise<unknown>
   const completion = (await run(modelId, input)) as OpenAiCompletion
 
-  const choice = completion?.choices?.[0]
-  const message = choice?.message
-  const text = typeof message?.content === 'string' ? message.content : ''
-  const rawReasoning = message?.reasoning_content ?? message?.reasoning
-  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : ''
-  const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
-  const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
-  const u: LlmTokenUsage = {
-    prompt_tokens: completion?.usage?.prompt_tokens ?? 0,
-    completion_tokens: completion?.usage?.completion_tokens ?? 0,
-  }
+  const {
+    text,
+    reasoning,
+    oaToolCalls,
+    finishReason,
+    usage: u,
+  } = parseCatalogCompletion(completion)
 
   log.info(
     {
@@ -294,6 +290,33 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
     },
   })
   return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
+}
+
+/**
+ * Project a Cloudflare AI-catalog OpenAI completion into the fields {@link runCatalogModel} relays:
+ * assistant text, reasoning trace, tool calls, finish reason, and normalized token usage. Extracted
+ * from that function to keep it within the cyclomatic-complexity budget — the (defensive `?.`)
+ * derivations are moved verbatim.
+ */
+function parseCatalogCompletion(completion: OpenAiCompletion): {
+  text: string
+  reasoning: string
+  oaToolCalls: Array<Record<string, unknown>>
+  finishReason: string
+  usage: LlmTokenUsage
+} {
+  const choice = completion?.choices?.[0]
+  const message = choice?.message
+  const text = typeof message?.content === 'string' ? message.content : ''
+  const rawReasoning = message?.reasoning_content ?? message?.reasoning
+  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : ''
+  const oaToolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  const finishReason = choice?.finish_reason ?? (oaToolCalls.length > 0 ? 'tool_calls' : 'stop')
+  const usage: LlmTokenUsage = {
+    prompt_tokens: completion?.usage?.prompt_tokens ?? 0,
+    completion_tokens: completion?.usage?.completion_tokens ?? 0,
+  }
+  return { text, reasoning, oaToolCalls, finishReason, usage }
 }
 
 /** The slice of an OpenAI Chat Completions response the catalog path reads. */

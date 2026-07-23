@@ -258,42 +258,16 @@ export class CompanionController {
       }
     }
 
-    // The score to judge: the parsed rating when there is a producer to grade, else a
-    // perfect score (no producer of this companion's target kind precedes it, so there
-    // is genuinely nothing to grade and the run advances).
-    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
-    // The FIRST review batch ALWAYS loops the producer back when it raised any comments,
-    // regardless of rating; the configured threshold only governs the SECOND pass onward.
-    // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
-    // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
-    // so the loop-back below always has a step to re-run.
-    const firstBatch = companion.attempts === 0
-    const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
-    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
-    // Append this cycle's standardized verdict (the same shape the requirements-rework
-    // gate stores) so the whole correction sequence is visible, not just the latest.
-    companion.verdicts.push({
-      rating,
-      threshold: companion.threshold,
-      passed,
+    // Compute the pass/fail verdict for this cycle and fold it (+ the reviewer/spec-companion
+    // side-signals) into the step — see {@link recordCompanionVerdict}.
+    const passed = this.recordCompanionVerdict({
+      step,
+      companion,
+      assessment,
+      producerIndex,
+      result,
       feedback,
     })
-    step.companion = companion
-    step.output = feedback || result.output || ''
-    // Record the spec-companion's business-vs-technical corroboration on the step (even
-    // below threshold) so the engine can infer the block's `technical` label both on the
-    // PASS branch below AND on a later human "proceed" past the cap, where only the
-    // persisted step survives. `undefined` ⇒ the companion gave no opinion.
-    if (step.agentKind === 'spec-companion' && assessment) {
-      step.technicalCorroborated = assessment.technicalCorroborated
-    }
-    // Record the code reviewer's per-best-practice-standard adherence report on the step
-    // (surfaced in run details), on both the pass and rework branches, whenever it produced one.
-    if (step.agentKind === 'reviewer') {
-      step.fragmentAdherence = assessment?.fragmentAdherence?.length
-        ? assessment.fragmentAdherence
-        : undefined
-    }
 
     // PASS: the producer cleared the bar (and was not force-looped on its first batch).
     if (passed) {
@@ -342,6 +316,61 @@ export class CompanionController {
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
+  }
+
+  /**
+   * Compute the pass/fail verdict for one companion grading cycle and fold it into the step:
+   * append the standardized verdict, record the spec-companion corroboration + the reviewer's
+   * per-fragment adherence, and set `step.output`. Returns whether the producer cleared the bar.
+   * Pure step bookkeeping split out of {@link applyAssessment} to keep it under the complexity
+   * ceiling.
+   */
+  private recordCompanionVerdict(args: {
+    step: PipelineStep
+    companion: NonNullable<PipelineStep['companion']>
+    assessment: CompanionAssessment | undefined
+    producerIndex: number
+    result: AgentRunResult
+    feedback: string
+  }): boolean {
+    const { step, companion, assessment, producerIndex, result, feedback } = args
+    // The score to judge: the parsed rating when there is a producer to grade, else a
+    // perfect score (no producer of this companion's target kind precedes it, so there
+    // is genuinely nothing to grade and the run advances).
+    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
+    // The FIRST review batch ALWAYS loops the producer back when it raised any comments,
+    // regardless of rating; the configured threshold only governs the SECOND pass onward.
+    // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
+    // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
+    // so the loop-back below always has a step to re-run.
+    const firstBatch = companion.attempts === 0
+    const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
+    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
+    // Append this cycle's standardized verdict (the same shape the requirements-rework
+    // gate stores) so the whole correction sequence is visible, not just the latest.
+    companion.verdicts.push({
+      rating,
+      threshold: companion.threshold,
+      passed,
+      feedback,
+    })
+    step.companion = companion
+    step.output = feedback || result.output || ''
+    // Record the spec-companion's business-vs-technical corroboration on the step (even
+    // below threshold) so the engine can infer the block's `technical` label both on the
+    // PASS branch below AND on a later human "proceed" past the cap, where only the
+    // persisted step survives. `undefined` ⇒ the companion gave no opinion.
+    if (step.agentKind === 'spec-companion' && assessment) {
+      step.technicalCorroborated = assessment.technicalCorroborated
+    }
+    // Record the code reviewer's per-best-practice-standard adherence report on the step
+    // (surfaced in run details), on both the pass and rework branches, whenever it produced one.
+    if (step.agentKind === 'reviewer') {
+      step.fragmentAdherence = assessment?.fragmentAdherence?.length
+        ? assessment.fragmentAdherence
+        : undefined
+    }
+    return passed
   }
 
   /**

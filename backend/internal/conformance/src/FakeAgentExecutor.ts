@@ -445,19 +445,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // one report per Tester call (last repeats) so a test can drive a withheld
     // greenlight → fixer loop → greenlight; omitted ⇒ greenlight immediately.
     if (context.agentKind === 'tester-api' || context.agentKind === 'tester-ui') {
-      const seq = this.options.testReports
-      const report: TestReport = seq?.length
-        ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())
-        : greenReport()
-      this.testerCalls += 1
-      return {
-        output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
-        model: 'fake',
-        testReport: report,
-        // The in-container compose stand-up record rides back exactly as the harness sends it,
-        // so the engine's persist → reload round-trip onto `step.test.infraSetup` is asserted.
-        ...(this.options.testerInfraSetup ? { infraSetup: this.options.testerInfraSetup } : {}),
-      }
+      return this.runTesterKind(context)
     }
 
     // The `fixer` step just reports success so the engine re-dispatches the Tester.
@@ -528,20 +516,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // target report a failing exit code (the engine re-dispatches), the target iteration passes
     // (the engine finishes + advances). A target above `maxIterations` never passes (exhaust).
     if (context.agentKind === RALPH_AGENT_KIND) {
-      const iteration = context.ralphValidation?.iteration ?? 1
-      const passed = iteration >= (this.options.ralphPassOnIteration ?? 1)
-      return {
-        output: `[ralph] iteration ${iteration} — ${passed ? 'validation passed' : 'validation failed'}`,
-        model: 'fake',
-        ralphVerdict: {
-          validationPassed: passed,
-          exitCode: passed ? 0 : 1,
-          ...(passed ? {} : { validationOutputTail: 'fake: 1 check still failing' }),
-          iteration,
-        },
-        ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
-        ...this.usageFields(),
-      }
+      return this.runRalphKind(context)
     }
 
     // The `merger` step returns a PR assessment the engine compares to the task's
@@ -584,6 +559,51 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
 
     return undefined
+  }
+
+  /**
+   * The `tester` (api/ui) arm, split out of {@link runStructuredKinds} to keep it within the
+   * complexity budget. A `testReports` sequence walks one report per Tester call (last repeats)
+   * so a test can drive a withheld greenlight → fixer loop → greenlight; omitted ⇒ greenlight
+   * immediately. Behaviour is byte-identical — the arm body moved verbatim.
+   */
+  private runTesterKind(context: AgentRunContext): AgentRunResult {
+    const seq = this.options.testReports
+    const report: TestReport = seq?.length
+      ? (seq[Math.min(this.testerCalls, seq.length - 1)] ?? greenReport())
+      : greenReport()
+    this.testerCalls += 1
+    return {
+      output: `[tester] ${report.greenlight ? 'greenlit' : 'found issues for'} "${context.block.title}"`,
+      model: 'fake',
+      testReport: report,
+      // The in-container compose stand-up record rides back exactly as the harness sends it,
+      // so the engine's persist → reload round-trip onto `step.test.infraSetup` is asserted.
+      ...(this.options.testerInfraSetup ? { infraSetup: this.options.testerInfraSetup } : {}),
+    }
+  }
+
+  /**
+   * The `ralph` arm, split out of {@link runStructuredKinds} to keep it within the complexity
+   * budget. The fake derives pass/fail from the iteration number the engine folded in
+   * (attempts + 1) vs `ralphPassOnIteration`, so the loop advances deterministically. Behaviour
+   * is byte-identical — the arm body moved verbatim.
+   */
+  private runRalphKind(context: AgentRunContext): AgentRunResult {
+    const iteration = context.ralphValidation?.iteration ?? 1
+    const passed = iteration >= (this.options.ralphPassOnIteration ?? 1)
+    return {
+      output: `[ralph] iteration ${iteration} — ${passed ? 'validation passed' : 'validation failed'}`,
+      model: 'fake',
+      ralphVerdict: {
+        validationPassed: passed,
+        exitCode: passed ? 0 : 1,
+        ...(passed ? {} : { validationOutputTail: 'fake: 1 check still failing' }),
+        iteration,
+      },
+      ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
+      ...this.usageFields(),
+    }
   }
 }
 

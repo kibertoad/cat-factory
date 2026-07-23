@@ -50,14 +50,10 @@ import { buildContextFiles, renderSkillForHarness } from './contextFiles.js'
 import { toRunResult } from './containerAgentResult.js'
 import {
   buildKindBody,
-  renderMergerMultiRepoSection,
-  renderMultiRepoWorkspaceSection,
   renderReferenceBranchesSection,
   renderReferenceReposSection,
 } from './jobBody.js'
 import {
-  CONFLICT_RESOLVER_AGENT_KIND,
-  MERGER_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
   isTesterKind,
@@ -65,7 +61,16 @@ import {
 } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
-import type { RepoCheckout, ResolveRepoTargets } from './resolveRepoTarget.js'
+import type { ResolveRepoTargets } from './resolveRepoTarget.js'
+import {
+  IMPLEMENTER_AGENT_KIND,
+  buildCommonBody,
+  buildRepoSpec,
+  githubRepoOrigin,
+  resolveConflictResolverPeer,
+  resolveMergerCombinedDiff,
+  resolveMultiRepoFanout,
+} from './containerAgentBody.js'
 
 // Re-exported for the composition root + tests that wire this executor by name.
 export type { ResolveRunnerTransport }
@@ -338,48 +343,6 @@ export interface RepoOrigin {
  * clone URL would always point at github.com, so a GitLab repo could never be cloned.
  */
 export type ResolveRepoOrigin = (repo: RepoTarget) => RepoOrigin
-
-const githubRepoOrigin: ResolveRepoOrigin = (repo) => ({
-  cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
-  provider: 'github',
-})
-
-function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
-  return {
-    owner: repo.owner,
-    name: repo.name,
-    baseBranch: repo.baseBranch,
-    cloneUrl: origin.cloneUrl,
-    provider: origin.provider,
-    ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
-  }
-}
-
-/**
- * The built-in implementer ("Coder") kind. The multi-repo coding fan-out
- * (service-connections phase 3) started ONLY on this kind: it is the step that makes the
- * cross-service change.
- */
-const IMPLEMENTER_AGENT_KIND = 'coder'
-
-/**
- * The PRE-REGISTRY built-in kinds that fan out across the task's connected repos as sibling
- * checkouts (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes
- * those SAME work branches to fix red CI across every repo in one container (a cross-repo
- * contract break is exactly what a single-repo fixer can't fix). The conflict-resolver stays
- * SINGLE-repo (a git conflict is per-repo textual — handled by targeting the conflicted repo,
- * not fan-out).
- *
- * These two are not yet migrated to the agent-kind registry, so they can't declare
- * `fanOutMultiRepo` on a definition — hence this small allow-list. Registry-backed kinds (the
- * read-only `bug-investigator`, and any custom cross-service explore kind a deployment registers)
- * opt in via {@link AgentKindRegistry.fansOutMultiRepo} instead of being added here — so a new
- * fan-out kind is a registry flag, not another entry in this Set.
- */
-const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
-  IMPLEMENTER_AGENT_KIND,
-  'ci-fixer',
-])
 
 /**
  * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
@@ -1171,17 +1134,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // travels as the top-level `skill` job-body field (the harness materialises it — natively for
     // claude-code, under `.cat-context/skill/` for Pi/codex), and `skillSection` primes the prompt.
     const skillRender = renderSkillForHarness(context.skill, harness)
-    // The UI tester uploads its captured screenshots back to the backend from inside the
-    // container. It reuses the SAME container session token it already carries for the LLM
-    // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
-    // base URL — so no extra credential and no extra public-URL dependency. Only the
-    // `tester-ui` kind gets it; every other kind never sees an upload seam.
-    const artifactUpload =
-      context.agentKind === UI_TESTER_AGENT_KIND &&
-      typeof auth.proxyBaseUrl === 'string' &&
-      typeof auth.sessionToken === 'string'
-        ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
-        : undefined
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
@@ -1194,23 +1146,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
-    const common = {
-      jobId,
-      model: ref.model,
-      ...auth,
-      ghToken,
-      ...(packageRegistries.length ? { packageRegistries } : {}),
-      repo: buildRepoSpec(repo, origin),
-      ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
-      ...(contextFiles.length ? { contextFiles } : {}),
-      // The resolved skill always travels as this dedicated top-level field (never a context
-      // file). The claude-code harness materialises it into ~/.claude/skills/<name>/ natively;
-      // Pi/codex materialise the same field's resources under `.cat-context/skill/` and receive
-      // the instructions folded into the prompt (skillSection) instead.
-      ...(skillRender.body ? { skill: skillRender.body } : {}),
-      ...(artifactUpload ? { artifactUpload } : {}),
-      ...(tuning?.guardLimits ? { guardLimits: tuning.guardLimits } : {}),
-    }
+    const common = buildCommonBody(
+      context,
+      {
+        jobId,
+        model: ref.model,
+        auth,
+        ghToken,
+        packageRegistries,
+        repoSpec: buildRepoSpec(repo, origin),
+        contextFiles,
+        skillBody: skillRender.body,
+        guardLimits: tuning?.guardLimits,
+      },
+      this.deps,
+    )
     // Render the prompt's linked-context summary index from exactly the items that were
     // materialised (some may have been dropped at the byte cap), so the agent is never
     // pointed at a `.cat-context/` file that doesn't exist.
@@ -1310,161 +1260,50 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     referenceBranchesSection?: string
   }> {
     const { workspaceId, blockId, repo, common, workBranch } = deps
-    // Multi-repo coding (service-connections phases 3–4): when the implementer OR the ci-fixer
-    // runs on a task with connected involved services, resolve every involved repo and fan the
-    // work out — peer repos as sibling checkouts plus a prompt section naming the layout. The
-    // coder opens one PR per changed repo; the ci-fixer resumes those same work branches to fix
-    // red CI across all of them (jobBody drops the peer `pr` on the fixer path). A service
-    // co-located in the primary's own repo (same monorepo) has no separate checkout; it rides
-    // the own-service PR and is named in the section so the agent edits its subtree. Any involved
-    // service present ⇒ the agent works at the repo ROOT (not just its own service subdir) so it
-    // can reach every involved subtree; `commonForKind` swaps `repo`.
-    let peerRepos:
-      | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
-      | undefined
-    let multiRepoSection: string | undefined
-    let commonForKind = common
+    // Multi-repo fan-out (coder / ci-fixer over connected involved services): peer sibling
+    // checkouts + the layout section + the root-cwd `common` swap. See {@link resolveMultiRepoFanout}.
+    const {
+      peerRepos: fanoutPeerRepos,
+      multiRepoSection: fanoutSection,
+      commonForKind: fanoutCommon,
+    } = await resolveMultiRepoFanout(
+      context,
+      { workspaceId, blockId, repo, common },
+      this.deps,
+      this.agentKindRegistry,
+    )
+    let peerRepos = fanoutPeerRepos
+    let multiRepoSection = fanoutSection
+    let commonForKind = fanoutCommon
     // The repo target the per-kind body builds against — the task's own service by default, but
     // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
-    // service (see the conflict-resolver block below).
+    // service (see {@link resolveConflictResolverPeer}).
     let repoForKind = repo
-    const involvedServices = context.involvedServices ?? []
-    const fansOutMultiRepo =
-      MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
-      this.agentKindRegistry.fansOutMultiRepo(context.agentKind)
-    if (fansOutMultiRepo && involvedServices.length > 0 && this.deps.resolveRepoTargets) {
-      // Reuse the primary repo already resolved above (line ~889) so the plural resolver skips
-      // re-reading the installation and re-walking the primary block's ancestry — it only needs
-      // to resolve + dedupe the involved peers on top of it.
-      const { checkouts } = await this.deps.resolveRepoTargets(
-        workspaceId,
-        blockId,
-        involvedServices.map((s) => s.frameId),
-        repo,
-      )
-      const primaryCheckout = checkouts.find((c) => c.primary)
-      const peerCheckouts = checkouts.filter((c) => !c.primary)
-      // Multi-service iff there is a distinct peer repo OR an involved service co-located in
-      // the primary's monorepo (both need the root-cwd + the prompt section).
-      const coLocated = primaryCheckout?.involved ?? []
-      if (peerCheckouts.length > 0 || coLocated.length > 0) {
-        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-        if (peerCheckouts.length > 0) {
-          peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
-            repo: buildRepoSpec(c.target, origin(c.target)),
-            ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
-          }))
-        }
-        multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
-        // Work at the repo ROOT: drop the primary's own-service subdir scoping so the agent
-        // can edit every involved subtree in the (mono)repo. The layout section names which
-        // subdirectory each service lives in.
-        if (primaryCheckout) {
-          const { serviceDirectory: _drop, ...rootTarget } = primaryCheckout.target
-          commonForKind = {
-            ...common,
-            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
-          }
-        }
-      }
+
+    // Conflict-resolver PEER targeting: point the (single-repo) resolver at the conflicted peer
+    // repo — swapping `repo`/`common.repo` — instead of the task's own service. No-op (undefined)
+    // for an own-repo conflict.
+    const conflict = await resolveConflictResolverPeer(
+      context,
+      { workspaceId, blockId, repo, common },
+      this.deps,
+    )
+    if (conflict) {
+      repoForKind = conflict.repoForKind
+      commonForKind = conflict.commonForKind
     }
 
-    // Conflict-resolver PEER targeting (service-connections phase 4 follow-up): when the
-    // conflicts gate detected the conflict on a connected involved service's repo, it hands the
-    // resolver `context.conflictTarget`. Point the (single-repo) resolver at that PEER repo —
-    // resolve its target and swap `repo`/`common.repo` — instead of the task's own service. The
-    // resolver clones the peer's PR (work) branch and merges the peer's base in (jobBody pins the
-    // branch to the shared work branch and reads `mergeBase` off this swapped target). An own-repo
-    // conflict carries no `frameId`, so this is a no-op and the resolver targets the own service.
-    const conflictFrameId =
-      context.agentKind === CONFLICT_RESOLVER_AGENT_KIND
-        ? context.conflictTarget?.frameId
-        : undefined
-    if (conflictFrameId && this.deps.resolveRepoTargets) {
-      const { checkouts } = await this.deps.resolveRepoTargets(
-        workspaceId,
-        blockId,
-        [conflictFrameId],
-        repo,
-      )
-      const peer = checkouts.find(
-        (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
-      )
-      // Fail fast if the tagged peer can't be resolved (e.g. a stale/missing repo projection row):
-      // falling through would silently point the resolver at the OWN repo, which has no conflict, so
-      // every re-probe would re-dispatch until the whole attempt budget is spent on the wrong repo
-      // and the run gives up misattributing the failure. A loud dispatch error surfaces the
-      // inconsistency immediately instead.
-      if (!peer) {
-        throw new Error(
-          `Conflict-resolver could not resolve the conflicted peer repo (frame '${conflictFrameId}') ` +
-            `for block '${blockId}' — its repo projection may be missing or unlinked.`,
-        )
-      }
-      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-      repoForKind = peer.target
-      commonForKind = { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) }
-    }
-
-    // Merger combined-diff (service-connections phase 4 follow-up): a multi-repo task opened one PR
-    // per changed repo. The merger scores the COMBINED change by cloning EVERY PR's repo as a
-    // read-only sibling at its PR branch (the read-only explore fan-out) and diffing each vs its
-    // base. Driven by the PRs that actually exist (`block.peerPullRequests`), not the involved-
-    // services set — a peer with no change opened no PR, so there is nothing to score there. The
-    // own-service PR rides the primary checkout (the merger clones `pr` full); the peers are added
-    // here with their own PR branch to check out, plus a section naming the sibling diff commands.
-    const peerPrs = context.block.peerPullRequests ?? []
-    if (
-      context.agentKind === MERGER_AGENT_KIND &&
-      peerPrs.length > 0 &&
-      this.deps.resolveRepoTargets
-    ) {
-      const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
-      if (frameIds.length > 0) {
-        const { checkouts } = await this.deps.resolveRepoTargets(
-          workspaceId,
-          blockId,
-          frameIds,
-          repo,
-        )
-        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-        const legs: {
-          spec: Record<string, unknown>
-          frameId: string
-          cloneBranch: string
-          target: RepoTarget
-        }[] = []
-        for (const pr of peerPrs) {
-          if (!pr.frameId) continue
-          const checkout = checkouts.find(
-            (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
-          )
-          if (!checkout) continue
-          legs.push({
-            spec: buildRepoSpec(checkout.target, origin(checkout.target)),
-            frameId: pr.frameId,
-            cloneBranch: pr.ref.branch ?? workBranch,
-            target: checkout.target,
-          })
-        }
-        if (legs.length > 0) {
-          peerRepos = legs.map((l) => ({
-            repo: l.spec,
-            frameId: l.frameId,
-            cloneBranch: l.cloneBranch,
-          }))
-          // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
-          // own service had no change); list it first so the section names its diff command too.
-          multiRepoSection = renderMergerMultiRepoSection([
-            { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
-            ...legs.map((l) => ({
-              owner: l.target.owner,
-              name: l.target.name,
-              baseBranch: l.target.baseBranch,
-            })),
-          ])
-        }
-      }
+    // Merger combined-diff: clone every peer PR's repo as a read-only sibling at its PR branch and
+    // name the sibling diff commands. Overrides the fan-out peers/section when it fires (undefined
+    // otherwise — the fan-out result stands). See {@link resolveMergerCombinedDiff}.
+    const merger = await resolveMergerCombinedDiff(
+      context,
+      { workspaceId, blockId, repo, common, workBranch },
+      this.deps,
+    )
+    if (merger) {
+      peerRepos = merger.peerRepos
+      multiRepoSection = merger.multiRepoSection
     }
 
     // Read-only reference repos + apriori reference branches: both independent of the fan-out above.

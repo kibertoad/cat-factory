@@ -1,4 +1,5 @@
 import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
+import { checkOwnerPairScope, checkServiceMountScope } from './rpc-scope.logic'
 
 // The mothership-mode persistence RPC wire protocol.
 //
@@ -1377,33 +1378,8 @@ async function checkEntityCallScope(
       break
     }
     case 'serviceMount': {
-      // The record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be in
-      // scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId`
-      // must be owned by the SAME account as the target workspace, so a raw upsert can never
-      // plant a cross-org mount — even for a token that spans several accounts (both would be in
-      // scope, so a workspace-only check would let one org's service be mounted onto another's
-      // board). A non-object arg, a missing/non-string field, an out-of-scope workspace, or a
-      // service whose account differs from the workspace's (incl. a missing service) → 404.
-      const record = args[rule.arg]
-      const workspaceId =
-        record && typeof record === 'object'
-          ? (record as { workspaceId?: unknown }).workspaceId
-          : undefined
-      const serviceId =
-        record && typeof record === 'object'
-          ? (record as { serviceId?: unknown }).serviceId
-          : undefined
-      if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
-      if (!opts.resolveServiceAccountIds) return denied
-      const workspaceAccount = await opts.resolveAccountId(workspaceId)
-      if (!inScope(workspaceAccount)) return denied
-      const serviceAccounts = await opts.resolveServiceAccountIds([serviceId])
-      const serviceAccount = serviceAccounts.get(serviceId)
-      // Same-account: the service must be owned by the workspace's (in-scope) account. Since
-      // `workspaceAccount` is already confirmed in scope, requiring equality also keeps the
-      // service in scope — a legacy/NULL-account service (never present under a scoped token)
-      // won't equal the string account, so it fails closed too.
-      if (typeof serviceAccount !== 'string' || serviceAccount !== workspaceAccount) return denied
+      const denialForMount = await checkServiceMountScope(args[rule.arg], opts, inScope, denied)
+      if (denialForMount) return denialForMount
       break
     }
     case 'owner': {
@@ -1449,30 +1425,6 @@ async function checkEntityCallScope(
   }
 
   // In scope: let the method run.
-  return undefined
-}
-
-/**
- * Resolve a tenant-library owner PAIR (ownerKind, ownerId) to an account and enforce token scope,
- * shared by the `owner` (positional) and `ownerField` (record-field) kinds. Returns `denied` when
- * the pair is malformed or out of scope, else `undefined`. A `workspace` owner resolves through the
- * workspace's owning account; an `account` owner IS the account; any other kind fails closed.
- */
-async function checkOwnerPairScope(
-  ownerKind: unknown,
-  ownerId: unknown,
-  opts: DispatchOptions,
-  inScope: (accountId: string | null | undefined) => boolean,
-  denied: DispatchResult,
-): Promise<DispatchResult | undefined> {
-  if (typeof ownerId !== 'string') return denied
-  if (ownerKind === 'workspace') {
-    if (!inScope(await opts.resolveAccountId(ownerId))) return denied
-  } else if (ownerKind === 'account') {
-    if (!inScope(ownerId)) return denied
-  } else {
-    return denied
-  }
   return undefined
 }
 

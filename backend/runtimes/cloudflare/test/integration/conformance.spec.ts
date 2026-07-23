@@ -36,6 +36,87 @@ import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRe
 // facade runs the identical suite over real Postgres — together they mandate
 // feature parity: a behavioural difference fails the same assertion in one runtime.
 
+type WorkerMakeAppOpts = Parameters<ConformanceHarness['makeApp']>[1]
+
+/** Copy only the truthy-valued keys of `obj` — the object-literal form of `...(v ? { k: v } : {})`. */
+function onlyTruthy<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    if (obj[key]) out[key] = obj[key]
+  }
+  return out
+}
+
+// The core-dependency overrides the Worker build reads, split out of the harness `makeApp` to
+// keep it within the complexity budget. Behaviour-neutral: each optional override still lands
+// only when the suite supplies it (the `onlyTruthy` filter mirrors the prior `...(v ? {} : {})`).
+function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: WorkerMakeAppOpts) {
+  const o = opts ?? {}
+  // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
+  // suite) via the CoreDependencies overrides the Worker build reads, so a registered custom
+  // backend is resolved by reference, exactly like a real deployment.
+  const backendRegistries = o.backendRegistries
+    ? {
+        environmentBackendRegistry: o.backendRegistries.environmentBackendRegistry,
+        runnerBackendRegistry: o.backendRegistries.runnerBackendRegistry,
+        customManifestTypeRegistry: o.backendRegistries.customManifestTypeRegistry,
+        userSecretKindRegistry: o.backendRegistries.userSecretKindRegistry,
+      }
+    : {}
+  return {
+    // A deterministic bootstrapper so the shared suite can drive the bootstrap lifecycle against
+    // D1 without a real container (driven via driveBootstrap); the prompt-fragment library repos
+    // (deterministic selector) so the library CRUD assertion runs against D1 too — parity with
+    // the Node/local fragment wiring.
+    executionEventPublisher: recorder,
+    repoBootstrapper: new FakeRepoBootstrapper(),
+    // A deterministic env-config-repairer so the shared suite can drive the repair
+    // dispatch→poll→re-validate lifecycle against D1 without a real container (driven via
+    // driveEnvConfigRepair); the module only builds when an env provider is also wired.
+    envConfigRepairer: new FakeEnvConfigRepairer(),
+    // Each override below lands only when the suite supplies it:
+    // - resolveRunRepoContext: the engine's run-repo resolver (a fake) so a registered custom
+    //   kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
+    // - resolveBinaryArtifactStore: the Worker binds R2 by default, so a null resolver is the
+    //   only way to assert the unconfigured-refusal path on this runtime.
+    // - environmentProvider + resolveRepoFilesForCoords: a native env provider + block-less
+    //   coords resolver so the on-demand repo-config validate route is asserted against real D1.
+    // - detectionConventions: deployment-level detection-convention extensions asserted against D1.
+    // - testerQualityReviewer: the QC companion's inline reviewer so the full QC loop drives on D1.
+    // - deployJobClient + resolveDeployCloneTarget: the async deploy lifecycle so the container
+    //   render path is driven through this facade's wiring.
+    // - agentKindRegistry: the app-owned registry (a custom kind pre-registered) resolved by
+    //   reference — the SAME instance the fake executor above got — plus the gate/step/preset/
+    //   task-type registries the matching suites pre-load.
+    ...onlyTruthy({
+      resolveRunRepoContext: o.resolveRunRepoContext,
+      resolveBinaryArtifactStore: o.resolveBinaryArtifactStore,
+      environmentProvider: o.environmentProvider,
+      resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
+      detectionConventions: o.detectionConventions,
+      testerQualityReviewer: o.testerQualityReviewer,
+      deployJobClient: o.deployJobClient,
+      resolveDeployCloneTarget: o.resolveDeployCloneTarget,
+      agentKindRegistry: o.agentKindRegistry,
+      gateRegistry: o.gateRegistry,
+      stepResolverRegistry: o.stepResolverRegistry,
+      initiativePresetRegistry: o.initiativePresetRegistry,
+      taskTypeRegistry: o.taskTypeRegistry,
+    }),
+    ...backendRegistries,
+    ...fragmentLibraryDeps(),
+    // A deterministic task source (fake 'jira') over the real D1 task repos, so the shared suite
+    // can assert create-task-from-issue parity against D1 too. The suite may override with
+    // pre-seeded providers to drive the recurring `bug-intake` step.
+    ...tasksDeps({
+      providers: o.taskSourceProviders ?? [
+        new FakeTaskSourceProvider('jira'),
+        new FakeTaskSourceProvider('linear'),
+      ],
+    }),
+  }
+}
+
 const harness: ConformanceHarness = {
   name: 'cloudflare',
   makeApp: (agentOptions, opts) => {
@@ -54,87 +135,7 @@ const harness: ConformanceHarness = {
       agentOptions?.asyncKinds?.length
         ? new AsyncFakeAgentExecutor(fakeOptions)
         : new FakeAgentExecutor(fakeOptions),
-      // A deterministic bootstrapper so the shared suite can drive the bootstrap
-      // lifecycle against D1 without a real container (driven via driveBootstrap); the
-      // prompt-fragment library repos (deterministic selector) so the library CRUD
-      // assertion runs against D1 too — parity with the Node/local fragment wiring.
-      {
-        executionEventPublisher: recorder,
-        repoBootstrapper: new FakeRepoBootstrapper(),
-        // A deterministic env-config-repairer so the shared suite can drive the repair
-        // dispatch→poll→re-validate lifecycle against D1 without a real container (driven via
-        // driveEnvConfigRepair); the module only builds when an env provider is also wired.
-        envConfigRepairer: new FakeEnvConfigRepairer(),
-        // Inject the engine's run-repo resolver (a fake in the suite) so a registered
-        // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
-        ...(opts?.resolveRunRepoContext
-          ? { resolveRunRepoContext: opts.resolveRunRepoContext }
-          : {}),
-        // Inject the binary-artifact store resolver so the suite drives the start-time
-        // binary-storage gate deterministically (the Worker binds R2 by default, so a null
-        // resolver is the only way to assert the unconfigured-refusal path on this runtime).
-        ...(opts?.resolveBinaryArtifactStore
-          ? { resolveBinaryArtifactStore: opts.resolveBinaryArtifactStore }
-          : {}),
-        // Inject a native environment provider + the block-less coords resolver (both
-        // fakes in the suite) so the on-demand repo-config validate route is asserted
-        // end-to-end against real D1, identically to Node.
-        ...(opts?.environmentProvider ? { environmentProvider: opts.environmentProvider } : {}),
-        ...(opts?.resolveRepoFilesForCoords
-          ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
-          : {}),
-        // Inject the deployment-level detection-convention extensions (a fake in the suite) so
-        // convention-honouring service-provisioning detection is asserted against real D1,
-        // identically to Node — catching a facade that forgot the config→deps threading.
-        ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
-        // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
-        // full QC loop is driven against real D1 without a model, identically to Node.
-        ...(opts?.testerQualityReviewer
-          ? { testerQualityReviewer: opts.testerQualityReviewer }
-          : {}),
-        // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
-        // the suite drives the container render path through this facade's wiring, identically to
-        // Node — asserting the `deploy` dispatch is accepted and the stubbed view finalizes the same.
-        ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
-        ...(opts?.resolveDeployCloneTarget
-          ? { resolveDeployCloneTarget: opts.resolveDeployCloneTarget }
-          : {}),
-        // Inject the app-owned backend registries (pre-loaded with custom kinds in the
-        // custom-backend suite) via the CoreDependencies overrides the Worker build reads, so a
-        // registered custom backend is resolved by reference, exactly like a real deployment.
-        ...(opts?.backendRegistries
-          ? {
-              environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
-              runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
-              customManifestTypeRegistry: opts.backendRegistries.customManifestTypeRegistry,
-              userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry,
-            }
-          : {}),
-        // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the
-        // custom-kind suite) via the CoreDependencies overrides the Worker build reads, so the
-        // container resolves it by reference — the SAME instance the fake executor above got.
-        ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
-        ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
-        ...(opts?.stepResolverRegistry ? { stepResolverRegistry: opts.stepResolverRegistry } : {}),
-        // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
-        // custom-preset suite) via the CoreDependencies overrides the Worker build reads.
-        ...(opts?.initiativePresetRegistry
-          ? { initiativePresetRegistry: opts.initiativePresetRegistry }
-          : {}),
-        // Inject the app-owned task-type registry (pre-loaded with a custom task type in the
-        // custom-task-type suite) via the CoreDependencies overrides the Worker build reads.
-        ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
-        ...fragmentLibraryDeps(),
-        // A deterministic task source (fake 'jira') over the real D1 task repos, so the
-        // shared suite can assert create-task-from-issue parity against D1 too. The suite may
-        // override with pre-seeded providers to drive the recurring `bug-intake` step.
-        ...tasksDeps({
-          providers: opts?.taskSourceProviders ?? [
-            new FakeTaskSourceProvider('jira'),
-            new FakeTaskSourceProvider('linear'),
-          ],
-        }),
-      },
+      buildWorkerConformanceDeps(recorder, opts),
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).
       // `gateProviders` is applied onto each build's app-owned `providerRegistry` (fresh per

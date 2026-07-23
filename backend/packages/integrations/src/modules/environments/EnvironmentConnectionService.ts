@@ -39,6 +39,7 @@ import type {
   ProvisioningRecommendation,
   RepairCustomManifestInput,
 } from '@cat-factory/contracts'
+import { commitGeneratedConfig, maybeDispatchConfigRepair } from './config-bootstrap.logic.js'
 import {
   type DetectionConventions,
   detectKubernetesProvisioning,
@@ -141,9 +142,6 @@ export interface ConfigRepairDispatch {
    */
   manifestPath?: string
 }
-
-/** Deterministic head branch for the PR-mode config bootstrap (idempotent re-runs). */
-const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
 
 /**
  * Compose the coding-agent prompt for a custom-manifest generate/fix run: the custom type's own
@@ -839,43 +837,6 @@ export class EnvironmentConnectionService {
   }
 
   /**
-   * Write the generated config files: a direct commit, or (in PR mode) create the config
-   * branch off the target head when it doesn't yet exist, commit onto it, and open the PR.
-   * Extracted from {@link bootstrapRepo} so its branch/PR conditionals don't nest under the
-   * generation guards (keeps max-depth ≤ 4).
-   */
-  private async writeGeneratedConfig(
-    repo: RunRepoContext['repo'],
-    opts: {
-      message: string
-      changed: { path: string; content: string }[]
-      writeBranch: string
-      targetBranch: string
-      prMode: boolean
-      prBranchHead: string | null
-    },
-  ): Promise<void> {
-    const { message, changed, writeBranch, targetBranch, prMode, prBranchHead } = opts
-    if (!prMode) {
-      await repo.commitFiles({ branch: writeBranch, message, files: changed })
-      return
-    }
-    if (!prBranchHead) {
-      const base = await repo.headSha(targetBranch)
-      if (base) await repo.createBranch(writeBranch, base)
-    }
-    await repo.commitFiles({ branch: writeBranch, message, files: changed })
-    if (!prBranchHead) {
-      await repo.openPullRequest({
-        title: message,
-        head: writeBranch,
-        base: targetBranch,
-        body: 'Automated provider configuration bootstrap.',
-      })
-    }
-  }
-
-  /**
    * Mechanically bootstrap the provider's config file into a target repo from the
    * collected `inputs`, commit it (or open a PR), then re-validate — falling back to the
    * repair agent when mechanical generation can't produce a valid config and the caller
@@ -924,35 +885,9 @@ export class EnvironmentConnectionService {
       resolveSecret,
     })
 
-    let committed = false
-    let writeBranch = targetBranch
-    if (!generated.needsAgent && generated.files.length) {
-      const prMode = !!input.openPr
-      let prBranchHead: string | null = null
-      if (prMode) {
-        writeBranch = BOOTSTRAP_CONFIG_BRANCH
-        prBranchHead = await bound.repo.headSha(writeBranch)
-      }
-      const compareBranch = prMode && prBranchHead ? writeBranch : targetBranch
-
-      const changed: { path: string; content: string }[] = []
-      for (const file of generated.files) {
-        const existing = await readRepoFile(file.path, compareBranch)
-        if (!existing || existing.content !== file.content) changed.push(file)
-      }
-      if (changed.length) {
-        const message = generated.commitMessage ?? 'chore: bootstrap environment provider config'
-        await this.writeGeneratedConfig(bound.repo, {
-          message,
-          changed,
-          writeBranch,
-          targetBranch,
-          prMode,
-          prBranchHead,
-        })
-        committed = true
-      }
-    }
+    const commit = await commitGeneratedConfig(bound, generated, input, targetBranch, readRepoFile)
+    const committed = commit.committed
+    let writeBranch = commit.writeBranch
 
     let validation = await this.runProviderValidate(
       provider,
@@ -963,41 +898,19 @@ export class EnvironmentConnectionService {
       resolveSecret,
     )
 
-    let usedAgent = false
-    let repairJobId: string | undefined
-    if (
-      !validation.ok &&
-      input.allowAgentFallback &&
-      provider.describeRepairAgent &&
-      this.deps.dispatchConfigRepair
-    ) {
-      usedAgent = true
-      if (input.openPr && writeBranch === targetBranch) {
-        const prBranchHead = await bound.repo.headSha(BOOTSTRAP_CONFIG_BRANCH)
-        if (!prBranchHead) {
-          const base = await bound.repo.headSha(targetBranch)
-          if (base) {
-            await bound.repo.createBranch(BOOTSTRAP_CONFIG_BRANCH, base)
-            await bound.repo.openPullRequest({
-              title: 'chore: repair environment provider config',
-              head: BOOTSTRAP_CONFIG_BRANCH,
-              base: targetBranch,
-              body: 'Automated provider configuration repair.',
-            })
-          }
-        }
-        writeBranch = BOOTSTRAP_CONFIG_BRANCH
-      }
-      const started = await this.deps.dispatchConfigRepair({
-        workspaceId,
-        owner: input.owner,
-        repo: input.repo,
-        gitRef: writeBranch,
-        issues: validation.issues,
-        inputs: input.inputs,
-      })
-      repairJobId = started.jobId
-    }
+    const agent = await maybeDispatchConfigRepair({
+      provider,
+      bound,
+      validation,
+      input,
+      workspaceId,
+      targetBranch,
+      writeBranch,
+      dispatchConfigRepair: this.deps.dispatchConfigRepair,
+    })
+    const usedAgent = agent.usedAgent
+    const repairJobId = agent.repairJobId
+    writeBranch = agent.writeBranch
 
     await this.deps.provisioningLog?.record({
       workspaceId,

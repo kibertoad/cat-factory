@@ -155,6 +155,28 @@ export function collectRegistrationProblems(
 
   // 3. Coherence (warn): a kind with postOps that has an agent step which is NOT structured
   //    output likely can't feed those post-ops from `result.custom`. Heuristic, so a warning.
+  problems.push(...checkPostOpsStructuredOutput(agentKinds, registry))
+
+  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
+  problems.push(...checkPipelineKinds(opts, registeredKindIds, gateKinds, builtInHelperKinds))
+
+  // 5. Custom task types (only when a task-type registry is supplied).
+  problems.push(...checkCustomTaskTypes(opts))
+
+  return problems
+}
+
+/**
+ * Section 3 of {@link collectRegistrationProblems}: a coherence WARNING for a kind that declares
+ * postOps but whose agent step is not structured output — those post-ops read `result.custom` and
+ * would see nothing. Heuristic, hence a warning. Split out to keep the collector under the
+ * complexity ceiling.
+ */
+function checkPostOpsStructuredOutput(
+  agentKinds: ReturnType<AgentKindRegistry['all']>,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
   for (const def of agentKinds) {
     const hasPostOps = (def.postOps?.length ?? 0) > 0
     const declaresStructured =
@@ -170,72 +192,90 @@ export function collectRegistrationProblems(
       })
     }
   }
+  return problems
+}
 
-  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
-  if (opts.knownAgentKinds) {
-    const known = opts.knownAgentKinds
-    for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
-      for (const agentKind of pipeline.agentKinds) {
-        const ok =
-          known.has(agentKind) ||
-          registeredKindIds.has(agentKind) ||
-          gateKinds.has(agentKind) ||
-          builtInHelperKinds.has(agentKind)
-        if (!ok) {
-          problems.push({
-            severity: 'error',
-            code: 'pipeline_unknown_kind',
-            message:
-              `Pipeline "${pipeline.id}" references agent kind "${agentKind}", which is not a ` +
-              `known built-in, a registered kind, or a registered gate.`,
-          })
-        }
-      }
-    }
-  }
-
-  // 5. Custom task types (only when a task-type registry is supplied). Each registration must
-  //    carry a NAMESPACED id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel`
-  //    id; a `defaultPipelineId` must resolve against the built-in + registered pipeline catalog
-  //    (else the created task would silently fall back to the positional default).
-  if (opts.taskTypeRegistry) {
-    const knownPipelineIds = new Set(seedPipelines(opts.pipelineRegistry).map((p) => p.id))
-    for (const taskType of opts.taskTypeRegistry.all()) {
-      if (!isNamespacedId(taskType.taskType)) {
+/**
+ * Section 4 of {@link collectRegistrationProblems}: every kind a registered pipeline names must
+ * resolve to a known built-in, a registered kind, a registered gate, or a built-in helper. Only
+ * run when a built-in catalog (`knownAgentKinds`) is supplied. Split out to keep the collector
+ * under the complexity ceiling.
+ */
+function checkPipelineKinds(
+  opts: ValidateRegistrationsOptions,
+  registeredKindIds: ReadonlySet<string>,
+  gateKinds: ReadonlySet<string>,
+  builtInHelperKinds: ReadonlySet<string>,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.knownAgentKinds) return problems
+  const known = opts.knownAgentKinds
+  for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
+    for (const agentKind of pipeline.agentKinds) {
+      const ok =
+        known.has(agentKind) ||
+        registeredKindIds.has(agentKind) ||
+        gateKinds.has(agentKind) ||
+        builtInHelperKinds.has(agentKind)
+      if (!ok) {
         problems.push({
           severity: 'error',
-          code: 'task_type_not_namespaced',
+          code: 'pipeline_unknown_kind',
           message:
-            `Custom task type "${taskType.taskType}" is not a namespaced id (<ns>:<name>, ` +
-            `lowercase a-z0-9, dash-separated). A bare id collides with the built-in picklist.`,
-        })
-      }
-      if (taskType.formPanel !== undefined && !isNamespacedId(taskType.formPanel)) {
-        problems.push({
-          severity: 'error',
-          code: 'task_type_form_panel_invalid',
-          message:
-            `Custom task type "${taskType.taskType}" declares formPanel "${taskType.formPanel}", ` +
-            `which is not a namespaced id (<ns>:<name>). Pair it with a frontend component in the ` +
-            `taskTypeFormPanels slot under that id.`,
-        })
-      }
-      if (
-        taskType.defaultPipelineId !== undefined &&
-        !knownPipelineIds.has(taskType.defaultPipelineId)
-      ) {
-        problems.push({
-          severity: 'error',
-          code: 'task_type_unknown_pipeline',
-          message:
-            `Custom task type "${taskType.taskType}" declares defaultPipelineId ` +
-            `"${taskType.defaultPipelineId}", which is neither a built-in nor a registered ` +
-            `pipeline. Register the pipeline (PipelineRegistry) or fix the id.`,
+            `Pipeline "${pipeline.id}" references agent kind "${agentKind}", which is not a ` +
+            `known built-in, a registered kind, or a registered gate.`,
         })
       }
     }
   }
+  return problems
+}
 
+/**
+ * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
+ * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
+ * must resolve against the built-in + registered pipeline catalog (else the created task would
+ * silently fall back to the positional default). Only run when a task-type registry is supplied.
+ * Split out to keep the collector under the complexity ceiling.
+ */
+function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (!opts.taskTypeRegistry) return problems
+  const knownPipelineIds = new Set(seedPipelines(opts.pipelineRegistry).map((p) => p.id))
+  for (const taskType of opts.taskTypeRegistry.all()) {
+    if (!isNamespacedId(taskType.taskType)) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_not_namespaced',
+        message:
+          `Custom task type "${taskType.taskType}" is not a namespaced id (<ns>:<name>, ` +
+          `lowercase a-z0-9, dash-separated). A bare id collides with the built-in picklist.`,
+      })
+    }
+    if (taskType.formPanel !== undefined && !isNamespacedId(taskType.formPanel)) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_form_panel_invalid',
+        message:
+          `Custom task type "${taskType.taskType}" declares formPanel "${taskType.formPanel}", ` +
+          `which is not a namespaced id (<ns>:<name>). Pair it with a frontend component in the ` +
+          `taskTypeFormPanels slot under that id.`,
+      })
+    }
+    if (
+      taskType.defaultPipelineId !== undefined &&
+      !knownPipelineIds.has(taskType.defaultPipelineId)
+    ) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_unknown_pipeline',
+        message:
+          `Custom task type "${taskType.taskType}" declares defaultPipelineId ` +
+          `"${taskType.defaultPipelineId}", which is neither a built-in nor a registered ` +
+          `pipeline. Register the pipeline (PipelineRegistry) or fix the id.`,
+      })
+    }
+  }
   return problems
 }
 

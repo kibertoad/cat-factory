@@ -106,7 +106,7 @@ import { InitiativeInterviewController } from './InitiativeInterviewController.j
 import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import { DocInterviewController } from './DocInterviewController.js'
 import type { ForkChatService } from './ForkChatService.js'
-import { FORK_DECISION_PRODUCER_KIND } from './forkDecision.logic.js'
+import { isReentrantDecisionResume } from './reentrancy.logic.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -1436,51 +1436,11 @@ export class ExecutionService {
     if (instance.status === 'paused') instance.status = 'running'
 
     if (step.state === 'waiting_decision') {
-      // The requirements gate is re-entrant: when the human answers the findings and asks to
-      // incorporate (`pendingIncorporation`), or asks the Requirement Writer to recommend answers
-      // (`pendingRecommendation`), a marker is set on the parked step and the run is signalled to
-      // wake. Fall through so the gate re-evaluates — folding + re-reviewing, or running the
-      // Writer per finding, in the durable driver (the LLM work that used to block the HTTP
-      // request) — instead of immediately re-parking. Every other parked step (and a requirements
-      // gate with nothing pending) re-parks on its durable decision id.
-      const reentrantRequirements =
-        (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND ||
-          step.agentKind === CLARITY_REVIEW_AGENT_KIND ||
-          step.agentKind === REQUIREMENTS_BRAINSTORM_AGENT_KIND ||
-          step.agentKind === ARCHITECTURE_BRAINSTORM_AGENT_KIND) &&
-        (!!step.pendingIncorporation || !!step.pendingRecommendation)
-      // The human-testing gate is likewise re-entrant: a human action (confirm / request a
-      // fix / pull main / recreate) records a `pendingAction` on the parked step and wakes
-      // the driver. Fall through so the gate re-evaluates and acts on it (dispatch a helper,
-      // rebuild the env, or advance) instead of immediately re-parking.
-      const reentrantHumanTest =
-        step.agentKind === HUMAN_TEST_AGENT_KIND && !!step.humanTest?.pendingAction
-      // The visual-confirmation gate is likewise re-entrant on a human action.
-      const reentrantVisualConfirm =
-        step.agentKind === VISUAL_CONFIRM_AGENT_KIND && !!step.visualConfirm?.pendingAction
-      // The interactive-interviewer gates (marked with the `interview-gate` trait) ride the shared
-      // InterviewGateController spine, which resumes by re-running the (slow) interviewer LLM in the
-      // durable driver: `continue`/`proceed` set `pendingInterview` on the parked step and wake the
-      // driver. Fall through so `InterviewGateController.evaluate` runs that pass instead of
-      // immediately re-parking — otherwise the interview never advances and the window stays stuck on
-      // the same questions. Trait-based (not kind-based) so a new interviewer needs no engine change.
-      const reentrantInterview =
-        hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry) &&
-        !!step.pendingInterview
-      // The implementation-fork decision phase is re-entrant on a chat turn: the human sent a
-      // grounded question about the surfaced forks, which sets `pendingForkChat` on the parked
-      // coder step and wakes the driver. Fall through so the fork step handler computes the reply
-      // inline (in the driver, off the HTTP request) and re-parks, instead of immediately
-      // re-parking on the stale approval id.
-      const reentrantForkDecision =
-        step.agentKind === FORK_DECISION_PRODUCER_KIND && !!step.pendingForkChat
-      if (
-        !reentrantRequirements &&
-        !reentrantHumanTest &&
-        !reentrantVisualConfirm &&
-        !reentrantInterview &&
-        !reentrantForkDecision
-      ) {
+      // Several gates are re-entrant: a human action sets a `pending*` marker on the parked step and
+      // wakes the driver, and the step handler must run the (slow) resume work in the durable driver
+      // instead of immediately re-parking on its stale decision id. See {@link
+      // isReentrantDecisionResume} for the per-gate cases.
+      if (!isReentrantDecisionResume(step, this.agentKindRegistry)) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
         const pendingId = step.decision?.id ?? step.approval?.id
