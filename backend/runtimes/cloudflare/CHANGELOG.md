@@ -1,5 +1,12 @@
 # @cat-factory/worker
 
+## 0.99.4
+
+### Patch Changes
+
+- Updated dependencies [ad4c999]
+  - @cat-factory/server@0.144.4
+
 ## 0.99.3
 
 ### Patch Changes
