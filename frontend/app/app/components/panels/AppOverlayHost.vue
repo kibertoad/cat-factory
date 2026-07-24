@@ -15,33 +15,36 @@
 //
 // First-party modals stay hand-mounted in `index.vue`; this seam is deliberately scoped to
 // consumer extensions (strangler discipline — the ~34 existing lazy modals are not migrated).
-import { computed, type Component } from 'vue'
+import { computed, watchEffect, type Component } from 'vue'
 import { useReactiveSlots } from '@modular-vue/runtime'
-import { resolveComponentRegistry } from '@modular-vue/core'
 import type { AppSlots } from '~/modular/slots'
+import { selectOverlay } from './AppOverlayHost.logic'
 
 const ui = useUiStore()
 const slots = useReactiveSlots<AppSlots>()
 
-// Index the merged `appOverlays` slot into an id → component registry. Duplicate ids throw by
-// default (`resolveComponentRegistry`) — two modules claiming the same overlay id is a wiring
-// bug, validated once at boot in `modular.client.ts` and cheaply memoized here.
-const registry = computed(() => resolveComponentRegistry(slots.value.appOverlays ?? []))
+// Pick the component for the active overlay id via the pure `selectOverlay` helper (indexes the
+// merged `appOverlays` slot with `resolveComponentRegistry`; duplicate ids throw, validated once
+// at boot in `modular.client.ts`). Recomputed if a consumer module's contributions change (they
+// don't after boot, but the read is cheap).
+const selection = computed(() => selectOverlay(slots.value.appOverlays ?? [], ui.activeOverlay?.id))
+const active = computed<Component | null>(() => selection.value.component)
 
-const active = computed<Component | null>(() => {
-  const id = ui.activeOverlay?.id
-  if (!id) return null
-  const component = registry.value.get(id) ?? null
-  // A dangling open (`openOverlay('acme:x')` with no registered component — e.g. a stale nav
-  // closure after an extension was removed) degrades to nothing rather than crashing.
-  if (import.meta.dev && !component) {
-    console.warn(
-      `[AppOverlayHost] ui.openOverlay('${id}') has no registered component. ` +
-        `Contribute { id: '${id}', component } to the appOverlays slot in a registerAppModule module.`,
-    )
-  }
-  return component
-})
+// Dev guard: a dangling open (`openOverlay('acme:x')` with no registered component — e.g. a stale
+// nav closure after an extension was removed) degrades to nothing rather than crashing. Kept in a
+// `watchEffect` — not the `computed` above — so the selection stays side-effect-free, mirroring
+// `StepResultViewHost`.
+if (import.meta.dev) {
+  watchEffect(() => {
+    if (selection.value.missing) {
+      const id = ui.activeOverlay?.id
+      console.warn(
+        `[AppOverlayHost] ui.openOverlay('${id}') has no registered component. ` +
+          `Contribute { id: '${id}', component } to the appOverlays slot in a registerAppModule module.`,
+      )
+    }
+  })
+}
 </script>
 
 <template>
