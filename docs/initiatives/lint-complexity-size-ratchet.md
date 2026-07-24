@@ -2,7 +2,7 @@
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
 targets (4 / 4 / **6**); `complexity` at **step 2 (30)**; `max-statements` at **step 2 (50)**;
-`max-lines-per-function` at **step 1.5 (632)** for product code (test suites carved off into an
+`max-lines-per-function` at **step 1.75 (400)** for product code (test suites carved off into an
 `overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` (→20) / `max-statements`
 (→30) / `max-lines` / `max-lines-per-function` still need the remaining god-file refactors to reach
 their final targets · **Owner:** core · **Started:** 2026-07-20
@@ -83,12 +83,32 @@ worst offender. These are the starting ceilings, not the goal.
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------------ |
 | `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
 | `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)             |
-| `max-lines-per-function` |     **632** |           **150** | product floor: `cloudflare/container.ts` (`buildContainer`, 631); tests: 2453 (`overrides`)            |
+| `max-lines-per-function` |     **400** |           **150** | product floor after the tenth-pass >400 split: the Pinia-store tail (`execution` 393); tests: 2453 (`overrides`)            |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                       |
 | `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                        |
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 
+> **Tenth pass (landed):** `max-lines-per-function` moved from **step 1.5 (632) to an intermediate
+> step 1.75 (400)** by splitting all eight product functions above 400 along cohesive,
+> behaviour-neutral seams — clearing the entire >400 band. The four DI composition-root builders (the
+> initiative's recurring size/complexity sink) drove the heavy lifting, two via sibling-file moves that
+> also shrink their tight-budget hosts: the Worker `buildContainer` (598 → 285) → a new
+> `container-assembly.ts` (`assembleWorkerContainer`, container.ts 2679 → 2345, so its
+> `check-file-size` allowance ratchets 2720 → 2400); orchestration `createCore` (485 → 385) → a new
+> `container/foundation.ts` (`createCoreFoundation`, container.ts 1923 → 1822, allowance 1948 → 1850);
+> `buildNodeContainer` (486 → 373) → an in-file `finalizeNodeContainer`; and local `buildLocalContainer`
+> (463 → 269) → an in-file `resolveLocalRunnerTransports`. The rest: the Worker `scheduled` cron handler
+> (451 → 16) → six module-level sweep helpers; the server public-API `registerTaskRoutes` (401 → 165) →
+> a `registerTaskLifecycleRoutes` sibling registrar; and the `pipelines` (456 → 100) + `environmentWizard`
+> (420 → 200) Pinia store setups → per-group action factories under `stores/{pipelines,environmentWizard}/`
+> (the `stores/board/*` precedent). Verified by the server (944), orchestration (885), and app (363) unit
+> suites + whole-tree typecheck (63/63); the Node/local/Worker facade behaviour is covered by the
+> cross-runtime conformance suites in CI (all extractions are byte-identical moves). No harness `src/**`
+> touched, so no image bump. The floor is now the Pinia-store tail (`execution` 393, node
+> `assembleNodeCoreDependencies`/`ExecutionService` ctor 387) — step 2's 300 target takes those + the
+> remaining sub-400 offenders. `complexity` / `max-statements` / `max-lines` unchanged.
+>
 > **Ninth pass (landed):** `complexity` reached **step 2 (40 → 30)** by splitting every one of the
 > ~34 functions above 30 along cohesive, behaviour-neutral seams (verified by the server /
 > orchestration / integrations / agents / cli unit suites, the executor-harness suite, and the Node
@@ -266,7 +286,8 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 | free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                                | ✅ landed |
 | 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                                  | ✅ landed |
 | 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533 — see seventh pass                                  | ✅ landed |
-| 2          |   300 | (product) `cloudflare/container.ts` `buildContainer` 631 (floor; needs a file split first — see below), `orchestration/container.ts` 472, the 7 Pinia `defineStore` setups, `cloudflare/index.ts` 451 … | ☐ todo    |
+| 1.75       |   400 | (8) the 4 DI builders (Worker `buildContainer` 598 → sibling `container-assembly.ts`, `buildNodeContainer` 486, `createCore` 485 → sibling `container/foundation.ts`, `buildLocalContainer` 463), Worker `scheduled` 451, server `registerTaskRoutes` 401, `pipelines` 456 + `environmentWizard` 420 stores — see tenth pass | ✅ landed |
+| 2          |   300 | (product) the Pinia-store tail (`execution` 393, `github`/`auth`/`initiative`/`workspace`/`board.mutations` 330–361), node `assembleNodeCoreDependencies` 387, `ExecutionService` ctor 387, `cloudflare/index.ts` residual … | ☐ todo    |
 | 3 (final)  |   150 | (product long tail)                                                                                                                                                                                     | ☐ todo    |
 
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,

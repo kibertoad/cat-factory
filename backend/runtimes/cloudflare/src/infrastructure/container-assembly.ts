@@ -1,0 +1,555 @@
+import {
+  type AppCaches,
+  type Clock,
+  DEFAULT_MODEL_PRESET_ID,
+  type ExecutionEventPublisher,
+  type IdGenerator,
+  type ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
+import {
+  type CoreDependencies,
+  AgentContextObservabilityService,
+  SearchQueryObservabilityService,
+  createCore,
+} from '@cat-factory/orchestration'
+import type {
+  AccountSettingsService,
+  ApiKeyService,
+  LocalModelEndpointService,
+  OpenRouterCatalogService,
+  PersonalSubscriptionService,
+  ProviderSubscriptionService,
+  PublicApiKeyService,
+  TestSecretsService,
+  UserSecretService,
+} from '@cat-factory/integrations'
+import {
+  logger,
+  runWithInitiator,
+  resolveWorkspaceCapabilities,
+  testEnvHasZeroConfigDefault,
+  WebCryptoPasswordHasher,
+  type PersistenceRegistry,
+  type ServerContainer,
+  type WebSearchUpstream,
+} from '@cat-factory/server'
+import {
+  type GateProviderOverrides,
+  applyGateProviders,
+  warnUnwiredGates,
+} from '@cat-factory/gates'
+import type { AppConfig } from './config'
+import type { Env } from './env'
+import type { WorkerRegistries } from './container-registries.js'
+import { baseUrlFor } from './ai/providerEndpoints'
+import type { ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
+import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
+import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
+import { WorkersAiLlmUpstream } from './ai/WorkersAiLlmUpstream'
+import { DurableObjectMachineEventRelay } from './events/DurableObjectMachineEventRelay'
+import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
+import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
+import { WorkflowsEnvironmentTestRunner } from './workflows/WorkflowsEnvironmentTestRunner'
+import { D1AccountRepository } from './repositories/D1AccountRepository'
+import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
+import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
+import { D1BlockRepository } from './repositories/D1BlockRepository'
+import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
+import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
+import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
+import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
+import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1MembershipRepository } from './repositories/D1MembershipRepository'
+import { D1PipelineRepository } from './repositories/D1PipelineRepository'
+import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
+import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
+import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
+import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
+import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
+import { D1ServiceRepository } from './repositories/D1ServiceRepository'
+import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
+import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
+import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
+import { D1UserRepository } from './repositories/D1UserRepository'
+import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
+import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
+import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import {
+  buildAppRegistry,
+  buildResolveRepoTarget,
+  buildWorkerVcsIdentityRegistry,
+  maybeWrapConsensus,
+  selectAgentExecutor,
+  selectDeployDeps,
+  selectDocumentsDeps,
+  selectEmailInvitationDeps,
+  selectEnvConfigRepairer,
+  selectEnvironmentsDeps,
+  selectFragmentLibraryDeps,
+  selectGitHubDeps,
+  selectIncidentEnrichmentDeps,
+  selectMergeLifecycleDeps,
+  selectPackageRegistryDeps,
+  selectRecurringDeps,
+  selectReleaseHealthDeps,
+  selectRepoBootstrapper,
+  selectRequirementsDeps,
+  selectRunnersDeps,
+  selectSandboxDeps,
+  selectSkillLibraryDeps,
+  selectSlackDeps,
+  selectTasksDeps,
+  selectTraceSink,
+  selectWorkRunner,
+} from './container.js'
+import type { D1Database } from '@cloudflare/workers-types'
+
+/**
+ * The pre-built infrastructure handles + app-owned registries `buildContainer` computes
+ * before assembly hands them to {@link assembleWorkerContainer}. Extracted from the
+ * `buildContainer` god-function (lint-complexity-size-ratchet) so that composition root
+ * stays under the per-function line budget — a behaviour-neutral move mirroring the Node
+ * facade's `container-*-deps.ts` carve-outs. `buildContainer` still owns the ordering of
+ * every side effect; this bundle just carries the handles across the call.
+ */
+export interface WorkerContainerAssemblyInput {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  telemetryDb: D1Database
+  clock: Clock
+  idGenerator: IdGenerator
+  caches: AppCaches
+  overrides: Partial<CoreDependencies>
+  gateProviders?: GateProviderOverrides
+  cloudflareModelsEnabled: boolean
+  registries: WorkerRegistries
+  provisioningLogRepository: D1ProvisioningLogRepository | undefined
+  resolveTransport: ResolveRunnerTransport | null
+  subscriptions: ProviderSubscriptionService | undefined
+  testSecretsService: TestSecretsService | undefined
+  personalSubscriptions: PersonalSubscriptionService | undefined
+  apiKeys: ApiKeyService | undefined
+  publicApiKeys: PublicApiKeyService | undefined
+  localModelEndpoints: LocalModelEndpointService | undefined
+  userSecrets: UserSecretService | undefined
+  openRouterCatalog: OpenRouterCatalogService | undefined
+  eventPublisher: ExecutionEventPublisher | undefined
+  agentContextObservability: AgentContextObservabilityService
+  searchQueryObservability: SearchQueryObservabilityService
+  accountSettings: AccountSettingsService | undefined
+  defaultWebSearchUpstream: WebSearchUpstream | undefined
+  resolveBinaryArtifactStore: ResolveBinaryArtifactStore
+  githubWebhookIngest: CfGitHubWebhookIngest
+}
+
+/**
+ * Assemble the Worker's {@link ServerContainer} from the infra handles + registries
+ * `buildContainer` built: wire the domain `CoreDependencies` (spreading every `select*Deps`
+ * module selector), wire the live env-config repair agent over the FINAL provider, apply any
+ * test-injected gate providers, and surface the mothership/observability/credential handles on
+ * the container. A behaviour-neutral extraction of the tail of `buildContainer` — the ordering
+ * of the dependencies build, the `...overrides` spread, the post-override repairer wiring and
+ * the gate-provider application is preserved exactly.
+ */
+export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {
+  const {
+    env,
+    config,
+    db,
+    telemetryDb,
+    clock,
+    idGenerator,
+    caches,
+    overrides,
+    gateProviders,
+    cloudflareModelsEnabled,
+    registries,
+    provisioningLogRepository,
+    resolveTransport,
+    subscriptions,
+    testSecretsService,
+    personalSubscriptions,
+    apiKeys,
+    publicApiKeys,
+    localModelEndpoints,
+    userSecrets,
+    openRouterCatalog,
+    eventPublisher,
+    agentContextObservability,
+    searchQueryObservability,
+    accountSettings,
+    defaultWebSearchUpstream,
+    resolveBinaryArtifactStore,
+    githubWebhookIngest,
+  } = input
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    vcsRegistry,
+    providerRegistry,
+  } = registries
+
+  const dependencies: CoreDependencies = {
+    // App-owned backend registries (kind → provider) the connection services resolve through.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    // The code-defined custom provision-type catalog, merged with the workspace rows by
+    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
+    // per-service provisioning picker.
+    customManifestTypeRegistry,
+    // Resolves the per-account binary-artifact store (screenshots) for the
+    // visual-confirmation gate; resolving to null ⇒ the gate passes through.
+    resolveBinaryArtifactStore,
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
+    accountRepository: new D1AccountRepository({ db }),
+    membershipRepository: new D1MembershipRepository({ db }),
+    userRepository: new D1UserRepository({ db }),
+    passwordHasher: new WebCryptoPasswordHasher(),
+    blockRepository: new D1BlockRepository({ db }),
+    pipelineRepository: new D1PipelineRepository({ db }),
+    executionRepository: new D1ExecutionRepository({ db, clock }),
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
+    tokenUsageRepository: new D1TokenUsageRepository({ db }),
+    // Telemetry lives in the dedicated TELEMETRY_DB database.
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // Unified provisioning event log (separate D1 binding). Threads the recorder into
+    // the env services and exposes the read service for the logs controller; undefined
+    // when PROVISIONING_DB isn't bound.
+    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
+    recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance is
+    // injected into the container executor below for the write path.
+    agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
+    idGenerator,
+    clock,
+    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
+    // skip selection entirely — selectAgentExecutor throws when a sandbox is opted
+    // in but its prerequisites are missing, which is the desired loud failure in
+    // production but must not fire for tests that never reach the real executor.
+    agentExecutor:
+      overrides.agentExecutor ??
+      maybeWrapConsensus(
+        selectAgentExecutor({
+          env,
+          config,
+          db,
+          clock,
+          resolveTransport,
+          agentKindRegistry,
+          subscriptions,
+          personalSubscriptions,
+          agentContextObservability,
+        }),
+        env,
+        config,
+        db,
+        eventPublisher,
+        agentKindRegistry,
+      ),
+    agentKindRegistry,
+    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
+    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
+    gateRegistry,
+    stepResolverRegistry,
+    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
+    // machine reads the SAME instance through its GateContext.
+    providerRegistry,
+    initiativePresetRegistry,
+    workRunner: selectWorkRunner(env),
+    executionEventPublisher: eventPublisher,
+    spendPricing: config.spend,
+    // Price metered dynamic OpenRouter models at their real per-model rate (not the
+    // bare-`openrouter` fallback) using this workspace's enabled catalog.
+    dynamicModelPricesFor: openRouterCatalog
+      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
+      : undefined,
+    // Repo-bootstrap repositories are wired unconditionally (reference-architecture
+    // CRUD is always available); the run path additionally needs the bootstrapper.
+    referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
+    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
+    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator, resolveTransport),
+    // Durably drive each bootstrap run's poll loop when the Workflows binding is
+    // present (mirrors the execution driver); without it a run still dispatches.
+    bootstrapRunner: env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
+      : undefined,
+    // Env-config-repair runs share the unified `agent_runs` table (kind-scoped). The
+    // job repository is wired unconditionally; the repairer (the agent fallback) is wired
+    // post-overrides below over the FINAL provider, and the durable runner when its
+    // Workflows binding is present (else the cron sweep re-drives a run left running).
+    envConfigRepairJobRepository: new D1EnvConfigRepairJobRepository({ db }),
+    envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
+      ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : undefined,
+    // The ephemeral-environment self-test: its own run store + the durable driver when the
+    // Workflows binding is present. The Workflow self-finalizes on poll-budget exhaustion,
+    // and the cron `sweepStuckEnvTests` (index.ts scheduled) is the backstop for a lost or
+    // terminal instance — the run store is not agent_runs, so the unified run sweep never
+    // covers it.
+    environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
+    environmentTestRunner: env.ENV_TEST_WORKFLOW
+      ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
+      : undefined,
+    ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
+    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator, providerRegistry),
+    // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
+    // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
+    // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s
+    // `overrides` (a `Partial<CoreDependencies>` field). Read explicitly here — rather than
+    // relying on the trailing `...overrides` spread — so the seam stays legible and robust to a
+    // future reorder. Applied only at first seed, so a user's later manual default choice wins.
+    defaultModelPresetId: overrides.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
+    ...selectReleaseHealthDeps(env, config, db, providerRegistry),
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt; present only when ENCRYPTION_KEY is set.
+    ...(testSecretsService
+      ? {
+          resolveTestSecretRefs: (workspaceId: string, blockId: string) =>
+            testSecretsService.resolveRefsForBlock(workspaceId, blockId),
+        }
+      : {}),
+    ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
+    ...selectPackageRegistryDeps(env, db),
+    ...(accountSettings ? { accountSettings } : {}),
+    ...selectSlackDeps(config, db),
+    ...selectEmailInvitationDeps(config, db),
+    ...selectTraceSink(config),
+    ...selectRecurringDeps(env, config, db, clock, idGenerator),
+    ...selectDocumentsDeps(env, config, db, clock, idGenerator),
+    ...selectTasksDeps(env, config, db, clock, idGenerator),
+    ...selectRequirementsDeps(env, config, db),
+    ...selectSandboxDeps(env.SANDBOX_DB),
+    ...selectEnvironmentsDeps(env, config, db),
+    ...selectDeployDeps(env, config, db, clock),
+    ...selectRunnersDeps(env, config, db),
+    ...selectFragmentLibraryDeps(env, config, db),
+    ...selectSkillLibraryDeps(env, config, db),
+    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
+    // sync Queue. No queue bound (local/dev) ⇒ no proactive resync; the dispatch-time probe
+    // is the freshness backstop.
+    enqueueSkillResync: async ({ accountId, sourceId }) => {
+      await githubWebhookIngest.queueSkillResync(accountId, sourceId)
+    },
+    // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
+    // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
+    // Worker's cross-instance state already lives in globally-addressed DOs / D1.
+    caches,
+    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
+      resolveWorkspaceCapabilities(
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlFor(provider, env),
+          localModelEndpoints,
+          openRouterCatalog,
+          accountSettings,
+          workspaceAccountOf: (workspaceId) =>
+            new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+          caches,
+        },
+        workspaceId,
+        initiatedBy,
+      ),
+    // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
+    // context, so a per-user PAT (when set) is preferred over the App token.
+    runInitiatorScope: runWithInitiator,
+    ...overrides,
+  }
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...overrides` above), so a native adapter injected via overrides — not the default
+  // manifest provider — is the one the repair dispatcher uses. Unwired on a stock deployment
+  // (the generic provider has no `describeRepairAgent`), exactly like the service guard.
+  const envConfigRepairer = selectEnvConfigRepairer({
+    env,
+    config,
+    db,
+    clock,
+    resolveTransport,
+    override: dependencies.environmentProvider,
+    environmentBackendRegistry,
+  })
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring done by the
+  // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
+  // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(providerRegistry, gateProviders)
+  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
+  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
+  warnUnwiredGates(providerRegistry, logger)
+
+  // The unified `agent_runs` reader (kind-spanning) — surfaced on the container for
+  // `AgentRunController` AND folded into the mothership `repositories` registry below (it is the
+  // one repo not carried by `CoreDependencies`). One instance shared by both.
+  const agentRunRepository = new D1AgentRunRepository({ db })
+
+  return {
+    ...createCore(dependencies),
+    config,
+    // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
+    // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+    // Surfaced on the ServerContainer here (not part of `CoreDependencies`, so `createCore` doesn't
+    // carry it) — kept symmetric with the Node facade.
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
+    // Hosted source-control PAT login: a user signs in with their OWN GitHub/GitLab PAT (the
+    // shared `/auth/pat` flow resolves it to an account, held to the login/org/domain allowlist).
+    // GitHub always; GitLab when configured. Mirrors the Node facade so a GitLab-only Worker
+    // deployment lets a GitLab user sign in (previously the Worker wired none, leaving it
+    // OAuth-only / GitHub-only for sign-in even though the engine gated/merged on GitLab).
+    vcsIdentity: buildWorkerVcsIdentityRegistry(config),
+    // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
+    vcsRegistry,
+    // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
+    // the shared service-spec read controller can read the `spec/` artifact off main.
+    resolveRunRepoContext: dependencies.resolveRunRepoContext,
+    // The block→service→repo resolver, surfaced so the task-search controller can scope a
+    // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
+    resolveRepoTarget: buildResolveRepoTarget(db),
+    agentRunRepository,
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: dependencies.executionRepository,
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this Worker. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Node facade.
+    ...(config.github.enabled
+      ? { githubTokenDelegation: buildAppRegistry(env, config, db, clock) }
+      : {}),
+    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
+    // Worker is a mothership (its WORKSPACE_EVENTS hub is bound), a machine-authed mothership-mode
+    // node's relayed engine events are injected into the per-workspace WorkspaceEventsHub Durable
+    // Object, so hosted teammates on the shared board see the local node's activity live. Wired
+    // symmetrically on the Node facade (the in-process hub / propagator). Absent binding ⇒ the
+    // endpoint 503s.
+    ...(env.WORKSPACE_EVENTS
+      ? { machineEventRelay: new DurableObjectMachineEventRelay(env.WORKSPACE_EVENTS) }
+      : {}),
+    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
+    // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
+    // The controller gates which repo+method is callable (allow-list) and account-scopes each
+    // call; exposing the whole `dependencies` (which carries every repo under its canonical name)
+    // is safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
+    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
+    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
+    // Sourced identically on both facades so they attach the same registry surface.
+    repositories: {
+      ...dependencies,
+      agentRunRepository,
+      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+      // local; only the metadata is proxied.
+      binaryArtifactMetadataStore: new D1BinaryArtifactMetadataStore({ db }),
+      // The sensitive per-service test-credential store is org/durable state the engine reads via
+      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+      // connections.
+      testSecretsRepository: new D1TestSecretsRepository({ db }),
+      // GitHub projection + installation reads the mothership serves over the persistence RPC even
+      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+      // projection over RPC. Both are plain org tables the mothership owns (`selectGitHubDeps`
+      // folds them into `dependencies` only when the App is configured), so reflect them regardless
+      // of `config.github.enabled`, else a mothership without its own App 500s that board load with
+      // `... is not wired`. Allow-listed in `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like
+      // the stores above. Sourced identically on both facades.
+      repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+      githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
+    } as unknown as PersistenceRegistry,
+    // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
+    // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    // The consensus transcript store, for the read endpoint (the SPA window's initial
+    // load / reload). Always wired; live updates ride the `consensus` workspace event.
+    consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
+    // Resolves the per-account binary-artifact store (screenshots) for the artifact
+    // controllers + the visual-confirmation gate (configured per-account in the UI).
+    resolveBinaryArtifactStore,
+    // The Worker's only test-env backend is the `environment-provider` (its UI-test container is
+    // torn down with the run — no long-lived in-container compose default), so a missing provider
+    // IS a real gap the "test environment not configured" banner should surface. Derived from the
+    // capability descriptor for symmetry with the Node facade (`testEnvHasZeroConfigDefault`).
+    ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
+    // The sensitive per-service test-credential store the shared test-secrets controller reads;
+    // present when the shared ENCRYPTION_KEY is configured.
+    ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    // The vendor-credential (subscription token pool) service the shared controller
+    // reads; present when the shared ENCRYPTION_KEY is configured.
+    subscriptions,
+    // The per-user individual-usage subscription store (Claude); present when the
+    // shared ENCRYPTION_KEY is configured.
+    personalSubscriptions,
+    // The direct-provider API-key pool (account/workspace/user); present when the
+    // shared ENCRYPTION_KEY is configured.
+    apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
+    // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
+    cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlFor(provider, env),
+    // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
+    localModelEndpoints,
+    // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
+    userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
+    userRepoAccess: new D1UserRepoAccessRepository({ db }),
+    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
+    // gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
+    ...(env.ENCRYPTION_KEY?.trim()
+      ? { sealedSecretInventory: new D1SealedSecretInventory({ db }) }
+      : {}),
+    // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
+    openRouterCatalog,
+    gateways: {
+      // Real-time event delivery via the per-workspace WorkspaceEventsHub DO (when
+      // the WORKSPACE_EVENTS namespace is bound; absent → the events route 501s).
+      realtime: new DoRealtimeGateway(env.WORKSPACE_EVENTS),
+      // GitHub backfill via Workflows; webhook/resync ingest via the sync Queue. Both
+      // fall back to inline handling when their binding is absent (local/dev/tests).
+      githubBackfill: new WorkflowsBackfillScheduler(env.GITHUB_BACKFILL_WORKFLOW),
+      githubWebhook: githubWebhookIngest,
+      // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
+      // Workers AI binding path (the `workers-ai` provider).
+      llmUpstream: new WorkersAiLlmUpstream(env),
+      // Container web-search upstream is resolved per-account by the proxy controller
+      // (keys moved out of env into the per-account settings store), so no boot-time
+      // gateway upstream is wired here.
+    },
+  }
+}

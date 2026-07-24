@@ -10,7 +10,7 @@ import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 
 /** The app-owned registries the Worker facade resolves once per build. */
-type WorkerRegistries = Required<
+export type WorkerRegistries = Required<
   Pick<
     CoreDependencies,
     | 'environmentBackendRegistry'

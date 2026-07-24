@@ -1496,6 +1496,299 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
   }
 }
 
+/**
+ * The tail of {@link buildNodeContainer}: gather the real-time + per-account dependency groups,
+ * apply the last-write-wins gate providers, assemble the engine {@link CoreDependencies}, wire the
+ * optional preview + env-config-repair modules, re-source the mothership run-path repos, and
+ * project the {@link ServerContainer} the HTTP layer resolves. Extracted verbatim from
+ * {@link buildNodeContainer} (a function-size ratchet split — behaviour AND side-effect order are
+ * identical), taking every local the composition root built as a single typed bundle.
+ */
+interface NodeContainerFinalizeBundle {
+  config: AppConfig
+  options: NodeContainerOptions
+  env: NodeJS.ProcessEnv
+  db: DrizzleDb
+  repos: ReturnType<typeof createDrizzleRepositories>
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T
+  idGenerator: CoreDependencies['idGenerator']
+  clock: CoreDependencies['clock']
+  standardAgentExecutor: Parameters<typeof buildNodeRealtimeDeps>[0]['standardAgentExecutor']
+  modelProviderResolver: NodeModelDepsResult['modelProviderResolver']
+  resolveWorkspaceModelDefault: Parameters<
+    typeof buildNodeRealtimeDeps
+  >[0]['resolveWorkspaceModelDefault']
+  agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
+  providerRegistry: NodeAppRegistriesResult['providerRegistry']
+  packageRegistrySecretCipher: NodeRunServicesResult['packageRegistrySecretCipher']
+  githubInstallationRepository: GitHubInstallationRepository
+  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
+  customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
+  gateRegistry: NodeAppRegistriesResult['gateRegistry']
+  stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
+  initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
+  apiKeys: NodeModelDepsResult['apiKeys']
+  subscriptions: NodeModelDepsResult['subscriptions']
+  personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
+  localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
+  openRouterCatalog: NodeModelDepsResult['openRouterCatalog']
+  cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
+  deployDeps: NodeTransportDeployResult['deployDeps']
+  runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
+  agentContextObservability: NodeRunServicesResult['agentContextObservability']
+  searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
+  resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
+  githubClient: NodeGitHubDepsResult['githubClient']
+  tasks: NodeGitHubDepsResult['tasks']
+  fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
+  issueWritebackProvider: NodeGitHubDepsResult['issueWritebackProvider']
+  githubGateDeps: NodeGitHubDepsResult['githubGateDeps']
+  githubModuleDeps: NodeGitHubDepsResult['githubModuleDeps']
+  bootstrapJobRepository: NodeBootstrapperResult['bootstrapJobRepository']
+  repoBootstrapper: NodeBootstrapperResult['repoBootstrapper']
+  resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
+  baseDeployMint: NodeTransportDeployResult['baseDeployMint']
+  resolveTransport: NodeTransportDeployResult['resolveTransport']
+  bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
+  remoteRepos: Record<string, unknown> | undefined
+  defaultWebSearchUpstream: NodeRunServicesResult['defaultWebSearchUpstream']
+  appRegistry: ReturnType<typeof buildNodeAppRegistry>
+  repoProjectionRepository: DrizzleRepoProjectionRepository
+  vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
+  testSecretsService: NodeRunServicesResult['testSecretsService']
+  publicApiKeys: NodeModelDepsResult['publicApiKeys']
+  userSecrets: NodeModelDepsResult['userSecrets']
+  traceSink: NodeModelDepsResult['traceSink']
+}
+
+function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerContainer {
+  const {
+    config,
+    options,
+    env,
+    db,
+    repos,
+    sourced,
+    idGenerator,
+    clock,
+    standardAgentExecutor,
+    modelProviderResolver,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    providerRegistry,
+    packageRegistrySecretCipher,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    apiKeys,
+    subscriptions,
+    personalSubscriptions,
+    localModelEndpoints,
+    openRouterCatalog,
+    cloudflareModelsEnabled,
+    deployDeps,
+    runnerPoolConnectionRepository,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
+    bootstrapJobRepository,
+    repoBootstrapper,
+    resolveRepoTarget,
+    baseDeployMint,
+    resolveTransport,
+    bootstrapMintInstallationToken,
+    remoteRepos,
+    defaultWebSearchUpstream,
+    appRegistry,
+    repoProjectionRepository,
+    vcsRegistry,
+    testSecretsService,
+    publicApiKeys,
+    userSecrets,
+    traceSink,
+  } = bundle
+
+  // Real-time event publisher + notification channel + optional consensus wrap, lifted into
+  // `container-realtime-deps.ts` to keep this root within the file-size budget.
+  const { slackDeps, executionEventPublisher, agentExecutor, notificationChannel } =
+    buildNodeRealtimeDeps({
+      env,
+      config,
+      repos,
+      sourced,
+      realtimeSink: options.realtimeSink,
+      standardAgentExecutor,
+      modelProviderResolver,
+      resolveWorkspaceModelDefault,
+      agentKindRegistry,
+    })
+
+  // Per-account settings + binary-artifact storage + the observability/incident gate-provider
+  // wiring (onto `providerRegistry`, before `applyGateProviders` below), plus the package-registry
+  // management deps, lifted into `container-account-deps.ts` to keep this root within budget.
+  const {
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+  } = buildNodeAccountDeps({
+    env,
+    config,
+    db,
+    repos,
+    idGenerator,
+    clock,
+    providerRegistry,
+    packageRegistrySecretCipher,
+    contentStorageDefaultBackend: options.contentStorageDefaultBackend,
+    caches: options.caches,
+  })
+
+  // Runner-pool URL/host guard, scoped to its own config (independent of the environment
+  // allow-list); absent => strict public-https.
+  const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
+
+  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
+  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
+  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
+  // leaves `gateProviders` undefined, so this is a no-op outside tests.
+  applyGateProviders(providerRegistry, options.gateProviders)
+  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
+  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
+  warnUnwiredGates(providerRegistry, logger)
+
+  // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
+  // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out
+  // (slice 4) enqueues through the SAME `githubWebhook` seam rather than re-deriving the queue.
+  const gateways = createNodeGateways(env, options.boss)
+
+  const dependencies = assembleNodeCoreDependencies({
+    config,
+    options,
+    env,
+    db,
+    repos,
+    sourced,
+    idGenerator,
+    clock,
+    gateways,
+    runnerUrlPolicy,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    providerRegistry,
+    apiKeys,
+    subscriptions,
+    personalSubscriptions,
+    localModelEndpoints,
+    openRouterCatalog,
+    modelProviderResolver,
+    cloudflareModelsEnabled,
+    deployDeps,
+    runnerPoolConnectionRepository,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
+    bootstrapJobRepository,
+    repoBootstrapper,
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel,
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+  })
+
+  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
+  // transport is available (real in local mode / a fake pair in the conformance suite).
+  wirePreviewModule(dependencies, options, {
+    env,
+    config,
+    repos,
+    resolveRepoTarget,
+    baseDeployMint,
+  })
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...options.overrides` above), so an injected native adapter — not the default manifest
+  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
+  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
+  // inherits this through `buildNodeContainer` with no extra wiring.
+  const envConfigRepairer = selectNodeEnvConfigRepairer({
+    env,
+    config,
+    resolveTransport,
+    installationRepository: githubInstallationRepository,
+    mintInstallationToken: bootstrapMintInstallationToken,
+    override: dependencies.environmentProvider,
+    environmentBackendRegistry,
+  })
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
+  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
+  applyMothershipRemoteRepos(dependencies, remoteRepos)
+
+  return projectNodeServerContainer({
+    dependencies,
+    config,
+    defaultWebSearchUpstream,
+    resolveRepoTarget,
+    repos,
+    appRegistry,
+    options,
+    repoProjectionRepository,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    resolveBinaryArtifactStore,
+    gateways,
+    vcsRegistry,
+    testSecretsService,
+    subscriptions,
+    personalSubscriptions,
+    apiKeys,
+    publicApiKeys,
+    cloudflareModelsEnabled,
+    env,
+    localModelEndpoints,
+    userSecrets,
+    db,
+    openRouterCatalog,
+    traceSink,
+  })
+}
+
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
@@ -1813,62 +2106,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       caches: options.caches,
     })
 
-  // Real-time event publisher + notification channel + optional consensus wrap, lifted into
-  // `container-realtime-deps.ts` to keep this root within the file-size budget.
-  const { slackDeps, executionEventPublisher, agentExecutor, notificationChannel } =
-    buildNodeRealtimeDeps({
-      env,
-      config,
-      repos,
-      sourced,
-      realtimeSink: options.realtimeSink,
-      standardAgentExecutor,
-      modelProviderResolver,
-      resolveWorkspaceModelDefault,
-      agentKindRegistry,
-    })
-
-  // Per-account settings + binary-artifact storage + the observability/incident gate-provider
-  // wiring (onto `providerRegistry`, before `applyGateProviders` below), plus the package-registry
-  // management deps, lifted into `container-account-deps.ts` to keep this root within budget.
-  const {
-    releaseHealthDeps,
-    packageRegistryDeps,
-    incidentEnrichmentDeps,
-    accountSettings,
-    resolveBinaryArtifactStore,
-  } = buildNodeAccountDeps({
-    env,
-    config,
-    db,
-    repos,
-    idGenerator,
-    clock,
-    providerRegistry,
-    packageRegistrySecretCipher,
-    contentStorageDefaultBackend: options.contentStorageDefaultBackend,
-    caches: options.caches,
-  })
-
-  // Runner-pool URL/host guard, scoped to its own config (independent of the environment
-  // allow-list); absent => strict public-https.
-  const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
-
-  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
-  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
-  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
-  // leaves `gateProviders` undefined, so this is a no-op outside tests.
-  applyGateProviders(providerRegistry, options.gateProviders)
-  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
-  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
-  warnUnwiredGates(providerRegistry, logger)
-
-  // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
-  // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out
-  // (slice 4) enqueues through the SAME `githubWebhook` seam rather than re-deriving the queue.
-  const gateways = createNodeGateways(env, options.boss)
-
-  const dependencies = assembleNodeCoreDependencies({
+  return finalizeNodeContainer({
     config,
     options,
     env,
@@ -1877,23 +2115,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     sourced,
     idGenerator,
     clock,
-    gateways,
-    runnerUrlPolicy,
+    standardAgentExecutor,
+    modelProviderResolver,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    providerRegistry,
+    packageRegistrySecretCipher,
     githubInstallationRepository,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
-    agentKindRegistry,
     gateRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
-    providerRegistry,
     apiKeys,
     subscriptions,
     personalSubscriptions,
     localModelEndpoints,
     openRouterCatalog,
-    modelProviderResolver,
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
@@ -1908,77 +2147,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     githubModuleDeps,
     bootstrapJobRepository,
     repoBootstrapper,
-    slackDeps,
-    executionEventPublisher,
-    agentExecutor,
-    notificationChannel,
-    releaseHealthDeps,
-    packageRegistryDeps,
-    incidentEnrichmentDeps,
-    accountSettings,
-    resolveBinaryArtifactStore,
-  })
-
-  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
-  // transport is available (real in local mode / a fake pair in the conformance suite).
-  wirePreviewModule(dependencies, options, {
-    env,
-    config,
-    repos,
     resolveRepoTarget,
     baseDeployMint,
-  })
-
-  // Wire the live env-config repair agent over the FINAL environment provider (after the
-  // `...options.overrides` above), so an injected native adapter — not the default manifest
-  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
-  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
-  // inherits this through `buildNodeContainer` with no extra wiring.
-  const envConfigRepairer = selectNodeEnvConfigRepairer({
-    env,
-    config,
     resolveTransport,
-    installationRepository: githubInstallationRepository,
-    mintInstallationToken: bootstrapMintInstallationToken,
-    override: dependencies.environmentProvider,
-    environmentBackendRegistry,
-  })
-  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
-  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
-  if (envConfigRepairer && !dependencies.envConfigRepairer) {
-    dependencies.envConfigRepairer = envConfigRepairer
-  }
-
-  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
-  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
-  applyMothershipRemoteRepos(dependencies, remoteRepos)
-
-  return projectNodeServerContainer({
-    dependencies,
-    config,
+    bootstrapMintInstallationToken,
+    remoteRepos,
     defaultWebSearchUpstream,
-    resolveRepoTarget,
-    repos,
     appRegistry,
-    options,
     repoProjectionRepository,
-    githubInstallationRepository,
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    resolveBinaryArtifactStore,
-    gateways,
     vcsRegistry,
     testSecretsService,
-    subscriptions,
-    personalSubscriptions,
-    apiKeys,
     publicApiKeys,
-    cloudflareModelsEnabled,
-    env,
-    localModelEndpoints,
     userSecrets,
-    db,
-    openRouterCatalog,
     traceSink,
   })
 }

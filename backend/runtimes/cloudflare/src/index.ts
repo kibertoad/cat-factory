@@ -209,6 +209,463 @@ const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
  */
 const RETENTION_CRON = '0 3 * * *'
 
+/**
+ * Daily pass: prune the unbounded ledgers/projections to their retention
+ * windows. The tables exist regardless of whether GitHub/agents are
+ * configured, so this runs unconditionally; an unused table reclaims nothing.
+ */
+function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  // ADR 0026 D6.1: the Worker has no boot moment, so the O(1) ENCRYPTION_KEY drift check
+  // rides the daily cron. It seeds the fingerprint on first run and logs a definitive
+  // drift signal on a key change. Independent of (and cheaper than) the retention work.
+  if (env.ENCRYPTION_KEY) {
+    const encryptionKey = env.ENCRYPTION_KEY
+    ctx.waitUntil(
+      checkKeyFingerprint({
+        store: new D1KeyFingerprintStore({ db: env.DB }),
+        masterKeyBase64: encryptionKey,
+        logger: keyFingerprintLogger,
+      }).catch((error) =>
+        logger.error(
+          { cron: 'key-fingerprint', err: errInfo(error) },
+          'key fingerprint check failed',
+        ),
+      ),
+    )
+    // ADR 0026 D6.2: the drift sweep — decrypt every sealed credential and raise/clear ONE
+    // `key_drift` card per affected workspace. Rides the same daily cron as the fingerprint.
+    ctx.waitUntil(
+      sweepKeyDriftAndRaise(
+        buildContainer(env),
+        (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
+        keyFingerprintLogger,
+      ).catch((error) =>
+        logger.error({ cron: 'key-drift', err: errInfo(error) }, 'key drift sweep failed'),
+      ),
+    )
+  }
+  // This branch never calls buildContainer (no request container is built for the
+  // sweep), so do the same fail-fast the build does: a clear error beats an opaque
+  // NPE deep in a telemetry repo when the binding is unbound.
+  const telemetryDb = requireTelemetryDb(env)
+  ctx.waitUntil(
+    sweepRetention({
+      tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
+      rateLimitRepository: new D1RateLimitRepository({
+        db: env.DB,
+        idGenerator: new CryptoIdGenerator(),
+      }),
+      commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
+      // Telemetry tables live in the dedicated TELEMETRY_DB database.
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+      agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({
+        db: telemetryDb,
+      }),
+      agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+      // Modeled subscription quota-cycle counters live in the main DB (migration 0047).
+      subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
+      pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
+      passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
+      notificationRepository: new D1NotificationRepository({ db: env.DB }),
+      // Prune the separate provisioning-log database when its binding is present.
+      ...(env.PROVISIONING_DB
+        ? {
+            provisioningLogRepository: new D1ProvisioningLogRepository({
+              db: env.PROVISIONING_DB,
+            }),
+          }
+        : {}),
+      clock,
+      policy: loadConfig(env).retention,
+    })
+      .then((result) => logger.info({ cron: 'retention', ...result }, 'retention sweep complete'))
+      .catch((error) =>
+        logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
+      ),
+  )
+  // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
+  // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
+  // whenever storage could be configured: the R2 default (ARTIFACT_BUCKET) OR a per-account
+  // S3 backend (which needs the encryption key to unseal its credentials).
+  if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
+    const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
+    ctx.waitUntil(
+      sweepBinaryArtifactRetention({
+        resolveStore: buildCloudflareArtifactStoreResolver(
+          env,
+          env.DB,
+          clock,
+          new CryptoIdGenerator(),
+        ),
+        listWorkspaceIds: () =>
+          new D1WorkspaceRepository({ db: env.DB })
+            .listVisible(null)
+            .then((ws) => ws.map((w) => w.id)),
+        retentionDaysFor: (workspaceId) =>
+          settingsRepo
+            .get(workspaceId)
+            .then(
+              (s) => s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
+            ),
+        now: clock.now(),
+      })
+        .then((removed) =>
+          logger.info(
+            { cron: 'retention', binaryArtifacts: removed },
+            'artifact retention sweep complete',
+          ),
+        )
+        .catch((error) =>
+          logger.error(
+            { cron: 'retention', err: errInfo(error) },
+            'artifact retention sweep failed',
+          ),
+        ),
+    )
+  }
+}
+
+/**
+ * Re-drive any agent run — execution OR bootstrap — whose Workflows instance
+ * died. One sweep over the unified agent_runs table dispatches by kind.
+ */
+function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
+    const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
+    const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
+    const repairLookup = env.ENV_CONFIG_REPAIR_WORKFLOW
+      ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : null
+    const execRunner = env.EXECUTION_WORKFLOW
+      ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
+      : null
+    const bootRunner = env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
+      : null
+    const repairRunner = env.ENV_CONFIG_REPAIR_WORKFLOW
+      ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : null
+    ctx.waitUntil(
+      sweepStuckRuns({
+        agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
+        instanceState: (ref) => {
+          const lookup =
+            ref.kind === 'bootstrap'
+              ? bootLookup
+              : ref.kind === 'env-config-repair'
+                ? repairLookup
+                : execLookup
+          // No binding for this kind → can't classify, so treat as alive (skip).
+          return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
+        },
+        redrive: async (ref) => {
+          if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
+          else if (ref.kind === 'env-config-repair')
+            await repairRunner?.startRun(ref.workspaceId, ref.id)
+          else await execRunner?.startRun(ref.workspaceId, ref.id)
+        },
+        // The durable instance is terminal and can't be recreated → finalize the
+        // run as stopped so it stops showing `running` forever (also reclaims any
+        // leftover container). Reuses the same stop path the user-facing button hits.
+        finalizeOrphan: async (ref) => {
+          const container = buildContainer(env)
+          const reason =
+            'The run was stopped automatically: its durable driver ended without finalizing it.'
+          if (ref.kind === 'bootstrap') {
+            if (container.bootstrap) {
+              await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
+                reason,
+                kind: 'unknown',
+              })
+            }
+          } else if (ref.kind === 'env-config-repair') {
+            if (container.envConfigRepair) {
+              await container.envConfigRepair.service.stop(ref.workspaceId, ref.id, {
+                reason,
+                kind: 'unknown',
+              })
+            }
+          } else {
+            await container.executionService.stopRun(ref.workspaceId, ref.id, {
+              reason,
+              kind: 'unknown',
+            })
+          }
+        },
+        // An execution whose instance stays missing past this deadline is failed
+        // `stalled` rather than re-created forever (symmetric with the Node sweeper).
+        failStalled: async (ref) => {
+          const container = buildContainer(env)
+          await container.executionService.failRun(
+            ref.workspaceId,
+            ref.id,
+            'Run stalled: its durable driver was lost and automatic recovery could not resume it.',
+            'stalled',
+            null,
+          )
+        },
+        clock,
+        leaseMs: SWEEP_LEASE_MS,
+        hardStallMs: SWEEP_HARD_STALL_MS,
+        orphanedSince: runSweepOrphanedSince,
+      })
+        // Surface what the sweep did — the key signal for "are runs getting stuck?"
+        // Only log when it actually acted.
+        .then(({ redriven, finalized, stalled }) => {
+          if (redriven > 0 || finalized > 0 || stalled > 0) {
+            logger.warn({ cron: 'run-sweeper', redriven, finalized, stalled }, 'swept stuck runs')
+          }
+        })
+        .catch((error) =>
+          logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+        ),
+    )
+  }
+}
+
+/**
+ * Env-test self-tests live in their own table (not agent_runs), so the unified run
+ * sweep never sees them — this sibling sweep re-drives a run whose Workflows instance
+ * was lost and finalizes (cleanup + failed) one whose instance is terminal.
+ */
+function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  if (env.ENV_TEST_WORKFLOW) {
+    const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
+    const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
+    ctx.waitUntil(
+      sweepStuckEnvTests({
+        repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
+        instanceState: (runId) => envTestLookup.instanceState(runId),
+        redrive: (workspaceId, runId) => envTestRunner.startRun(workspaceId, runId),
+        finalizeOrphan: async (workspaceId, runId) => {
+          const container = buildContainer(env)
+          await container.environments?.environmentTest?.expire(
+            workspaceId,
+            runId,
+            'The environment test was stopped automatically: its durable driver ended without finalizing it.',
+          )
+        },
+        clock,
+        leaseMs: SWEEP_LEASE_MS,
+      })
+        .then(({ redriven, finalized }) => {
+          if (redriven > 0 || finalized > 0) {
+            logger.warn(
+              { cron: 'env-test-sweeper', redriven, finalized },
+              'swept stuck env-test runs',
+            )
+          }
+        })
+        .catch((error) =>
+          logger.error({ cron: 'env-test-sweeper', err: errInfo(error) }, 'env-test sweep failed'),
+        ),
+    )
+  }
+}
+
+/**
+ * Reclaim expired personal-credential activations (individual-usage subscriptions).
+ * Each is a short-lived, system-encrypted per-run copy of a user's token; the TTL
+ * bounds standing exposure and a finished run's rows are deleted at completion, but
+ * this backstop also clears any that outlived their TTL. The table always exists.
+ */
+function reclaimExpiredActivations(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  const activations = new D1SubscriptionActivationRepository({ db: env.DB })
+  ctx.waitUntil(
+    activations
+      .deleteExpired(clock.now())
+      .then((reclaimed) => {
+        if (reclaimed > 0)
+          logger.info({ cron: 'activation-sweeper', reclaimed }, 'reclaimed activations')
+      })
+      .catch((error) =>
+        logger.error(
+          { cron: 'activation-sweeper', err: errInfo(error) },
+          'activation sweep failed',
+        ),
+      ),
+  )
+}
+
+/**
+ * Instance-level container reaper: kill any per-run container that outlived its
+ * legitimate maximum lifetime. This is the load-bearing backstop the run-record
+ * nets miss — a terminal run whose container survived, or a stuck-`running` run
+ * a live driver keeps warm (so its idle sleep clock never starts). Keys off the
+ * real live-container inventory, not the run record, and kills via the same
+ * EXEC_CONTAINER binding (no Cloudflare API token). With normal runs now self-
+ * reclaiming, a reaped container is a genuine leak — the registry logs each loudly.
+ */
+function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  if (env.EXEC_CONTAINER) {
+    const reaper = new ContainerInstanceRegistry(
+      env.EXEC_CONTAINER,
+      new D1LiveContainerRepository({ db: env.DB }),
+      clock,
+    )
+    const maxAgeMs = loadConfig(env).execution.containerMaxAgeMs
+    ctx.waitUntil(
+      reaper
+        .reapStaleBefore(clock.now() - maxAgeMs)
+        .then(({ reaped }) => {
+          if (reaped > 0)
+            logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
+        })
+        .catch((error) =>
+          logger.error({ cron: 'container-reaper', err: errInfo(error) }, 'container reap failed'),
+        ),
+    )
+  }
+}
+
+/**
+ * The remaining every-2-min backstops: notification escalation, recurring pipelines,
+ * the initiative loop, Kaizen gradings, GitHub reconcile, environment teardown, and the
+ * platform observability/health sweeps. Each is an independent, no-op-when-unwired sweep.
+ */
+function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemClock): void {
+  // Escalate long-waiting notifications yellow → red (every 2 min). Runs no longer
+  // time out waiting for a human, so the escalating notification — past each
+  // workspace's `waitingEscalationMinutes` threshold — is the overdue-human signal.
+  ctx.waitUntil(
+    escalateStaleNotifications(buildContainer(env), clock.now())
+      .then((escalated) => {
+        if (escalated > 0)
+          logger.info({ cron: 'notification-escalation', escalated }, 'escalated notifications')
+      })
+      .catch((error) =>
+        logger.error(
+          { cron: 'notification-escalation', err: errInfo(error) },
+          'notification escalation failed',
+        ),
+      ),
+  )
+
+  // Fire any due recurring pipelines (every 2 min; the actual cadence is hours).
+  // Each due schedule starts its pipeline against its reused block, skipping any
+  // whose block already has an active run. No-op when the feature isn't wired.
+  ctx.waitUntil(
+    Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now()))
+      .then((result) => {
+        if (result && (result.fired > 0 || result.skipped > 0)) {
+          logger.info({ cron: 'recurring-pipelines', ...result }, 'fired recurring pipelines')
+        }
+      })
+      .catch((error) =>
+        logger.error(
+          { cron: 'recurring-pipelines', err: errInfo(error) },
+          'recurring-pipeline sweep failed',
+        ),
+      ),
+  )
+
+  // Tick the initiative execution loop (every 2 min): reconcile each executing initiative's
+  // spawned tasks and spawn the next wave up to its concurrency cap. Terminal child runs poke
+  // the loop directly, so this is the backstop cadence. No-op when initiatives aren't wired.
+  ctx.waitUntil(
+    Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now()))
+      .then((result) => {
+        if (result && (result.spawned > 0 || result.completed > 0)) {
+          logger.info({ cron: 'initiative-loop', ...result }, 'ticked initiative loop')
+        }
+      })
+      .catch((error) =>
+        logger.error(
+          { cron: 'initiative-loop', err: errInfo(error) },
+          'initiative-loop sweep failed',
+        ),
+      ),
+  )
+
+  // Run any pending Kaizen gradings (every 2 min): the engine only inserts `scheduled`
+  // rows at run completion, so this background pass does the actual LLM grading (and
+  // re-drives `running` rows orphaned by a crashed sweep). Bounded per pass to stay
+  // within the cron budget; no-op when the Kaizen feature isn't wired. The grader's
+  // model is resolved per-workspace (Model Configuration), so this is workspace-wide.
+  if (!kaizenSweeping) {
+    kaizenSweeping = true
+    ctx.waitUntil(
+      Promise.resolve(
+        buildContainer(env).kaizen?.service.runPending(
+          clock.now() - KAIZEN_STALE_MS,
+          KAIZEN_SWEEP_BATCH,
+        ),
+      )
+        .then((processed) => {
+          if (processed && processed > 0)
+            logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
+        })
+        .catch((error) =>
+          logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
+        )
+        .finally(() => {
+          kaizenSweeping = false
+        }),
+    )
+  }
+
+  // Reconcile GitHub projections that may have missed a webhook (no-op unless
+  // the integration is configured).
+  ctx.waitUntil(
+    reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS)
+      .then((scheduled) => {
+        if (scheduled > 0)
+          // `sweep:` (not `cron:`) so the summary shares a field with the pass's
+          // per-repo lines, which the shared reconcile core emits on both facades.
+          logger.info({ sweep: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
+      })
+      .catch((error) =>
+        logger.error({ sweep: 'github-reconcile', err: errInfo(error) }, 'github reconcile failed'),
+      ),
+  )
+
+  // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
+  // environment integration is configured).
+  ctx.waitUntil(
+    sweepExpiredEnvironments(env, clock).catch((error) =>
+      logger.error({ cron: 'env-sweeper', err: errInfo(error) }, 'environment sweep failed'),
+    ),
+  )
+
+  // Push deployment-level (platform-operator) observability aggregates to the OTLP
+  // endpoint as OpenTelemetry gauge metrics, once per cron tick. Opt-in on top of the base
+  // OTel exporter (OTEL_PLATFORM_METRICS); a no-op otherwise. Per account, enumerated from
+  // the workspace projection — the same `listVisible(null)` shape the artifact sweep uses.
+  // The container (hence the platform-observability read) is built only when opted in.
+  {
+    const otel = loadConfig(env).otel
+    const sweep = runPlatformMetricsSweep({
+      otel,
+      platformObservability: otel.platformMetrics.enabled
+        ? buildContainer(env).platformObservability
+        : undefined,
+      workspaceRepository: new D1WorkspaceRepository({ db: env.DB }),
+      logger,
+    })
+    if (sweep) ctx.waitUntil(sweep)
+  }
+
+  // Raise/clear `platform_health` notifications when the deployment's OWN run health crosses
+  // an operator threshold, per account (the push counterpart to the operator dashboard read).
+  // Opt-in (`PLATFORM_ALERTS`); the container (hence the platform-observability read) is built
+  // only when opted in so a deployment that hasn't opted in pays nothing.
+  if (loadConfig(env).platformAlerts.enabled) {
+    ctx.waitUntil(
+      sweepPlatformHealth(buildContainer(env), logger)
+        .then(({ raised, cleared }) => {
+          if (raised > 0 || cleared > 0)
+            logger.info({ cron: 'platform-health', raised, cleared }, 'platform health sweep')
+        })
+        .catch((error) =>
+          logger.error(
+            { cron: 'platform-health', err: errInfo(error) },
+            'platform health sweep failed',
+          ),
+        ),
+    )
+  }
+}
+
 export default {
   // Validate the registered extensions (gates / agent kinds) ONCE, on the first request —
   // by which point every `register*` import side effect has run. A typo'd gate helperKind or
@@ -228,453 +685,18 @@ export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const clock = new SystemClock()
 
-    // Daily pass: prune the unbounded ledgers/projections to their retention
-    // windows. The tables exist regardless of whether GitHub/agents are
-    // configured, so this runs unconditionally; an unused table reclaims nothing.
+    // Daily pass: prune the unbounded ledgers/projections to their retention windows.
     if (controller.cron === RETENTION_CRON) {
-      // ADR 0026 D6.1: the Worker has no boot moment, so the O(1) ENCRYPTION_KEY drift check
-      // rides the daily cron. It seeds the fingerprint on first run and logs a definitive
-      // drift signal on a key change. Independent of (and cheaper than) the retention work.
-      if (env.ENCRYPTION_KEY) {
-        const encryptionKey = env.ENCRYPTION_KEY
-        ctx.waitUntil(
-          checkKeyFingerprint({
-            store: new D1KeyFingerprintStore({ db: env.DB }),
-            masterKeyBase64: encryptionKey,
-            logger: keyFingerprintLogger,
-          }).catch((error) =>
-            logger.error(
-              { cron: 'key-fingerprint', err: errInfo(error) },
-              'key fingerprint check failed',
-            ),
-          ),
-        )
-        // ADR 0026 D6.2: the drift sweep — decrypt every sealed credential and raise/clear ONE
-        // `key_drift` card per affected workspace. Rides the same daily cron as the fingerprint.
-        ctx.waitUntil(
-          sweepKeyDriftAndRaise(
-            buildContainer(env),
-            (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
-            keyFingerprintLogger,
-          ).catch((error) =>
-            logger.error({ cron: 'key-drift', err: errInfo(error) }, 'key drift sweep failed'),
-          ),
-        )
-      }
-      // This branch never calls buildContainer (no request container is built for the
-      // sweep), so do the same fail-fast the build does: a clear error beats an opaque
-      // NPE deep in a telemetry repo when the binding is unbound.
-      const telemetryDb = requireTelemetryDb(env)
-      ctx.waitUntil(
-        sweepRetention({
-          tokenUsageRepository: new D1TokenUsageRepository({ db: env.DB }),
-          rateLimitRepository: new D1RateLimitRepository({
-            db: env.DB,
-            idGenerator: new CryptoIdGenerator(),
-          }),
-          commitRepository: new D1CommitProjectionRepository({ db: env.DB }),
-          // Telemetry tables live in the dedicated TELEMETRY_DB database.
-          llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
-          agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({
-            db: telemetryDb,
-          }),
-          agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
-          // Modeled subscription quota-cycle counters live in the main DB (migration 0047).
-          subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
-          pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
-          passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
-          notificationRepository: new D1NotificationRepository({ db: env.DB }),
-          // Prune the separate provisioning-log database when its binding is present.
-          ...(env.PROVISIONING_DB
-            ? {
-                provisioningLogRepository: new D1ProvisioningLogRepository({
-                  db: env.PROVISIONING_DB,
-                }),
-              }
-            : {}),
-          clock,
-          policy: loadConfig(env).retention,
-        })
-          .then((result) =>
-            logger.info({ cron: 'retention', ...result }, 'retention sweep complete'),
-          )
-          .catch((error) =>
-            logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
-          ),
-      )
-      // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
-      // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
-      // whenever storage could be configured: the R2 default (ARTIFACT_BUCKET) OR a per-account
-      // S3 backend (which needs the encryption key to unseal its credentials).
-      if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
-        const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
-        ctx.waitUntil(
-          sweepBinaryArtifactRetention({
-            resolveStore: buildCloudflareArtifactStoreResolver(
-              env,
-              env.DB,
-              clock,
-              new CryptoIdGenerator(),
-            ),
-            listWorkspaceIds: () =>
-              new D1WorkspaceRepository({ db: env.DB })
-                .listVisible(null)
-                .then((ws) => ws.map((w) => w.id)),
-            retentionDaysFor: (workspaceId) =>
-              settingsRepo
-                .get(workspaceId)
-                .then(
-                  (s) =>
-                    s?.artifactRetentionDays ?? DEFAULT_WORKSPACE_SETTINGS.artifactRetentionDays,
-                ),
-            now: clock.now(),
-          })
-            .then((removed) =>
-              logger.info(
-                { cron: 'retention', binaryArtifacts: removed },
-                'artifact retention sweep complete',
-              ),
-            )
-            .catch((error) =>
-              logger.error(
-                { cron: 'retention', err: errInfo(error) },
-                'artifact retention sweep failed',
-              ),
-            ),
-        )
-      }
+      runDailyRetentionSweeps(env, ctx, clock)
       return
     }
 
     // Frequent pass (every 2 min): time-sensitive backstops.
-    // Re-drive any agent run — execution OR bootstrap — whose Workflows instance
-    // died. One sweep over the unified agent_runs table dispatches by kind.
-    if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
-      const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
-      const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
-      const repairLookup = env.ENV_CONFIG_REPAIR_WORKFLOW
-        ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW)
-        : null
-      const execRunner = env.EXECUTION_WORKFLOW
-        ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
-        : null
-      const bootRunner = env.BOOTSTRAP_WORKFLOW
-        ? new WorkflowsBootstrapRunner(env.BOOTSTRAP_WORKFLOW)
-        : null
-      const repairRunner = env.ENV_CONFIG_REPAIR_WORKFLOW
-        ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
-        : null
-      ctx.waitUntil(
-        sweepStuckRuns({
-          agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
-          instanceState: (ref) => {
-            const lookup =
-              ref.kind === 'bootstrap'
-                ? bootLookup
-                : ref.kind === 'env-config-repair'
-                  ? repairLookup
-                  : execLookup
-            // No binding for this kind → can't classify, so treat as alive (skip).
-            return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
-          },
-          redrive: async (ref) => {
-            if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
-            else if (ref.kind === 'env-config-repair')
-              await repairRunner?.startRun(ref.workspaceId, ref.id)
-            else await execRunner?.startRun(ref.workspaceId, ref.id)
-          },
-          // The durable instance is terminal and can't be recreated → finalize the
-          // run as stopped so it stops showing `running` forever (also reclaims any
-          // leftover container). Reuses the same stop path the user-facing button hits.
-          finalizeOrphan: async (ref) => {
-            const container = buildContainer(env)
-            const reason =
-              'The run was stopped automatically: its durable driver ended without finalizing it.'
-            if (ref.kind === 'bootstrap') {
-              if (container.bootstrap) {
-                await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
-                  reason,
-                  kind: 'unknown',
-                })
-              }
-            } else if (ref.kind === 'env-config-repair') {
-              if (container.envConfigRepair) {
-                await container.envConfigRepair.service.stop(ref.workspaceId, ref.id, {
-                  reason,
-                  kind: 'unknown',
-                })
-              }
-            } else {
-              await container.executionService.stopRun(ref.workspaceId, ref.id, {
-                reason,
-                kind: 'unknown',
-              })
-            }
-          },
-          // An execution whose instance stays missing past this deadline is failed
-          // `stalled` rather than re-created forever (symmetric with the Node sweeper).
-          failStalled: async (ref) => {
-            const container = buildContainer(env)
-            await container.executionService.failRun(
-              ref.workspaceId,
-              ref.id,
-              'Run stalled: its durable driver was lost and automatic recovery could not resume it.',
-              'stalled',
-              null,
-            )
-          },
-          clock,
-          leaseMs: SWEEP_LEASE_MS,
-          hardStallMs: SWEEP_HARD_STALL_MS,
-          orphanedSince: runSweepOrphanedSince,
-        })
-          // Surface what the sweep did — the key signal for "are runs getting stuck?"
-          // Only log when it actually acted.
-          .then(({ redriven, finalized, stalled }) => {
-            if (redriven > 0 || finalized > 0 || stalled > 0) {
-              logger.warn({ cron: 'run-sweeper', redriven, finalized, stalled }, 'swept stuck runs')
-            }
-          })
-          .catch((error) =>
-            logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
-          ),
-      )
-    }
-
-    // Env-test self-tests live in their own table (not agent_runs), so the unified run
-    // sweep above never sees them — this sibling sweep re-drives a run whose Workflows
-    // instance was lost and finalizes (cleanup + failed) one whose instance is terminal.
-    if (env.ENV_TEST_WORKFLOW) {
-      const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
-      const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
-      ctx.waitUntil(
-        sweepStuckEnvTests({
-          repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
-          instanceState: (runId) => envTestLookup.instanceState(runId),
-          redrive: (workspaceId, runId) => envTestRunner.startRun(workspaceId, runId),
-          finalizeOrphan: async (workspaceId, runId) => {
-            const container = buildContainer(env)
-            await container.environments?.environmentTest?.expire(
-              workspaceId,
-              runId,
-              'The environment test was stopped automatically: its durable driver ended without finalizing it.',
-            )
-          },
-          clock,
-          leaseMs: SWEEP_LEASE_MS,
-        })
-          .then(({ redriven, finalized }) => {
-            if (redriven > 0 || finalized > 0) {
-              logger.warn(
-                { cron: 'env-test-sweeper', redriven, finalized },
-                'swept stuck env-test runs',
-              )
-            }
-          })
-          .catch((error) =>
-            logger.error(
-              { cron: 'env-test-sweeper', err: errInfo(error) },
-              'env-test sweep failed',
-            ),
-          ),
-      )
-    }
-
-    // Reclaim expired personal-credential activations (individual-usage subscriptions).
-    // Each is a short-lived, system-encrypted per-run copy of a user's token; the TTL
-    // bounds standing exposure and a finished run's rows are deleted at completion, but
-    // this backstop also clears any that outlived their TTL. The table always exists.
-    {
-      const activations = new D1SubscriptionActivationRepository({ db: env.DB })
-      ctx.waitUntil(
-        activations
-          .deleteExpired(clock.now())
-          .then((reclaimed) => {
-            if (reclaimed > 0)
-              logger.info({ cron: 'activation-sweeper', reclaimed }, 'reclaimed activations')
-          })
-          .catch((error) =>
-            logger.error(
-              { cron: 'activation-sweeper', err: errInfo(error) },
-              'activation sweep failed',
-            ),
-          ),
-      )
-    }
-
-    // Instance-level container reaper: kill any per-run container that outlived its
-    // legitimate maximum lifetime. This is the load-bearing backstop the run-record
-    // nets miss — a terminal run whose container survived, or a stuck-`running` run
-    // a live driver keeps warm (so its idle sleep clock never starts). Keys off the
-    // real live-container inventory, not the run record, and kills via the same
-    // EXEC_CONTAINER binding (no Cloudflare API token). With normal runs now self-
-    // reclaiming, a reaped container is a genuine leak — the registry logs each loudly.
-    if (env.EXEC_CONTAINER) {
-      const reaper = new ContainerInstanceRegistry(
-        env.EXEC_CONTAINER,
-        new D1LiveContainerRepository({ db: env.DB }),
-        clock,
-      )
-      const maxAgeMs = loadConfig(env).execution.containerMaxAgeMs
-      ctx.waitUntil(
-        reaper
-          .reapStaleBefore(clock.now() - maxAgeMs)
-          .then(({ reaped }) => {
-            if (reaped > 0)
-              logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
-          })
-          .catch((error) =>
-            logger.error(
-              { cron: 'container-reaper', err: errInfo(error) },
-              'container reap failed',
-            ),
-          ),
-      )
-    }
-
-    // Escalate long-waiting notifications yellow → red (every 2 min). Runs no longer
-    // time out waiting for a human, so the escalating notification — past each
-    // workspace's `waitingEscalationMinutes` threshold — is the overdue-human signal.
-    ctx.waitUntil(
-      escalateStaleNotifications(buildContainer(env), clock.now())
-        .then((escalated) => {
-          if (escalated > 0)
-            logger.info({ cron: 'notification-escalation', escalated }, 'escalated notifications')
-        })
-        .catch((error) =>
-          logger.error(
-            { cron: 'notification-escalation', err: errInfo(error) },
-            'notification escalation failed',
-          ),
-        ),
-    )
-
-    // Fire any due recurring pipelines (every 2 min; the actual cadence is hours).
-    // Each due schedule starts its pipeline against its reused block, skipping any
-    // whose block already has an active run. No-op when the feature isn't wired.
-    ctx.waitUntil(
-      Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now()))
-        .then((result) => {
-          if (result && (result.fired > 0 || result.skipped > 0)) {
-            logger.info({ cron: 'recurring-pipelines', ...result }, 'fired recurring pipelines')
-          }
-        })
-        .catch((error) =>
-          logger.error(
-            { cron: 'recurring-pipelines', err: errInfo(error) },
-            'recurring-pipeline sweep failed',
-          ),
-        ),
-    )
-
-    // Tick the initiative execution loop (every 2 min): reconcile each executing initiative's
-    // spawned tasks and spawn the next wave up to its concurrency cap. Terminal child runs poke
-    // the loop directly, so this is the backstop cadence. No-op when initiatives aren't wired.
-    ctx.waitUntil(
-      Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now()))
-        .then((result) => {
-          if (result && (result.spawned > 0 || result.completed > 0)) {
-            logger.info({ cron: 'initiative-loop', ...result }, 'ticked initiative loop')
-          }
-        })
-        .catch((error) =>
-          logger.error(
-            { cron: 'initiative-loop', err: errInfo(error) },
-            'initiative-loop sweep failed',
-          ),
-        ),
-    )
-
-    // Run any pending Kaizen gradings (every 2 min): the engine only inserts `scheduled`
-    // rows at run completion, so this background pass does the actual LLM grading (and
-    // re-drives `running` rows orphaned by a crashed sweep). Bounded per pass to stay
-    // within the cron budget; no-op when the Kaizen feature isn't wired. The grader's
-    // model is resolved per-workspace (Model Configuration), so this is workspace-wide.
-    if (!kaizenSweeping) {
-      kaizenSweeping = true
-      ctx.waitUntil(
-        Promise.resolve(
-          buildContainer(env).kaizen?.service.runPending(
-            clock.now() - KAIZEN_STALE_MS,
-            KAIZEN_SWEEP_BATCH,
-          ),
-        )
-          .then((processed) => {
-            if (processed && processed > 0)
-              logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
-          })
-          .catch((error) =>
-            logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
-          )
-          .finally(() => {
-            kaizenSweeping = false
-          }),
-      )
-    }
-
-    // Reconcile GitHub projections that may have missed a webhook (no-op unless
-    // the integration is configured).
-    ctx.waitUntil(
-      reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS)
-        .then((scheduled) => {
-          if (scheduled > 0)
-            // `sweep:` (not `cron:`) so the summary shares a field with the pass's
-            // per-repo lines, which the shared reconcile core emits on both facades.
-            logger.info({ sweep: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
-        })
-        .catch((error) =>
-          logger.error(
-            { sweep: 'github-reconcile', err: errInfo(error) },
-            'github reconcile failed',
-          ),
-        ),
-    )
-
-    // Tear down ephemeral environments whose TTL has elapsed (no-op unless the
-    // environment integration is configured).
-    ctx.waitUntil(
-      sweepExpiredEnvironments(env, clock).catch((error) =>
-        logger.error({ cron: 'env-sweeper', err: errInfo(error) }, 'environment sweep failed'),
-      ),
-    )
-
-    // Push deployment-level (platform-operator) observability aggregates to the OTLP
-    // endpoint as OpenTelemetry gauge metrics, once per cron tick. Opt-in on top of the base
-    // OTel exporter (OTEL_PLATFORM_METRICS); a no-op otherwise. Per account, enumerated from
-    // the workspace projection — the same `listVisible(null)` shape the artifact sweep uses.
-    // The container (hence the platform-observability read) is built only when opted in.
-    {
-      const otel = loadConfig(env).otel
-      const sweep = runPlatformMetricsSweep({
-        otel,
-        platformObservability: otel.platformMetrics.enabled
-          ? buildContainer(env).platformObservability
-          : undefined,
-        workspaceRepository: new D1WorkspaceRepository({ db: env.DB }),
-        logger,
-      })
-      if (sweep) ctx.waitUntil(sweep)
-    }
-
-    // Raise/clear `platform_health` notifications when the deployment's OWN run health crosses
-    // an operator threshold, per account (the push counterpart to the operator dashboard read).
-    // Opt-in (`PLATFORM_ALERTS`); the container (hence the platform-observability read) is built
-    // only when opted in so a deployment that hasn't opted in pays nothing.
-    if (loadConfig(env).platformAlerts.enabled) {
-      ctx.waitUntil(
-        sweepPlatformHealth(buildContainer(env), logger)
-          .then(({ raised, cleared }) => {
-            if (raised > 0 || cleared > 0)
-              logger.info({ cron: 'platform-health', raised, cleared }, 'platform health sweep')
-          })
-          .catch((error) =>
-            logger.error(
-              { cron: 'platform-health', err: errInfo(error) },
-              'platform health sweep failed',
-            ),
-          ),
-      )
-    }
+    redriveStuckAgentRuns(env, ctx, clock)
+    redriveStuckEnvTests(env, ctx, clock)
+    reclaimExpiredActivations(env, ctx, clock)
+    reapStaleContainers(env, ctx, clock)
+    runPeriodicBackstops(env, ctx, clock)
   },
 
   async queue(
