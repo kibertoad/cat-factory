@@ -324,13 +324,39 @@ function mergeEffort(result: AgentResult, effortReport: EffortReport | undefined
 
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
-  // Private-registry auth first, before any mode runs: every mode with a checkout may
-  // install dependencies (the agent's own shell and the frontend-infra stand-up both
-  // inherit `HOME`, so they all read the written ~/.npmrc). A job with no entries
-  // clears any stale ~/.npmrc from a prior job on a reused (warm-pool) container.
-  await configurePackageRegistries(job.packageRegistries)
-  if (job.mode === 'preview') return runPreviewMode(job, opts)
-  return job.mode === 'coding' ? runCodingMode(job, opts) : runExploreMode(job, opts)
+  // An `ambientAuth` job runs in the SHARED native host process on the developer's own HOME
+  // (see `LocalProcessRunnerTransport`), so anything this job would otherwise write to a
+  // process- or HOME-global gets a per-job directory instead — it can't corrupt the
+  // developer's files, and concurrent jobs can't race on them.
+  const scopeDir = job.ambientAuth ? await mkdtemp(join(tmpdir(), 'cf-jobenv-')) : undefined
+  try {
+    // Private-registry auth first, before any mode runs: every mode with a checkout may
+    // install dependencies (the agent's own shell and the frontend-infra stand-up both
+    // inherit this env, so they all read the written npmrc). In a container a job with no
+    // entries clears any stale ~/.npmrc from a prior job on a reused (warm-pool) container.
+    const registryEnv = await configurePackageRegistries(
+      job.packageRegistries,
+      scopeDir ? { isolatedDir: scopeDir } : {},
+    )
+    const scoped = withAgentEnv(opts, registryEnv)
+    if (job.mode === 'preview') return await runPreviewMode(job, scoped)
+    return job.mode === 'coding'
+      ? await runCodingMode(job, scoped)
+      : await runExploreMode(job, scoped)
+  } finally {
+    if (scopeDir) await rm(scopeDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+/**
+ * Layer extra child-process env onto a job's {@link RunOptions}. The agent CLI is spawned with
+ * `{...process.env, ...agentEnv}`, so this is how per-job values reach the agent (and the shell
+ * tools it spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every
+ * concurrent job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
+ */
+function withAgentEnv(opts: RunOptions, env: Record<string, string>): RunOptions {
+  if (Object.keys(env).length === 0) return opts
+  return { ...opts, agentEnv: { ...opts.agentEnv, ...env } }
 }
 
 /**
@@ -423,27 +449,22 @@ async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
 }
 
 /**
- * Inject the tester's sensitive secrets into the PROCESS environment so the agent's shell tools
- * (spawned as child processes that inherit this env) can read `$KEY` — the out-of-band delivery
- * channel. Each value is registered for redaction so it can't leak into captured output/logs.
- * Returns a restore closure that puts the environment back afterward (warm-pool hygiene, so a
- * later job on a reused container never inherits a prior run's secrets). Reserved/toolchain env
- * names were already dropped at parse. A no-op when there are no secrets.
+ * Build the env carrying the tester's sensitive secrets, so the agent's shell tools (spawned as
+ * child processes that inherit it) can read `$KEY` — the out-of-band delivery channel. Each value
+ * is registered for redaction so it can't leak into captured output/logs. Reserved/toolchain env
+ * names were already dropped at parse. No secrets ⇒ an empty env.
+ *
+ * Returned as EXPLICIT child env rather than written onto `process.env`: a process-global
+ * set/restore is only safe when the process runs one job, which the native host-process transport
+ * breaks (it serves every concurrent ambient job from one process). There, two overlapping tester
+ * runs would read each other's secrets, and whichever finished first would delete the other's
+ * mid-run. Scoping them to the spawn env makes the delivery correct under concurrency and drops
+ * the restore step entirely.
  */
-function applyTestSecrets(secrets: TestSecretSpec[] | undefined): () => void {
-  if (!secrets?.length) return () => {}
+export function testSecretEnv(secrets: TestSecretSpec[] | undefined): Record<string, string> {
+  if (!secrets?.length) return {}
   registerKnownSecrets(secrets.map((s) => s.value))
-  const previous = new Map<string, string | undefined>()
-  for (const { key, value } of secrets) {
-    previous.set(key, process.env[key])
-    process.env[key] = value
-  }
-  return () => {
-    for (const [key, prior] of previous) {
-      if (prior === undefined) delete process.env[key]
-      else process.env[key] = prior
-    }
-  }
+  return Object.fromEntries(secrets.map(({ key, value }) => [key, value]))
 }
 
 /**
@@ -553,10 +574,10 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         ? { infraSetup: managed.record }
         : {}
 
-      // Inject the tester's sensitive secrets into the environment (out of band) so the agent's
-      // shell can read them as `$KEY`; restore afterwards so a reused (warm-pool) container never
-      // leaks them to a later job. A no-op for non-tester runs (no `testSecrets`).
-      const restoreSecrets = applyTestSecrets(job.testSecrets)
+      // Hand the tester's sensitive secrets to the agent's child process (out of band) so its
+      // shell can read them as `$KEY`. Scoped to this job's env, so a concurrent job in the same
+      // harness process never sees them. A no-op for non-tester runs (no `testSecrets`).
+      const agentOpts = withAgentEnv(opts, testSecretEnv(job.testSecrets))
 
       try {
         opts.onPhase?.('agent')
@@ -590,7 +611,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             contextFiles: job.contextFiles,
             guardLimits: job.guardLimits,
           },
-          opts,
+          agentOpts,
         )
 
         return mergeEffort(
@@ -602,7 +623,6 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           effortReport,
         )
       } finally {
-        restoreSecrets()
         if (managed) await managed.cleanup()
       }
     },

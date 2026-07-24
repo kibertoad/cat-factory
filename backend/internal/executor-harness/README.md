@@ -65,6 +65,32 @@ Bootstrap differs at the ends — it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+## Per-job state: never a process- or HOME-global
+
+A job's staging state (the tester's secrets, private-registry auth, a repo-sourced Claude
+Skill) must be scoped to that job, not written into `process.env` or the home directory.
+
+In a container those two ARE per-job — one job per process, and `HOME` belongs to that
+container — so a global was a safe place to stage. The **local native transport** breaks both
+assumptions: one long-lived host process serves every concurrent `ambientAuth` job, on the
+**developer's own home**. A global there is shared mutable state across siblings, and writing
+(or clearing) a dotfile destroys a file the developer owns.
+
+So per-job values ride explicit **child env** (`RunOptions.agentEnv` →
+`SubscriptionRunOptions.extraEnv`, merged over the inherited env at spawn) and per-job files go
+under a per-job directory:
+
+| State                | Container                                    | Native (`ambientAuth`)                                                    |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| Tester secrets       | child env                                    | child env (same path — the old `process.env` set/restore is gone)         |
+| Private-registry auth | `~/.npmrc`; cleared when a job has no entries | per-job `.npmrc` + `npm_config_userconfig`, seeded from the developer's; theirs is never written or removed |
+| Repo-sourced Claude Skill | installed into the isolated `CLAUDE_CONFIG_DIR` | not installed — read from the checkout's `.cat-context/skill/`, like codex |
+
+When you add per-job state, put it in one of those two places. `~/.pi/*` and
+`~/.config/rpiv-web-tools` remain HOME-global, which is fine only because the Pi harness never
+runs natively (the native router sends `ambientAuth` jobs — Claude/Codex only — to the host
+process and everything else to a container).
+
 ## No secrets in the image
 
 The image (built from the `Dockerfile`, base `node:26-trixie-slim`) contains
@@ -86,6 +112,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
+| `src/package-registries.ts` | Private-registry (npm) auth: renders the job's allowlisted entries into an npmrc — the user `~/.npmrc` in a container, a per-job file pointed at by `npm_config_userconfig` for a native job. |
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`) — talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/logger.ts`    | Structured logging.                                                                                     |

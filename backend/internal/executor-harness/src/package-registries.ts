@@ -1,20 +1,39 @@
-import { chmod, rm, writeFile } from 'node:fs/promises'
+import { chmod, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { PackageRegistrySpec } from './job.js'
 import { registerKnownSecrets } from './redact.js'
 
 // Private package-registry auth for the checkout's installs (npm private orgs,
-// GitHub Packages). The job's allowlisted entries are rendered into the USER
-// `~/.npmrc` — read by npm, pnpm and yarn v1 alike, and inherited by every child
-// process (the agent's own shell installs and the frontend-infra stand-up's) — so
-// the token never rides argv or the checkout. Written per job; a job with NO
-// entries removes any stale file, because warm-pool containers are reused across
-// jobs and must not leak a prior workspace's token.
+// GitHub Packages). The job's allowlisted entries are rendered into an npmrc — read by
+// npm, pnpm and yarn v1 alike, and inherited by every child process (the agent's own
+// shell installs and the frontend-infra stand-up's) — so the token never rides argv or
+// the checkout.
+//
+// WHERE that npmrc lands depends on whether the harness process owns its HOME:
+//   - container (the default): the user `~/.npmrc`. HOME belongs to that one container, so
+//     writing it is safe and a job with NO entries CLEARS it — warm-pool containers are
+//     reused across jobs and must not leak a prior workspace's token.
+//   - shared native host process (`ambientAuth`, the local native transport): HOME is the
+//     DEVELOPER's. Writing there would overwrite their own npm config, clearing there would
+//     DELETE it, and concurrent jobs in the one process would race on the single file. Such a
+//     job gets its own npmrc under a per-job directory instead, pointed at by
+//     `npm_config_userconfig`; the developer's file is never written and never removed.
 
-/** Where the per-job npm auth lands (the user npmrc, outside any checkout). */
+/** Where the per-job npm auth lands in a container (the user npmrc, outside any checkout). */
 export function npmrcPath(): string {
   return join(homedir(), '.npmrc')
+}
+
+/**
+ * Per-job isolation for the rendered npmrc. Set `isolatedDir` when the harness process is
+ * SHARED across concurrent jobs and its HOME is the developer's own — i.e. the local native
+ * host-process transport, which is exactly the set of jobs carrying `ambientAuth`. Absent ⇒
+ * the container default (`~/.npmrc`).
+ */
+export interface PackageRegistryScope {
+  /** A per-job directory (removed with the job) to hold this job's npmrc. */
+  isolatedDir?: string
 }
 
 /**
@@ -39,20 +58,53 @@ export function renderNpmrc(entries: readonly PackageRegistrySpec[]): string {
 }
 
 /**
- * Write (or clear) the per-job `~/.npmrc` before the agent runs. Tokens are
- * registered for output redaction so a token echoed in an npm error never reaches
+ * Write (or clear) the job's npmrc before the agent runs, and return the env the agent's child
+ * process needs to find it (empty for the container default, which npm picks up from HOME).
+ * Tokens are registered for output redaction so a token echoed in an npm error never reaches
  * logs or stored output.
  */
 export async function configurePackageRegistries(
   entries: readonly PackageRegistrySpec[] | undefined,
-): Promise<void> {
-  const path = npmrcPath()
-  if (!entries || entries.length === 0) {
-    await rm(path, { force: true })
-    return
+  scope: PackageRegistryScope = {},
+): Promise<Record<string, string>> {
+  const hasEntries = Boolean(entries?.length)
+  if (scope.isolatedDir) {
+    // A job with no entries needs no file at all: emitting no override leaves the developer's
+    // own `~/.npmrc` in effect (their private registries keep working) — and, crucially, leaves
+    // it ALONE. Clearing a stale file is a container concern; here nothing stale can exist,
+    // because the per-job dir is created and removed with the job.
+    if (!hasEntries) return {}
+    const path = join(scope.isolatedDir, '.npmrc')
+    await writeIsolatedNpmrc(path, entries!)
+    return { npm_config_userconfig: path }
   }
-  registerKnownSecrets(entries.map((entry) => entry.token))
-  await writeFile(path, renderNpmrc(entries), { mode: 0o600 })
+  const path = npmrcPath()
+  if (!hasEntries) {
+    await rm(path, { force: true })
+    return {}
+  }
+  registerKnownSecrets(entries!.map((entry) => entry.token))
+  await writeFile(path, renderNpmrc(entries!), { mode: 0o600 })
   // writeFile's mode only applies on create — tighten an existing file too.
+  await chmod(path, 0o600)
+  return {}
+}
+
+/**
+ * Write the per-job npmrc, seeded from the developer's own `~/.npmrc` when they have one so
+ * their unrelated settings (a corporate registry, a proxy) keep working for this run. The job's
+ * lines are APPENDED, and npm resolves the last occurrence of a key, so the job's entries win on
+ * any host they both configure. Copying their file into a 0600 temp adds no exposure: an ambient
+ * run already has the developer's full file access by definition.
+ */
+async function writeIsolatedNpmrc(
+  path: string,
+  entries: readonly PackageRegistrySpec[],
+): Promise<void> {
+  registerKnownSecrets(entries.map((entry) => entry.token))
+  // Best-effort: no personal npmrc (or an unreadable one) just means the job's entries stand alone.
+  const inherited = await readFile(npmrcPath(), 'utf8').catch(() => '')
+  const prefix = inherited && !inherited.endsWith('\n') ? `${inherited}\n` : inherited
+  await writeFile(path, `${prefix}${renderNpmrc(entries)}`, { mode: 0o600 })
   await chmod(path, 0o600)
 }
