@@ -44,7 +44,7 @@ import {
 import {
   classifyHumanReview,
   isApproved,
-  outstandingComments,
+  outstandingConversation,
   outstandingThreads,
   requiredApprovals,
 } from './review.logic.js'
@@ -627,11 +627,22 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
     // escalate it the longer it waits. A grace-window wait (comments present) needs no card.
     const awaitingApproval =
       outstandingThreads(snapshot).length === 0 &&
-      outstandingComments(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
+      outstandingConversation(snapshot, gateState.lastAddressedCommentAt).length === 0 &&
       !isApproved(snapshot)
     if (awaitingApproval) {
       await raiseHumanReviewCard((block) => {
         const title = block?.title ?? 'this task'
+        // A standing CHANGES_REQUESTED with no actionable text (no summary body, no threads, no
+        // comments) can't be auto-fixed — tell the human a review happened and blocks the merge,
+        // rather than the misleading "awaiting review / assign a reviewer" (a review DID happen).
+        if (snapshot.changesRequested) {
+          return {
+            title: `Changes requested on "${title}"`,
+            body:
+              'A reviewer requested changes on the PR but left no actionable comment for the ' +
+              'fixer to address. Review the request on GitHub, or request a fix here.',
+          }
+        }
         // "No reviewer" only when nobody is assigned AND nobody has approved yet — a reviewer who
         // approves is removed from the requested-reviewer list, so `assignedReviewers` alone would
         // wrongly tell the user to assign a reviewer who already signed off (e.g. 1 of 2 approvals

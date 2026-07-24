@@ -499,10 +499,14 @@ export class FetchGitLabClient implements VcsClient {
     const approvedBy =
       ((json ?? {}) as { approved_by?: Array<{ user?: { username?: string } | null }> })
         .approved_by ?? []
-    return approvedBy
-      .map((a) => a.user?.username ?? '')
-      .filter(Boolean)
-      .map((author) => ({ author, state: 'APPROVED', submittedAt: 0, commitId: null }))
+    return (
+      approvedBy
+        .map((a) => a.user?.username ?? '')
+        .filter(Boolean)
+        // GitLab's approvals API models only current approvers (no change-requests, no review
+        // summary body), so each maps to a bodyless standing APPROVED review.
+        .map((author) => ({ author, state: 'APPROVED', body: '', submittedAt: 0, commitId: null }))
+    )
   }
 
   async getRequiredApprovingReviewCount(

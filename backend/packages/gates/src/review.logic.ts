@@ -35,9 +35,14 @@ export function requiredApprovals(snapshot: PullRequestReviewSnapshot): number {
   return Math.max(1, snapshot.requiredApprovingReviewCount)
 }
 
-/** Whether the PR meets the required number of assigned-reviewer approvals. */
+/**
+ * Whether the PR is approved AND clear to advance: it meets the required number of approvals AND
+ * no reviewer has a standing CHANGES_REQUESTED. GitHub blocks a merge while a change request
+ * stands even when the required approval count is met by OTHER reviewers, so the gate must not
+ * advance on it either — otherwise it would sign off a PR GitHub itself would refuse to merge.
+ */
 export function isApproved(snapshot: PullRequestReviewSnapshot): boolean {
-  return snapshot.approvals >= requiredApprovals(snapshot)
+  return snapshot.approvals >= requiredApprovals(snapshot) && !snapshot.changesRequested
 }
 
 /**
@@ -50,13 +55,22 @@ export function outstandingThreads(snapshot: PullRequestReviewSnapshot): ReviewT
   return snapshot.unresolvedThreads.filter((t) => !t.isBot)
 }
 
-/** Plain conversation comments not yet handed to the fixer (newer than the last addressed). */
-export function outstandingComments(
+/**
+ * Non-bot conversational feedback not yet handed to the fixer (newer than the last addressed):
+ * plain PR comments PLUS the non-approving review SUMMARY bodies (a CHANGES_REQUESTED / COMMENTED
+ * review's top-level text — reviewer feedback that carries no inline thread). Both are low-signal
+ * and cursor-gated in the same way, so the gate treats them as one outstanding-comment set;
+ * merging them here is what lets a "Request changes" with only a summary body reach the fixer
+ * instead of stalling the run on an approval the reviewer will never give.
+ */
+export function outstandingConversation(
   snapshot: PullRequestReviewSnapshot,
   lastAddressedCommentAt: number | null | undefined,
 ): PullRequestComment[] {
   const since = lastAddressedCommentAt ?? 0
-  return snapshot.comments.filter((c) => !c.isBot && c.createdAt > since)
+  return [...snapshot.comments, ...snapshot.reviewSummaries]
+    .filter((c) => !c.isBot && c.createdAt > since)
+    .sort((a, b) => a.createdAt - b.createdAt)
 }
 
 /** The newest "comment" timestamp across the outstanding threads + plain comments (for grace). */
@@ -87,7 +101,7 @@ export function renderReviewFeedbackForFixer(
     lines.push('')
   }
   if (comments.length > 0) {
-    lines.push('PR comments:')
+    lines.push('Reviewer comments:')
     for (const c of comments) lines.push(`- ${c.author || 'reviewer'}: ${c.body}`)
     lines.push('')
   }
@@ -104,11 +118,14 @@ export function renderReviewFeedbackForFixer(
  *       otherwise wait (let the reviewer finish a series of comments before churning the branch).
  *  4. Not approved + nothing outstanding → wait (the reviewer hasn't acted / hasn't approved).
  *
- * Plain conversation comments are LOW-signal, so they count as actionable only while the PR is
- * NOT yet approved (the reviewer is still iterating and may drop an instruction in the thread).
- * Once approved, only explicit unresolved review THREADS trigger a fix — a casual "lgtm"/"thanks"
+ * Conversational feedback — plain PR comments AND non-approving review summary bodies (a
+ * CHANGES_REQUESTED / COMMENTED review's top-level text; see {@link outstandingConversation}) —
+ * is LOW-signal, so it counts as actionable only while the PR is NOT yet approved (the reviewer
+ * is still iterating and may drop an instruction in a comment or a change-request summary). Once
+ * approved, only explicit unresolved review THREADS trigger a fix — a casual "lgtm"/"thanks"
  * after sign-off must never churn the branch with a pointless fixer round. A human can always
- * force a change post-approval via the freeform request-fix control.
+ * force a change post-approval via the freeform request-fix control. (A standing CHANGES_REQUESTED
+ * keeps the PR NOT approved via {@link isApproved}, so its summary stays actionable.)
  */
 export function classifyHumanReview(
   snapshot: PullRequestReviewSnapshot,
@@ -120,7 +137,9 @@ export function classifyHumanReview(
   }
   const threads = outstandingThreads(snapshot)
   const approved = isApproved(snapshot)
-  const comments = approved ? [] : outstandingComments(snapshot, gateState.lastAddressedCommentAt)
+  const comments = approved
+    ? []
+    : outstandingConversation(snapshot, gateState.lastAddressedCommentAt)
   const hasOutstanding = threads.length > 0 || comments.length > 0
 
   if (!hasOutstanding) {
