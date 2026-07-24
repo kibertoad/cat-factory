@@ -1,7 +1,6 @@
 import type {
   BlockRepository,
   ObservabilityConnectionRepository,
-  ObservabilityProviderKind,
   ReleaseEvidence,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
@@ -10,6 +9,7 @@ import type {
   ReleaseSignal,
   SecretCipher,
 } from '@cat-factory/kernel'
+import type { ObservabilityProviderRegistry } from './registry.js'
 
 /**
  * A single observability vendor's reads, built from its already-decrypted credentials.
@@ -27,11 +27,6 @@ export type ObservabilityAdapterFactory = (
   credentials: unknown,
   opts: { fetchImpl?: typeof fetch },
 ) => ObservabilityAdapter
-
-/** The set of observability providers a facade can serve. */
-export type ObservabilityProviderRegistry = Partial<
-  Record<ObservabilityProviderKind, ObservabilityAdapterFactory>
->
 
 export interface RegistryReleaseHealthProviderDependencies {
   observabilityConnectionRepository: ObservabilityConnectionRepository
@@ -99,7 +94,7 @@ export class RegistryReleaseHealthProvider implements ReleaseHealthProvider {
 
     const connection = await this.deps.observabilityConnectionRepository.get(workspaceId)
     if (!connection) return null
-    const factory = this.deps.registry[connection.provider]
+    const factory = this.deps.registry.get(connection.provider)
     if (!factory) return null
 
     const credentials: unknown = JSON.parse(

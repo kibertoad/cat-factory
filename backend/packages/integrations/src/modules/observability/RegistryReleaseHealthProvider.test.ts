@@ -64,7 +64,7 @@ function makeProvider(
     releaseHealthConfigRepository: configRepo,
     blockRepository: blockRepo,
     secretCipher: identityCipher,
-    registry: defaultObservabilityRegistry,
+    registry: defaultObservabilityRegistry(),
     fetchImpl,
   })
 }
@@ -148,7 +148,7 @@ describe('RegistryReleaseHealthProvider.probe (Datadog adapter)', () => {
           ({ id, parentId: null }) as Block,
       } as unknown as BlockRepository,
       secretCipher: identityCipher,
-      registry: defaultObservabilityRegistry,
+      registry: defaultObservabilityRegistry(),
       fetchImpl: (async () => new Response('{}', { status: 200 })) as unknown as typeof fetch,
     })
     await expect(provider.probe('ws', 'blk', Date.now())).rejects.toThrow()
