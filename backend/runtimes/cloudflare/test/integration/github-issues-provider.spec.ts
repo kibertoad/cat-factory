@@ -22,6 +22,7 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
     provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 0,
     deletedAt: null,
     ...overrides,

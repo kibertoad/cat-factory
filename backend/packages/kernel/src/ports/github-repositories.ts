@@ -48,6 +48,15 @@ export interface GitHubInstallation {
   cachedToken: string | null
   /** Token expiry (epoch ms), or null. */
   tokenExpiresAt: number | null
+  /**
+   * A durable, sealed access credential the connection authenticates with, or null when the
+   * provider mints its own tokens (the GitHub-App path, which keeps its key in env and caches
+   * minted tokens in {@link cachedToken}). Populated for a per-workspace PAT connection — a
+   * hosted GitLab connect seals the user's PAT here (sealed with the deployment `SecretCipher`,
+   * never plaintext) so the per-connection token source can decrypt it at call time. Unlike
+   * {@link cachedToken} this is the long-lived credential, not an ephemeral minted token.
+   */
+  accessToken: string | null
   createdAt: number
   /** Set when the installation is suspended/uninstalled (tombstone). */
   deletedAt: number | null

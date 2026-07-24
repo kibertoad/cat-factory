@@ -39,6 +39,7 @@ function installation(
     appId: null,
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 1,
     deletedAt,
   }

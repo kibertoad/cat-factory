@@ -1,7 +1,13 @@
-import type { Clock, GitHubClient, VcsProviderRegistry } from '@cat-factory/kernel'
+import type {
+  Clock,
+  GitHubClient,
+  GitHubInstallationRepository,
+  SecretCipher,
+  VcsProviderRegistry,
+} from '@cat-factory/kernel'
 import { FetchGitLabClient } from './FetchGitLabClient.js'
 import { GitLabProvisioningClient } from './provisioning.js'
-import { StaticGitLabTokenSource } from './tokenSource.js'
+import { StaticGitLabTokenSource, StoredGitLabTokenSource } from './tokenSource.js'
 import { asGitHubClient } from './vcsBackedGitHubClient.js'
 import { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
 import type { GitLabTokenSource } from './tokenSource.js'
@@ -26,6 +32,7 @@ export { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
 export {
   type GitLabTokenSource,
   StaticGitLabTokenSource,
+  StoredGitLabTokenSource,
   GITLAB_PUBLIC_API_BASE,
 } from './tokenSource.js'
 export * as gitlabProjection from './projection.js'
@@ -84,6 +91,43 @@ export function buildGitLabEngineClient(options: BuildGitLabEngineClientOptions)
       tokenSource: new StaticGitLabTokenSource(options.token, options.apiBase),
       clock: options.clock,
       fetchImpl: options.fetchImpl,
+    }),
+    provider: 'gitlab',
+  })
+}
+
+export interface BuildGitLabConnectClientOptions {
+  /** Reads the per-workspace `github_installations` row carrying the sealed PAT. */
+  installations: GitHubInstallationRepository
+  /** Decrypts the sealed PAT at call time. */
+  cipher: SecretCipher
+  /** REST v4 base for the deployment's GitLab instance. */
+  apiBase: string
+  clock: Clock
+  fetchImpl?: typeof fetch
+  logger?: { warn: (message: string) => void }
+}
+
+/**
+ * Build a GitLab-backed {@link GitHubClient} for the hosted per-workspace PAT connect flow: a
+ * {@link FetchGitLabClient} whose token source ({@link StoredGitLabTokenSource}) resolves and
+ * decrypts each connection's sealed PAT, bridged onto the `GitHubClient` port via
+ * {@link asGitHubClient}. This is the client the `github` module's sync / installation services
+ * read through for a workspace connected via GitLab — routed to per workspace by the
+ * provider-routing client when a GitHub App is also configured. Shared by every hosted facade
+ * so they cannot drift in HOW they build it.
+ */
+export function buildGitLabConnectClient(options: BuildGitLabConnectClientOptions): GitHubClient {
+  return asGitHubClient({
+    vcs: new FetchGitLabClient({
+      tokenSource: new StoredGitLabTokenSource({
+        installations: options.installations,
+        cipher: options.cipher,
+        apiBase: options.apiBase,
+      }),
+      clock: options.clock,
+      fetchImpl: options.fetchImpl,
+      logger: options.logger,
     }),
     provider: 'gitlab',
   })

@@ -10,6 +10,7 @@ export interface GitHubInstallationRow {
   provider: string | null
   cached_token: string | null
   token_expires_at: number | null
+  access_token: string | null
   created_at: number
   deleted_at: number | null
 }
@@ -25,6 +26,7 @@ export function rowToInstallation(row: GitHubInstallationRow): GitHubInstallatio
     provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     cachedToken: row.cached_token,
     tokenExpiresAt: row.token_expires_at,
+    accessToken: row.access_token ?? null,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
@@ -41,6 +43,7 @@ export function installationValues(i: GitHubInstallation): Record<string, unknow
     provider: i.provider,
     cached_token: i.cachedToken,
     token_expires_at: i.tokenExpiresAt,
+    access_token: i.accessToken,
     created_at: i.createdAt,
     deleted_at: i.deletedAt,
   }

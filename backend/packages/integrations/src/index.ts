@@ -10,6 +10,11 @@ export {
   type GitHubSyncServiceDependencies,
 } from './modules/github/GitHubSyncService.js'
 export { WebhookService, type WebhookServiceDependencies } from './modules/github/WebhookService.js'
+export {
+  VcsPatConnectionService,
+  type VcsPatConnectionServiceDependencies,
+} from './modules/vcs/VcsPatConnectionService.js'
+export { syntheticInstallationId } from './modules/vcs/syntheticInstallationId.js'
 export * as githubProjection from './modules/github/projection.logic.js'
 export {
   RepoProvisioningService,

@@ -29,14 +29,20 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   usable `owner/repo/url` per hit. The neutral doc-search box degrades to "no results".
 - **Sub-issues** (`listSubIssues`): GitLab has no parent→child issue hierarchy, so the
   optional method is left unimplemented (the caller degrades gracefully).
-- **Multi-connection / App-style connect flow**: GitLab uses the single-token model (one
-  `GITLAB_TOKEN`/`GITLAB_PAT` per deployment) for the ENGINE's gate/merge/sync, mirroring local
-  mode's PAT. A per-workspace OAuth connect flow with many GitLab connections is future work, not
-  part of this pass. (User **sign-in** is separate and already at parity — a GitLab user pastes
-  their own PAT at `/auth/pat` on any facade; see items 5–6. Admission via any of the three gates
-  works — `AUTH_ALLOWED_LOGINS`, `AUTH_ALLOWED_EMAIL_DOMAINS`, and `AUTH_ALLOWED_ORGS` (matched
-  against GitLab **group** full paths). There is no GitLab OAuth browser flow, so hosted GitLab
-  sign-in is PAT-only, whereas GitHub additionally offers OAuth.)
+- **Per-workspace PAT connect (backend landed; UI + engine-routing pending)**: a workspace can now
+  connect GitLab by pasting a PAT — `POST /workspaces/:ws/gitlab/connection` validates + seals it
+  and writes the `github_installations`/`github_repos` projection (a `github_installations.access_token`
+  column holds the sealed PAT), so **repo browse / link / sync** run per-workspace through the shared
+  GitHub-shaped surface. A `ProviderRoutingGitHubClient` lets a deployment serve GitHub-App and
+  GitLab-PAT workspaces side by side. Still open (deliberately deferred): the connect **UI** (slice 2b
+  of the [gitlab-ui-parity](../../docs/initiatives/gitlab-ui-parity.md) initiative), routing the
+  **engine's gate/merge/RepoFiles** path per-workspace (it still reads through the single-token
+  `GITLAB_TOKEN` engine client, so per-workspace connect is currently gated on that token being set),
+  and an **OAuth** browser connect flow (PAT-only today). (User **sign-in** is separate and already at
+  parity — a GitLab user pastes their own PAT at `/auth/pat` on any facade; see items 5–6. Admission
+  via any of the three gates works — `AUTH_ALLOWED_LOGINS`, `AUTH_ALLOWED_EMAIL_DOMAINS`, and
+  `AUTH_ALLOWED_ORGS` (matched against GitLab **group** full paths). There is no GitLab OAuth browser
+  flow, so hosted GitLab sign-in is PAT-only, whereas GitHub additionally offers OAuth.)
 - **Listing page cap**: `FetchGitLabClient` paginates up to `MAX_PAGES` (~1000 items) and
   `logger.warn`s when truncating — surfaced, not silent. The PAT-login group/org enumeration
   (`GitLabIdentityResolver.resolveOrgs` / `GitHubIdentityResolver.resolveOrgs`) follows the same
