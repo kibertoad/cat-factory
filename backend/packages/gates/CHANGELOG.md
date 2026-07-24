@@ -1,5 +1,29 @@
 # @cat-factory/gates
 
+## 0.7.22
+
+### Patch Changes
+
+- 0e2799e: Close three gaps in the `human-review` PR gate:
+
+  - **Reviewer "Request changes" summaries are no longer ignored.** The gate only reacted to
+    inline review threads and plain conversation comments, so a reviewer who requested changes with
+    their feedback in the review's top-level summary box (no inline line comments) was invisible —
+    the run waited indefinitely for an approval that would never come. The review `body` is now read
+    (`FetchGitHubClient` + the `GitHubPullRequestReview` port), surfaced on the snapshot as
+    `reviewSummaries`, and folded into the gate's outstanding-feedback set so it dispatches the
+    fixer like any other comment.
+  - **A standing `CHANGES_REQUESTED` now blocks advancement** even when the required approval count
+    is met by other reviewers (`PullRequestReviewSnapshot.changesRequested` + `isApproved`), matching
+    GitHub's own merge rule so the gate can't sign off a PR GitHub would refuse to merge.
+  - **Approval reduction is order-independent**: reviews are sorted by `submittedAt` before the
+    "latest standing review per author" reduction, instead of trusting the API's array order.
+
+- Updated dependencies [0e2799e]
+- Updated dependencies [239788a]
+  - @cat-factory/kernel@0.154.2
+  - @cat-factory/contracts@0.160.1
+
 ## 0.7.21
 
 ### Patch Changes
