@@ -176,8 +176,12 @@ FIRST so it can pick the work up without re-deriving context. Capture:
   surfaced (e.g. "keep the runtimes symmetric", ">1 construction site per facade"), so they
   aren't rediscovered the hard way each slice.
 
-The first example is [`docs/initiatives/registry-di-migration.md`](./docs/initiatives/registry-di-migration.md)
-(moving the module-global plugin registries to app-owned DI, one registry at a time).
+The first worked example — the registry-DI migration (moving every module-global plugin
+registry to app-owned DI, one registry at a time) — has run its full lifecycle: it was tracked
+under `docs/initiatives/` and, on completion, converted to
+[`backend/docs/adr/0028-registry-di.md`](./backend/docs/adr/0028-registry-di.md) per the rule
+below. For a tracker still in flight, see
+[`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 
 **When the initiative's committed scope is complete, convert the tracker into an ADR and
 delete the tracker.** The tracker is a working document (per-slice checklist, file lists,

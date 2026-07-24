@@ -789,7 +789,7 @@ export function selectReleaseHealthDeps(
       releaseHealthConfigRepository,
       blockRepository: new D1BlockRepository({ db }),
       secretCipher: observabilitySecretCipher,
-      registry: defaultObservabilityRegistry,
+      registry: defaultObservabilityRegistry(),
     }),
   )
   return {
