@@ -493,94 +493,40 @@ function buildLocalAppConfig(params: {
   }
 }
 
-export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
-  const env = applyLocalDefaults(options.env ?? process.env)
-  // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
-  // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
-  // reads the same workspace settings the rest of the engine does. Created up front because the
-  // mothership-vs-Postgres persistence decision (which needs the clock) is resolved next.
-  const clock = new SystemClock()
-  const idGenerator = new CryptoIdGenerator()
-  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable state
-  // is served remotely (RPC) and credentials stay local (node:sqlite); `repos` is then the
-  // remote (RPC-backed) composite, threaded through the existing NodeContainer seams with `db`
-  // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
-  // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
-  const { mothership, repos } = resolveLocalPersistence(options, env, clock)
-  // The provider-agnostic push/clone token + VCS client + repo-origin resolution (GitHub PAT →
-  // GitLab PAT → mothership-delegated GitHub). Extracted to keep `buildLocalContainer` under the
-  // complexity ceiling.
-  const { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin } =
-    resolveLocalVcs(env, mothership, options)
-  const base = options.config ?? loadNodeConfig(env)
-  // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
-  // creation URL so the SPA can surface it as a dismissible banner — the server-side warn
-  // log alone is easy to miss in a dev terminal. With a PAT, force the GitHub integration
-  // ON: the Node loader only enables it for a configured GitHub App, but local mode reaches
-  // GitHub through the PAT-backed client, so the read/link endpoints (connection, available
-  // repos, "add from existing repo") should be served the same way.
-  // Native local execution (opt-in): run agents as a host process driving the developer's
-  // OWN installed `claude` / `codex` CLI (ambient login), bypassing Docker. The env is the
-  // ALLOW-LIST of subscription harnesses to run natively (`claude-code,codex`); parsed into
-  // a harness set so the executor flags `ambientAuth` ONLY for a listed harness whose vendor
-  // is that CLI's native vendor (Claude/Codex), and the personal-credential gate skips just
-  // those vendors. Default off — the container path is unchanged.
-  const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS, (message) =>
-    logger.warn(message),
-  )
-  const nativeAgents = nativeHarnesses.length > 0
-  // Inline subscription execution (DEFAULT ON, `LOCAL_NATIVE_INLINE`): which subscription
-  // harnesses may serve the INLINE LLM steps (requirements reviewer, brainstorm, task-estimator,
-  // inline document kinds) on the developer's ambient `claude` / `codex` CLI. This is DECOUPLED
-  // from `LOCAL_NATIVE_AGENTS` above: that opt-in governs running whole CONTAINER agents
-  // unsandboxed on the host; an inline step is just a one-shot text call (no repo, no tools), so
-  // running it on the local CLI is benign and defaults on. It is what lets a subscription-only
-  // preset (everything pinned to `claude-opus`/GPT) run its inline reviewers in BOTH local and
-  // mothership mode — both boot through this facade on the developer's machine, so the host CLI
-  // is reachable in either. Off via `LOCAL_NATIVE_INLINE=off`.
-  const inlineHarnesses = parseInlineHarnesses(env.LOCAL_NATIVE_INLINE, (message) =>
-    logger.warn(message),
-  )
-  const inlineAgents = inlineHarnesses.length > 0
-  // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
-  // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
-  // <provider> PAT" button — the only sign-in path, since that env token is also the operational
-  // credential. Advertised on `localMode.patLogin` so the login screen renders the right
-  // buttons, and exposed on the container for the `/auth/pat` endpoint.
-  const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
-  const config: AppConfig = buildLocalAppConfig({
-    base,
-    env,
-    gitToken,
-    delegatedGitHub,
-    nativeAgents,
-    nativeHarnesses,
-    inlineAgents,
-    inlineHarnesses,
-    mothership,
-    configured,
-  })
-
-  // Local mode has no GitHub-App connect flow, so a workspace's installation is conjured
-  // from the PAT on first read (see AutoProvisioningInstallationRepository): the synthetic
-  // row makes `getConnection` report connected and gives the sync service an installation
-  // id to list/link repos under. The PAT account is fetched once and shared across
-  // workspaces (a single developer's token).
-  let accountPromise: Promise<PatAccount> | undefined
-  const resolveAccount = () => (accountPromise ??= fetchPatAccount(env))
-  const githubInstallationRepository =
-    gitToken && options.db
-      ? new AutoProvisioningInstallationRepository(
-          new DrizzleGitHubInstallationRepository(options.db),
-          resolveAccount,
-          deploymentProvider,
-        )
-      : undefined
-
-  const wsSettings = new WorkspaceSettingsService({
-    workspaceSettingsRepository: repos.workspaceSettingsRepository,
-    workspaceRepository: repos.workspaceRepository,
-  })
+/**
+ * Resolve the local facade's runner-transport cluster in one place: the lazily-built serving
+ * container transport (+ its live-reconfigurable local-mode settings service), the native-vs-container
+ * per-job router, the dedicated deploy job client, the runner-pool resolver, the host-docker compose
+ * runtime/preflight seam, and the per-workspace local-vs-pool chooser (`resolveTransport`) + its
+ * start-time `assertAgentBackendConfigured` guard. Extracted verbatim from {@link buildLocalContainer}
+ * to keep the composition root under the function-size ratchet — behaviour is identical. The native
+ * host-process transport is created lazily inside the router, so it is surfaced to the caller's
+ * `onShutdown` via `getNativeProcessTransport` (read at shutdown time) rather than a snapshot.
+ */
+function resolveLocalRunnerTransports(params: {
+  env: NodeJS.ProcessEnv
+  options: NodeContainerOptions
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  repos: ReturnType<typeof resolveLocalPersistence>['repos']
+  wsSettings: WorkspaceSettingsService
+  config: AppConfig
+  clock: SystemClock
+  idGenerator: CryptoIdGenerator
+  nativeAgents: boolean
+}): {
+  resolveTransport: ResolveRunnerTransport
+  resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
+  assertAgentBackendConfigured: (workspaceId: string) => Promise<void>
+  deployJobClient: NodeContainerOptions['deployJobClient']
+  backendRegistries: ReturnType<typeof createBackendRegistries>
+  localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
+  localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
+  localSettingsService: LocalSettingsService | undefined
+  localDeployTransport: ReturnType<typeof buildLocalDeployTransport>
+  getNativeProcessTransport: () => LocalProcessRunnerTransport | undefined
+} {
+  const { env, options, mothership, repos, wsSettings, config, clock, idGenerator, nativeAgents } =
+    params
 
   // The local container transport is constructed LAZILY on first dispatch, so the service
   // still boots to serve the board (and inline kinds) even when no container runtime is up.
@@ -805,6 +751,138 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     }
   }
 
+  return {
+    resolveTransport,
+    resolveContainerTransport,
+    assertAgentBackendConfigured,
+    deployJobClient,
+    backendRegistries,
+    localComposeRuntime,
+    localPreflightProbes,
+    localSettingsService,
+    localDeployTransport,
+    getNativeProcessTransport: () => nativeProcessTransport,
+  }
+}
+
+export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
+  const env = applyLocalDefaults(options.env ?? process.env)
+  // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
+  // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
+  // reads the same workspace settings the rest of the engine does. Created up front because the
+  // mothership-vs-Postgres persistence decision (which needs the clock) is resolved next.
+  const clock = new SystemClock()
+  const idGenerator = new CryptoIdGenerator()
+  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable state
+  // is served remotely (RPC) and credentials stay local (node:sqlite); `repos` is then the
+  // remote (RPC-backed) composite, threaded through the existing NodeContainer seams with `db`
+  // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
+  // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
+  const { mothership, repos } = resolveLocalPersistence(options, env, clock)
+  // The provider-agnostic push/clone token + VCS client + repo-origin resolution (GitHub PAT →
+  // GitLab PAT → mothership-delegated GitHub). Extracted to keep `buildLocalContainer` under the
+  // complexity ceiling.
+  const { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin } =
+    resolveLocalVcs(env, mothership, options)
+  const base = options.config ?? loadNodeConfig(env)
+  // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
+  // creation URL so the SPA can surface it as a dismissible banner — the server-side warn
+  // log alone is easy to miss in a dev terminal. With a PAT, force the GitHub integration
+  // ON: the Node loader only enables it for a configured GitHub App, but local mode reaches
+  // GitHub through the PAT-backed client, so the read/link endpoints (connection, available
+  // repos, "add from existing repo") should be served the same way.
+  // Native local execution (opt-in): run agents as a host process driving the developer's
+  // OWN installed `claude` / `codex` CLI (ambient login), bypassing Docker. The env is the
+  // ALLOW-LIST of subscription harnesses to run natively (`claude-code,codex`); parsed into
+  // a harness set so the executor flags `ambientAuth` ONLY for a listed harness whose vendor
+  // is that CLI's native vendor (Claude/Codex), and the personal-credential gate skips just
+  // those vendors. Default off — the container path is unchanged.
+  const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS, (message) =>
+    logger.warn(message),
+  )
+  const nativeAgents = nativeHarnesses.length > 0
+  // Inline subscription execution (DEFAULT ON, `LOCAL_NATIVE_INLINE`): which subscription
+  // harnesses may serve the INLINE LLM steps (requirements reviewer, brainstorm, task-estimator,
+  // inline document kinds) on the developer's ambient `claude` / `codex` CLI. This is DECOUPLED
+  // from `LOCAL_NATIVE_AGENTS` above: that opt-in governs running whole CONTAINER agents
+  // unsandboxed on the host; an inline step is just a one-shot text call (no repo, no tools), so
+  // running it on the local CLI is benign and defaults on. It is what lets a subscription-only
+  // preset (everything pinned to `claude-opus`/GPT) run its inline reviewers in BOTH local and
+  // mothership mode — both boot through this facade on the developer's machine, so the host CLI
+  // is reachable in either. Off via `LOCAL_NATIVE_INLINE=off`.
+  const inlineHarnesses = parseInlineHarnesses(env.LOCAL_NATIVE_INLINE, (message) =>
+    logger.warn(message),
+  )
+  const inlineAgents = inlineHarnesses.length > 0
+  // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
+  // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
+  // <provider> PAT" button — the only sign-in path, since that env token is also the operational
+  // credential. Advertised on `localMode.patLogin` so the login screen renders the right
+  // buttons, and exposed on the container for the `/auth/pat` endpoint.
+  const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
+  const config: AppConfig = buildLocalAppConfig({
+    base,
+    env,
+    gitToken,
+    delegatedGitHub,
+    nativeAgents,
+    nativeHarnesses,
+    inlineAgents,
+    inlineHarnesses,
+    mothership,
+    configured,
+  })
+
+  // Local mode has no GitHub-App connect flow, so a workspace's installation is conjured
+  // from the PAT on first read (see AutoProvisioningInstallationRepository): the synthetic
+  // row makes `getConnection` report connected and gives the sync service an installation
+  // id to list/link repos under. The PAT account is fetched once and shared across
+  // workspaces (a single developer's token).
+  let accountPromise: Promise<PatAccount> | undefined
+  const resolveAccount = () => (accountPromise ??= fetchPatAccount(env))
+  const githubInstallationRepository =
+    gitToken && options.db
+      ? new AutoProvisioningInstallationRepository(
+          new DrizzleGitHubInstallationRepository(options.db),
+          resolveAccount,
+          deploymentProvider,
+        )
+      : undefined
+
+  const wsSettings = new WorkspaceSettingsService({
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    workspaceRepository: repos.workspaceRepository,
+  })
+
+  // The runner-transport cluster (lazy serving container transport + its live-reconfigurable
+  // local-mode settings service, the native-vs-container router, the deploy job client, the
+  // runner-pool resolver, the host-docker compose/preflight seam, and the per-workspace
+  // local-vs-pool chooser + its start guard). Extracted to keep this composition root under the
+  // function-size ratchet — the native host-process transport is surfaced via a getter so
+  // `onShutdown` reads its current value.
+  const {
+    resolveTransport,
+    resolveContainerTransport,
+    assertAgentBackendConfigured,
+    deployJobClient,
+    backendRegistries,
+    localComposeRuntime,
+    localPreflightProbes,
+    localSettingsService,
+    localDeployTransport,
+    getNativeProcessTransport,
+  } = resolveLocalRunnerTransports({
+    env,
+    options,
+    mothership,
+    repos,
+    wsSettings,
+    config,
+    clock,
+    idGenerator,
+    nativeAgents,
+  })
+
   // The selected runtime decides whether the Tester's LOCAL docker-compose infra (run
   // via Docker-in-Docker) is possible: Docker/Podman/OrbStack/Colima can nest a daemon,
   // Apple `container` (one VM per container) cannot. Surface that capability to the
@@ -946,7 +1024,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         inProcessRunner?.stop()
         mothership.close()
       }
-      await nativeProcessTransport?.shutdown()
+      await getNativeProcessTransport()?.shutdown()
       if (localDeployTransport instanceof LocalProcessRunnerTransport) {
         await localDeployTransport.shutdown()
       }

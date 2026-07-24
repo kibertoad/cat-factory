@@ -6,14 +6,11 @@ import {
   type MergedRecipeDraft,
   type PreflightResult,
   type ProvisioningRecommendation,
-  type ProvisioningSeedDumpCandidate,
   type StackRecipe,
   analystRecipeDraftSchema,
   mergeAnalystRecipeDraft,
-  stackRecipeSchema,
 } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import { useBoardStore } from '~/stores/board'
 import { useExecutionStore } from '~/stores/execution'
 import { useGitHubStore } from '~/stores/github'
@@ -21,7 +18,10 @@ import { useInfraConfigStore } from '~/stores/infraConfig'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { usePreflightsStore } from '~/stores/preflights'
 import { useServicesStore } from '~/stores/services'
-import { useWorkspaceStore } from '~/stores/workspace'
+import type { WizardContext } from '~/stores/environmentWizard/context'
+import { createFlowActions } from '~/stores/environmentWizard/flow'
+import { createRecipeActions } from '~/stores/environmentWizard/recipe'
+import { createSaveActions } from '~/stores/environmentWizard/save'
 
 // The environment setup wizard's cross-step DATA + actions (shared-stacks slice 7). It backs the
 // guided flow — pick a service frame → review the recommended `docker-compose` recipe (detector
@@ -38,6 +38,10 @@ import { useWorkspaceStore } from '~/stores/workspace'
 // here — this store no longer holds a `step` / `STEP_ORDER` / `goToStep`. It is purely the per-frame
 // data+action layer the journey's step components drive; `beginForFrame` seeds it when a step first
 // targets a frame.
+//
+// The cross-step actions live in cohesive factories under `stores/environmentWizard/` (flow /
+// recipe / save) that close over the shared reactive {@link WizardContext} assembled here — a
+// size-only extraction following the `board` store idiom, behaviour is unchanged.
 
 /** The seeded analyst-only pipeline the "run deep analysis" trigger starts against the frame. */
 const ANALYSIS_PIPELINE_ID = 'pl_environment_analysis'
@@ -46,22 +50,6 @@ const ANALYST_AGENT_KIND = 'environment-analyst'
 
 /** The analyst run's lifecycle as the wizard surfaces it. */
 export type AnalysisStatus = 'idle' | 'running' | 'ready' | 'failed'
-
-/** Drop empty arrays / undefined so the persisted recipe stays minimal and schema-valid
- *  (`composeFiles` etc. are `minLength(1)`, so an empty array would 422). */
-function pruneRecipe(recipe: StackRecipe): StackRecipe {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(recipe)) {
-    if (value === undefined || value === null) continue
-    if (Array.isArray(value) && value.length === 0) continue
-    out[key] = value
-  }
-  return out as StackRecipe
-}
-
-function cloneRecipe(recipe: StackRecipe): StackRecipe {
-  return JSON.parse(JSON.stringify(recipe)) as StackRecipe
-}
 
 export const useEnvironmentWizardStore = defineStore('environmentWizard', () => {
   const board = useBoardStore()
@@ -189,254 +177,42 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   )
 
   // ---- Actions ------------------------------------------------------------
-  /**
-   * Clear all per-frame flow state (detection, working recipe, preflight, save, trial). Shared by
-   * `open` and `selectFrame` so re-targeting the wizard at a different frame can't leave a prior
-   * frame's `saved`/`composeService`/`exposedPort`/results behind (which would make an unsaved
-   * frame render the green "saved" confirmation + offer a trial provision).
-   */
-  function resetFlowState() {
-    detecting.value = false
-    detectError.value = false
-    recommendation.value = null
-    analysisRequested.value = false
-    analysisError.value = false
-    recipe.value = {}
-    composeService.value = ''
-    preflightRunning.value = false
-    preflightResults.value = null
-    preflightError.value = null
-    handlerLabel.value = 'Docker Compose'
-    exposedPort.value = 80
-    saving.value = false
-    saveError.value = null
-    saved.value = false
-    trialing.value = false
-    trialError.value = null
-    trialStarted.value = false
+  // The cross-step actions are split into cohesive factories sharing the reactive context above (a
+  // size-only extraction — behaviour is identical to the former in-closure functions). The internal
+  // `resetFlowState` / `seedFromMerged` helpers stay private to the flow factory (they were never
+  // part of the public store shape).
+  const context: WizardContext = {
+    board,
+    github,
+    infra,
+    execution,
+    preflights,
+    frameId,
+    detecting,
+    detectError,
+    recommendation,
+    analysisRequested,
+    analysisError,
+    recipe,
+    composeService,
+    preflightRunning,
+    preflightResults,
+    preflightError,
+    handlerLabel,
+    exposedPort,
+    saving,
+    saveError,
+    saved,
+    trialing,
+    trialError,
+    trialStarted,
+    repoContext,
+    analysisPipeline,
+    merged,
   }
-
-  /**
-   * Seed the data layer for a frame the journey's review step is entering. The
-   * journey owns navigation, so this is idempotent by frame: it (re)seeds +
-   * detects only when the target frame actually changes, so back-navigating to
-   * the review step (or a resume) does NOT clobber the operator's in-progress
-   * recipe edits. Selecting a different frame resets the flow for it.
-   */
-  function beginForFrame(id: string | null) {
-    if (frameId.value === id) return
-    frameId.value = id
-    resetFlowState()
-    if (id) void detect()
-  }
-
-  /** Re-seed the working recipe from the current merge (detector-only, or +analyst after apply). */
-  function seedFromMerged() {
-    if (merged.value) recipe.value = cloneRecipe(merged.value.recipe)
-    // Default the exposed service to the detector's recommended compose service, when known.
-    const recommended = recommendation.value?.composeServiceCandidates?.find((c) => c.recommended)
-    if (recommended && !composeService.value) composeService.value = recommended.service
-  }
-
-  /** Run checkout-free detection for the frame's repo (non-binding; seeds the working recipe). */
-  async function detect() {
-    const ctx = repoContext.value
-    if (!ctx) {
-      detectError.value = true
-      return
-    }
-    const repo = github.repoFor(ctx.githubId)
-    if (!repo) {
-      detectError.value = true
-      return
-    }
-    detecting.value = true
-    detectError.value = false
-    try {
-      const rec = await infra.detectProvisioning({
-        owner: repo.owner,
-        repo: repo.name,
-        ...(ctx.directory ? { directory: ctx.directory } : {}),
-        prefer: 'docker-compose',
-      })
-      recommendation.value = rec
-      // Seed the exposed port + build flag from the detected provisioning where present.
-      seedFromMerged()
-    } catch {
-      detectError.value = true
-    } finally {
-      detecting.value = false
-    }
-  }
-
-  /** Fire the analyst-only pipeline against the frame (mirrors how bootstrap runs pl_blueprint). */
-  async function startAnalysis() {
-    const id = frameId.value
-    const pipeline = analysisPipeline.value
-    if (!id || !pipeline) {
-      analysisError.value = true
-      return
-    }
-    analysisError.value = false
-    try {
-      await execution.start(id, pipeline)
-      analysisRequested.value = true
-    } catch {
-      analysisError.value = true
-    }
-  }
-
-  /** Fold the (now-ready) analyst draft into the working recipe (re-seed from the merge). */
-  function applyAnalystDraft() {
-    seedFromMerged()
-  }
-
-  /** Toggle an OS-override / extra compose file into the working recipe's ordered `composeFiles`. */
-  function toggleComposeFile(path: string) {
-    const files = recipe.value.composeFiles ? [...recipe.value.composeFiles] : []
-    const idx = files.indexOf(path)
-    if (idx >= 0) files.splice(idx, 1)
-    else files.push(path)
-    recipe.value = { ...recipe.value, composeFiles: files }
-  }
-
-  /** Toggle a `COMPOSE_PROFILES` label into the working recipe. */
-  function toggleProfile(profile: string) {
-    const profiles = recipe.value.composeProfiles ? [...recipe.value.composeProfiles] : []
-    const idx = profiles.indexOf(profile)
-    if (idx >= 0) profiles.splice(idx, 1)
-    else profiles.push(profile)
-    recipe.value = { ...recipe.value, composeProfiles: profiles }
-  }
-
-  /**
-   * Convert a confirmed seed-dump candidate into a `compose-exec` step that pipes the dump via
-   * stdin. The service + command are a best-effort default (the exposed/db service + a `cat`
-   * placeholder) the operator refines in the recipe editor — detection can't know the DB client.
-   */
-  function addSeedStep(candidate: ProvisioningSeedDumpCandidate) {
-    const setupSteps = recipe.value.setupSteps ? [...recipe.value.setupSteps] : []
-    setupSteps.push({
-      kind: 'compose-exec',
-      name: `Import seed ${candidate.name}`,
-      service: composeService.value || 'db',
-      command: ['sh', '-c', 'cat'],
-      stdinFile: candidate.path,
-    })
-    recipe.value = { ...recipe.value, setupSteps }
-  }
-
-  /** Replace the working recipe from a raw-JSON edit; returns an error message or null on success. */
-  function setRecipeFromJson(text: string): string | null {
-    let parsedJson: unknown
-    try {
-      parsedJson = JSON.parse(text)
-    } catch (err) {
-      return err instanceof Error ? err.message : 'Invalid JSON'
-    }
-    const result = v.safeParse(stackRecipeSchema, parsedJson)
-    if (!result.success) return result.issues.map((i) => i.message).join('; ')
-    recipe.value = result.output
-    return null
-  }
-
-  /** Run the working recipe's declared preflight checks (host-bound; degrades on a non-local facade). */
-  async function runPreflight() {
-    preflightRunning.value = true
-    preflightError.value = null
-    try {
-      preflightResults.value = await preflights.run(recipe.value.prerequisites ?? [])
-    } catch (err) {
-      // A 503 is handled inside `preflights.run` (degraded note); anything else is a real failure
-      // that must be shown rather than swallowed into an unhandled rejection.
-      preflightError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
-    } finally {
-      preflightRunning.value = false
-    }
-  }
-
-  /**
-   * Persist the confirmed config: register the workspace's `docker-compose` handler (so the Deployer
-   * can provision it) AND write the recipe onto the service frame's provisioning. The handler carries
-   * only the daemon "how" (the exposed service + port); the recipe is the per-service "what/where".
-   */
-  async function save() {
-    const id = frameId.value
-    const service = composeService.value.trim()
-    if (!id || !service) {
-      saveError.value = 'A frame and an exposed compose service are required.'
-      return
-    }
-    // `exposedPort` is a `v-model.number` field, which yields '' (not a number) when cleared. Guard
-    // here so an empty/out-of-range port can't reach the handler manifest.
-    const port = Number(exposedPort.value)
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      saveError.value = 'Enter a valid exposed port (1-65535).'
-      return
-    }
-    saving.value = true
-    saveError.value = null
-    const pruned = pruneRecipe(recipe.value)
-    const build = recommendation.value?.provisioning.composeBuild === true
-    const allowHostCommands = (pruned.setupSteps ?? []).some((s) => s.kind === 'host-command')
-    try {
-      await infra.registerHandler({
-        provisionType: 'docker-compose',
-        config: {
-          engine: 'local-docker',
-          manifest: {
-            providerId: 'compose',
-            label: handlerLabel.value.trim() || 'Docker Compose',
-            baseUrl: 'http://localhost',
-            auth: { type: 'none' },
-            provision: { method: 'POST', pathTemplate: '' },
-            response: {},
-            providerConfig: {
-              service,
-              port,
-              ...(build ? { build: true } : {}),
-              ...(allowHostCommands ? { allowHostCommands: true } : {}),
-            },
-          },
-        },
-        secrets: {},
-      })
-      await board.updateBlock(id, {
-        provisioning: {
-          type: 'docker-compose',
-          ...(pruned.composeFiles?.[0] ? { composePath: pruned.composeFiles[0] } : {}),
-          ...(build ? { composeBuild: true } : {}),
-          recipe: pruned,
-        },
-      })
-      saved.value = true
-    } catch (err) {
-      saveError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
-    } finally {
-      saving.value = false
-    }
-  }
-
-  /** Optional trial: provision the just-saved config for the frame (local-only; live logs shown). */
-  async function trialProvision() {
-    const id = frameId.value
-    if (!id || !saved.value) return
-    trialing.value = true
-    trialError.value = null
-    try {
-      const api = useApi()
-      const ws = useWorkspaceStore()
-      await api.provisionEnvironment(ws.requireId(), { blockId: id })
-      trialStarted.value = true
-    } catch (err) {
-      trialError.value =
-        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
-    } finally {
-      trialing.value = false
-    }
-  }
+  const flow = createFlowActions(context)
+  const recipeActions = createRecipeActions(context)
+  const saveActions = createSaveActions(context)
 
   return {
     // state
@@ -470,16 +246,8 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     analysisStatus,
     merged,
     // actions
-    beginForFrame,
-    detect,
-    startAnalysis,
-    applyAnalystDraft,
-    toggleComposeFile,
-    toggleProfile,
-    addSeedStep,
-    setRecipeFromJson,
-    runPreflight,
-    save,
-    trialProvision,
+    ...flow,
+    ...recipeActions,
+    ...saveActions,
   }
 })

@@ -692,6 +692,10 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicTask(projected.block, projected.service.id), 202)
   })
 
+  registerTaskLifecycleRoutes(app)
+}
+
+function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // --- Task lifecycle: edit / stop / retry / run projection / live stream -----
   // The external counterparts of the SPA's task-lifecycle operations, each double-scoped
   // to the key's workspace AND to a real board task (`getServiceTask`, which excludes

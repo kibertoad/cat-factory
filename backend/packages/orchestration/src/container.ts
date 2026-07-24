@@ -27,13 +27,11 @@ import {
   createBrainstormModule,
   createKaizenModule,
   createClarityModule,
-  createNotificationsModule,
   createSlackModule,
   createRiskPoliciesModule,
   createSharedStacksModule,
   createPreflightModule,
   createSandboxModule,
-  createWorkspaceSettingsModule,
   createReleaseHealthModule,
   createPackageRegistriesModule,
   createPreviewModule,
@@ -44,6 +42,7 @@ import {
   createRecurringModule,
 } from './container/modules.js'
 import { resolveCoreRuntime } from './container/runtime.js'
+import { createCoreFoundation } from './container/foundation.js'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
   AccountInvitationRepository,
@@ -1458,120 +1457,20 @@ export function createCore(dependencies: CoreDependencies): Core {
   // return. The core spine (below) stays explicit —
   // it carries the genuine circular late-bindings (account ⇄ spend, engine ⇄ initiative loop).
   const modules = new ModuleRegistry()
-  // Built up-front (before the board + execution engine) so the board's review-debt friction
-  // guard on task creation, the per-service task limit, and the escalation sweep can all read
-  // them. Neither module depends on any service constructed below — only `dependencies` + the
-  // settings cache slice — so building them here is safe and keeps the locals threadable.
-  const notifications = modules.build('notifications', () =>
-    createNotificationsModule(dependencies),
-  )
-  const settings = modules.build('settings', () =>
-    createWorkspaceSettingsModule(dependencies, caches.workspaceSettings),
-  )
-  // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
-  // user on the workspace (and every board mounting a shared service) — both facades route
-  // here, so the wiring is symmetric by construction. The repo-projection cache lets
-  // `addServiceFromRepo`'s monorepo-flag write invalidate the same group the resolver reads.
-  const boardService = new BoardService({
-    ...dependencies,
-    executionEventPublisher,
-    repoProjectionCache: caches.repoProjection,
-    // The resolved (defaulted) task-type registry, so a custom-typed task resolves its
-    // deployment-registered default pipeline (the raw `dependencies.taskTypeRegistry` may be
-    // undefined; this is the same instance re-exposed on `Core` for the snapshot projection).
-    taskTypeRegistry,
-    // Opt-in review-debt friction on task creation: read the acting workspace's settings + open
-    // notifications to decide whether authoring a new task is frictioned. Optional seams — when a
-    // facade doesn't wire settings/notifications, the guard is a pass-through.
-    reviewFrictionSettings: settings?.service,
-    reviewFrictionNotifications: notifications?.service,
-  })
-  const workspaceService = new WorkspaceService({
-    ...dependencies,
-    // The resolved (defaulted) pipeline registry, so a new workspace is seeded with the built-in
-    // catalog + any deployment-registered pipelines (the raw `dependencies.pipelineRegistry` may be
-    // undefined; this is the same instance the pipeline service reseeds from).
-    pipelineRegistry,
-    // A board delete drops its cached access decisions (workspace-rbac).
-    workspaceAccessCache: caches.workspaceAccess,
-  })
-  // Workspace-RBAC roster + access-mode management (workspace-rbac, slice 5). Present only when
-  // the member repository is wired (both facades wire it; tests/no-roster leave it absent, so the
-  // members controller 503s). Every roster/access-mode write drops the board's access cache group.
-  modules.build('workspaceMemberService', () =>
-    dependencies.workspaceMemberRepository
-      ? new WorkspaceMemberService({
-          workspaceMemberRepository: dependencies.workspaceMemberRepository,
-          workspaceRepository: dependencies.workspaceRepository,
-          membershipRepository: dependencies.membershipRepository,
-          userRepository: dependencies.userRepository,
-          clock: dependencies.clock,
-          workspaceAccessCache: caches.workspaceAccess,
-        })
-      : undefined,
-  )
-  // Late-bound so the account service can invalidate the spend service's cached
-  // account-budget limit on an account-budget edit (spendService is built below).
+  // Late-bound: accountService reads the below-built spendService via `getSpendService`.
   let spendServiceRef: SpendService | undefined
-  const accountService = new AccountService({
-    accountRepository: dependencies.accountRepository,
-    membershipRepository: dependencies.membershipRepository,
-    userRepository: dependencies.userRepository,
-    idGenerator: dependencies.idGenerator,
-    clock: dependencies.clock,
-    onAccountBudgetChanged: (accountId) => spendServiceRef?.invalidateAccountLimit(accountId),
-    // A membership grant/role change alters board access across the account, so drop the
-    // workspace-access cache wholesale (workspace-rbac — the coarse fallback for a rare write).
-    onAccountMembershipChanged: () => caches.workspaceAccess.invalidateAll(),
-    // Reject an account budget above the operator cap on write (late-bound: spendService
-    // is built below, and the cap is a static deployment fact once it is).
-    resolveAccountBudgetCap: () => spendServiceRef?.budgetCaps().accountMonthlyLimitMax,
-  })
-  const userService = new UserService({
-    userRepository: dependencies.userRepository,
-    passwordHasher: dependencies.passwordHasher,
-    idGenerator: dependencies.idGenerator,
-    clock: dependencies.clock,
-  })
-  const email = modules.build('email', () =>
-    dependencies.emailConnectionRepository && dependencies.emailSecretCipher
-      ? new EmailConnectionService({
-          emailConnectionRepository: dependencies.emailConnectionRepository,
-          secretCipher: dependencies.emailSecretCipher,
-          clock: dependencies.clock,
-        })
-      : undefined,
-  )
-  modules.build('invitations', () =>
-    dependencies.invitationRepository
-      ? new InvitationService({
-          invitationRepository: dependencies.invitationRepository,
-          accountRepository: dependencies.accountRepository,
-          membershipRepository: dependencies.membershipRepository,
-          idGenerator: dependencies.idGenerator,
-          clock: dependencies.clock,
-          // Resolve the inviting account's own (DB-stored) email sender at send time.
-          resolveEmailSender: email ? (accountId) => email.resolveSender(accountId) : undefined,
-          appBaseUrl: dependencies.appBaseUrl,
-          // Accepting an invitation grants membership ⇒ drop the workspace-access cache (workspace-rbac).
-          onAccountMembershipChanged: () => caches.workspaceAccess.invalidateAll(),
-        })
-      : undefined,
-  )
-  modules.build('passwordReset', () =>
-    dependencies.passwordResetTokenRepository
-      ? new PasswordResetService({
-          passwordResetTokenRepository: dependencies.passwordResetTokenRepository,
-          userRepository: dependencies.userRepository,
-          passwordHasher: dependencies.passwordHasher,
-          idGenerator: dependencies.idGenerator,
-          clock: dependencies.clock,
-          resolveSystemEmailSender: dependencies.resolveSystemEmailSender,
-          appBaseUrl: dependencies.appBaseUrl,
-          logger: dependencies.logger,
-        })
-      : undefined,
-  )
+  // The foundation slice (notifications/settings, board/workspace/account/user + the account-
+  // onboarding modules) is built up-front as a cohesive collaborator; see container/foundation.ts.
+  const { notifications, settings, boardService, workspaceService, accountService, userService } =
+    createCoreFoundation({
+      dependencies,
+      modules,
+      caches,
+      executionEventPublisher,
+      taskTypeRegistry,
+      pipelineRegistry,
+      getSpendService: () => spendServiceRef,
+    })
   const pipelineService = new PipelineService({ ...dependencies, pipelineRegistry })
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,
