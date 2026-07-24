@@ -111,4 +111,27 @@ describe('app modular registry', () => {
     expect(ids).toContain('build-pipeline')
     expect(ids).toContain('consumer:reports')
   })
+
+  it('merges a consumer-contributed overlay into the appOverlays slot (slice-D extensibility)', () => {
+    // A deployment contributes its OWN top-level overlay to the `appOverlays` slot; the layer's
+    // single `<AppOverlayHost>` mounts it on `ui.openOverlay(id)` — no host edit (the slice-D
+    // extensibility promise). A fake component (plain object) stands in for the SFC.
+    const fakeOverlay = { name: 'AcmeSecurityDashboard' }
+    registerAppModule(
+      defineModule({
+        id: 'consumer:overlay',
+        version: '1.0.0',
+        slots: {
+          appOverlays: [{ id: 'acme:security-dashboard-overlay', component: fakeOverlay }],
+        },
+      }),
+    )
+
+    const slots = createAppRegistry({ gates: NO_GATES }).resolveManifest().slots as {
+      appOverlays: { id: string }[]
+    }
+    // The slot exists by default (empty) even with no first-party overlays, and the consumer
+    // entry lands in it.
+    expect(slots.appOverlays.map((o) => o.id)).toContain('acme:security-dashboard-overlay')
+  })
 })

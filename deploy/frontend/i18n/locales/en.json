@@ -24,6 +24,12 @@
       "compliant": "Compliant",
       "actionNeeded": "Action needed",
       "body": "A real deployment renders live compliance state here from its own store."
+    },
+    "securityDashboard": {
+      "title": "Acme security dashboard",
+      "subtitle": "A consumer top-level overlay, opened from the sidebar via useAppOverlays().",
+      "body": "This overlay is contributed to the appOverlays slot and mounted by the layer's AppOverlayHost with zero host edits. A real deployment renders its own security posture here.",
+      "placeholderRow": "Sample compliance signal {n}"
     }
   }
 }

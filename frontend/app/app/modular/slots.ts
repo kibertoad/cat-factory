@@ -31,6 +31,14 @@ import type { NavContribution } from './nav-contributions'
  *    per custom task type, addressed by the type's `formPanel` id and paired via
  *    `resolveComponentRegistry` (same shape as `resultViews`); shown INSTEAD of the
  *    descriptor-driven `fields`. An unpaired id degrades to the descriptor fields.
+ *  - `appOverlays` (extension slice D) — top-level modals/overlays a consumer module
+ *    contributes ({@link OverlayContribution}, an id → component `ComponentEntry`),
+ *    opened by `ui.openOverlay(id, subject?)` / `useAppOverlays().open(...)` and
+ *    mounted by the single `<AppOverlayHost>` in `pages/index.vue` (which selects the
+ *    active entry through `resolveComponentRegistry`, the same pick-one primitive
+ *    `resultViews` uses). This is the one host surface a consumer flatly could not
+ *    extend before — a nav item's `run` closure now has something to open. First-party
+ *    modals stay hand-mounted in `index.vue`; the seam is for consumer overlays.
  *
  * The index signature is mutable (`unknown[]`) to satisfy the runtime's
  * `SlotMap` constraint while `unknown[]` still meets `useReactiveSlots`'
@@ -43,6 +51,7 @@ export interface AppSlots {
   inspectorPanels: PanelEntry<Block>[]
   taskTypes: CustomTaskType[]
   taskTypeFormPanels: ResultViewContribution[]
+  appOverlays: OverlayContribution[]
   [key: string]: unknown[]
 }
 
@@ -57,3 +66,15 @@ export interface AppSlots {
  * custom task type's `formPanel` id).
  */
 export type ResultViewContribution = ComponentEntry<Component>
+
+/**
+ * One consumer-contributed top-level overlay (a modal/panel with no first-party
+ * home), addressed by its namespaced `<ns>:<name>` id. A plain `ComponentEntry`,
+ * so `<AppOverlayHost>` indexes the merged `appOverlays` slot with the same
+ * `resolveComponentRegistry` pick-one primitive as `resultViews` and mounts the
+ * entry whose id matches the active `ui.openOverlay(...)` request. The overlay
+ * component receives the (optional) subject as a `subject` prop and emits `close`;
+ * it composes the layer's `ResultWindowShell` / `useModalBehavior` for its own
+ * chrome (see the consumer-extensions guide).
+ */
+export type OverlayContribution = ComponentEntry<Component>

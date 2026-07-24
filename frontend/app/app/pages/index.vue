@@ -16,6 +16,7 @@ import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
+import AppOverlayHost from '~/components/panels/AppOverlayHost.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import ReviewFrictionDialog from '~/components/board/ReviewFrictionDialog.vue'
 import CreateInitiativeModal from '~/components/board/CreateInitiativeModal.vue'
@@ -377,6 +378,9 @@ watch(
       <DecisionModal />
       <AgentStepDetail />
       <StepResultViewHost />
+      <!-- Consumer-contributed top-level overlays (extension slice D). Renders nothing until a
+           consumer opens one via `ui.openOverlay` / `useAppOverlays().open(...)`. -->
+      <AppOverlayHost />
       <AddTaskModal />
       <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
       <CreateInitiativeModal />

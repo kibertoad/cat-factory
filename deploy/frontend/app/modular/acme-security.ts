@@ -14,7 +14,12 @@
 //                         that also ships `@cat-factory/example-custom-agent` on the backend
 //                         gets a first-class palette block whose runs open THIS window
 //                         (backend data × code-shipped component, joined by the id).
-//   - `nav`             — a sidebar + command-palette destination with its own `run`.
+//   - `nav`             — a sidebar + command-palette destination with its own `run`, which
+//                         now opens the `appOverlays` overlay below (extension slice D).
+//   - `appOverlays`     — a CODE-shipped top-level OVERLAY (`AcmeSecurityDashboard`, extension
+//                         slice D) the nav `run` opens via `useAppOverlays()`. The one host
+//                         surface a consumer could not extend before; it reuses the layer's
+//                         shared `ResultWindowShell` chrome with ZERO host edits.
 //   - `inspectorPanels` — an extra inspector body panel for task blocks.
 //   - `taskTypes`       — a CODE-shipped CUSTOM task type (`acme:incident`, extension slice B)
 //                         with descriptor-driven create-form fields. It becomes a first-class
@@ -28,10 +33,15 @@ import { defineModule } from '@modular-vue/core'
 import type { PanelEntry } from '@modular-vue/core'
 import AcmeSecurityReport from '../components/acme/AcmeSecurityReport.vue'
 import AcmeIncidentPanel from '../components/acme/AcmeIncidentPanel.vue'
+import AcmeSecurityDashboard from '../components/acme/AcmeSecurityDashboard.vue'
 
 /** The namespaced result-view id shared by the window (the `resultViews` entry) and the
  *  agent kind that selects it (the `agentKinds` entry) — the pairing key. */
 export const ACME_SECURITY_REPORT_VIEW = 'acme:security-report'
+
+/** The namespaced overlay id shared by the `appOverlays` entry and the nav item that opens
+ *  it (extension slice D) — the pairing key for a consumer top-level overlay. */
+export const ACME_SECURITY_DASHBOARD_OVERLAY = 'acme:security-dashboard-overlay'
 
 /** The backend agent kind this deployment provides a bespoke window for. Matches
  *  `SECURITY_AUDITOR_KIND` in `@cat-factory/example-custom-agent`. */
@@ -111,16 +121,22 @@ export const acmeSecurityModule = defineModule({
         sidebar: { group: 'integrations', order: 90 },
         command: { group: 'integrations', order: 90 },
         run: () => {
-          // A real consumer would open its own overlay / route; overlays are a later slice,
-          // so this demonstrates a nav item invoking real behaviour via a shared toast.
-          useToast().add({
-            title: 'Acme security dashboard',
-            description: 'Demo consumer nav action — wire this to your own panel.',
-            icon: 'i-lucide-shield-check',
-          })
+          // Open THIS deployment's own top-level overlay (the `appOverlays` entry below) via
+          // the auto-imported `useAppOverlays()` seam — extension slice D. No layer store
+          // import, no host edit; the layer's single `<AppOverlayHost>` mounts the paired
+          // component. (Before slice D this could only fire a toast — a consumer nav item had
+          // no host surface to open.)
+          useAppOverlays().open(ACME_SECURITY_DASHBOARD_OVERLAY)
         },
       },
     ],
+    // A CODE-shipped top-level OVERLAY (extension slice D), paired to the nav `run` above by
+    // its namespaced id. `<AppOverlayHost>` (mounted once in the layer's `pages/index.vue`)
+    // resolves this slot and mounts the component when `ui.openOverlay(id)` fires — the one
+    // host surface a consumer could not extend before. The overlay composes the layer's shared
+    // `ResultWindowShell` chrome (see the component), so it inherits focus-trap / scroll-lock /
+    // shared-stack Escape with zero host edits.
+    appOverlays: [{ id: ACME_SECURITY_DASHBOARD_OVERLAY, component: AcmeSecurityDashboard }],
     // An extra inspector body panel for task-level blocks. `when(block)` gates it per block
     // (the same predicate shape the built-in panels use); `order` places it among them.
     inspectorPanels: [

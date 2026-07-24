@@ -108,6 +108,7 @@ export function createAppRegistry(
       inspectorPanels: [],
       taskTypes: [],
       taskTypeFormPanels: [],
+      appOverlays: [],
     },
   }).use(journeysPlugin())
   for (const mod of [...FIRST_PARTY_MODULES, ...extraModules, ...consumerModules]) {
