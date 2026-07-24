@@ -245,6 +245,14 @@ export interface FakeAgentOptions {
    */
   ralphPassOnIteration?: number
   /**
+   * The effort self-assessment every result carries (the deterministic analogue of the harness
+   * reading the agent's `.cat-effort.json` sentinel file). Set it to assert the engine records
+   * the report on the step — including on the kinds whose verdict drives run flow and therefore
+   * never reach the normal completion. Omitted ⇒ no report, exactly like an inline agent or an
+   * older harness image.
+   */
+  effortReport?: AgentRunResult['effortReport']
+  /**
    * The app-owned agent-kind registry the fake reads to detect a structured `container-explore`
    * kind (built-in `bug-investigator` or a registered CUSTOM kind) so it returns `result.custom`.
    * The custom-kind conformance case injects the SAME instance the container was built with;
@@ -385,7 +393,22 @@ export class FakeAgentExecutor implements AgentExecutor {
     return undefined
   }
 
+  /**
+   * The deterministic analogue of the harness lifting the agent's effort self-assessment off
+   * its sentinel file: fold the configured report onto EVERY result, whichever kind produced
+   * it. Wrapping the single exit (rather than threading the option through each kind's branch)
+   * is what lets the suite assert the engine records it on the kinds whose verdict drives run
+   * flow — a parked `pr-reviewer`, a companion, a Tester withholding its greenlight — not just
+   * on a plainly-completing step.
+   */
   async run(context: AgentRunContext): Promise<AgentRunResult> {
+    const result = await this.produceResult(context)
+    return this.options.effortReport
+      ? { ...result, effortReport: this.options.effortReport }
+      : result
+  }
+
+  private async produceResult(context: AgentRunContext): Promise<AgentRunResult> {
     // The producer/companion cluster (decision park, blueprints, spec-writer, companion grade)
     // is split into its own dispatcher to keep `run` under the complexity ceiling; it returns
     // `undefined` when the kind isn't one of those, so control falls through to the rest.

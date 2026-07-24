@@ -40,8 +40,19 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       ],
     }
 
+    // The reviewer's effort self-assessment, lifted by the harness off its sentinel file.
+    const effortReport = {
+      difficulty: 8,
+      summary: 'Large diff across two subsystems.',
+      reducedEffectiveness: 'No spec for the auth change.',
+      obstacles: ['missing spec', 'no test coverage on the touched path'],
+    }
+
     it('parks a review run on its findings, then resolves the human selection to done', async () => {
-      const { call, createWorkspace, drive } = harness.makeApp({ customResult: reviewerOutput })
+      const { call, createWorkspace, drive } = harness.makeApp({
+        customResult: reviewerOutput,
+        effortReport,
+      })
       const { workspace } = await createWorkspace({ seed: true })
       const wsId = workspace.id
 
@@ -71,6 +82,13 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       expect(findings.map((f) => f.severity)).toEqual(['high', 'nit'])
       expect(findings[0]!.id).toMatch(/^prf_/)
       expect(findings[0]!.sliceId).toBe(step.prReview?.slices?.[0]?.id)
+      // The reviewer's effort self-assessment is recorded on the step even though this kind
+      // NEVER reaches the normal completion (its findings park the run), which is what the
+      // run-details windows render. Recording it only on the completion path silently dropped
+      // it for every verdict-driven kind.
+      expect(step.effortReport?.difficulty).toBe(8)
+      expect(step.effortReport?.reducedEffectiveness).toBe('No spec for the auth change.')
+      expect(step.effortReport?.obstacles).toEqual(effortReport.obstacles)
 
       // The park raised a `pr_review_ready` inbox card (identically on both runtimes).
       const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
