@@ -155,8 +155,7 @@ async function manageInfra(
   dir: string,
   workDir: string,
   infra: AgentInfraSpec,
-  signal: AbortSignal | undefined,
-  onActivity: (() => void) | undefined,
+  opts: RunOptions,
   logger: Logger,
 ): Promise<{
   note?: string
@@ -168,7 +167,7 @@ async function manageInfra(
     // `onActivity` feeds the inactivity watchdog through the frontend build/serve stand-up,
     // which (unlike docker-compose's 5-min-capped `up`) can run past the inactivity window.
     // Runs in `workDir` so a monorepo frontend builds/serves from its own package subtree.
-    const fe = await standUpFrontend(workDir, infra, signal, onActivity, logger)
+    const fe = await standUpFrontend(workDir, infra, opts, logger)
     return {
       ...(fe.note ? { note: fe.note } : {}),
       ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
@@ -176,7 +175,7 @@ async function manageInfra(
       cleanup: () => tearDownFrontend(fe.processes, logger),
     }
   }
-  const standUp = await standUpInfra(dir, infra, signal, logger)
+  const standUp = await standUpInfra(dir, infra, opts.signal, logger)
   return {
     ...(standUp.note ? { note: standUp.note } : {}),
     ...(standUp.record ? { record: standUp.record } : {}),
@@ -417,7 +416,7 @@ async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
     logger.info('agent(preview): building + serving', {
       serviceDirectory: job.repo.serviceDirectory,
     })
-    const fe = await standUpFrontend(workDir, infra, opts.signal, opts.onActivity, logger)
+    const fe = await standUpFrontend(workDir, infra, opts, logger)
     const infraSetupFields: { infraSetup?: InfraSetupRecord } = fe.record
       ? { infraSetup: fe.record }
       : {}
@@ -557,9 +556,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // The run-mode guidance itself lives in the backend-composed system/user prompt; the
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
-      const managed = infra
-        ? await manageInfra(dir, workDir, infra, opts.signal, opts.onActivity, logger)
-        : undefined
+      const managed = infra ? await manageInfra(dir, workDir, infra, opts, logger) : undefined
       // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
       // app it just built + served (the backend env resolution already reached the harness).

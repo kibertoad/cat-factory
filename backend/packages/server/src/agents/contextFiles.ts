@@ -87,16 +87,23 @@ export interface SkillJobBody {
  * `CLAUDE_CONFIG_DIR/skills/<name>/` natively for claude-code (the CLI loads it), or
  * `.cat-context/skill/<relPath>` for Pi/codex (which read the checkout).
  *
- * Only the PROMPT differs by harness: claude-code gets a short pointer (its instructions live in
- * the installed SKILL.md, so they are not duplicated into the prompt), while Pi/codex get the full
- * instructions folded in (their agents don't natively load a skill) plus a pointer to the
- * materialised resources. A resource whose body couldn't be fetched (oversized / binary /
- * unreadable) is referenced by its repo path in the prompt rather than materialised. No skill ⇒
- * everything empty.
+ * Only the PROMPT differs: a NATIVE install gets a short pointer (its instructions live in the
+ * installed SKILL.md, so they are not duplicated into the prompt), while every checkout-reading
+ * case gets the full instructions folded in plus a pointer to the materialised resources. A
+ * resource whose body couldn't be fetched (oversized / binary / unreadable) is referenced by its
+ * repo path in the prompt rather than materialised. No skill ⇒ everything empty.
+ *
+ * `ambientAuth` decides this as much as the harness does. An ambient claude-code run has no
+ * isolated `CLAUDE_CONFIG_DIR` to install into, and the harness REFUSES to write a repo's skill
+ * into the developer's own `~/.claude` (it would outlive the run, and two concurrent native jobs
+ * carrying same-named skills would clobber each other), so it reads the checkout exactly like
+ * codex. Rendering such a run the native way would point the agent at a skill that was never
+ * installed, with its instructions nowhere in the prompt.
  */
 export function renderSkillForHarness(
   skill: AgentRunContext['skill'],
   harness: HarnessKind,
+  ambientAuth = false,
 ): { body?: SkillJobBody; section?: string } {
   if (!skill) return {}
   const withBody = skill.resources.filter(
@@ -115,7 +122,7 @@ export function renderSkillForHarness(
     resources: withBody.map((r) => ({ relPath: r.relPath, content: r.body })),
   }
 
-  if (harness === 'claude-code') {
+  if (harness === 'claude-code' && !ambientAuth) {
     return {
       body,
       section:
@@ -124,8 +131,9 @@ export function renderSkillForHarness(
     }
   }
 
-  // Pi / codex: fold the instructions into the prompt; the harness materialises the resources
-  // under `.cat-context/skill/` (see the harness `skill` handling), which the prompt points at.
+  // Pi / codex / AMBIENT claude-code: fold the instructions into the prompt; the harness
+  // materialises the resources under `.cat-context/skill/` (see the harness `skill` handling),
+  // which the prompt points at.
   const resourceNote = withBody.length
     ? ` The skill's resource files are available under \`.cat-context/skill/\`: ${withBody
         .map((r) => r.relPath)

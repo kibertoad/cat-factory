@@ -1,5 +1,6 @@
 ---
 '@cat-factory/executor-harness': minor
+'@cat-factory/server': patch
 '@cat-factory/local-server': patch
 ---
 
@@ -21,7 +22,9 @@ and not for the shared native host process, whose `HOME` is the developer's own:
   run in the developer's personal setup, and two concurrent jobs carrying same-named skills from
   different repos overwrote each other. The native install now happens only into an isolated
   `CLAUDE_CONFIG_DIR`; an ambient run reads the skill from the checkout's `.cat-context/skill/`,
-  the same fallback codex always used.
+  the same fallback codex always used. The prompt follows: `renderSkillForHarness` now keys off
+  ambient auth as well as the harness, so such a run gets the skill's instructions folded in
+  rather than a pointer to an install that never happened.
 - **The Tester's secrets were set on `process.env` and restored afterwards.** Two overlapping
   Tester runs in one harness process would read each other's values, and whichever finished
   first would delete the other's mid-run. They now ride explicit child env
@@ -29,3 +32,10 @@ and not for the shared native host process, whose `HOME` is the developer's own:
   shell tools still read them as `$KEY` with no shared mutable state.
 
 Container behaviour is unchanged throughout.
+
+Two consequences of the npmrc move are handled with it: the stand-up/validation commands the
+HARNESS spawns (rather than the agent) are passed the job env explicitly, so they keep the job's
+registry auth on the native path; and the developer's own credentials, now seeded into the job's
+npmrc, are registered for output redaction alongside the job's. Note `npm_config_userconfig` is
+honoured by npm and pnpm but not yarn, so a yarn checkout on the native path sees only the
+developer's own registries.

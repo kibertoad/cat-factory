@@ -19,6 +19,12 @@ import { registerKnownSecrets } from './redact.js'
 //     DELETE it, and concurrent jobs in the one process would race on the single file. Such a
 //     job gets its own npmrc under a per-job directory instead, pointed at by
 //     `npm_config_userconfig`; the developer's file is never written and never removed.
+//
+// Note the isolated path trades a little reach for that safety: `~/.npmrc` is read by npm, pnpm
+// and yarn v1 alike, whereas `npm_config_userconfig` is honoured by npm and pnpm but NOT by yarn
+// (v1 or Berry). A yarn-based checkout on the native path therefore sees only the developer's own
+// registries, not the job's. Since the alternative is overwriting the file they actually use, the
+// limitation stands — a yarn repo needing private-registry auth wants the container path.
 
 /** Where the per-job npm auth lands in a container (the user npmrc, outside any checkout). */
 export function npmrcPath(): string {
@@ -96,6 +102,11 @@ export async function configurePackageRegistries(
  * lines are APPENDED, and npm resolves the last occurrence of a key, so the job's entries win on
  * any host they both configure. Copying their file into a 0600 temp adds no exposure: an ambient
  * run already has the developer's full file access by definition.
+ *
+ * The seeded credentials are registered for redaction alongside the job's own. The job's tokens
+ * were always registered; the developer's were not, because before this path existed their file
+ * was overwritten and no credential of theirs was in play during the run. Now that theirs is in
+ * effect, an npm error echoing one must be scrubbed on exactly the same terms.
  */
 async function writeIsolatedNpmrc(
   path: string,
@@ -104,7 +115,24 @@ async function writeIsolatedNpmrc(
   registerKnownSecrets(entries.map((entry) => entry.token))
   // Best-effort: no personal npmrc (or an unreadable one) just means the job's entries stand alone.
   const inherited = await readFile(npmrcPath(), 'utf8').catch(() => '')
+  registerKnownSecrets(npmrcCredentials(inherited))
   const prefix = inherited && !inherited.endsWith('\n') ? `${inherited}\n` : inherited
   await writeFile(path, `${prefix}${renderNpmrc(entries)}`, { mode: 0o600 })
   await chmod(path, 0o600)
+}
+
+/**
+ * The credential VALUES in npmrc content: the three keys npm accepts a secret under, on any host
+ * line. Used to register a seeded (developer-owned) file's tokens for redaction. An `${ENV_VAR}`
+ * reference is not itself a secret — npm expands it at read time — so it is skipped rather than
+ * registered as a literal to scrub.
+ */
+export function npmrcCredentials(content: string): string[] {
+  const found: string[] = []
+  for (const line of content.split(/\r?\n/)) {
+    const match = /^\s*(?:.*:)?_(?:authToken|auth|password)\s*=\s*(.+?)\s*$/.exec(line)
+    const value = match?.[1]?.replace(/^["']|["']$/g, '')
+    if (value && !/^\$\{.*\}$/.test(value)) found.push(value)
+  }
+  return found
 }

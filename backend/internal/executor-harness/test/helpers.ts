@@ -41,3 +41,16 @@ export async function stubTempHome(): Promise<string> {
  * and asserting it loosely everywhere would stop catching a regression there.
  */
 export const FS_HAS_POSIX_MODES = process.platform !== 'win32'
+
+/**
+ * A temp directory removed when the current test finishes. Use it for anything the code under
+ * test writes outside the stubbed home (a per-job scope dir, a fake bin dir), so a suite run
+ * doesn't accumulate stray directories under the system temp dir.
+ */
+export async function tempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix))
+  onTestFinished(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+  return dir
+}

@@ -434,7 +434,9 @@ value out of both. Concretely, in native mode:
 - **Your `~/.npmrc` is never written and never deleted.** A job carrying private-registry
   auth gets its own npmrc under a per-job dir (seeded from yours, so your registries and
   proxy still apply) and npm is pointed at it with `npm_config_userconfig`. A job with no
-  registry entries leaves yours in effect, untouched.
+  registry entries leaves yours in effect, untouched. One limitation: `npm_config_userconfig`
+  is honoured by npm and pnpm but not by yarn, so a yarn-based repo needing the job's private
+  registries wants a container run rather than a native one.
 - **A repo's Claude Skill is never installed into your `~/.claude`.** Those runs read the
   skill from the checkout (`.cat-context/skill/`) instead, so nothing from a task's repo
   persists in your personal Claude Code setup after the run.

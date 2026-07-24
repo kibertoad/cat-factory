@@ -4,7 +4,8 @@ import { renderSkillForHarness } from './contextFiles.js'
 
 // Coverage for the harness-aware rendering of a resolved `skill` (repo-sourced Claude Skills,
 // slice 2): the payload always travels as the top-level `skill` body field; only the PROMPT
-// differs by harness (claude-code gets a short pointer, Pi/codex get the folded-in instructions).
+// differs by harness (a NATIVE claude-code install gets a short pointer, every checkout-reading
+// case — Pi, codex, and AMBIENT claude-code — gets the folded-in instructions).
 
 type ResolvedSkill = NonNullable<AgentRunContext['skill']>
 
@@ -54,6 +55,23 @@ describe('renderSkillForHarness', () => {
     expect(section).toContain('templates/report.md')
     // Un-bodied resource still referenced by repo path.
     expect(section).toContain('.claude/skills/triage/big.bin')
+  })
+
+  it('ambient claude-code: folds in the instructions, because nothing is installed natively', () => {
+    // A native run has an isolated CLAUDE_CONFIG_DIR to install into; an ambient one does not, and
+    // the harness refuses to write a repo's skill into the developer's own ~/.claude. Rendering it
+    // as an install would hand the agent a pointer to a skill that is nowhere on disk.
+    const { body, section } = renderSkillForHarness(skill(), 'claude-code', true)
+    expect(body?.resources).toEqual([{ relPath: 'templates/report.md', content: '# report' }])
+    expect(section).not.toContain('installed for this step as a Claude skill')
+    expect(section).toContain('1. Reproduce')
+    expect(section).toContain('.cat-context/skill/')
+  })
+
+  it('ambient makes no difference to codex/Pi, which always read the checkout', () => {
+    expect(renderSkillForHarness(skill(), 'codex', true)).toEqual(
+      renderSkillForHarness(skill(), 'codex'),
+    )
   })
 
   it('omits the resource/missing notes when there are no such resources', () => {

@@ -86,6 +86,18 @@ under a per-job directory:
 | Private-registry auth | `~/.npmrc`; cleared when a job has no entries | per-job `.npmrc` + `npm_config_userconfig`, seeded from the developer's; theirs is never written or removed |
 | Repo-sourced Claude Skill | installed into the isolated `CLAUDE_CONFIG_DIR` | not installed — read from the checkout's `.cat-context/skill/`, like codex |
 
+Two consequences worth knowing:
+
+- **The skill's PROMPT follows the same split.** A native install gets a short pointer; every
+  checkout-reading case (Pi, codex, ambient claude-code) gets the instructions folded in plus a
+  pointer to `.cat-context/skill/`. That decision is the backend's `renderSkillForHarness`, which
+  keys off `ambientAuth` as well as the harness — rendering an ambient run as an install would
+  point the agent at a skill that is nowhere on disk.
+- **`npm_config_userconfig` reaches less than `~/.npmrc` did.** npm and pnpm honour it; yarn does
+  not. And it only reaches processes that are handed the job env, so anything the HARNESS itself
+  spawns (the frontend stand-up's install/build, a ralph validation command) is passed
+  `RunOptions.agentEnv` explicitly rather than relying on inheritance.
+
 When you add per-job state, put it in one of those two places. `~/.pi/*` and
 `~/.config/rpiv-web-tools` remain HOME-global, which is fine only because the Pi harness never
 runs natively (the native router sends `ambientAuth` jobs — Claude/Codex only — to the host

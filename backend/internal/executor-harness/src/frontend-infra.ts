@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FrontendInfraSpec, InfraSetupRecord } from './job.js'
+import type { RunOptions } from './runner.js'
 import { killChildProcess } from './process.js'
 import { pathExists } from './fs-utils.js'
 import { captureRedactedOutput, redactSecrets } from './redact.js'
@@ -77,10 +78,10 @@ function guardProcess(child: ChildProcess, label: string, logger: Logger): Child
 export async function standUpFrontend(
   dir: string,
   infra: FrontendInfraSpec,
-  signal: AbortSignal | undefined,
-  onActivity: (() => void) | undefined,
+  run: Pick<RunOptions, 'signal' | 'onActivity' | 'agentEnv'>,
   logger: Logger = log,
 ): Promise<FrontendStandUp> {
+  const { signal, onActivity } = run
   const startedAt = Date.now()
   const processes: ChildProcess[] = []
   // The frontend app's directory: the checkout root, or a monorepo subdirectory when the config
@@ -118,6 +119,11 @@ export async function standUpFrontend(
 
   const buildEnv =
     (infra.envInjection ?? DEFAULTS.envInjection) === 'build' ? (infra.env ?? {}) : {}
+  // The job's own env (see `RunOptions.agentEnv`) — today the private-registry npmrc pointer.
+  // The stand-up is spawned by the HARNESS, not by the agent, so it does not inherit whatever the
+  // agent's CLI child was given: without this the install here would miss the job's registry auth
+  // on the native path, where the npmrc is per-job rather than the process's `~/.npmrc`.
+  const jobEnv = run.agentEnv ?? {}
 
   try {
     // 1) Install dependencies.
@@ -128,6 +134,7 @@ export async function standUpFrontend(
       signal,
       timeout: 8 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, ...jobEnv },
     })
     pushOutput(installed.stdout, installed.stderr)
 
@@ -140,7 +147,7 @@ export async function standUpFrontend(
       signal,
       timeout: 12 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, ...buildEnv },
+      env: { ...process.env, ...jobEnv, ...buildEnv },
     })
     pushOutput(built.stdout, built.stderr)
 

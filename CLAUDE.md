@@ -930,6 +930,10 @@ The two seams to use instead:
   when the agent CLI is spawned. Layer onto it with `withAgentEnv(opts, env)`; the agent and
   every shell tool it spawns read it as `$KEY`. This is how the tester's secrets travel (they
   used to be a `process.env` set + restore closure, which two overlapping Tester runs raced on).
+  **Anything the HARNESS spawns itself must be passed `agentEnv` explicitly** — it is not in
+  `process.env`, so a child of the harness rather than of the agent inherits nothing. That is
+  the frontend stand-up's install/build (`standUpFrontend`) and the ralph validation command;
+  both take the run's `RunOptions` for exactly this reason.
 - **A per-job directory**, created in `handleAgent` for an `ambientAuth` job and removed with it.
   This is where the private-registry npmrc goes (pointed at by `npm_config_userconfig`, seeded
   from the developer's so their registries keep working), because writing — or, for a job with no
@@ -939,7 +943,10 @@ The two seams to use instead:
 Some state has no per-job form, and then the answer is to **not write it at all** rather than
 write it globally: a repo-sourced Claude Skill is installed natively only into an isolated
 `CLAUDE_CONFIG_DIR`, never the developer's `~/.claude`; an ambient run reads it from the
-checkout's `.cat-context/skill/` (the fallback codex always used).
+checkout's `.cat-context/skill/` (the fallback codex always used). **When you move state to the
+checkout like that, move the PROMPT with it** — `renderSkillForHarness` (`@cat-factory/server`)
+therefore keys off `ambientAuth` as well as the harness, so an ambient run gets the instructions
+folded in rather than a pointer to an install that never happened.
 
 `~/.pi/*` and `~/.config/rpiv-web-tools` are still HOME-global. That is safe ONLY because the
 Pi harness never runs natively — `NativeRoutingRunnerTransport` routes per JOB, sending
