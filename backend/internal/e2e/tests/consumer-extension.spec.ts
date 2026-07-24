@@ -58,6 +58,34 @@ test.describe('consumer extension (dogfood)', () => {
     await expect(acmeSection.getByTestId('inspector-section-toggle')).toBeVisible()
   })
 
+  // Slice D (overlays): the consumer nav item's `run` closure opens a CODE-shipped top-level
+  // overlay (`appOverlays` slot → `AcmeSecurityDashboard`) via `useAppOverlays()`. Before slice
+  // D a consumer nav item had no host surface to open — this proves the `appOverlays` slot →
+  // `<AppOverlayHost>` path end-to-end through the assembled product, including that the overlay
+  // inherits the shared shell's Escape (owned by `useModalBehavior`).
+  test('a consumer nav entry opens a registered top-level overlay', async ({
+    page,
+    seededBoard,
+  }) => {
+    expect(seededBoard.workspaceId, 'board seeded').toBeTruthy()
+
+    // The overlay is not mounted until opened — `<AppOverlayHost>` renders nothing at rest.
+    const overlay = page.getByTestId('acme-security-dashboard-window')
+    await expect(overlay).toBeHidden()
+
+    // Click the consumer sidebar item; its `run` calls `useAppOverlays().open(...)`, and the
+    // layer's single `<AppOverlayHost>` resolves the `appOverlays` slot and mounts the paired
+    // consumer component — zero host edit.
+    await page.getByTestId('nav-acme-security').click()
+    await expect(overlay).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(overlay.getByTestId('acme-security-dashboard-body')).toBeVisible()
+
+    // Escape is owned by the shared `ResultWindowShell`'s `useModalBehavior`, which the consumer
+    // overlay composes for its chrome — so the consumer inherits it and the overlay closes.
+    await page.keyboard.press('Escape')
+    await expect(overlay).toBeHidden()
+  })
+
   test('a security-auditor step opens the consumer result window', async ({
     page,
     request,

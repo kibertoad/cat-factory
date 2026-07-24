@@ -52,6 +52,7 @@ const slots = (): AppSlots => ({
   inspectorPanels: [],
   taskTypes: [],
   taskTypeFormPanels: [],
+  appOverlays: [],
 })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 

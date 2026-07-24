@@ -15,7 +15,7 @@ import {
   environmentSetupModule,
   environmentSetupPersistence,
 } from '~/modular/journeys/environmentSetup'
-import type { AppSlots, ResultViewContribution } from '~/modular/slots'
+import type { AppSlots, OverlayContribution, ResultViewContribution } from '~/modular/slots'
 import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 
 /**
@@ -102,6 +102,11 @@ export default defineNuxtPlugin({
     // duplicate `formPanel` id across the first-party + consumer modules throws at BOOT
     // rather than the first time the create-task form opens a custom type's section.
     resolveComponentRegistry((slots.taskTypeFormPanels ?? []) as ResultViewContribution[])
+    // Same fail-fast for the consumer-overlay registry (extension slice D): a duplicate
+    // `appOverlays` id across the first-party + consumer modules throws at BOOT rather than
+    // the first time `<AppOverlayHost>` mounts one. The slot is static after this resolve, so
+    // the host's own reactive re-resolve is a cheap read this has already validated.
+    resolveComponentRegistry((slots.appOverlays ?? []) as OverlayContribution[])
     // Consumer agent kinds + task types contributed as CODE to the static `agentKinds` /
     // `taskTypes` slots (module slots resolve once, so the static base is the full set).
     useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])

@@ -69,6 +69,7 @@ export default defineNuxtPlugin(() => {
 | Custom task types                   | `taskTypes`       | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`) |
 | Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, run, sidebar?, command?, toolbar? }`                     | the three shells via `useNavContributions`                           |
 | Inspector body panels               | `inspectorPanels` | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                 |
+| Top-level overlays                  | `appOverlays`     | `{ id: '<ns>:<name>', component }`                                                               | `<AppOverlayHost>` via `useAppOverlays().open(id)`                   |
 | Multi-step wizards                  | (journeys)        | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                  |
 | Locale strings                      | (i18n)            | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                      |
 
@@ -135,6 +136,33 @@ task created with it round-trips with zero host edits.
 > silently — the type just won't pre-select a pipeline and an unpaired `formPanel` degrades to the
 > descriptor `fields`. Prefer backend registration when you want the fail-fast guardrail.
 
+### Top-level overlays (`appOverlays`)
+
+A nav item's `run` closure — or any consumer code — often needs to open a full-screen panel of
+its own: a dashboard, a wizard, a settings surface. The layer's first-party modals are
+hand-mounted in `pages/index.vue`, which a consumer can't edit, so the `appOverlays` slot + the
+single `<AppOverlayHost>` are the seam:
+
+1. Contribute `{ id: '<ns>:<name>', component }` to the `appOverlays` slot (see
+   `acme:security-dashboard-overlay` in the example module).
+2. Open it from anywhere with the auto-imported `useAppOverlays().open('<ns>:<name>', subject?)`
+   — typically a nav item's `run` closure. The optional `subject` is any value your overlay
+   renders against (e.g. a block id); it reaches the component as a `subject` prop.
+3. `<AppOverlayHost>` resolves the slot with `resolveComponentRegistry` (the same pick-one
+   primitive `resultViews` uses) and mounts the matching component, wiring its `close` emit to
+   `useAppOverlays().close()`.
+
+It is a **pick-one** host: opening a second overlay replaces the first, and `close()` clears it.
+Compose the shared `ResultWindowShell` (via `#components`) for chrome so your overlay inherits
+focus-trap / scroll-lock / shared-stack Escape — emit `close` from its `@close`. A dangling open
+(`open('<ns>:x')` with no registered component — e.g. a stale closure after the extension was
+removed) degrades to nothing (a dev-console warning names the id), never a crash. Duplicate ids
+across modules throw at boot, like every other slot.
+
+> **Scope.** This seam is for CONSUMER overlays. The layer's own ~34 first-party modals stay
+> hand-mounted in `index.vue` and are migrated only opportunistically — don't reach for
+> `appOverlays` to replace a first-party fast-path modal.
+
 ## Reuse the shared building blocks — don't reinvent them
 
 The layer ships window/inspector primitives you compose instead of hand-rolling chrome or
@@ -152,6 +180,7 @@ below). Compose these:
 | `InspectorSection`     | `#components` → `PanelsInspectorSection`  | The collapsible inspector-section shell (chevron header, count, hint) so a consumer panel reads like a built-in one.                                                                                                                                                                                          |
 | `useResultView(id)`    | auto-imported                             | The window seam contract: `{ open, blockId, instanceId, stepIndex, close }` (+ an `onOpen` loader for windows that fetch, and an `onClose` flush). Escape is owned by the shell, not here.                                                                                                                    |
 | `usePanelSubject<T>()` | `@modular-vue/core`                       | Read the block injected into an inspector panel by `<PanelsOutlet>`.                                                                                                                                                                                                                                          |
+| `useAppOverlays()`     | auto-imported                             | Open / close your own top-level overlays: `{ open(id, subject?), close(), active }`. The store-free seam a nav `run` closure uses to open an `appOverlays`-slot component (see "Top-level overlays").                                                                                                         |
 
 > **Reference layer components through `#components`, not bare tags.** Nuxt auto-registers a
 > layer's components under a **path-derived** name (`components/panels/ResultWindowShell.vue`

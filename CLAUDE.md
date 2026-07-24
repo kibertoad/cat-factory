@@ -1948,6 +1948,17 @@ auth-enabled or it passes vacuously.
   (e.g. for a custom block type) to the SAME slot via `registerAppModule` — no `InspectorPanel.vue`
   edits. The shell (identity/title/description, run banners, actions row, the frame "view
   requirements" button) is NOT part of the group.
+- **Consumer overlay seam (frontend):** a consumer deployment contributes its own top-level
+  overlays through the `appOverlays` slot (`{ id: '<ns>:<name>', component }`, an `OverlayContribution`
+  in `app/modular/slots.ts`) and opens one via the auto-imported `useAppOverlays().open(id, subject?)`
+  (or `ui.openOverlay`, `stores/ui/modals.ts`). A single `<AppOverlayHost>` (`app/components/panels/`,
+  mounted once in `pages/index.vue`) resolves the merged slot with `resolveComponentRegistry` — the
+  same slice-2 pick-one primitive as `StepResultViewHost` — and mounts the entry matching the active
+  `ui.activeOverlay` pointer, handing it the optional `subject` prop + a `close` emit. This is the
+  frontend-extension-mechanism initiative's slice D (`docs/initiatives/frontend-extension-mechanism.md`):
+  the one host surface a consumer could not extend before (a nav `run` closure had nothing to open).
+  First-party modals stay hand-mounted in `index.vue` (strangler — the seam is scoped to consumer
+  overlays); duplicate slot ids fail fast at boot, a dangling open degrades to nothing.
 - **Frontend module registry seam (`registerAppModule`, `@cat-factory/app`):** the frontend
   analogue of the backend registries (`registerAgentKind`/`registerGate`). The layer owns a
   [modular-vue](https://github.com/kibertoad/modular-react) registry (`app/modular/registry.ts`,

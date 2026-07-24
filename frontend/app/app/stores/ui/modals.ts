@@ -840,6 +840,33 @@ function createAiOnboardingModals() {
 }
 
 /**
+ * The generic CONSUMER-overlay host (extension slice D — the frontend-extension-mechanism
+ * initiative). Unlike every sub-slice above, this holds NO per-modal boolean: it is a single
+ * pick-one pointer to whichever consumer-contributed overlay (the `appOverlays` slot) is
+ * currently open, so a consumer nav item's `run` closure finally has something to open. A
+ * deployment registers `{ id: '<ns>:<name>', component }` in the `appOverlays` slot and calls
+ * `ui.openOverlay(id, subject?)` (usually via the auto-imported `useAppOverlays()` composable);
+ * the single `<AppOverlayHost>` in `pages/index.vue` resolves the slot and mounts the matching
+ * component, handing it the optional `subject`. First-party modals stay hand-mounted in
+ * `index.vue` — this seam is deliberately scoped to consumer extensions (strangler discipline).
+ */
+function createConsumerOverlayHost() {
+  // The active consumer overlay: its slot id + an optional opaque subject the overlay renders
+  // against (e.g. a block id). Null when no consumer overlay is open. Only ONE at a time —
+  // opening another replaces it (a pick-one host, like the result-view seam).
+  const activeOverlay = ref<{ id: string; subject?: unknown } | null>(null)
+
+  function openOverlay(id: string, subject?: unknown) {
+    activeOverlay.value = { id, subject }
+  }
+  function closeOverlay() {
+    activeOverlay.value = null
+  }
+
+  return { activeOverlay, openOverlay, closeOverlay }
+}
+
+/**
  * The modal / panel slice of the UI store: every open-close flag for the dozens of modals,
  * panels and hubs (document + task import, bootstrap, integrations, workspace/account settings,
  * infrastructure, vendor credentials, the startup health advisories, the AI-onboarding surfaces,
@@ -904,6 +931,7 @@ export function createUiModals() {
   const misc = createMiscModals()
   const documentsTasks = createDocumentTaskModals(resetHubReturn)
   const overlays = createOverlayModals()
+  const consumerOverlays = createConsumerOverlayHost()
   const panels = createIntegrationPanelModals(resetHubReturn)
   const settings = createSettingsModals(resetHubReturn)
   const infra = createInfraModals(resetHubReturn)
@@ -924,6 +952,7 @@ export function createUiModals() {
     ...misc,
     ...documentsTasks,
     ...overlays,
+    ...consumerOverlays,
     ...panels,
     ...settings,
     ...infra,

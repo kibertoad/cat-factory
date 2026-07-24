@@ -1,6 +1,6 @@
 # Initiative: frontend extension mechanism (consumer modules over modular-vue)
 
-**Status:** slices A–B landed (dogfood consumer module + authoring guide; custom task types) · **Owner:** frontend · **Started:** 2026-07-21
+**Status:** slices A–B landed (dogfood consumer module + authoring guide; custom task types) · slice D landed (consumer top-level overlays) · **Owner:** frontend · **Started:** 2026-07-21
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up a
 > slice; update the checklist at the end of each PR. This initiative builds ON TOP of the
@@ -356,7 +356,7 @@ ships an explicit, exported, semver-guarded public surface from `@cat-factory/ap
 | A   | Dogfood + authoring guide | Worked consumer example module in `deploy/frontend` pairing with `@cat-factory/example-custom-agent` (result window for `security-auditor`, a nav entry, an inspector panel); `frontend/app` consumer-authoring doc; e2e spec driving the consumer window | done   | this PR |
 | B   | Custom task types         | Contracts widen + `customTaskTypeSchema`; kernel `TaskTypeRegistry` + validation + conformance; snapshot `customTaskTypes`; frontend `taskTypes` slot/store/read-model, `AddTaskModal` descriptor fields + `taskTypeFormPanels`, card badge fallback      | done   | this PR |
 | C   | Generic step interaction  | Backend `interaction` registration + generic park/submit routes + `interaction_pending` notification; frontend `useStepInteraction`; example interactive consumer agent; conformance both runtimes                                                        | todo   | —       |
-| D   | Overlays                  | `appOverlays` slot + `<AppOverlayHost>` (adopting upstream `OverlayOutlet`/`useOverlay`) + `ui.openOverlay`; one consumer example; opportunistic first conversions                                                                                        | todo   | —       |
+| D   | Overlays                  | `appOverlays` slot + `<AppOverlayHost>` + `ui.openOverlay` / `useAppOverlays`; one consumer example; opportunistic first conversions                                                                                                                      | done   | this PR |
 | E   | Notification kinds        | `notificationTypeSchema` widen + `notificationKinds` slot + safe default row                                                                                                                                                                              | todo   | —       |
 | F   | Custom stream events      | `custom` `WorkspaceEvent` member + `streamHandlers` slot + single `onMessage` branch                                                                                                                                                                      | todo   | —       |
 | G   | Public surface            | Exported registration/composable/type surface, export audit, semver policy documented                                                                                                                                                                     | todo   | —       |
@@ -464,6 +464,49 @@ create-form + card badge → dogfood + e2e + conformance.
   pairing) but the dogfood uses the descriptor-`fields` path; the formPanel path degrades to the
   fields when unpaired. No modular-vue upstream work was needed — only landed primitives
   (`resolveComponentRegistry`, `useReactiveSlots`, the remote-manifest shape).
+
+## Slice D outcomes (landed)
+
+Consumer top-level overlays are now a first-class extension axis — the one host surface a
+consumer flatly could not extend before (a nav item's `run` closure had nothing to open, so the
+dogfood's `acme:security-dashboard` nav item only fired a toast). Slice D closes that end to end:
+slot → host → `useAppOverlays` → dogfood → e2e.
+
+- **`appOverlays` slot + a single `<AppOverlayHost>`.** A consumer contributes
+  `{ id: '<ns>:<name>', component }` (an `OverlayContribution` = `ComponentEntry`, `slots.ts`) and
+  the layer mounts ONE `<AppOverlayHost>` in `pages/index.vue`. The host is the slice-2 pick-one
+  pattern verbatim — `resolveComponentRegistry` over the merged slot, keyed by the active
+  `ui.activeOverlay` pointer — the exact shape `StepResultViewHost` already uses, so no new
+  selection machinery. First-party modals stay hand-mounted (strangler discipline — the ~34 lazy
+  `index.vue` modals are untouched; the seam is scoped to consumer overlays).
+- **`ui.openOverlay(id, subject?)` / `closeOverlay()` + the `useAppOverlays()` public composable.**
+  The pointer is a new pick-one sub-slice of `stores/ui/modals.ts` (`createConsumerOverlayHost`);
+  the auto-imported `useAppOverlays()` wraps it (`{ open, close, active }`) so a consumer never
+  reaches into the layer's Pinia stores — the same decoupling as `useResultView`. (The design
+  slotted `useAppOverlays` under slice G's public surface; it landed here because the dogfood's
+  store-free open path needs it. It is additive and carries forward to G unchanged.)
+- **The overlay receives `subject` as a prop and emits `close`.** `<AppOverlayHost>` mounts
+  `<component :is :subject @close="ui.closeOverlay()">`; the consumer overlay composes the shared
+  `ResultWindowShell` (via `#components`) for chrome and forwards `@close`, inheriting focus-trap /
+  scroll-lock / shared-stack Escape with zero host edits. A dangling open (no registered component)
+  degrades to nothing with a dev-warn; duplicate ids throw at boot (the `modular.client.ts`
+  fail-fast resolve, like every other slot).
+- **Dogfood + coverage.** The `deploy/frontend` `acme:security` module gained a CODE-shipped
+  overlay (`AcmeSecurityDashboard.vue`) + the `appOverlays` entry, and its nav `run` now calls
+  `useAppOverlays().open(...)` instead of the placeholder toast — zero host edits. The e2e
+  (`consumer-extension.spec.ts`) clicks the consumer nav item, asserts the overlay opens LIVE, and
+  that Escape (owned by the shared shell) closes it. Registry + ui-slice unit specs pin the slot
+  merge and the pick-one open/close/replace behaviour.
+- **What bent (the reflection half) — NO upstream work; built on landed primitives.** The design
+  framed this slice as "the natural home for the upstream `OverlayOutlet`/`useOverlay` primitives
+  that slice 5 released but did not adopt." In practice cat-factory's overlay selection is
+  identical to the already-adopted `resolveComponentRegistry` pick-one host (`StepResultViewHost`),
+  and the chrome half is the already-adopted `useModalBehavior` (via `ResultWindowShell`) — so the
+  host is those two landed primitives, needing **no** modular-vue release (like slice B). This
+  mirrors slice 5's own decision to prefer the slotted shell over the headless `OverlayOutlet` for
+  cat-factory's bespoke-header windows. `OverlayOutlet` adoption therefore remains a deliberate
+  deferral, not a gap — available if a future overlay surface wants the headless outlet. No shim
+  lives here; the slice is closed on landed upstream.
 
 ## Conventions & gotchas (carried between slices)
 
