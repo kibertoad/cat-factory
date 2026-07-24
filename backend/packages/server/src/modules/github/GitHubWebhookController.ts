@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { StateSigner } from '../../github/state.js'
+import { webhookBodyLimit } from '../../webhooks/bodyLimit.js'
 import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 import type { AppEnv } from '../../http/env.js'
 
@@ -15,7 +16,7 @@ import type { AppEnv } from '../../http/env.js'
 export function githubWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/webhooks', async (c) => {
+  app.post('/webhooks', webhookBodyLimit(), async (c) => {
     const container = c.get('container')
     const github = container.github
     if (!github)

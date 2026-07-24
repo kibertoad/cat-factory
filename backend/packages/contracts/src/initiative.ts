@@ -32,6 +32,19 @@ export const INITIATIVE_MAX_CONCURRENT = 20
 
 const score = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const idField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX))
+// The tracker-folder slug feeds `initiativeDocDir(slug)` = `docs/initiatives/<slug>` and the
+// JSON/tracker/version paths committed via `RepoFiles.commitFiles`, so it must stay a plain
+// lower-kebab token — no dots or slashes that could reshape a committed path. The server only
+// ever produces such slugs (`initiativeSlug`), so this constrains the wire contract to what the
+// generator already guarantees. Distinct from `idField` (used for pipeline/phase/item ids like
+// `pl_full`, which legitimately carry underscores).
+const slugField = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(INITIATIVE_ID_MAX),
+  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+)
 const titleField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_TITLE_MAX))
 const proseField = v.pipe(v.string(), v.maxLength(INITIATIVE_PROSE_MAX))
 const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
@@ -316,7 +329,7 @@ export const initiativeSchema = v.object({
   /** The initiative-level board block this entity belongs to (1:1). */
   blockId: v.string(),
   /** Stable slug naming the in-repo tracker folder (`docs/initiatives/<slug>/`). */
-  slug: idField,
+  slug: slugField,
   title: titleField,
   /**
    * The initiative-preset this initiative was created from (see `initiative-preset.ts`).

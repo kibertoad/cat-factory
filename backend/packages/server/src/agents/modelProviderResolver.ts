@@ -9,7 +9,7 @@ import {
   openAiCompatibleResolver,
   openAiResolver,
 } from '@cat-factory/agents'
-import type { ApiKeyService } from '@cat-factory/integrations'
+import { type ApiKeyService, fetchLocalRunner } from '@cat-factory/integrations'
 import type {
   LlmTraceSink,
   ModelProvider,
@@ -81,12 +81,17 @@ export function createScopedModelProviderResolver(
         }
       }
       // The initiating user's locally-run runners (keyless OpenAI-compatible endpoints).
+      // Route their transport through `fetchLocalRunner` so the inline path re-validates the
+      // SSRF allow-list on EVERY redirect hop — the same guard the proxy path applies. Without
+      // it the AI-SDK default fetch would silently follow a local runner's 302 to the
+      // cloud-metadata endpoint (SEC-2).
       if (scope.userId && opts.localEndpointsFor) {
         for (const ep of await opts.localEndpointsFor(scope.userId)) {
           registry[ep.provider] = openAiCompatibleResolver({
             name: ep.provider,
             apiKey: ep.apiKey || 'local',
             baseURL: ep.baseUrl,
+            fetch: (url, init) => fetchLocalRunner(String(url), init ?? {}),
           })
         }
       }

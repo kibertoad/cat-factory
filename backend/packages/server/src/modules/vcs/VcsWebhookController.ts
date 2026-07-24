@@ -3,6 +3,7 @@ import { isVcsProvider } from '@cat-factory/kernel'
 import type { VcsConnectionRef } from '@cat-factory/kernel'
 import type { AppConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
+import { webhookBodyLimit } from '../../webhooks/bodyLimit.js'
 import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 
 /**
@@ -21,7 +22,7 @@ import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 export function vcsWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/:provider/webhooks', async (c) => {
+  app.post('/:provider/webhooks', webhookBodyLimit(), async (c) => {
     const providerParam = c.req.param('provider')
     if (!isVcsProvider(providerParam)) {
       return c.json({ error: { code: 'validation', message: 'Unknown VCS provider' } }, 404)
