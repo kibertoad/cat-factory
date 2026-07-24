@@ -1,5 +1,37 @@
 # @cat-factory/worker
 
+## 0.99.6
+
+### Patch Changes
+
+- 696da88: Finish the registry-DI migration: normalize the observability-provider registry to the same
+  app-owned class shape as the other registries. `ObservabilityProviderRegistry` is now a class
+  (`register`/`get`/`kinds`) and `defaultObservabilityRegistry()` a factory that pre-loads the
+  Datadog adapter, replacing the interim `Partial<Record<kind, factory>>` record — a breaking
+  change to the exported surface (pre-1.0, no shim). Each facade now injects
+  `defaultObservabilityRegistry()` into `RegistryReleaseHealthProvider`. The initiative's every
+  module-global plugin registry is now app-owned DI; the tracker is converted to
+  `backend/docs/adr/0028-registry-di.md`.
+- Updated dependencies [0e2799e]
+- Updated dependencies [696da88]
+- Updated dependencies [239788a]
+  - @cat-factory/kernel@0.154.2
+  - @cat-factory/server@0.144.6
+  - @cat-factory/gates@0.7.22
+  - @cat-factory/gitlab@0.11.22
+  - @cat-factory/integrations@0.93.0
+  - @cat-factory/agents@0.69.2
+  - @cat-factory/contracts@0.160.1
+  - @cat-factory/caching@0.10.35
+  - @cat-factory/consensus@0.11.31
+  - @cat-factory/eks@0.1.130
+  - @cat-factory/observability-langfuse@0.7.253
+  - @cat-factory/observability-otel@0.2.36
+  - @cat-factory/orchestration@0.135.5
+  - @cat-factory/provider-cloudflare@0.7.281
+  - @cat-factory/spend@0.12.79
+  - @cat-factory/prompt-fragments@0.14.8
+
 ## 0.99.5
 
 ### Patch Changes

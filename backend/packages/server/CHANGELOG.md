@@ -1,5 +1,51 @@
 # @cat-factory/server
 
+## 0.144.6
+
+### Patch Changes
+
+- 0e2799e: Close three gaps in the `human-review` PR gate:
+
+  - **Reviewer "Request changes" summaries are no longer ignored.** The gate only reacted to
+    inline review threads and plain conversation comments, so a reviewer who requested changes with
+    their feedback in the review's top-level summary box (no inline line comments) was invisible —
+    the run waited indefinitely for an approval that would never come. The review `body` is now read
+    (`FetchGitHubClient` + the `GitHubPullRequestReview` port), surfaced on the snapshot as
+    `reviewSummaries`, and folded into the gate's outstanding-feedback set so it dispatches the
+    fixer like any other comment.
+  - **A standing `CHANGES_REQUESTED` now blocks advancement** even when the required approval count
+    is met by other reviewers (`PullRequestReviewSnapshot.changesRequested` + `isApproved`), matching
+    GitHub's own merge rule so the gate can't sign off a PR GitHub would refuse to merge.
+  - **Approval reduction is order-independent**: reviews are sorted by `submittedAt` before the
+    "latest standing review per author" reduction, instead of trusting the API's array order.
+
+- 239788a: Security hardening (round 2, SSRF/injection batch):
+
+  - **SEC-2** — the inline model-provider path now routes local-runner endpoints through the
+    redirect-revalidating `fetchLocalRunner` (an optional `fetch` on `openAiCompatibleResolver`), so
+    an inline LLM call can't be 302'd to the cloud-metadata endpoint. Matches the proxy path.
+  - **SEC-7** — the Confluence document provider reuses the shared `safeFetch`, which strips the
+    Basic-auth header and body on a cross-origin redirect (the local copy that kept them is removed).
+  - **SEC-9** — explicit `bodyLimit` backstops on the unauthenticated `/github/webhooks` and
+    `/vcs/:provider/webhooks` raw-body reads (25 MB) and the LLM proxy `/v1/chat/completions` route
+    (32 MB), so an anonymous/session caller can't pin memory before the HMAC/session check.
+  - **SEC-10** — the initiative `slug` wire field is constrained to a lower-kebab grammar, so no
+    `/`/`..` segment can reshape a committed `docs/initiatives/<slug>/…` path.
+  - **`/vcs` fail-closed fix** — `/vcs` is added to the auth gate's `PUBLIC_PREFIXES`, so the
+    provider-neutral VCS webhook receiver is reachable on an auth-enabled deployment (it verifies its
+    own per-provider signature/token, like `/github`).
+
+- Updated dependencies [0e2799e]
+- Updated dependencies [696da88]
+- Updated dependencies [239788a]
+  - @cat-factory/kernel@0.154.2
+  - @cat-factory/integrations@0.93.0
+  - @cat-factory/agents@0.69.2
+  - @cat-factory/contracts@0.160.1
+  - @cat-factory/orchestration@0.135.5
+  - @cat-factory/spend@0.12.79
+  - @cat-factory/prompt-fragments@0.14.8
+
 ## 0.144.5
 
 ### Patch Changes
