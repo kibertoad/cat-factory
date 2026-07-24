@@ -35,15 +35,9 @@ export default defineNuxtPlugin(() => {
       version: '1.0.0',
       slots: {
         resultViews: [{ id: 'acme:security-report', component: AcmeSecurityReport }],
-        agentKinds: [
-          /* palette entries — see "Agent kinds" */
-        ],
-        nav: [
-          /* sidebar / command-palette destinations — see "Navigation" */
-        ],
-        inspectorPanels: [
-          /* per-block detail panels — see "Inspector panels" */
-        ],
+        agentKinds: [/* palette entries — see "Agent kinds" */],
+        nav: [/* sidebar / command-palette destinations — see "Navigation" */],
+        inspectorPanels: [/* per-block detail panels — see "Inspector panels" */],
       },
     }),
   )

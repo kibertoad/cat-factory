@@ -20,8 +20,8 @@ export type WorkersAiBinding = Parameters<typeof createWorkersAI>[0]['binding']
 
 /** A {@link ModelResolver} for `workers-ai` over the in-process Cloudflare `AI` binding. */
 export function cloudflareBindingResolver(binding: WorkersAiBinding): ModelResolver {
-  // workers-ai-provider@3 implements the same provider spec as `ai` v6
-  // (`@ai-sdk/provider` v3), so the model is a real LanguageModel — no cast.
+  // workers-ai-provider@4 implements the same provider spec as `ai` v7
+  // (`@ai-sdk/provider` v4), so the model is a real LanguageModel — no cast.
   const workersai = createWorkersAI({ binding })
   return (ref) => workersai(ref.model as Parameters<typeof workersai>[0])
 }

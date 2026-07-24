@@ -156,8 +156,7 @@ function when(epochMs: number): string {
         <pre
           v-if="entry.error"
           class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-rose-900/50 bg-rose-950/30 p-1.5 text-[11px] text-rose-200/90"
-          >{{ entry.error }}</pre
-        >
+          >{{ entry.error }}</pre>
       </li>
     </ul>
   </div>

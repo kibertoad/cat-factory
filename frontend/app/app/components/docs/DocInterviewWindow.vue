@@ -111,8 +111,7 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
           <pre
             v-if="session.brief"
             class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-300"
-            >{{ session.brief }}</pre
-          >
+            >{{ session.brief }}</pre>
           <p v-else class="text-[13px] text-slate-400">{{ t('docInterview.converged') }}</p>
         </div>
 

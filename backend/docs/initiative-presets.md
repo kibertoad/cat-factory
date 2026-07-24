@@ -62,17 +62,13 @@ initiativePresetRegistry.register({
       color: '#0ea5e9',
       description: '…',
     },
-    fields: [
-      /* the create-time form (see below) */
-    ],
+    fields: [/* the create-time form (see below) */],
     planningPipelineId: 'pl_initiative_docs', // an existing pipeline id
     interview: 'skip', // the form IS the interview
     humanReviewDefault: false,
     defaultFragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
     phaseTemplate: {
-      phases: [
-        /* the required plan shape */
-      ],
+      phases: [/* the required plan shape */],
       allowAdditionalPhases: false,
     },
     // policyDefaults?: Partial<InitiativeExecutionPolicy>

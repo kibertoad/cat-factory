@@ -601,8 +601,7 @@ async function copyOutput() {
                 </div>
                 <pre
                   class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
-                  >{{ draftTarget.quotedSource }}</pre
-                >
+                  >{{ draftTarget.quotedSource }}</pre>
                 <UTextarea
                   v-model="draftBody"
                   :rows="3"
@@ -646,8 +645,7 @@ async function copyOutput() {
                 </div>
                 <pre
                   class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
-                  >{{ c.quotedSource }}</pre
-                >
+                  >{{ c.quotedSource }}</pre>
                 <p class="text-[12px] text-slate-200">{{ c.body }}</p>
               </div>
 

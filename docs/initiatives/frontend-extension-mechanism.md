@@ -84,22 +84,12 @@ export default defineNuxtPlugin(() => {
             order: 55,
           },
         ],
-        nav: [
-          /* command-palette / sidebar entries with `run` closures */
-        ],
+        nav: [/* command-palette / sidebar entries with `run` closures */],
         // NEW slots this initiative adds — see the extension-point sections below:
-        taskTypes: [
-          /* … */
-        ],
-        appOverlays: [
-          /* … */
-        ],
-        notificationKinds: [
-          /* … */
-        ],
-        streamHandlers: [
-          /* … */
-        ],
+        taskTypes: [/* … */],
+        appOverlays: [/* … */],
+        notificationKinds: [/* … */],
+        streamHandlers: [/* … */],
       },
     }),
   )
