@@ -106,6 +106,11 @@ describe('mountAuthGate — default-deny', () => {
     expect((await call('GET', '/health')).status).toBe(200)
     expect((await call('GET', '/auth/login')).status).toBe(200)
     expect((await call('GET', '/v1/chat')).status).toBe(200)
+    expect((await call('GET', '/github/webhooks')).status).toBe(200)
+    // /vcs carries its own per-provider signature/token check (like /github), so the session
+    // gate must let its provider webhook deliveries through — else the receiver is dead on any
+    // auth-enabled deployment.
+    expect((await call('POST', '/vcs/gitlab/webhooks')).status).toBe(200)
     expect((await call('GET', '/workspaces')).status).toBe(401)
   })
 

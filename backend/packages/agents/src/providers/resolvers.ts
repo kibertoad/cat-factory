@@ -29,16 +29,26 @@ export function anthropicResolver(opts: { apiKey?: string; baseURL?: string }): 
 /**
  * Resolver for an OpenAI-compatible vendor (DashScope/Qwen, DeepSeek, Moonshot, or a
  * self-hosted gateway). `name` is only used by the SDK for telemetry/labels.
+ *
+ * `fetch` overrides the transport the SDK uses. Cloud vendors leave it unset (the AI-SDK
+ * default fetch, which follows 3xx redirects automatically). A LOCAL runner endpoint
+ * (Ollama / LM Studio / …) MUST pass a redirect-revalidating fetch (`fetchLocalRunner`) so
+ * the inline path re-runs the SSRF allow-list on every hop — otherwise a permitted local
+ * host could `302` the call to the cloud-metadata endpoint and the default fetch would
+ * follow it silently (SEC-2). This mirrors the proxy path, which already routes local-runner
+ * calls through `fetchLocalRunner`.
  */
 export function openAiCompatibleResolver(opts: {
   name: string
   apiKey: string
   baseURL: string
+  fetch?: typeof fetch
 }): ModelResolver {
   const provider = createOpenAICompatible({
     name: opts.name,
     apiKey: opts.apiKey,
     baseURL: opts.baseURL,
+    ...(opts.fetch ? { fetch: opts.fetch } : {}),
   })
   return (ref) => provider(ref.model)
 }

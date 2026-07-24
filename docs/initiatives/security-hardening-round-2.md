@@ -40,21 +40,62 @@ symmetric D1 ⇄ Drizzle + conformance work (already scoped in round 1's item 8)
 
 Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 
-| ID     | Item                                                               | Severity | Priority | Status  | PR  |
-| ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | --- |
-| SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ⏳ todo | —   |
-| SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ⏳ todo | —   |
-| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —   |
-| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —   |
-| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —   |
-| SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ⏳ todo | —   |
-| SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ⏳ todo | —   |
-| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —   |
-| SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ⏳ todo | —   |
-| SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ⏳ todo | —   |
-| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —   |
+| ID     | Item                                                               | Severity | Priority | Status  | PR        |
+| ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | --------- |
+| SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ✅ done | #1207     |
+| SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ✅ done | SSRF-2 PR |
+| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —         |
+| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —         |
+| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —         |
+| SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ✅ done | round-1   |
+| SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ✅ done | SSRF-2 PR |
+| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —         |
+| SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ✅ done | SSRF-2 PR |
+| SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ✅ done | SSRF-2 PR |
+| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —         |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
+
+**SEC-8 and SEC-11 are deferred to a dedicated harness PR** — both touch
+`backend/internal/executor-harness/src/**`, which mandates a runner-image tag bump (see
+CLAUDE.md "Releases & changesets"). They are the two lowest-severity items (Low + Very-Low, both
+"not currently exploitable"), so they are batched into that separate image-bumping change rather
+than entangling this shared-package PR with an image republish.
+
+### Landed (the SSRF-2 / injection-hardening PR)
+
+This phase closes the P0 SSRF asymmetry (SEC-2) and the shared-package P2 defense-in-depth items
+that need no harness image bump (SEC-7, SEC-9, SEC-10) plus the one-line `/vcs` fail-closed fix. It
+also records two items the round-2 review listed as todo that had already shipped:
+
+- **SEC-2** — `openAiCompatibleResolver` gained an optional `fetch`; the inline scoped model
+  provider (`server/src/agents/modelProviderResolver.ts`) now wires
+  `(url, init) => fetchLocalRunner(String(url), init)` for **local runner endpoints only**, so an
+  inline LLM call re-validates the SSRF allow-list on every redirect hop — symmetric with the proxy
+  path. Cloud vendors keep the AI-SDK default fetch. Test in `agents/providers/resolvers.test.ts`.
+- **SEC-7** — `ConfluenceProvider` now routes through the shared
+  `integrations/modules/shared/safe-fetch.ts` `safeFetch`/`readCappedText` (the local copy that
+  kept `Authorization` + body across origins is deleted), so a configured Atlassian site can't 302
+  the Basic-auth token to a different public host. Regression test in `ConfluenceProvider.ssrf.test.ts`.
+- **SEC-9** — a shared `server/src/webhooks/bodyLimit.ts` (`webhookBodyLimit()`, 25 MB) now guards
+  the unauthenticated `/github/webhooks` and `/vcs/:provider/webhooks` raw-body reads, and the LLM
+  proxy `/v1/chat/completions` route caps its buffered JSON at 32 MB — so an anonymous caller can't
+  pin memory up to the platform request limit before the HMAC/session check. Test in `bodyLimit.test.ts`.
+- **SEC-10** — the initiative `slug` wire field is now a dedicated `slugField`
+  (`/^[a-z0-9][a-z0-9-]*$/`), matching what the server's `initiativeSlug` generator already
+  produces, so no `/`/`..` segment can reshape a committed `docs/initiatives/<slug>/…` path.
+  `idField` is unchanged (pipeline/phase/item ids like `pl_full` keep underscores). Test in
+  `initiative.slug.test.ts`.
+- **`/vcs` fail-closed fix** (from "Notes & accepted risks") — `/vcs` is now in `PUBLIC_PREFIXES`
+  (`http/authGate.ts`), so the provider-neutral VCS webhook receiver is reachable on an
+  auth-enabled deployment (it does its own per-provider signature/token check, exactly like
+  `/github`). Assertion added to `test/authGate.spec.ts`.
+- **SEC-1** (already shipped in **#1207** as `SEC-RBAC-0`) — the account-tier `viaWorkspaceId` is
+  re-authorized through `requireViaWorkspaceAccess`. See the workspace-rbac follow-ups tracker.
+- **SEC-6** (already shipped in **round 1's item 7**) — `AgentContextObservabilityService.record`
+  already scrubs every body (`systemPrompt`/`userPrompt`/`fragments[].body`/`contextFiles[].content`)
+  through `redactSecrets` before the size budget, drops secret-shaped files, and deep-scrubs `extras`.
+  No further change needed.
 
 ---
 
@@ -282,12 +323,10 @@ provider permits an owner/repo literally named `..` (and a single `..` can't esc
 
 ## Notes & accepted risks (no code fix scoped)
 
-- **`/vcs` webhooks are unreachable when auth is enabled (functional bug, fails closed).** The
-  neutral VCS webhook route is **not** in `PUBLIC_PREFIXES` (`http/authGate.ts:25`), unlike
-  `/github`, so on an auth-enabled deployment the session gate 401s GitLab's delivery before
-  the controller's own signature check. No security exposure (fails closed), but the receiver
-  is effectively dead. Add `/vcs` to `PUBLIC_PREFIXES` — it does its own HMAC/token
-  verification, exactly like `/github`. (Worth folding into the SEC batch since it's one line.)
+- ~~**`/vcs` webhooks are unreachable when auth is enabled (functional bug, fails closed).**~~
+  **FIXED (SSRF-2 PR):** `/vcs` is now in `PUBLIC_PREFIXES` (`http/authGate.ts`); the neutral VCS
+  webhook receiver does its own per-provider signature/token verification, exactly like `/github`,
+  so the session gate no longer 401s a provider's delivery before that check.
 - **Workspace-scoped routes gate on membership, not role.** Sensitive per-workspace actions
   (vendor credentials, workspace API keys, workspace settings) are protected by workspace
   membership but not an admin-role check (contrast account-scoped keys, which `requireAdmin`).

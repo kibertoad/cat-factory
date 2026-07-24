@@ -6,6 +6,7 @@ import {
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
+import { readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import { CONFLUENCE_DESCRIPTOR } from './confluence.logic.js'
 import * as confluenceLogic from './confluence.logic.js'
 
@@ -17,8 +18,6 @@ import * as confluenceLogic from './confluence.logic.js'
 // class is the thin `fetch` shell around it. No SDK — fetch + `btoa` suffice.
 
 const USER_AGENT = 'cat-factory'
-/** Bound the redirect chain so a permitted first hop can't walk us anywhere. */
-const MAX_REDIRECTS = 5
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
 const MAX_RESPONSE_BYTES = 5_000_000
 
@@ -33,74 +32,9 @@ export class ConfluenceApiError extends Error {
   }
 }
 
-/**
- * `fetch` with redirects followed by hand so the SSRF guard runs against EVERY
- * hop. With the default `redirect: 'follow'` the permitted site could 302 to an
- * internal target (or downgrade https→http) and the runtime would follow it
- * unchecked, leaking the Basic-auth token. We force `redirect: 'manual'`,
- * re-resolve the `Location` against the current URL, and re-run the same
- * `assertSafe` guard (https-only + host blocklist) before following.
- */
-async function safeFetch(
-  url: string,
-  init: RequestInit,
-  assertSafe: (u: string) => void,
-): Promise<Response> {
-  let current = url
-  for (let hop = 0; ; hop++) {
-    assertSafe(current)
-    const res = await fetch(current, { ...init, redirect: 'manual' })
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location')
-      if (!location) return res
-      if (hop >= MAX_REDIRECTS) {
-        throw new ConfluenceApiError(502, 'Confluence returned too many redirects')
-      }
-      current = new URL(location, current).toString()
-      continue
-    }
-    return res
-  }
-}
-
-/**
- * Read a response body with a running byte cap so a hostile/huge response can't
- * OOM the isolate. Checks the declared Content-Length first, then enforces the
- * cap while streaming.
- */
-async function readCappedText(res: Response, maxBytes: number): Promise<string> {
-  const declared = res.headers.get('content-length')
-  if (declared && Number(declared) > maxBytes) {
-    throw new ConfluenceApiError(502, 'Confluence response too large')
-  }
-  const body = res.body
-  if (!body) return ''
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel()
-        throw new ConfluenceApiError(502, 'Confluence response too large')
-      }
-      chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const merged = new Uint8Array(total)
-  let offset = 0
-  for (const c of chunks) {
-    merged.set(c, offset)
-    offset += c.byteLength
-  }
-  return new TextDecoder().decode(merged)
-}
+/** Build a {@link ConfluenceApiError} for the shared `safeFetch`/`readCappedText` helpers. */
+const makeConfluenceError = (status: number, message: string): ConfluenceApiError =>
+  new ConfluenceApiError(status, `Confluence: ${message}`)
 
 interface ContentResponse {
   id?: string
@@ -194,17 +128,20 @@ export class ConfluenceProvider implements DocumentSourceProvider {
         },
       },
       (u) => confluenceLogic.assertSafeConfluenceBaseUrl(u),
+      makeConfluenceError,
     )
 
     if (!res.ok) {
-      const text = await readCappedText(res, MAX_RESPONSE_BYTES).catch(() => '')
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeConfluenceError, false).catch(
+        () => '',
+      )
       throw new ConfluenceApiError(
         res.status,
         `Confluence GET ${url} → ${res.status}: ${text.slice(0, 300)}`,
       )
     }
 
-    const text = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeConfluenceError)
     const json = (() => {
       try {
         return JSON.parse(text) as ContentResponse
@@ -238,15 +175,18 @@ export class ConfluenceProvider implements DocumentSourceProvider {
         },
       },
       (u) => confluenceLogic.assertSafeConfluenceBaseUrl(u),
+      makeConfluenceError,
     )
     if (!res.ok) {
-      const text = await readCappedText(res, MAX_RESPONSE_BYTES).catch(() => '')
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeConfluenceError, false).catch(
+        () => '',
+      )
       throw new ConfluenceApiError(
         res.status,
         `Confluence search ${url} → ${res.status}: ${text.slice(0, 300)}`,
       )
     }
-    const text = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeConfluenceError)
     const json = (() => {
       try {
         return JSON.parse(text)
