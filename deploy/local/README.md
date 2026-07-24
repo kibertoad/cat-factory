@@ -37,10 +37,21 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 ## Run it
 
 ```sh
-cp .env.example .env          # then fill in GITHUB_PAT (LOCAL_HARNESS_IMAGE is optional)
+cp .env.example .env          # then fill in the values below
+pnpm secrets                  # prints the three crypto secrets — paste them into .env
 pnpm db:up                    # start the local Postgres
 pnpm start                    # migrate + boot the service on :8787
 ```
+
+Four values are **mandatory** and boot fails loudly without them: `DATABASE_URL` (the
+compose default is already in `.env.example`) plus `AUTH_SESSION_SECRET`,
+`ENCRYPTION_KEY` and `HARNESS_SHARED_SECRET`. All three secrets must stay **stable**
+across restarts — regenerating them forces a re-login, orphans every credential sealed
+under the old key, or breaks re-attach to jobs still running from before the restart.
+`npx @cat-factory/cli env` writes a complete `.env` (secrets, `DATABASE_URL`, a minted
+PAT) in one step if you'd rather not assemble it by hand. Everything else is optional:
+`GITHUB_PAT` unlocks repo-operating steps and PAT sign-in, `LOCAL_HARNESS_IMAGE` is
+normally left unset.
 
 `startLocal()` connects to `DATABASE_URL`, runs the schema migration, boots pg-boss +
 the durable execution worker, and serves the shared HTTP API. Agent jobs reach the
@@ -135,13 +146,11 @@ curl -s https://api.cloudflare.com/client/v4/accounts \
   | python -c 'import json,sys; [print(a["id"], a["name"]) for a in json.load(sys.stdin)["result"]]'
 ```
 
-`ENCRYPTION_KEY` is generated per process when unset, so a stock boot works with no
-config. If you DO set it, it must be valid base64 of at least 32 bytes (e.g.
-`openssl rand -base64 32`); a non-base64 value like `dummy` fails the cipher at boot
-with `InvalidCharacterError`. Set it explicitly to keep encrypted-at-rest credentials
-(integration tokens, personal subscriptions, local-runner keys) decryptable across
-restarts; otherwise a fresh per-process key means they have to be re-entered after
-each restart.
+`ENCRYPTION_KEY` is mandatory (see [Run it](#run-it)) and must be valid base64 of at
+least 32 bytes — `pnpm secrets` prints one, as does `openssl rand -base64 32`. A
+non-base64 value like `dummy` is rejected at boot. Keep it stable: it seals the
+encrypted-at-rest credentials (integration tokens, personal subscriptions, local-runner
+keys), so a new key orphans every one of them and they have to be re-entered.
 
 ## Choosing the default model preset
 
@@ -198,9 +207,8 @@ Local runners are configured **per user** (a runner lives on your machine) in th
    task and run the pipeline — the agent containers reach the model through this
    service's LLM proxy (no key leaves your machine).
 
-Local models need no API key, so no `*_API_KEY` env var. `ENCRYPTION_KEY` must be set
-(local mode generates one per process; set it explicitly to keep your runner config and
-optional keys across restarts). Networking: the LLM proxy runs in **this host process**,
+Local models need no API key, so no `*_API_KEY` env var — your runner config is sealed
+with the mandatory `ENCRYPTION_KEY`. Networking: the LLM proxy runs in **this host process**,
 so it reaches the runner at `localhost` directly — you only need a non-default base URL
 if your runner listens elsewhere or you run the orchestrator itself in a container.
 
