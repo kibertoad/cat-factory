@@ -495,8 +495,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ prettyPrompt(c.promptText) }}</pre
-                    >
+                      >{{ prettyPrompt(c.promptText) }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
@@ -504,8 +503,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ c.responseText || '—' }}</pre
-                    >
+                      >{{ c.responseText || '—' }}</pre>
                   </div>
                   <div v-if="c.reasoningText">
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
@@ -513,8 +511,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
-                      >{{ c.reasoningText }}</pre
-                    >
+                      >{{ c.reasoningText }}</pre>
                   </div>
                 </div>
               </li>
@@ -597,8 +594,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ s.systemPrompt || '—' }}</pre
-                    >
+                      >{{ s.systemPrompt || '—' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
@@ -606,8 +602,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ s.userPrompt || '—' }}</pre
-                    >
+                      >{{ s.userPrompt || '—' }}</pre>
                   </div>
                   <div v-if="s.fragments.length">
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
@@ -621,8 +616,7 @@ function exportJson() {
                       <div class="mb-1 text-[11px] text-slate-400">{{ f.id }}</div>
                       <pre
                         class="max-h-48 overflow-auto text-[11px] leading-relaxed text-slate-300"
-                        >{{ f.body }}</pre
-                      >
+                        >{{ f.body }}</pre>
                     </div>
                   </div>
                   <div v-if="s.contextFiles.length">
@@ -640,8 +634,7 @@ function exportJson() {
                       </div>
                       <pre
                         class="max-h-72 overflow-auto text-[11px] leading-relaxed text-slate-300"
-                        >{{ file.content }}</pre
-                      >
+                        >{{ file.content }}</pre>
                     </div>
                   </div>
                   <div>
@@ -650,8 +643,7 @@ function exportJson() {
                     </div>
                     <pre
                       class="max-h-48 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
-                      >{{ prettyExtras(s.extras) }}</pre
-                    >
+                      >{{ prettyExtras(s.extras) }}</pre>
                   </div>
                 </div>
               </li>

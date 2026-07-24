@@ -35,8 +35,9 @@ export async function runRequirementReview(
       inputTokens: usage.inputTokens ?? 0,
       outputTokens: usage.outputTokens ?? 0,
       // The AI SDK surfaces provider prefix-cache hits here (0 on a cache-less route),
-      // so the report can quantify the caching dimension across providers.
-      cachedInputTokens: usage.cachedInputTokens ?? 0,
+      // so the report can quantify the caching dimension across providers. In AI SDK v7
+      // the cached-read count moved under `usage.inputTokenDetails.cacheReadTokens`.
+      cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
     },
     meta: { itemCount: items.length, raw: text },
   }

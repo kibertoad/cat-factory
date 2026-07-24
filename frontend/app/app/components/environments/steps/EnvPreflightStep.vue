@@ -94,8 +94,7 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
         <pre
           v-if="r.status !== 'pass' && r.remediation"
           class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-amber-900/40 bg-amber-950/20 p-1.5 text-[11px] text-amber-200/90"
-          >{{ r.remediation }}</pre
-        >
+          >{{ r.remediation }}</pre>
       </li>
     </ul>
 

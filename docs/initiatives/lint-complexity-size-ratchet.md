@@ -345,8 +345,8 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
   (`syncResource` handlers, `runProviderValidate`'s repo target). Destructure at the top of the body
   so the diff below the signature is untouched — that keeps the refactor behaviour-neutral.
 - **A refactor touching `executor-harness/src/**`republishes the runner image.** Bump the harness`version`+ run`pnpm sync:image-tags`(updates the three pins +`RECOMMENDED_HARNESS_IMAGE`) +
-add the `@cat-factory/executor-harness`changeset, and verify with`node scripts/check-runner-image-tag.mjs --since origin/main`. This is why an offender in the
-harness (e.g. `streamCli`) makes a lint slice heavier than a pure library one.
+  add the `@cat-factory/executor-harness`changeset, and verify with`node scripts/check-runner-image-tag.mjs --since origin/main`. This is why an offender in the
+  harness (e.g. `streamCli`) makes a lint slice heavier than a pure library one.
 - **Never raise a `max` back up.** Once a step lands, the ceiling only moves down. If a new
   PR would exceed a live ceiling, the PR splits its code — that is the whole point.
 - **`error`, not `warn`.** The rules match the repo's `correctness: error` posture so a

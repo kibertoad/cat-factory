@@ -462,8 +462,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 <pre
                   v-if="selectedRun.outputText"
                   class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
-                  >{{ selectedRun.outputText }}</pre
-                >
+                  >{{ selectedRun.outputText }}</pre>
                 <div v-if="gradeByRun.get(selectedRun.id)" class="mt-2 space-y-0.5">
                   <p
                     v-for="d in gradeByRun.get(selectedRun.id)!.scores"

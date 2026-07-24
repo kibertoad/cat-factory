@@ -101,6 +101,22 @@ export default defineConfig(async () => {
       // enough to absorb CI variance without letting a real stall sit for long.
       testTimeout: 10_000,
       hookTimeout: 10_000,
+      // Ignore workerd's un-awaitable unhandled rejections so a benign, expected
+      // one can't red an otherwise-green run. The `[ai]` binding cannot run in the
+      // local pool (`remoteBindings: false`), so any engine path that fires an INLINE
+      // Cloudflare Workers AI call (the Tester quality-review companion) rejects with
+      // "Binding AI needs to be run remotely". The product code CATCHES that failure and
+      // passes through (every assertion still passes) — but AI SDK v7 wraps each provider
+      // call in a diagnostics-channel tracing span, and workerd's `node:diagnostics_channel`
+      // polyfill reports `tracingChannel(...).hasSubscribers` as `undefined` rather than
+      // `false`, so `ai` takes its traced path instead of the no-subscriber pass-through and
+      // its internal settle handler floats a second rejection nothing can consume. We
+      // subscribe to none of `ai`'s telemetry channels, so this promise has no product
+      // meaning, and workerd surfaces it at the runtime level where no JS handler
+      // (`addEventListener('unhandledrejection')`) can intercept it. Test-pool-only, like
+      // `remoteBindings: false` and the `toad-cache` alias below; revisit if a future `ai`
+      // release restores the no-subscriber pass-through under the workerd polyfill.
+      dangerouslyIgnoreUnhandledErrors: true,
     },
     resolve: {
       // Pin `toad-cache` to its CommonJS build inside the Workers test pool.

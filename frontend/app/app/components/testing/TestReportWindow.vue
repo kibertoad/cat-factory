@@ -419,8 +419,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 v-if="showInfraSetupLogs"
                 data-testid="tester-infra-setup-logs"
                 class="mt-2 max-h-64 overflow-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] leading-relaxed text-slate-300"
-                >{{ infraSetup.logs }}</pre
-              >
+                >{{ infraSetup.logs }}</pre>
             </template>
           </div>
 

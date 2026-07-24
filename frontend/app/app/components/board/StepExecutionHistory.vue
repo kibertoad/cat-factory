@@ -68,8 +68,7 @@ const entries = computed<Entry[]>(() =>
           <CopyButton :text="entry.output.output" class="absolute end-1 top-1 z-10" />
           <pre
             class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-slate-950/80 p-1.5 pe-9 text-[10px] leading-snug text-slate-300"
-            >{{ entry.output.output }}</pre
-          >
+            >{{ entry.output.output }}</pre>
         </div>
         <p v-if="entry.output.truncated" class="mt-1 text-[10px] text-slate-500">
           {{ t('panels.stepDetail.outputTruncated') }}

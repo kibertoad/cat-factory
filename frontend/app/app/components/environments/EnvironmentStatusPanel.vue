@@ -128,8 +128,7 @@ const ENV_STATUS_META = computed<
           (environment.status === 'failed' || environment.status === 'expired')
         "
         class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-rose-900/60 bg-rose-950/40 p-1.5 text-[11px] text-rose-200/90"
-        >{{ environment.lastError }}</pre
-      >
+        >{{ environment.lastError }}</pre>
     </div>
     <p v-else class="text-[12px] text-slate-500">
       {{ degradedReason ?? t('environments.empty') }}

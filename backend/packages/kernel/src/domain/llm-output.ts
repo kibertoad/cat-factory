@@ -32,7 +32,7 @@ export function extractJson(text: string): unknown {
  * earlier bracket whose balanced span is not valid JSON (e.g. a bracket inside prose).
  */
 function extractJsonValue(candidate: string): unknown {
-  for (let from = 0; from < candidate.length; ) {
+  for (let from = 0; from < candidate.length;) {
     const rel = candidate.slice(from).search(/[[{]/)
     if (rel === -1) return null
     const start = from + rel

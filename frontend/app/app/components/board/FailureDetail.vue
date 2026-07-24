@@ -29,8 +29,7 @@ const { t } = useI18n()
       <pre
         class="max-h-32 overflow-auto whitespace-pre-wrap rounded p-1.5 pe-9"
         :class="preClass"
-        >{{ detail }}</pre
-      >
+        >{{ detail }}</pre>
     </div>
   </details>
 </template>

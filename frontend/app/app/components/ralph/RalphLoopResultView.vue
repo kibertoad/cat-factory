@@ -147,8 +147,7 @@ const STATUS_META = computed<
               <CopyButton :text="ralph.lastValidationTail" class="absolute end-1 top-1" />
               <pre
                 class="whitespace-pre-wrap pe-8 font-mono text-[11px] leading-relaxed text-slate-400"
-                >{{ ralph.lastValidationTail }}</pre
-              >
+                >{{ ralph.lastValidationTail }}</pre>
             </div>
           </template>
 

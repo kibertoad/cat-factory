@@ -749,10 +749,12 @@ The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The polic
   dependency sweep — its deps feed the published runner image (see the image-tag rules
   below), so bumping them is a separate, deliberate, image-bumping change.
 - **The Vercel AI SDK family (`ai`, `@ai-sdk/*`) is held to the major that pairs with
-  `workers-ai-provider`.** `workers-ai-provider`'s peers require `ai@^6` + `@ai-sdk/*@^3`
-  (provider/openai/anthropic), so do NOT bump `ai` to v7 (or the `@ai-sdk/*` packages past
-  their `ai@6`-compatible majors) until `workers-ai-provider` ships a release whose peers
-  accept it. Upgrade only within those majors.
+  `workers-ai-provider`.** As of `workers-ai-provider@4` the family is on `ai@^7` +
+  `@ai-sdk/*@^4` (`provider`/`openai`/`anthropic`; `@ai-sdk/openai-compatible@^3`,
+  `@ai-sdk/amazon-bedrock@^5`), because `workers-ai-provider@4`'s peers require `ai@^7` +
+  `@ai-sdk/*@^4`. So do NOT bump `ai` past v7 (or the `@ai-sdk/*` packages past their
+  `ai@7`-compatible majors) until `workers-ai-provider` ships a release whose peers accept
+  it. Upgrade only within those majors.
 
 ## Releases & changesets
 
