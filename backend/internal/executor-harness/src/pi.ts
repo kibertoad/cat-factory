@@ -250,9 +250,10 @@ export const SKILL_CONTEXT_SUBDIR = 'skill'
 
 /**
  * Materialise a repo-sourced skill's RESOURCE files under `.cat-context/skill/` in the checkout
- * (repo-sourced Claude Skills, slice 2) — the Pi/codex path, whose agents read the checkout rather
- * than a native `~/.claude/skills` dir (the skill's instructions are folded into their prompt by
- * the backend). Resource sub-paths were sanitized at the job boundary (no traversal), so nested
+ * (repo-sourced Claude Skills, slice 2) — the path for every run that does NOT get a native
+ * install: Pi, codex, and ambient claude-code (no isolated `CLAUDE_CONFIG_DIR` to install into).
+ * Their agents read the checkout, and the skill's instructions are folded into their prompt by the
+ * backend (`renderSkillForHarness`, which keys off ambient auth as well as the harness). Resource sub-paths were sanitized at the job boundary (no traversal), so nested
  * dirs are created as needed. Kept out of the agent's commits via the same `.cat-context/` git
  * exclude entry. A skill with no resource bodies is a no-op.
  */

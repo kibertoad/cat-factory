@@ -1195,7 +1195,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // A `skill` step's resolved skill, rendered harness-aware (repo-skills slice 2): the payload
     // travels as the top-level `skill` job-body field (the harness materialises it — natively for
     // claude-code, under `.cat-context/skill/` for Pi/codex), and `skillSection` primes the prompt.
-    const skillRender = renderSkillForHarness(context.skill, harness)
+    // Ambient (native) claude-code takes the checkout path too — it has no isolated config home to
+    // install into — so the prompt must carry the instructions rather than point at an install.
+    const skillRender = renderSkillForHarness(context.skill, harness, auth.ambientAuth === true)
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.

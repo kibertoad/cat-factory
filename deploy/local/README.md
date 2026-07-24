@@ -422,6 +422,29 @@ your pipelines is Claude/Codex you can run native-only with no image.
 > Tester's local docker-compose infra is unavailable in native mode for now (a follow-up
 > adds host-Docker compose with per-run project names + git-worktree isolation).
 
+#### Parallel native runs, and what stays yours
+
+Native runs **do** go in parallel: the transport keeps ONE long-lived harness process and
+starts each job in it immediately (no queue, no cap), each in its own throwaway clone under
+your temp dir. You do not need to serialize anything.
+
+What that costs is a shared process and a shared `HOME`, so the harness keeps every per-job
+value out of both. Concretely, in native mode:
+
+- **Your `~/.npmrc` is never written and never deleted.** A job carrying private-registry
+  auth gets its own npmrc under a per-job dir (seeded from yours, so your registries and
+  proxy still apply) and npm is pointed at it with `npm_config_userconfig`. A job with no
+  registry entries leaves yours in effect, untouched. One limitation: `npm_config_userconfig`
+  is honoured by npm and pnpm but not by yarn, so a yarn-based repo needing the job's private
+  registries wants a container run rather than a native one.
+- **A repo's Claude Skill is never installed into your `~/.claude`.** Those runs read the
+  skill from the checkout (`.cat-context/skill/`) instead, so nothing from a task's repo
+  persists in your personal Claude Code setup after the run.
+- **Tester secrets go to the agent's child process only**, not the harness's own environment,
+  so two overlapping Tester runs can't read or clobber each other's.
+
+Your `~/.claude` / `~/.codex` login is still used as-is — that's the point of native mode.
+
 ### Inline steps on your subscription (`LOCAL_NATIVE_INLINE`, default on)
 
 The inline LLM steps — the requirements reviewer, brainstorm, task-estimator and inline

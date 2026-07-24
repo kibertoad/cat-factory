@@ -669,6 +669,8 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   GitHub Actions CI and **merges the PR for real**. Repo resolution is unchanged (the
   `github_repos`/`github_installations` projection); the `linkRepo` helper (+ CLI) seeds
   those rows from PAT-read repo metadata since there is no GitHub-App connect flow.
+  **Native execution (`LOCAL_NATIVE_AGENTS`) makes per-job state a correctness concern** —
+  see "Per-job state in the harness" below.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
   per-run Cloudflare Container (the Pi coding-agent harness). Published to **npm**
   (its zero-dependency `dist/server.js` is the entry `@cat-factory/local-server`
@@ -907,6 +909,52 @@ runs an agent in a container should mirror it.
    one per workspace) → broadcast → SPA `useWorkspaceStream.ts` →
    `execution.upsert()` store → `TaskExecution.vue` / `PipelineProgress.vue`
    render the `{completed}/{total}` subtask bars.
+
+## Per-job state in the harness — NEVER a process- or HOME-global
+
+**Anything the executor-harness stages for ONE job must be scoped to that job: explicit child
+env, or a per-job directory. Never `process.env`, never a dotfile under `HOME`.** This is
+absolute, and it is a correctness rule, not hygiene.
+
+The trap is that a global LOOKS per-job in the setting most code is written against. In a
+container, one job owns the process and `HOME` belongs to that container, so staging a value in
+`process.env` (restoring it afterwards) or writing `~/.npmrc` is safe. The **local native
+transport** (`LOCAL_NATIVE_AGENTS`, `LocalProcessRunnerTransport`) breaks both invariants at
+once: ONE long-lived host process serves EVERY concurrent `ambientAuth` job, and its `HOME` is
+the **developer's own**. The same code then leaks one job's state into a sibling and destroys
+files the developer owns — and the container tests keep passing.
+
+The two seams to use instead:
+
+- **`RunOptions.agentEnv`** → `SubscriptionRunOptions.extraEnv`, merged over the inherited env
+  when the agent CLI is spawned. Layer onto it with `withAgentEnv(opts, env)`; the agent and
+  every shell tool it spawns read it as `$KEY`. This is how the tester's secrets travel (they
+  used to be a `process.env` set + restore closure, which two overlapping Tester runs raced on).
+  **Anything the HARNESS spawns itself must be passed `agentEnv` explicitly** — it is not in
+  `process.env`, so a child of the harness rather than of the agent inherits nothing. That is
+  the frontend stand-up's install/build (`standUpFrontend`) and the ralph validation command;
+  both take the run's `RunOptions` for exactly this reason.
+- **A per-job directory**, created in `handleAgent` for an `ambientAuth` job and removed with it.
+  This is where the private-registry npmrc goes (pointed at by `npm_config_userconfig`, seeded
+  from the developer's so their registries keep working), because writing — or, for a job with no
+  entries, CLEARING — the real `~/.npmrc` corrupted the developer's own npm config on every
+  native run.
+
+Some state has no per-job form, and then the answer is to **not write it at all** rather than
+write it globally: a repo-sourced Claude Skill is installed natively only into an isolated
+`CLAUDE_CONFIG_DIR`, never the developer's `~/.claude`; an ambient run reads it from the
+checkout's `.cat-context/skill/` (the fallback codex always used). **When you move state to the
+checkout like that, move the PROMPT with it** — `renderSkillForHarness` (`@cat-factory/server`)
+therefore keys off `ambientAuth` as well as the harness, so an ambient run gets the instructions
+folded in rather than a pointer to an install that never happened.
+
+`~/.pi/*` and `~/.config/rpiv-web-tools` are still HOME-global. That is safe ONLY because the
+Pi harness never runs natively — `NativeRoutingRunnerTransport` routes per JOB, sending
+`ambientAuth` jobs (Claude/Codex, ambient login) to the host process and everything else to a
+container. Do not extend that assumption to new state.
+
+When you add per-job state, add a test that two concurrent jobs keep it separate. The container
+path alone will not catch the regression.
 
 ## Repo bootstrap flow (ASYNC + observable + board-integrated)
 

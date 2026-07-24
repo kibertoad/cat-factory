@@ -105,8 +105,9 @@ export interface CodingAgentSpec extends HarnessAuthFields {
   validation?: { command: string; iteration?: number }
   /**
    * A repo-sourced Claude Skill to make available for this run (a `skill` step, slice 2). Threaded
-   * into {@link runAgentInWorkspace}, which installs it harness-aware (native `~/.claude/skills`
-   * for claude-code, `.cat-context/skill/` for Pi/codex). Absent ⇒ no skill.
+   * into {@link runAgentInWorkspace}, which installs it harness-aware: natively under the ISOLATED
+   * `CLAUDE_CONFIG_DIR` for a leased-credential claude-code run, `.cat-context/skill/` for everything
+   * else (Pi, codex, and ambient claude-code, which has no isolated config dir). Absent ⇒ no skill.
    */
   skill?: SkillSpec
 }
@@ -602,6 +603,10 @@ async function runRalphValidation(
       cwd,
       detached: spawnDetached,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // The job's own env (see `RunOptions.agentEnv`): a validation command typically installs
+      // before it tests, and this is spawned by the HARNESS rather than the agent, so it does not
+      // otherwise inherit the job's private-registry npmrc pointer on the native path.
+      env: { ...process.env, ...opts.agentEnv },
     })
     // Keep only the tail; guard against unbounded buffering on a chatty command.
     const capture = (chunk: Buffer): void => {

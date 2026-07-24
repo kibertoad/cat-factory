@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   claudeAssistantContent,
@@ -81,8 +81,9 @@ export interface SubscriptionRunOptions {
   /**
    * A repo-sourced Claude Skill to install natively before launch (repo-sourced Claude Skills,
    * slice 2). The claude-code runner writes it to `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md`
-   * (+ resource files) so the CLI loads it; the codex runner ignores it (codex reads the
-   * checkout's `.cat-context/skill/`, materialised by the caller). Absent ⇒ no skill installed.
+   * (+ resource files) so the CLI loads it — but ONLY when it owns an isolated config home, i.e.
+   * NOT under `ambientAuth`. The codex runner ignores it outright. Every case that skips the
+   * native install reads the checkout's `.cat-context/skill/`, materialised by the caller.
    */
   skill?: {
     name: string
@@ -90,6 +91,14 @@ export interface SubscriptionRunOptions {
     instructions: string
     resources: { relPath: string; content: string }[]
   }
+  /**
+   * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
+   * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
+   * agent and its shell tools see them without the harness mutating its OWN environment — which
+   * is shared by every concurrent job under the native host-process transport. See
+   * `RunOptions.agentEnv`.
+   */
+  extraEnv?: Record<string, string>
   /** Aborting this kills the CLI (the job's inactivity/max-duration watchdog). */
   signal?: AbortSignal
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
@@ -449,14 +458,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   }
 
   // Repo-sourced Claude Skill (slice 2): install it as a native skill under the config dir's
-  // `skills/<name>/` so the CLI discovers and can invoke it. Written to the isolated per-run
-  // config home when present, else the developer's `~/.claude` (ambient/native mode). Best-effort:
-  // a write failure must not wedge the run — the prompt still names the skill.
-  if (opts.skill) {
-    const skillsRoot = configHome
-      ? join(configHome, 'skills')
-      : join(homedir(), '.claude', 'skills')
-    await writeNativeSkill(skillsRoot, opts.skill).catch(() => {})
+  // `skills/<name>/` so the CLI discovers and can invoke it. ONLY into the isolated per-run config
+  // home — never the developer's own `~/.claude` (ambient/native mode), where it would persist in
+  // their personal setup after the run and two concurrent jobs carrying same-named skills from
+  // different repos would clobber each other. An ambient run reads the skill from the checkout
+  // instead (`.cat-context/skill/`, materialised by the caller). Best-effort: a write failure must
+  // not wedge the run — the prompt still names the skill.
+  if (opts.skill && configHome) {
+    await writeNativeSkill(join(configHome, 'skills'), opts.skill).catch(() => {})
   }
 
   const env = buildClaudeEnv(opts, configHome)
@@ -542,8 +551,11 @@ function buildClaudeEnv(
   opts: SubscriptionRunOptions,
   configHome: string | undefined,
 ): Record<string, string> {
-  if (opts.ambientAuth) return {}
+  // The job-scoped env rides along in BOTH modes; the credential/config vars below are what
+  // ambient mode drops (the developer's own logged-in `~/.claude` is used instead).
+  if (opts.ambientAuth) return { ...opts.extraEnv }
   return {
+    ...opts.extraEnv,
     CLAUDE_CONFIG_DIR: configHome!,
     ...(opts.subscriptionBaseUrl
       ? {
@@ -738,7 +750,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       },
       prompt,
       opts,
-      codexHome ? { CODEX_HOME: codexHome } : {},
+      { ...opts.extraEnv, ...(codexHome ? { CODEX_HOME: codexHome } : {}) },
       opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
       onEvent,
     )
