@@ -69,7 +69,7 @@ export {
   classifyHumanReview,
   isApproved,
   outstandingThreads,
-  outstandingComments,
+  outstandingConversation,
   renderReviewFeedbackForFixer,
   requiredApprovals,
   type HumanReviewVerdict,

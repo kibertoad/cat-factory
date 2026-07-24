@@ -117,6 +117,13 @@ export interface GitHubPullRequestReview {
   author: string
   /** Review verdict: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING'. */
   state: string
+  /**
+   * The review's top-level summary body (the text a reviewer types into GitHub's
+   * "Request changes" / "Comment" box), or '' when the review carried none. This is the
+   * feedback a reviewer leaves WITHOUT inline line comments, so the `human-review` gate must
+   * read it to act on a change request that has no review threads (see {@link ReviewThread}).
+   */
+  body: string
   /** Epoch ms when the review was submitted (0 when unknown). */
   submittedAt: number
   /** The commit sha the review targeted, or null. */

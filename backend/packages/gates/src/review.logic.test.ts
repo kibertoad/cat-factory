@@ -37,8 +37,10 @@ function snapshot(over: Partial<PullRequestReviewSnapshot> = {}): PullRequestRev
     requiredApprovingReviewCount: 1,
     assignedReviewers: ['alice'],
     approvals: 0,
+    changesRequested: false,
     unresolvedThreads: [],
     comments: [],
+    reviewSummaries: [],
     ...over,
   }
 }
@@ -137,6 +139,57 @@ describe('classifyHumanReview', () => {
     const snap = snapshot({
       approvals: 1,
       comments: [{ id: 'c1', author: 'bob', body: 'thanks!', createdAt: NOW, isBot: false }],
+    })
+    expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('advance')
+  })
+
+  it('dispatches on a CHANGES_REQUESTED review SUMMARY body with no inline threads', () => {
+    // The gap: a reviewer clicks "Request changes" and types their feedback in the summary box
+    // (no inline line comments). That body arrives as a `reviewSummary`, not a thread/comment —
+    // it MUST be handed to the fixer, not silently ignored while the run waits for an approval.
+    const snap = snapshot({
+      changesRequested: true,
+      reviewSummaries: [
+        {
+          id: 'review-1',
+          author: 'alice',
+          body: 'Please add error handling.',
+          createdAt: NOW,
+          isBot: false,
+        },
+      ],
+    })
+    const v = classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW })
+    expect(v.kind).toBe('dispatch')
+    if (v.kind === 'dispatch') {
+      expect(v.instructions).toContain('Please add error handling.')
+      expect(v.latestCommentAt).toBe(NOW)
+    }
+  })
+
+  it('does NOT advance while a standing CHANGES_REQUESTED stands, even with required approvals met', () => {
+    // GitHub blocks the merge while one reviewer's standing review is CHANGES_REQUESTED, even
+    // when another reviewer's approval meets the required count. The gate must mirror that: with
+    // no actionable text it waits (never advances), so it can't sign off a PR GitHub would refuse.
+    const snap = snapshot({ approvals: 1, requiredApprovingReviewCount: 1, changesRequested: true })
+    expect(isApproved(snap)).toBe(false)
+    expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('wait')
+  })
+
+  it('ignores a review summary once the PR is approved (same rule as plain comments)', () => {
+    // A COMMENTED review's body after sign-off is post-approval chatter — no fixer churn, advance.
+    const snap = snapshot({
+      approvals: 1,
+      changesRequested: false,
+      reviewSummaries: [
+        {
+          id: 'review-1',
+          author: 'bob',
+          body: 'nice work, minor nit',
+          createdAt: NOW,
+          isBot: false,
+        },
+      ],
     })
     expect(classifyHumanReview(snap, state(), { graceMinutes: 0, now: NOW }).kind).toBe('advance')
   })

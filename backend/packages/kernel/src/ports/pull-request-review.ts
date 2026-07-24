@@ -62,10 +62,27 @@ export interface PullRequestReviewSnapshot {
    * ≥ {@link requiredApprovingReviewCount}.
    */
   approvals: number
+  /**
+   * Whether at least one non-bot reviewer's LATEST standing review is CHANGES_REQUESTED. GitHub
+   * blocks a merge while such a review stands even when the required approval count is met by
+   * OTHER reviewers, so the gate must not advance on it — {@link isApproved} folds this in
+   * alongside the approval count.
+   */
+  changesRequested: boolean
   /** Open (unresolved) review threads on the PR, oldest→newest by latest comment. */
   unresolvedThreads: ReviewThread[]
   /** General PR conversation comments, oldest→newest. */
   comments: PullRequestComment[]
+  /**
+   * Non-approving review SUMMARY bodies — the top-level text of each non-bot CHANGES_REQUESTED /
+   * COMMENTED review that carried a body (oldest→newest). This is the reviewer feedback that
+   * lives on the review itself rather than in an inline thread or a conversation comment; the
+   * gate treats it as outstanding feedback exactly like a plain comment (actionable while the PR
+   * is not yet approved, deduplicated via the same `lastAddressedCommentAt` cursor). Modelled as
+   * {@link PullRequestComment} so the classifier reduces it uniformly with `comments`; the `id`
+   * is a synthetic `review-<n>` marker (a submitted review has no comment id).
+   */
+  reviewSummaries: PullRequestComment[]
 }
 
 export interface PullRequestReviewProvider {

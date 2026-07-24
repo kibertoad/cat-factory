@@ -125,7 +125,7 @@ export class FakeVcsClient implements VcsClient {
         },
       ],
       reviews: options.reviews ?? [
-        { author: 'approver', state: 'APPROVED', submittedAt: 0, commitId: null },
+        { author: 'approver', state: 'APPROVED', body: '', submittedAt: 0, commitId: null },
       ],
       requestedReviewers: options.requestedReviewers ?? [],
       reviewThreads: options.reviewThreads ?? [],
