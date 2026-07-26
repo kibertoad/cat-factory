@@ -1,6 +1,6 @@
 # Initiative: headless clarification loop
 
-**Status:** in progress (slice 1 landing) · **Owner:** core · **Started:** 2026-07-26
+**Status:** in progress (slice 1 landed; slice 2 next) · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -237,19 +237,46 @@ driver's replays cannot double-post.
 
 ### Checklist
 
-| #    | Item                                                                               | Status  |
-| ---- | ---------------------------------------------------------------------------------- | ------- |
-| 1.1  | `decide` scope on the ladder + service/contract tests                              | ⬜ todo |
-| 1.2  | `intakeOrigin` on `ExecutionInstance` + `RunStartOptions` + shared mappers         | ⬜ todo |
-| 1.3  | Admission relaxation + `POST /api/v1/jobs/:id/cancel`                              | ⬜ todo |
-| 1.4  | Public decision contracts (`@cat-factory/contracts`)                               | ⬜ todo |
-| 1.5  | `PublicDecisionController` (delegating, no parallel logic)                         | ⬜ todo |
-| 1.6  | `decision` SSE frames on both public streams                                       | ⬜ todo |
-| 1.7  | `notification_webhooks` persistence, D1 ⇄ Drizzle + repo parity                    | ⬜ todo |
-| 1.8  | `WebhookNotificationChannel` + HMAC signing + bounded retry, wired in both facades | ⬜ todo |
-| 1.9  | Conformance: park → list decisions → answer → incorporate → advance, both runtimes | ⬜ todo |
-| 1.10 | Conformance: individual-usage run resumes across a park with no new activation     | ⬜ todo |
-| 1.11 | Docs sweep + changesets                                                            | ⬜ todo |
+| #    | Item                                                                                     | Status  |
+| ---- | ---------------------------------------------------------------------------------------- | ------- |
+| 1.1  | `decide` scope on the ladder (+ the SPA token picker + all 10 locales)                   | ✅ done |
+| 1.2  | `intakeOrigin` on `ExecutionInstance` + `RunStartOptions` + shared mappers               | ✅ done |
+| 1.3  | Admission relaxation + `POST /api/v1/jobs/:id/cancel`                                    | ✅ done |
+| 1.4  | Public decision contracts (`@cat-factory/contracts`)                                     | ✅ done |
+| 1.5  | `PublicDecisionController` (delegating, no parallel logic)                               | ✅ done |
+| 1.6  | `decision` SSE frames on both public streams (which now stay open across a park)         | ✅ done |
+| 1.7  | `notification_webhooks` persistence, D1 ⇄ Drizzle + a repository-parity suite            | ✅ done |
+| 1.8  | `WebhookNotificationChannel` + HMAC signing + bounded retry, wired in both facades       | ✅ done |
+| 1.9  | Conformance: list → answer a park over `/api/v1`, scoping + scope refusal, both runtimes | ✅ done |
+| 1.10 | Individual-usage runs across a park — see the note below                                 | ✅ done |
+| 1.11 | Docs sweep (OpenAPI, CLAUDE.md, AGENTS.md) + changeset                                   | ✅ done |
+
+**On 1.10 (individual-usage models).** The brief asked to verify the resume path needs nothing
+new and add a conformance case. Verified: `personalGateForBlock` / `personalGateForRun` refuse an
+individual-usage model at the public START and RETRY boundaries, so a headless run on such a model
+never exists — there is no parked run of that shape for a resume to break. The run-scoped
+activation is cleared only when the run reaches a TERMINAL state (`emitInstance` →
+`deleteByExecution`), and a park is not terminal, so an activation would outlive a park regardless.
+A conformance case asserting "an individual-usage run resumes across a park" would therefore have
+to construct a state the public surface refuses to create — it would assert the fake, not the
+product. The existing refusal is covered by the public-API integration specs; the honest outcome is
+that this needs nothing, recorded here rather than papered over with a vacuous test.
+
+**On the admission guard's coverage.** The relaxation is exercised as a unit test
+(`publicApiAdmission.test.ts`) rather than over the wire, because the ONLY public pipeline is the
+built-in one and built-ins are read-only — there is no way to construct a public-and-parking
+pipeline through the API. The policy is pure logic in the SHARED controller layer, so it cannot
+drift between facades; what conformance asserts instead is that each facade wires the agent-kind
+registry the `headlessStartable` flag is computed against.
+
+**Deferred from slice 1 (deliberately, not forgotten).**
+
+- No SPA UI for the notification webhook: it is managed over
+  `GET|PUT|DELETE /workspaces/:ws/notification-webhook` (behind `integrations.manage`). The
+  consumer of this feature is a headless integration whose operator is already using the API; a
+  settings panel is worth adding when a human-facing deployment wants it.
+- The fork-decision CHAT is not exposed publicly — it is an interactive deliberation affordance,
+  and a headless caller already receives each fork's full approach/trade-offs/risk text.
 
 ### Conventions & gotchas carried forward
 
