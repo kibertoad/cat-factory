@@ -36,6 +36,31 @@ export interface VcsIdentity {
   email: string | null
 }
 
+/**
+ * Thrown by a {@link VcsIdentityResolver} when the provider's "current user" endpoint
+ * responds with a non-2xx status, carrying that HTTP `status` so a caller can tell a
+ * client-side token problem (4xx — invalid/revoked/insufficient scope) apart from a
+ * transient upstream failure (5xx). A network/transport failure surfaces as an ordinary
+ * `Error` (no `status`), which a caller should also treat as transient, NOT as a bad token.
+ * The originating error is preserved on `cause`.
+ */
+export class VcsIdentityError extends Error {
+  constructor(
+    message: string,
+    /** The provider's HTTP status, when the failure was an HTTP response (absent for transport errors). */
+    readonly status?: number,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options)
+    this.name = 'VcsIdentityError'
+  }
+
+  /** True for a 4xx: the token itself is the problem (invalid, revoked, or missing scope). */
+  get isClientError(): boolean {
+    return this.status != null && this.status >= 400 && this.status < 500
+  }
+}
+
 /** Resolves a raw source-control PAT to the account it belongs to. */
 export interface VcsIdentityResolver {
   /**

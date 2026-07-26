@@ -1,4 +1,5 @@
 import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import { VcsIdentityError } from '@cat-factory/kernel'
 
 // Resolves a GitHub PAT to its account via `GET /user` — the same identity (the numeric
 // user id) the OAuth login path keys on, so a PAT login and a GitHub OAuth login for the
@@ -54,7 +55,10 @@ export class GitHubIdentityResolver implements VcsIdentityResolver {
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`GitHub /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      throw new VcsIdentityError(
+        `GitHub /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
+        res.status,
+      )
     }
     const user = (await res.json()) as GitHubUserResponse
     if (user.id == null || !user.login) {

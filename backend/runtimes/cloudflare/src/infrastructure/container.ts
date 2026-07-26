@@ -1,7 +1,6 @@
 import {
   type AgentContextRecorder,
   type AgentExecutor,
-  type CachedRepoRead,
   type Clock,
   CompositeNotificationChannel,
   type DocumentSourceProvider,
@@ -99,9 +98,7 @@ import {
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
   ContainerEnvConfigRepairer,
   makeResolveDeployCloneTarget,
-  makeResolveRunRepoContext,
   RunnerJobClient,
-  makeResolveRepoFilesForCoords,
   makeResolveBinaryArtifactStore,
   type BuildBlobBackend,
   ensureWorkBranchViaRest,
@@ -144,7 +141,6 @@ import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistr
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
-import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
@@ -168,11 +164,6 @@ import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTo
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
-import { D1BranchProjectionRepository } from './repositories/D1BranchProjectionRepository'
-import { D1PullRequestProjectionRepository } from './repositories/D1PullRequestProjectionRepository'
-import { D1IssueProjectionRepository } from './repositories/D1IssueProjectionRepository'
-import { D1CommitProjectionRepository } from './repositories/D1CommitProjectionRepository'
-import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProjectionRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
@@ -233,12 +224,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import {
-  GitHubDocQualityProvider,
-  GitHubPullRequestReviewProvider,
-  ProviderRoutingGitHubClient,
-} from '@cat-factory/server'
-import { selectWorkerVcsConnectDeps } from './vcsConnect'
+import { GitHubDocQualityProvider, GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -247,8 +233,6 @@ import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
-import { FetchGitHubProvisioningClient } from './github/FetchGitHubProvisioningClient'
-import { WebCryptoWebhookVerifier } from './github/WebCryptoWebhookVerifier'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
@@ -1475,139 +1459,6 @@ function selectEventPublisher(env: Env, db: D1Database): ExecutionEventPublisher
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
   })
 }
-
-/**
- * Build the GitHub integration's concrete ports when an App is configured,
- * mirroring `selectWorkRunner`. Returns an empty object otherwise, so `createCore`
- * leaves the `github` module unassembled and the feature stays opt-in.
- */
-export function selectGitHubDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-  repoFilesCache: GroupCacheHandle<CachedRepoRead>,
-): Partial<CoreDependencies> {
-  const githubInstallationRepository = new D1GitHubInstallationRepository({ db })
-  // Per-workspace GitLab PAT connect (opt-in): a GitLab-backed client whose token source decrypts
-  // each workspace's sealed PAT, plus the connect service that validates + seals a pasted PAT.
-  // Mirrors the Node facade's `selectVcsConnectDeps` (per "keep the runtimes symmetric").
-  const gitlabConnect = selectWorkerVcsConnectDeps(config, githubInstallationRepository, db, clock)
-  const gitlabConnectClient = gitlabConnect?.client
-
-  if (!config.github.enabled) {
-    // GitLab-only deployment: the App-shaped provisioning wiring stays off (GitLab ingests via the
-    // neutral `/vcs/:provider/webhooks` route), but the checkout-free RepoFiles seams — a registered
-    // custom kind's pre/post-op hooks + the environments module's on-demand repo validation — must
-    // still work, so wire them from the single-token GitLab engine client. When per-workspace connect
-    // is enabled, ALSO wire the `github` module (browse/link/sync) with the per-workspace connect
-    // client + the connect service, so a GitLab user connects and manages repos through the UI.
-    if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
-      const engineClient = buildGitLabEngineClient({
-        token: env.GITLAB_TOKEN,
-        apiBase: config.gitlab.apiBase,
-        clock,
-      })
-      return {
-        resolveRunRepoContext: makeResolveRunRepoContext(
-          engineClient,
-          buildResolveRepoTarget(db),
-          repoFilesCache,
-        ),
-        resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
-          engineClient,
-          githubInstallationRepository,
-          new D1RepoProjectionRepository({ db }),
-        ),
-        ...(gitlabConnectClient
-          ? {
-              githubClient: gitlabConnectClient,
-              githubInstallationRepository,
-              repoProjectionRepository: new D1RepoProjectionRepository({ db }),
-              branchProjectionRepository: new D1BranchProjectionRepository({ db }),
-              pullRequestProjectionRepository: new D1PullRequestProjectionRepository({ db }),
-              issueProjectionRepository: new D1IssueProjectionRepository({ db }),
-              commitProjectionRepository: new D1CommitProjectionRepository({ db }),
-              checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
-              userRepoAccessRepository: new D1UserRepoAccessRepository({ db }),
-              commitBackfillHorizonMs: config.retention.commitMs || undefined,
-            }
-          : {}),
-        ...(gitlabConnect ? { vcsConnectionService: gitlabConnect.service } : {}),
-      }
-    }
-    return {}
-  }
-
-  const registry = buildAppRegistry(env, config, db, clock)
-  const githubClient = new FetchGitHubClient({
-    registry,
-    rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-    idGenerator,
-    clock,
-    apiBase: config.github.apiBase,
-  })
-  // Privileged App tier (ADR 0005): when configured, its client backs the
-  // create-repo endpoint; `canCreateRepos` flags a connection whose installation
-  // is owned by the privileged App. Absent → repo creation stays the manual flow.
-  const repoProvisioningClient = config.github.privilegedApp
-    ? new FetchGitHubProvisioningClient({ registry, apiBase: config.github.apiBase })
-    : undefined
-  // The client the `github` module reads through: when per-workspace GitLab connect is ALSO
-  // enabled, route each installation-keyed call to the App or GitLab client by the connection's
-  // stored provider; otherwise the App client serves the module directly. The RepoFiles seams +
-  // the GitHub-issue/docs consumers keep the raw App `githubClient` (they must not gain the
-  // GitLab fallback, per CLAUDE.md's VCS rule).
-  const moduleClient: GitHubClient = gitlabConnectClient
-    ? new ProviderRoutingGitHubClient({
-        installations: githubInstallationRepository,
-        github: githubClient,
-        gitlab: gitlabConnectClient,
-      })
-    : githubClient
-  return {
-    githubClient: moduleClient,
-    ...(gitlabConnect ? { vcsConnectionService: gitlabConnect.service } : {}),
-    // The engine binds a registered custom kind's pre/post-op hooks to a run's repo via
-    // this checkout-free RepoFiles resolver (installation + repo + default branch),
-    // composed from the same client + repo-target walk the container executor uses. The
-    // `repoFiles` cache (slice 4) makes the post-op idempotency re-reads a read-through hit.
-    resolveRunRepoContext: makeResolveRunRepoContext(
-      githubClient,
-      buildResolveRepoTarget(db),
-      repoFilesCache,
-    ),
-    // Block-less repo resolver for the environments module's on-demand repo validation /
-    // config bootstrap (operator names owner+repo).
-    resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
-      githubClient,
-      githubInstallationRepository,
-      new D1RepoProjectionRepository({ db }),
-    ),
-    githubInstallationRepository,
-    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
-    branchProjectionRepository: new D1BranchProjectionRepository({ db }),
-    pullRequestProjectionRepository: new D1PullRequestProjectionRepository({ db }),
-    issueProjectionRepository: new D1IssueProjectionRepository({ db }),
-    commitProjectionRepository: new D1CommitProjectionRepository({ db }),
-    checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
-    userRepoAccessRepository: new D1UserRepoAccessRepository({ db }),
-    webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
-    // Bound the initial backfill to the commit retention horizon (0 = full).
-    commitBackfillHorizonMs: config.retention.commitMs || undefined,
-    repoProvisioningClient,
-    canCreateRepos: (installation) => registry.canCreateRepos(installation),
-    // Advisory: does the install actually grant `workflows: write`? Read from the
-    // owning App's installation-token permission set (cached), so the UI can warn
-    // when agent pushes touching `.github/workflows/*` would be rejected.
-    workflowsGranted: async (installation) => {
-      const perms = await registry.installationPermissions(installation.installationId)
-      return perms.workflows === 'write'
-    },
-  }
-}
-
 /**
  * Build the document-source integration's concrete ports: the configured source
  * providers (Confluence, Notion, …) plus the two D1 repositories. The integration is

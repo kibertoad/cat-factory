@@ -7,7 +7,7 @@ import type {
   VcsIdentityResolver,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ValidationError, VcsIdentityError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { VcsPatConnectionService } from './VcsPatConnectionService.js'
 import { syntheticInstallationId } from './syntheticInstallationId.js'
@@ -102,13 +102,24 @@ describe('VcsPatConnectionService', () => {
     expect(row.workspaceId).toBe('ws-1')
   })
 
-  it('rejects an invalid PAT with a ValidationError and writes nothing', async () => {
+  it('rejects an invalid PAT (provider 4xx) with a ValidationError and writes nothing', async () => {
     const { service, installations } = makeService(
       fakeInstallations(),
-      fakeResolver(new Error('HTTP 401')),
+      fakeResolver(new VcsIdentityError('HTTP 401', 401)),
     )
     await expect(service.connect('ws-1', 'bad')).rejects.toBeInstanceOf(ValidationError)
     expect(installations.rows.size).toBe(0)
+  })
+
+  it('propagates a transient upstream failure verbatim (NOT a ValidationError) and writes nothing', async () => {
+    // A provider 5xx or a transport failure is the provider's fault, not the token's — mapping it
+    // to "invalid token" would mislead the user and discard the real cause. It must surface as-is
+    // (→ a 500), never as a 4xx validation error.
+    for (const err of [new VcsIdentityError('HTTP 503', 503), new Error('network unreachable')]) {
+      const { service, installations } = makeService(fakeInstallations(), fakeResolver(err))
+      await expect(service.connect('ws-1', 'tok')).rejects.toBe(err)
+      expect(installations.rows.size).toBe(0)
+    }
   })
 
   it('getConnection returns the gitlab connection, and null for other providers / none', async () => {

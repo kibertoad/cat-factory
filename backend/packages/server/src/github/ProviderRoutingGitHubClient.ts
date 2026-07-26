@@ -94,11 +94,17 @@ export class ProviderRoutingGitHubClient implements GitHubClient {
     const memo = this.providerById.get(installationId)
     if (memo) return memo
     const row = await this.deps.installations.getByInstallationId(installationId)
-    // Unknown installation → treat as GitHub (the legacy/backstop default the projection column
-    // also uses), so a call for an id we can't resolve routes to the App client rather than throwing.
-    const provider = row?.provider ?? 'github'
-    this.providerById.set(installationId, provider)
-    return provider
+    if (!row) {
+      // Unknown installation → treat as GitHub (the legacy/backstop default the projection column
+      // also uses), so a call for an id we can't resolve routes to the App client rather than
+      // throwing. Do NOT memoise this fallback: the row may simply not exist YET (a connection
+      // created after this client was built — the router is a long-lived singleton on Node), and
+      // caching 'github' for it would pin the wrong provider for the process lifetime. Only a
+      // resolved row's provider — an immutable identity — is safe to memoise.
+      return 'github'
+    }
+    this.providerById.set(installationId, row.provider)
+    return row.provider
   }
 
   private async route(installationId: number): Promise<GitHubClient> {

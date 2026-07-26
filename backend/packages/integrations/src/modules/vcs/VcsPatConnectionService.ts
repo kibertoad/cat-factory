@@ -7,7 +7,7 @@ import type {
   VcsIdentityResolver,
   VcsProvider,
 } from '@cat-factory/kernel'
-import { requireWorkspace, ValidationError } from '@cat-factory/kernel'
+import { requireWorkspace, ValidationError, VcsIdentityError } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { syntheticInstallationId } from './syntheticInstallationId.js'
 
@@ -65,17 +65,26 @@ export class VcsPatConnectionService {
   async connect(workspaceId: string, pat: string): Promise<GitHubConnection> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     // Validate the token BEFORE sealing/persisting anything, so we never write a connection that
-    // can't authenticate. A resolver throw means the token is invalid/revoked or lacks the scope
-    // to read its own account — a client error, surfaced as a typed ValidationError (→ 4xx) so it
-    // is not mistaken for an internal failure. Other failures (cipher, DB) propagate as 500s.
+    // can't authenticate. Distinguish the two failure classes rather than blanket-mapping every
+    // throw to a 4xx: a provider 4xx (invalid/revoked token or missing scope) is a CLIENT error,
+    // surfaced as a typed ValidationError (→ 4xx); a 5xx or a transport failure is TRANSIENT (the
+    // provider is down, not the user's token), so we re-throw it to surface as a 500 with its
+    // diagnostic intact — reporting "your token is invalid" for a provider outage would be wrong
+    // and would discard the real cause. Other failures (cipher, DB) likewise propagate as 500s.
     let identity
     try {
       identity = await this.deps.identityResolver.resolveIdentity(pat)
-    } catch {
-      throw new ValidationError(
-        `That ${this.deps.provider} token is invalid or lacks the required access.`,
-        { reason: 'invalid_token' },
-      )
+    } catch (err) {
+      // Only a provider 4xx is the token's fault. A 5xx (VcsIdentityError, not a client error) or
+      // a transport failure (an ordinary Error, no status) is transient — re-throw it verbatim so
+      // it surfaces as a 500 with its diagnostic, rather than blaming the user's token.
+      if (err instanceof VcsIdentityError && err.isClientError) {
+        throw new ValidationError(
+          `That ${this.deps.provider} token is invalid or lacks the required access.`,
+          { reason: 'invalid_token' },
+        )
+      }
+      throw err
     }
     const sealed = await this.deps.cipher.encrypt(pat)
     const installationId = await syntheticInstallationId(workspaceId)
