@@ -694,8 +694,8 @@ export function selectMergeLifecycleDeps(
   const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
   if (publisher) channels.push(new InAppNotificationChannel(publisher))
-  const slackChannel = buildSlackChannel(config, db)
-  if (slackChannel) channels.push(slackChannel)
+  const externalChannel = buildExternalNotificationChannel(config, db)
+  if (externalChannel) channels.push(externalChannel)
   if (channels.length === 1) deps.notificationChannel = channels[0]
   else if (channels.length > 1)
     deps.notificationChannel = new CompositeNotificationChannel(channels)
@@ -1003,6 +1003,25 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
         'slack notification delivery failed',
       ),
   })
+}
+
+/**
+ * This deployment's EXTERNAL notification channels — everything that is NOT the in-app push
+ * (Slack today). Two consumers: {@link selectMergeLifecycleDeps} composes it into the engine's own
+ * fan-out, and the ServerContainer attaches it as `machineNotificationDelivery`, the seam the
+ * mothership-mode `POST /internal/notifications/deliver` endpoint delivers a laptop-raised
+ * notification through (its credentials never leave this deployment). In-app is excluded there on
+ * purpose: a laptop's in-app frame already arrives over the real-time upstream relay.
+ *
+ * Called once per consumer (so the seam gets its own instance), exactly like `buildAppRegistry`,
+ * which the `githubTokenDelegation` seam also re-builds — the channel is a stateless adapter over
+ * D1 reads plus a cipher, so a second instance costs nothing.
+ */
+export function buildExternalNotificationChannel(
+  config: AppConfig,
+  db: D1Database,
+): NotificationChannel | null {
+  return buildSlackChannel(config, db)
 }
 
 /**
