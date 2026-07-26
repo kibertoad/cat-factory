@@ -4,7 +4,11 @@ import { type AgentKindRegistry } from '@cat-factory/agents'
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
-import { type BackendRegistries, type DeployJobClient } from '@cat-factory/integrations'
+import {
+  type BackendRegistries,
+  type DeployJobClient,
+  type RegisterHandlerInput,
+} from '@cat-factory/integrations'
 import {
   type Clock,
   type DeployCloneTarget,
@@ -240,6 +244,14 @@ export interface NodeContainerOptions {
    * manual default choice is always preserved.
    */
   defaultModelPresetId?: string
+  /**
+   * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`),
+   * forwarded into `createCore`. When present (and the environments module is wired) the container
+   * exposes an `environmentHandlerSeeder`; `start()`/`bootServer` boot-backfill every existing
+   * workspace and `WorkspaceService.create` seeds each new one, so a deployment supplies its infra
+   * handler from config with no manual SPA step. Absent / empty ⇒ no seeding.
+   */
+  seedEnvironmentHandlers?: RegisterHandlerInput[]
   /**
    * Override the direct-vendor API-key pool's repository. When provided it REPLACES the
    * default Drizzle one, so a sibling facade can back the key pool with a different store

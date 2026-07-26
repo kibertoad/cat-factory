@@ -18,6 +18,7 @@ import type {
 } from '@cat-factory/kernel'
 import type {
   BlockRepository,
+  EnvironmentHandlerSeeder,
   ExecutionRepository,
   GroupCacheHandle,
   PipelineRegistry,
@@ -82,6 +83,12 @@ export interface WorkspaceServiceDependencies {
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** Optional structural logger for best-effort diagnostics (e.g. a swallowed artifact purge). */
   logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  /**
+   * Late-bound (the seeder is built after this service in the container, so it's read at call
+   * time — mirrors the `getSpendService` accessor AccountService uses) so `create` seeds the
+   * deployment's declared environment handlers onto a new workspace. Absent ⇒ no seeding.
+   */
+  getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
 }
 
 /** Creates, reads and deletes boards (workspaces) and assembles snapshots. */
@@ -99,6 +106,7 @@ export class WorkspaceService {
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
 
   constructor({
     workspaceRepository,
@@ -114,6 +122,7 @@ export class WorkspaceService {
     workspaceAccessCache,
     resolveBinaryArtifactStore,
     logger,
+    getEnvironmentHandlerSeeder,
   }: WorkspaceServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -128,6 +137,7 @@ export class WorkspaceService {
     this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
     this.logger = logger
+    this.getEnvironmentHandlerSeeder = getEnvironmentHandlerSeeder
   }
 
   /**
@@ -223,6 +233,11 @@ export class WorkspaceService {
     if (input.seed ?? true) {
       await this.seedBoard(workspace.id)
     }
+    // Seed the deployment's pre-declared environment handlers onto the new board (idempotently),
+    // so a service's declared provision type resolves an infra handler with no manual SPA step.
+    // Late-bound (the seeder is built after this service in the container) and absent ⇒ a no-op;
+    // the seeder swallows per-seed failures, so this never fails workspace creation.
+    await this.getEnvironmentHandlerSeeder?.()?.ensureForWorkspace(workspace.id)
     return this.snapshot(workspace.id)
   }
 

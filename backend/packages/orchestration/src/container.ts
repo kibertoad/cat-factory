@@ -78,6 +78,7 @@ import type {
 import type {
   CustomManifestTypeRepository,
   EnvironmentConnectionRepository,
+  EnvironmentHandlerSeeder,
   EnvironmentRegistryRepository,
   EnvironmentUserHandlerRepository,
 } from '@cat-factory/kernel'
@@ -185,6 +186,8 @@ import {
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
   EnvironmentUserHandlerService,
+  createEnvironmentHandlerSeeder,
+  type RegisterHandlerInput,
   RunnerPoolConnectionService,
   PreflightService,
   ProvisioningLogRecorder,
@@ -622,6 +625,16 @@ export interface CoreDependencies {
   // feature is off. Per-tenant secrets are encrypted via `secretCipher`.
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
+  /**
+   * A deployment's pre-declared environment-handler SEEDS (each a `RegisterHandlerInput`). When
+   * supplied (and the environments module is wired), `createCore` builds an
+   * {@link EnvironmentHandlerSeeder} over them and exposes it on the container: the runtime
+   * boot-backfills every existing workspace and `WorkspaceService.create` seeds each new one, so a
+   * deployment (e.g. a Kargo adapter) supplies the infra handler from its config instead of a human
+   * filling the Infrastructure → Test environments form. Seeding is idempotent + per-seed
+   * fault-tolerant. Absent / empty ⇒ no seeding.
+   */
+  seedEnvironmentHandlers?: RegisterHandlerInput[]
   /**
    * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
    * publishes a served app's port to a host port and keeps the container alive. Wired ONLY on a
@@ -1343,6 +1356,12 @@ export interface OptionalCoreModules {
   tasks?: TasksModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
+  /**
+   * The deployment-declared environment-handler seeder, present only when the environments module
+   * is wired. The runtime reads it to boot-backfill every existing workspace (and it is late-bound
+   * into `WorkspaceService` for the on-create hook). A no-op when no seeds were declared.
+   */
+  environmentHandlerSeeder?: EnvironmentHandlerSeeder
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
   /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
@@ -1454,6 +1473,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   const modules = new ModuleRegistry()
   // Late-bound: accountService reads the below-built spendService via `getSpendService`.
   let spendServiceRef: SpendService | undefined
+  // Late-bound: WorkspaceService.create reads the environment-handler seeder via
+  // `getEnvironmentHandlerSeeder`; it is built AFTER the foundation (below, over the environments
+  // module's connection service), so the workspace service resolves it at call time, not now.
+  let environmentHandlerSeederRef: EnvironmentHandlerSeeder | undefined
   // The foundation slice (notifications/settings, board/workspace/account/user + the account-
   // onboarding modules) is built up-front as a cohesive collaborator; see container/foundation.ts.
   const { notifications, settings, boardService, workspaceService, accountService, userService } =
@@ -1465,6 +1488,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       taskTypeRegistry,
       pipelineRegistry,
       getSpendService: () => spendServiceRef,
+      getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
     })
   const pipelineService = new PipelineService({ ...dependencies, pipelineRegistry })
   const spendService = new SpendService({
@@ -1558,6 +1582,20 @@ export function createCore(dependencies: CoreDependencies): Core {
       sharedStacks?.service,
       preflight?.service,
     ),
+  )
+  // The deployment-declared environment-handler seeder, built over the environments module's
+  // connection service (so it can list/register handlers). Built only when the environments module
+  // is wired; it is a no-op when `seedEnvironmentHandlers` is empty. Stored in the late-bound ref
+  // so WorkspaceService.create's on-create hook resolves it, and exposed on the container return
+  // (via the registry) so the runtime can boot-backfill every existing workspace.
+  environmentHandlerSeederRef = modules.build('environmentHandlerSeeder', () =>
+    environments
+      ? createEnvironmentHandlerSeeder({
+          connectionService: environments.connectionService,
+          seeds: dependencies.seedEnvironmentHandlers ?? [],
+          logger: dependencies.logger,
+        })
+      : undefined,
   )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.

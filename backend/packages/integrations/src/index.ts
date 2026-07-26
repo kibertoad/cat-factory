@@ -160,6 +160,10 @@ export {
   type EnvironmentHandlerView,
   type ResolvedTypeProvider,
 } from './modules/environments/EnvironmentConnectionService.js'
+// The generic (deployment-neutral) seeder that idempotently registers a deployment's pre-declared
+// environment handlers onto a workspace — the concrete implementation of the kernel
+// `EnvironmentHandlerSeeder` port, built over the connection service's list/register handlers.
+export { createEnvironmentHandlerSeeder } from './modules/environments/EnvironmentHandlerSeeder.js'
 // Deployment-level, additive extensions to the built-in provisioning-detection conventions
 // (extra compose file names/dirs, seed dirs, env-template dirs). Threaded from the app config
 // through `CoreDependencies` into the detectors so an org can broaden detection without a code edit.
