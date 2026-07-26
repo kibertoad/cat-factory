@@ -67,6 +67,21 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       })
       expect(res.status).toBe(403)
     })
+
+    it('serves /internal/notifications/deliver with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The notification DELIVERY endpoint (a mothership-mode node asks the mothership to deliver
+      // a notification it raised through the org's external transports) is mounted by the shared
+      // controller on both facades and checks the machine token FIRST — before the "does this
+      // facade have an external channel" 503 — so an unauthenticated call is a 403 everywhere.
+      // The drift guard that the endpoint exists and is machine-gated regardless of whether this
+      // facade wires Slack.
+      const res = await call('POST', '/internal/notifications/deliver', {
+        workspaceId: 'ws_x',
+        notificationId: 'ntf_x',
+      })
+      expect(res.status).toBe(403)
+    })
   })
 
   describe('workspaces', () => {
