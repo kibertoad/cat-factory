@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
-  CreateBranchInput,
   GitHubAvailableRepo,
   GitHubBranch,
   GitHubConnection,
@@ -9,18 +8,15 @@ import type {
   GitHubIssue,
   GitHubPullRequest,
   GitHubRepo,
-  MergePullRequestInput,
-  OpenPullRequestInput,
   RepoTreeEntry,
-  ResyncRequest,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
-
-/** Stable identity for a pull request in the `pulls` list: repo + PR number. */
-const pullKey = (repoGithubId: number, number: number) => `${repoGithubId}:${number}`
+import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
+import { createGitHubConnectionActions } from '~/stores/github/connection'
+import { createGitHubRepoActions } from '~/stores/github/repoActions'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -155,170 +151,35 @@ export const useGitHubStore = defineStore('github', () => {
     if (connected.value && repos.value.length === 0) await load()
   }
 
-  /**
-   * Load the repos the installation can access, with this workspace's link state.
-   * With a `q` the backend filters `owner/name` server-side (the add-service picker
-   * searches instead of prefetching a huge installation); without one it browses all
-   * (the repo-link panel). A blank/short `q` clears the list rather than fetching.
-   */
-  async function loadAvailableRepos(q?: string) {
-    if (!connected.value) return
-    if (q !== undefined && q.trim() === '') {
-      availableRepos.value = []
-      return
-    }
-    loadingAvailable.value = true
-    try {
-      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId(), q)
-    } finally {
-      loadingAvailable.value = false
-    }
-  }
-
-  /**
-   * Search the installation/PAT-accessible repos server-side WITHOUT touching the shared
-   * `availableRepos`/`loadingAvailable` singleton — it returns the matches to the caller instead.
-   * This is the reusable form behind {@link useRepoSearch}: two independent pickers (the
-   * add-service modal and the doc-task reference-repo picker) can search concurrently without
-   * clobbering each other's results. A blank/short `q` (or no connection) returns `[]`.
-   */
-  async function searchAvailableRepos(q: string): Promise<GitHubAvailableRepo[]> {
-    if (!connected.value || q.trim() === '') return []
-    return api.listGitHubAvailableRepos(workspace.requireId(), q)
-  }
-
-  /** Set the exact set of repos this workspace links, then refresh projections. */
-  async function setLinkedRepos(repoGithubIds: number[]) {
-    savingRepos.value = true
-    try {
-      repos.value = await api.setGitHubLinkedRepos(workspace.requireId(), repoGithubIds)
-      // Reflect the new link state in the picker and refresh PRs/issues.
-      const linked = new Set(repoGithubIds)
-      availableRepos.value = availableRepos.value.map((r) => ({
-        ...r,
-        linked: linked.has(r.githubId),
-      }))
-      await load()
-    } finally {
-      savingRepos.value = false
-    }
-  }
-
-  /** Lazily load (and cache) the branches for a single repo. */
-  async function loadBranches(repoGithubId: number): Promise<GitHubBranch[]> {
-    const list = await api.listGitHubBranches(workspace.requireId(), repoGithubId)
-    branches.value = { ...branches.value, [repoGithubId]: list }
-    return list
-  }
-
-  /** List one level of a (monorepo) repo's tree, for the service-directory picker. */
-  function loadRepoTree(repoGithubId: number, path = '') {
-    return api.listGitHubRepoTree(workspace.requireId(), repoGithubId, path)
-  }
-
   /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
   const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
 
-  /**
-   * Load (and cache) EVERY file in a repo — the whole tree in one recursive read — so a
-   * picker can search files by path entirely client-side (no per-keystroke server call).
-   * Cached by repo id so re-opening the picker for the same repo is instant; force a
-   * refetch with `{ reload: true }`. Mirrors the branches cache.
-   */
-  async function loadRepoFiles(
-    repoGithubId: number,
-    opts: { reload?: boolean } = {},
-  ): Promise<RepoTreeEntry[]> {
-    const cached = repoFiles.value[repoGithubId]
-    if (cached && !opts.reload) return cached
-    const files = await api.listGitHubRepoFiles(workspace.requireId(), repoGithubId)
-    repoFiles.value = { ...repoFiles.value, [repoGithubId]: files }
-    return files
+  // The installation lifecycle + the per-repo reads/writes, split into cohesive factories
+  // sharing the state above (a size-only extraction mirroring `stores/board/` — behaviour is
+  // identical to the former in-closure functions).
+  const context: GitHubStoreContext = {
+    api,
+    workspace,
+    available,
+    connection,
+    installations,
+    loadingInstallations,
+    repos,
+    availableRepos,
+    loadingAvailable,
+    savingRepos,
+    pulls,
+    upsertPull,
+    getPull,
+    issues,
+    branches,
+    repoFiles,
+    syncing,
+    connected,
+    load,
   }
-
-  /** The URL a workspace owner visits to install the App against this workspace. */
-  function getInstallUrl(): Promise<string> {
-    return api.getGitHubInstallUrl(workspace.requireId()).then((r) => r.url)
-  }
-
-  /** Discover the App's installations so the user can connect one without typing an id. */
-  async function loadInstallations() {
-    loadingInstallations.value = true
-    try {
-      const { installations: list } = await api.listGitHubInstallations(workspace.requireId())
-      installations.value = list
-    } finally {
-      loadingInstallations.value = false
-    }
-  }
-
-  /** Programmatic bind by installation id (the browser flow uses the redirect). */
-  async function connect(installationId: number) {
-    connection.value = await api.connectGitHub(workspace.requireId(), installationId)
-    available.value = true
-    await load()
-  }
-
-  async function disconnect() {
-    await api.disconnectGitHub(workspace.requireId())
-    connection.value = null
-    repos.value = []
-    availableRepos.value = []
-    pulls.value = []
-    issues.value = []
-    branches.value = {}
-  }
-
-  /** Trigger a resync, then refresh projections (no-op for queued/backfill). */
-  async function resync(body: ResyncRequest = {}) {
-    syncing.value = true
-    try {
-      const res = await api.resyncGitHub(workspace.requireId(), body)
-      await load()
-      return res
-    } finally {
-      syncing.value = false
-    }
-  }
-
-  // ---- repo writes ----------------------------------------------------------
-
-  /**
-   * Create a repository under the connected account (privileged App tier). Only
-   * meaningful when `canCreateRepos`; the backend 409s otherwise. Returns the
-   * created repo so the caller can confirm/link it.
-   */
-  function createRepo(input: Parameters<typeof api.createGitHubRepo>[1]) {
-    return api.createGitHubRepo(workspace.requireId(), input)
-  }
-
-  async function createBranch(repoGithubId: number, input: CreateBranchInput) {
-    const branch = await api.createGitHubBranch(workspace.requireId(), repoGithubId, input)
-    const next = branches.value[repoGithubId] ?? []
-    branches.value = { ...branches.value, [repoGithubId]: [branch, ...next] }
-    return branch
-  }
-
-  async function openPullRequest(repoGithubId: number, input: OpenPullRequestInput) {
-    const pr = await api.openGitHubPullRequest(workspace.requireId(), repoGithubId, input)
-    upsertPull(pr)
-    return pr
-  }
-
-  async function mergePullRequest(
-    repoGithubId: number,
-    number: number,
-    input: MergePullRequestInput = {},
-  ) {
-    await api.mergeGitHubPullRequest(workspace.requireId(), repoGithubId, number, input)
-    // Optimistically reflect the merge until the next sync confirms it.
-    const existing = getPull(pullKey(repoGithubId, number))
-    if (existing) upsertPull({ ...existing, state: 'closed', merged: true })
-  }
-
-  function comment(repoGithubId: number, number: number, body: string) {
-    return api.commentGitHubIssue(workspace.requireId(), repoGithubId, number, body)
-  }
+  const connectionActions = createGitHubConnectionActions(context)
+  const repoActions = createGitHubRepoActions(context)
 
   /**
    * Drop the per-workspace projection + connection state (called on workspace switch)
@@ -365,23 +226,9 @@ export const useGitHubStore = defineStore('github', () => {
     ensureProbed,
     load,
     ensureLoaded,
-    loadAvailableRepos,
-    searchAvailableRepos,
-    setLinkedRepos,
-    loadRepoTree,
     repoFiles,
-    loadRepoFiles,
-    loadBranches,
-    getInstallUrl,
-    loadInstallations,
-    connect,
-    disconnect,
-    resync,
-    createRepo,
-    createBranch,
-    openPullRequest,
-    mergePullRequest,
-    comment,
+    ...connectionActions,
+    ...repoActions,
     reset,
   }
 })

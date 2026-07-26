@@ -10,32 +10,7 @@ import type {
 } from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
-import { usePipelinesStore } from '~/stores/pipelines'
-import { useExecutionStore } from '~/stores/execution'
-import { useAgentRunsStore } from '~/stores/agentRuns'
-import { useEnvironmentTestStore } from '~/stores/environmentTest'
-import { useNotificationsStore } from '~/stores/notifications'
-import { useRiskPoliciesStore } from '~/stores/riskPolicies'
-import { useSharedStacksStore } from '~/stores/sharedStacks'
-import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
-import { useAgentConfigStore } from '~/stores/agentConfig'
-import { useModelPresetsStore } from '~/stores/modelPresets'
-import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
-import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
-import { useInitiativesStore } from '~/stores/initiative'
-import { useServicesStore } from '~/stores/services'
-import { useAgentsStore } from '~/stores/agents'
-import { useTaskTypesStore } from '~/stores/taskTypes'
-import { buildWorkspaceCapabilitiesManifest } from '~/modular/capabilities'
-import { useSkillsStore } from '~/stores/skills'
-import { useTrackerStore } from '~/stores/tracker'
-import { useRequirementsStore } from '~/stores/requirements'
-import { useClarityStore } from '~/stores/clarity'
-import { useBrainstormStore } from '~/stores/brainstorm'
-import { useConsensusStore } from '~/stores/consensus'
-import { useGitHubStore } from '~/stores/github'
-import { useFragmentsStore } from '~/stores/fragments'
-import { useProviderConnectionsStore } from '~/stores/providerConnections'
+import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
 import { markBoot } from '~/utils/bootMarks'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
@@ -109,30 +84,14 @@ export const useWorkspaceStore = defineStore(
      * fresh loads (init/switch/create), where there is no in-flight-upsert race to guard.
      */
     function hydrate(snapshot: WorkspaceSnapshot, boardSince?: number) {
-      // A change of active board (or the first load) — drop the per-block caches that are
-      // NOT part of the snapshot (reviews, brainstorm/consensus sessions, the GitHub
-      // projection) so a switched-to board never shows the previous one's stale state.
-      // These are lazily reloaded/re-probed per board, so clearing on a same-board refresh
-      // would needlessly wipe an open review window — hence only on an actual id change.
-      if (workspaceId.value !== snapshot.workspace.id) {
-        useRequirementsStore().reset()
-        useClarityStore().reset()
-        useBrainstormStore().reset()
-        useConsensusStore().reset()
-        useGitHubStore().reset()
-        useInitiativesStore().reset()
-        useDocInterviewStore().reset()
-        // The fragment picker catalog is per-board (the merged tenant catalog), so drop
-        // it too — the next inspector open re-fetches it for the switched-to board rather
-        // than showing the previous board's (or a raw-id placeholder for) fragments.
-        useFragmentsStore().invalidate()
-      }
+      // A change of active board (or the first load) drops the per-block caches that are NOT
+      // part of the snapshot; a same-board refresh keeps them (see `resetPerBoardCaches`).
+      if (workspaceId.value !== snapshot.workspace.id) resetPerBoardCaches()
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
       accountSpend.value = snapshot.accountSpend ?? null
       userSpend.value = snapshot.userSpend ?? null
       budgetCaps.value = snapshot.budgetCaps ?? null
-      useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
       infraSetup.value = snapshot.infraSetup ?? null
       access.value = snapshot.access ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename). The
@@ -144,55 +103,8 @@ export const useWorkspaceStore = defineStore(
       } else {
         workspaces.value.unshift(snapshot.workspace)
       }
-      useBoardStore().hydrate(snapshot.blocks, boardSince)
-      useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
-      usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
-      useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
-      useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
-      useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
-      useEnvironmentTestStore().hydrate(snapshot.environmentTestRuns ?? [], snapshot.workspace.id)
-      useNotificationsStore().hydrate(snapshot.notifications ?? [])
-      useRiskPoliciesStore().hydrate(
-        snapshot.riskPolicies ?? [],
-        snapshot.riskPolicyCatalogVersions,
-      )
-      useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
-      useWorkspaceSettingsStore().hydrate(snapshot.settings)
-      useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
-      useModelPresetsStore().hydrate(
-        snapshot.modelPresets ?? [],
-        snapshot.modelPresetCatalogVersions,
-      )
-      useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
-      useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
-      useInitiativesStore().hydrate(snapshot.initiatives)
-      // Registered initiative presets (built-in generic + any a deployment mixed in): drive the
-      // create picker and which planning pipeline "Run planning" starts. Workspace-independent.
-      useInitiativesStore().hydratePresets(snapshot.initiativePresets)
-      useTrackerStore().hydrate(snapshot.trackerSettings)
-      useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
-      // Hydrate the deployment's backend-registered capabilities from ONE shared per-workspace
-      // remote capability manifest carrying BOTH custom agent kinds AND custom task types (its
-      // version covers both, so an unchanged snapshot no-ops both stores). Each store reads its
-      // own slot off it, so a proprietary agent kind renders as a first-class palette block +
-      // result view and a proprietary task type as a first-class create-task choice + card badge.
-      // Swapped wholesale per workspace (no global-catalog mutation).
-      const capabilities = buildWorkspaceCapabilitiesManifest(
-        snapshot.customAgentKinds ?? [],
-        snapshot.customTaskTypes ?? [],
-      )
-      useAgentsStore().hydrateCapabilities(capabilities)
-      useTaskTypesStore().hydrateCapabilities(capabilities)
-      // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
-      // pipeline builder's per-step skill picker has its options. A straight replace.
-      useSkillsStore().hydrate(snapshot.skills ?? [])
-      // Seed the connect form's backend-kind selectors (built-in + any custom backend a
-      // deployment registered), so a programmatically-registered env/runner backend is a
-      // first-class connect option instead of a hardcoded manifest/kubernetes list.
-      useProviderConnectionsStore().registerBackendKinds({
-        environment: snapshot.environmentBackendKinds,
-        'runner-pool': snapshot.runnerBackendKinds,
-      })
+      // Fan the rest of the snapshot out into the per-feature data stores.
+      applySnapshotToStores(snapshot, boardSince)
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */

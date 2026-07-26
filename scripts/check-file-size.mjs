@@ -48,14 +48,14 @@ const LEGACY_ALLOWANCES = new Map([
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2800],
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2650],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
   // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The Node
   // root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
-  ['backend/runtimes/node/src/container.ts', 2250],
-  ['backend/packages/orchestration/src/container.ts', 1850],
+  ['backend/runtimes/node/src/container.ts', 1550],
+  ['backend/packages/orchestration/src/container.ts', 1750],
   ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2350],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,

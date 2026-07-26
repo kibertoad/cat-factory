@@ -82,8 +82,8 @@ import { RunAdmission } from './RunAdmission.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
-import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
-import { buildBrainstormKind, buildClarityKind, buildRequirementsKind } from './review-kinds.js'
+import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { buildGateWindowControllers, buildReviewSubjects } from './gate-window-controllers.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
 import {
@@ -521,6 +521,28 @@ export interface BlueprintReconciler {
 }
 
 /**
+ * The effective risk/merge policy for one run, as {@link ExecutionService.resolveRiskPolicy}
+ * resolves it (the block's selected preset, else the workspace default, else the built-in).
+ * Named here because the gate windows receive that resolver as a bound call-back and each
+ * consumer reads only the subset it gates on.
+ */
+export interface ResolvedRunRiskPolicy {
+  name: string
+  maxComplexity: number
+  maxRisk: number
+  maxImpact: number
+  ciMaxAttempts: number
+  maxRequirementIterations: number
+  maxRequirementConcernAllowed: RequirementConcernLevel
+  maxTesterQualityIterations: number
+  releaseWatchWindowMinutes: number
+  releaseMaxAttempts: number
+  humanReviewGraceMinutes: number
+  autoMergeEnabled: boolean
+  forkDecision?: StepGating | null
+}
+
+/**
  * The execution engine. It orchestrates a pipeline of agent-performed steps and
  * is fully deterministic: `advanceInstance` moves one run forward by exactly one
  * step, delegating the actual work — and the choice of whether to pause for a
@@ -767,175 +789,62 @@ export class ExecutionService {
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
-    this.testerController = new TesterController({
-      blockRepository,
-      notificationService,
-      agentExecutor,
-      contextBuilder: this.contextBuilder,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
-      stateMachine: this.runStateMachine,
-      // The test quality-control companion's inline reviewer (when wired); absent → QC
-      // pass-through. Stamps its verdicts with the engine clock.
-      ...(testerQualityReviewer ? { qualityReviewer: testerQualityReviewer } : {}),
-      clockNow: () => this.clock.now(),
-    })
-    this.ralphController = new RalphController({
-      blockRepository,
-      notificationService,
-      agentExecutor,
-      contextBuilder: this.contextBuilder,
-      stateMachine: this.runStateMachine,
-      clockNow: () => this.clock.now(),
-    })
-    this.humanTestController = new HumanTestController({
+    // The human-gate window controllers (Tester / Ralph / human-test / visual-confirmation /
+    // review / fork-decision / PR-review), built by the sibling factory over one deps bundle.
+    // The engine methods they reach back into are passed BOUND, so every closure still resolves
+    // against this instance exactly as when they were constructed inline.
+    const gateWindows = buildGateWindowControllers({
       blockRepository,
       executionRepository,
       workRunner,
       agentExecutor,
-      contextBuilder: this.contextBuilder,
       notificationService,
-      // The human-test gate READS the env the upstream `deployer` step provisioned (it no longer
-      // stands up its own) — resolved by the block's OWN service frame, exactly as the tester
-      // context resolves it, so the gate and the tester(s) share the one provisioned env. Left
-      // undefined when no provider is wired (the gate degrades to manual mode).
-      ...(environmentProvisioning
-        ? {
-            readEnvironment: async (ws, block) => {
-              const frame = await this.contextBuilder.resolveServiceFrame(ws, block.id)
-              const handle = await environmentProvisioning.getHandleForBlock(
-                ws,
-                block.id,
-                frame?.id,
-              )
-              // Reconcile against the LIVE provider status when the stored record isn't yet
-              // `ready`: the deployer records an async provider's env as `provisioning`, and nothing
-              // re-polls that row once the deployer step completes, so a slow-but-now-ready env
-              // would otherwise read stale and wrongly degrade the gate to manual mode. One refresh
-              // reconciles it; an env still genuinely provisioning / failed degrades as before.
-              // Best-effort — keep the stored handle if the status read throws.
-              if (handle && handle.status !== 'ready') {
-                try {
-                  return await environmentProvisioning.refreshStatus(ws, handle.id)
-                } catch {
-                  return handle
-                }
-              }
-              return handle
-            },
-          }
-        : {}),
-      ...(environmentTeardown
-        ? {
-            teardownEnvironment: async (ws, id) => {
-              await environmentTeardown.teardown(ws, id)
-            },
-          }
-        : {}),
-      ...(branchUpdater ? { branchUpdater } : {}),
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
-      stateMachine: this.runStateMachine,
-      stepGraph: this.stepGraph,
-      clockNow: () => this.clock.now(),
-    })
-    this.visualConfirmationController = new VisualConfirmationController({
-      blockRepository,
-      executionRepository,
-      workRunner,
-      agentExecutor,
       contextBuilder: this.contextBuilder,
-      notificationService,
-      ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
+      idGenerator,
+      clock,
       clockNow: () => this.clock.now(),
-    })
-    this.reviewGate = new ReviewGateController({
-      blockRepository,
-      executionRepository,
-      workRunner,
-      stateMachine: this.runStateMachine,
-      stepGraph: this.stepGraph,
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
+      testerQualityReviewer,
+      environmentProvisioning,
+      environmentTeardown,
+      branchUpdater,
+      resolveBinaryArtifactStore,
+      forkChatService,
     })
-    this.forkDecisionController = new ForkDecisionController({
+    this.testerController = gateWindows.testerController
+    this.ralphController = gateWindows.ralphController
+    this.humanTestController = gateWindows.humanTestController
+    this.visualConfirmationController = gateWindows.visualConfirmationController
+    this.reviewGate = gateWindows.reviewGate
+    this.forkDecisionController = gateWindows.forkDecisionController
+    this.prReviewController = gateWindows.prReviewController
+    // The review-gate subjects + the two interactive interview gates, built by the sibling
+    // factory over the same collaborators (see gate-window-controllers.ts).
+    const reviewSubjects = buildReviewSubjects({
       blockRepository,
       executionRepository,
       workRunner,
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
-      idGenerator,
-      clock,
-      notificationService,
-      ...(forkChatService ? { forkChatService } : {}),
-      resolveEffectiveDescription: (ws, block) =>
-        this.contextBuilder.resolveEffectiveDescription(ws, block),
-    })
-    this.prReviewController = new PrReviewController({
-      executionRepository,
-      workRunner,
-      stateMachine: this.runStateMachine,
-      stepGraph: this.stepGraph,
-      idGenerator,
-      clock,
-      notificationService,
-    })
-    // The review-gate subjects (requirements / clarity / the two brainstorm stages), built by
-    // the factories in review-kinds.ts over one shared closure of collaborators — each subject's
-    // differentiators live there, not on the engine.
-    const reviewKindDeps = {
-      events: executionEventPublisher,
-      blockRepository,
-      executionRepository,
+      executionEventPublisher,
       requirementReviewService,
       clarityReviewService,
       brainstormServices,
       issueWriteback,
-    }
-    this.requirementsKind = buildRequirementsKind(reviewKindDeps)
-    this.clarityKind = buildClarityKind(reviewKindDeps)
-    this.requirementsBrainstormKind = buildBrainstormKind(
-      'requirements',
-      REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-      reviewKindDeps,
-    )
-    this.architectureBrainstormKind = buildBrainstormKind(
-      'architecture',
-      ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-      reviewKindDeps,
-    )
-    // The interactive-planning interviewer gate — wired whenever the initiative store is
-    // present (the entity is where its state lives). The interviewer LLM is optional: without
-    // it (or without a model) the gate passes through, so planning still runs off the raw
-    // block description. Absent initiative store → the `initiative-interviewer` step passes
-    // through in RunDispatcher (an initiative pipeline can't run without the store anyway).
-    this.initiativeInterviewController = initiativeService
-      ? new InitiativeInterviewController({
-          blockRepository,
-          executionRepository,
-          workRunner,
-          stateMachine: this.runStateMachine,
-          stepGraph: this.stepGraph,
-          interviewService: initiativeInterviewService,
-          initiativeService,
-        })
-      : undefined
-    // The interactive document-interview gate (WS5) — wired whenever the interview service is
-    // present. Without it (or without a model) the gate passes through, so document pipelines
-    // still run off the raw outline. Self-contained persistence lives in the service.
-    this.docInterviewController = docInterviewService
-      ? new DocInterviewController({
-          blockRepository,
-          executionRepository,
-          workRunner,
-          stateMachine: this.runStateMachine,
-          stepGraph: this.stepGraph,
-          events: executionEventPublisher,
-          docInterviewService,
-        })
-      : undefined
+      initiativeService,
+      initiativeInterviewService,
+      docInterviewService,
+    })
+    this.requirementsKind = reviewSubjects.requirementsKind
+    this.clarityKind = reviewSubjects.clarityKind
+    this.requirementsBrainstormKind = reviewSubjects.requirementsBrainstormKind
+    this.architectureBrainstormKind = reviewSubjects.architectureBrainstormKind
+    this.initiativeInterviewController = reviewSubjects.initiativeInterviewController
+    this.docInterviewController = reviewSubjects.docInterviewController
     // The per-step dispatch + completion spine. Composes the collaborators built above; the
     // merge subgraph stays on the engine, reached only through the injected `resolveRiskPolicy`
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
@@ -2069,21 +1978,7 @@ export class ExecutionService {
   private async resolveRiskPolicy(
     workspaceId: string,
     block: Block,
-  ): Promise<{
-    name: string
-    maxComplexity: number
-    maxRisk: number
-    maxImpact: number
-    ciMaxAttempts: number
-    maxRequirementIterations: number
-    maxRequirementConcernAllowed: RequirementConcernLevel
-    maxTesterQualityIterations: number
-    releaseWatchWindowMinutes: number
-    releaseMaxAttempts: number
-    humanReviewGraceMinutes: number
-    autoMergeEnabled: boolean
-    forkDecision?: StepGating | null
-  }> {
+  ): Promise<ResolvedRunRiskPolicy> {
     const repo = this.riskPolicyRepository
     if (repo) {
       // Read each preset through the cache slice when wired: the row is slow-moving admin config
