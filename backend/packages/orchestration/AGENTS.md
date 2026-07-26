@@ -23,7 +23,11 @@ optional module is `build(key, factory)`-declared once and emitted via `...modul
   `DeployerStepController` (the deployer provision fan-out + env projection),
   `FollowUpGateController` (the follow-up companion gate + its human-action API), plus
   `RunStateMachine`, `StepGraph`, the gate/companion/review controllers, and `*.logic.ts`
-  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …). The run/step lifecycle
+  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
+  `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
+  composed from the settled run's own state and published onto its PR through the
+  `PrVerificationReportPublisher` port). `ExecutionServiceDependencies.ts` holds the engine's
+  injected-collaborator contract, re-exported from `ExecutionService.ts`. The run/step lifecycle
   reference is `docs/execution-state-machine.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`, `merge/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,

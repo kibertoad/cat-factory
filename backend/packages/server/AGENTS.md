@@ -22,6 +22,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   contract; `runtime/gateways.ts` — the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `persistence/mappers.ts` — the dialect-agnostic row↔domain mappers shared by **both** stores.
-- `github/FetchGitHubClient.ts` — the GitHub client.
+- `github/FetchGitHubClient.ts` — the GitHub client. Its siblings implement the engine-facing
+  VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
+  deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,
+  `GitHubPullRequestMerger`, `GitHubBranchUpdater`, and `GitHubPrReportPublisher` (upserts the
+  verification report as a marker-delimited region of the PR description).
 
 **See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Multi-runtime facades", "Conventions".

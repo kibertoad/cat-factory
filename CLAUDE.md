@@ -1258,6 +1258,53 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
     the preset library.
 
+## PR verification report (engine-maintained evidence on the run's PR)
+
+The engine — NOT the agent — keeps a **verification report** on every run's pull request:
+captured facts, not the agent's prose claims. Form + shape rationale (and the phase-2 backlog)
+live in [`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+
+- **Form: a managed section of the PR BODY**, delimited by
+  `<!-- cat-factory:verification-report:start -->` / `:end` (kernel `domain/pr-report.ts`,
+  `spliceManagedSection`). The markers ARE the identity, so the write is idempotent with **no
+  persisted state**: a re-run, retry, or replayed durable step replaces the marked region instead
+  of appending a second copy, and the agent's own description above it is never touched. A
+  maintained COMMENT was rejected: it needs a comment id persisted (a lost id duplicates the
+  report) plus an `updateComment` write neither the `GitHubClient` nor `VcsClient` port has.
+- **Shape: an engine HOOK on step settlement, not a pipeline step.** One call in
+  `RunDispatcher.recordStepResult` → `PrVerificationReportController.publishForRun`. Its POSITION
+  is load-bearing: **after** `applyTerminalStepResolver` (so a `merger` step publishes with its
+  resolved `MergeDecision`) and **before** `finalizeBlock` (so the `pipeline_complete` card a
+  merger-less pipeline raises points at a PR already carrying the finished report). A passing
+  polling gate settles through the same `recordStepResult`, so the CI verdict needs no second
+  hook. A one-shot `pr-report` STEP was rejected: it would need inserting into all 15 built-in
+  pipelines, would never exist for deployment-authored ones, and a run that fails or parks
+  part-way — the runs most worth inspecting — would never reach it.
+- **Composed from state already in memory** (`prReport.logic.ts`, pure): the CI gate's recorded
+  verdict/failing checks/attempts (`step.gate` — never a re-probe of the `CiStatusProvider`,
+  which costs a round trip AND can disagree with what the gate acted on), the tester's
+  `step.test.lastReport`, the deployer's `step.deployEnvs` + the live `step.environment`
+  projections for teardown, the merger's `step.custom`, and the per-step agent kind + model. The
+  only reads are one `blockRepository.get` and one batched `taskRepository.listByBlock`.
+- **A section whose producing step didn't run says so** (`status: 'absent'` + a `note`) — a
+  silently missing section reads exactly like a clean one, which is the false reassurance this
+  feature exists to remove.
+- **Rendered as markdown + a fenced JSON block** validated by `prVerificationReportSchema`
+  (`@cat-factory/contracts` `pr-report.ts`), so external tooling ingests it without scraping.
+- **Provider-neutral by construction.** The `PrVerificationReportPublisher` port
+  (`kernel/ports/pr-report.ts`) is served by `GitHubPrReportPublisher` (`@cat-factory/server`)
+  over whatever `GitHubClient` a facade wired as its **engine** VCS client — so a GitLab-only
+  deployment publishes onto the MR description through the same call. It needs the new REQUIRED
+  `getPullRequestBody` on both the `GitHubClient` and `VcsClient` ports (read-splice-write, always
+  against the CURRENT remote body, so a concurrent human edit is never clobbered).
+- **Best-effort, always.** Publishing is bookkeeping: the controller swallows + logs, hashes the
+  rendered section so a 12-step run makes one PR edit rather than twelve, and is a total no-op
+  when no publisher is wired (tests, no-VCS deployments). The observability deep link comes from
+  `appBaseUrl`; absent ⇒ no link rather than a dead one. Its SPA consumer is the narrow
+  `useRunDeepLink` composable — a down-payment on slice 4 of
+  [`docs/initiatives/global-search-and-deep-links.md`](./docs/initiatives/global-search-and-deep-links.md),
+  to be DELETED when that general parser lands.
+
 ## Post-release health flow (Datadog gate → Agent-On-Call → notify/enrich)
 
 After a release ships, the **`post-release-health`** gate (the LAST standard-pipeline

@@ -443,6 +443,11 @@ export type {
 } from './provider-model-catalog-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger, MergePrEntry, MergeAllOutcome } from './pr-merger.js'
+export type {
+  PrVerificationReportPublisher,
+  PrReportPublishResult,
+  PrReportSkipReason,
+} from './pr-report.js'
 export type { CiCheck, RepoCiStatus, CiStatusReport, CiStatusProvider } from './ci-status.js'
 export type { DocQualityReport, DocQualityProvider } from './doc-quality.js'
 export type {

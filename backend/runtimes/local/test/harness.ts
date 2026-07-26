@@ -161,6 +161,8 @@ type ConformanceAppOpts = {
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
   deployJobClient?: CoreDependencies['deployJobClient']
   resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
+  prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
+  appBaseUrl?: string
   backendRegistries?: BackendRegistries
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
@@ -251,6 +253,8 @@ function buildConformanceOverrides(
       testerQualityReviewer: o.testerQualityReviewer,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
+      prVerificationReportPublisher: o.prVerificationReportPublisher,
+      appBaseUrl: o.appBaseUrl,
     }),
   }
 }

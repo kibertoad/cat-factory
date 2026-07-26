@@ -35,6 +35,7 @@ import {
   GitHubCiStatusProvider,
   GitHubDocQualityProvider,
   GitHubMergeabilityProvider,
+  GitHubPrReportPublisher,
   GitHubPullRequestMerger,
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
@@ -321,6 +322,13 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
         blockRepository,
       }),
       pullRequestMerger: new GitHubPullRequestMerger({
+        githubClient: engineVcsClient,
+        resolveRepoTarget,
+        blockRepository,
+      }),
+      // Keeps the engine-maintained verification report current on each run's PR. Reads
+      // through the same `engineVcsClient`, so a GitLab-only deployment gets it too.
+      prVerificationReportPublisher: new GitHubPrReportPublisher({
         githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository,
