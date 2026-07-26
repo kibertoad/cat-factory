@@ -89,7 +89,6 @@ import {
   selectEnvConfigRepairer,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
-  selectGitHubDeps,
   selectIncidentEnrichmentDeps,
   selectMergeLifecycleDeps,
   selectPackageRegistryDeps,
@@ -105,6 +104,7 @@ import {
   selectTraceSink,
   selectWorkRunner,
 } from './container.js'
+import { selectGitHubDeps } from './github-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
 
 /**

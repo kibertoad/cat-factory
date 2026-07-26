@@ -1378,6 +1378,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repoProjectionRepository,
     blockRepository: repos.blockRepository,
     trackerSettingsRepository: repos.trackerSettingsRepository,
+    workspaceRepository: repos.workspaceRepository,
     caches: options.caches,
   })
 

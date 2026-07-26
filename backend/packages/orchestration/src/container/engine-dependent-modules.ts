@@ -76,6 +76,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   // Observability + per-account settings that a facade builds and passes through on the deps bag.
   modules.build('agentContextObservability', () => dependencies.agentContextObservability)
   modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
+  modules.build('vcsConnectionService', () => dependencies.vcsConnectionService)
   modules.build('accountSettings', () =>
     dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
   )

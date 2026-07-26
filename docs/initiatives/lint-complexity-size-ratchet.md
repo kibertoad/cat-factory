@@ -79,15 +79,15 @@ node scripts/lint-limits-report.mjs --top 15   # more offenders per rule
 Every rule below currently passes with **zero** violations because its `max` equals the
 worst offender. These are the starting ceilings, not the goal.
 
-| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                                             |
-| ------------------------ | ----------: | ----------------: | ---------------------------------------------------------------------------------------------------------------- |
-| `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files)           |
-| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)                       |
-| `max-lines-per-function` |     **300** |           **150** | product floor after the eleventh-pass >300 split (node `container.ts` 296); tests: 2453 (`overrides`)            |
-| `max-lines`              |    **2648** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2648)                                                 |
-| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                                  |
-| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                                  |
-| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                                  |
+| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                                   |
+| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------------ |
+| `complexity`             |      **30** |            **20** | at step 2 — floor 30 after the 30–40 tail split (incl. the `buildContainer`/`RunDispatcher` god-files) |
+| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)             |
+| `max-lines-per-function` |     **300** |           **150** | product floor after the eleventh-pass >300 split (node `container.ts` 296); tests: 2453 (`overrides`)  |
+| `max-lines`              |    **2648** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2648)                                       |
+| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                        |
+| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
+| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                        |
 
 > **Eleventh pass (landed):** `max-lines-per-function` reached **step 2 (400 → 300)** by splitting
 > all twelve product functions above 300 along cohesive, behaviour-neutral seams, and `max-lines`
@@ -100,24 +100,25 @@ worst offender. These are the starting ceilings, not the goal.
 > pattern (ExecutionService.ts 2752 → 2648, so its `check-file-size` allowance ratchets 2800 → 2650);
 > the inline `resolveRiskPolicy` return type is now the named `ResolvedRunRiskPolicy`. The three DI
 > composition roots followed: orchestration `createCore` (385 → 293) → `container/engine-collaborators.ts`
-> + `container/engine-dependent-modules.ts` (container.ts 1822 → 1732, allowance 1850 → 1750); the Node
-> root's `assembleNodeCoreDependencies` (387) + `buildNodeContainer` (373 → 296) → a new
-> `container-core-deps.ts` (the bundle contract + the literal split across a persistence/services
-> seam, plus the four `selectNode*Deps` selectors only it used) and `container-foundation.ts`
-> (`resolveNodeContainerFoundation` + `resolveNodeAppRegistries` + `pickRepoSource`) — container.ts
-> 2247 → 1532, allowance 2250 → **1550**; and the Worker's `assembleWorkerContainer` (398 → 213) → an
-> in-file `buildWorkerCoreDependencies`. The six Pinia-store setups (`execution` 393, `auth` 361,
-> `github` 354, `initiative` 353, `board/mutations` 347, `workspace` 332) split into per-group action
-> factories under `stores/{execution,auth,github,initiative,board,workspace}/`, following the
-> `stores/board/*` + `stores/pipelines/*` precedent; the `workspace` store's snapshot fan-out moved to
-> `stores/workspace/hydrate.ts` (which also drops its `hydrate` well under the `complexity` /
-> `max-statements` ceilings). The local mothership conformance harness (306) split its RPC client +
-> overrides builders out. Verified by the orchestration (885), server (952), integrations (937), agents
-> (382), kernel (165), contracts (73), workspaces (18), gates (40) and app (372) unit suites, the Worker
-> integration/conformance suite on real workerd + D1 (812), and the Node (602) + local (657) conformance
-> suites on real Postgres, plus a whole-tree typecheck (63/63). No harness `src/**` touched, so no image
-> bump. The remaining >300 band is empty; step 3's 150 target takes the ~240-function product tail.
-> `complexity` / `max-statements` unchanged.
+>
+> - `container/engine-dependent-modules.ts` (container.ts 1822 → 1732, allowance 1850 → 1750); the Node
+>   root's `assembleNodeCoreDependencies` (387) + `buildNodeContainer` (373 → 296) → a new
+>   `container-core-deps.ts` (the bundle contract + the literal split across a persistence/services
+>   seam, plus the four `selectNode*Deps` selectors only it used) and `container-foundation.ts`
+>   (`resolveNodeContainerFoundation` + `resolveNodeAppRegistries` + `pickRepoSource`) — container.ts
+>   2247 → 1532, allowance 2250 → **1550**; and the Worker's `assembleWorkerContainer` (398 → 213) → an
+>   in-file `buildWorkerCoreDependencies`. The six Pinia-store setups (`execution` 393, `auth` 361,
+>   `github` 354, `initiative` 353, `board/mutations` 347, `workspace` 332) split into per-group action
+>   factories under `stores/{execution,auth,github,initiative,board,workspace}/`, following the
+>   `stores/board/*` + `stores/pipelines/*` precedent; the `workspace` store's snapshot fan-out moved to
+>   `stores/workspace/hydrate.ts` (which also drops its `hydrate` well under the `complexity` /
+>   `max-statements` ceilings). The local mothership conformance harness (306) split its RPC client +
+>   overrides builders out. Verified by the orchestration (885), server (952), integrations (937), agents
+>   (382), kernel (165), contracts (73), workspaces (18), gates (40) and app (372) unit suites, the Worker
+>   integration/conformance suite on real workerd + D1 (812), and the Node (602) + local (657) conformance
+>   suites on real Postgres, plus a whole-tree typecheck (63/63). No harness `src/**` touched, so no image
+>   bump. The remaining >300 band is empty; step 3's 150 target takes the ~240-function product tail.
+>   `complexity` / `max-statements` unchanged.
 >
 > **Tenth pass (landed):** `max-lines-per-function` moved from **step 1.5 (632) to an intermediate
 > step 1.75 (400)** by splitting all eight product functions above 400 along cohesive,
@@ -310,15 +311,15 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-lines-per-function` — 3103 → 150
 
-| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                                     | Status    |
-| ---------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3103 | —                                                                                                                                                                                                                                                                                                                            | ✅ landed |
-| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                                                                                                                                                     | ✅ landed |
-| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                                                                                                                                                       | ✅ landed |
-| 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533 — see seventh pass                                                                                                                                                       | ✅ landed |
-| 1.75       |   400 | (8) the 4 DI builders (Worker `buildContainer` 598 → sibling `container-assembly.ts`, `buildNodeContainer` 486, `createCore` 485 → sibling `container/foundation.ts`, `buildLocalContainer` 463), Worker `scheduled` 451, server `registerTaskRoutes` 401, `pipelines` 456 + `environmentWizard` 420 stores — see tenth pass | ✅ landed |
+| Step       | `max` | Offenders to split first                                                                                                                                                                                                                                                                                                                                                                                                  | Status    |
+| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline   |  3103 | —                                                                                                                                                                                                                                                                                                                                                                                                                         | ✅ landed |
+| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                                                                                                                                                                                                                                                  | ✅ landed |
+| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                                                                                                                                                                                                                                                    | ✅ landed |
+| 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533 — see seventh pass                                                                                                                                                                                                                                                    | ✅ landed |
+| 1.75       |   400 | (8) the 4 DI builders (Worker `buildContainer` 598 → sibling `container-assembly.ts`, `buildNodeContainer` 486, `createCore` 485 → sibling `container/foundation.ts`, `buildLocalContainer` 463), Worker `scheduled` 451, server `registerTaskRoutes` 401, `pipelines` 456 + `environmentWizard` 420 stores — see tenth pass                                                                                              | ✅ landed |
 | 2          |   300 | (12) the 6 Pinia-store setups (`execution` 393 … `workspace` 332) → per-group action factories, `ExecutionService` ctor 387 → `gate-window-controllers.ts`, node `assembleNodeCoreDependencies` 387 + `buildNodeContainer` 373 → `container-core-deps.ts` + `container-foundation.ts`, Worker `assembleWorkerContainer` 398, `createCore` 385 → `container/engine-*.ts`, local mothership harness 306 — see eleventh pass | ✅ landed |
-| 3 (final)  |   150 | (product long tail, ~240)                                                                                                                                                                                                                                                                                                    | ☐ todo    |
+| 3 (final)  |   150 | (product long tail, ~240)                                                                                                                                                                                                                                                                                                                                                                                                 | ☐ todo    |
 
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,
 > big `describe`/`it` blocks). **Decided (step 1):** an `overrides` entry holds the test globs

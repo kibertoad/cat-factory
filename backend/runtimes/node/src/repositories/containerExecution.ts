@@ -92,6 +92,7 @@ function rowToInstallation(row: typeof githubInstallations.$inferSelect): GitHub
     provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     cachedToken: row.cached_token,
     tokenExpiresAt: row.token_expires_at,
+    accessToken: row.access_token ?? null,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }
@@ -195,6 +196,7 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       provider: installation.provider,
       cached_token: installation.cachedToken,
       token_expires_at: installation.tokenExpiresAt,
+      access_token: installation.accessToken,
       created_at: installation.createdAt,
       deleted_at: installation.deletedAt,
     }

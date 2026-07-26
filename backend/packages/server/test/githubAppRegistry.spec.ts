@@ -25,6 +25,7 @@ function installation(appId: string | null): GitHubInstallation {
     appId,
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 0,
     deletedAt: null,
   }

@@ -168,6 +168,7 @@ export type {
   ProvisionedRepo,
 } from './github-provisioning.js'
 export type { VcsClient } from './vcs-client.js'
+export { VcsIdentityError } from './vcs-identity.js'
 export type {
   VcsIdentity,
   VcsIdentityResolver,

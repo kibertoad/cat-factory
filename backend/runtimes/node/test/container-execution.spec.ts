@@ -97,6 +97,7 @@ describe('container-execution persistence (Postgres)', () => {
         provider: 'github',
         cachedToken: null,
         tokenExpiresAt: null,
+        accessToken: null,
         createdAt: 1,
         deletedAt: null,
       })
@@ -124,6 +125,7 @@ describe('container-execution persistence (Postgres)', () => {
         provider: 'github',
         cachedToken: null,
         tokenExpiresAt: null,
+        accessToken: null,
         createdAt: 1,
         deletedAt: null,
       })
@@ -201,6 +203,7 @@ describe('container-execution persistence (Postgres)', () => {
         provider: 'github',
         cachedToken: null,
         tokenExpiresAt: null,
+        accessToken: null,
         createdAt: 1,
         deletedAt: null,
       })

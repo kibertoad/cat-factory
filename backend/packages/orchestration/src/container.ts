@@ -200,6 +200,7 @@ import {
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
   type UserSecretKindRegistry,
+  type VcsPatConnectionService,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
@@ -533,6 +534,13 @@ export interface CoreDependencies {
   // all of them are supplied, `createCore` assembles the `github` module.
   githubClient?: GitHubClient
   githubInstallationRepository?: GitHubInstallationRepository
+  /**
+   * The per-workspace VCS PAT connect service (GitLab today), injected by a facade when GitLab
+   * connect is wired (a sealing key + GitLab config). Exposed on {@link Core} and surfaced on the
+   * ServerContainer, where the GitLab connect controller drives it. Absent ⇒ the connect endpoints
+   * 503, exactly like the App-based `github` module when unconfigured.
+   */
+  vcsConnectionService?: VcsPatConnectionService
   repoProjectionRepository?: RepoProjectionRepository
   branchProjectionRepository?: BranchProjectionRepository
   pullRequestProjectionRepository?: PullRequestProjectionRepository
@@ -1327,6 +1335,8 @@ export interface OptionalCoreModules {
   searchQueryObservability?: SearchQueryObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
+  /** Present only when a facade wired the per-workspace VCS PAT connect service (GitLab connect). */
+  vcsConnectionService?: VcsPatConnectionService
   /** Present only when the document-source integration is configured (see CoreDependencies). */
   documents?: DocumentsModule
   /** Present only when the task-source integration is configured (see CoreDependencies). */

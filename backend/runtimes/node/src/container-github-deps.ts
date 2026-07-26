@@ -3,8 +3,10 @@ import {
   IssueWritebackService,
   JiraProvider,
   LinearTaskProvider,
+  VcsPatConnectionService,
   githubIssuesLogic,
 } from '@cat-factory/integrations'
+import { GitLabIdentityResolver, buildGitLabConnectClient } from '@cat-factory/gitlab'
 import type {
   AppCaches,
   BlockRepository,
@@ -20,6 +22,7 @@ import type {
   TaskConnectionRepository,
   TaskSourceProvider,
   TrackerSettingsRepository,
+  WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
@@ -35,6 +38,7 @@ import {
   GitHubPullRequestMerger,
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
+  ProviderRoutingGitHubClient,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   makeResolveRepoFilesForCoords,
@@ -145,6 +149,8 @@ export interface NodeGitHubDepsInput {
   repoProjectionRepository: RepoProjectionRepository
   blockRepository: BlockRepository
   trackerSettingsRepository: TrackerSettingsRepository
+  /** Needed by the per-workspace GitLab PAT connect service (workspace existence guard). */
+  workspaceRepository: WorkspaceRepository
   caches?: AppCaches
 }
 
@@ -236,77 +242,13 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   const tasks = selectNodeTasksDeps(config, db, githubClient, githubInstallationRepository)
 
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
-  // issue), gated per workspace + per task inside the provider. GitHub uses the same
-  // per-tenant client + installation lookup as the tracker/CI/merge providers; Jira
-  // reuses the workspace's encrypted connection. Wired whenever the tracker-settings
-  // repo exists (always on Node) so the engine can write back when a tracker is set.
-  const resolveWritebackIssue = githubClient
-    ? async (workspaceId: string, externalId: string) => {
-        const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
-        if (!parsed) return null
-        const installation = await githubInstallationRepository.getByWorkspace(workspaceId)
-        if (!installation) return null
-        return { installationId: installation.installationId, parsed }
-      }
-    : undefined
-  const issueWritebackProvider = new IssueWritebackService({
+  // issue), gated per workspace + per task inside the provider.
+  const issueWritebackProvider = buildNodeIssueWriteback({
+    githubClient,
+    githubInstallationRepository,
     trackerSettingsRepository,
-    taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
-    fetchImpl: fetch,
-    ...(githubClient && resolveWritebackIssue
-      ? {
-          commentOnGitHubIssue: async (workspaceId, externalId, body) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.comment(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              body,
-            )
-          },
-          closeGitHubIssue: async (workspaceId, externalId) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.closeIssue(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-            )
-          },
-          labelGitHubIssue: async (workspaceId, externalId, label) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.applyIssueLabel?.(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              label,
-            )
-          },
-        }
-      : {}),
-    ...(tasks.taskConnectionRepository
-      ? {
-          resolveJiraConnection: async (workspaceId: string) => {
-            const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-              workspaceId,
-              'jira',
-            )
-            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-            if (!baseUrl || !accountEmail || !apiToken) return null
-            return { baseUrl, accountEmail, apiToken }
-          },
-          resolveLinearConnection: async (workspaceId: string) => {
-            const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-              workspaceId,
-              'linear',
-            )
-            const { apiKey, token } = connection?.credentials ?? {}
-            return apiKey || token ? { apiKey, token } : null
-          },
-        }
-      : {}),
+    sourced,
+    taskConnectionRepository: tasks.taskConnectionRepository,
   })
 
   let githubGateDeps: Partial<CoreDependencies> = {}
@@ -386,70 +328,10 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
     }
   }
 
-  // GitHub installation + projections + sync/webhook module: wired when the App is
-  // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
-  // turns the GitHub read endpoints + the inline webhook/backfill sync on for Node —
-  // the sync engine (GitHubSyncService) is runtime-neutral, so populating the
-  // projection repos here makes the inline ingest actually persist (parity with the
-  // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
-  // `workflowsGranted` come from the App registry when present (advisory).
-  const githubModuleDeps: Partial<CoreDependencies> =
-    config.github.enabled && githubClient
-      ? {
-          githubClient,
-          githubInstallationRepository,
-          repoProjectionRepository,
-          // The five GitHub projection repos share one shape (remote in mothership mode, else
-          // Drizzle over `db`), routed through the shared `sourced` helper.
-          branchProjectionRepository: sourced(
-            'branchProjectionRepository',
-            (d) => new DrizzleBranchProjectionRepository(d),
-          ),
-          pullRequestProjectionRepository: sourced(
-            'pullRequestProjectionRepository',
-            (d) => new DrizzlePullRequestProjectionRepository(d),
-          ),
-          issueProjectionRepository: sourced(
-            'issueProjectionRepository',
-            (d) => new DrizzleIssueProjectionRepository(d),
-          ),
-          commitProjectionRepository: sourced(
-            'commitProjectionRepository',
-            (d) => new DrizzleCommitProjectionRepository(d),
-          ),
-          checkRunProjectionRepository: sourced(
-            'checkRunProjectionRepository',
-            (d) => new DrizzleCheckRunProjectionRepository(d),
-          ),
-          // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
-          // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
-          userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
-          webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
-          // Bound the initial backfill to the commit retention horizon (0 = full).
-          commitBackfillHorizonMs: config.retention.commitMs || undefined,
-          ...(appRegistry
-            ? {
-                // Privileged App tier (ADR 0005): when configured, its client backs the
-                // create-repo endpoint; `canCreateRepos` flags a connection whose
-                // installation is owned by the privileged App. Absent → repo creation
-                // stays the manual flow (parity with the Worker's selectGitHubDeps).
-                repoProvisioningClient: config.github.privilegedApp
-                  ? new FetchGitHubProvisioningClient({
-                      registry: appRegistry,
-                      apiBase: config.github.apiBase,
-                    })
-                  : undefined,
-                canCreateRepos: (installation) => appRegistry.canCreateRepos(installation),
-                workflowsGranted: async (installation) => {
-                  const perms = await appRegistry.installationPermissions(
-                    installation.installationId,
-                  )
-                  return perms.workflows === 'write'
-                },
-              }
-            : {}),
-        }
-      : {}
+  const githubModuleDeps = buildNodeGitHubModuleDeps({
+    input,
+    githubClient,
+  })
 
   return {
     githubClient,
@@ -459,4 +341,252 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
     githubGateDeps,
     githubModuleDeps,
   }
+}
+
+/**
+ * Wire the per-workspace GitLab PAT connect deps: the GitLab-backed `GitHubClient` (its token
+ * source decrypts each workspace's sealed PAT) that the `github` module reads through for a
+ * `gitlab` connection, plus the `VcsPatConnectionService` the connect controller drives. Enabled
+ * only when GitLab is configured AND a sealing key is present. Runtime-neutral inputs, so the
+ * Worker facade wires it the same way (per "keep the runtimes symmetric").
+ */
+function selectVcsConnectDeps(input: {
+  config: AppConfig
+  installations: GitHubInstallationRepository
+  workspaceRepository: WorkspaceRepository
+  clock: Clock
+}): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
+  const { config, installations, workspaceRepository, clock } = input
+  const gitlab = config.gitlab
+  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  // One cipher seals (connect) and unseals (token source) under the same domain, so the two
+  // instances the client + service build from the same key + info interoperate.
+  const cipher = new WebCryptoSecretCipher({
+    masterKeyBase64: gitlab.encryptionKey,
+    info: 'cat-factory:vcs-token',
+  })
+  const client = buildGitLabConnectClient({
+    installations,
+    cipher,
+    apiBase: gitlab.apiBase,
+    clock,
+  })
+  const service = new VcsPatConnectionService({
+    provider: 'gitlab',
+    installations,
+    workspaceRepository,
+    identityResolver: new GitLabIdentityResolver({ apiBase: gitlab.apiBase }),
+    cipher,
+    clock,
+  })
+  return { client, service }
+}
+
+/**
+ * Assemble the deps for the `github` module (installation + the five projections + sync/webhook),
+ * including the per-workspace GitLab PAT connect wiring and the provider-routing client that
+ * fronts them when BOTH a GitHub App and GitLab connect are configured. Split out of
+ * {@link selectNodeGitHubDeps} along the module-deps seam so that selector stays within the
+ * per-function line budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
+ * Behaviour-neutral: the same values are built in the same order.
+ */
+function buildNodeGitHubModuleDeps(args: {
+  input: NodeGitHubDepsInput
+  /** The engine/App client already resolved by the caller (an override or App-minted). */
+  githubClient: GitHubClient | undefined
+}): Partial<CoreDependencies> {
+  const { input, githubClient } = args
+  const {
+    config,
+    db,
+    sourced,
+    clock,
+    appRegistry,
+    githubInstallationRepository,
+    repoProjectionRepository,
+  } = input
+
+  // GitHub installation + projections + sync/webhook module: wired when the App is
+  // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
+  // turns the GitHub read endpoints + the inline webhook/backfill sync on for Node —
+  // the sync engine (GitHubSyncService) is runtime-neutral, so populating the
+  // projection repos here makes the inline ingest actually persist (parity with the
+  // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
+  // `workflowsGranted` come from the App registry when present (advisory).
+  // Per-workspace GitLab PAT connect (opt-in): when GitLab is configured AND a sealing key is
+  // present, wire a GitLab-backed client whose token source decrypts each workspace's sealed PAT,
+  // plus the connect service that validates + seals a pasted PAT. This lets a workspace connect
+  // GitLab through the UI and reuse the SAME GitHub-shaped projection/sync surface. Mirrors the
+  // Worker's `selectGitHubDeps` (per "keep the runtimes symmetric").
+  const gitlabConnect = selectVcsConnectDeps({
+    config,
+    installations: githubInstallationRepository,
+    workspaceRepository: input.workspaceRepository,
+    clock,
+  })
+  const gitlabConnectClient = gitlabConnect?.client
+  const vcsConnectionService = gitlabConnect?.service
+
+  // The client the `github` module (installation / sync / service) reads through. When BOTH a
+  // GitHub App and GitLab connect are configured, route each installation-keyed call to the
+  // matching client by the connection's stored provider; otherwise the single configured client
+  // serves the module directly.
+  const appClient = config.github.enabled ? githubClient : undefined
+  const moduleClient: GitHubClient | undefined =
+    appClient && gitlabConnectClient
+      ? new ProviderRoutingGitHubClient({
+          installations: githubInstallationRepository,
+          github: appClient,
+          gitlab: gitlabConnectClient,
+        })
+      : (appClient ?? gitlabConnectClient)
+
+  return moduleClient
+    ? {
+        githubClient: moduleClient,
+        // Surfaced on the container for the GitLab connect controller (a CoreDependency, so it
+        // flows through `createCore` onto the ServerContainer). Present only with GitLab connect.
+        ...(vcsConnectionService ? { vcsConnectionService } : {}),
+        githubInstallationRepository,
+        repoProjectionRepository,
+        // The five GitHub projection repos share one shape (remote in mothership mode, else
+        // Drizzle over `db`), routed through the shared `sourced` helper.
+        branchProjectionRepository: sourced(
+          'branchProjectionRepository',
+          (d) => new DrizzleBranchProjectionRepository(d),
+        ),
+        pullRequestProjectionRepository: sourced(
+          'pullRequestProjectionRepository',
+          (d) => new DrizzlePullRequestProjectionRepository(d),
+        ),
+        issueProjectionRepository: sourced(
+          'issueProjectionRepository',
+          (d) => new DrizzleIssueProjectionRepository(d),
+        ),
+        commitProjectionRepository: sourced(
+          'commitProjectionRepository',
+          (d) => new DrizzleCommitProjectionRepository(d),
+        ),
+        checkRunProjectionRepository: sourced(
+          'checkRunProjectionRepository',
+          (d) => new DrizzleCheckRunProjectionRepository(d),
+        ),
+        // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
+        // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
+        userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
+        // The GitHub webhook verifier is App-specific (a GitLab-only deployment ingests via the
+        // neutral `/vcs/:provider/webhooks` route, not this verifier), so wire it only with the App.
+        ...(appClient
+          ? { webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret) }
+          : {}),
+        // Bound the initial backfill to the commit retention horizon (0 = full).
+        commitBackfillHorizonMs: config.retention.commitMs || undefined,
+        ...(appRegistry
+          ? {
+              // Privileged App tier (ADR 0005): when configured, its client backs the
+              // create-repo endpoint; `canCreateRepos` flags a connection whose
+              // installation is owned by the privileged App. Absent → repo creation
+              // stays the manual flow (parity with the Worker's selectGitHubDeps).
+              repoProvisioningClient: config.github.privilegedApp
+                ? new FetchGitHubProvisioningClient({
+                    registry: appRegistry,
+                    apiBase: config.github.apiBase,
+                  })
+                : undefined,
+              canCreateRepos: (installation) => appRegistry.canCreateRepos(installation),
+              workflowsGranted: async (installation) => {
+                const perms = await appRegistry.installationPermissions(installation.installationId)
+                return perms.workflows === 'write'
+              },
+            }
+          : {}),
+      }
+    : {}
+}
+
+/**
+ * Assemble the issue-tracker writeback provider (comment-on-PR-open + close/label-on-merge of a
+ * task's linked issue), gated per workspace + per task inside the provider. GitHub uses the same
+ * per-tenant client + installation lookup as the tracker/CI/merge providers; Jira and Linear reuse
+ * the workspace's encrypted connection. Split out of {@link selectNodeGitHubDeps} for the
+ * per-function line budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
+ */
+function buildNodeIssueWriteback(args: {
+  githubClient: GitHubClient | undefined
+  githubInstallationRepository: GitHubInstallationRepository
+  trackerSettingsRepository: TrackerSettingsRepository
+  sourced: NodeGitHubDepsInput['sourced']
+  taskConnectionRepository: TaskConnectionRepository | undefined
+}): IssueWritebackService {
+  const {
+    githubClient,
+    githubInstallationRepository,
+    trackerSettingsRepository,
+    sourced,
+    taskConnectionRepository,
+  } = args
+  // Wired whenever the tracker-settings repo exists (always on Node) so the engine can write
+  // back when a tracker is set; the GitHub half resolves the workspace's installation per issue.
+  const resolveWritebackIssue = githubClient
+    ? async (workspaceId: string, externalId: string) => {
+        const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
+        if (!parsed) return null
+        const installation = await githubInstallationRepository.getByWorkspace(workspaceId)
+        if (!installation) return null
+        return { installationId: installation.installationId, parsed }
+      }
+    : undefined
+  return new IssueWritebackService({
+    trackerSettingsRepository,
+    taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
+    fetchImpl: fetch,
+    ...(githubClient && resolveWritebackIssue
+      ? {
+          commentOnGitHubIssue: async (workspaceId, externalId, body) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.comment(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+              body,
+            )
+          },
+          closeGitHubIssue: async (workspaceId, externalId) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.closeIssue(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+            )
+          },
+          labelGitHubIssue: async (workspaceId, externalId, label) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.applyIssueLabel?.(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+              label,
+            )
+          },
+        }
+      : {}),
+    ...(taskConnectionRepository
+      ? {
+          resolveJiraConnection: async (workspaceId: string) => {
+            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
+            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+            if (!baseUrl || !accountEmail || !apiToken) return null
+            return { baseUrl, accountEmail, apiToken }
+          },
+          resolveLinearConnection: async (workspaceId: string) => {
+            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
+            const { apiKey, token } = connection?.credentials ?? {}
+            return apiKey || token ? { apiKey, token } : null
+          },
+        }
+      : {}),
+  })
 }

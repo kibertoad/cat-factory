@@ -95,6 +95,9 @@ export class GitHubInstallationService {
       provider: 'github',
       cachedToken: null,
       tokenExpiresAt: null,
+      // The App mints its own installation tokens from its key; no durable per-connection
+      // credential is stored here (that column backs the per-workspace PAT connect path).
+      accessToken: null,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }

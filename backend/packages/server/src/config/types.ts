@@ -396,6 +396,13 @@ export interface GitLabConfig {
   connectionId: string
   /** Shared secret compared against the inbound `X-Gitlab-Token` webhook header; '' when unset. */
   webhookSecret: string
+  /**
+   * The deployment `ENCRYPTION_KEY` (base64), used to seal a per-workspace GitLab PAT at rest for
+   * the connect flow. Present whenever the facade has an encryption key configured; absent ⇒ the
+   * per-workspace PAT connect surface is not wired (the deployment still gates/merges on the
+   * single-token engine client). Domain-separated under `cat-factory:vcs-token`.
+   */
+  encryptionKey?: string
 }
 
 export interface AppConfig {

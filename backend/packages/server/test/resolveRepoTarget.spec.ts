@@ -23,6 +23,7 @@ const installation: GitHubInstallation = {
   appId: null,
   cachedToken: null,
   tokenExpiresAt: null,
+  accessToken: null,
   createdAt: 0,
   deletedAt: null,
 }

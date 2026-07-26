@@ -195,6 +195,10 @@ export {
   type FetchGitHubClientDependencies,
 } from './github/FetchGitHubClient.js'
 export {
+  ProviderRoutingGitHubClient,
+  type ProviderRoutingGitHubClientDependencies,
+} from './github/ProviderRoutingGitHubClient.js'
+export {
   GitHubIdentityResolver,
   type GitHubIdentityResolverOptions,
 } from './github/GitHubIdentityResolver.js'

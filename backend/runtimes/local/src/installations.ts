@@ -68,6 +68,9 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
       provider: this.provider,
       cachedToken: null,
       tokenExpiresAt: null,
+      // Local mode authenticates every workspace with the one deployment PAT (the
+      // `mintInstallationToken` seam), so the synthetic row stores no per-connection token.
+      accessToken: null,
       createdAt: this.now(),
       deletedAt: null,
     }

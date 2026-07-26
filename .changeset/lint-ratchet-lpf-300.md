@@ -13,4 +13,6 @@ subjects through sibling factories (`gate-window-controllers.ts`), `createCore` 
 `container/engine-collaborators.ts` + `container/engine-dependent-modules.ts`, the Node composition
 root through `container-core-deps.ts` + `container-foundation.ts`, the Worker's container assembly
 through an in-file `buildWorkerCoreDependencies`, and six Pinia stores through per-group action
-factories under `stores/{execution,auth,github,initiative,board,workspace}/`. No behaviour change.
+factories under `stores/{execution,auth,github,initiative,board,workspace}/`, and the Node
+`selectNodeGitHubDeps` selector through the `buildNodeIssueWriteback` +
+`buildNodeGitHubModuleDeps` siblings. No behaviour change.

@@ -1,4 +1,5 @@
 import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import { VcsIdentityError } from '@cat-factory/kernel'
 import { GITLAB_PUBLIC_API_BASE } from './tokenSource.js'
 
 // Resolves a GitLab PAT to its account via `GET /api/v4/user` — the GitLab analogue of
@@ -55,7 +56,10 @@ export class GitLabIdentityResolver implements VcsIdentityResolver {
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`GitLab /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
+      throw new VcsIdentityError(
+        `GitLab /user failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
+        res.status,
+      )
     }
     const user = (await res.json()) as GitLabUserResponse
     if (user.id == null || !user.username) {

@@ -17,6 +17,7 @@ import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
 import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
+import { gitlabController } from './modules/gitlab/GitLabController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
@@ -222,6 +223,7 @@ function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', serviceSpecController())
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
+  app.route('/workspaces/:workspaceId', gitlabController())
   app.route('/workspaces/:workspaceId', slackController())
 }
 
