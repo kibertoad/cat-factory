@@ -1,5 +1,13 @@
 # @cat-factory/conformance
 
+## 0.11.67
+
+### Patch Changes
+
+- Updated dependencies [1ffa4fe]
+  - @cat-factory/orchestration@0.136.1
+  - @cat-factory/server@0.145.1
+
 ## 0.11.66
 
 ### Patch Changes
