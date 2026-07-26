@@ -1,8 +1,14 @@
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
-import { SLACK_CIPHER_INFO, SlackNotificationChannel } from '@cat-factory/integrations'
+import {
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
+  SLACK_CIPHER_INFO,
+  SlackNotificationChannel,
+  buildNotificationWebhookSupport,
+} from '@cat-factory/integrations'
 import {
   type AgentExecutor,
+  type Clock,
   CompositeNotificationChannel,
   type ModelProviderResolver,
   type NotificationChannel,
@@ -19,6 +25,7 @@ import {
 import type { DrizzleDb } from './db/client.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import type { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleNotificationWebhookRepository } from './repositories/drizzle/settings.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -110,6 +117,44 @@ export interface NodeRealtimeDepsInput {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   agentKindRegistry: AgentKindRegistry
+  clock: Clock
+}
+
+/**
+ * Build the outbound notification-webhook feature (management service + delivery channel) when the
+ * shared encryption key is present — the signing secret must be sealable. Both halves come from
+ * ONE builder so they can't drift onto different repositories/ciphers. The repository rides the
+ * `sourced` seam like the Slack repos, so mothership mode reads the same remote-backed rows.
+ * Null when no key is set; then the management surface 503s and no deliveries are attempted.
+ */
+function selectNodeNotificationWebhookSupport(
+  env: NodeJS.ProcessEnv,
+  clock: Clock,
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
+): ReturnType<typeof buildNotificationWebhookSupport> | null {
+  // Read the shared key straight off the env, exactly as the Worker's builder does — the Node
+  // config splits ENCRYPTION_KEY into per-feature sub-configs, and inventing another one here
+  // would make the two facades gate this feature on different conditions.
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return null
+  return buildNotificationWebhookSupport({
+    notificationWebhookRepository: sourced(
+      'notificationWebhookRepository',
+      (d) => new DrizzleNotificationWebhookRepository(d),
+    ),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
+    }),
+    clock,
+    // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
+    // through the structured logger so a broken receiver is diagnosable.
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'notification webhook delivery failed',
+      ),
+  })
 }
 
 /**
@@ -129,6 +174,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     modelProviderResolver,
     resolveWorkspaceModelDefault,
     agentKindRegistry,
+    clock,
   } = input
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -138,6 +184,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, repos, sourced)
+  const notificationWebhookSupport = selectNodeNotificationWebhookSupport(env, clock, sourced)
   const executionEventPublisher = realtimeSink
     ? new FanOutEventPublisher(new NodeEventPublisher(realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
@@ -169,6 +216,10 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
   if (executionEventPublisher)
     notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
   if (slackDeps.notificationChannel) notificationChannels.push(slackDeps.notificationChannel)
+  // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
+  // browser WebSocket, so a parked run would otherwise reach it only by polling (see
+  // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
+  if (notificationWebhookSupport) notificationChannels.push(notificationWebhookSupport.channel)
   const notificationChannel =
     notificationChannels.length === 0
       ? undefined
@@ -176,5 +227,11 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
         ? notificationChannels[0]
         : new CompositeNotificationChannel(notificationChannels)
 
-  return { slackDeps, executionEventPublisher, agentExecutor, notificationChannel }
+  return {
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel,
+    notificationWebhookSupport,
+  }
 }

@@ -1159,6 +1159,19 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   seam** (see "Conventions"), not a hardcoded mount. `InspectorPanel.vue` freezes a
   task's raw description once `incorporated` (the standardized doc takes focus), and after
   a stop-reset surfaces the last incorporated doc read-only as a base.
+- **Headless callers drive the SAME loop over the public API** (`/api/v1/runs/:runId/decisions`,
+  `PublicDecisionController`): list a run's open findings, reply/dismiss, incorporate, re-review,
+  proceed, resolve-exceeded, choose a fork. Every route delegates to the SAME service methods the
+  SPA controllers call, so the park's CAS/approval-id arbitration and the task's preset knobs apply
+  identically whichever surface answers. Gated on the `decide` rung of the public-API scope ladder
+  (`read ⊂ write ⊂ decide ⊂ admin`) — which is ALSO what admits a parking pipeline through
+  `POST /api/v1/initiatives` at all. **Do not add a hard park timeout as a backstop: a parked run
+  waits for a human indefinitely by design** (`ExecutionWorkflow` re-arms its `waitForEvent` rather
+  than failing the run); the backstops are the workspace's in-flight cap plus
+  `POST /api/v1/jobs/:id/cancel`. A run records how it entered the system
+  (`ExecutionInstance.intakeOrigin`, `ui` | `public-api`, in the `detail` JSON, carried across
+  retry/restart) — a UI-started task's overseer is in the SPA and its behaviour is unchanged. See
+  [`docs/initiatives/headless-clarification-loop.md`](./docs/initiatives/headless-clarification-loop.md).
 
 ## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
 
@@ -1253,6 +1266,12 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the in-app `notification` `WorkspaceEvent` is pushed (worker
     `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
     with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
+    `WebhookNotificationChannel` (`@cat-factory/integrations`) is the third: a per-workspace
+    outbound HTTPS endpoint (`notification_webhooks`, D1 ⇄ Drizzle) delivered HMAC-signed with a
+    sealed secret, best-effort with a bounded retry that gives up on a 4xx. It exists because a
+    HEADLESS caller has no in-app inbox and no browser WebSocket, so a parked run would otherwise
+    reach it only by polling. An EMPTY type filter means the parking + actionable-tail defaults,
+    NOT everything.
     `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
     (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +

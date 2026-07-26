@@ -454,6 +454,183 @@
         ],
         "type": "object"
       },
+      "PublicChooseFork": {
+        "properties": {
+          "custom": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forkId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "PublicDecision": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PublicRequirementsDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicForkDecision"
+          }
+        ]
+      },
+      "PublicDecisionList": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/PublicDecision"
+            },
+            "type": "array"
+          },
+          "parked": {
+            "type": "boolean"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "blocked",
+              "paused",
+              "done",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "taskId",
+          "status",
+          "parked",
+          "decisions"
+        ],
+        "type": "object"
+      },
+      "PublicForkDecision": {
+        "properties": {
+          "forks": {
+            "items": {
+              "properties": {
+                "approach": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "recommended": {
+                  "type": "boolean"
+                },
+                "riskNotes": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "tradeoffs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary",
+                "approach",
+                "tradeoffs"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "fork"
+          },
+          "seamSummary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "proposing",
+              "awaiting_choice",
+              "answering",
+              "chosen",
+              "single_path",
+              "skipped"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "seamSummary",
+          "forks"
+        ],
+        "type": "object"
+      },
+      "PublicIncorporate": {
+        "properties": {
+          "feedback": {
+            "maxLength": 4000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PublicJob": {
         "properties": {
           "createdAt": {
@@ -588,6 +765,153 @@
         },
         "required": [
           "pipelines"
+        ],
+        "type": "object"
+      },
+      "PublicReplyFinding": {
+        "properties": {
+          "reply": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "reply"
+        ],
+        "type": "object"
+      },
+      "PublicRequirementsDecision": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/PublicReviewFinding"
+            },
+            "type": "array"
+          },
+          "incorporatedRequirements": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "iteration": {
+            "type": "number"
+          },
+          "kind": {
+            "const": "requirements-review"
+          },
+          "maxIterations": {
+            "type": "number"
+          },
+          "reviewId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "incorporating",
+              "reviewing",
+              "merged",
+              "exceeded",
+              "incorporated"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reviewId",
+          "taskId",
+          "status",
+          "iteration",
+          "maxIterations",
+          "findings",
+          "incorporatedRequirements"
+        ],
+        "type": "object"
+      },
+      "PublicResolveExceeded": {
+        "properties": {
+          "choice": {
+            "enum": [
+              "extra-round",
+              "proceed",
+              "stop-reset"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice"
+        ],
+        "type": "object"
+      },
+      "PublicReviewFinding": {
+        "properties": {
+          "category": {
+            "enum": [
+              "gap",
+              "clarification",
+              "assumption",
+              "risk",
+              "question"
+            ],
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "answered",
+              "resolved",
+              "dismissed",
+              "recommend_requested"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "category",
+          "severity",
+          "title",
+          "detail",
+          "status",
+          "reply"
         ],
         "type": "object"
       },
@@ -792,6 +1116,21 @@
         },
         "required": [
           "services"
+        ],
+        "type": "object"
+      },
+      "PublicSetFindingStatus": {
+        "properties": {
+          "status": {
+            "enum": [
+              "dismissed",
+              "open"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -1041,6 +1380,58 @@
         ]
       }
     },
+    "/api/v1/jobs/{id}/cancel": {
+      "post": {
+        "description": "Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.",
+        "operationId": "cancelPublicJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicJob"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Cancel an initiative job",
+        "tags": [
+          "Initiatives"
+        ]
+      }
+    },
     "/api/v1/jobs/{id}/events": {
       "get": {
         "description": "Server-sent events for a headless initiative run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.",
@@ -1268,6 +1659,488 @@
         "summary": "List the workspace's pipelines",
         "tags": [
           "Pipelines"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions": {
+      "get": {
+        "description": "Read what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.",
+        "operationId": "listPublicRunDecisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List a run's parked decisions",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/fork/choose": {
+      "post": {
+        "description": "Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.",
+        "operationId": "choosePublicRunFork",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicChooseFork"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Choose an implementation approach",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/findings/{itemId}": {
+      "patch": {
+        "description": "Dismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a `decide`-scope key.",
+        "operationId": "setPublicRunFindingStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicSetFindingStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss or reopen a finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/findings/{itemId}/reply": {
+      "post": {
+        "description": "Record an answer to one reviewer finding. Returns the run's updated decision list. Requires a `decide`-scope key.",
+        "operationId": "replyPublicRunFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicReplyFinding"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Answer a review finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/incorporate": {
+      "post": {
+        "description": "Fold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.",
+        "operationId": "incorporatePublicRunRequirements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicIncorporate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Incorporate the answers",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/proceed": {
+      "post": {
+        "description": "Settle the requirements phase and advance the parked run (used when nothing is outstanding). Requires a `decide`-scope key.",
+        "operationId": "proceedPublicRunRequirements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Proceed with the current requirements",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/re-review": {
+      "post": {
+        "description": "Run one more reviewer pass over the incorporated document. On convergence the parked run advances. Requires a `decide`-scope key.",
+        "operationId": "reReviewPublicRunRequirements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Re-review the incorporated document",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/requirements/resolve-exceeded": {
+      "post": {
+        "description": "Pick how a review that exhausted its reviewer-pass budget proceeds: one more round, proceed with the last incorporated document, or stop and reset the task. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunRequirementsExceeded",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveExceeded"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a review at its iteration cap",
+        "tags": [
+          "Decisions"
         ]
       }
     },
@@ -1852,6 +2725,10 @@
     }
   ],
   "tags": [
+    {
+      "description": "A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.",
+      "name": "Decisions"
+    },
     {
       "description": "Headless initiative-breakdown runs (start, poll, stream).",
       "name": "Initiatives"

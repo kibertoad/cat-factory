@@ -312,6 +312,28 @@ export {
 } from './modules/provisioning-logs/LoggingRunnerTransport.js'
 export { redactSecrets } from './modules/provisioning-logs/redact.js'
 
+// Notification webhook: an outbound HTTP delivery transport for the existing notification
+// mechanism (`WebhookNotificationChannel` implements the same `NotificationChannel` port),
+// plus the per-workspace endpoint management service. This is how a HEADLESS integration —
+// which has no in-app inbox and no browser WebSocket — learns that a run parked.
+export {
+  WebhookNotificationChannel,
+  type WebhookNotificationChannelDependencies,
+} from './modules/notificationWebhook/WebhookNotificationChannel.js'
+export {
+  NotificationWebhookService,
+  type NotificationWebhookServiceDependencies,
+} from './modules/notificationWebhook/NotificationWebhookService.js'
+export {
+  WEBHOOK_SIGNATURE_HEADERS,
+  signWebhookDelivery,
+} from './modules/notificationWebhook/webhookSignature.js'
+export {
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
+  buildNotificationWebhookSupport,
+  type NotificationWebhookSupportDependencies,
+} from './modules/notificationWebhook/support.js'
+
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),
 // plus the per-account connection / per-workspace routing / member-mapping services.

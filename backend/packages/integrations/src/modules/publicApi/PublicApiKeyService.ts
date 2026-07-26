@@ -48,17 +48,27 @@ export interface PublicApiKeyAuth {
   keyId: string
   accountId: string
   workspaceId: string
-  /** What this key may do (read ⊂ write ⊂ admin) — the public surface gates each route on it. */
+  /**
+   * What this key may do (read ⊂ write ⊂ decide ⊂ admin) — the public surface gates each
+   * route on it.
+   */
   scope: PublicApiScope
 }
 
-/** The scope ladder as a rank, so a `have ≥ need` check is one comparison. */
-const SCOPE_RANK: Record<PublicApiScope, number> = { read: 0, write: 1, admin: 2 }
+/**
+ * The scope ladder as a rank, so a `have ≥ need` check is one comparison. DERIVED from the
+ * contract's `PUBLIC_API_SCOPES` array order rather than hand-listed, so inserting a rung
+ * (as `decide` was, between `write` and `admin`) cannot leave the wire vocabulary and the
+ * server-side check disagreeing about the ladder.
+ */
+const SCOPE_RANK: Record<PublicApiScope, number> = Object.fromEntries(
+  PUBLIC_API_SCOPES.map((scope, rank) => [scope, rank]),
+) as Record<PublicApiScope, number>
 
 /**
  * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
- * inclusive — an `admin` key satisfies a `write` or `read` requirement — so this is a simple
- * rank comparison, the single source of truth for every `/api/v1` scope gate.
+ * inclusive — an `admin` key satisfies a `decide`, `write` or `read` requirement — so this is
+ * a simple rank comparison, the single source of truth for every `/api/v1` scope gate.
  */
 export function scopeSatisfies(have: PublicApiScope, need: PublicApiScope): boolean {
   return SCOPE_RANK[have] >= SCOPE_RANK[need]

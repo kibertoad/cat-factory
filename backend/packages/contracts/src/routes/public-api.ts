@@ -75,6 +75,22 @@ export const getPublicJobContract = defineApiContract({
   responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
 })
 
+/**
+ * Cancel a headless initiative run. The escape hatch that makes admitting a PARKING pipeline
+ * safe (see `docs/initiatives/headless-clarification-loop.md`, D1): a parked run waits for a
+ * human indefinitely and holds one of the workspace's in-flight initiative slots, so a caller
+ * that decides not to answer must be able to free it. Idempotent — a run already terminal comes
+ * back as-is. Board tasks have had `POST /api/v1/tasks/:taskId/stop` all along; this is its
+ * counterpart on the initiative surface.
+ */
+export const cancelPublicJobContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/api/v1/jobs/${id}/cancel`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
+})
+
 // ---- basic board workloads: services + tasks (key-authenticated) -----------
 
 /** List the workspace's services (board service frames). */

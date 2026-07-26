@@ -54,7 +54,9 @@ import {
   ProvisioningLogRecorder,
   LoggingRunnerTransport,
   SLACK_CIPHER_INFO,
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
   SlackNotificationChannel,
+  buildNotificationWebhookSupport,
   TicketTrackerService,
   IssueWritebackService,
   githubIssuesLogic,
@@ -230,6 +232,7 @@ import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
+import { D1NotificationWebhookRepository } from './repositories/D1NotificationWebhookRepository'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
@@ -666,14 +669,29 @@ function selectEngineVcsClient(
   return undefined
 }
 
+/** What {@link selectMergeLifecycleDeps} needs. An options object rather than a positional tail:
+ *  it already carried six parameters, and the notification channels it composes will keep
+ *  growing (in-app, Slack, the outbound webhook, …) — a named bag stays readable and keeps the
+ *  call site honest about which of the several same-typed handles is which. */
+export interface MergeLifecycleDepsInput {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  idGenerator: IdGenerator
+  providerRegistry: ProviderRegistry
+  /**
+   * The outbound notification-webhook delivery channel, when the deployment configured one. Built
+   * by the caller (alongside its management service, from ONE builder) so both halves are
+   * guaranteed to read the same rows through the same cipher.
+   */
+  webhookChannel?: NotificationChannel
+}
+
 export function selectMergeLifecycleDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-  providerRegistry: ProviderRegistry,
+  input: MergeLifecycleDepsInput,
 ): Partial<CoreDependencies> {
+  const { env, config, db, clock, idGenerator, providerRegistry, webhookChannel } = input
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
@@ -687,15 +705,19 @@ export function selectMergeLifecycleDeps(
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
-  // Compose the delivery channels: in-app push (when the events binding is present)
-  // and Slack (when the integration is enabled) implement the same NotificationChannel
-  // port and fan out via CompositeNotificationChannel — realizing the seam the kernel
-  // port documents, with no change to the engine call sites that raise notifications.
+  // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
+  // the integration is enabled) and the outbound webhook (when a workspace registered one) all
+  // implement the same NotificationChannel port and fan out via CompositeNotificationChannel —
+  // realizing the seam the kernel port documents, with no change to the engine call sites that
+  // raise notifications. The webhook channel is what a HEADLESS caller relies on: it has no
+  // in-app inbox and no browser WebSocket, so a parked run would otherwise reach it only by
+  // polling (see docs/initiatives/headless-clarification-loop.md).
   const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
   if (publisher) channels.push(new InAppNotificationChannel(publisher))
   const slackChannel = buildSlackChannel(config, db)
   if (slackChannel) channels.push(slackChannel)
+  if (webhookChannel) channels.push(webhookChannel)
   if (channels.length === 1) deps.notificationChannel = channels[0]
   else if (channels.length > 1)
     deps.notificationChannel = new CompositeNotificationChannel(channels)
@@ -1001,6 +1023,36 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
       logger.warn(
         { err: error instanceof Error ? error.message : String(error), ...ctx },
         'slack notification delivery failed',
+      ),
+  })
+}
+
+/**
+ * Build the outbound notification-webhook feature (management service + delivery channel) when the
+ * shared encryption key is present — the signing secret must be sealable. Both halves come from
+ * one builder so they can't drift onto different repositories/ciphers. Null when no key is set;
+ * then the management surface 503s and no deliveries are attempted.
+ */
+function buildNotificationWebhookSupportForWorker(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): ReturnType<typeof buildNotificationWebhookSupport> | null {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return null
+  return buildNotificationWebhookSupport({
+    notificationWebhookRepository: new D1NotificationWebhookRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
+    }),
+    clock,
+    // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
+    // through the structured logger so a broken receiver is diagnosable.
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'notification webhook delivery failed',
       ),
   })
 }
@@ -2193,6 +2245,11 @@ export function buildContainer(
   // gateway exposes, rather than reaching for the queue binding a second time.
   const githubWebhookIngest = new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE)
 
+  // The outbound notification webhook: management service + delivery channel from ONE builder, so
+  // the surface that reports an endpoint as configured and the channel that delivers to it can
+  // never end up on different repositories/ciphers.
+  const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(env, db, clock)
+
   return assembleWorkerContainer({
     env,
     config,
@@ -2233,5 +2290,6 @@ export function buildContainer(
     defaultWebSearchUpstream,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
+    notificationWebhookSupport,
   })
 }

@@ -1,4 +1,9 @@
-import type { AgentFailure, PipelineStep, PriorStepOutput } from '@cat-factory/kernel'
+import type {
+  AgentFailure,
+  ExecutionInstance,
+  PipelineStep,
+  PriorStepOutput,
+} from '@cat-factory/kernel'
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
@@ -173,5 +178,53 @@ function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineSt
     startedAt: undefined,
     finishedAt: undefined,
     pausedAt: undefined,
+  }
+}
+
+/**
+ * Build the replacement `ExecutionInstance` a retry or a restart installs for a block: a FRESH run
+ * id over the re-planned steps, carrying forward everything that describes the WORK rather than
+ * the attempt — the initiator, how the run entered the system, and the prior-attempt failure +
+ * successful-output trails.
+ *
+ * Both callers had this identically inline, which is precisely how a field comes to be carried
+ * forward on one path and silently dropped on the other (a retried headless run reverting to `ui`
+ * intake would, in slice 2, stop its clarification questions ever reaching the ticket). Keeping it
+ * here — beside the step-planning it pairs with — makes "what survives a re-drive" one decision in
+ * one place.
+ */
+export function buildResumedInstance(input: {
+  /** The run being replaced (its identity + everything carried forward). */
+  previous: ExecutionInstance
+  /** The freshly-minted run id. */
+  id: string
+  /** The re-planned steps + cursor (from {@link planResumedSteps} / {@link planRestartFromStep}). */
+  plan: { steps: PipelineStep[]; currentStep: number }
+  /** Initiator override (a retry may be driven by a different user); falls back to the previous. */
+  initiatedBy?: string | null
+  /** `now`, for attributing the carried-forward successful outputs. */
+  now: number
+}): ExecutionInstance {
+  const { previous, id, plan, initiatedBy, now } = input
+  return {
+    id,
+    blockId: previous.blockId,
+    pipelineId: previous.pipelineId,
+    pipelineName: previous.pipelineName,
+    steps: plan.steps,
+    currentStep: plan.currentStep,
+    status: 'running',
+    initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+    // A retry/restart re-drives the SAME work, so how it originally entered the system is a
+    // property of the work, not of this attempt — a headless run stays headless whether its failed
+    // attempt is retried through the public API or the SPA.
+    ...(previous.intakeOrigin != null ? { intakeOrigin: previous.intakeOrigin } : {}),
+    // Preserve the error trail: the failure this attempt clears is appended to the history so it
+    // stays viewable after the top banner disappears on restart.
+    failureHistory: carryForwardFailures(previous),
+    // A retry resumes at the first UNFINISHED step and so discards no completed output (this just
+    // carries any prior restart's trail forward); a restart resets the chosen step and every later
+    // one, so the SUCCESSFUL outputs it discards are recorded here, attributed by step index.
+    outputHistory: carryForwardOutputs(previous, plan.currentStep, now),
   }
 }

@@ -2519,6 +2519,7 @@
       "scopes": {
         "read": "Yalnızca okuma",
         "write": "Okuma ve yazma",
+        "decide": "Kararları yanıtlama",
         "admin": "Tam erişim"
       },
       "toast": {

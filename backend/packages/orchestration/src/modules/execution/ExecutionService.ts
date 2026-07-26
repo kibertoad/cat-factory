@@ -155,12 +155,7 @@ import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import {
-  carryForwardFailures,
-  carryForwardOutputs,
-  planResumedSteps,
-  planRestartFromStep,
-} from './retry.logic.js'
+import { buildResumedInstance, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -1051,7 +1046,7 @@ export class ExecutionService {
     pipelineId: string,
     options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
-    const { initiatedBy, activate, origin = 'manual', gatesOverride } = options
+    const { initiatedBy, activate, origin = 'manual', intakeOrigin, gatesOverride } = options
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
     const pipeline = assertFound(
@@ -1245,6 +1240,9 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      // Only a headless start carries an explicit intake origin; `ui` is the read-time
+      // default, so an ordinary board/schedule start stores nothing extra.
+      ...(intakeOrigin != null ? { intakeOrigin } : {}),
       createdAt: this.clock.now(),
       ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
@@ -2353,22 +2351,13 @@ export class ExecutionService {
     // atomic `insertLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
     // any terminal rows in the SAME transaction, so a concurrent double-retry is serialised by
     // the live-run index (the loser gets a 409) instead of both deleting-then-inserting.
-    const instance: ExecutionInstance = {
+    const instance = buildResumedInstance({
+      previous,
       id: newId,
-      blockId: previous.blockId,
-      pipelineId: previous.pipelineId,
-      pipelineName: previous.pipelineName,
-      steps,
-      currentStep,
-      status: 'running',
-      initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
-      // Preserve the error trail: the failure this retry is clearing is appended to the
-      // history so it stays viewable after the top banner disappears on restart.
-      failureHistory: carryForwardFailures(previous),
-      // A retry resumes at the first UNFINISHED step, so it discards no completed output —
-      // this just carries any prior restart's successful-output trail forward unchanged.
-      outputHistory: carryForwardOutputs(previous, currentStep, this.clock.now()),
-    }
+      plan: { steps, currentStep },
+      initiatedBy,
+      now: this.clock.now(),
+    })
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
@@ -2464,23 +2453,13 @@ export class ExecutionService {
     // the torn-down source run (`replaceId`, which here may still be LIVE — running/paused/
     // blocked) and clears terminal rows in one transaction, so a concurrent start that already
     // created a NEW live run for the block loses (409) instead of being silently clobbered.
-    const instance: ExecutionInstance = {
+    const instance = buildResumedInstance({
+      previous,
       id: newId,
-      blockId: previous.blockId,
-      pipelineId: previous.pipelineId,
-      pipelineName: previous.pipelineName,
-      steps,
-      currentStep,
-      status: 'running',
-      initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
-      // Preserve the error trail across a restart too (a failed run is a valid restart
-      // source), so the prior failure stays viewable once the run is running again.
-      failureHistory: carryForwardFailures(previous),
-      // A restart resets the chosen step + every later one, discarding their outputs — record
-      // the SUCCESSFUL ones so the step-detail execution history keeps what they produced, not
-      // only the errors. Attributed by step index and accumulated across successive restarts.
-      outputHistory: carryForwardOutputs(previous, currentStep, this.clock.now()),
-    }
+      plan: { steps, currentStep },
+      initiatedBy,
+      now: this.clock.now(),
+    })
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {

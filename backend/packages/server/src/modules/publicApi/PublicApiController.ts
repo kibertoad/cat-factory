@@ -1,6 +1,7 @@
 import {
   type Block,
   actPublicNotificationContract,
+  cancelPublicJobContract,
   createInitiativeJobContract,
   createPublicTaskContract,
   deletePublicTaskContract,
@@ -21,21 +22,13 @@ import {
   type PublicJob,
   type PublicJobStatus,
   type PublicPipeline,
-  type PublicApiScope,
   type PublicRun,
   type PublicService,
   type PublicTask,
 } from '@cat-factory/contracts'
-import {
-  type AgentKindRegistry,
-  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-  CLARITY_REVIEW_AGENT_KIND,
-  isInlineModelStep,
-  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  REQUIREMENTS_REVIEW_AGENT_KIND,
-} from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { CredentialRequiredError } from '@cat-factory/kernel'
-import { scopeSatisfies, type PublicApiKeyAuth } from '@cat-factory/integrations'
+import { scopeSatisfies } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -46,6 +39,12 @@ import {
   notificationActEffect,
 } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
+import { authorize } from './publicApiAuth.js'
+import {
+  canParkOnHuman,
+  isHeadlessInlinePipeline,
+  isInlineOnlyPipeline,
+} from './publicApiAdmission.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
 // gate (its `/api` prefix is in the authGate bypass list); every route authenticates IN-CONTROLLER
@@ -72,66 +71,6 @@ const SSE_REAUTH_MS = 5000
 /** Max headless "initiative" runs a single workspace may have in flight at once (a public-API
  *  concurrency backstop: bounds the LLM spend one — possibly leaked — key can drive). */
 const MAX_ACTIVE_INITIATIVE_RUNS = 5
-
-/**
- * Inline agent kinds that PARK a run on a human/gate decision. A public run is headless (no human
- * to answer), so a pipeline containing one would hang forever (its anchor stays `in_progress`,
- * permanently consuming a concurrency slot) — refuse it at admission. This MUST list every
- * inline-and-parking kind: the two review gates AND the two brainstorm dialogues (all four set the
- * run `blocked` awaiting a human, see ExecutionService.evaluateReview / the brainstorm gate).
- */
-const PARKING_INLINE_KINDS = new Set<string>([
-  REQUIREMENTS_REVIEW_AGENT_KIND,
-  CLARITY_REVIEW_AGENT_KIND,
-  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-])
-
-type KeyResult =
-  | { auth: PublicApiKeyAuth }
-  | { fail: { status: 401 | 403 | 503; code: string; message: string } }
-
-/**
- * Resolve the caller's public-API key to a workspace scope, or a `fail` describing the error the
- * handler should emit (kept as data, not a `Response`, so the contract handlers stay typed).
- */
-async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
-  const svc = c.get('container').publicApiKeys
-  if (!svc) {
-    return { fail: { status: 503, code: 'unavailable', message: 'Public API is not configured' } }
-  }
-  const raw = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-  const auth = await svc.authenticate(raw)
-  if (!auth) {
-    return { fail: { status: 401, code: 'unauthorized', message: 'Invalid or missing API key' } }
-  }
-  return { auth }
-}
-
-/**
- * Authenticate the caller AND require a minimum permission scope. The scope ladder is inclusive
- * (read ⊂ write ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin` key
- * satisfies any. A valid key whose scope is too low is a 403 `insufficient_scope` (distinct from
- * the 401 an unknown/absent key gets) — the caller can tell "wrong key" from "key can't do this".
- * Every `/api/v1` handler gates through this, naming the least scope it needs.
- */
-async function authorize<E extends AppEnv>(
-  c: Context<E>,
-  need: PublicApiScope,
-): Promise<KeyResult> {
-  const result = await resolveKey(c)
-  if ('fail' in result) return result
-  if (!scopeSatisfies(result.auth.scope, need)) {
-    return {
-      fail: {
-        status: 403,
-        code: 'insufficient_scope',
-        message: `This action requires a '${need}'-scope key; this key is scoped '${result.auth.scope}'`,
-      },
-    }
-  }
-  return result
-}
 
 function mapStatus(status: ExecutionStatus): PublicJobStatus {
   return status === 'done' ? 'succeeded' : status === 'failed' ? 'failed' : 'running'
@@ -263,31 +202,6 @@ function toPublicPipeline(
 }
 
 /**
- * Whether a pipeline is safe to expose to an EXTERNAL, headless caller: every enabled step runs
- * inline (no container, no repo, no push) AND none of them can park the run on a human decision
- * (an approval gate, or a review kind that waits for input). A public run has no human to answer,
- * so a parking step would hang until the SSE/timeout cap — reject it up front instead.
- */
-function isHeadlessInlinePipeline(
-  pipeline: {
-    agentKinds: string[]
-    enabled?: boolean[]
-    gates?: boolean[]
-  },
-  registry: AgentKindRegistry,
-): boolean {
-  const enabled = pipeline.agentKinds
-    .map((kind, i) => ({ kind, i }))
-    .filter(({ i }) => pipeline.enabled?.[i] !== false)
-  if (enabled.length === 0) return false
-  // An approval gate on any enabled step parks the run for a human decision.
-  if (enabled.some(({ i }) => pipeline.gates?.[i])) return false
-  return enabled.every(
-    ({ kind }) => isInlineModelStep(kind, registry) && !PARKING_INLINE_KINDS.has(kind),
-  )
-}
-
-/**
  * Load a public JOB by id for an authenticated key: the persisted execution, but ONLY when it is
  * anchored on a HEADLESS internal block (a run this public surface created). Returns null when no
  * such run exists in the key's workspace OR the id points at a normal board execution — so an
@@ -361,13 +275,27 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         400,
       )
     }
-    if (!isHeadlessInlinePipeline(pipeline, container.agentKindRegistry)) {
-      // Defense in depth: a public pipeline must be inline-only (so an external run can never
-      // trigger a container/GitHub push) AND non-parking (no human gate to hang a headless run).
-      // The built-in public pipeline already satisfies both.
+    // Defense in depth: a public pipeline must be inline-only, so an external run can never
+    // trigger container work or a GitHub push. This half is absolute — no scope lifts it.
+    if (!isInlineOnlyPipeline(pipeline, container.agentKindRegistry)) {
       return c.json(
         { error: { code: 'pipeline_not_inline', message: 'Public pipeline must be inline' } },
         400,
+      )
+    }
+    // The parking half is a SCOPE question (see PARKING_INLINE_KINDS): a pipeline that can park
+    // on a human decision needs a caller able to answer it, which is exactly what a `decide`-scope
+    // key asserts. A `write` key gets the pre-existing refusal, now naming the reason and the fix.
+    if (canParkOnHuman(pipeline) && !scopeSatisfies(auth.scope, 'decide')) {
+      return c.json(
+        {
+          error: {
+            code: 'pipeline_requires_decide_scope',
+            message:
+              "This pipeline can park on a human decision (a requirements/clarity review, a brainstorm, or an approval gate). Start it with a 'decide'-scope key, which can answer the park through /api/v1/runs/:runId/decisions",
+          },
+        },
+        403,
       )
     }
 
@@ -402,6 +330,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     try {
       execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
         initiatedBy: null,
+        intakeOrigin: 'public-api',
       })
     } catch (err) {
       await rollbackInitiativeRun(c, auth.workspaceId, block.id)
@@ -457,6 +386,33 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicJob(execution), 200)
   })
 
+  // Cancel a headless initiative run. This is what makes admitting a PARKING pipeline safe (see
+  // PARKING_INLINE_KINDS): a parked run waits for a human indefinitely while its anchor holds one
+  // of the workspace's MAX_ACTIVE_INITIATIVE_RUNS slots, so a caller that decides not to answer
+  // must be able to free it — otherwise the concurrency cap is a wall with no door. Delegates to
+  // the SAME `stopRun` the board `stop` route uses: idempotent (a terminal run comes back as-is)
+  // and it records a `cancelled` terminal state rather than deleting the run, so the job stays
+  // readable afterwards. `write` (not `decide`): giving up on your own run is an ordinary
+  // mutation, and a caller must never be locked out of cleaning up work it started.
+  buildHonoRoute(app, cancelPublicJobContract, async (c) => {
+    const gate = await authorize(c, 'write')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const { id } = c.req.valid('param')
+    // Same headless-job scoping as the poll read: only an initiative run this surface created.
+    const execution = await loadPublicJob(c, auth.workspaceId, id)
+    if (!execution) {
+      return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
+    }
+    const stopped = await c.get('container').executionService.stopRun(auth.workspaceId, id)
+    return c.json(toPublicJob(stopped), 200)
+  })
+
   // Stream a job's progress + terminal completion over SSE. Implemented as a bounded poll over the
   // persisted execution (runtime-symmetric by construction — no per-facade event-hub wiring), so
   // it serves identically on the Worker and Node. Authenticated by the API key header (an external
@@ -483,8 +439,10 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
       let lastAuthCheck = Date.now()
       let last = ''
       // Emit the initial state immediately, then poll until terminal / client-gone / revoked /
-      // timeout. The run was validated as headless-inline at admission, so it never parks — but
-      // stop on ANY non-running raw status (blocked/paused too) rather than spinning to the cap.
+      // timeout. A `blocked` run is a PARK awaiting a human decision — no longer a dead end, since
+      // a `decide`-scope caller can answer it over `/api/v1/runs/:runId/decisions` — so the stream
+      // announces the park and keeps watching rather than closing on it.
+      let announcedPark = false
       for (;;) {
         if (stream.aborted) break
         // Re-verify the key periodically so a mid-stream revoke cuts the connection (the key was
@@ -505,16 +463,35 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
           })
           last = data
         }
+        // A `blocked` run has PARKED on a human decision. Announce it once (so a caller learns of
+        // the park by push rather than by polling the decisions endpoint on a timer) and keep the
+        // stream open — the park is answerable, and answering resumes the very run being watched,
+        // which the caller should see through the SAME connection. Announced once per park rather
+        // than every tick, so a long park doesn't spam identical frames; re-armed when the run
+        // resumes, so a second park later in the pipeline is announced too.
+        if (execution.status === 'blocked') {
+          if (!announcedPark) {
+            await stream.writeSSE({ event: 'decision', data })
+            announcedPark = true
+          }
+        } else {
+          announcedPark = false
+        }
         // A `paused` run is NOT terminal — the spend gate pauses a run when the workspace budget
         // is exhausted and RESUMES it once budget frees up (ExecutionService.evaluateStep), so keep
         // polling (bounded by SSE_MAX_MS below) rather than signalling a false terminal stop.
-        if (execution.status !== 'running' && execution.status !== 'paused') {
+        // `blocked` is likewise non-terminal now (see above).
+        if (
+          execution.status !== 'running' &&
+          execution.status !== 'paused' &&
+          execution.status !== 'blocked'
+        ) {
           // The run has stopped. When it ended in a terminal public status (succeeded/failed) the
-          // event above already carried `done`/`error`. But a raw status that maps to `running`
-          // (e.g. `blocked` — a run parked awaiting a human, which a headless run can never resolve;
-          // admission rules this out for the built-in pipeline) would otherwise close the stream
-          // after a `progress` frame, leaving the client unable to tell "terminal" from "connection
-          // dropped". Emit an explicit terminal `stopped` frame so every close is unambiguous.
+          // event above already carried `done`/`error`. A raw status that maps to `running` but is
+          // neither terminal nor a park (a `cancelled` stop lands as `failed`, so this is the
+          // belt-and-braces arm) would otherwise close the stream after a `progress` frame, leaving
+          // the client unable to tell "terminal" from "connection dropped". Emit an explicit
+          // terminal `stopped` frame so every close is unambiguous.
           if (job.status === 'running') await stream.writeSSE({ event: 'stopped', data })
           break
         }
@@ -682,6 +659,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // abuse backstop for board starts — the analogue of the initiative surface's active-run cap.
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
       initiatedBy: null,
+      intakeOrigin: 'public-api',
     })
     // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
     // executionId, progress) rather than an optimistic guess — a run may park/block at its first
@@ -899,6 +877,9 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       const startedAt = Date.now()
       let lastAuthCheck = Date.now()
       let last = ''
+      // Announce a park once per park (see the jobs stream for the rationale); re-armed on resume
+      // so a later step's park is announced too.
+      let announcedPark = false
       for (;;) {
         if (stream.aborted) break
         if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
@@ -923,6 +904,20 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
             data,
           })
           last = data
+        }
+        // A `blocked` run has PARKED on a human decision (a requirements/clarity review, a
+        // brainstorm, an approval gate, a fork choice). Push it as a distinct `decision` frame so
+        // the caller reacts to the park instead of inferring it from a `progress` payload whose
+        // status happens to read `blocked`; `GET /api/v1/runs/:runId/decisions` then carries what
+        // is actually being asked. The stream stays open across the park — answering resumes this
+        // very run, and the caller should see that on the same connection.
+        if (execution.status === 'blocked') {
+          if (!announcedPark) {
+            await stream.writeSSE({ event: 'decision', data })
+            announcedPark = true
+          }
+        } else {
+          announcedPark = false
         }
         if (execution.status === 'done' || execution.status === 'failed') break
         if (Date.now() - startedAt > SSE_MAX_MS) {

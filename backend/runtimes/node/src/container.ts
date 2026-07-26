@@ -4,7 +4,11 @@ import { type AgentKindRegistry } from '@cat-factory/agents'
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
-import { type BackendRegistries, type DeployJobClient } from '@cat-factory/integrations'
+import {
+  type BackendRegistries,
+  type DeployJobClient,
+  type NotificationWebhookService,
+} from '@cat-factory/integrations'
 import {
   type Clock,
   type DeployCloneTarget,
@@ -680,6 +684,8 @@ interface NodeServerContainerBundle {
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
   apiKeys: NodeModelDepsResult['apiKeys']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
+  /** The per-workspace outbound notification-webhook config service (null with no encryption key). */
+  notificationWebhooks: NotificationWebhookService | undefined
   cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
   env: NodeJS.ProcessEnv
   localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
@@ -716,6 +722,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
+    notificationWebhooks,
     cloudflareModelsEnabled,
     env,
     localModelEndpoints,
@@ -836,6 +843,8 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     apiKeys,
     // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
     publicApiKeys,
+    // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
+    notificationWebhooks,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
@@ -990,18 +999,24 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
 
   // Real-time event publisher + notification channel + optional consensus wrap, lifted into
   // `container-realtime-deps.ts` to keep this root within the file-size budget.
-  const { slackDeps, executionEventPublisher, agentExecutor, notificationChannel } =
-    buildNodeRealtimeDeps({
-      env,
-      config,
-      repos,
-      sourced,
-      realtimeSink: options.realtimeSink,
-      standardAgentExecutor,
-      modelProviderResolver,
-      resolveWorkspaceModelDefault,
-      agentKindRegistry,
-    })
+  const {
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel,
+    notificationWebhookSupport,
+  } = buildNodeRealtimeDeps({
+    env,
+    config,
+    repos,
+    sourced,
+    realtimeSink: options.realtimeSink,
+    standardAgentExecutor,
+    modelProviderResolver,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    clock,
+  })
 
   // Per-account settings + binary-artifact storage + the observability/incident gate-provider
   // wiring (onto `providerRegistry`, before `applyGateProviders` below), plus the package-registry
@@ -1148,6 +1163,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
+    notificationWebhooks: notificationWebhookSupport?.service,
     cloudflareModelsEnabled,
     env,
     localModelEndpoints,

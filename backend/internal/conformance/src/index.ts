@@ -65,6 +65,7 @@ export { defineSharedStackSuite } from './shared-stack-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { defineNotificationSuite } from './notification-suite.js'
+export { defineNotificationWebhookSuite } from './notification-webhook-suite.js'
 export {
   definePlatformMetricsSuite,
   type PlatformMetricsSeed,

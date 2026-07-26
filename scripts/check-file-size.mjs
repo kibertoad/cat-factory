@@ -60,7 +60,7 @@ const LEGACY_ALLOWANCES = new Map([
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
-  ['backend/runtimes/node/src/db/schema.ts', 2300],
+  ['backend/runtimes/node/src/db/schema.ts', 2200],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],

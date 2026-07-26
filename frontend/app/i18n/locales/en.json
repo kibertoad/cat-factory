@@ -2585,6 +2585,7 @@
       "scopes": {
         "read": "Read only",
         "write": "Read and write",
+        "decide": "Answer decisions",
         "admin": "Full access"
       },
       "toast": {

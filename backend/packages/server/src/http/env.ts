@@ -20,6 +20,7 @@ import type {
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
+  NotificationWebhookService,
   PublicApiKeyService,
   RunnerBackendRegistry,
   TestSecretsService,
@@ -146,6 +147,13 @@ export interface ServerContainer extends Core {
    * authentication of `PublicApiController`. Absent ⇒ both surfaces 503.
    */
   publicApiKeys?: PublicApiKeyService
+  /**
+   * The per-workspace OUTBOUND notification-webhook configuration store. Present only when the
+   * facade wired the repository (needs a SecretCipher for the signing secret). Drives the
+   * management controller; the matching `WebhookNotificationChannel` reads the same rows to
+   * deliver. Absent ⇒ the management surface 503s and no webhook deliveries are attempted.
+   */
+  notificationWebhooks?: NotificationWebhookService
   /**
    * Whether the opt-in Cloudflare Workers AI provider lib is registered for this
    * deployment (binding on the Worker, REST account/token on Node). When false, the

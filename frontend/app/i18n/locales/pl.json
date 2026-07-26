@@ -2397,6 +2397,7 @@
       "scopes": {
         "read": "Tylko odczyt",
         "write": "Odczyt i zapis",
+        "decide": "Odpowiadanie na decyzje",
         "admin": "Pełny dostęp"
       },
       "toast": {

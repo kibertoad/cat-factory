@@ -9,7 +9,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 
 **Where things live:**
 
-- `modules/*/…Controller.ts` — the ~48 Hono controllers, one dir per module.
+- `modules/*/…Controller.ts` — the ~50 Hono controllers, one dir per module.
+- `modules/publicApi/` — the key-authenticated `/api/v1` surface (NOT behind the session gate):
+  `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
+  parked human decisions — the headless clarification loop), `publicApiAuth.ts` (the shared bearer
+  gate + `read ⊂ write ⊂ decide ⊂ admin` ladder) and `publicApiAdmission.ts` (what an external
+  caller may launch). See `docs/initiatives/headless-clarification-loop.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`

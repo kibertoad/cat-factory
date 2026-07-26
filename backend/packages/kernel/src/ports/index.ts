@@ -511,6 +511,10 @@ export type {
 export type { BranchUpdateOutcome, BranchUpdater } from './branch-updater.js'
 export type { NotificationRepository } from './notification-repositories.js'
 export type {
+  NotificationWebhookRecord,
+  NotificationWebhookRepository,
+} from './notification-webhook-repositories.js'
+export type {
   SlackConnectionRecord,
   SlackConnectionRepository,
   SlackSettingsRecord,
