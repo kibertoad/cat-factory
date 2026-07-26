@@ -204,30 +204,28 @@ function getMothership(db: DrizzleDb): Mothership {
   return ms
 }
 
-/**
- * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
- * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
- * agent + no-op runner let the suite advance runs itself via `drive`.
- */
-export function makeMothershipConformanceApp(
-  db: DrizzleDb,
-  agentOptions?: FakeAgentOptions,
-  opts?: {
-    cloudflareModelsEnabled?: boolean
-    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
-    resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
-    gateProviders?: GateProviderOverrides
-    environmentProvider?: CoreDependencies['environmentProvider']
-    resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
-    backendRegistries?: BackendRegistries
-    initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
-    taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
-    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
-    detectionConventions?: CoreDependencies['detectionConventions']
-  },
-): ConformanceApp {
-  const ms = getMothership(db)
+/** The per-suite injections a mothership conformance app is built with. */
+interface MothershipAppOptions {
+  cloudflareModelsEnabled?: boolean
+  resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+  resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
+  gateProviders?: GateProviderOverrides
+  environmentProvider?: CoreDependencies['environmentProvider']
+  resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+  backendRegistries?: BackendRegistries
+  initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+  taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  detectionConventions?: CoreDependencies['detectionConventions']
+}
 
+/**
+ * Build the in-process persistence-RPC client the mothership SUT's remote repositories call
+ * through: it signs a fresh machine token over the CURRENT account scope per call and posts to
+ * the mothership app's `/internal/persistence` route. Extracted from
+ * {@link makeMothershipConformanceApp} for the per-function line budget.
+ */
+function buildMothershipRpcClient(ms: Mothership): PersistenceRpcClient {
   // The machine token's account scope grows as the harness seeds workspaces (each under a real,
   // scoped account on the mothership — a dev-open node's null/personal account would 404 over
   // the scoped RPC). The in-process client signs a fresh token over the CURRENT scope per call,
@@ -235,7 +233,7 @@ export function makeMothershipConformanceApp(
   // is unit-tested in persistenceRpc.spec.ts; here a broad self-authored token just lets the
   // repository-surface assertions run.)
   const scopeAccountIds = ms.scopeAccountIds
-  const client: PersistenceRpcClient = {
+  return {
     async call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse> {
       const { token } = await mintMachineToken(SESSION_SECRET, {
         userId: CONF_USER.id,
@@ -265,11 +263,19 @@ export function makeMothershipConformanceApp(
       }
     },
   }
+}
 
-  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
-  const credentialStore = createLocalCredentialStore(':memory:')
-  const recorder = new RecordingEventPublisher()
-  const overrides: Partial<CoreDependencies> = {
+/**
+ * The `CoreDependencies` overrides the mothership SUT is built with: the deterministic fake
+ * agent + the no-op durable runners the suite drives itself via `drive`, plus whatever a suite
+ * injected. Extracted from {@link makeMothershipConformanceApp} for the per-function line budget.
+ */
+function buildMothershipOverrides(
+  recorder: RecordingEventPublisher,
+  agentOptions: FakeAgentOptions | undefined,
+  opts: MothershipAppOptions | undefined,
+): Partial<CoreDependencies> {
+  return {
     agentExecutor: agentOptions?.asyncKinds?.length
       ? new AsyncFakeAgentExecutor(agentOptions)
       : new FakeAgentExecutor(agentOptions),
@@ -294,7 +300,30 @@ export function makeMothershipConformanceApp(
     // to the Worker/Node/local-standalone harnesses.
     ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
   }
+}
 
+/**
+ * Build one mothership-mode conformance app over the shared Postgres mothership. The SUT is a
+ * no-database `buildNodeContainer` whose repositories are RPC-backed; the deterministic fake
+ * agent + no-op runner let the suite advance runs itself via `drive`.
+ */
+export function makeMothershipConformanceApp(
+  db: DrizzleDb,
+  agentOptions?: FakeAgentOptions,
+  opts?: MothershipAppOptions,
+): ConformanceApp {
+  const ms = getMothership(db)
+
+  // The machine token's account scope grows as the harness seeds workspaces (each under a real,
+  // scoped account on the mothership), and the RPC client signs a fresh token over the CURRENT
+  // scope per call — so a workspace created after the SUT was built is still reachable.
+  const scopeAccountIds = ms.scopeAccountIds
+  const client = buildMothershipRpcClient(ms)
+
+  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
+  const credentialStore = createLocalCredentialStore(':memory:')
+  const recorder = new RecordingEventPublisher()
+  const overrides = buildMothershipOverrides(recorder, agentOptions, opts)
   const container = buildNodeContainer({
     // No `db`: org/durable state is the remote registry, credentials are the local sqlite store.
     repos,

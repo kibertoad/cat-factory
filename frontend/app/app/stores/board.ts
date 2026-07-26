@@ -4,6 +4,7 @@ import type { Block } from '~/types/domain'
 import { useBlockQueries } from '~/composables/useBlockQueries'
 import type { PendingRemoval } from '~/stores/board/context'
 import { createBoardMutations } from '~/stores/board/mutations'
+import { createBoardPlacement } from '~/stores/board/placement'
 import { createBoardRemoval } from '~/stores/board/removal'
 
 /**
@@ -11,7 +12,8 @@ import { createBoardRemoval } from '~/stores/board/removal'
  * are owned by the backend — this store is a hydrated cache. Read getters are
  * pure client logic (see {@link useBlockQueries}); every mutation calls the API
  * and applies the authoritative block the server returns. The write operations
- * live in cohesive factories ({@link createBoardMutations} / {@link createBoardRemoval},
+ * live in cohesive factories ({@link createBoardMutations} / {@link createBoardPlacement} /
+ * {@link createBoardRemoval},
  * under `stores/board/`) that close over the shared state assembled here — a size-only
  * split, not a new seam.
  */
@@ -141,6 +143,7 @@ export const useBoardStore = defineStore('board', () => {
   // internal to the removal factory (only its delete toast wires it), so it is NOT re-exported.
   const context = { blocks, getBlock, upsert, pendingRemovals, pendingDoomed, api, toast, tr }
   const mutations = createBoardMutations(context)
+  const placement = createBoardPlacement(context)
   const { detach, reattach, removeBlock } = createBoardRemoval(context)
 
   return {
@@ -152,6 +155,7 @@ export const useBoardStore = defineStore('board', () => {
     upsert,
     ...queries,
     ...mutations,
+    ...placement,
     detach,
     reattach,
     removeBlock,

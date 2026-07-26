@@ -1,16 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type {
-  Initiative,
-  InitiativeExecutionPolicy,
-  InitiativePresetDescriptor,
-  InitiativePresetInputs,
-  PromoteInitiativeFollowUpInput,
-  UpdateInitiativeItemInput,
-} from '~/types/domain'
+import type { Initiative, InitiativePresetDescriptor, InitiativePresetInputs } from '~/types/domain'
 
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBoardStore } from '~/stores/board'
+import {
+  createInitiativePlanningActions,
+  type InitiativeActionContext,
+} from '~/stores/initiative/planning'
+import { createInitiativeCurationActions } from '~/stores/initiative/curation'
 
 /** The built-in generic preset id (mirrors kernel's `GENERIC_INITIATIVE_PRESET_ID`). */
 export const GENERIC_PRESET_ID = 'preset_generic'
@@ -165,91 +163,6 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     }
   }
 
-  /** True while a planning-window action (continue/proceed) is resuming the run. */
-  const resuming = ref(false)
-
-  /** Record the human's answer to one pending interview question (no run resume). */
-  async function answerQuestion(blockId: string, questionId: string, answer: string) {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    const updated = await api.answerInitiativeQuestion(
-      workspace.workspaceId,
-      blockId,
-      questionId,
-      answer,
-    )
-    upsert(updated)
-    return updated
-  }
-
-  /** Question ids the interviewer is currently drafting a recommendation for (window spinner). */
-  const recommending = ref<Set<string>>(new Set())
-
-  /** Mark a planning question not-relevant (`dismissed`) or reopen it (no run resume). */
-  async function setQuestionStatus(
-    blockId: string,
-    questionId: string,
-    status: 'open' | 'dismissed',
-  ) {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    const updated = await api.setInitiativeQuestionStatus(
-      workspace.workspaceId,
-      blockId,
-      questionId,
-      status,
-    )
-    upsert(updated)
-    return updated
-  }
-
-  /**
-   * Ask the interviewer to recommend a suggested answer for one pending question. Runs the
-   * interviewer LLM inline server-side; the returned entity carries the suggestion on the question.
-   * Tracks the in-flight id so the window can show a per-question spinner.
-   */
-  async function recommendAnswer(blockId: string, questionId: string) {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    recommending.value = new Set(recommending.value).add(questionId)
-    try {
-      const updated = await api.recommendInitiativeAnswer(
-        workspace.workspaceId,
-        blockId,
-        questionId,
-      )
-      upsert(updated)
-      return updated
-    } finally {
-      const next = new Set(recommending.value)
-      next.delete(questionId)
-      recommending.value = next
-    }
-  }
-
-  /** Submit the answers and resume the interview (the interviewer re-runs, may ask more). */
-  async function continuePlanning(blockId: string) {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    resuming.value = true
-    try {
-      const updated = await api.continueInitiativePlanning(workspace.workspaceId, blockId)
-      upsert(updated)
-      return updated
-    } finally {
-      resuming.value = false
-    }
-  }
-
-  /** Skip remaining questions: the interviewer converges and the run advances. */
-  async function proceedPlanning(blockId: string) {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    resuming.value = true
-    try {
-      const updated = await api.proceedInitiativePlanning(workspace.workspaceId, blockId)
-      upsert(updated)
-      return updated
-    } finally {
-      resuming.value = false
-    }
-  }
-
   /** True while a loop control (pause/resume/cancel) is in flight. */
   const controlling = ref(false)
 
@@ -272,76 +185,12 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     }
   }
 
-  /** True while a curation action (promote/dismiss/edit item/edit policy) is in flight. */
-  const curating = ref(false)
-
-  async function curate<T>(fn: () => Promise<T>): Promise<T> {
-    if (!workspace.workspaceId) throw new Error('No active workspace')
-    curating.value = true
-    try {
-      return await fn()
-    } finally {
-      curating.value = false
-    }
-  }
-
-  /** Promote an `open` harvested follow-up into a new pending tracker item. */
-  async function promoteFollowUp(
-    initiativeId: string,
-    followUpId: string,
-    input: PromoteInitiativeFollowUpInput,
-  ) {
-    return curate(async () => {
-      const updated = await api.promoteInitiativeFollowUp(
-        workspace.workspaceId!,
-        initiativeId,
-        followUpId,
-        input,
-      )
-      upsert(updated)
-      return updated
-    })
-  }
-
-  /** Dismiss a harvested follow-up. */
-  async function dismissFollowUp(initiativeId: string, followUpId: string) {
-    return curate(async () => {
-      const updated = await api.dismissInitiativeFollowUp(
-        workspace.workspaceId!,
-        initiativeId,
-        followUpId,
-      )
-      upsert(updated)
-      return updated
-    })
-  }
-
-  /** Edit one tracker item and/or drive its status (retry a blocked item / skip it). */
-  async function updateItem(
-    initiativeId: string,
-    itemId: string,
-    input: UpdateInitiativeItemInput,
-  ) {
-    return curate(async () => {
-      const updated = await api.updateInitiativeItem(
-        workspace.workspaceId!,
-        initiativeId,
-        itemId,
-        input,
-      )
-      upsert(updated)
-      return updated
-    })
-  }
-
-  /** Replace the execution policy (concurrency + pipeline rules). */
-  async function updatePolicy(initiativeId: string, policy: InitiativeExecutionPolicy) {
-    return curate(async () => {
-      const updated = await api.updateInitiativePolicy(workspace.workspaceId!, initiativeId, policy)
-      upsert(updated)
-      return updated
-    })
-  }
+  // The planning-window + tracker-curation actions, split into cohesive factories sharing the
+  // state above (a size-only extraction mirroring `stores/board/` — behaviour is identical to the
+  // former in-closure functions). Each owns the in-flight flags its window renders.
+  const context: InitiativeActionContext = { api, workspace, upsert }
+  const planning = createInitiativePlanningActions(context)
+  const curation = createInitiativeCurationActions(context)
 
   function reset() {
     byBlock.value = {}
@@ -353,10 +202,7 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     presets,
     all,
     creating,
-    resuming,
     controlling,
-    curating,
-    recommending,
     forBlock,
     presetById,
     planningPipelineIdFor,
@@ -366,16 +212,9 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     create,
     probePreset,
     load,
-    answerQuestion,
-    setQuestionStatus,
-    recommendAnswer,
-    continuePlanning,
-    proceedPlanning,
     control,
-    promoteFollowUp,
-    dismissFollowUp,
-    updateItem,
-    updatePolicy,
+    ...planning,
+    ...curation,
     reset,
   }
 })

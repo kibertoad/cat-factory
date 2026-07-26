@@ -12,21 +12,9 @@ import type {
 import type { AppCaches } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
-  createServicesModule,
-  createGitHubModule,
   createDocumentsModule,
-  createTasksModule,
   createEnvironmentsModule,
-  createRunnersModule,
-  createBootstrapModule,
   createTesterQualityReviewer,
-  createDocInterviewService,
-  createForkChatService,
-  resolveBlockRunContext,
-  createRequirementsModule,
-  createBrainstormModule,
-  createKaizenModule,
-  createClarityModule,
   createSlackModule,
   createRiskPoliciesModule,
   createSharedStacksModule,
@@ -38,11 +26,11 @@ import {
   createIncidentEnrichmentModule,
   createModelPresetsModule,
   createServiceFragmentDefaultsModule,
-  createTrackerModule,
-  createRecurringModule,
 } from './container/modules.js'
 import { resolveCoreRuntime } from './container/runtime.js'
 import { createCoreFoundation } from './container/foundation.js'
+import { createEngineCollaborators } from './container/engine-collaborators.js'
+import { registerEngineDependentModules } from './container/engine-dependent-modules.js'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
   AccountInvitationRepository,
@@ -243,9 +231,6 @@ import { RecurringPipelineService } from './modules/recurring/RecurringPipelineS
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { InitiativeService } from './modules/initiative/InitiativeService.js'
 import { InitiativeLoopService } from './modules/initiative/InitiativeLoopService.js'
-import type { InitiativeRunHarvest } from './modules/initiative/initiative.logic.js'
-import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
-import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
   type ResolveFragmentInstallationId,
@@ -1599,78 +1584,32 @@ export function createCore(dependencies: CoreDependencies): Core {
   modules.build('riskPolicies', () => createRiskPoliciesModule(dependencies, caches))
   modules.build('sandbox', () => createSandboxModule(dependencies, agentKindRegistry))
   registerStandaloneModules(modules, dependencies)
-  // Built before the execution engine so the planning pipeline's plan ingest + the
-  // committer step's tracker mirror can run through it.
-  const initiativeService = dependencies.initiativeRepository
-    ? new InitiativeService({
-        workspaceRepository: dependencies.workspaceRepository,
-        blockRepository: dependencies.blockRepository,
-        initiativeRepository: dependencies.initiativeRepository,
-        initiativePresetRegistry,
-        events: executionEventPublisher,
-        clock: dependencies.clock,
-        idGenerator: dependencies.idGenerator,
-        // Validate the plan's pipeline ids at ingest (fail a plan that names a missing pipeline
-        // loudly during planning, rather than surfacing it as a per-item spawn deviation later).
-        pipelineRepository: dependencies.pipelineRepository,
-      })
-    : undefined
-  // The interactive-planning interviewer's inline LLM (slice 2). Resolves its model exactly
-  // like the requirements reviewer — the routing default, honouring a block pin and the
-  // workspace's model preset for the `initiative-interviewer` kind — so it needs no dedicated
-  // facade wiring. `enabled` gates it: with no model provider the interviewer gate passes
-  // through and planning runs off the raw block description.
-  const initiativeInterviewService = new InitiativeInterviewService({
+  // The collaborators the engine needs BEFORE it is constructed (initiative + interview
+  // services, the requirements / clarity / brainstorm / doc-interview / fork-chat / kaizen
+  // review surfaces, and the task module), plus the late-bound initiative-loop poke. Lifted
+  // into `container/engine-collaborators.ts` for the per-function line budget; the
+  // registration order — which IS dependency order for the module registry — is preserved.
+  const {
+    initiativeService,
+    initiativeInterviewService,
+    requirements,
+    docInterview,
+    forkChat,
+    clarity,
+    brainstorm,
+    kaizen,
+    tasks,
+    pokeInitiativeLoop,
+    setInitiativeLoop,
+  } = createEngineCollaborators({
+    dependencies,
+    modules,
     initiativePresetRegistry,
-    modelProviderResolver: dependencies.modelProviderResolver,
-    modelProvider: dependencies.modelProvider,
-    modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
-    resolveBlockModel: dependencies.requirementReviewResolveModel,
-    ...(dependencies.inlineHarnessRef ? { runsInline: dependencies.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            dependencies.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
-    resolveRunContext: resolveBlockRunContext(dependencies),
+    executionEventPublisher,
+    notifications,
+    fragmentLibrary,
+    boardService,
   })
-  // Built before the execution engine so the special `requirements-review` gate step can
-  // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
-  const requirements = modules.build('requirements', () =>
-    createRequirementsModule(dependencies, notifications?.service, fragmentLibrary),
-  )
-  const docInterview = createDocInterviewService(dependencies)
-  const forkChat = createForkChatService(dependencies)
-  const clarity = modules.build('clarity', () =>
-    createClarityModule(dependencies, notifications?.service),
-  )
-  const brainstorm = modules.build('brainstorm', () =>
-    createBrainstormModule(dependencies, notifications?.service),
-  )
-  // Built before the execution engine so the engine's terminal hook can schedule a
-  // post-run Kaizen grading for each completed agent step.
-  const kaizen = modules.build('kaizen', () => createKaizenModule(dependencies))
-
-  // Late-bound so the engine's terminal hooks can poke the execution loop, which is built AFTER
-  // the engine (the loop depends on `executionService.start`). Fire-and-forget; a null ref (the
-  // loop unwired, or the settled block not part of an initiative) is a no-op.
-  let initiativeLoopRef: InitiativeLoopService | undefined
-  const pokeInitiativeLoop = (
-    workspaceId: string,
-    initiativeBlockId: string,
-    harvest?: InitiativeRunHarvest,
-  ): void => {
-    void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId, harvest)
-  }
-
-  // Built before the execution engine so the engine's `bug-intake` step can drive the
-  // read-and-claim intake helper (`tasks.bugIntakeService`). Also feeds the recurring module's
-  // schedule intake-config validation below.
-  const tasks = modules.build('tasks', () => createTasksModule(dependencies, boardService))
 
   const executionService = new ExecutionService({
     ...dependencies,
@@ -1747,69 +1686,22 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
   })
 
-  // Modules that depend on the assembled engine (they drive `executionService`, or feed the
-  // late-bound initiative loop). Grouped into a local closure so the composition root stays under
-  // the statement ceiling; the closure captures every local it needs and preserves the registration
-  // order — the last one it runs late-binds `initiativeLoopRef` for the terminal poke above.
-  const registerEngineDependentModules = (): void => {
-    modules.build('github', () => createGitHubModule(dependencies, caches))
-    modules.build('runners', () => createRunnersModule(dependencies))
-    // After a bootstrap succeeds, map the new repo into a blueprint + the board by
-    // starting the blueprint-only pipeline against the service frame.
-    modules.build('bootstrap', () =>
-      createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
-        executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
-      ),
-    )
-    modules.build('tracker', () => createTrackerModule(dependencies))
-    modules.build('recurring', () =>
-      createRecurringModule(
-        dependencies,
-        executionService,
-        executionEventPublisher,
-        tasks?.connectionService,
-      ),
-    )
-    // The env-config-repair module is a sub-module of `environments` — surfaced as its own top-level
-    // `Core.envConfigRepair` key. Registered here (not in the `environments` build above) so it emits
-    // through the same registry rather than a bespoke return spread.
-    modules.build('envConfigRepair', () => environments?.envConfigRepair)
-    // Observability + per-account settings that a facade builds and passes through on the deps bag.
-    modules.build('agentContextObservability', () => dependencies.agentContextObservability)
-    modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
-    modules.build('vcsConnectionService', () => dependencies.vcsConnectionService)
-    modules.build('accountSettings', () =>
-      dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
-    )
-    // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
-    // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
-    // settling child run advances its owning initiative immediately. Present only when initiatives
-    // are wired; the cron/interval sweepers call `loop.runDue`.
-    const initiativeLoop =
-      initiativeService && dependencies.initiativeRepository
-        ? new InitiativeLoopService({
-            initiativeRepository: dependencies.initiativeRepository,
-            initiativeService,
-            blockRepository: dependencies.blockRepository,
-            pipelineRepository: dependencies.pipelineRepository,
-            executionService,
-            events: executionEventPublisher,
-            clock: dependencies.clock,
-            idGenerator: dependencies.idGenerator,
-            notificationService: notifications?.service,
-            resolveRunRepoContext: dependencies.resolveRunRepoContext,
-            serviceRepository: dependencies.serviceRepository,
-          })
-        : undefined
-    initiativeLoopRef = initiativeLoop
-    modules.build('initiatives', () =>
-      initiativeService && initiativeLoop
-        ? { service: initiativeService, loop: initiativeLoop }
-        : undefined,
-    )
-    modules.build('services', () => createServicesModule(dependencies))
-  }
-  registerEngineDependentModules()
+  // The modules that depend on the assembled engine (they drive `executionService`, or feed the
+  // late-bound initiative loop). Lifted into `container/engine-dependent-modules.ts` for the
+  // per-function line budget; it registers in the SAME order and late-binds the initiative loop
+  // through `setInitiativeLoop` so the terminal poke above resolves it.
+  registerEngineDependentModules({
+    dependencies,
+    modules,
+    caches,
+    executionEventPublisher,
+    executionService,
+    environments,
+    tasks,
+    notifications,
+    initiativeService,
+    setInitiativeLoop,
+  })
 
   // The always-present spine, plus every optional module the registry assembled in ONE place
   // (unwired keys absent) — replacing the ~40 hand-written `...(x ? { x } : {})` return spreads.

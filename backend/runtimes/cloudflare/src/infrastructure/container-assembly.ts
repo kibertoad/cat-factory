@@ -155,7 +155,15 @@ export interface WorkerContainerAssemblyInput {
  * of the dependencies build, the `...overrides` spread, the post-override repairer wiring and
  * the gate-provider application is preserved exactly.
  */
-export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {
+/**
+ * Build the engine {@link CoreDependencies} from the assembly input: every repository the Worker
+ * serves off D1, the selected agent executor / work runner, and the `select*Deps` module
+ * selectors, with the caller's `...overrides` applied LAST. Extracted verbatim from
+ * {@link assembleWorkerContainer} so the runtime object is identical (later spreads still
+ * override earlier ones in the same order) — purely the function-size ratchet split, not a
+ * behaviour change.
+ */
+function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
     config,
@@ -165,7 +173,6 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     idGenerator,
     caches,
     overrides,
-    gateProviders,
     cloudflareModelsEnabled,
     registries,
     provisioningLogRepository,
@@ -174,15 +181,12 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     testSecretsService,
     personalSubscriptions,
     apiKeys,
-    publicApiKeys,
     localModelEndpoints,
-    userSecrets,
     openRouterCatalog,
     eventPublisher,
     agentContextObservability,
     searchQueryObservability,
     accountSettings,
-    defaultWebSearchUpstream,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -194,11 +198,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     gateRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
-    vcsRegistry,
     providerRegistry,
   } = registries
 
-  const dependencies: CoreDependencies = {
+  return {
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -377,6 +380,29 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     runInitiatorScope: runWithInitiator,
     ...overrides,
   }
+}
+
+export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {
+  const { env, config, db, clock, registries, resolveTransport, gateProviders } = input
+  const {
+    subscriptions,
+    testSecretsService,
+    personalSubscriptions,
+    apiKeys,
+    publicApiKeys,
+    localModelEndpoints,
+    userSecrets,
+    openRouterCatalog,
+    cloudflareModelsEnabled,
+    defaultWebSearchUpstream,
+    resolveBinaryArtifactStore,
+    githubWebhookIngest,
+  } = input
+  const { environmentBackendRegistry, runnerBackendRegistry, providerRegistry, vcsRegistry } =
+    registries
+  // The domain dependency object (built in its own function to stay within the size budget);
+  // the post-override wiring below still reads + mutates THIS instance, exactly as before.
+  const dependencies = buildWorkerCoreDependencies(input)
 
   // Wire the live env-config repair agent over the FINAL environment provider (after the
   // `...overrides` above), so a native adapter injected via overrides — not the default

@@ -1,33 +1,12 @@
-import {
-  type AgentKindRegistry,
-  defaultAgentKindRegistry,
-  defaultInitiativePresetRegistry,
-} from '@cat-factory/agents'
+import { type AgentKindRegistry } from '@cat-factory/agents'
 // Opt-in AWS EKS backends (runner + environment), registered by reference below (the Worker
 // facade registers the same pair, keeping the runtimes symmetric with the native `kubernetes`
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
-import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
-import {
-  ConfluenceProvider,
-  FigmaProvider,
-  ZeplinProvider,
-  GitHubDocsProvider,
-  LinearDocumentProvider,
-  createBackendRegistries,
-  type BackendRegistries,
-  HttpRunnerPoolProvider,
-  NotionProvider,
-  EMAIL_CIPHER_INFO,
-  createEmailSender,
-  TicketTrackerService,
-  type DeployJobClient,
-} from '@cat-factory/integrations'
+import { type BackendRegistries, type DeployJobClient } from '@cat-factory/integrations'
 import {
   type Clock,
-  type DocumentSourceProvider,
-  type EmailSender,
   type DeployCloneTarget,
   type GitHubClient,
   type GitHubInstallationRepository,
@@ -39,17 +18,12 @@ import {
   type ProviderSubscriptionTokenRepository,
   type RunnerPoolProvider,
   type SubscriptionActivationRepository,
-  DEFAULT_MODEL_PRESET_ID,
-  defaultProviderRegistry,
-  defaultVcsRegistry,
 } from '@cat-factory/kernel'
 import {
   type CoreDependencies,
   createCore,
-  defaultStepResolverRegistry,
   type GateRegistry,
   type StepResolverRegistry,
-  resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import {
   type AppConfig,
@@ -61,10 +35,6 @@ import {
   GitHubAppAuth,
   GitHubAppRegistry,
   GitHubIdentityResolver,
-  runWithInitiator,
-  WebCryptoPasswordHasher,
-  WebCryptoSecretCipher,
-  buildInfrastructureCapabilities,
   testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
@@ -72,7 +42,6 @@ import {
   type PersistenceRegistry,
   logger,
   resolveUrlSafetyPolicy,
-  resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
@@ -80,15 +49,9 @@ import {
 import {
   type GateProviderOverrides,
   applyGateProviders,
-  gateRegistryWithBuiltins,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import {
-  buildGitLabEngineClient,
-  GitLabIdentityResolver,
-  registerGitLab,
-  StaticGitLabTokenSource,
-} from '@cat-factory/gitlab'
+import { GitLabIdentityResolver } from '@cat-factory/gitlab'
 import type {
   AppCaches,
   InitiativePresetRegistry,
@@ -100,7 +63,6 @@ import type {
   VcsProviderRegistry,
 } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
-import { loadNodeConfig } from './config.js'
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeModelDeps } from './container-model-deps.js'
 import { buildNodeRunServices } from './container-run-services-deps.js'
@@ -108,11 +70,6 @@ import { buildNodeBootstrapper, buildNodeTransportDeploy } from './container-tra
 import { buildNodeAccountDeps } from './container-account-deps.js'
 import { buildNodeRealtimeDeps } from './container-realtime-deps.js'
 import type { DrizzleDb } from './db/client.js'
-import { executionRuntime } from './execution/config.js'
-import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
-import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.js'
-import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
-import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
@@ -122,41 +79,25 @@ import {
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
-import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 import { DrizzleSealedSecretInventory } from './repositories/drizzle/sealedSecretInventory.js'
-import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
+import { createDrizzleRepositories } from './repositories/drizzle.js'
 import type { ContentStorageBackend } from '@cat-factory/contracts'
-import { DrizzleReferenceArchitectureRepository } from './repositories/bootstrap.js'
-import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRepair.js'
-import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
-import {
-  DrizzleDocumentConnectionRepository,
-  DrizzleDocumentRepository,
-} from './repositories/documents.js'
-import {
-  DrizzleEnvironmentConnectionRepository,
-  DrizzleEnvironmentRegistryRepository,
-} from './repositories/environments.js'
-import { DrizzleCustomManifestTypeRepository } from './repositories/customManifestType.js'
-import { DrizzleNotificationRepository } from './repositories/notifications.js'
-import {
-  selectNodeFragmentLibraryDeps,
-  selectNodeSkillLibraryDeps,
-} from './container-content-library-deps.js'
-import {} from './repositories/slack.js'
-import {} from './repositories/tasks.js'
-import { CryptoIdGenerator, SystemClock } from './runtime.js'
-import {} from './wireCredentialServices.js'
 // The container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
 import {
-  RUNNERS_CIPHER_INFO,
   buildNodeContainerExecutor,
-  buildTraceSink,
   selectNodeEnvConfigRepairer,
 } from './container-executor-deps.js'
+
+import { assembleNodeCoreDependencies } from './container-core-deps.js'
+import {
+  resolveNodeContainerFoundation,
+  type NodeAppRegistriesResult,
+} from './container-foundation.js'
+// Re-exported for the mothership routing-seam test + any facade that sources its own repos.
+export { pickRepoSource } from './container-foundation.js'
 
 // Re-export the public seams the local facade + tests still import from `./container.js`.
 export {
@@ -165,80 +106,12 @@ export {
   withProvisioningLog,
 } from './container-executor-deps.js'
 
-/**
- * Source one org/durable repository that a standard build constructs directly from the Drizzle
- * `db`. In mothership mode (no Postgres) `remote` is the full-surface remote registry — a
- * `Proxy` (`createRemoteRepositoryRegistry`) that forwards any repo name to the hosted
- * mothership over the `/internal/persistence` RPC — so the repo comes from THERE instead of the
- * absent db; otherwise `build()` constructs the Drizzle repo over `db` as before. This is the
- * Phase-3 `db: undefined` audit seam: every direct-db store on the board-load + run path routes
- * through it. Routing is orthogonal to the server-side allow-list — an un-allow-listed remote
- * method still returns a clean `unknown_method`, never a `db`-undefined `TypeError`. Mirrors the
- * credential-repo override seam (`providerApiKeyRepository`), which keeps credentials local while
- * org state goes remote. See docs/initiatives/mothership-mode.md (Phase 3, part 1).
- */
-export function pickRepoSource<T>(
-  remote: Record<string, unknown> | undefined,
-  name: string,
-  build: () => T,
-): T {
-  return remote ? (remote[name] as T) : build()
-}
-
 // Memoised per object so a container build shares ONE model provider (hence one inline
 // trace sink) across the agent executor, requirements reviewer, doc planner and
 // fragment selector, and ONE core trace sink — instead of each call constructing its
 // own. Mirrors the Worker's `buildModelProvider` memoisation. Memoisation matters more for
 // OTel than Langfuse: the SDK sink owns batch processors/exporters, so it must be built
 // once per config, not per wiring site.
-/**
- * Wire account invitations + per-account email senders for the Node facade (parity
- * with the Worker's `selectEmailInvitationDeps`). Invitations are always available (an
- * invite link works without email); the email-connection store + cipher are wired only
- * when EMAIL is enabled, so an account can onboard a SendGrid/Resend key in the UI and
- * have invites emailed. The provider key is sealed with the shared ENCRYPTION_KEY.
- */
-function selectNodeEmailInvitationDeps(
-  config: AppConfig,
-  repos: ReturnType<typeof createDrizzleRepositories>,
-): Partial<CoreDependencies> {
-  const deps: Partial<CoreDependencies> = {
-    invitationRepository: repos.invitationRepository,
-    // Password reset works without email (the link is logged in dev); the system sender
-    // below upgrades it to real delivery when configured.
-    passwordResetTokenRepository: repos.passwordResetTokenRepository,
-    resolveSystemEmailSender: buildSystemEmailSender(config),
-    appBaseUrl: config.email.appBaseUrl || undefined,
-    logger,
-  }
-  if (config.email.enabled && config.email.encryptionKey) {
-    deps.emailConnectionRepository = repos.emailConnectionRepository
-    deps.emailSecretCipher = new WebCryptoSecretCipher({
-      masterKeyBase64: config.email.encryptionKey,
-      info: EMAIL_CIPHER_INFO,
-    })
-  }
-  return deps
-}
-
-/**
- * Build the deployment-level system email sender (auth emails like password reset) from
- * the env-driven `email.system` config, or undefined when not configured.
- */
-function buildSystemEmailSender(
-  config: AppConfig,
-): (() => Promise<EmailSender | null>) | undefined {
-  const system = config.email.system
-  if (!system) return undefined
-  const sender = createEmailSender({
-    provider: system.provider,
-    from: system.from,
-    sendgrid: system.provider === 'sendgrid' ? { apiKey: system.apiKey } : undefined,
-    resend: system.provider === 'resend' ? { apiKey: system.apiKey } : undefined,
-  })
-  if (!sender) return undefined
-  return async () => sender
-}
 
 /**
  * Rate-limit accounting is best-effort telemetry the Worker persists to D1; the Node
@@ -654,56 +527,6 @@ export interface NodeContainerOptions {
  * App, `PUBLIC_URL`, `AUTH_SESSION_SECRET`, `ENCRYPTION_KEY`) are absent the
  * composite still serves inline kinds but fails container kinds loudly.
  */
-/**
- * Resolve every app-owned registry the container wires: the backend-kind registries (env + runner
- * + custom-manifest + user-secret), the agent-kind / gate / step-resolver / initiative-preset /
- * VCS-provider / gate-provider registries. Each is the injected instance when `options` supplies it
- * (a deployment's custom entries, or the conformance harness's pre-loaded instance) else the
- * built-ins-only default, and the opt-in AWS EKS backends are registered by reference. Extracted
- * from {@link buildNodeContainer} to keep it under the complexity ceiling.
- */
-function resolveNodeAppRegistries(options: NodeContainerOptions) {
-  const {
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    customManifestTypeRegistry,
-    userSecretKindRegistry,
-  } = options.backendRegistries ?? createBackendRegistries()
-
-  // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
-  // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
-  // pass-through until a workspace connects an `eks` backend. Registered on BOTH facades (the
-  // Worker registers the same pair in its container build) so the runtimes stay symmetric with
-  // the native `kubernetes` backend these extend — a real EKS cluster's private-CA apiserver is
-  // only reachable from a runtime that can pin a custom CA (Node/local), the same constraint a
-  // private-CA `kubernetes` connection already carries.
-  runnerBackendRegistry.register(eksRunnerBackend)
-  environmentBackendRegistry.register(eksEnvironmentBackend)
-
-  return {
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    customManifestTypeRegistry,
-    userSecretKindRegistry,
-    // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
-    // are visible) else the built-ins-only default.
-    agentKindRegistry: options.agentKindRegistry ?? defaultAgentKindRegistry(),
-    // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
-    // else a fresh one with the built-in `@cat-factory/gates` suite installed.
-    gateRegistry: options.gateRegistry ?? gateRegistryWithBuiltins(),
-    // The app-owned step-resolver registry: the injected instance else an empty default (the
-    // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
-    stepResolverRegistry: options.stepResolverRegistry ?? defaultStepResolverRegistry(),
-    // The app-owned initiative-preset registry: the injected instance else the built-ins-only
-    // default (generic / docs-refresh / tech-migration).
-    initiativePresetRegistry: options.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
-    // Opt-in GitLab VCS provider registry (a no-op unless GITLAB_TOKEN is set; the wiring lives in
-    // the caller, symmetric with the Worker facade per "keep the runtimes symmetric").
-    vcsRegistry: options.vcsRegistry ?? defaultVcsRegistry(),
-    // The app-owned provider registry the built-in gates probe through (fresh empty unless injected).
-    providerRegistry: options.providerRegistry ?? defaultProviderRegistry(),
-  }
-}
 
 /**
  * Wire the browsable frontend-preview module (slice 5c) onto the built dependencies. Local mode
@@ -829,467 +652,13 @@ function applyMothershipRemoteRepos(
   }
 }
 
-type NodeAppRegistriesResult = ReturnType<typeof resolveNodeAppRegistries>
-type NodeModelDepsResult = ReturnType<typeof buildNodeModelDeps>
-type NodeTransportDeployResult = ReturnType<typeof buildNodeTransportDeploy>
-type NodeRunServicesResult = ReturnType<typeof buildNodeRunServices>
-type NodeGitHubDepsResult = ReturnType<typeof selectNodeGitHubDeps>
-type NodeBootstrapperResult = ReturnType<typeof buildNodeBootstrapper>
-type NodeRealtimeDepsResult = ReturnType<typeof buildNodeRealtimeDeps>
-type NodeAccountDepsResult = ReturnType<typeof buildNodeAccountDeps>
-
-/**
- * The intermediate values {@link buildNodeContainer} builds before it assembles the engine
- * {@link CoreDependencies}: the resolved config/options, the shared Drizzle repo set + the
- * mothership-aware `sourced` picker, and every build*Deps / select*Deps fragment.
- * Bundled so {@link assembleNodeCoreDependencies} can own the large `dependencies` object
- * literal (a size-only split — behaviour is identical), keeping the composition root within the
- * function-size budget.
- */
-interface NodeCoreDepsBundle {
-  config: AppConfig
-  options: NodeContainerOptions
-  env: NodeJS.ProcessEnv
-  db: DrizzleDb
-  repos: ReturnType<typeof createDrizzleRepositories>
-  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T
-  idGenerator: CoreDependencies['idGenerator']
-  clock: CoreDependencies['clock']
-  gateways: ReturnType<typeof createNodeGateways>
-  runnerUrlPolicy: ReturnType<typeof resolveUrlSafetyPolicy>
-  githubInstallationRepository: GitHubInstallationRepository
-  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
-  runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
-  customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
-  agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
-  gateRegistry: NodeAppRegistriesResult['gateRegistry']
-  stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
-  initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
-  providerRegistry: NodeAppRegistriesResult['providerRegistry']
-  apiKeys: NodeModelDepsResult['apiKeys']
-  subscriptions: NodeModelDepsResult['subscriptions']
-  personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
-  localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
-  openRouterCatalog: NodeModelDepsResult['openRouterCatalog']
-  modelProviderResolver: NodeModelDepsResult['modelProviderResolver']
-  cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
-  deployDeps: NodeTransportDeployResult['deployDeps']
-  runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
-  agentContextObservability: NodeRunServicesResult['agentContextObservability']
-  searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
-  resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
-  githubClient: NodeGitHubDepsResult['githubClient']
-  tasks: NodeGitHubDepsResult['tasks']
-  fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
-  issueWritebackProvider: NodeGitHubDepsResult['issueWritebackProvider']
-  githubGateDeps: NodeGitHubDepsResult['githubGateDeps']
-  githubModuleDeps: NodeGitHubDepsResult['githubModuleDeps']
-  bootstrapJobRepository: NodeBootstrapperResult['bootstrapJobRepository']
-  repoBootstrapper: NodeBootstrapperResult['repoBootstrapper']
-  slackDeps: NodeRealtimeDepsResult['slackDeps']
-  executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
-  agentExecutor: NodeRealtimeDepsResult['agentExecutor']
-  notificationChannel: NodeRealtimeDepsResult['notificationChannel']
-  releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
-  packageRegistryDeps: NodeAccountDepsResult['packageRegistryDeps']
-  incidentEnrichmentDeps: NodeAccountDepsResult['incidentEnrichmentDeps']
-  accountSettings: NodeAccountDepsResult['accountSettings']
-  resolveBinaryArtifactStore: NodeAccountDepsResult['resolveBinaryArtifactStore']
-}
-
-/**
- * Assemble the engine {@link CoreDependencies} from the {@link NodeCoreDepsBundle} the composition
- * root built. Extracted verbatim from {@link buildNodeContainer} so the runtime object is identical
- * (later spreads still override earlier ones in the same order) — purely the function-size ratchet
- * split, not a behaviour change.
- */
-function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDependencies {
-  const {
-    config,
-    options,
-    env,
-    db,
-    repos,
-    sourced,
-    idGenerator,
-    clock,
-    gateways,
-    runnerUrlPolicy,
-    githubInstallationRepository,
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    customManifestTypeRegistry,
-    agentKindRegistry,
-    gateRegistry,
-    stepResolverRegistry,
-    initiativePresetRegistry,
-    providerRegistry,
-    apiKeys,
-    subscriptions,
-    personalSubscriptions,
-    localModelEndpoints,
-    openRouterCatalog,
-    modelProviderResolver,
-    cloudflareModelsEnabled,
-    deployDeps,
-    runnerPoolConnectionRepository,
-    agentContextObservability,
-    searchQueryObservability,
-    resolveTestSecretRefs,
-    githubClient,
-    tasks,
-    fileGitHubIssue,
-    issueWritebackProvider,
-    githubGateDeps,
-    githubModuleDeps,
-    bootstrapJobRepository,
-    repoBootstrapper,
-    slackDeps,
-    executionEventPublisher,
-    agentExecutor,
-    notificationChannel,
-    releaseHealthDeps,
-    packageRegistryDeps,
-    incidentEnrichmentDeps,
-    accountSettings,
-    resolveBinaryArtifactStore,
-  } = bundle
-  return {
-    ...releaseHealthDeps,
-    ...incidentEnrichmentDeps,
-    ...packageRegistryDeps,
-    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
-    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
-    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
-    // App-owned backend registries (kind → provider) the connection services resolve through.
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
-    // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
-    agentKindRegistry,
-    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
-    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
-    gateRegistry,
-    stepResolverRegistry,
-    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
-    // machine reads the SAME instance through its GateContext.
-    providerRegistry,
-    // The app-owned pipeline registry (deployment-registered extra pipelines); createCore threads
-    // it into the workspace + pipeline services and re-exposes it on Core for boot-time validation.
-    pipelineRegistry: options.pipelineRegistry,
-    // The app-owned custom task-type registry (deployment-registered namespaced task types);
-    // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
-    // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
-    taskTypeRegistry: options.taskTypeRegistry,
-    // The app-owned initiative-preset registry; the initiative services read it and it is
-    // re-exposed on Core for the snapshot descriptors + preset probe.
-    initiativePresetRegistry,
-    // The code-defined custom provision-type catalog, merged with the workspace rows by
-    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
-    // per-service provisioning picker.
-    customManifestTypeRegistry,
-    ...(accountSettings ? { accountSettings } : {}),
-    // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
-    // gate; resolving to null (no storage configured) ⇒ the gate passes through.
-    resolveBinaryArtifactStore,
-    workspaceRepository: repos.workspaceRepository,
-    workspaceMemberRepository: repos.workspaceMemberRepository,
-    accountRepository: repos.accountRepository,
-    membershipRepository: repos.membershipRepository,
-    userRepository: repos.userRepository,
-    passwordHasher: new WebCryptoPasswordHasher(),
-    blockRepository: repos.blockRepository,
-    pipelineRepository: repos.pipelineRepository,
-    executionRepository: repos.executionRepository,
-    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    // In mothership mode its home is the LOCAL `node:sqlite` credential bucket (the activation
-    // re-seals the token for the run, and the LOCAL container executor decrypts it), injected via
-    // `options.subscriptionActivationRepository` — the SAME instance the personal-subscription
-    // service above mints into, so mint + clear agree. Absent (plain Node / siloed-Postgres local)
-    // → the Drizzle repo over `db`. This is NEVER routed through `sourced` (the remote registry):
-    // every no-db (mothership) caller injects the override — `buildLocalContainer` in production
-    // and `makeMothershipConformanceApp` in tests — so `db` here is always a real Postgres handle,
-    // and routing an activation clear to the mothership (where `deleteByExecution` isn't
-    // allow-listed) is a path no caller takes.
-    subscriptionActivationRepository:
-      options.subscriptionActivationRepository ?? new DrizzleSubscriptionActivationRepository(db),
-    // In-org shared services. When a realtime hub is wired (start()), the engine's
-    // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
-    // so a shared service's live events reach every board that mounts it — parity with
-    // the Cloudflare facade. Without a hub (createServer/tests) the engine uses its
-    // NoopEventPublisher and nothing is pushed.
-    serviceRepository: repos.serviceRepository,
-    workspaceMountRepository: repos.workspaceMountRepository,
-    tokenUsageRepository: repos.tokenUsageRepository,
-    llmCallMetricRepository: repos.llmCallMetricRepository,
-    // Deployment-level rollups over `agent_runs` for the operator dashboard.
-    platformMetricsRepository: repos.platformMetricsRepository,
-    // Unified provisioning event log (its own Postgres schema). Threads the recorder
-    // into the env services and exposes the read service for the logs controller.
-    provisioningLogRepository: repos.provisioningLogRepository,
-    recordLlmPrompts: config.observability.recordPrompts,
-    // Re-exposed on the core for the agent-context read endpoint; the same instance
-    // is injected into the container executor above for the write path.
-    agentContextObservability,
-    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
-    // write path (it reads it off the request container).
-    searchQueryObservability,
-    // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
-    // recorded LLM call out as a generation. Built only when configured; otherwise
-    // undefined and there is no external emission.
-    llmTraceSink: buildTraceSink(config),
-    modelPresetRepository: repos.modelPresetRepository,
-    // A fresh workspace's model-preset library is seeded with this built-in as the default
-    // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
-    // Claude). Applied only at first seed, so a user's later manual default choice wins.
-    defaultModelPresetId: options.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
-    serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
-    // Requirements-review feature (stateless reviewer + the requirements-rework
-    // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
-    // so both runtimes serve the review/rework API AND substitute a block's reworked
-    // requirements into the agent context (the cross-runtime conformance suite asserts
-    // the substitution against both stores). The reviewer's model resolves exactly
-    // like a pipeline step: block-pin > workspace per-kind default > routing default
-    // (which falls back to Cloudflare Workers AI unless a direct key is set).
-    requirementReviewRepository: repos.requirementReviewRepository,
-    // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
-    // reuses the requirements reviewer's model config resolved just below.
-    docInterviewRepository: repos.docInterviewRepository,
-    // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
-    // facade, so the engine schedules gradings at run completion and the background sweep
-    // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
-    kaizenGradingRepository: repos.kaizenGradingRepository,
-    kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
-    clarityReviewRepository: repos.clarityReviewRepository,
-    brainstormSessionRepository: repos.brainstormSessionRepository,
-    // Initiatives (the long-running multi-task work container). Wired unconditionally,
-    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
-    // planning pipeline's ingest/committer steps work identically on both runtimes.
-    initiativeRepository: repos.initiativeRepository,
-    // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
-    // merge gate resolves (block-pinned preset > workspace default). Wired
-    // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
-    // preset CRUD API + the merger step's threshold resolution work identically.
-    riskPolicyRepository: repos.riskPolicyRepository,
-    // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
-    // unconditionally like the merge presets so the CRUD API works identically on both
-    // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no
-    // `composeRuntime` — the local facade injects one via `overrides.composeRuntime`.
-    sharedStackRepository: repos.sharedStackRepository,
-    // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
-    // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
-    // reviewer model config below. The container body never enumerates the five repos.
-    ...createDrizzleSandboxDeps(db),
-    // Per-workspace runtime settings (human-wait escalation threshold + per-service task
-    // limit). Wired unconditionally so the settings API + the limit enforcement + the
-    // escalation sweep work identically to the Worker.
-    workspaceSettingsRepository: repos.workspaceSettingsRepository,
-    userSettingsRepository: repos.userSettingsRepository,
-    modelProviderResolver,
-    requirementReviewModel: config.agents.routing.default.ref,
-    requirementReviewResolveModel: config.agents.resolveBlockModel,
-    // Local mode runs the inline reviewers/brainstorm/estimator on the ambient Claude Code /
-    // Codex CLI when the pinned model is a subscription harness (undefined on stock Node, so
-    // such refs degrade to the routing default). Also drives the preset satisfiability guard.
-    ...(config.agents.inlineHarnessRef ? { inlineHarnessRef: config.agents.inlineHarnessRef } : {}),
-    // Notifications subsystem (parity with the Worker, which wires it unconditionally):
-    // the inbox + the human-action surfaces. Node has no real-time push, so the rows
-    // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
-    notificationRepository: sourced(
-      'notificationRepository',
-      (d) => new DrizzleNotificationRepository(d),
-    ),
-    ...tasks.deps,
-    // Recurring pipelines + the workspace tracker selection. The tracker provider
-    // files the tech-debt pipeline's issue by resolving the *workspace's* connected
-    // integration: GitHub issues through the workspace's GitHub App installation,
-    // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
-    pipelineScheduleRepository: repos.pipelineScheduleRepository,
-    trackerSettingsRepository: repos.trackerSettingsRepository,
-    ticketTrackerProvider: new TicketTrackerService({
-      trackerSettingsRepository: repos.trackerSettingsRepository,
-      fetchImpl: fetch,
-      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
-      ...(tasks.taskConnectionRepository
-        ? {
-            resolveJiraConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'jira',
-              )
-              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-              if (!baseUrl || !accountEmail || !apiToken) return null
-              return { baseUrl, accountEmail, apiToken }
-            },
-            resolveLinearConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'linear',
-              )
-              const { apiKey, token } = connection?.credentials ?? {}
-              return apiKey || token ? { apiKey, token } : null
-            },
-          }
-        : {}),
-    }),
-    issueWritebackProvider,
-    idGenerator,
-    clock,
-    agentExecutor,
-    spendPricing: config.spend,
-    // Price metered dynamic OpenRouter models at their real per-model rate (not the
-    // bare-`openrouter` fallback) using this workspace's enabled catalog.
-    dynamicModelPricesFor: openRouterCatalog
-      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
-      : undefined,
-    // The runner-pool integration assembles when enabled, so a workspace can
-    // register the self-hosted pool its container agents dispatch to.
-    ...(config.runners.enabled && config.runners.encryptionKey
-      ? {
-          runnerPoolConnectionRepository,
-          runnerSecretCipher: new WebCryptoSecretCipher({
-            masterKeyBase64: config.runners.encryptionKey,
-            info: RUNNERS_CIPHER_INFO,
-          }),
-          // The pool provider instance backs the connection service's describeProvider +
-          // testConnection (the manifest editor's secret-key form + a pre-save probe). An
-          // injected native adapter wins here too (same instance that drives dispatch), so
-          // its describeConfig/testConnection render — else the generic manifest provider
-          // (same SSRF policy as the dispatch transport).
-          runnerPoolProvider:
-            options.runnerPoolProvider ??
-            new HttpRunnerPoolProvider(runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {}),
-          // Node (and local) has undici, so it can verify a private CA / skip TLS for a
-          // Kubernetes apiserver — accept such a config at registration.
-          runnerCustomTlsSupported: true,
-          ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
-        }
-      : {}),
-    ...(options.boss
-      ? {
-          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
-          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
-          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
-          bootstrapRunner: new PgBossBootstrapRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable env-config-repair driver (analogue of the Worker's
-          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
-          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable ephemeral-environment self-test driver (analogue of the Worker's
-          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
-          environmentTestRunner: new PgBossEnvironmentTestRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-        }
-      : {}),
-    ...githubGateDeps,
-    // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
-    // sync/webhook module (inline ingest persists to these repos on Node).
-    ...githubModuleDeps,
-    // Repo-bootstrap: the reference-architecture library + bootstrap-run store make the
-    // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
-    // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
-    // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
-    referenceArchitectureRepository: sourced(
-      'referenceArchitectureRepository',
-      (d) => new DrizzleReferenceArchitectureRepository(d),
-    ),
-    bootstrapJobRepository,
-    ...(repoBootstrapper ? { repoBootstrapper } : {}),
-    // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
-    // repository is wired unconditionally; the repairer (agent fallback) is wired
-    // post-overrides below over the FINAL provider, and the durable runner in the
-    // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
-    envConfigRepairJobRepository: sourced(
-      'envConfigRepairJobRepository',
-      (d) => new DrizzleEnvConfigRepairJobRepository(d),
-    ),
-    // Ephemeral-environment self-test runs (their own table). The store is wired
-    // unconditionally; the environments module builds the service when it + a git provider
-    // are present, and the durable runner is wired in the `options.boss` block above.
-    environmentTestRunRepository: sourced(
-      'environmentTestRunRepository',
-      (d) => new DrizzleEnvironmentTestRunRepository(d),
-    ),
-    // Document sources (Confluence / Notion / GitHub docs): wired from the shared
-    // integration providers exactly like the Worker, so a workspace can connect a
-    // source and import requirement/PRD/RFC pages as agent context.
-    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
-    // Ephemeral environments (opt-in): a workspace registers its own environment
-    // management API; the tester provisions/destroys per-run environments from it. A
-    // trusted in-house adapter can replace the default HTTP provider via the seam.
-    // The environment integration scopes its own URL/host policy from
-    // `config.environments` inside this selector (separate from the runner pool's).
-    ...selectNodeEnvironmentsDeps(config, db),
-    // The async container-backed Kubernetes deploy lifecycle (deployJobClient +
-    // resolveDeployCloneTarget) — pool-backed by default, overridable by the local facade.
-    ...deployDeps,
-    // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
-    // of best-practice fragments feeding every agent run, wired exactly like the
-    // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
-    ...selectNodeFragmentLibraryDeps(
-      config,
-      env,
-      db,
-      githubClient,
-      githubInstallationRepository,
-      modelProviderResolver,
-    ),
-    // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
-    // account's catalog of repo-authored skills, wired exactly like the Worker's
-    // selectSkillLibraryDeps (account repos + installation resolver).
-    ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
-    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
-    // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the
-    // dispatch-time probe is the freshness backstop.
-    enqueueSkillResync: async ({ accountId, sourceId }) => {
-      await gateways.githubWebhook.queueSkillResync(accountId, sourceId)
-    },
-    // Slack: an extra notification transport (the channel) + its management module.
-    // Default-off; when enabled its channel is composed into `notificationChannel` below
-    // alongside the in-app push, identically to the Worker.
-    ...slackDeps,
-    // Account invitations + per-account email senders (UI-onboarded, DB-stored).
-    ...selectNodeEmailInvitationDeps(config, repos),
-    // The pipeline-start guard resolves what's configured for a workspace + initiator.
-    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
-      resolveWorkspaceCapabilities(
-        {
-          apiKeys,
-          subscriptions,
-          personalSubscriptions,
-          cloudflareModelsEnabled,
-          baseUrlFor: (provider) => baseUrlForNode(provider, env),
-          localModelEndpoints,
-          openRouterCatalog,
-          accountSettings,
-          workspaceAccountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
-          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
-          ...(options.caches ? { caches: options.caches } : {}),
-        },
-        workspaceId,
-        initiatedBy,
-      ),
-    // Real-time push (when a hub is wired) + the composed notification channel (in-app
-    // push + Slack). These come AFTER the spreads so the composite replaces the bare
-    // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
-    ...(executionEventPublisher ? { executionEventPublisher } : {}),
-    ...(notificationChannel ? { notificationChannel } : {}),
-    // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
-    // context, so a per-user PAT (when set) is preferred over the App/env token.
-    runInitiatorScope: runWithInitiator,
-    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
-    // is set). Absent ⇒ createCore builds bare in-memory defaults.
-    ...(options.caches ? { caches: options.caches } : {}),
-    ...options.overrides,
-  }
-}
+export type NodeModelDepsResult = ReturnType<typeof buildNodeModelDeps>
+export type NodeTransportDeployResult = ReturnType<typeof buildNodeTransportDeploy>
+export type NodeRunServicesResult = ReturnType<typeof buildNodeRunServices>
+export type NodeGitHubDepsResult = ReturnType<typeof selectNodeGitHubDeps>
+export type NodeBootstrapperResult = ReturnType<typeof buildNodeBootstrapper>
+export type NodeRealtimeDepsResult = ReturnType<typeof buildNodeRealtimeDeps>
+export type NodeAccountDepsResult = ReturnType<typeof buildNodeAccountDeps>
 
 interface NodeServerContainerBundle {
   dependencies: CoreDependencies
@@ -1790,67 +1159,25 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
 }
 
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
-  const env = options.env ?? process.env
-  const config = options.config ?? loadNodeConfig(env)
-  // A browsable preview needs a per-runtime host-port-publish transport. Plain Node (runner
-  // pool) has none, so advertise support ONLY when a `previewTransport` is actually wired
-  // (local mode, or a facade/test that injects one) — otherwise the SPA would offer a Start
-  // button that 503s. Local pre-sets its own descriptor before calling in, so this ??= is
-  // skipped there; the check covers a stock Node build (false) and the conformance harness
-  // (which injects a fake transport via `overrides` → true).
-  const previewTransportWired = Boolean(
-    options.previewTransport ?? options.overrides?.previewTransport,
-  )
-  // The Node service has no built-in per-run container runtime: repo-operating agents run on
-  // a self-hosted runner pool, and Tester environments via the environment provider. Surface
-  // that so the SPA's infrastructure selector reads accurately. Local mode pre-sets its own
-  // descriptor (host Docker + pool) before calling in, so only fill it when absent.
-  config.infrastructure ??= buildInfrastructureCapabilities({
-    execution: { available: ['runner-pool'], active: 'runner-pool' },
-    testEnv: { available: ['environment-provider'], active: 'environment-provider' },
-    frontendPreview: { supported: previewTransportWired },
-    // A remote Node deployment has account admins to govern the account-wide model policy.
-    // (Local mode sets `config.infrastructure` itself before delegating here, so its
-    // mothership-gated value wins over this `??=`.)
-    modelPolicy: { supported: true },
-  })
-  const clock = new SystemClock()
-  const idGenerator = new CryptoIdGenerator()
-  // Mothership mode runs with NO Postgres (`options.db` undefined): org/durable state is served
-  // remotely via `options.repos`, so that set is REQUIRED there. (A standard Node/local build
-  // passes `db` and we build the Drizzle set from it.)
-  if (!options.repos && !options.db) {
-    throw new Error(
-      'buildNodeContainer requires `repos` when `db` is undefined (mothership mode supplies the ' +
-        'composite remote + local-credential repositories).',
-    )
-  }
-  const repos = options.repos ?? createDrizzleRepositories(options.db as DrizzleDb, clock)
-  // The Drizzle constructors only stash the handle — no build-time work (audited) — so BUILDING
-  // the stores below over an `undefined` db is safe; `db` carries the non-null type for those
-  // constructions, and the per-user credential services take the OPTIONAL `options.db` and turn
-  // themselves off when it is absent.
-  const db = options.db as DrizzleDb
-  // Mothership mode (`options.db` undefined): the org/durable stores a standard build constructs
-  // directly from the db — the GitHub installation + projections, runner-pool connection,
-  // bootstrap + env-config-repair job stores, notifications, reference-architecture library,
-  // task + subscription-activation stores — are sourced from the REMOTE registry instead (here
-  // `options.repos` is the full-surface remote `Proxy` from `composeMothership`, which forwards
-  // any repo name to the mothership over RPC). `pickRepoSource(remoteRepos, name, build)` picks
-  // the remote entry when there is no db, else builds the Drizzle repo — see the Phase-3 audit in
-  // docs/initiatives/mothership-mode.md. The feature-flagged integration repos owned by the
-  // sub-helpers (tasks/documents/environments/fragments/slack) are opt-in and off by default, so
-  // they are NOT on the default board-load + run path and remain a follow-up sub-slice.
-  const remoteRepos = options.db ? undefined : (repos as unknown as Record<string, unknown>)
-  // `remoteRepos` + `db` are fixed for this build, so bind them once: `sourced('name', (d) => …)`
-  // picks the remote registry entry in mothership mode, else builds the Drizzle repo over `db`.
-  const sourced = <T>(name: string, build: (d: DrizzleDb) => T): T =>
-    pickRepoSource(remoteRepos, name, () => build(db))
-
-  // The app-owned registries (backend kinds, agent kinds, gates, step resolvers, initiative
-  // presets, VCS providers, gate-provider registry) — injected instances when supplied (a
-  // deployment's custom entries / the conformance harness) else the built-ins-only defaults.
-  // The SAME instances flow to the executors, createCore, and the ServerContainer projection.
+  // The composition-root foundation: the resolved env/config (+ the Node infrastructure
+  // descriptor), the clock/id generator, the repository set with its mothership-aware `sourced`
+  // picker, the app-owned registries, the opt-in GitLab engine client, and the workspace
+  // model-preset resolver. Lifted into `container-foundation.ts` so this root stays within the
+  // per-function line budget; every side effect (the `config.infrastructure ??=` fill, the
+  // `registerGitLab` registration) still happens here, first, exactly as before.
+  const {
+    env,
+    config,
+    clock,
+    idGenerator,
+    repos,
+    db,
+    remoteRepos,
+    sourced,
+    registries,
+    gitlabEngineClient,
+    resolveWorkspaceModelDefault,
+  } = resolveNodeContainerFoundation(options)
   const {
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -1862,42 +1189,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     initiativePresetRegistry,
     vcsRegistry,
     providerRegistry,
-  } = resolveNodeAppRegistries(options)
-
-  // The built-in gates' providers are wired onto the app-owned `providerRegistry` (fresh unless
-  // injected via `options`). The GitHub + release-health wiring runs only inside its
-  // `enabled`/`githubClient` branches; a fresh registry starts empty, so an unconfigured gate just
-  // stays unwired (pass-through) — no reset needed (the former `clearGateProviders()` guarded a
-  // module-global that no longer exists). Mirrors the Worker facade (keep the runtimes symmetric).
-  // Any test-injected gate providers (`options.gateProviders`) are applied at the END of this build
-  // so they OVERRIDE the config wiring (local mode wires a PAT-backed CI provider here that would
-  // otherwise clobber a faked one) — gates read their provider lazily at probe time, last write wins.
-  let gitlabEngineClient: GitHubClient | undefined
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
-    registerGitLab(vcsRegistry, {
-      tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
-      clock,
-      webhookSecret: config.gitlab.webhookSecret || undefined,
-    })
-    // Bridge the GitLab VcsClient onto the legacy GitHubClient port the engine's gate / merge /
-    // RepoFiles paths consume, so a GitLab-only deployment (no GitHub App) gates on real CI and
-    // merges the MR for real — the SAME wiring local mode already does, now on the Node facade
-    // too (keep the runtimes symmetric). The GitHub App client wins when both are configured.
-    gitlabEngineClient = buildGitLabEngineClient({
-      token: env.GITLAB_TOKEN,
-      apiBase: config.gitlab.apiBase,
-      clock,
-    })
-  }
-
-  // Honour the workspace's model presets at run time (block-pinned > the task's
-  // selected/default model preset > env routing), uniformly for inline and container
-  // kinds. The built-in default preset points every agent kind at Kimi K2.7.
-  const resolveWorkspaceModelDefault = (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => resolvePresetModelForKind(repos.modelPresetRepository, workspaceId, agentKind, modelPresetId)
+  } = registries
 
   // The credential/token stores + the model-provisioning stack (API-key pool, public-API +
   // local-model-endpoint + user-secret + OpenRouter + subscription + personal-subscription
@@ -2172,77 +1464,3 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
  * No registered providers → `{ deps: {} }` and both the tasks module and the Jira
  * tracker stay off (the encryption key is guaranteed present by `loadTasksConfig`).
  */
-/**
- * Wire the document-source integration for the Node facade, mirroring the Worker's
- * `selectDocumentsDeps`: the shared `@cat-factory/integrations` provider shells
- * (Confluence/Notion always; GitHub-docs only when a GitHub client is available, since
- * it reuses the workspace's App installation), the Drizzle connection/document repos,
- * and — in `llm` planner mode — the default model ref the doc→board planner runs with
- * (the container's `modelProvider` is shared). Source credentials are encrypted at rest
- * under a documents-scoped HKDF info, keyed by the shared ENCRYPTION_KEY.
- */
-function selectNodeDocumentsDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-): Partial<CoreDependencies> {
-  if (!config.documents.enabled || !config.documents.encryptionKey) return {}
-  const providers: DocumentSourceProvider[] = []
-  if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
-  if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
-  // Figma + Zeplin authenticate with a per-workspace PAT (no GitHub client needed), like
-  // Notion/Confluence.
-  if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
-  if (config.documents.sources.includes('zeplin')) providers.push(new ZeplinProvider())
-  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
-  if (config.documents.sources.includes('github') && githubClient) {
-    providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
-  }
-  if (providers.length === 0) return {}
-  return {
-    documentSourceProviders: providers,
-    documentConnectionRepository: new DrizzleDocumentConnectionRepository(
-      db,
-      new WebCryptoSecretCipher({
-        masterKeyBase64: config.documents.encryptionKey,
-        info: 'cat-factory:documents',
-      }),
-    ),
-    documentRepository: new DrizzleDocumentRepository(db),
-    ...(config.documents.planner === 'llm'
-      ? { documentPlannerModel: config.agents.routing.default.ref }
-      : {}),
-  }
-}
-
-/**
- * Wire the ephemeral-environment integration for the Node facade when enabled,
- * mirroring the Worker's `selectEnvironmentsDeps`: the Drizzle connection + registry repos
- * and the environment-scoped `SecretCipher`. The provider itself is resolved per-workspace
- * from the env-backend registry by the stored `kind` (built-in `manifest`/`kubernetes`, or a
- * deployment's programmatically-registered custom kind), so nothing is injected here.
- * Per-tenant management-API secrets are encrypted at rest with the shared ENCRYPTION_KEY.
- * No key configured → `{}` and the module stays off (there is no separate enable flag).
- */
-function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
-  if (!config.environments.encryptionKey) return {}
-  // The provider is resolved per-workspace from the env-backend registry by the stored
-  // `kind`. Node honors custom-CA / insecure-skip TLS (undici), so a Kubernetes env config
-  // with a CA is allowed (environmentCustomTlsSupported defaults to supported).
-  const urlPolicy = resolveUrlSafetyPolicy(config.environments)
-  return {
-    environmentConnectionRepository: new DrizzleEnvironmentConnectionRepository(db),
-    environmentRegistryRepository: new DrizzleEnvironmentRegistryRepository(db),
-    // The workspace-defined custom-manifest-type catalog is a workspace feature on every facade.
-    customManifestTypeRepository: new DrizzleCustomManifestTypeRepository(db),
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: config.environments.encryptionKey,
-    }),
-    ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
-    // Deployment-level, additive extensions to the built-in provisioning-detection conventions.
-    ...(config.environments.detectionConventions
-      ? { detectionConventions: config.environments.detectionConventions }
-      : {}),
-  }
-}

@@ -7,6 +7,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
+import { createAuthSessionActions } from '~/stores/auth/session'
+import { createAuthRedirectActions } from '~/stores/auth/mothership'
 
 /**
  * "Login with GitHub" session state. The backend mints a signed session token
@@ -121,63 +123,19 @@ export const useAuthStore = defineStore(
       return true
     })
 
-    /** Pull a token handed back in the post-login URL fragment (#token=…). */
-    function consumeRedirectToken() {
-      if (typeof window === 'undefined') return
-      const match = /(?:^#|[#&])token=([^&]+)/.exec(window.location.hash)
-      if (!match) return
-      token.value = decodeURIComponent(match[1]!)
-      // Strip the token from the URL so it isn't left in history or shared.
-      history.replaceState(null, '', window.location.pathname + window.location.search)
-    }
-
-    /**
-     * Mothership mode: when the mothership OAuth redirect returns here (flagged
-     * `?mothership_connect=1`), the URL fragment carries a MOTHERSHIP session — not a local one.
-     * Hand it to our OWN node, which exchanges it for a cached machine token and returns a LOCAL
-     * session for the same user. Returns true when it handled the redirect (so the caller skips
-     * the normal `consumeRedirectToken`, which would wrongly store the mothership session locally).
-     */
-    async function maybeConnectMothership(): Promise<boolean> {
-      if (typeof window === 'undefined') return false
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('mothership_connect') !== '1') return false
-      const match = /(?:^#|[#&])token=([^&]+)/.exec(window.location.hash)
-      const session = match ? decodeURIComponent(match[1]!) : null
-      // Clean the flag + fragment from the URL regardless of outcome, so it isn't left in history.
-      params.delete('mothership_connect')
-      const qs = params.toString()
-      history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
-      if (!session) return true
-      try {
-        const result = await api.connectMothership(session)
-        applySession({ token: result.session, user: result.user })
-        mothershipError.value = null
-      } catch (err) {
-        // Surface the failure so the login screen shows it, rather than silently dropping the
-        // user back on the sign-in button as if the click did nothing. The captured session is
-        // already stripped from the URL, so recovery is a fresh "Sign in via mothership".
-        mothershipError.value =
-          err instanceof Error ? err.message : 'Could not connect to the mothership'
-      }
-      return true
-    }
-
-    /**
-     * Mothership mode: sign in through the hosted mothership. The mothership owns identity + the
-     * allowlist, so we send the browser to ITS OAuth and return here flagged for the connect
-     * exchange (`maybeConnectMothership`). No-op if the mothership URL isn't known.
-     */
-    function signInViaMothership() {
-      if (typeof window === 'undefined') return
-      const base = localMode.value?.mothershipUrl
-      if (!base) return
-      mothershipError.value = null
-      const here = new URL(window.location.origin + window.location.pathname)
-      here.searchParams.set('mothership_connect', '1')
-      const redirect = new URLSearchParams({ redirect: here.toString() })
-      window.location.href = `${base.replace(/\/$/, '')}/auth/login?${redirect}`
-    }
+    // The sign-in / sign-out operations and the redirect-fragment handling, split into cohesive
+    // factories sharing the state above (a size-only extraction mirroring `stores/board/` —
+    // behaviour is identical to the former in-closure functions). The redirect factory applies a
+    // mothership-exchanged session through the session factory's setter.
+    const { applySession, ...session } = createAuthSessionActions({
+      api,
+      apiBase,
+      token,
+      user,
+      autoLoginProvider,
+    })
+    const { consumeRedirectToken, maybeConnectMothership, signInViaMothership, maybeAcceptInvite } =
+      createAuthRedirectActions({ api, token, localMode, mothershipError, applySession })
 
     /** Resolve auth state: capture any redirect token, then check the backend. */
     async function bootstrap() {
@@ -237,7 +195,7 @@ export const useAuthStore = defineStore(
         localMode.value.patLogin?.configured.includes(autoLoginProvider.value)
       ) {
         try {
-          await patLogin({ provider: autoLoginProvider.value })
+          await session.patLogin({ provider: autoLoginProvider.value })
         } catch {
           autoLoginProvider.value = null
         }
@@ -246,106 +204,6 @@ export const useAuthStore = defineStore(
       // brand-new user redeems it server-side during signup/OAuth instead).
       if (user.value) await maybeAcceptInvite()
       ready.value = true
-    }
-
-    /** Redeem an `?invite=` token in the URL for the signed-in user, then clean the URL. */
-    async function maybeAcceptInvite() {
-      if (typeof window === 'undefined') return
-      const params = new URLSearchParams(window.location.search)
-      const inviteToken = params.get('invite')
-      if (!inviteToken) return
-      try {
-        await api.acceptInvite(inviteToken)
-      } catch {
-        // Stale/already-accepted invite — ignore and let the app load normally.
-      }
-      params.delete('invite')
-      const qs = params.toString()
-      history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
-    }
-
-    /** Build a post-login redirect back to the current page, with an optional invite. */
-    function redirectTarget(invite?: string): string {
-      const here = window.location.origin + window.location.pathname
-      const params = new URLSearchParams({ redirect: here })
-      if (invite) params.set('invite', invite)
-      return params.toString()
-    }
-
-    /** Send the browser to the backend's GitHub login, returning here after. */
-    function login(invite?: string) {
-      if (typeof window === 'undefined') return
-      window.location.href = `${apiBase}/auth/login?${redirectTarget(invite)}`
-    }
-
-    /** Send the browser to the backend's Google login, returning here after. */
-    function loginWithGoogle(invite?: string) {
-      if (typeof window === 'undefined') return
-      window.location.href = `${apiBase}/auth/google/login?${redirectTarget(invite)}`
-    }
-
-    /** Apply a freshly-minted token + user (from password signup/login). */
-    function applySession(result: { token: string; user: AuthUser }) {
-      token.value = result.token
-      user.value = result.user
-    }
-
-    /** Register a new email/password user (optionally redeeming an invite). */
-    async function signup(body: {
-      email: string
-      password: string
-      name?: string
-      invite?: string
-    }) {
-      applySession(await api.signup(body))
-    }
-
-    /** Sign in with email/password. */
-    async function passwordLogin(body: { email: string; password: string }) {
-      applySession(await api.passwordLogin(body))
-    }
-
-    /**
-     * Local mode: sign in as the account a source-control PAT belongs to. `token` omitted
-     * uses the server-configured PAT (one-click); otherwise a pasted token. Resolves to the
-     * SAME canonical user as GitHub OAuth would (keyed on the provider's numeric id).
-     */
-    async function patLogin(body: { provider: 'github' | 'gitlab'; token?: string }) {
-      applySession(await api.patLogin(body))
-      // Remember the choice so a later load re-mints the session from the env PAT silently.
-      autoLoginProvider.value = body.provider
-    }
-
-    /** Request a password-reset link by email (always resolves; never reveals existence). */
-    async function forgotPassword(email: string) {
-      await api.forgotPassword({ email })
-    }
-
-    /** Redeem a reset token and set a new password. Throws on an invalid/expired token. */
-    async function resetPassword(token: string, password: string) {
-      await api.resetPassword({ token, password })
-    }
-
-    /** Drop the local session (sessions are stateless server-side). */
-    function logout() {
-      api.logout().catch(() => {})
-      token.value = null
-      user.value = null
-      // Forget the remembered provider so logout sticks (otherwise bootstrap would
-      // immediately re-mint a session from the env PAT).
-      autoLoginProvider.value = null
-    }
-
-    /**
-     * Called by the API client when a request comes back 401. Drops the dead session but KEEPS
-     * the remembered provider (unlike logout): a 401 from an expired/rotated token or a
-     * transient blip should let the next load silently re-mint from the env PAT, not force the
-     * login screen. The guarded re-mint in `bootstrap` clears the choice itself if it genuinely
-     * fails (PAT removed/revoked), so there's no re-login loop.
-     */
-    function handleUnauthorized() {
-      token.value = null
-      user.value = null
     }
 
     return {
@@ -367,16 +225,8 @@ export const useAuthStore = defineStore(
       isMisconfigured,
       needsLogin,
       bootstrap,
-      login,
-      loginWithGoogle,
       signInViaMothership,
-      signup,
-      passwordLogin,
-      patLogin,
-      forgotPassword,
-      resetPassword,
-      logout,
-      handleUnauthorized,
+      ...session,
     }
   },
   { persist: { pick: ['token', 'autoLoginProvider'] } },
