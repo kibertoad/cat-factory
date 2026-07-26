@@ -1,5 +1,23 @@
 # @cat-factory/worker
 
+## 0.100.1
+
+### Patch Changes
+
+- 1ffa4fe: Split every product function above 300 lines along cohesive, behaviour-neutral seams so the
+  `max-lines-per-function` ratchet reaches step 2 (400 → 300) and `max-lines` drops to its new floor
+  (2802 → 2648). The engine's `ExecutionService` constructor now composes its gate windows + review
+  subjects through sibling factories (`gate-window-controllers.ts`), `createCore` through
+  `container/engine-collaborators.ts` + `container/engine-dependent-modules.ts`, the Node composition
+  root through `container-core-deps.ts` + `container-foundation.ts`, the Worker's container assembly
+  through an in-file `buildWorkerCoreDependencies`, and six Pinia stores through per-group action
+  factories under `stores/{execution,auth,github,initiative,board,workspace}/`, and the Node
+  `selectNodeGitHubDeps` selector through the `buildNodeIssueWriteback` +
+  `buildNodeGitHubModuleDeps` siblings. No behaviour change.
+- Updated dependencies [1ffa4fe]
+  - @cat-factory/orchestration@0.136.1
+  - @cat-factory/server@0.145.1
+
 ## 0.100.0
 
 ### Minor Changes
