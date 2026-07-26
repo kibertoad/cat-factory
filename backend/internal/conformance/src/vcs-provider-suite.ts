@@ -25,6 +25,7 @@ function installation(overrides: Partial<GitHubInstallation> = {}): GitHubInstal
     provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 1,
     deletedAt: null,
     ...overrides,
@@ -78,6 +79,35 @@ export function defineVcsProviderSuite(
       const rows = await repoProjection.list(ws)
       expect(rows.map((r) => r.provider)).toEqual(['gitlab'])
       expect((await repoProjection.get(ws, repoId))?.provider).toBe('gitlab')
+    })
+
+    it('round-trips a sealed access token on a gitlab connection', async () => {
+      // The per-workspace GitLab PAT connect seals the token onto the installation row; the
+      // stored token source reads it back to authenticate. A facade that dropped the column
+      // or lost the value would break the hosted GitLab connect flow on one runtime only.
+      const { installations } = makeRepos()
+      const { ws, install } = scope()
+      await installations.upsert(
+        installation({
+          installationId: install,
+          workspaceId: ws,
+          provider: 'gitlab',
+          accessToken: 'sealed:gl-pat-envelope',
+        }),
+      )
+      expect((await installations.getByWorkspace(ws))?.accessToken).toBe('sealed:gl-pat-envelope')
+      expect((await installations.getByInstallationId(install))?.accessToken).toBe(
+        'sealed:gl-pat-envelope',
+      )
+    })
+
+    it('leaves the access token null on a github connection', async () => {
+      const { installations } = makeRepos()
+      const { ws, install } = scope()
+      await installations.upsert(
+        installation({ installationId: install, workspaceId: ws, provider: 'github' }),
+      )
+      expect((await installations.getByWorkspace(ws))?.accessToken).toBeNull()
     })
 
     it('round-trips a github connection + repo', async () => {

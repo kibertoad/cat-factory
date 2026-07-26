@@ -27,6 +27,7 @@ function installation(overrides: Partial<GitHubInstallation> = {}): GitHubInstal
     appId: null,
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: 0,
     deletedAt: null,
     ...overrides,

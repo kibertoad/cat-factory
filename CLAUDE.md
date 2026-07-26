@@ -400,6 +400,21 @@ gitlabEngineClient`)**, wired in every facade — keep it distinct from the App-
   dead "GitHub Issues" source). Frontend repo discovery is the GitHub-shaped store
   (`useGitHubStore` / `listGitHubAvailableRepos`) that returns GitLab projects via the adapter —
   there is no separate GitLab store; do not add one.
+- **Per-workspace PAT connect reuses `github_installations`, and multi-provider deployments route
+  by the stored `provider`.** A workspace connects GitLab by pasting a PAT: `VcsPatConnectionService`
+  (`@cat-factory/integrations`) validates it via a `VcsIdentityResolver`, seals it with the
+  deployment `SecretCipher` onto a new `github_installations.access_token` column, and writes a
+  `provider: 'gitlab'` row (synthetic installation id per workspace) — so the whole `GitHubSyncService`
+  seed path works unchanged. `StoredGitLabTokenSource` + `buildGitLabConnectClient`
+  (`@cat-factory/gitlab`) build a per-workspace GitLab-backed `GitHubClient`. When a facade has BOTH
+  a GitHub App AND GitLab connect, the `github` module reads through **`ProviderRoutingGitHubClient`**
+  (`@cat-factory/server`) — it dispatches each installation-keyed call to the App or GitLab client by
+  the connection's stored provider (provider memoised per installation, so no N+1 in sync loops). Do
+  NOT hand-roll a second per-provider `githubClient` or fork the module; feed the module the router
+  (both) / App (github-only) / connect client (gitlab-only), symmetric across facades
+  (`selectVcsConnectDeps` Node ⇄ `selectWorkerVcsConnectDeps` Worker). This is the connect (browse/
+  link/sync) surface only — the engine's gate/merge still rides the single-token `engineVcsClient`;
+  per-workspace engine routing is a follow-up (see `docs/initiatives/gitlab-ui-parity.md`).
 - **The migration is incremental** — the kernel _ports_ are neutralized, but many _entity_ types
   (`GitHubRepo`, the `github_repos`/`github_installations` projection tables) are still GitHub-named
   and reused as-is (their shapes aren't GitHub-specific; "Phase 1 … folds the entity names too"). So

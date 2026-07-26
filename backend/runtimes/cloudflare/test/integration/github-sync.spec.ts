@@ -193,6 +193,7 @@ describe('github sync', () => {
       provider: 'github' as const,
       cachedToken: null,
       tokenExpiresAt: null,
+      accessToken: null,
       createdAt: 1000,
       deletedAt: null,
     })

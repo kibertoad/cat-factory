@@ -2075,6 +2075,10 @@ export const githubInstallations = pgTable(
     provider: text('provider').notNull().default('github'),
     cached_token: text('cached_token'),
     token_expires_at: bigint('token_expires_at', { mode: 'number' }),
+    // Durable, sealed access credential for a per-workspace PAT connection (a hosted GitLab
+    // connect seals the user's PAT here). Null for the GitHub-App path, which mints its own
+    // tokens. See kernel `GitHubInstallation.accessToken`.
+    access_token: text('access_token'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },

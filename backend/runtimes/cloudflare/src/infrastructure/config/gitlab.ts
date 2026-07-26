@@ -18,5 +18,8 @@ export function loadGitLabConfig(env: Env): GitLabConfig | undefined {
     apiBase: env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE,
     connectionId: env.GITLAB_CONNECTION_ID?.trim() || 'gitlab',
     webhookSecret: env.GITLAB_WEBHOOK_SECRET ?? '',
+    // The shared ENCRYPTION_KEY seals per-workspace GitLab PATs for the connect flow;
+    // domain-separated under `cat-factory:vcs-token`. Absent ⇒ the connect surface stays off.
+    encryptionKey: env.ENCRYPTION_KEY?.trim() || undefined,
   }
 }

@@ -1,4 +1,8 @@
-import type { VcsConnectionRef } from '@cat-factory/kernel'
+import type {
+  GitHubInstallationRepository,
+  SecretCipher,
+  VcsConnectionRef,
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // How the GitLab client obtains a per-connection access token + base URL. Unlike
@@ -38,5 +42,45 @@ export class StaticGitLabTokenSource implements GitLabTokenSource {
 
   apiBase(): string {
     return this.base
+  }
+}
+
+/**
+ * A per-workspace token source for the hosted GitLab connect flow: it resolves the sealed PAT
+ * stored on the workspace's `github_installations` row (written by `VcsPatConnectionService`)
+ * and decrypts it with the deployment `SecretCipher` at call time. The connection is keyed by
+ * `connectionId = String(installationId)` (the synthetic id the connect flow derived from the
+ * workspace id), so `Number(connectionId)` reads the row back.
+ *
+ * The REST base is a single deployment-level value (`GITLAB_API_BASE`) — a deployment targets
+ * one GitLab instance for all its workspaces — supplied at construction. Unlike
+ * {@link StaticGitLabTokenSource}, the token differs per connection, so a workspace only
+ * authenticates with the credential it sealed.
+ */
+export class StoredGitLabTokenSource implements GitLabTokenSource {
+  constructor(
+    private readonly deps: {
+      installations: GitHubInstallationRepository
+      cipher: SecretCipher
+      apiBase?: string
+    },
+  ) {}
+
+  async token(connection: VcsConnectionRef): Promise<string> {
+    const installationId = Number(connection.connectionId)
+    if (!Number.isFinite(installationId)) {
+      throw new Error(
+        `GitLab connection has a non-numeric connectionId: ${connection.connectionId}`,
+      )
+    }
+    const installation = await this.deps.installations.getByInstallationId(installationId)
+    if (!installation || installation.deletedAt || !installation.accessToken) {
+      throw new Error(`No GitLab credential stored for connection ${connection.connectionId}`)
+    }
+    return this.deps.cipher.decrypt(installation.accessToken)
+  }
+
+  apiBase(): string {
+    return this.deps.apiBase ?? GITLAB_PUBLIC_API_BASE
   }
 }

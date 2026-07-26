@@ -132,6 +132,7 @@ export async function seedGitHubForWorkspace(
     provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
+    accessToken: null,
     createdAt: now,
     deletedAt: null,
   })
