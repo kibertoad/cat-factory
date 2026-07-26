@@ -1,5 +1,29 @@
 # @cat-factory/local-server
 
+## 0.73.7
+
+### Patch Changes
+
+- 7c6bd77: Per-workspace GitLab PAT connect flow (backend, GitLab UI-parity slice 2a). A hosted
+  deployment can now connect a workspace to GitLab by pasting a personal access token: the
+  token is validated against the account's identity, sealed at rest (a new `access_token`
+  column on `github_installations`, mirrored across D1 + Drizzle), and the workspace's repos
+  are browsed / linked / synced through the SAME GitHub-shaped projection surface. A new
+  `ProviderRoutingGitHubClient` routes each installation-keyed call to the App or GitLab client
+  by the connection's stored provider, so a deployment can serve GitHub App and GitLab PAT
+  workspaces side by side. New endpoints: `GET|POST|DELETE /workspaces/:ws/gitlab/connection`
+  (503 until GitLab connect is wired). The connect UI is a follow-up slice.
+- Updated dependencies [7c6bd77]
+  - @cat-factory/kernel@0.155.0
+  - @cat-factory/contracts@0.161.0
+  - @cat-factory/gitlab@0.12.0
+  - @cat-factory/integrations@0.94.0
+  - @cat-factory/server@0.145.0
+  - @cat-factory/orchestration@0.136.0
+  - @cat-factory/node-server@0.112.0
+  - @cat-factory/agents@0.69.3
+  - @cat-factory/executor-harness@1.54.0
+
 ## 0.73.6
 
 ### Patch Changes
