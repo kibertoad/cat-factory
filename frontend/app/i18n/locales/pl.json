@@ -512,6 +512,8 @@
         "env_test_not_a_frame": "Autotest środowiska działa dla poszczególnych usług, więc można go uruchomić tylko dla usługi, a nie dla modułu czy zadania.",
         "env_test_infraless": "Ta usługa nie ma skonfigurowanego udostępniania środowisk tymczasowych, więc autotest nie ma czego sprawdzić.",
         "env_test_not_provisionable": "Ta usługa ma typ udostępniania, ale nie ma jeszcze dla niego żadnego mechanizmu obsługi w przestrzeni roboczej, więc udostępnianie nie może zostać uruchomione. Skonfiguruj mechanizm obsługi środowiska.",
+        "env_test_not_provisionable_no_handler": "Dla typu udostępniania tej usługi nie skonfigurowano żadnego mechanizmu obsługi środowiska w przestrzeni roboczej. W sekcji Infrastruktura → Środowiska testowe zarejestruj jeden — dla dostawcy niestandardowego mechanizm obsługi Custom (remote-custom), którego akceptowany manifest id odpowiada temu, który przypina ta usługa.",
+        "env_test_not_provisionable_type_mismatch": "Do typu udostępniania tej usługi może pasować więcej niż jeden mechanizm obsługi środowiska. Przypnij manifest id do tej usługi, aby rozwiązywany był dokładnie jeden, albo usuń nakładający się mechanizm obsługi w sekcji Infrastruktura → Środowiska testowe.",
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym."
       },
       "action": {
