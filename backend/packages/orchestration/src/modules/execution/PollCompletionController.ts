@@ -15,6 +15,11 @@ import type { TesterController } from './TesterController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { PrReviewController } from './PrReviewController.js'
+import {
+  applyValidationReport,
+  coerceValidationReport,
+  validationFailureDetail,
+} from './validation.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
 type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
@@ -193,6 +198,12 @@ export class PollCompletionController {
     // Mark the container errored and persist so the failed details show it (failRun
     // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
     // the terminal frame, so markContainerErrored deliberately doesn't).
+    // A job that failed because its PRE-PR VALIDATION never went green carries the harness's
+    // report: record it on the step (the evidence — each command's exit code + output tail) and
+    // prefer its rendered detail over the generic harness diagnostic, so the board's failure card
+    // shows WHICH check failed and what it printed. Persisted by `markContainerErrored` below,
+    // which is why it is folded on first. A report-less failure is untouched.
+    const validationDetail = this.applyValidationFailure(step, update.validationReport)
     await this.markContainerErrored(workspaceId, instance, step)
     return {
       kind: 'job_failed',
@@ -200,12 +211,25 @@ export class PollCompletionController {
       // Prefer the harness's structured cause; default to the coarse `agent` when it reported
       // none (the watchdog-phrase string fallback is gone — current images always emit a cause).
       failureKind: failureKindFromHarnessCause(update.failureCause) ?? 'agent',
-      detail: update.detail ?? update.error,
+      detail: validationDetail ?? update.detail ?? update.error,
       // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
       // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
       // machine-readable `reason` so a post-mortem sees it was e.g. a `git` push failure, not
       // a generic agent error, without regrepping the transcript.
       ...(update.failureCause ? { reason: update.failureCause } : {}),
     }
+  }
+
+  /**
+   * Fold a failed poll's pre-PR validation report onto the step and render its failure detail.
+   * Returns the detail string when the report describes a red checkout (so the caller can prefer
+   * it over the harness's generic diagnostic), else `null` — for a job that carried no report, or
+   * one whose checks had actually passed before some unrelated failure.
+   */
+  private applyValidationFailure(step: PipelineStep, raw: unknown): string | null {
+    const report = coerceValidationReport(raw)
+    if (!report) return null
+    applyValidationReport(step, report)
+    return validationFailureDetail(report)
   }
 }

@@ -12,9 +12,11 @@ prerequisites are configured.
   `runners/` (the self-hosted runner-pool transports).
 - `datadog/` + `observability/` — release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/` — incident enrichment.
+- `testSecrets/` — sealed per-service test credentials; `validation/` — per-service PRE-PR
+  validation checks (the commands the harness runs before a PR opens; frame-chain resolved).
 - `slack/`, `email/` — notification channels; `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/` — supporting services.
 - `backend-registries.ts` — a loose registration file sitting among the module dirs.
 
-**See also:** `CLAUDE.md` → "Post-release health flow"; `backend/docs/`
+**See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow"; `backend/docs/`
 {`runner-pool-integration`, `environments-integration`, `github-integration`, `document-sources`}`.md`.

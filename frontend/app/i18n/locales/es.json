@@ -1058,6 +1058,25 @@
       "remove": "Quitar {repo}",
       "connectFirst": "Conecta GitHub para adjuntar repositorios de referencia.",
       "hint": "El escritor de documentos los clona en modo de solo lectura para reutilizar soluciones existentes como referencia al redactar. Nunca los modifica."
+    },
+    "validationChecks": {
+      "title": "Validación previa al PR",
+      "sectionHint": "Comandos que se ejecutan sobre la copia de trabajo cuando el programador termina y antes de abrir una solicitud de incorporación. Un fallo vuelve al agente para que lo corrija; solo una copia sin errores abre un PR.",
+      "hint": "Cada comando se ejecuta con `sh -c` en la copia de trabajo de este servicio, en orden. Hay que arreglar el código, no la comprobación: al agente se le indica que no las debilite.",
+      "clear": "Vaciar",
+      "configNoun": "comprobaciones de validación",
+      "label": "Nombre",
+      "labelPlaceholder": "lint",
+      "command": "Comando",
+      "addCheck": "Añadir comprobación",
+      "removeCheck": "Quitar esta comprobación",
+      "empty": "No hay comprobaciones configuradas. Las ejecuciones de este servicio abren una solicitud de incorporación sin verificación local.",
+      "maxAttempts": "Intentos",
+      "maxAttemptsHint": "Rondas de corrección",
+      "save": "Guardar comprobaciones",
+      "savedToast": "Comprobaciones guardadas",
+      "saveFailed": "No se pudieron guardar las comprobaciones",
+      "clearFailed": "No se pudieron vaciar las comprobaciones"
     }
   },
   "panels": {
@@ -1224,6 +1243,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Hallazgos relacionados",
         "unnamed": "Estándar"
+      },
+      "validation": {
+        "heading": "Validación previa al PR",
+        "passed": "Superada",
+        "failed": "Fallida",
+        "attempts": "Intento {attempts} de {maxAttempts}",
+        "passedSummary": "Las {total} comprobaciones se superaron en el intento {attempts}. La solicitud de incorporación se abrió desde una copia sin errores.",
+        "failedSummary": "{failed} de {total} comprobaciones seguían fallando tras {attempts} de {maxAttempts} intentos, así que no se abrió ninguna solicitud de incorporación.",
+        "exitCode": "código de salida {code}",
+        "timedOut": "tiempo agotado"
       }
     },
     "inspector": {

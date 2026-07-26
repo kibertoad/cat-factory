@@ -1340,6 +1340,25 @@
       "remove": "{repo} entfernen",
       "connectFirst": "Verbinde GitHub, um Referenz-Repositories anzuhängen.",
       "hint": "Der Dokument-Writer klont diese schreibgeschützt, um beim Entwerfen vorhandene Lösungen als Referenz wiederzuverwenden. Er ändert sie nie."
+    },
+    "validationChecks": {
+      "title": "Prüfungen vor dem PR",
+      "sectionHint": "Befehle, die nach dem Coder und vor dem Öffnen eines Pull Requests im Checkout laufen. Ein Fehlschlag geht zur Behebung an den Agenten zurück; nur ein fehlerfreier Checkout öffnet einen PR.",
+      "hint": "Jeder Befehl läuft der Reihe nach mit `sh -c` im Checkout dieses Dienstes. Der Agent soll den Code reparieren, nicht die Prüfung abschwächen.",
+      "clear": "Leeren",
+      "configNoun": "Prüfungen",
+      "label": "Name",
+      "labelPlaceholder": "lint",
+      "command": "Befehl",
+      "addCheck": "Prüfung hinzufügen",
+      "removeCheck": "Diese Prüfung entfernen",
+      "empty": "Keine Prüfungen konfiguriert. Läufe für diesen Dienst öffnen einen Pull Request ohne lokale Überprüfung.",
+      "maxAttempts": "Versuche",
+      "maxAttemptsHint": "Korrekturrunden",
+      "save": "Prüfungen speichern",
+      "savedToast": "Prüfungen gespeichert",
+      "saveFailed": "Prüfungen konnten nicht gespeichert werden",
+      "clearFailed": "Prüfungen konnten nicht geleert werden"
     }
   },
   "panels": {
@@ -1506,6 +1525,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Zugehörige Befunde",
         "unnamed": "Standard"
+      },
+      "validation": {
+        "heading": "Prüfungen vor dem PR",
+        "passed": "Bestanden",
+        "failed": "Fehlgeschlagen",
+        "attempts": "Versuch {attempts} von {maxAttempts}",
+        "passedSummary": "Alle {total} Prüfungen wurden in Versuch {attempts} bestanden. Der Pull Request wurde aus einem fehlerfreien Checkout geöffnet.",
+        "failedSummary": "{failed} von {total} Prüfungen schlugen nach {attempts} von {maxAttempts} Versuchen weiterhin fehl, daher wurde kein Pull Request geöffnet.",
+        "exitCode": "Exit-Code {code}",
+        "timedOut": "Zeitüberschreitung"
       }
     },
     "inspector": {

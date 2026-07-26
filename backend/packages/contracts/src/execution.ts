@@ -4,6 +4,7 @@ import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { ralphStepStateSchema } from './ralph.js'
+import { validationReportSchema } from './validation-checks.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
@@ -1028,6 +1029,16 @@ export const pipelineStepSchema = v.object({
    * state after a restart. Absent for non-`ralph` steps. See {@link ralphStepStateSchema}.
    */
   ralph: v.optional(v.nullable(ralphStepStateSchema)),
+  /**
+   * The harness-computed PRE-PR VALIDATION report for a coding step whose service configured
+   * validation checks: the latest attempt's per-command outcomes (exit code + a bounded,
+   * secret-scrubbed output tail), how many agent+check rounds ran, and whether the checkout
+   * ended green. Recorded by the engine from the runner result on BOTH the passing path (the
+   * PR opened; this is the captured proof) and the exhausted path (the step failed; this is
+   * the evidence). Rides the run's persisted `detail` blob — no migration. Absent when the
+   * service configured no checks. See {@link validationReportSchema}.
+   */
+  validation: v.optional(v.nullable(validationReportSchema)),
   /**
    * Transient re-entry marker carried on a parked `coder` step whose fork decision is
    * `answering`: set when the human sends a chat message so the run is signalled to

@@ -51,6 +51,7 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
+import { applyValidationReport } from './validation.logic.js'
 import {
   commitInitiativeTracker,
   FORK_PROPOSER_KIND,
@@ -981,6 +982,9 @@ export class RunDispatcher {
     // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
     // would otherwise never emit, leaving it indistinguishable from a wedged run to the sweeper + UI.
     if (this.applyLastActivity(s, update.lastActivityAt)) changed = true
+    // Republish the latest pre-PR validation attempt so the repair loop is visible WHILE it
+    // runs ("lint failed, repairing — attempt 2 of 3") instead of only at the end.
+    if (applyValidationReport(s, update.validationReport)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.recordBackendDiagnostics(target, update.backend)) changed = true
@@ -1366,6 +1370,13 @@ export class RunDispatcher {
     // step raising a human decision. Those are the runs whose self-assessment is most worth
     // reading, and none of them ever reaches the normal completion with the result in hand.
     if (result.effortReport) step.effortReport = result.effortReport
+
+    // The pre-PR validation report of a coding step whose service configured checks — recorded
+    // here for the same reason as the effort report above: it describes the JOB THAT JUST RAN,
+    // so it must land before any early-returning path below. On this (successful) path it is
+    // the captured proof the checkout was green BEFORE the PR opened; the failed path records
+    // it in `PollCompletionController.handleFailedPoll`.
+    applyValidationReport(step, result.validationReport)
 
     // Meter the LLM call into the usage ledger. Recorded whether the step completed or
     // raised a decision — both consumed tokens. A subscription-harness result is tagged

@@ -259,6 +259,21 @@ export interface FakeAgentOptions {
    * omitted ⇒ a fresh {@link defaultAgentKindRegistry} (built-ins only).
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * Observer called with EVERY {@link AgentRunContext} the engine dispatches. The fake stands in
+   * for `ContainerAgentExecutor`, which is what turns the context into a harness job body — so
+   * this is the conformance suite's window onto what would have ridden the body (e.g. the
+   * service frame's resolved pre-PR `validationChecks`). Purely observational: it never affects
+   * the mimicked result.
+   */
+  onContext?: (context: AgentRunContext) => void
+  /**
+   * The pre-PR validation report every coding result carries (the deterministic analogue of the
+   * harness running the service's check commands against the checkout). Set it to assert the
+   * engine records the report on the step; omitted ⇒ no report, exactly like a service that
+   * configured no checks.
+   */
+  validationReport?: AgentRunResult['validationReport']
 }
 
 /**
@@ -402,10 +417,17 @@ export class FakeAgentExecutor implements AgentExecutor {
    * on a plainly-completing step.
    */
   async run(context: AgentRunContext): Promise<AgentRunResult> {
+    // Surface the dispatched context to the suite BEFORE producing a result: the fake stands in
+    // for the container executor, so this is where a conformance case observes what the engine
+    // resolved onto the context (and would therefore have put in the harness job body).
+    this.options.onContext?.(context)
     const result = await this.produceResult(context)
-    return this.options.effortReport
-      ? { ...result, effortReport: this.options.effortReport }
+    const withValidation = this.options.validationReport
+      ? { ...result, validationReport: this.options.validationReport }
       : result
+    return this.options.effortReport
+      ? { ...withValidation, effortReport: this.options.effortReport }
+      : withValidation
   }
 
   private async produceResult(context: AgentRunContext): Promise<AgentRunResult> {

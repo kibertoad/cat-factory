@@ -48,7 +48,9 @@ const LEGACY_ALLOWANCES = new Map([
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2650],
+  // `ExecutionServiceDependencies` (the ~360-line construction-seam interface) now lives in its
+  // own module, so `ExecutionService.ts` ratchets down accordingly.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2320],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -60,11 +62,16 @@ const LEGACY_ALLOWANCES = new Map([
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
-  ['backend/runtimes/node/src/db/schema.ts', 2300],
+  // The opt-in integration tables (sealed connections + per-service-frame integration config)
+  // now live in `schema-integrations.ts`, re-exported from `schema.ts` — so it ratchets down.
+  ['backend/runtimes/node/src/db/schema.ts', 2240],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1600],
+  // The poll site's pure runner-view → engine-update shaping (`buildRunningUpdate` /
+  // `buildFailureMeta`) now lives with the rest of the output-boundary normalisation in
+  // `containerAgentResult.ts`, so the executor ratchets down accordingly.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1580],
   ['backend/packages/server/src/github/FetchGitHubClient.ts', 1550],
 ])
 

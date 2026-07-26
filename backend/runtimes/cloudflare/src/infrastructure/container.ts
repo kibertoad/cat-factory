@@ -68,6 +68,7 @@ import {
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
   TestSecretsService,
+  ValidationConfigService,
   TEST_SECRETS_CIPHER_INFO,
   createEmailSender,
 } from '@cat-factory/integrations'
@@ -199,6 +200,7 @@ import { D1ObservabilityConnectionRepository } from './repositories/D1Observabil
 import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
@@ -2087,6 +2089,16 @@ export function buildContainer(
   // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
   const testSecretsService = buildTestSecretsService(env, db, clock)
 
+  // The per-service PRE-PR VALIDATION CHECK store — shared by the validation-check CRUD
+  // controller and the engine's dispatch resolution (the commands ride the coding job body).
+  // Always wired: the commands are operator-authored shell strings that run inside the run's own
+  // container, so there is nothing sealed and no ENCRYPTION_KEY prerequisite.
+  const validationConfigService = new ValidationConfigService({
+    validationConfigRepository: new D1ValidationConfigRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    clock,
+  })
+
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
   const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
@@ -2220,6 +2232,7 @@ export function buildContainer(
     resolveTransport,
     subscriptions,
     testSecretsService,
+    validationConfigService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,

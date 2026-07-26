@@ -47,6 +47,7 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
+import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -208,6 +209,17 @@ export interface AgentContextBuilderDeps {
    */
   resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
   /**
+   * Optional: resolve the PRE-PR VALIDATION CHECKS configured for a run block's service frame
+   * (walked up the frame chain) — the commands the harness runs against the checkout before
+   * opening a PR. Wired from the facade's `ValidationConfigService`; absent (or resolving to
+   * `null` — the service configured none) ⇒ nothing is folded onto the context, so the job body
+   * carries no checks and the harness runs its existing path unchanged.
+   */
+  resolveValidationChecks?: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<ResolvedValidationChecks | null>
+  /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
    * document-backed entries). When wired the engine uses it instead of the static
    * pool, so curated and living-document fragments actually reach a run.
@@ -290,6 +302,10 @@ export class AgentContextBuilder {
       // only — the kinds that receive the values out of band. Advertised in the tester prompt so
       // the agent knows which env vars are injected; values are resolved separately at dispatch.
       testSecrets,
+      // The service frame's PRE-PR validation checks (walked up the frame chain), forwarded by
+      // the container executor onto a PR-opening coding job body so the harness can run them
+      // against the checkout before it opens the PR. `null` ⇒ the service configured none.
+      validationChecks,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
       // preset steering resolved for THIS step's kind.
@@ -314,6 +330,7 @@ export class AgentContextBuilder {
       isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
+      this.validationChecksFor(workspaceId, block.id),
       this.resolveInitiativeContext(workspaceId, block, agentKind),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
@@ -402,6 +419,7 @@ export class AgentContextBuilder {
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
+      ...validationChecks,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
       // (identities are self-contained), so no repo reads here.
@@ -587,6 +605,28 @@ export class AgentContextBuilder {
   }
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
+  /**
+   * The service frame's PRE-PR VALIDATION CHECKS for a run block, already shaped as a spread-ready
+   * fragment (`{}` when the resolver is unwired, the service configured none, or the read failed).
+   * Returning the fragment rather than a nullable keeps both the resolution and the fold
+   * branch-free at the `buildContext` call site, which is at its complexity ceiling.
+   */
+  private async validationChecksFor(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ validationChecks?: ResolvedValidationChecks }> {
+    try {
+      const resolved = await this.deps.resolveValidationChecks?.(workspaceId, blockId)
+      return resolved ? { validationChecks: resolved } : {}
+    } catch {
+      // A config-store read failure must never wedge a run — a mothership node whose server
+      // doesn't reflect this repository, or a transient store outage, would otherwise fail EVERY
+      // coding dispatch. Degrade to "no checks", which is exactly the unconfigured behaviour: the
+      // PR opens as it did before the feature existed rather than the whole build stopping.
+      return {}
+    }
+  }
+
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
     return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
   }

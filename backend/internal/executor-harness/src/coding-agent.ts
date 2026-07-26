@@ -42,6 +42,11 @@ import {
 import type { ProgressGuardLimits } from './pi.js'
 import type { RunOptions } from './runner.js'
 import { log, type Logger } from './logger.js'
+import {
+  runValidationLoop,
+  type ValidationChecksSpec,
+  type ValidationReport,
+} from './validation-checks.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -104,6 +109,15 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    */
   validation?: { command: string; iteration?: number }
   /**
+   * PRE-PR VALIDATION: the service's configured check commands + repair-round budget. When set,
+   * the harness runs them against the checkout after the agent settles and, while they fail and
+   * budget remains, re-runs the agent with the captured output as its instruction. A red checkout
+   * at the end means the caller opens NO pull request and fails the job. Set only for a dispatch
+   * that opens a PR and whose service configured checks; absent everywhere else. See
+   * `docs/initiatives/pre-pr-validation.md`.
+   */
+  validationChecks?: ValidationChecksSpec
+  /**
    * A repo-sourced Claude Skill to make available for this run (a `skill` step, slice 2). Threaded
    * into {@link runAgentInWorkspace}, which installs it harness-aware: natively under the ISOLATED
    * `CLAUDE_CONFIG_DIR` for a leased-credential claude-code run, `.cat-context/skill/` for everything
@@ -138,6 +152,12 @@ export interface CodingAgentOutcome {
     validationOutputTail?: string
     iteration?: number
   }
+  /**
+   * The pre-PR validation loop's LAST attempt (present only when {@link CodingAgentSpec.validationChecks}
+   * was set). `passed: false` means the attempt budget was spent with the checkout still red —
+   * the caller must open no PR and fail the job with this as the evidence.
+   */
+  validationReport?: ValidationReport
 }
 
 /**
@@ -271,15 +291,17 @@ export async function runCodingAgent(
         followUpTick.unref?.()
       }
 
-      let outcome: CodingAgentOutcome
-      try {
-        opts.onPhase?.('agent')
-        logger.info('coding-agent: running agent', { serviceDirectory })
-        const agentRun = await runAgentInWorkspace(
+      // One agent pass over this checkout, parameterised only by the prompt — so the pre-PR
+      // validation loop below can re-run the agent with a repair instruction without
+      // re-deriving (or drifting from) the dispatch's own settings.
+      const runAgentPass = (
+        userPrompt: string,
+      ): Promise<Awaited<ReturnType<typeof runAgentInWorkspace>>> =>
+        runAgentInWorkspace(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
-            userPrompt: spec.userPrompt,
+            userPrompt,
             model: spec.model,
             harness: spec.harness,
             subscriptionToken: spec.subscriptionToken,
@@ -295,7 +317,34 @@ export async function runCodingAgent(
           },
           opts,
         )
+
+      let outcome: CodingAgentOutcome
+      try {
+        opts.onPhase?.('agent')
+        logger.info('coding-agent: running agent', { serviceDirectory })
+        let agentRun = await runAgentPass(spec.userPrompt)
+        // PRE-PR VALIDATION: run the service's configured checks against the checkout and, while
+        // they fail and budget remains, hand the captured output back to the agent and run it
+        // again. Sits BETWEEN the agent and the finalize/push/PR step so a red checkout never
+        // reaches `openPullRequest` — the whole point of the feature. Keyed purely off the job
+        // body carrying checks (no agent-kind switch); absent ⇒ this is a no-op and the flow
+        // below is byte-for-byte what it was.
+        const validationChecks = spec.validationChecks
+        let validationReport: ValidationReport | undefined
+        if (validationChecks && (await producedWork(dir, spec, baseSha, resumed, opts))) {
+          validationReport = await runValidationLoop({
+            workDir,
+            spec: validationChecks,
+            logger,
+            opts,
+            runAgentPass,
+            onAgentPass: (run) => {
+              agentRun = mergeAgentPasses(agentRun, run)
+            },
+          })
+        }
         outcome = await finalizeCodingRun({
+          validationReport,
           dir,
           spec,
           logger,
@@ -444,6 +493,8 @@ async function prepareCodingCheckout(
  * {@link runCodingAgent} so its body stays small; returns the built {@link CodingAgentOutcome}.
  */
 async function finalizeCodingRun(args: {
+  /** The pre-PR validation loop's last attempt, attached to the outcome (absent when unconfigured). */
+  validationReport?: ValidationReport
   dir: string
   spec: CodingAgentSpec
   logger: Logger
@@ -459,6 +510,7 @@ async function finalizeCodingRun(args: {
   agentRun: Awaited<ReturnType<typeof runAgentInWorkspace>>
 }): Promise<CodingAgentOutcome> {
   const {
+    validationReport,
     dir,
     spec,
     logger,
@@ -558,7 +610,72 @@ async function finalizeCodingRun(args: {
   if (spec.validation) {
     outcome.validation = await runRalphValidation(workDir, spec.validation, logger, opts)
   }
+  // Pre-PR validation: the loop already ran (before this finalize, so a red checkout never
+  // reaches the PR-opening caller); attach its verdict for the caller to gate on and for the
+  // backend to record on the step.
+  if (validationReport) outcome.validationReport = validationReport
   return outcome
+}
+
+/**
+ * Whether this pass produced anything worth VALIDATING — i.e. the branch advanced past its
+ * pre-run tip (or the run resumed an earlier one's pushed work). Gates the pre-PR validation
+ * loop, for two reasons: a run that changed nothing has nothing to check, and its real failure
+ * is "the agent produced no file changes" — reporting a red BASE branch instead would blame the
+ * run for a pre-existing condition it never touched (and burn the whole repair budget re-running
+ * an agent that already declined to act).
+ *
+ * Commits forgotten edits to tracked files first, exactly as {@link finalizeCodingRun} does, so
+ * an agent that edited-but-didn't-commit still counts as work. That call is idempotent, so
+ * finalize repeating it later is a no-op. Uncommitted NEW files are invisible here — but they
+ * are equally invisible to finalize, so a run whose only product is an uncommitted new file is
+ * a no-op on both paths, and the checks would have nothing to gate anyway.
+ */
+async function producedWork(
+  dir: string,
+  spec: CodingAgentSpec,
+  baseSha: string,
+  resumed: boolean,
+  opts: RunOptions,
+): Promise<boolean> {
+  await commitTrackedEdits(dir, spec.commitMessage, opts.signal)
+  return resumed || (await branchHasCommitsSince(dir, baseSha, opts.signal))
+}
+
+/**
+ * Fold a pre-PR validation REPAIR pass's run into the accumulated agent outcome, so a looped run
+ * reports what every round actually spent rather than only the first. Counts and telemetry are
+ * summed/concatenated; the single-valued fields (the summary the backend renders, the effort
+ * report, the diagnostics that judge the FINAL answer) take the LATEST pass, which is the one
+ * whose state the PR is opened from.
+ */
+function mergeAgentPasses<T extends Awaited<ReturnType<typeof runAgentInWorkspace>>>(
+  previous: T,
+  next: T,
+): T {
+  return {
+    ...next,
+    stats: {
+      toolCalls: (previous.stats?.toolCalls ?? 0) + (next.stats?.toolCalls ?? 0),
+      assistantChars: (previous.stats?.assistantChars ?? 0) + (next.stats?.assistantChars ?? 0),
+    },
+    ...(previous.usage || next.usage
+      ? {
+          usage: {
+            inputTokens: (previous.usage?.inputTokens ?? 0) + (next.usage?.inputTokens ?? 0),
+            outputTokens: (previous.usage?.outputTokens ?? 0) + (next.usage?.outputTokens ?? 0),
+          },
+        }
+      : {}),
+    ...(previous.callMetrics || next.callMetrics
+      ? { callMetrics: [...(previous.callMetrics ?? []), ...(next.callMetrics ?? [])] }
+      : {}),
+    // The repair pass's own effort report wins when it wrote one; otherwise keep the first
+    // pass's rather than losing the assessment entirely.
+    ...((next.effortReport ?? previous.effortReport)
+      ? { effortReport: next.effortReport ?? previous.effortReport }
+      : {}),
+  }
 }
 
 /**

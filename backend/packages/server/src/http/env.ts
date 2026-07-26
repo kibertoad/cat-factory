@@ -23,6 +23,7 @@ import type {
   PublicApiKeyService,
   RunnerBackendRegistry,
   TestSecretsService,
+  ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
@@ -126,6 +127,13 @@ export interface ServerContainer extends Core {
    * the container executor (values, injected into the Tester out of band).
    */
   testSecrets?: TestSecretsService
+  /**
+   * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
+   * checkout before opening a PR. Present only when the facade wired the validation-config
+   * repository. Backs the validation-check CRUD controller; its `resolveForBlock` is also
+   * threaded into the engine so a dispatch carries the resolved commands in the job body.
+   */
+  validationConfig?: ValidationConfigService
   /**
    * The per-user individual-usage subscription store (Claude). Present only when the
    * facade wired the personal-subscription repositories (needs ENCRYPTION_KEY). Drives

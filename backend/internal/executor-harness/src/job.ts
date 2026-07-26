@@ -2,6 +2,7 @@ import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 import type { EffortReport } from './effort.js'
+import type { ValidationChecksSpec, ValidationReport } from './validation-checks.js'
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -172,6 +173,32 @@ function parseValidationSpec(value: unknown): ValidationSpec | undefined {
       : {}),
     ...(iteration !== undefined ? { iteration } : {}),
   }
+}
+
+/**
+ * Parse the optional PRE-PR VALIDATION CHECKS spec (see
+ * docs/initiatives/pre-pr-validation.md): the service's ordered `{ label, command }` pairs and
+ * the repair-round budget. Every entry needs a non-empty command; entries without one are
+ * dropped, and a spec that ends up with no usable check returns `undefined` — so a malformed
+ * body degrades to the exact pre-feature behaviour (no loop, PR opens as before) rather than
+ * failing an otherwise-good coding run. `maxAttempts` is clamped to a sane range so a bad body
+ * can't make a container loop forever.
+ */
+function parseValidationChecksSpec(value: unknown): ValidationChecksSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (!Array.isArray(o.checks)) return undefined
+  const checks: { label: string; command: string }[] = []
+  for (const raw of o.checks) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const c = raw as Record<string, unknown>
+    if (typeof c.command !== 'string' || c.command.trim() === '') continue
+    const label = typeof c.label === 'string' && c.label.trim() ? c.label.trim() : c.command
+    checks.push({ label, command: c.command })
+  }
+  if (checks.length === 0) return undefined
+  const parsed = posInt(o.maxAttempts)
+  return { checks, maxAttempts: Math.min(parsed ?? 3, VALIDATION_MAX_ATTEMPTS_CEILING) }
 }
 
 /**
@@ -831,7 +858,18 @@ export interface AgentJob extends HarnessAuthFields {
    * agent commits + pushes. Present only for a `ralph` iteration. See {@link ValidationSpec}.
    */
   validation?: ValidationSpec
+  /**
+   * Coding mode: the service's PRE-PR VALIDATION CHECKS — commands the harness runs against the
+   * checkout after the agent settles and BEFORE opening a PR, feeding a failure back to the agent
+   * until they pass or the budget is spent. Present only on a dispatch that opens a PR and whose
+   * service configured checks; absent ⇒ the run behaves exactly as before. Deliberately keyed off
+   * job DATA, not the agent kind. See {@link ValidationChecksSpec}.
+   */
+  validationChecks?: ValidationChecksSpec
 }
+
+/** The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to. */
+export const VALIDATION_MAX_ATTEMPTS_CEILING = 10
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
 export interface GuardLimitsSpec {
@@ -876,6 +914,14 @@ export interface AgentResult {
    * — the failure-class artifact the orchestrator-side provisioning logs can't capture.
    */
   infraSetup?: InfraSetupRecord
+  /**
+   * The PRE-PR VALIDATION report: the outcome of running the service's configured check commands
+   * against the checkout after the agent settled and before opening a PR, plus how many repair
+   * rounds the harness spent. Present on BOTH outcomes — a passing report accompanies the opened
+   * PR (the captured proof), and a failing one accompanies the run's `error` (no PR was opened).
+   * Absent when the job carried no {@link AgentJob.validationChecks}.
+   */
+  validationReport?: ValidationReport
   /**
    * Preview mode: the in-container URL the built app is served at (e.g. `http://localhost:4173`).
    * This is NOT host-reachable on its own — the container runtime publishes the serve port to an
@@ -1282,6 +1328,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     testSecrets: parseTestSecrets(o.testSecrets),
     guardLimits: parseGuardLimits(o.guardLimits),
     validation: parseValidationSpec(o.validation),
+    validationChecks: parseValidationChecksSpec(o.validationChecks),
     reviewPrNumber: posInt(o.reviewPrNumber),
   })
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
@@ -1319,6 +1366,7 @@ interface ParsedAgentJobParts {
   testSecrets: ReturnType<typeof parseTestSecrets>
   guardLimits: ReturnType<typeof parseGuardLimits>
   validation: ReturnType<typeof parseValidationSpec>
+  validationChecks: ReturnType<typeof parseValidationChecksSpec>
   reviewPrNumber: number | undefined
 }
 
@@ -1371,6 +1419,7 @@ function assembleAgentJob(
     testSecrets,
     guardLimits,
     validation,
+    validationChecks,
     reviewPrNumber,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
@@ -1399,6 +1448,7 @@ function assembleAgentJob(
     ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
     ...(guardLimits ? { guardLimits } : {}),
     ...(validation ? { validation } : {}),
+    ...(validationChecks ? { validationChecks } : {}),
   }
 }
 

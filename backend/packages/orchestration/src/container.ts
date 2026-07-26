@@ -162,7 +162,7 @@ import { InvitationService } from '@cat-factory/workspaces'
 import { PasswordResetService } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
 import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-factory/spend'
-import type { OpenRouterModelMeta } from '@cat-factory/contracts'
+import type { OpenRouterModelMeta, ResolvedValidationChecks } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
@@ -919,6 +919,16 @@ export interface CoreDependencies {
    * `TestSecretsService`; absent ⇒ no advertised secrets. NEVER returns a value.
    */
   resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
+  /**
+   * Resolve the PRE-PR VALIDATION CHECKS configured for a run block's service frame — the
+   * commands the harness runs against the checkout before opening a PR. Wired from the facade's
+   * `ValidationConfigService`; absent (or resolving to `null`) ⇒ no checks travel on the job
+   * body and the harness runs its existing path unchanged.
+   */
+  resolveValidationChecks?: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<ResolvedValidationChecks | null>
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher
   /** Stores a workspace's incident-enrichment connection (sealed PagerDuty + incident.io). */
@@ -1661,6 +1671,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     kaizenScheduler: kaizen?.service,
     environmentProvisioning: environments?.provisioningService,
     resolveTestSecretRefs: dependencies.resolveTestSecretRefs,
+    resolveValidationChecks: dependencies.resolveValidationChecks,
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
