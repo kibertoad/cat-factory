@@ -1253,6 +1253,11 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the in-app `notification` `WorkspaceEvent` is pushed (worker
     `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
     with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
+    In **mothership mode** the org's EXTERNAL channels are unreachable from the laptop (their
+    credentials are sealed with the mothership's key), so `RemoteNotificationChannel` composes in
+    and asks the mothership to deliver the row by id over `POST /internal/notifications/deliver`
+    — the in-app frame still rides the real-time upstream relay. See
+    [`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md).
     `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
     (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
