@@ -19,12 +19,25 @@ import { loadWorkspaceAccess } from './workspaceAccess.js'
 //   /v1       — container LLM proxy; authenticated by a model-locked session token
 //               (ContainerSessionService), not the workspace session.
 //   /github   — GitHub webhooks + setup callback; verified by HMAC signature.
+//   /vcs      — provider-neutral VCS webhooks (GitLab first); each provider verifies its own
+//               signature/token over the raw body inside the controller, exactly like /github.
+//               Without this the session gate 401s the provider's delivery before that check
+//               (fails closed, but the receiver is then dead on any auth-enabled deployment).
 //   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
 //   /internal — mothership-mode machine API; authenticated by an audience-pinned machine
 //               token verified inside the controller, not by the session gate.
 //   /api      — the public external API; authenticated by an in-controller public-API key
 //               (`Authorization: Bearer cf_live_…`), not the session gate.
-const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/internal', '/api']
+const PUBLIC_PREFIXES = [
+  '/health',
+  '/auth',
+  '/v1',
+  '/github',
+  '/vcs',
+  '/slack',
+  '/internal',
+  '/api',
+]
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/

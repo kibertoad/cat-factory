@@ -56,14 +56,15 @@ describe('FetchGitHubClient PR-review reads', () => {
     await expect(makeClient().listRequestedReviewers(1, ref, 7)).resolves.toEqual(['alice', 'bob'])
   })
 
-  it('maps reviews to {author,state,submittedAt(ms),commitId}', async () => {
+  it('maps reviews to {author,state,body,submittedAt(ms),commitId}', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         json([
           {
             user: { login: 'alice' },
-            state: 'APPROVED',
+            state: 'CHANGES_REQUESTED',
+            body: 'Please add error handling.',
             submitted_at: '2026-01-02T03:04:05Z',
             commit_id: 'abc',
           },
@@ -72,7 +73,14 @@ describe('FetchGitHubClient PR-review reads', () => {
     )
     const reviews = await makeClient().listPullRequestReviews(1, ref, 7)
     expect(reviews).toHaveLength(1)
-    expect(reviews[0]).toMatchObject({ author: 'alice', state: 'APPROVED', commitId: 'abc' })
+    // The review's summary BODY is mapped — the `human-review` gate needs it to act on a
+    // "Request changes" that has no inline review threads.
+    expect(reviews[0]).toMatchObject({
+      author: 'alice',
+      state: 'CHANGES_REQUESTED',
+      body: 'Please add error handling.',
+      commitId: 'abc',
+    })
     expect(reviews[0]!.submittedAt).toBe(Date.parse('2026-01-02T03:04:05Z'))
   })
 

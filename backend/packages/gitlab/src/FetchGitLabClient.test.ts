@@ -309,8 +309,8 @@ describe('FetchGitLabClient', () => {
       'GET /projects/7/approvals': { body: { approvals_before_merge: 2 } },
     })
     expect(await c.listPullRequestReviews(connection, ref, 3)).toEqual([
-      { author: 'dee', state: 'APPROVED', submittedAt: 0, commitId: null },
-      { author: 'eli', state: 'APPROVED', submittedAt: 0, commitId: null },
+      { author: 'dee', state: 'APPROVED', body: '', submittedAt: 0, commitId: null },
+      { author: 'eli', state: 'APPROVED', body: '', submittedAt: 0, commitId: null },
     ])
     expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main')).toBe(2)
   })

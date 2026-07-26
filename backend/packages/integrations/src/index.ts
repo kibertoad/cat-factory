@@ -413,9 +413,11 @@ export {
   type RegistryReleaseHealthProviderDependencies,
   type ObservabilityAdapter,
   type ObservabilityAdapterFactory,
-  type ObservabilityProviderRegistry,
 } from './modules/observability/RegistryReleaseHealthProvider.js'
-export { defaultObservabilityRegistry } from './modules/observability/registry.js'
+export {
+  ObservabilityProviderRegistry,
+  defaultObservabilityRegistry,
+} from './modules/observability/registry.js'
 export {
   DatadogObservabilityAdapter,
   type DatadogCredentialsShape,

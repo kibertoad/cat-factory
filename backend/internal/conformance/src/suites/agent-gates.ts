@@ -602,8 +602,10 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
       requiredApprovingReviewCount: 1,
       assignedReviewers: [],
       approvals: 1,
+      changesRequested: false,
       unresolvedThreads: [],
       comments: [],
+      reviewSummaries: [],
     }
 
     it('passes through when approved with no unresolved threads', async () => {

@@ -871,12 +871,14 @@ export class FetchGitHubClient implements GitHubClient {
           json as {
             user?: { login?: string }
             state?: string
+            body?: string | null
             submitted_at?: string | null
             commit_id?: string | null
           }[]
         ).map((r) => ({
           author: r.user?.login ?? '',
           state: r.state ?? '',
+          body: r.body ?? '',
           submittedAt: parseGitHubTime(r.submitted_at),
           commitId: r.commit_id ?? null,
         })),

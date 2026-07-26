@@ -120,7 +120,7 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
         releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
         blockRepository: repos.blockRepository,
         secretCipher: observabilitySecretCipher,
-        registry: defaultObservabilityRegistry,
+        registry: defaultObservabilityRegistry(),
       }),
     )
   }

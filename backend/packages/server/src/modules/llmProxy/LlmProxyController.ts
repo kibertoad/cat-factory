@@ -1,4 +1,5 @@
 import { type Context, Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
@@ -414,251 +415,266 @@ async function relayUpstream(
   return c.json(json as Record<string, unknown>)
 }
 
+/**
+ * Ceiling on the buffered proxy request body. A completion payload can carry long prompts and
+ * inline (base64) images, so this is generous — but bounded, so a session-authenticated caller
+ * can't pin memory up to the platform request limit (SEC-9). Consistent with the artifact
+ * upload routes' explicit `bodyLimit`.
+ */
+const MAX_PROXY_BODY_BYTES = 32 * 1024 * 1024
+
 export function llmProxyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/v1/chat/completions', async (c) => {
-    // Proxy-entry clock: everything from here to the upstream dispatch (and after the
-    // response) is transport overhead; the slice spent waiting on the model is the
-    // actual execution. The two are split in the observability sink.
-    const t0 = Date.now()
-    const {
-      config,
-      spendService,
-      gateways,
-      llmObservability,
-      executionEventPublisher,
-      apiKeys,
-      localModelEndpoints,
-    } = c.get('container')
-    const secret = config.auth.sessionSecret
-    if (!secret) {
-      logger.error({ scope: 'llmProxy' }, 'llm proxy: session secret not configured')
-      return c.json({ error: { message: 'LLM proxy is not configured' } }, 503)
-    }
-
-    const sessions = new ContainerSessionService({ secret })
-    const session = await sessions.verify(bearer(c.req.header('authorization')))
-    if (!session) {
-      logger.warn({ scope: 'llmProxy' }, 'llm proxy: invalid or expired session token')
-      return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
-    }
-
-    // Parse + harden the request: lock the model to the session's, and ask for
-    // usage on the final streamed chunk so we can always meter. Parsed before the
-    // spend gate so a refusal is still recorded with its prompt/shape for analysis.
-    let payload: Record<string, unknown>
-    try {
-      payload = (await c.req.json()) as Record<string, unknown>
-    } catch {
-      return c.json({ error: { message: 'Invalid JSON body' } }, 400)
-    }
-    payload.model = session.model
-
-    // Prompt caching: route this conversation's calls to the same cached prefix on
-    // providers that support it (keyed on the execution id, stable across the run's
-    // turns). A no-op for providers that cache automatically on the prefix or not at
-    // all — see `promptCacheParams`.
-    Object.assign(payload, promptCacheParams(session.provider, session.executionId))
-
-    const streaming = payload.stream === true
-    const toolCount = Array.isArray(payload.tools) ? payload.tools.length : 0
-    const messageCount = Array.isArray(payload.messages) ? payload.messages.length : 0
-    // The EFFECTIVE output ceiling: updated below if the proxy overrides max_tokens
-    // (e.g. the Workers AI floor), so the recorded metric reflects what actually
-    // applied, not just what the client asked for.
-    let requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
-    const promptText = JSON.stringify(payload.messages ?? [])
-
-    // Correlate every proxied call with its run so a bootstrap/execution can be
-    // traced end to end. We log the tool count explicitly: an agent (Pi) that gets
-    // no tools back can't edit files, so a toolless call is the signature of a no-op.
-    const log = logger.child({
-      scope: 'llmProxy',
-      workspaceId: session.workspaceId,
-      executionId: session.executionId,
-      agentKind: session.agentKind,
-      provider: session.provider,
-      model: session.model,
-    })
-    log.info({ streaming, toolCount }, 'llm proxy: forwarding chat completion')
-
-    const waitUntil = makeWaitUntil(c)
-
-    // One id per proxied call, minted here so the SAME id rides both the live
-    // `llmCall` activity event and the persisted metric row — the drill-down panel
-    // keys its lazy body-load by it, and a live-appended summary row reconciles with
-    // the stored row on reload instead of duplicating.
-    const callId = `llm_${crypto.randomUUID()}`
-
-    // Per-call observation handling, off the response path: (1) push a COMPACT live
-    // activity event (no prompt/response bodies) so an open "Model activity" panel
-    // updates in real time, independent of the durable driver — the proxy records
-    // calls even while the run's poll loop is evicted; (2) persist the full metric to
-    // the observability sink when it is wired. `upstreamMs` is supplied by whichever
-    // path made the call; `totalMs` is the proxy's end-to-end time. Both are
-    // best-effort and must never break the proxy.
-    const observe = (obs: ProxyCallObservation): void => {
-      const promptTokens = obs.usage?.prompt_tokens ?? 0
-      const completionTokens = obs.usage?.completion_tokens ?? 0
-      const cachedPromptTokens = obs.cachedPromptTokens ?? cachedTokensFromUsage(obs.usage)
-      const totalMs = Date.now() - t0
-
-      // Live activity event — emitted regardless of whether the persistence sink is
-      // wired, so the live view works even on a deployment that does not retain
-      // metrics. This fires on EVERY observed outcome, including refusals/errors (spend
-      // exhausted, unavailable provider, upstream non-2xx) where no model work ran:
-      // surfacing those live (with `ok:false`) is intentional and matches what the sink
-      // persists. Best-effort: a publish failure (no subscribers, transient hub error)
-      // must not break metering.
-      waitUntil(
-        Promise.resolve(
-          // `?.` on the publisher itself, not just the method: a minimal container
-          // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
-          // emit is best-effort — a missing publisher must never break metering.
-          executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
-            id: callId,
-            workspaceId: session.workspaceId,
-            executionId: session.executionId,
-            agentKind: session.agentKind,
-            provider: session.provider,
-            model: session.model,
-            createdAt: Date.now(),
-            streaming,
-            messageCount,
-            toolCount,
-            requestMaxTokens,
-            promptTokens,
-            cachedPromptTokens,
-            completionTokens,
-            totalTokens: promptTokens + completionTokens,
-            finishReason: obs.finishReason,
-            upstreamMs: obs.upstreamMs,
-            overheadMs: Math.max(0, totalMs - obs.upstreamMs),
-            totalMs,
-            ok: obs.ok,
-            httpStatus: obs.httpStatus,
-            errorMessage: obs.errorMessage,
-          }),
-        ).catch(() => {}),
-      )
-
-      if (!llmObservability) return
-      waitUntil(
-        llmObservability
-          .record({
-            id: callId,
-            workspaceId: session.workspaceId,
-            executionId: session.executionId,
-            agentKind: session.agentKind,
-            provider: session.provider,
-            model: session.model,
-            streaming,
-            messageCount,
-            toolCount,
-            requestMaxTokens,
-            promptTokens,
-            cachedPromptTokens,
-            completionTokens,
-            totalTokens: promptTokens + completionTokens,
-            finishReason: obs.finishReason,
-            totalMs,
-            upstreamMs: obs.upstreamMs,
-            ok: obs.ok,
-            httpStatus: obs.httpStatus,
-            errorMessage: obs.errorMessage,
-            promptText,
-            responseText: obs.responseText,
-            reasoningText: obs.reasoningText ?? '',
-          })
-          // Observability must never break the proxy.
-          .catch((err) =>
-            log.warn(
-              { err: err instanceof Error ? err.message : String(err) },
-              'llm proxy: failed to record metric',
-            ),
-          ),
-      )
-    }
-
-    // Spend gate: refuse once the monthly budget is exhausted, mirroring the
-    // engine's pre-step check so a container can't keep spending.
-    if (
-      await spendService.isOverBudget(session.workspaceId, {
-        accountId: session.accountId,
-        userId: session.userId,
-      })
-    ) {
-      logger.warn(
-        { scope: 'llmProxy', workspaceId: session.workspaceId, executionId: session.executionId },
-        'llm proxy: spend budget exhausted — refusing call',
-      )
-      observe({
-        usage: null,
-        finishReason: null,
-        responseText: '',
-        ok: false,
-        httpStatus: 402,
-        errorMessage: 'Spend budget exhausted',
-        upstreamMs: 0,
-      })
-      return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
-    }
-
-    // Give container agents generous output room for in-process Workers AI models (a no-op
-    // for other providers); records the ceiling actually applied so the metric is accurate.
-    requestMaxTokens = applyWorkersAiCeiling(session, payload, promptText, requestMaxTokens)
-
-    // The pooled API key leased for this call (non-binding providers), so usage can be
-    // folded back into its rolling-window rotation counters when the call completes.
-    let leasedApiKeyId: string | null = null
-
-    const record = (usage: LlmTokenUsage | null): Promise<number> => {
-      if (!usage) return Promise.resolve(0)
-      const inputTokens = usage.prompt_tokens ?? 0
-      const outputTokens = usage.completion_tokens ?? 0
-      // Fold usage into the leased key's rotation counters (best-effort, off the meter).
-      if (leasedApiKeyId && apiKeys) {
-        void apiKeys.recordUsage(leasedApiKeyId, { inputTokens, outputTokens }).catch(() => {})
+  app.post(
+    '/v1/chat/completions',
+    bodyLimit({
+      maxSize: MAX_PROXY_BODY_BYTES,
+      onError: (c) => c.json({ error: { message: 'Request body exceeds size limit' } }, 413),
+    }),
+    async (c) => {
+      // Proxy-entry clock: everything from here to the upstream dispatch (and after the
+      // response) is transport overhead; the slice spent waiting on the model is the
+      // actual execution. The two are split in the observability sink.
+      const t0 = Date.now()
+      const {
+        config,
+        spendService,
+        gateways,
+        llmObservability,
+        executionEventPublisher,
+        apiKeys,
+        localModelEndpoints,
+      } = c.get('container')
+      const secret = config.auth.sessionSecret
+      if (!secret) {
+        logger.error({ scope: 'llmProxy' }, 'llm proxy: session secret not configured')
+        return c.json({ error: { message: 'LLM proxy is not configured' } }, 503)
       }
-      return spendService.record({
+
+      const sessions = new ContainerSessionService({ secret })
+      const session = await sessions.verify(bearer(c.req.header('authorization')))
+      if (!session) {
+        logger.warn({ scope: 'llmProxy' }, 'llm proxy: invalid or expired session token')
+        return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+      }
+
+      // Parse + harden the request: lock the model to the session's, and ask for
+      // usage on the final streamed chunk so we can always meter. Parsed before the
+      // spend gate so a refusal is still recorded with its prompt/shape for analysis.
+      let payload: Record<string, unknown>
+      try {
+        payload = (await c.req.json()) as Record<string, unknown>
+      } catch {
+        return c.json({ error: { message: 'Invalid JSON body' } }, 400)
+      }
+      payload.model = session.model
+
+      // Prompt caching: route this conversation's calls to the same cached prefix on
+      // providers that support it (keyed on the execution id, stable across the run's
+      // turns). A no-op for providers that cache automatically on the prefix or not at
+      // all — see `promptCacheParams`.
+      Object.assign(payload, promptCacheParams(session.provider, session.executionId))
+
+      const streaming = payload.stream === true
+      const toolCount = Array.isArray(payload.tools) ? payload.tools.length : 0
+      const messageCount = Array.isArray(payload.messages) ? payload.messages.length : 0
+      // The EFFECTIVE output ceiling: updated below if the proxy overrides max_tokens
+      // (e.g. the Workers AI floor), so the recorded metric reflects what actually
+      // applied, not just what the client asked for.
+      let requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
+      const promptText = JSON.stringify(payload.messages ?? [])
+
+      // Correlate every proxied call with its run so a bootstrap/execution can be
+      // traced end to end. We log the tool count explicitly: an agent (Pi) that gets
+      // no tools back can't edit files, so a toolless call is the signature of a no-op.
+      const log = logger.child({
+        scope: 'llmProxy',
         workspaceId: session.workspaceId,
-        accountId: session.accountId,
-        userId: session.userId,
         executionId: session.executionId,
         agentKind: session.agentKind,
-        model: `${session.provider}:${session.model}`,
-        usage: { inputTokens, outputTokens },
+        provider: session.provider,
+        model: session.model,
       })
-    }
+      log.info({ streaming, toolCount }, 'llm proxy: forwarding chat completion')
 
-    // The per-call state the dispatch helpers below thread through; `observe` / `record` stay
-    // bound to this handler's mutable `requestMaxTokens` / `leasedApiKeyId`.
-    const ctx: ProxyCallContext = {
-      session,
-      payload,
-      streaming,
-      promptText,
-      log,
-      gateways,
-      apiKeys,
-      localModelEndpoints,
-      waitUntil,
-      observe,
-      record,
-    }
+      const waitUntil = makeWaitUntil(c)
 
-    // Workers AI (and any binding-reached provider) has no external upstream: run it in-process
-    // via the facade's gateway. Null-provider (e.g. Node can't) surfaces as unavailable.
-    if (session.provider === 'workers-ai') return dispatchInProcess(c, ctx)
+      // One id per proxied call, minted here so the SAME id rides both the live
+      // `llmCall` activity event and the persisted metric row — the drill-down panel
+      // keys its lazy body-load by it, and a live-appended summary row reconciles with
+      // the stored row on reload instead of duplicating.
+      const callId = `llm_${crypto.randomUUID()}`
 
-    // Resolve the upstream base URL + bearer key (local runner vs the DB-backed key pool), then
-    // forward + meter. A failure is already observed and returned ready-to-send.
-    const target = await resolveUpstreamTarget(c, ctx)
-    if ('failure' in target) return target.failure
-    leasedApiKeyId = target.leasedApiKeyId
-    return relayUpstream(c, ctx, target)
-  })
+      // Per-call observation handling, off the response path: (1) push a COMPACT live
+      // activity event (no prompt/response bodies) so an open "Model activity" panel
+      // updates in real time, independent of the durable driver — the proxy records
+      // calls even while the run's poll loop is evicted; (2) persist the full metric to
+      // the observability sink when it is wired. `upstreamMs` is supplied by whichever
+      // path made the call; `totalMs` is the proxy's end-to-end time. Both are
+      // best-effort and must never break the proxy.
+      const observe = (obs: ProxyCallObservation): void => {
+        const promptTokens = obs.usage?.prompt_tokens ?? 0
+        const completionTokens = obs.usage?.completion_tokens ?? 0
+        const cachedPromptTokens = obs.cachedPromptTokens ?? cachedTokensFromUsage(obs.usage)
+        const totalMs = Date.now() - t0
+
+        // Live activity event — emitted regardless of whether the persistence sink is
+        // wired, so the live view works even on a deployment that does not retain
+        // metrics. This fires on EVERY observed outcome, including refusals/errors (spend
+        // exhausted, unavailable provider, upstream non-2xx) where no model work ran:
+        // surfacing those live (with `ok:false`) is intentional and matches what the sink
+        // persists. Best-effort: a publish failure (no subscribers, transient hub error)
+        // must not break metering.
+        waitUntil(
+          Promise.resolve(
+            // `?.` on the publisher itself, not just the method: a minimal container
+            // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
+            // emit is best-effort — a missing publisher must never break metering.
+            executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
+              id: callId,
+              workspaceId: session.workspaceId,
+              executionId: session.executionId,
+              agentKind: session.agentKind,
+              provider: session.provider,
+              model: session.model,
+              createdAt: Date.now(),
+              streaming,
+              messageCount,
+              toolCount,
+              requestMaxTokens,
+              promptTokens,
+              cachedPromptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens,
+              finishReason: obs.finishReason,
+              upstreamMs: obs.upstreamMs,
+              overheadMs: Math.max(0, totalMs - obs.upstreamMs),
+              totalMs,
+              ok: obs.ok,
+              httpStatus: obs.httpStatus,
+              errorMessage: obs.errorMessage,
+            }),
+          ).catch(() => {}),
+        )
+
+        if (!llmObservability) return
+        waitUntil(
+          llmObservability
+            .record({
+              id: callId,
+              workspaceId: session.workspaceId,
+              executionId: session.executionId,
+              agentKind: session.agentKind,
+              provider: session.provider,
+              model: session.model,
+              streaming,
+              messageCount,
+              toolCount,
+              requestMaxTokens,
+              promptTokens,
+              cachedPromptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens,
+              finishReason: obs.finishReason,
+              totalMs,
+              upstreamMs: obs.upstreamMs,
+              ok: obs.ok,
+              httpStatus: obs.httpStatus,
+              errorMessage: obs.errorMessage,
+              promptText,
+              responseText: obs.responseText,
+              reasoningText: obs.reasoningText ?? '',
+            })
+            // Observability must never break the proxy.
+            .catch((err) =>
+              log.warn(
+                { err: err instanceof Error ? err.message : String(err) },
+                'llm proxy: failed to record metric',
+              ),
+            ),
+        )
+      }
+
+      // Spend gate: refuse once the monthly budget is exhausted, mirroring the
+      // engine's pre-step check so a container can't keep spending.
+      if (
+        await spendService.isOverBudget(session.workspaceId, {
+          accountId: session.accountId,
+          userId: session.userId,
+        })
+      ) {
+        logger.warn(
+          { scope: 'llmProxy', workspaceId: session.workspaceId, executionId: session.executionId },
+          'llm proxy: spend budget exhausted — refusing call',
+        )
+        observe({
+          usage: null,
+          finishReason: null,
+          responseText: '',
+          ok: false,
+          httpStatus: 402,
+          errorMessage: 'Spend budget exhausted',
+          upstreamMs: 0,
+        })
+        return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+      }
+
+      // Give container agents generous output room for in-process Workers AI models (a no-op
+      // for other providers); records the ceiling actually applied so the metric is accurate.
+      requestMaxTokens = applyWorkersAiCeiling(session, payload, promptText, requestMaxTokens)
+
+      // The pooled API key leased for this call (non-binding providers), so usage can be
+      // folded back into its rolling-window rotation counters when the call completes.
+      let leasedApiKeyId: string | null = null
+
+      const record = (usage: LlmTokenUsage | null): Promise<number> => {
+        if (!usage) return Promise.resolve(0)
+        const inputTokens = usage.prompt_tokens ?? 0
+        const outputTokens = usage.completion_tokens ?? 0
+        // Fold usage into the leased key's rotation counters (best-effort, off the meter).
+        if (leasedApiKeyId && apiKeys) {
+          void apiKeys.recordUsage(leasedApiKeyId, { inputTokens, outputTokens }).catch(() => {})
+        }
+        return spendService.record({
+          workspaceId: session.workspaceId,
+          accountId: session.accountId,
+          userId: session.userId,
+          executionId: session.executionId,
+          agentKind: session.agentKind,
+          model: `${session.provider}:${session.model}`,
+          usage: { inputTokens, outputTokens },
+        })
+      }
+
+      // The per-call state the dispatch helpers below thread through; `observe` / `record` stay
+      // bound to this handler's mutable `requestMaxTokens` / `leasedApiKeyId`.
+      const ctx: ProxyCallContext = {
+        session,
+        payload,
+        streaming,
+        promptText,
+        log,
+        gateways,
+        apiKeys,
+        localModelEndpoints,
+        waitUntil,
+        observe,
+        record,
+      }
+
+      // Workers AI (and any binding-reached provider) has no external upstream: run it in-process
+      // via the facade's gateway. Null-provider (e.g. Node can't) surfaces as unavailable.
+      if (session.provider === 'workers-ai') return dispatchInProcess(c, ctx)
+
+      // Resolve the upstream base URL + bearer key (local runner vs the DB-backed key pool), then
+      // forward + meter. A failure is already observed and returned ready-to-send.
+      const target = await resolveUpstreamTarget(c, ctx)
+      if ('failure' in target) return target.failure
+      leasedApiKeyId = target.leasedApiKeyId
+      return relayUpstream(c, ctx, target)
+    },
+  )
 
   return app
 }
