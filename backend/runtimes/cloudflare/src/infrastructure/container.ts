@@ -256,7 +256,7 @@ import {
   buildSubscriptionService,
   buildTestSecretsService,
   buildUserSecretService,
-  buildValidationConfigService,
+  buildFrameConfigServices,
 } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -1992,11 +1992,10 @@ export function buildContainer(
   // vendor-credential controller, so both read the same pool.
   const subscriptions = buildSubscriptionService(env, db, clock)
 
-  // The sensitive per-service test-credential store (sealed) — shared by the test-secrets
-  // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
-  const testSecretsService = buildTestSecretsService(env, db, clock)
-
-  const validationConfigService = buildValidationConfigService(db, clock)
+  // The per-service-FRAME configuration stores (sealed test credentials, pre-PR validation
+  // checks, acceptance criteria) — each shared by its CRUD controller and its engine resolver.
+  const { testSecretsService, validationConfigService, acceptanceCriteriaService } =
+    buildFrameConfigServices(env, db, clock, idGenerator)
 
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
@@ -2142,6 +2141,7 @@ export function buildContainer(
     subscriptions,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,

@@ -324,6 +324,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // dispatch's frame read). Nothing sealed — the commands are operator-authored shell strings
   // that run inside the run's own container — so the plain record rides the machine API.
   validationConfigRepository: {},
+  // Acceptance criteria: the whole surface is allow-listed (the inspector CRUD + triage, the
+  // dispatch's frame read, and the post-review accretion write). Nothing sealed — criteria are
+  // product knowledge a member curates — so the plain records ride the machine API.
+  acceptanceCriterionRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /

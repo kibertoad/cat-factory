@@ -1080,6 +1080,33 @@
       "savedToast": "Denetimler kaydedildi",
       "saveFailed": "Denetimler kaydedilemedi",
       "clearFailed": "Denetimler temizlenemedi"
+    },
+    "acceptanceCriteria": {
+      "title": "Kabul ölçütleri",
+      "sectionHint": "Bu hizmetin ne yapması gerektiği, kalıcı verildiğinde/olduğunda/o zaman ifadeleri olarak tutulur. Onaylanan ölçütler bu hizmet üzerinde çalışan her ajana verilir ve test eden her biri için bir karar bildirir.",
+      "hint": "Bunlar kalıcı davranışlardır, bu görevin işi değil. Sonuçlanmış bir gereksinim incelemesinden önerilen ölçütler, siz onaylayana veya emekliye ayırana kadar burada bekler.",
+      "add": "Ekle",
+      "addedToast": "Kabul ölçütü eklendi",
+      "addFailed": "Kabul ölçütü eklenemedi",
+      "updateFailed": "Kabul ölçütü güncellenemedi",
+      "deleteFailed": "Kabul ölçütü kaldırılamadı",
+      "criterionNoun": "kabul ölçütü",
+      "proposedHeading": "incelenmeyi bekleyen ölçüt yok | incelenmeyi bekleyen 1 ölçüt | incelenmeyi bekleyen {count} ölçüt",
+      "confirm": "Onayla",
+      "retire": "Emekliye ayır",
+      "remove": "Kaldır",
+      "retiredCount": "emekliye ayrılmış ölçüt yok | emekliye ayrılmış 1 ölçüt | emekliye ayrılmış {count} ölçüt",
+      "empty": "Kayıtlı ölçüt yok. Bu hizmet üzerinde çalışan ajanlara, hizmetin hâlihazırda ne yapması gerektiği hakkında hiçbir şey söylenmiyor.",
+      "given": "Verildiğinde {text}. ",
+      "when": "{text} olduğunda, ",
+      "outcome": "o zaman {text}.",
+      "titleLabel": "Başlık",
+      "givenLabel": "Verildiğinde (isteğe bağlı)",
+      "whenLabel": "Olduğunda",
+      "outcomeLabel": "O zaman",
+      "tagsLabel": "Etiketler",
+      "tagsHint": "Virgülle ayrılmış",
+      "save": "Ölçüt ekle"
     }
   },
   "panels": {

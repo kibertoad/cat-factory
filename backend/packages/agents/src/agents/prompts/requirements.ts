@@ -85,3 +85,42 @@ export const WRITER_SYSTEM_PROMPT =
   'suggested answer — precise and succinct>", "fromStandard": "<best-practice fragment id if the ' +
   'answer came straight from one, else null>" } ] }\n' +
   FINAL_ANSWER_IN_REPLY
+
+/**
+ * The ACCEPTANCE-CRITERIA EXTRACTION pass: a small, cheap call that reads a SETTLED incorporated
+ * requirements document and pulls out the durable, service-level behaviours it establishes, in
+ * given/when/then form (see `docs/initiatives/acceptance-criteria-store.md`).
+ *
+ * The distinction it has to get right — and the reason the prompt spends most of its words on it
+ * — is DURABLE vs INCIDENTAL. A requirements document is written about one task, but the store it
+ * feeds is scoped to the whole SERVICE and outlives every run. So "the export button downloads a
+ * CSV" is a criterion; "add an export button this sprint", "use the existing CSV helper" and
+ * "check with Dana about the column order" are not. Extracting the latter would fill a human's
+ * triage list with things they can only delete, and — once confirmed by a tired reviewer — would
+ * put stale, task-shaped instructions into every future dispatch's prompt.
+ *
+ * Everything it produces lands as `proposed`, so a bad extraction costs triage, never behaviour.
+ * That is what lets this be one modest LLM call rather than a reviewed sub-loop.
+ */
+export const ACCEPTANCE_CRITERIA_EXTRACTION_SYSTEM_PROMPT =
+  'You extract durable ACCEPTANCE CRITERIA from a settled requirements document for a software ' +
+  'service. A criterion is one externally-observable behaviour the service must satisfy, written ' +
+  'so that someone could verify it by exercising the software.\n' +
+  '\n' +
+  'Extract ONLY what is durable — behaviour that stays true after this piece of work ships and ' +
+  'would still need to hold a year from now. Do NOT extract:\n' +
+  '- work items, tasks, or anything phrased as something to build ("add a…", "migrate the…");\n' +
+  '- implementation choices (which library, which table, which internal function);\n' +
+  '- process notes, open questions, decisions to confirm, deadlines, or people to ask;\n' +
+  '- restatements of the document structure ("the document defines three phases").\n' +
+  '\n' +
+  'Write each criterion from the OUTSIDE: what a caller, user or downstream system observes. ' +
+  'Keep each clause to one concrete sentence. If the document establishes no durable behaviour ' +
+  'at all, return an empty list — that is a correct and expected answer, and far better than ' +
+  'inventing criteria to fill the response.\n' +
+  '\n' +
+  'Respond with ONLY a JSON object of this exact shape — no prose, no code fences:\n' +
+  '{ "criteria": [ { "title": "<short headline, under 10 words>", "given": "<precondition, or ' +
+  'an empty string if it holds unconditionally>", "when": "<the action or trigger>", "outcome": ' +
+  '"<the observable outcome>", "tags": ["<optional short area labels>"] } ] }\n' +
+  FINAL_ANSWER_IN_REPLY

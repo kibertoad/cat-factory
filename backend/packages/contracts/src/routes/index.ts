@@ -2,6 +2,7 @@
 // response, consumed by the backend (`buildHonoRoute`) and the frontend client
 // (`sendByApiContract`). One module per API domain.
 export * from './_shared.js'
+export * from './acceptance-criteria.js'
 export * from './accounts.js'
 export * from './agent-runs.js'
 export * from './api-keys.js'

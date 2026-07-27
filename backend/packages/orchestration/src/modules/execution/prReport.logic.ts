@@ -5,12 +5,14 @@ import type {
   MergeDecision,
   PipelineStep,
   PrReportCheck,
+  PrReportCriterion,
   PrReportEnvironment,
   PrReportIssue,
   PrVerificationReport,
   TestReport,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
+import type { ResolvedAcceptanceCriterion } from '@cat-factory/contracts'
 import { PR_VERIFICATION_REPORT_VERSION } from '@cat-factory/contracts'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
@@ -72,6 +74,13 @@ export interface PrReportInputs {
   repo?: string | null
   /** The VCS provider that repo lives on (neutral vocabulary — never assumed GitHub). */
   provider?: 'github' | 'gitlab' | null
+  /**
+   * The service's CONFIRMED acceptance criteria, resolved for the run's service frame. Passed in
+   * rather than read here because this module is pure; `[]` when the service has none (or the
+   * store isn't wired), which the composer reports as `absent` WITH a note rather than omitting
+   * the section — see {@link composeAcceptanceCriteria}.
+   */
+  acceptanceCriteria: readonly ResolvedAcceptanceCriterion[]
   /** Deep link into the run's observability panel; null when no public app URL is configured. */
   runUrl: string | null
   /** Epoch ms stamped as the report's `generatedAt`. */
@@ -195,6 +204,78 @@ function composeTests(
     })),
     fixerAttempts: step.test?.attempts ?? 0,
     maxFixerAttempts: step.test?.maxAttempts ?? null,
+  }
+}
+
+/**
+ * The service's acceptance criteria, joined to whatever the run's tester said about each.
+ *
+ * The join is what makes the section worth having: the criteria are the SERVICE's durable
+ * contract (resolved from the store, not from the run), and the verdicts are what THIS run
+ * observed about them. A criterion with no verdict is reported with a null one rather than
+ * dropped — an un-checked requirement is exactly the thing a reviewer needs to see, and
+ * omitting it would make a partially-verified PR look fully verified.
+ *
+ * The two empty cases get DIFFERENT notes, because they are different facts about a pull
+ * request: "this service has never had its behaviour written down" and "it has, but this run
+ * ran no tester to check any of it" call for different reviewer reactions.
+ */
+function composeAcceptanceCriteria(
+  instance: ExecutionInstance,
+  criteria: readonly ResolvedAcceptanceCriterion[],
+  truncations: string[],
+): PrVerificationReport['acceptanceCriteria'] {
+  const empty = { entries: [], met: 0, notMet: 0, unverified: 0 }
+  if (criteria.length === 0) {
+    return {
+      status: 'absent',
+      note: 'This service has no confirmed acceptance criteria — there is no behavioural contract to check this change against.',
+      ...empty,
+    }
+  }
+  const step = findStep(
+    instance,
+    (s) => isTesterKind(s.agentKind),
+    (s) => s.test?.lastReport != null,
+  )
+  const verdicts = new Map(
+    (step?.test?.lastReport?.criteriaVerdicts ?? []).map((verdict) => [
+      verdict.criterionId,
+      verdict,
+    ]),
+  )
+  const entries: PrReportCriterion[] = cap(criteria, 'acceptanceCriteria.entries', truncations).map(
+    (criterion) => {
+      const verdict = verdicts.get(criterion.id)
+      return {
+        id: criterion.id,
+        title: scrubbed(criterion.title),
+        given: scrubbed(criterion.given),
+        when: scrubbed(criterion.when),
+        outcome: scrubbed(criterion.outcome),
+        verdict: verdict?.status ?? null,
+        evidence: scrub(verdict?.evidence),
+      }
+    },
+  )
+  const met = entries.filter((e) => e.verdict === 'met').length
+  const notMet = entries.filter((e) => e.verdict === 'not_met').length
+  if (verdicts.size === 0) {
+    return {
+      status: 'absent',
+      note: `This service has ${criteria.length} confirmed acceptance criteria, but no tester in this run returned a verdict on any of them.`,
+      entries,
+      met,
+      notMet,
+      unverified: entries.length,
+    }
+  }
+  return {
+    status: 'reported',
+    entries,
+    met,
+    notMet,
+    unverified: entries.length - met - notMet,
   }
 }
 
@@ -335,6 +416,7 @@ export function composePrVerificationReport(
     },
     ci: composeCi(instance, truncations),
     tests: composeTests(instance, truncations),
+    acceptanceCriteria: composeAcceptanceCriteria(instance, inputs.acceptanceCriteria, truncations),
     environments: composeEnvironments(instance, truncations),
     merge: composeMerge(instance),
     observability: { runUrl: inputs.runUrl },
@@ -409,6 +491,45 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
       '',
       '**Outstanding concerns:**',
       ...tests.concerns.map((c) => `- \`${c.severity}\` ${c.title}`),
+    )
+  }
+  return [...out, '']
+}
+
+function renderAcceptanceCriteria(criteria: PrVerificationReport['acceptanceCriteria']): string[] {
+  const out = ['### Acceptance criteria', '']
+  // An `absent` section can still carry entries (criteria exist, nobody judged them), so the
+  // note is rendered ALONGSIDE the table rather than instead of it — the reviewer needs both
+  // "here is the contract" and "none of it was checked".
+  if (criteria.note) out.push(`_${criteria.note}_`, '')
+  if (criteria.entries.length === 0) return out
+  out.push(
+    `**Verified:** ${criteria.met} met · ${criteria.notMet} not met · ${criteria.unverified} unverified`,
+    '',
+    '| Criterion | Expected behaviour | Verdict | Evidence |',
+    '| --- | --- | --- | --- |',
+  )
+  for (const entry of criteria.entries) {
+    const verdict =
+      entry.verdict === 'met'
+        ? '✅ met'
+        : entry.verdict === 'not_met'
+          ? '❌ not met'
+          : entry.verdict === 'not_covered'
+            ? '➖ not covered'
+            : 'not reported'
+    // The given/when/then collapses into ONE cell: three columns of prose makes the table
+    // unreadable at PR width, and the machine-readable JSON block below keeps the clauses split
+    // for anything that wants them structured.
+    const behaviour = [
+      entry.given ? `Given ${entry.given}` : '',
+      `When ${entry.when}`,
+      `Then ${entry.outcome}`,
+    ]
+      .filter(Boolean)
+      .join('; ')
+    out.push(
+      `| ${hostMarkdown.cell(entry.title)} | ${hostMarkdown.cell(behaviour)} | ${verdict} | ${hostMarkdown.cell(entry.evidence ?? '')} |`,
     )
   }
   return [...out, '']
@@ -506,6 +627,7 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     ...renderRun(report.run, report.observability.runUrl),
     ...renderCi(report.ci),
     ...renderTests(report.tests),
+    ...renderAcceptanceCriteria(report.acceptanceCriteria),
     ...renderEnvironments(report.environments),
     ...renderMerge(report.merge),
     ...renderTruncations(report.truncations),

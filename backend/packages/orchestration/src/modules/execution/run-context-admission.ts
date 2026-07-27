@@ -38,6 +38,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'environmentProvisioning'
   | 'resolveTestSecretRefs'
   | 'resolveValidationChecks'
+  | 'resolveAcceptanceCriteria'
   | 'fragmentResolver'
   | 'skillResolver'
   | 'spendService'
@@ -70,6 +71,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     environmentProvisioning: deps.environmentProvisioning,
     resolveTestSecretRefs: deps.resolveTestSecretRefs,
     resolveValidationChecks: deps.resolveValidationChecks,
+    resolveAcceptanceCriteria: deps.resolveAcceptanceCriteria,
     fragmentResolver: deps.fragmentResolver,
     skillResolver: deps.skillResolver,
   })

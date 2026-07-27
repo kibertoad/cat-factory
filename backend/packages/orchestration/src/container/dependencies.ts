@@ -12,7 +12,12 @@ import type {
   ResolveFragmentInstallationId,
   ResolveSkillInstallationId,
 } from '@cat-factory/agents'
-import type { OpenRouterModelMeta, ResolvedValidationChecks } from '@cat-factory/contracts'
+import type {
+  AcceptanceCriterionDraft,
+  OpenRouterModelMeta,
+  ResolvedAcceptanceCriteria,
+  ResolvedValidationChecks,
+} from '@cat-factory/contracts'
 import type {
   AccountSettingsService,
   ComposeRuntime,
@@ -864,6 +869,36 @@ export interface CoreDependencies {
     workspaceId: string,
     frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
+  /**
+   * Optional: resolve the CONFIRMED acceptance criteria for a run's SERVICE FRAME — the durable
+   * given/when/then behaviour statements the service has accumulated (see
+   * `docs/initiatives/acceptance-criteria-store.md`). Folded onto the agent run context by the
+   * context builder and rendered into the spec-writer / coder / reviewer / tester prompts, with
+   * each criterion's stable id so the tester can return a per-criterion verdict. Absent (or
+   * resolving to `null`) ⇒ no criteria section, so every prompt is byte-for-byte what it was
+   * before this feature existed.
+   *
+   * Keyed by the frame, not the run block, for the same reason as
+   * {@link resolveValidationChecks}: the ancestry walk happens exactly once per dispatch and is
+   * threaded into every frame-scoped resolver.
+   */
+  resolveAcceptanceCriteria?: (
+    workspaceId: string,
+    frameId: string,
+  ) => Promise<ResolvedAcceptanceCriteria | null>
+  /**
+   * Optional: persist the acceptance criteria the post-review ACCRETION pass extracted from a
+   * settled requirements review, as `proposed` candidates against the run's service frame.
+   * Wired from the facade's `AcceptanceCriteriaService`; absent ⇒ no accretion at all (the
+   * extraction pass is skipped before any model call), which is what keeps a deployment that
+   * wired no criterion store on exactly its old behaviour.
+   */
+  recordDerivedAcceptanceCriteria?: (
+    workspaceId: string,
+    frameId: string,
+    sourceReviewId: string,
+    drafts: readonly AcceptanceCriterionDraft[],
+  ) => Promise<unknown>
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher
   /** Stores a workspace's incident-enrichment connection (sealed PagerDuty + incident.io). */

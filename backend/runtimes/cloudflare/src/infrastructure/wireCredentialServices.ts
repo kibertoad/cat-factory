@@ -2,6 +2,7 @@ import type {
   Clock,
   GitHubRepo,
   GroupCacheHandle,
+  IdGenerator,
   ResolveUserGitHubToken,
 } from '@cat-factory/kernel'
 import {
@@ -14,6 +15,7 @@ import {
   TEST_SECRETS_CIPHER_INFO,
   TestSecretsService,
   UserSecretService,
+  AcceptanceCriteriaService,
   ValidationConfigService,
   type UserSecretKindRegistry,
   usdRateForSpendCurrency,
@@ -26,6 +28,7 @@ import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
+import { D1AcceptanceCriterionRepository } from './repositories/D1AcceptanceCriterionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
 import { D1PublicApiKeyRepository } from './repositories/D1PublicApiKeyRepository'
@@ -262,6 +265,14 @@ export function buildTestSecretsService(
 }
 
 /**
+ * Build the per-service ACCEPTANCE-CRITERIA store — the durable given/when/then behaviour
+ * statements a service accumulates. Backs the criteria CRUD controller, the engine's dispatch
+ * resolution (the CONFIRMED criteria ride the prompts) and the post-requirements-review
+ * accretion write. Like the validation-check store beside it this needs no encryption key —
+ * criteria are product knowledge, not secrets — so it is always wired. Stateless, so building a
+ * fresh instance per call site is safe.
+ */
+/**
  * Build the per-service PRE-PR VALIDATION CHECK store — the commands the executor-harness runs
  * against the checkout before opening a PR. Backs the validation-check CRUD controller and the
  * engine's dispatch resolution (the commands ride the coding job body). Unlike the sealed stores
@@ -269,6 +280,19 @@ export function buildTestSecretsService(
  * run inside the run's own container, so there is nothing to seal and it is always wired.
  * Stateless, so building a fresh instance per call site is safe.
  */
+export function buildAcceptanceCriteriaService(
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): AcceptanceCriteriaService {
+  return new AcceptanceCriteriaService({
+    acceptanceCriterionRepository: new D1AcceptanceCriterionRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    idGenerator,
+    clock,
+  })
+}
+
 export function buildValidationConfigService(
   db: D1Database,
   clock: Clock,
@@ -278,4 +302,31 @@ export function buildValidationConfigService(
     blockRepository: new D1BlockRepository({ db }),
     clock,
   })
+}
+
+/**
+ * The three PER-SERVICE-FRAME configuration stores, built together: the sealed test credentials,
+ * the pre-PR validation checks, and the acceptance criteria. They form one family — each is keyed
+ * by `(workspace, service-frame block)`, each is resolved up the frame chain at dispatch, and each
+ * is surfaced on both the container (for its CRUD controller) and the engine (for its resolver) —
+ * so the composition root takes them in one call rather than three loose lines that drift apart.
+ *
+ * Only the test-credential store is sealed, and it is therefore the only one that can come back
+ * `undefined` (no `ENCRYPTION_KEY`); the other two hold no secret material and are always wired.
+ */
+export function buildFrameConfigServices(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): {
+  testSecretsService: TestSecretsService | undefined
+  validationConfigService: ValidationConfigService
+  acceptanceCriteriaService: AcceptanceCriteriaService
+} {
+  return {
+    testSecretsService: buildTestSecretsService(env, db, clock),
+    validationConfigService: buildValidationConfigService(db, clock),
+    acceptanceCriteriaService: buildAcceptanceCriteriaService(db, clock, idGenerator),
+  }
 }

@@ -1,5 +1,6 @@
 import {
   ACCOUNT_SETTINGS_CIPHER_INFO,
+  AcceptanceCriteriaService,
   AccountSettingsService,
   RegistrySubscriptionQuotaProvider,
   TEST_SECRETS_CIPHER_INFO,
@@ -7,7 +8,13 @@ import {
   ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
-import type { AppCaches, Clock, IdGenerator, WebSearchAvailability } from '@cat-factory/kernel'
+import type {
+  AcceptanceCriterionDraft,
+  AppCaches,
+  Clock,
+  IdGenerator,
+  WebSearchAvailability,
+} from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
   LlmObservabilityService,
@@ -182,6 +189,27 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
   const resolveValidationChecks = (workspaceId: string, frameId: string) =>
     validationConfigService.resolveForFrame(workspaceId, frameId)
 
+  // Acceptance criteria: the service backs the CRUD/triage controller, the engine's dispatch
+  // resolution (`resolveAcceptanceCriteria`, which folds the service frame's CONFIRMED criteria
+  // onto the agent run context so the prompts state what the service must already do) and the
+  // post-requirements-review accretion write. Like the validation checks above, criteria are
+  // product knowledge rather than secrets, so this needs no ENCRYPTION_KEY and is always wired.
+  // See docs/initiatives/acceptance-criteria-store.md.
+  const acceptanceCriteriaService = new AcceptanceCriteriaService({
+    acceptanceCriterionRepository: repos.acceptanceCriterionRepository,
+    blockRepository: repos.blockRepository,
+    idGenerator,
+    clock,
+  })
+  const resolveAcceptanceCriteria = (workspaceId: string, frameId: string) =>
+    acceptanceCriteriaService.resolveForFrame(workspaceId, frameId)
+  const recordDerivedAcceptanceCriteria = (
+    workspaceId: string,
+    frameId: string,
+    reviewId: string,
+    drafts: readonly AcceptanceCriterionDraft[],
+  ) => acceptanceCriteriaService.recordDerived(workspaceId, frameId, reviewId, drafts)
+
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real reads land in B2). The
   // registry of REAL vendor adapters is empty today, so every vendor reports modeled.
@@ -205,6 +233,9 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     resolveTestSecretRefs,
     validationConfigService,
     resolveValidationChecks,
+    acceptanceCriteriaService,
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
     subscriptionQuotaProvider,
   }
 }

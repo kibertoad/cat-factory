@@ -69,6 +69,10 @@ export interface GateWindowControllerDeps {
   issueWriteback: ExecutionServiceDependencies['issueWriteback']
   /** Facade logger for that best-effort echo. */
   logger: ExecutionServiceDependencies['logger']
+  /** The requirements reviewer — also the source of the post-settlement criteria extraction. */
+  requirementReviewService: ExecutionServiceDependencies['requirementReviewService']
+  /** Persists the extracted criteria; absent ⇒ no criterion store wired, so no accretion. */
+  recordDerivedAcceptanceCriteria: ExecutionServiceDependencies['recordDerivedAcceptanceCriteria']
 }
 
 /**
@@ -97,6 +101,8 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     forkChatService,
     issueWriteback,
     logger,
+    requirementReviewService,
+    recordDerivedAcceptanceCriteria,
   } = deps
   const testerController = new TesterController({
     blockRepository,
@@ -177,6 +183,25 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     stepGraph,
     clockNow,
   })
+  // The acceptance-criteria ACCRETION closure, composed from the three pieces that live in
+  // different layers: the reviewer (which owns the settled document AND the model resolution
+  // that reads it), the frame walk (criteria are service-scoped, the review is task-scoped), and
+  // the facade's criterion store. Assembled here rather than inside the gate controller so the
+  // controller keeps ONE narrow optional dep instead of three, and so the whole feature collapses
+  // to `undefined` — no closure, no reads, no model call — when either end is unwired.
+  const accrueAcceptanceCriteria =
+    requirementReviewService && recordDerivedAcceptanceCriteria
+      ? async (ws: string, blockId: string): Promise<void> => {
+          const frame = await contextBuilder.resolveServiceFrame(ws, blockId)
+          // A task with no owning service frame has nowhere service-scoped to accrete to.
+          if (!frame) return
+          const review = await requirementReviewService.getForBlock(ws, blockId)
+          if (!review) return
+          const drafts = await requirementReviewService.extractAcceptanceCriteria(ws, blockId)
+          if (drafts.length === 0) return
+          await recordDerivedAcceptanceCriteria(ws, frame.id, review.id, drafts)
+        }
+      : undefined
   const reviewGate = new ReviewGateController({
     blockRepository,
     executionRepository,
@@ -187,6 +212,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     dispatchIterationCap,
     ...(issueWriteback ? { issueWriteback } : {}),
     ...(logger ? { logger } : {}),
+    ...(accrueAcceptanceCriteria ? { accrueAcceptanceCriteria } : {}),
   })
   const forkDecisionController = new ForkDecisionController({
     blockRepository,
@@ -324,5 +350,12 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     architectureBrainstormKind,
     initiativeInterviewController,
     docInterviewController,
+    // The dispatch list the `interview-gate` trait routes through, keyed on each controller's
+    // own `agentKind` (a new interviewer wires its controller here — no engine branch). Assembled
+    // here rather than at the call site because THIS function decides which of the two exist:
+    // filtering them back out of an optional pair is bookkeeping the engine shouldn't repeat.
+    interviewControllers: [initiativeInterviewController, docInterviewController].filter(
+      (c): c is InitiativeInterviewController | DocInterviewController => !!c,
+    ),
   }
 }

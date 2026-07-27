@@ -629,6 +629,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     environmentProvisioning: environments?.provisioningService,
     resolveTestSecretRefs: dependencies.resolveTestSecretRefs,
     resolveValidationChecks: dependencies.resolveValidationChecks,
+    resolveAcceptanceCriteria: dependencies.resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria: dependencies.recordDerivedAcceptanceCriteria,
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,

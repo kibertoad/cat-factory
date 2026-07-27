@@ -511,6 +511,10 @@ export {
   type ValidationConfigServiceDependencies,
 } from './modules/validation/ValidationConfigService.js'
 export {
+  AcceptanceCriteriaService,
+  type AcceptanceCriteriaServiceDependencies,
+} from './modules/acceptance/AcceptanceCriteriaService.js'
+export {
   LocalSettingsService,
   type LocalSettingsServiceDependencies,
 } from './modules/localSettings/LocalSettingsService.js'

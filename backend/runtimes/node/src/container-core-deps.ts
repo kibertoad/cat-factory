@@ -129,6 +129,8 @@ export interface NodeCoreDepsBundle {
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
   resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
+  resolveAcceptanceCriteria: NodeRunServicesResult['resolveAcceptanceCriteria']
+  recordDerivedAcceptanceCriteria: NodeRunServicesResult['recordDerivedAcceptanceCriteria']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -183,6 +185,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     searchQueryObservability,
     resolveTestSecretRefs,
     resolveValidationChecks,
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
     tasks,
     fileGitHubIssue,
     releaseHealthDeps,
@@ -199,6 +203,12 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
     ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
     resolveValidationChecks,
+    // Fold the service frame's CONFIRMED acceptance criteria into the spec-writer / coder /
+    // reviewer / tester prompts, and persist the ones the post-review accretion pass derives.
+    // Always wired (criteria are product knowledge, not secrets); a service with none resolves
+    // `null`, which is byte-for-byte the pre-feature prompt.
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

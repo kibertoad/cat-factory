@@ -1415,6 +1415,62 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
     the preset library.
 
+## Acceptance-criteria store flow (per-service behaviour contract → prompts → verdicts → PR report)
+
+A service frame accumulates **acceptance criteria** — durable given/when/outcome statements of
+required behaviour — so the knowledge a requirements review produces outlives the task that
+produced it. Full design + the deferrals:
+[`docs/initiatives/acceptance-criteria-store.md`](./docs/initiatives/acceptance-criteria-store.md).
+
+- **Persistence is the frame-scoped-config shape, with one departure**: `acceptance_criteria`
+  (D1 ⇄ Drizzle, mirrored) → `AcceptanceCriterionRepository` (kernel) → `AcceptanceCriteriaService`
+  (integrations; frame-only CRUD + `resolveForFrame` + `recordDerived`) → `AcceptanceCriteriaController`
+  (`GET|POST /workspaces/:ws/services/:blockId/acceptance-criteria`, `PATCH|DELETE
+…/acceptance-criteria/:criterionId`) → the `ServiceAcceptanceCriteria.vue` inspector panel. The
+  departure from `validation_configs` / `release_health_configs` is **one ROW per criterion, not one
+  JSON blob per frame**: each carries its own lifecycle and a stable id the tester verdicts and the PR
+  report join on, so `listByFrameBlocks` (a chunked `IN`) is the primary read.
+- **The controller is deliberately NOT admin-gated.** Every neighbouring frame-scoped controller
+  mounts `requireWorkspacePermission(...)` because it edits operator CONFIGURATION. Criteria are
+  product knowledge — the class of thing a member writes — so the RBAC gate's viewer WRITE FLOOR is
+  the whole authorization story. Do not "fix" this by adding a permission mount.
+- **Only `confirmed` criteria leave the store.** `resolveForFrame` filters on status, so a
+  `proposed` one (a model extraction nobody has read) or a `retired` one can never steer an agent.
+  This is the load-bearing invariant of the whole feature — a hallucinated "requirement" in the
+  coder's prompt is strictly worse than having no store — and the conformance suite pins it on both
+  runtimes.
+- **Accretion is a HOOK on review settlement, not a pipeline step** (the PR-report shape, and for
+  the same reasons: a step would need inserting into all fifteen built-in pipelines, would never
+  exist in a deployment-authored one, and would be skipped by exactly the runs whose requirements
+  were hardest-won). Every path where a review reaches `incorporated` funnels through
+  `ReviewGateController.settled`, which calls the optional `accrueAcceptanceCriteria` closure →
+  `RequirementReviewService.extractAcceptanceCriteria` (one cheap LLM call over the incorporated
+  document; it lives on that service because it already owns both the document AND the model
+  resolution) → `recordDerived`, which files the drafts as `proposed`. It rides the **requirements**
+  subject only (`ReviewKind.accretesCriteria`) — a clarity review settles a bug report, whose
+  "behaviours" are symptoms of a defect. Best-effort and behind the settlement throughout: no model
+  wired, a prose answer, a truncated response or a store outage all leave the run untouched.
+- **Consumption threads the ONE frame walk.** `AgentContextBuilder.buildContext` resolves the
+  service frame in its first wave; `acceptanceCriteriaFor` joins that wave beside
+  `validationChecksFor` rather than walking again. The result lands on
+  `AgentRunContext.acceptanceCriteria` and renders through `acceptanceCriteriaSection`
+  (`@cat-factory/agents`) into every standard phase AND the generic prompt path (so spec-writer and
+  the testers get it). The section says explicitly that these are STANDING behaviours, not this
+  task's work — an agent handed a list of behaviours otherwise assumes it was asked to build them.
+- **The tester rules on them**: `criteriaVerdictsSection` (tester kinds only, via
+  `isTesterReportingKind` — NOT the fixer, which returns no report) asks for a `criteriaVerdicts`
+  array keyed by criterion id, contracted as `TestReport.criteriaVerdicts`. `not_covered` is a
+  first-class verdict distinct from `not_met`: "we didn't check" and "it's broken" must never look
+  the same, which is the entire point of keeping a list.
+- **The PR report renders the join.** `prReport.logic.ts` composes an `acceptanceCriteria` section
+  from the resolved criteria + the tester's verdicts, under the usual discipline: `hostMarkdown.cell`
+  on every hole, `cap()` with a `truncations` note, and `absent`-WITH-a-note for the two empty cases
+  — which get DIFFERENT notes, because "this service has no recorded contract" and "it has one but
+  nothing checked it" are different facts about a pull request. A criterion with no verdict is listed
+  with a null one, never dropped.
+- **Unconfigured ⇒ byte-for-byte the old behaviour**: no confirmed criteria ⇒ no context field ⇒ no
+  prompt section ⇒ the report's absent note. The conformance suite asserts that half explicitly.
+
 ## PR verification report (engine-maintained evidence on the run's PR)
 
 The engine — NOT the agent — keeps a **verification report** on every run's pull request:

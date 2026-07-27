@@ -1137,6 +1137,33 @@
       "savedToast": "Validation checks saved",
       "saveFailed": "Could not save the validation checks",
       "clearFailed": "Could not clear the validation checks"
+    },
+    "acceptanceCriteria": {
+      "title": "Acceptance criteria",
+      "sectionHint": "What this service must do, kept as durable given/when/outcome statements. Confirmed criteria are given to every agent that works on this service, and the tester reports a verdict on each one.",
+      "hint": "These are standing behaviours, not this task's work. Criteria proposed from a settled requirements review wait here until you confirm or retire them.",
+      "add": "Add",
+      "addedToast": "Acceptance criterion added",
+      "addFailed": "Could not add the acceptance criterion",
+      "updateFailed": "Could not update the acceptance criterion",
+      "deleteFailed": "Could not remove the acceptance criterion",
+      "criterionNoun": "acceptance criterion",
+      "proposedHeading": "no criteria awaiting review | 1 criterion awaiting review | {count} criteria awaiting review",
+      "confirm": "Confirm",
+      "retire": "Retire",
+      "remove": "Remove",
+      "retiredCount": "no retired criteria | 1 retired criterion | {count} retired criteria",
+      "empty": "No criteria recorded. Agents working on this service are told nothing about what it must already do.",
+      "given": "Given {text}. ",
+      "when": "When {text}, ",
+      "outcome": "then {text}.",
+      "titleLabel": "Headline",
+      "givenLabel": "Given (optional)",
+      "whenLabel": "When",
+      "outcomeLabel": "Then",
+      "tagsLabel": "Tags",
+      "tagsHint": "Comma separated",
+      "save": "Add criterion"
     }
   },
   "panels": {

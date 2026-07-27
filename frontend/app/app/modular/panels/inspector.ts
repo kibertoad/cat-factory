@@ -29,6 +29,7 @@ import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import ServiceValidationConfig from '~/components/panels/inspector/ServiceValidationConfig.vue'
+import ServiceAcceptanceCriteria from '~/components/panels/inspector/ServiceAcceptanceCriteria.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
 import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
 
@@ -82,6 +83,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
   'service-fragments': ServiceFragments,
   'service-release-health': ServiceReleaseHealthConfig,
   'service-validation-checks': ServiceValidationConfig,
+  'service-acceptance-criteria': ServiceAcceptanceCriteria,
   'epic-children': EpicChildren,
   'initiative-inspector': InitiativeInspector,
 }

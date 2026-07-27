@@ -1383,6 +1383,33 @@
       "savedToast": "Prüfungen gespeichert",
       "saveFailed": "Prüfungen konnten nicht gespeichert werden",
       "clearFailed": "Prüfungen konnten nicht geleert werden"
+    },
+    "acceptanceCriteria": {
+      "title": "Abnahmekriterien",
+      "sectionHint": "Was dieser Dienst leisten muss, festgehalten als dauerhafte Gegeben/Wenn/Dann-Aussagen. Bestätigte Kriterien erhält jeder Agent, der an diesem Dienst arbeitet, und der Tester meldet zu jedem ein Urteil.",
+      "hint": "Dies sind dauerhafte Verhaltensweisen, nicht die Arbeit dieser Aufgabe. Kriterien, die aus einer abgeschlossenen Anforderungsprüfung vorgeschlagen wurden, warten hier, bis Sie sie bestätigen oder ausmustern.",
+      "add": "Hinzufügen",
+      "addedToast": "Abnahmekriterium hinzugefügt",
+      "addFailed": "Abnahmekriterium konnte nicht hinzugefügt werden",
+      "updateFailed": "Abnahmekriterium konnte nicht aktualisiert werden",
+      "deleteFailed": "Abnahmekriterium konnte nicht entfernt werden",
+      "criterionNoun": "Abnahmekriterium",
+      "proposedHeading": "keine Kriterien zur Prüfung | 1 Kriterium zur Prüfung | {count} Kriterien zur Prüfung",
+      "confirm": "Bestätigen",
+      "retire": "Ausmustern",
+      "remove": "Entfernen",
+      "retiredCount": "keine ausgemusterten Kriterien | 1 ausgemustertes Kriterium | {count} ausgemusterte Kriterien",
+      "empty": "Keine Kriterien erfasst. Agenten, die an diesem Dienst arbeiten, erfahren nichts darüber, was er bereits leisten muss.",
+      "given": "Gegeben {text}. ",
+      "when": "Wenn {text}, ",
+      "outcome": "dann {text}.",
+      "titleLabel": "Überschrift",
+      "givenLabel": "Gegeben (optional)",
+      "whenLabel": "Wenn",
+      "outcomeLabel": "Dann",
+      "tagsLabel": "Schlagwörter",
+      "tagsHint": "Durch Kommas getrennt",
+      "save": "Kriterium hinzufügen"
     }
   },
   "panels": {

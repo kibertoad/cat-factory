@@ -133,6 +133,30 @@ export interface AgentRunContext {
     maxAttempts: number
   }
   /**
+   * The service's CONFIRMED acceptance criteria, resolved for this run's service frame (the
+   * same frame-chain walk as {@link validationChecks}). These are the durable given/when/outcome
+   * behaviour statements the service has accumulated — the answer to "what is this supposed to
+   * do" that used to die with each task's requirements review (see
+   * `docs/initiatives/acceptance-criteria-store.md`).
+   *
+   * Rendered into the spec-writer / coder / reviewer / tester prompts, and carried with their
+   * stable `id`s so the tester can return a per-criterion verdict the PR report joins on.
+   * `proposed` criteria are deliberately EXCLUDED — they came from a model extraction pass no
+   * human has read yet, and a hallucinated "requirement" steering the coder would be worse than
+   * having no store. Absent when the service has no confirmed criteria ⇒ every prompt is
+   * byte-for-byte what it was before this feature existed.
+   */
+  acceptanceCriteria?: {
+    criteria: {
+      id: string
+      title: string
+      given: string
+      when: string
+      outcome: string
+      tags: string[]
+    }[]
+  }
+  /**
    * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
    * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
    * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)

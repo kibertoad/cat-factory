@@ -1383,6 +1383,33 @@
       "savedToast": "Controlli salvati",
       "saveFailed": "Impossibile salvare i controlli",
       "clearFailed": "Impossibile svuotare i controlli"
+    },
+    "acceptanceCriteria": {
+      "title": "Criteri di accettazione",
+      "sectionHint": "Ciò che questo servizio deve fare, conservato come enunciati duraturi dato/quando/allora. I criteri confermati vengono forniti a ogni agente che lavora su questo servizio, e il tester riporta un verdetto su ciascuno.",
+      "hint": "Sono comportamenti permanenti, non il lavoro di questa attività. I criteri proposti da una revisione dei requisiti conclusa restano qui finché non li confermi o li ritiri.",
+      "add": "Aggiungi",
+      "addedToast": "Criterio di accettazione aggiunto",
+      "addFailed": "Impossibile aggiungere il criterio di accettazione",
+      "updateFailed": "Impossibile aggiornare il criterio di accettazione",
+      "deleteFailed": "Impossibile rimuovere il criterio di accettazione",
+      "criterionNoun": "criterio di accettazione",
+      "proposedHeading": "nessun criterio in attesa di revisione | 1 criterio in attesa di revisione | {count} criteri in attesa di revisione",
+      "confirm": "Conferma",
+      "retire": "Ritira",
+      "remove": "Rimuovi",
+      "retiredCount": "nessun criterio ritirato | 1 criterio ritirato | {count} criteri ritirati",
+      "empty": "Nessun criterio registrato. Gli agenti che lavorano su questo servizio non sanno nulla di ciò che deve già fare.",
+      "given": "Dato {text}. ",
+      "when": "Quando {text}, ",
+      "outcome": "allora {text}.",
+      "titleLabel": "Titolo",
+      "givenLabel": "Dato (facoltativo)",
+      "whenLabel": "Quando",
+      "outcomeLabel": "Allora",
+      "tagsLabel": "Tag",
+      "tagsHint": "Separati da virgole",
+      "save": "Aggiungi criterio"
     }
   },
   "panels": {
