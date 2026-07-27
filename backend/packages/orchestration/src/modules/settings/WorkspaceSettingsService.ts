@@ -82,6 +82,8 @@ export class WorkspaceSettingsService {
       taskLimitPerType:
         patch.taskLimitPerType !== undefined ? patch.taskLimitPerType : current.taskLimitPerType,
       storeAgentContext: patch.storeAgentContext ?? current.storeAgentContext,
+      publishPrVerificationReport:
+        patch.publishPrVerificationReport ?? current.publishPrVerificationReport,
       artifactRetentionDays: patch.artifactRetentionDays ?? current.artifactRetentionDays,
       kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
       delegateAgentsToRunnerPool:

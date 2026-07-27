@@ -29,7 +29,6 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type {} from '@cat-factory/kernel'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -108,8 +107,6 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import type {} from '@cat-factory/kernel'
-import type {} from '@cat-factory/integrations'
 import { dependenciesMet, descendantIds, serviceOf } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
@@ -121,15 +118,16 @@ import {
   planResumedSteps,
   planRestartFromStep,
 } from './retry.logic.js'
+import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
+import { PrVerificationReportController } from './PrVerificationReportController.js'
 
-import type {
+// The engine's injected-collaborator contract lives next door (a ~350-line declaration block
+// that was crowding this file against its size budget); re-exported here so every existing
+// importer — including the package index — keeps resolving it from `ExecutionService.js`.
+export type {
   BlueprintReconciler,
   ExecutionServiceDependencies,
 } from './ExecutionServiceDependencies.js'
-
-// The engine's construction seam (and the one port shape declared purely for it) lives in its
-// own module — it is ~360 lines of pure declaration. Re-exported here so no import site changes.
-export type { BlueprintReconciler, ExecutionServiceDependencies }
 
 /**
  * The effective risk/merge policy for one run, as {@link ExecutionService.resolveRiskPolicy}
@@ -316,6 +314,10 @@ export class ExecutionService {
     stepResolverRegistry,
     providerRegistry,
     initiativePresetRegistry,
+    prVerificationReportPublisher,
+    workspaceSettingsRepository,
+    appBaseUrl,
+    logger,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -498,6 +500,18 @@ export class ExecutionService {
         this.initiativeInterviewController,
         this.docInterviewController,
       ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
+      // Keeps the run's verification report on its PR as each step settles (a hook, not a
+      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
+      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
+      prVerificationReport: new PrVerificationReportController({
+        blockRepository,
+        clock,
+        publisher: prVerificationReportPublisher,
+        taskRepository,
+        workspaceSettingsRepository,
+        appBaseUrl,
+        logger,
+      }),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,

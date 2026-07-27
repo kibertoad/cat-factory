@@ -760,6 +760,11 @@
         "body": "Memorizza il contesto completo fornito a ogni agente: i prompt composti, i frammenti di best practice inclusi e il contenuto completo dei file iniettati nel suo container, cosicche possa essere ispezionato in seguito nella vista di osservabilita. I corpi vengono conservati per la stessa finestra della telemetria LLM per chiamata. Disattiva per interrompere la memorizzazione (gli snapshot esistenti vengono eliminati dalla retention).",
         "toggle": "Memorizza il contesto completo dell'agente"
       },
+      "prReport": {
+        "heading": "Rapporto di verifica sulla pull request",
+        "body": "Mantiene un rapporto di verifica sulla pull request di ogni esecuzione: il verdetto della CI, il rapporto del tester, il ciclo di vita dell'ambiente effimero e la valutazione di merge, come fatti rilevati e non come affermazioni dell'agente. Le credenziali vengono ripulite prima di ogni scrittura. Disattiva per smettere di pubblicarlo; un rapporto già presente resta invariato.",
+        "toggle": "Pubblica il rapporto di verifica sulle pull request"
+      },
       "retention": {
         "heading": "Retention degli screenshot",
         "body": "Per quanto tempo conservare gli screenshot catturati dal tester UI e le immagini di design di riferimento con cui vengono confrontati (il gate di conferma visiva). Un job di pulizia giornaliero elimina sia i byte delle immagini sia i loro metadati una volta superata questa finestra.",

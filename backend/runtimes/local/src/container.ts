@@ -312,6 +312,11 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           personalSubscriptionRepository: mothership.credentialStore.personalSubscriptionRepository,
           subscriptionActivationRepository:
             mothership.credentialStore.subscriptionActivationRepository,
+          // The org's EXTERNAL notification transports (Slack) live on the mothership — their
+          // credentials are sealed with ITS key, so this node can't deliver them. Compose the
+          // delegating channel alongside the local in-app push (which already relays upstream),
+          // so a notification a local run raises still reaches the team's Slack.
+          notificationChannels: [mothership.notificationChannel],
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

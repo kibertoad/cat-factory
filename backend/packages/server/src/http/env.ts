@@ -1,6 +1,7 @@
 import type {
   AgentRunRepository,
   ExecutionRepository,
+  NotificationChannel,
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
@@ -293,6 +294,18 @@ export interface ServerContainer extends Core {
    * the OUTBOUND half of "real-time both directions"; see docs/initiatives/mothership-mode.md.
    */
   machineEventRelay?: MachineEventRelay
+  /**
+   * Mothership-side notification DELIVERY for a machine-authed mothership-mode node
+   * (`POST /internal/notifications/deliver`): the node persists the notification row remotely but
+   * holds none of the org's external delivery credentials (the Slack bot token is sealed with the
+   * mothership's key, which never reaches a laptop), so the mothership re-reads the row and
+   * delivers it through THIS channel. Each facade wires it with its EXTERNAL channels only — the
+   * in-app push for a laptop-raised notification already rides the real-time upstream relay, so
+   * routing it here too would double-push the same frame. Wired by a facade acting as a mothership
+   * that has at least one external channel (both Node + Cloudflare — the symmetric change);
+   * absent ⇒ the endpoint 503s. See docs/initiatives/mothership-mode.md.
+   */
+  machineNotificationDelivery?: NotificationChannel
   /**
    * Local-mode mothership login seam: exchange a mothership SESSION token for a machine token
    * and cache it locally, so the node can talk to the mothership without a pasted static token.

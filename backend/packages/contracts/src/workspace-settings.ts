@@ -84,6 +84,19 @@ export const workspaceSettingsSchema = v.object({
    */
   storeAgentContext: v.boolean(),
   /**
+   * Whether the engine maintains its verification report on each run's pull request. On by
+   * default.
+   *
+   * A pull request is a more exposed surface than the telemetry store — it can be a public
+   * repo, and its description is visible to everyone who can see the PR. The report carries
+   * only captured run facts and every free-text field is scrubbed of credentials before it is
+   * written, but a workspace that would rather keep its CI verdicts, test outcomes and
+   * environment URLs off the PR can turn it off here. Off ⇒ nothing is written and any region
+   * already on a PR is left exactly as it is (the engine never deletes what it wrote — a
+   * report that vanished would read as "the run had nothing to say").
+   */
+  publishPrVerificationReport: v.boolean(),
+  /**
    * How many days captured UI screenshots + uploaded reference design images (the
    * binary artifacts backing the visual-confirmation gate) are retained before the
    * cleanup sweep deletes them — bytes and metadata. Default 14. Bounded 1–3650.
@@ -149,6 +162,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   taskLimitShared: v.optional(v.nullable(limitSchema)),
   taskLimitPerType: v.optional(v.nullable(taskLimitPerTypeSchema)),
   storeAgentContext: v.optional(v.boolean()),
+  publishPrVerificationReport: v.optional(v.boolean()),
   artifactRetentionDays: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
   ),

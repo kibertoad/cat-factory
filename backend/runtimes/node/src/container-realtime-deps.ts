@@ -110,6 +110,13 @@ export interface NodeRealtimeDepsInput {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   agentKindRegistry: AgentKindRegistry
+  /**
+   * Extra delivery channels contributed by a downstream facade, composed alongside the ones built
+   * here. Local mode in mothership mode contributes its `RemoteNotificationChannel` (the org's
+   * external transports live on the mothership), so a laptop-raised notification still reaches
+   * the team's Slack. Empty/absent on a stock Node deployment.
+   */
+  extraNotificationChannels?: NotificationChannel[]
 }
 
 /**
@@ -129,6 +136,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     modelProviderResolver,
     resolveWorkspaceModelDefault,
     agentKindRegistry,
+    extraNotificationChannels,
   } = input
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -165,16 +173,30 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
       }))
     : standardAgentExecutor
 
+  // EXTERNAL channels = everything that is not the in-app push. They are what a mothership
+  // delivers on behalf of a mothership-mode node (`machineNotificationDelivery`), because they are
+  // the ones whose credentials never leave the mothership; the in-app frame for a laptop-raised
+  // notification already rides the real-time upstream relay, so it must NOT be delivered twice.
+  const externalNotificationChannels: NotificationChannel[] = [
+    ...(slackDeps.notificationChannel ? [slackDeps.notificationChannel] : []),
+    ...(extraNotificationChannels ?? []),
+  ]
   const notificationChannels: NotificationChannel[] = []
   if (executionEventPublisher)
     notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
-  if (slackDeps.notificationChannel) notificationChannels.push(slackDeps.notificationChannel)
-  const notificationChannel =
-    notificationChannels.length === 0
-      ? undefined
-      : notificationChannels.length === 1
-        ? notificationChannels[0]
-        : new CompositeNotificationChannel(notificationChannels)
+  notificationChannels.push(...externalNotificationChannels)
 
-  return { slackDeps, executionEventPublisher, agentExecutor, notificationChannel }
+  return {
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel: composeChannels(notificationChannels),
+    externalNotificationChannel: composeChannels(externalNotificationChannels),
+  }
+}
+
+/** One channel as-is, several fanned out, none ⇒ undefined (the port is simply not wired). */
+function composeChannels(channels: NotificationChannel[]): NotificationChannel | undefined {
+  if (channels.length === 0) return undefined
+  return channels.length === 1 ? channels[0] : new CompositeNotificationChannel(channels)
 }

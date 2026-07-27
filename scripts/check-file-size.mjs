@@ -47,9 +47,12 @@ const LEGACY_ALLOWANCES = new Map([
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN). The
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
-  // `ExecutionServiceDependencies` (the ~360-line construction-seam interface) now lives in its
-  // own module, so `ExecutionService.ts` ratchets down accordingly.
+  // The poll paths' "fold one update onto the step" helpers now live in `step-fold.logic.ts`,
+  // so `RunDispatcher.ts` ratchets down accordingly.
+  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2430],
+  // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
+  // its own module (re-exported, so no call site changed) when the PR-verification-report hook
+  // needed headroom — ratcheted DOWN to lock the win in.
   ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2320],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
@@ -57,7 +60,9 @@ const LEGACY_ALLOWANCES = new Map([
   // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The Node
   // root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
   ['backend/runtimes/node/src/container.ts', 1550],
-  ['backend/packages/orchestration/src/container.ts', 1750],
+  // `CoreDependencies` (the ~815-line `createCore` contract) now lives in `container/dependencies.ts`,
+  // re-exported — the same split the engine's own dependency block got — so the domain composition
+  // root drops back under the DEFAULT budget and needs no allowance at all.
   ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2350],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,

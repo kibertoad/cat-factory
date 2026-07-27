@@ -81,6 +81,7 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   buildAppRegistry,
+  buildExternalNotificationChannel,
   buildResolveRepoTarget,
   buildWorkerVcsIdentityRegistry,
   maybeWrapConsensus,
@@ -447,6 +448,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   // `AgentRunController` AND folded into the mothership `repositories` registry below (it is the
   // one repo not carried by `CoreDependencies`). One instance shared by both.
   const agentRunRepository = new D1AgentRunRepository({ db })
+  // The EXTERNAL (non-in-app) delivery channels, for the mothership delivery seam below. Built
+  // from the same source of truth `selectMergeLifecycleDeps` composes into the engine's fan-out.
+  const externalNotificationChannel = buildExternalNotificationChannel(config, db)
 
   return {
     ...createCore(dependencies),
@@ -489,6 +493,16 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // endpoint 503s.
     ...(env.WORKSPACE_EVENTS
       ? { machineEventRelay: new DurableObjectMachineEventRelay(env.WORKSPACE_EVENTS) }
+      : {}),
+    // Mothership-side notification DELIVERY (`POST /internal/notifications/deliver`): a
+    // mothership-mode node persists its notification rows here but holds none of the org's
+    // external delivery credentials (the Slack bot token is sealed with THIS Worker's key), so it
+    // asks the mothership to deliver a row by id. Wired with the EXTERNAL channels only — the
+    // in-app frame for a laptop-raised notification already arrives over the real-time upstream
+    // relay, so delivering it here too would double-push it. Wired symmetrically on the Node
+    // facade. Slack off ⇒ no external channel ⇒ the endpoint 503s.
+    ...(externalNotificationChannel
+      ? { machineNotificationDelivery: externalNotificationChannel }
       : {}),
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.

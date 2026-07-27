@@ -212,6 +212,8 @@ interface MothershipAppOptions {
   gateProviders?: GateProviderOverrides
   environmentProvider?: CoreDependencies['environmentProvider']
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
+  prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
+  appBaseUrl?: string
   backendRegistries?: BackendRegistries
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -299,6 +301,13 @@ function buildMothershipOverrides(
     // full QC loop is driven through the mothership composition root without a model, identically
     // to the Worker/Node/local-standalone harnesses.
     ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
+    // The engine's PR verification-report publisher (+ the public app URL its observability
+    // deep link is built from), so the report hook is driven through the mothership
+    // composition root exactly as through the Worker/Node/local-standalone harnesses.
+    ...(opts?.prVerificationReportPublisher
+      ? { prVerificationReportPublisher: opts.prVerificationReportPublisher }
+      : {}),
+    ...(opts?.appBaseUrl ? { appBaseUrl: opts.appBaseUrl } : {}),
   }
 }
 

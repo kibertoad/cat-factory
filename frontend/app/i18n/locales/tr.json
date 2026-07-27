@@ -2758,6 +2758,11 @@
         "body": "Her agent'a sağlanan tüm bağlamı saklayın: oluşturulan istemler, içine katlanan en iyi uygulama parçaları ve konteynerine enjekte edilen dosyaların tam içeriği; böylece daha sonra gözlemlenebilirlik görünümünde incelenebilir. Gövdeler, çağrı başına LLM telemetrisi ile aynı süre boyunca tutulur. Saklamayı durdurmak için kapatın (mevcut anlık görüntüler saklama ilkesiyle temizlenir).",
         "toggle": "Tüm agent bağlamını sakla"
       },
+      "prReport": {
+        "heading": "Pull request doğrulama raporu",
+        "body": "Her çalıştırmanın pull request'inde bir doğrulama raporu tutar: CI sonucu, test edicinin raporu, geçici ortamın yaşam döngüsü ve birleştirme değerlendirmesi — ajanın kendi iddiaları yerine kaydedilmiş gerçekler olarak. Kimlik bilgileri yazılmadan önce temizlenir. Yayımlamayı durdurmak için kapatın; hâlihazırda yayımlanmış bir rapor olduğu gibi bırakılır.",
+        "toggle": "Doğrulama raporunu pull request'lerde yayımla"
+      },
       "retention": {
         "heading": "Ekran görüntüsü saklama",
         "body": "Arayüz test aracının yakaladığı ekran görüntülerinin ve bunların karşılaştırıldığı referans tasarım görsellerinin (görsel doğrulama geçidi) ne kadar süre tutulacağı. Günlük bir temizleme işi, hem görsel baytlarını hem de meta verilerini bu süreyi aştıklarında siler.",

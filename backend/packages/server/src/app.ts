@@ -38,6 +38,7 @@ import { modelPresetController } from './modules/modelPresets/ModelPresetControl
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
+import { notificationRelayController } from './modules/notifications/NotificationRelayController.js'
 import { pipelineController } from './modules/pipelines/PipelineController.js'
 import { promptFragmentController } from './modules/promptFragments/PromptFragmentController.js'
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
@@ -133,6 +134,13 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // RPC; 503 unless the facade wired `machineEventRelay`. Mounted on both facades so either can be
   // a mothership. See docs/initiatives/mothership-mode.md.
   app.route('/', eventsRelayController())
+  // Mothership-mode notification DELIVERY (`/internal/notifications/deliver`): a mothership-mode
+  // local node persists its notification rows remotely but holds none of the org's external
+  // delivery credentials, so it asks the mothership to deliver a row (by id) through the org's
+  // Slack. Machine-token gated like the persistence RPC; 503 unless the facade wired
+  // `machineNotificationDelivery`. Mounted on both facades so either can be a mothership. See
+  // docs/initiatives/mothership-mode.md.
+  app.route('/', notificationRelayController())
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())

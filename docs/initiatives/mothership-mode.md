@@ -246,6 +246,46 @@
   co-membership-scope + secret-read-refusal tests in `persistenceRpc.spec.ts`; the drift guard moves
   `get`/`listByIds` out of `pending`.
 
+**Notification delivery delegation (PR 4, first half)**
+
+- **`POST /internal/notifications/deliver`** — the mothership now DELIVERS a notification a
+  mothership-mode node raised, through the ORG's external transports (Slack today). Previously such
+  a notification persisted remotely (the allow-listed `notificationRepository`) and rendered in the
+  inbox, but never reached Slack: the bot token is sealed with the MOTHERSHIP's key, which by
+  product decision 3 never reaches a laptop, so a `merge_review` / `ci_failed` /
+  `release_regression` raised by a local run silently stopped at the board. The shared
+  `notificationRelayController` (`@cat-factory/server`) is mounted on BOTH facades like the
+  persistence RPC, behind the same machine-token audience pin (checked FIRST, so availability isn't
+  probeable) and the same account-scope binding (workspace → account → uniform 404, no existence
+  leak). The facade seam is `ServerContainer.machineNotificationDelivery`, wired from each
+  facade's **EXTERNAL** channels only (Node: `buildNodeRealtimeDeps`' new
+  `externalNotificationChannel`; Cloudflare: the new exported `buildExternalNotificationChannel`) —
+  the IN-APP frame for a laptop-raised notification already reaches the mothership's browsers over
+  the real-time upstream relay, so routing it here too would double-push it. No external channel
+  (Slack off) ⇒ 503.
+  **The wire carries IDENTIFIERS ONLY** (`{ workspaceId, notificationId }`): the mothership
+  re-reads the row from its OWN workspace-scoped store and delivers THAT, so a compromised node
+  token can at most ask for a re-delivery of a row that already exists in an account it can already
+  reach — it can never inject forged text into the org's Slack, and a notification of another
+  workspace can't be addressed through an in-scope one.
+  The laptop consumes it through `RemoteNotificationChannel` over `HttpMachineNotificationClient`
+  (same base URL + per-request machine token as the persistence RPC, so it follows the same
+  connect/expiry lifecycle; a token-less node skips the round-trip entirely). `composeMothership`
+  builds it and `buildLocalContainer` threads it into `buildNodeContainer`'s new
+  `notificationChannels` seam, so it composes alongside the local in-app push with no engine
+  change. Self-swallowing per the port's best-effort contract (with an `onError` log), so an
+  unreachable mothership never breaks the state transition that raised the notification.
+  Tested in `packages/server/test/notificationsRelay.spec.ts` (auth pin, scope, the
+  stored-content-not-body-content property, cross-workspace refusal, 503/422/500 edges, and the
+  client+channel round-trip), `runtimes/node/test/machineNotificationDelivery.spec.ts` (the
+  in-app-stays-out-of-the-seam split at its source), `runtimes/local/src/mothership.test.ts`
+  (client wire shape + the `buildLocalContainer` threading), and the shared cross-runtime suite
+  (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on BOTH facades).
+  **Still open in PR 4:** email delegation (`RemoteEmailSender` → `POST /internal/email/send`) is
+  deliberately NOT built — see the "Cross-cutting delegation" note on why it has no reachable
+  consumer today — and mothership-SIDE delivery of a notification a HOSTED teammate raised whose
+  Slack connection was sealed by a LAPTOP (the secrets-delegation residual, unchanged).
+
 **Login (PR 3)**
 
 - **Login-based machine-token minting** — the static `LOCAL_MOTHERSHIP_TOKEN` is replaced by a token
@@ -530,14 +570,13 @@ never remotely invocable (mothership-internal cron).
   mothership projects. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain
   mothership-owned; the repo-write projection-refresh slice is still open.)
 
-  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, and the
-  > real-time UPSTREAM publish (below) are IMPLEMENTED. The remaining bullets below are the DESIGN for
-  > PR 4 / PR 5 and are **NOT yet in code** — no `/internal/notifications`, `/internal/email`, or
-  > `/internal/telemetry` endpoint exists yet (a grep finds them only in this doc + ADR 0009). The
-  > three live `/internal/*` routes today are `POST /internal/persistence`,
-  > `POST /internal/github/installation-token`, and `POST /internal/events/publish`. The remote
-  > `notificationRepository` PERSISTS a notification row today (allow-listed), but in-app/Slack/email
-  > DELIVERY delegation is unbuilt.
+  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, the
+  > real-time UPSTREAM publish, and notification DELIVERY delegation (below) are IMPLEMENTED. The
+  > remaining bullets below are the DESIGN for PR 4's email half / PR 5 and are **NOT yet in code** —
+  > no `/internal/email` or `/internal/telemetry` endpoint exists yet (a grep finds them only in this
+  > doc + ADR 0009). The four live `/internal/*` routes today are `POST /internal/persistence`,
+  > `POST /internal/github/installation-token`, `POST /internal/events/publish`, and
+  > `POST /internal/notifications/deliver`.
 
 - **Real-time — UPSTREAM (outbound) ✅ landed; INBOUND (subscribe) planned.** The OUTBOUND leg is
   built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a
@@ -556,13 +595,25 @@ never remotely invocable (mothership-internal cron).
   (`gateways.realtime.upgrade`) with machine auth, and suppresses the origin node's echo by threading
   its stable subscribe `?cid=` through the outbound publish as `originConnectionId` (the mechanism the
   outbound leg already carries). SPA wire protocol unchanged in both directions.
-- **Notifications (PR 4 — planned, not built).** Row persists via the remote `notificationRepository`
-  (done); in-app delivery would ride the event fan-out (needs PR 2); **Slack** delivery would stay
-  mothership-side via a `RemoteNotificationChannel` → `POST /internal/notifications/deliver`. (Slack
-  settings MANAGEMENT already persists over the RPC — see "Landed so far"; only mothership-side
-  DELIVERY is unbuilt.)
-- **Email (PR 4 — planned, not built).** `RemoteEmailSender` → `POST /internal/email/send`; the
-  mothership decrypts the account key and sends. Email/Slack keys never reach the laptop.
+- **Notifications ✅ landed.** Row persists via the remote `notificationRepository`; IN-APP delivery
+  rides the real-time upstream relay (the laptop's own in-app channel publishes through the layered
+  propagator, so the frame reaches the mothership's browsers); **EXTERNAL** (Slack) delivery is
+  mothership-side via `RemoteNotificationChannel` → `POST /internal/notifications/deliver`
+  (machine-authed, account-scoped, identifiers-only so the mothership delivers its OWN row). Each
+  facade wires the seam with its external channels only, so the two `/internal/*` surfaces never
+  double-push the same notification. See "Landed so far" for the full shape.
+  **Residual (later secrets-delegation slice):** delivery of a notification whose Slack connection
+  was sealed by a LAPTOP under the LOCAL key — the mothership can't decrypt it, mirroring the
+  observability gate-probe residual.
+- **Email (PR 4 — deliberately NOT built; no reachable consumer today).** The design stands —
+  `RemoteEmailSender` → `POST /internal/email/send`, mothership decrypts the account key and sends,
+  keys never reach the laptop — but nothing on a mothership-mode node can currently reach the
+  `EmailSender` port: its only consumers are `InvitationService` (whose `invitationRepository.create`
+  / `setStatus` are admin-gated and therefore excluded from the RPC allow-list) and
+  `PasswordResetService` (a pre-auth flow the mothership serves itself). Building the endpoint now
+  would ship an untriggerable path. Revisit when a later slice adds the role dimension to the token
+  scope (unblocking the invite surface) or an email NOTIFICATION channel lands — at which point it
+  is a direct copy of the notification-delivery shape above.
 - **Telemetry ingest (PR 5 — planned, not built).** Bulk `POST /internal/telemetry/ingest`
   (append-only, excluded from the generic allow-list); finished-runs batch sweeper + short local-TTL
   pruner + read-through.
@@ -608,7 +659,11 @@ document/task connection integration, blocked on the decrypt-inside connection r
 basic board-load + run path. (Subscription activation and the Slack settings surface are no longer
 residuals — PR 3 landed them; see "Landed so far".)
 
-- **PR 4 — notifications + email + Slack delegation.**
+- **PR 4 — notifications + email + Slack delegation.** Notification/Slack DELIVERY delegation **✅
+  landed** (`POST /internal/notifications/deliver` + `RemoteNotificationChannel` — see "Landed so
+  far"). Email delegation is deliberately deferred until it has a reachable consumer (see
+  "Cross-cutting delegation"). **Remaining:** mothership-side delivery of a laptop-sealed Slack
+  connection (rides the secrets-delegation slice).
 - **PR 5 — telemetry/logs local-first sync.**
 - **PR 6 — UI labeling + hardening** (whitelisting admin, token rotation, rate-limiting, security
   review).

@@ -22,6 +22,7 @@ import type {
   InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
+  PrVerificationReportPublisher,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -422,6 +423,20 @@ export interface ConformanceAppOptions {
    * harness threads it into its core overrides exactly as a real facade composes it.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * Inject the PR verification-report publisher (the suite supplies a
+   * {@link FakePrReportPublisher}) so the engine's report hook can be driven on EVERY runtime
+   * without a VCS connection: the suite asserts the COMPOSED report — and that a retry
+   * rewrites it in place rather than appending a second copy — identically on D1 and Postgres.
+   * Each facade harness threads it into its core overrides exactly as a real facade composes
+   * it from its engine VCS client. Absent → the engine publishes nothing, as today.
+   */
+  prVerificationReportPublisher?: PrVerificationReportPublisher
+  /**
+   * The deployment's public SPA base URL, so the suite can assert the report's observability
+   * deep link is built from config rather than a hardcoded host.
+   */
+  appBaseUrl?: string
   /**
    * Inject explicit built-in gate providers (e.g. a faked `CiStatusProvider`). A facade
    * build resets the deployment-global gate providers up-front then re-wires from config;

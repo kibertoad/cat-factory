@@ -48,9 +48,13 @@ import {
   parseLocalModelId,
   recordGateAttempt,
   RunContendedError,
-  sameSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
+import {
+  applyContainerRunning,
+  applyLastActivity,
+  applySubtaskProgress,
+} from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
 import {
   commitInitiativeTracker,
@@ -73,7 +77,6 @@ import {
   evictionFailureDetail,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
-  shouldPersistActivity,
 } from './job.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
@@ -85,6 +88,7 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
+import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import { PollCompletionController } from './PollCompletionController.js'
@@ -176,6 +180,8 @@ export interface RunDispatcherDeps {
    * its controller here, with no new dispatch branch. Absent/unwired kinds pass through.
    */
   interviewControllers?: InterviewGateController<unknown>[]
+  /** Keeps the run's verification report current on its PR; a no-op with no publisher wired. */
+  prVerificationReport: PrVerificationReportController
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -243,6 +249,7 @@ export class RunDispatcher {
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
   /** Interview-gate controllers keyed by their `agentKind` — the trait-driven dispatch table. */
   private readonly interviewControllers: Map<string, InterviewGateController<unknown>>
+  private readonly prVerificationReport: PrVerificationReportController
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -332,6 +339,7 @@ export class RunDispatcher {
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
     )
+    this.prVerificationReport = deps.prVerificationReport
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -351,8 +359,8 @@ export class RunDispatcher {
       environmentProvisioning: deps.environmentProvisioning,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
-      applyContainerRunning: (step, update) => this.applyContainerRunning(step, update),
-      applySubtaskProgress: (step, counts) => this.applySubtaskProgress(step, counts),
+      applyContainerRunning: (step, update) => applyContainerRunning(step, update),
+      applySubtaskProgress: (step, counts) => applySubtaskProgress(step, counts),
       recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
         this.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
     })
@@ -976,12 +984,12 @@ export class RunDispatcher {
     // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
     if (!s || s.jobId !== jobId) return false
     let changed = false
-    if (this.applyContainerRunning(s, update)) changed = true
-    if (this.applySubtaskProgress(s, update.subtasks)) changed = true
+    if (applyContainerRunning(s, update)) changed = true
+    if (applySubtaskProgress(s, update.subtasks)) changed = true
     // Persist the harness liveness heartbeat (throttled) so a quiet-but-alive container keeps the
     // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
     // would otherwise never emit, leaving it indistinguishable from a wedged run to the sweeper + UI.
-    if (this.applyLastActivity(s, update.lastActivityAt)) changed = true
+    if (applyLastActivity(s, update.lastActivityAt)) changed = true
     // Republish the latest pre-PR validation attempt so the repair loop is visible WHILE it
     // runs ("lint failed, repairing — attempt 2 of 3") instead of only at the end.
     if (applyValidationReport(s, update.validationReport)) changed = true
@@ -1075,56 +1083,6 @@ export class RunDispatcher {
     await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-  }
-
-  private applyContainerRunning(
-    step: PipelineStep,
-    update: { phase?: string; container?: { id?: string; url?: string } },
-  ): boolean {
-    const prev = step.container ?? undefined
-    const next = {
-      status: 'up' as const,
-      phase: update.phase ?? prev?.phase ?? null,
-      id: update.container?.id ?? prev?.id ?? null,
-      url: update.container?.url ?? prev?.url ?? null,
-    }
-    if (
-      prev?.status === next.status &&
-      (prev?.phase ?? null) === next.phase &&
-      (prev?.id ?? null) === next.id &&
-      (prev?.url ?? null) === next.url
-    ) {
-      return false
-    }
-    step.container = next
-    return true
-  }
-
-  /**
-   * Apply an async step's live subtask counts to the step (and the derived 0..1 progress
-   * fraction), returning whether anything changed. Shared by {@link pollAgentJob} (the agent
-   * executor's `update.subtasks`) and the {@link DeployerStepController} poll (the deploy job's
-   * `view.progress`)
-   * so the progress-fraction math lives in one place.
-   */
-  private applySubtaskProgress(step: PipelineStep, counts: PipelineStep['subtasks']): boolean {
-    if (!counts || sameSubtasks(step.subtasks, counts)) return false
-    step.subtasks = counts
-    step.progress = counts.total > 0 ? counts.completed / counts.total : 0
-    return true
-  }
-
-  /**
-   * Fold a running poll's forwarded liveness heartbeat onto `step.lastActivityAt`, THROTTLED via
-   * {@link shouldPersistActivity}: re-stamped only once the heartbeat has advanced by a bounded
-   * window (not on every ~15s poll), and never when a wedged job's heartbeat is frozen — so its
-   * `updated_at` correctly stops advancing. Returns whether it changed, so the caller persists +
-   * emits (refreshing the run's `updated_at` and the UI's "active Ns ago") only on a real advance.
-   */
-  private applyLastActivity(step: PipelineStep, incoming: number | undefined): boolean {
-    if (!shouldPersistActivity(step.lastActivityAt, incoming)) return false
-    step.lastActivityAt = incoming
-    return true
   }
 
   /**
@@ -1521,6 +1479,18 @@ export class RunDispatcher {
     // the harness). Position-independent like the resolver above; a no-op for built-ins
     // and when GitHub isn't wired. A throwing op propagates to fail the step/run.
     await this.repoOps.runRegisteredPostOps(workspaceId, instance, step, isFinalStep, result)
+
+    // Refresh the engine-maintained VERIFICATION REPORT on the run's PR from the evidence the
+    // instance now carries (CI verdict, tester report, environment lifecycle, merge assessment).
+    // Its POSITION is load-bearing: AFTER the terminal resolver, so a `merger` step publishes
+    // with its resolved `MergeDecision` recorded; BEFORE `finalizeBlock`, so the
+    // `pipeline_complete` card a merger-less pipeline raises points at a PR that already carries
+    // the finished report. A passing polling gate settles through here too, so the CI verdict
+    // needs no hook of its own. Best-effort inside the controller: no publisher wired, no PR
+    // yet, or a settlement whose evidence is unchanged ⇒ nothing happens. A settlement that DOES
+    // change the evidence writes, so the report tracks the run rather than landing once at the
+    // end — which is the point, since a run that fails or parks part-way never reaches an end.
+    await this.prVerificationReport.publishForRun(workspaceId, instance)
 
     if (isFinalStep) {
       instance.status = 'done'

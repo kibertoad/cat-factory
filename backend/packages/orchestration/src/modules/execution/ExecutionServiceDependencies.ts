@@ -1,27 +1,11 @@
-// The dependency contract for the execution engine — every wire a runtime facade injects.
-//
-// Extracted VERBATIM from `ExecutionService.ts` (no behaviour change): the interface had grown
-// to ~360 lines of pure declaration, which is most of what pushed the engine file back against
-// its size ratchet. It is a cohesive unit in its own right — the single place a new optional
-// integration is declared, and the shape `createCore` fills in — so it lives beside the class
-// it configures rather than padding it. `ExecutionService` re-exports the type, so no import
-// site changes.
-
-import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { ResolvedValidationChecks } from '@cat-factory/contracts'
-import type {
-  BugIntakeService,
-  EnvironmentProvisioningService,
-  EnvironmentTeardownService,
-} from '@cat-factory/integrations'
 import type {
   AccountRepository,
-  BlueprintService,
   AgentExecutor,
   BlockRepository,
+  BlueprintService,
+  BranchUpdater,
   BrainstormSessionRepository,
   BrainstormStage,
-  BranchUpdater,
   ClarityReviewRepository,
   Clock,
   DocInterviewRepository,
@@ -36,6 +20,7 @@ import type {
   IssueWritebackProvider,
   ModelRef,
   PipelineRepository,
+  PrVerificationReportPublisher,
   ProviderCapabilities,
   ProviderRegistry,
   PullRequestMerger,
@@ -52,17 +37,25 @@ import type {
   TicketTrackerProvider,
   WorkRunner,
   WorkspaceRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { ResolvedValidationChecks } from '@cat-factory/contracts'
+import type {
+  BugIntakeService,
+  EnvironmentProvisioningService,
+  EnvironmentTeardownService,
+} from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import type { BoardService } from '../board/BoardService.js'
 import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
-import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
-import type { NotificationService } from '../notifications/NotificationService.js'
+import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
+import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type {
@@ -71,8 +64,15 @@ import type {
   SkillResolver,
 } from './AgentContextBuilder.js'
 import type { ForkChatService } from './ForkChatService.js'
+import type { PrReportLogger } from './PrVerificationReportController.js'
 import type { KaizenScheduler } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
+
+// The injected collaborator contract of the {@link ExecutionService} — the engine's single
+// `dependencies` object, split out of `ExecutionService.ts` so a ~350-line declaration block
+// stops crowding the engine's control flow against its file-size budget (see
+// `scripts/check-file-size.mjs`: budgets are split triggers, never numbers to raise). Purely
+// declarative; re-exported from `ExecutionService.ts` so every existing importer is unchanged.
 
 /** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
 export interface BlueprintReconciler {
@@ -440,4 +440,28 @@ export interface ExecutionServiceDependencies {
    * a fixed backend; a missing local pool still fails loudly at dispatch).
    */
   assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
+  /**
+   * Optional: writes the engine's verification report (CI verdict, tester report, ephemeral
+   * environment lifecycle, merge assessment, run metadata + an observability deep link) onto
+   * the run's pull request as a marker-delimited, idempotently-updated section. A facade
+   * composes it from its engine VCS client, so GitLab deployments publish too. Absent (tests,
+   * a no-VCS deployment) → the engine behaves exactly as it did before the feature.
+   */
+  prVerificationReportPublisher?: PrVerificationReportPublisher
+  /**
+   * Optional: the deployment's public SPA base URL, used to build the verification report's
+   * observability deep link. Absent → the report carries no link rather than a dead one.
+   */
+  appBaseUrl?: string
+  /**
+   * Optional: the per-workspace settings row, read by the verification-report hook for the
+   * `publishPrVerificationReport` opt-out. Absent ⇒ the default (on).
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * Optional structured logger (the facade's pino logger) for the engine's best-effort paths —
+   * today the PR verification report, whose whole contract is that it never fails a run. Absent
+   * ⇒ those failures are silent, which is why every facade wires it.
+   */
+  logger?: PrReportLogger
 }
