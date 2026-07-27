@@ -885,6 +885,14 @@ export class EnvironmentProvisioningService {
       externalId: provisioned.externalId ?? record.externalId,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, record.createdAt),
       accessCipher: await this.encryptAccess(provisioned.access),
+      // Persist the provider's failure reason on a poll-time transition to `failed` (cleared once
+      // not failed), mirroring the provisionSync path — WITHOUT this, a reconcile that flips an env
+      // to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing)
+      // left `lastError` stale/empty, so the env-detail surface and the env self-test showed a
+      // generic "provisioning failed" instead of the real cause (e.g. a "404 No commit found
+      // for the ref …" pointing at a project↔repo mismatch).
+      lastError:
+        provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
 
@@ -907,7 +915,9 @@ export class EnvironmentProvisioningService {
           blockId: record.blockId,
           executionId: record.executionId,
           outcome: 'failure',
-          error: 'Environment provisioning did not complete (it never became ready).',
+          error:
+            provisioned.error?.trim() ||
+            'Environment provisioning did not complete (it never became ready).',
           detail: null,
         })
       } catch {

@@ -58,7 +58,7 @@ export interface EnvironmentTestProvisioning {
   /**
    * Re-poll a recorded environment's status via its provider (`provider.status`) and persist any
    * change. The self-test uses this to WAIT for a synchronously-recorded env (a REST provider that
-   * returns immediately with `provisioning` — e.g. Kargo) to actually reach `ready` before tearing
+   * returns immediately with `provisioning`) to actually reach `ready` before tearing
    * it down, so the test confirms the env stands up rather than just that the create call returned.
    */
   refreshStatus(workspaceId: string, id: string): Promise<EnvironmentHandle>
@@ -103,7 +103,8 @@ export interface EnvironmentTestServiceDependencies {
   /**
    * Structured logger for terminal-failure diagnostics. A self-test failure is otherwise only
    * persisted on the run record (and surfaced in the SPA) — never logged server-side — so a
-   * provider/dispatch throw (e.g. a Kargo 422) leaves no trace in the logs. `fail()` emits one
+   * provider/dispatch throw (e.g. a provider rejecting the create with a 422) leaves no trace in
+   * the logs. `fail()` emits one
    * `warn` per failure with the stage + message (+ stack when the cause is an `Error`). Absent ⇒
    * no logging (the run record is still written).
    */
@@ -296,7 +297,7 @@ export class EnvironmentTestService {
 
       // The throwaway branch now exists, so the NEXT phase is provisioning. Advance the stage
       // BEFORE dispatching, for two reasons: (1) `startProvision` can throw (a provider rejects
-      // the create, e.g. a Kargo 422) — with the stage still at `creating_branch`, `fail()` would
+      // the create with a 422) — with the stage still at `creating_branch`, `fail()` would
       // mislabel a provisioning-dispatch failure as a branch-creation failure (`failedStage`
       // reads the live stage); (2) a slow dispatch otherwise leaves the SPA showing a stalled
       // "creating branch" until it returns. A rejected write means a concurrent stop finalized
@@ -374,7 +375,7 @@ export class EnvironmentTestService {
     record: EnvironmentTestRunRecord,
   ): Promise<EnvironmentTestPollResult> {
     // Synchronous path: the env was recorded at dispatch (`startProvision` returned `completed`),
-    // but a REST provider can return BEFORE the env is actually up — e.g. Kargo's create responds
+    // but a REST provider can return BEFORE the env is actually up — e.g. a create that responds
     // immediately with `provisioning` and no URL. So poll the provider's status until the env truly
     // reaches `ready` before tearing it down; the whole point of the self-test is to confirm the env
     // stands up and is reachable, not merely that the create call returned a handle. The durable

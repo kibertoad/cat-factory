@@ -268,8 +268,8 @@ export async function start(
     /**
      * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
      * deploy-app wrapper passes this so the server auto-registers the deployment's infra handlers
-     * per workspace with no manual SPA step — e.g. a Kargo adapter feeding its handler from
-     * `.kargo.yml`. Forwarded onto the `NodeContainerOptions` handed to `buildContainer` (so it
+     * per workspace with no manual SPA step. Forwarded onto the `NodeContainerOptions` handed to
+     * `buildContainer` (so it
      * rides through `createCore`), and used AFTER listen to boot-backfill every existing workspace;
      * new workspaces are seeded by `WorkspaceService.create`. Also reaches `buildLocalContainer` via
      * the local facade's builder. Omitted ⇒ no seeding.

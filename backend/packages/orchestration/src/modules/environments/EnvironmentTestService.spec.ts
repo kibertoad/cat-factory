@@ -285,13 +285,13 @@ describe('EnvironmentTestService', () => {
     const { repo, calls } = fakeRepo()
     const { service, runRepo } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      probe: { ok: false, message: "Kargo project 'CAT_FACTORY' was not found." },
+      probe: { ok: false, message: "project 'demo' was not found." },
     })
     const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ConflictError)
     const conflict = err as ConflictError
     expect(conflict.details?.reason).toBe('env_test_connection_failed')
-    expect(conflict.message).toContain("project 'CAT_FACTORY' was not found")
+    expect(conflict.message).toContain("project 'demo' was not found")
     // A pre-dispatch gate: no run record, and no throwaway branch was created.
     expect(runRepo.rows.size).toBe(0)
     expect(calls.created).toEqual([])
@@ -340,7 +340,7 @@ describe('EnvironmentTestService', () => {
     const { repo } = fakeRepo()
     const { service, teardowns } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      // A REST provider (e.g. Kargo) records the env at dispatch but it's still coming up.
+      // A REST provider records the env at dispatch but it's still coming up.
       dispatch: { kind: 'completed', handle: { id: 'env-9', url: null } as EnvironmentHandle },
       statusPolls: [{ status: 'provisioning' }, { status: 'provisioning' }, { status: 'ready' }],
     })

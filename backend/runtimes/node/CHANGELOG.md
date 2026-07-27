@@ -1,5 +1,15 @@
 # @cat-factory/node-server
 
+## 0.121.1
+
+### Patch Changes
+
+- Updated dependencies [323b6cf]
+  - @cat-factory/integrations@0.101.3
+  - @cat-factory/eks@0.1.144
+  - @cat-factory/orchestration@0.146.1
+  - @cat-factory/server@0.156.1
+
 ## 0.121.0
 
 ### Minor Changes
