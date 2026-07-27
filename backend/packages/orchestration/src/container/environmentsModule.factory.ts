@@ -149,5 +149,6 @@ export function buildEnvironmentTestService(args: {
     clock: deps.clock,
     ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
     ...(eventPublisher ? { eventPublisher } : {}),
+    ...(deps.logger ? { logger: deps.logger } : {}),
   })
 }
