@@ -1,5 +1,18 @@
 # @cat-factory/app
 
+## 0.162.0
+
+### Minor Changes
+
+- 1947062: Add Reports: an account-scoped, admin-gated analytics view answering where the spend and the work go — spend per model and per agent kind, spend and run activity per board / service / task type, and a spend trend over a 24h/7d/30d/90d window with an optional single-board filter.
+
+  New `GET /accounts/:accountId/reports` over the new kernel `ReportsRepository` port, implemented on both runtimes (D1 ⇄ Drizzle) and pinned by a cross-runtime conformance suite. Every breakdown is one SQL `GROUP BY` over the existing `token_usage` and `agent_runs` tables — no new table and no migration. Real metered cost is reported separately from the illustrative equivalent-API cost of flat-rate subscription usage, and a call whose run / service / task type cannot be resolved is surfaced as its own unattributed slice rather than dropped.
+
+### Patch Changes
+
+- Updated dependencies [1947062]
+  - @cat-factory/contracts@0.176.0
+
 ## 0.161.0
 
 ### Minor Changes

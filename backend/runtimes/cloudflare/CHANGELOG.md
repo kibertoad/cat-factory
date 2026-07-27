@@ -1,5 +1,33 @@
 # @cat-factory/worker
 
+## 0.110.0
+
+### Minor Changes
+
+- 1947062: Add Reports: an account-scoped, admin-gated analytics view answering where the spend and the work go — spend per model and per agent kind, spend and run activity per board / service / task type, and a spend trend over a 24h/7d/30d/90d window with an optional single-board filter.
+
+  New `GET /accounts/:accountId/reports` over the new kernel `ReportsRepository` port, implemented on both runtimes (D1 ⇄ Drizzle) and pinned by a cross-runtime conformance suite. Every breakdown is one SQL `GROUP BY` over the existing `token_usage` and `agent_runs` tables — no new table and no migration. Real metered cost is reported separately from the illustrative equivalent-API cost of flat-rate subscription usage, and a call whose run / service / task type cannot be resolved is surfaced as its own unattributed slice rather than dropped.
+
+### Patch Changes
+
+- Updated dependencies [1947062]
+  - @cat-factory/contracts@0.176.0
+  - @cat-factory/kernel@0.169.0
+  - @cat-factory/orchestration@0.150.0
+  - @cat-factory/server@0.159.0
+  - @cat-factory/agents@0.74.1
+  - @cat-factory/consensus@0.11.51
+  - @cat-factory/eks@0.1.150
+  - @cat-factory/gates@0.7.41
+  - @cat-factory/gitlab@0.13.17
+  - @cat-factory/integrations@0.103.1
+  - @cat-factory/observability-otel@0.2.55
+  - @cat-factory/prompt-fragments@0.14.24
+  - @cat-factory/spend@0.12.98
+  - @cat-factory/caching@0.10.54
+  - @cat-factory/observability-langfuse@0.7.272
+  - @cat-factory/provider-cloudflare@0.7.301
+
 ## 0.109.4
 
 ### Patch Changes
