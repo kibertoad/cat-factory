@@ -135,10 +135,10 @@ export interface RunRepoContext {
   repoId: string
   /**
    * The repo's GitHub owner (org) and name — together `owner/name` identify the repo. Surfaced so a
-   * code environment adapter can resolve a per-SERVICE target keyed by the repo (e.g. a Kargo
-   * project, whose name IS the repo name) at provision/status time, rather than a single static
-   * default. Optional for back-compat with older resolvers / test fakes; the real resolvers always
-   * set them.
+   * code environment adapter can resolve a per-SERVICE target keyed by the repo (e.g. a provider
+   * whose project/namespace is named after the repo) at provision/status time, rather than a single
+   * static default. Optional for back-compat with older resolvers / test fakes; the real resolvers
+   * always set them.
    */
   owner?: string
   name?: string
