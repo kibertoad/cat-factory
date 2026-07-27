@@ -5,7 +5,7 @@
 // task inspector's "Merge policy" dropdown selects from. Exactly one preset is the
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
 import { computed, reactive, ref, watch } from 'vue'
-import type { RiskPolicy, RequirementConcernLevel } from '~/types/merge'
+import type { MergeClassRules, RiskPolicy, RequirementConcernLevel } from '~/types/merge'
 import type { StepGating } from '@cat-factory/contracts'
 
 const { t } = useI18n()
@@ -43,6 +43,9 @@ interface Draft {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
   autoMergeEnabled: boolean
+  // Per-change-class auto-merge rules. An OMITTED class means "use the score ceilings above",
+  // so `{}` is the identity — the editor stores `thresholds` as an omission for that reason.
+  classRules: MergeClassRules
   // Implementation-fork decision gating (edited 0..100, stored 0..1); disabled ⇒ off in `auto`.
   forkEnabled: boolean
   forkMinComplexity: number
@@ -79,6 +82,7 @@ function toDraft(p: RiskPolicy): Draft {
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     autoMergeEnabled: p.autoMergeEnabled,
+    classRules: { ...p.classRules },
     forkEnabled: p.forkDecision?.enabled ?? false,
     forkMinComplexity: Math.round((p.forkDecision?.minComplexity ?? 0.5) * 100),
     forkMinRisk: Math.round((p.forkDecision?.minRisk ?? 0.4) * 100),
@@ -121,6 +125,7 @@ async function save(p: RiskPolicy) {
       maxRequirementIterations: d.maxRequirementIterations,
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
       autoMergeEnabled: d.autoMergeEnabled,
+      classRules: d.classRules,
       forkDecision: forkGating(d),
     })
     toast.add({
@@ -176,6 +181,7 @@ const draft = reactive<Draft>({
   maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
   autoMergeEnabled: true,
+  classRules: {},
   forkEnabled: false,
   forkMinComplexity: 50,
   forkMinRisk: 40,
@@ -196,10 +202,12 @@ async function create() {
       maxRequirementIterations: draft.maxRequirementIterations,
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
       autoMergeEnabled: draft.autoMergeEnabled,
+      classRules: draft.classRules,
       forkDecision: forkGating(draft),
     })
     draft.name = ''
     draft.autoMergeEnabled = true
+    draft.classRules = {}
     toast.add({
       title: t('settings.riskPolicy.toast.created'),
       icon: 'i-lucide-check',
@@ -339,6 +347,16 @@ async function create() {
             size="sm"
           />
         </label>
+      </div>
+
+      <!-- Per-change-class auto-merge rules, each shown beside that class's accumulated track
+           record — the number that justifies widening the rule. -->
+      <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+        <MergeClassRulesEditor
+          v-model="drafts[p.id]!.classRules"
+          :auto-merge-enabled="drafts[p.id]!.autoMergeEnabled"
+          :disabled="busy === p.id"
+        />
       </div>
 
       <!-- Implementation-fork decision gate: propose materially different approaches before the

@@ -1,5 +1,6 @@
 import type {
   BlockType,
+  MergeClassRules,
   ModelPreset,
   RequirementConcernLevel,
   StepGating,
@@ -82,6 +83,14 @@ export const DEFAULT_RISK_POLICY = {
 } as const
 
 /**
+ * The built-in presets ship with NO per-class rules: every class falls back to the score
+ * ceilings, so the default policy is byte-for-byte the historical behaviour. Widening a class
+ * to `always` is an operator decision the workspace makes once its per-class track record
+ * justifies it — never something a seed decides on their behalf.
+ */
+export const DEFAULT_MERGE_CLASS_RULES: MergeClassRules = {}
+
+/**
  * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
  * workspace's persisted copy can be matched against the catalog and reseeded). The
  * service stamps each with `createdAt` on first seed; {@link seedRiskPolicies} lists
@@ -106,6 +115,8 @@ export interface RiskPolicySeed {
   autoMergeEnabled: boolean
   /** Estimate gating for the implementation-fork decision phase; disabled on the built-ins. */
   forkDecision: StepGating | null
+  /** Per-change-class auto-merge rules; empty on the built-ins (see DEFAULT_MERGE_CLASS_RULES). */
+  classRules: MergeClassRules
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: boolean
   /**
@@ -141,8 +152,9 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
     autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
     forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
+    classRules: { ...DEFAULT_MERGE_CLASS_RULES },
     isDefault: true,
-    version: 3,
+    version: 4,
   },
   {
     id: 'mp_manual_review',
@@ -161,8 +173,11 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // The whole point of this preset: never auto-merge — always raise a human review.
     autoMergeEnabled: false,
     forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
+    // No per-class rules: a class rule can never override `autoMergeEnabled: false`, and
+    // shipping one here would only mislead an operator reading the preset.
+    classRules: { ...DEFAULT_MERGE_CLASS_RULES },
     isDefault: false,
-    version: 3,
+    version: 4,
   },
 ]
 

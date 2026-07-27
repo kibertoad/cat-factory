@@ -1,0 +1,462 @@
+import type {
+  ChangeClass,
+  ExecutionInstance,
+  MergeClassRollup,
+  MergeTrackRecord,
+  Pipeline,
+  RepoFiles,
+  RiskPolicy,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import type { ConformanceApp, ConformanceHarness } from './harness.js'
+
+// Cross-runtime parity for the MERGE TRACK RECORD (docs/initiatives/merge-track-record.md):
+// the deterministic change classification, the per-class auto-merge rules on a merge preset, the
+// persisted record of each merge decision, the reviewer-effort tag, and the per-class SQL rollups.
+//
+// What this proves that a unit test can't: the whole chain is wired on BOTH facades — the
+// `merge_track_records` table + its repository (D1 ⇄ Drizzle) map the same columns, the `class_rules`
+// preset column round-trips, `MergeResolver` reads the classification through the run-repo seam,
+// the notification `act` body's effort tag lands on the record, and the rollup aggregate returns
+// the same numbers from SQLite and Postgres. A facade that mapped a column differently, or forgot
+// to wire the repository, fails a test here instead of shipping.
+//
+// Everything is driven over real HTTP against `app.fetch`, with the changed-file list served by a
+// fake `RepoFiles` through the SAME `resolveRunRepoContext` override the custom-agent suites use.
+
+/** A `RepoFiles` that reports exactly `paths` as the PR's changed files. */
+function repoWithChangedFiles(paths: string[]): RepoFiles {
+  return {
+    getFile: async () => null,
+    listDirectory: async () => [],
+    headSha: async () => 'base-sha',
+    createBranch: async () => {},
+    deleteBranch: async () => {},
+    commitFiles: async () => ({ sha: 'commit-sha' }),
+    openPullRequest: async () => {
+      throw new Error('this suite never opens a PR')
+    },
+    listChangedFiles: async () =>
+      paths.map((path) => ({
+        path,
+        previousPath: null,
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        patch: null,
+      })),
+  }
+}
+
+/** The PR the fake coder reports, so the block carries a number classification can read. */
+const FAKE_PR = { url: 'https://github.test/acme/repo/pull/42', number: 42, branch: 'work' }
+
+export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
+  const { name } = harness
+
+  describe(`[${name}] merge track record (HTTP)`, () => {
+    /**
+     * Run a `coder` + `merger` pipeline to completion with a given changed-file list, merger
+     * assessment and (optionally) a preset carrying per-class rules. Returns everything the
+     * assertions need: the settled block, the merger step's recorded decision, and the run id.
+     */
+    async function driveMergerRun(options: {
+      changedFiles: string[]
+      assessment: { complexity: number; risk: number; impact: number; rationale: string }
+      /** Created and pinned on the task before the run when supplied. */
+      preset?: Record<string, unknown>
+    }): Promise<{
+      app: ConformanceApp
+      wsId: string
+      executionId: string
+      status: string
+      decision: { outcome?: string; reason?: string; changeClass?: string }
+    }> {
+      const app = harness.makeApp(
+        {
+          confidence: 1,
+          pullRequest: FAKE_PR,
+          mergeAssessment: options.assessment,
+        },
+        {
+          resolveRunRepoContext: async () => ({
+            repo: repoWithChangedFiles(options.changedFiles),
+            baseBranch: 'main',
+          }),
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      if (options.preset) {
+        const created = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+          name: 'Class rules',
+          maxComplexity: 0.5,
+          maxRisk: 0.4,
+          maxImpact: 0.5,
+          ciMaxAttempts: 10,
+          maxRequirementIterations: 6,
+          maxRequirementConcernAllowed: 'none',
+          ...options.preset,
+        })
+        expect(created.status).toBe(201)
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          riskPolicyId: created.body.id,
+        })
+      }
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build + merger',
+        agentKinds: ['coder', 'merger'],
+      })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+      const ticked = await app.drive(wsId)
+      const exec = ticked.find((e) => e.blockId === 'task_login')!
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      return {
+        app,
+        wsId,
+        executionId: exec.id,
+        status: snap.blocks.find((b) => b.id === 'task_login')!.status,
+        decision: exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          changeClass?: string
+        },
+      }
+    }
+
+    const rollupFor = async (
+      app: ConformanceApp,
+      wsId: string,
+      changeClass: ChangeClass,
+    ): Promise<MergeClassRollup> => {
+      const res = await app.call<MergeClassRollup[]>(
+        'GET',
+        `/workspaces/${wsId}/merge-track-records/rollups`,
+      )
+      expect(res.status).toBe(200)
+      // The rollup response always carries EVERY class (the service fills empties in), so a
+      // never-seen class reads as zeros rather than being absent.
+      const found = res.body.find((r) => r.changeClass === changeClass)
+      expect(found, `rollup for ${changeClass}`).toBeDefined()
+      return found!
+    }
+
+    it('records an auto-merge with the run change class and a null effort tag', async () => {
+      // The happy path: a within-threshold, credibly-explained assessment auto-merges, and the
+      // decision is persisted with the DETERMINISTIC class derived from the changed files — no
+      // human has tagged it, so the effort is null and the class's rollup counts it as untagged.
+      const run = await driveMergerRun({
+        changedFiles: ['src/login.ts', 'README.md'],
+        assessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'Small, well-tested.' },
+      })
+      expect(run.status).toBe('done')
+      expect(run.decision.outcome).toBe('auto_merged')
+      // Mixed diff (source + docs) resolves to the HIGHEST-ranked class present.
+      expect(run.decision.changeClass).toBe('source')
+
+      const rollup = await rollupFor(run.app, run.wsId, 'source')
+      expect(rollup.total).toBe(1)
+      expect(rollup.autoMerged).toBe(1)
+      expect(rollup.merged).toBe(1)
+      expect(rollup.humanMerged).toBe(0)
+      expect(rollup.pendingReview).toBe(0)
+      // An auto-merge records itself with NO tag — nothing downstream may break on the null.
+      expect(rollup.effort).toEqual({ none: 0, minor: 0, major: 0, untagged: 1 })
+    })
+
+    it('classifies a mixed diff by the documented precedence (highest-ranked class wins)', async () => {
+      // A dependency bump that also touches a migration is a SCHEMA change: `schema` outranks
+      // `dependency`, so an "always auto-merge dependency bumps" rule could never fire on it.
+      // This is the property that makes per-class rules safe, so it is asserted on both runtimes.
+      const run = await driveMergerRun({
+        changedFiles: ['package.json', 'pnpm-lock.yaml', 'drizzle/0001_x/migration.sql'],
+        assessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'Bump + migration.' },
+      })
+      expect(run.decision.changeClass).toBe('schema')
+      expect((await rollupFor(run.app, run.wsId, 'schema')).total).toBe(1)
+      expect((await rollupFor(run.app, run.wsId, 'dependency')).total).toBe(0)
+    })
+
+    it('auto-merges an over-threshold dependency bump when the preset always auto-merges that class', async () => {
+      // The headline acceptance criterion. The assessment BUSTS every ceiling, so the score
+      // comparison alone would raise `merge_review`; the preset's `dependency: always` rule
+      // overrides it. Proves the full wiring: `class_rules` persisted on the preset row →
+      // `resolveRiskPolicy` → the classification through the run-repo seam → `MergeResolver`.
+      const run = await driveMergerRun({
+        changedFiles: ['package.json', 'pnpm-lock.yaml'],
+        assessment: { complexity: 0.95, risk: 0.95, impact: 0.95, rationale: 'Big bump.' },
+        preset: { classRules: { dependency: 'always' } },
+      })
+      expect(run.status).toBe('done')
+      expect(run.decision.outcome).toBe('auto_merged')
+      // The reason names the CLASS rule, not the thresholds — the banner must not imply the
+      // scores were within range when they plainly were not.
+      expect(run.decision.reason).toBe('class_auto_merge')
+      expect(run.decision.changeClass).toBe('dependency')
+      expect((await rollupFor(run.app, run.wsId, 'dependency')).autoMerged).toBe(1)
+    })
+
+    it('forces review on a within-threshold schema change when the preset never auto-merges that class', async () => {
+      // The inverse rule. A maximally-mergeable assessment (0/0/0 + a real rationale) would
+      // auto-merge under the score comparison; `schema: never` must route it to a human anyway.
+      const run = await driveMergerRun({
+        changedFiles: ['backend/runtimes/cloudflare/migrations/0099_add_column.sql'],
+        assessment: { complexity: 0, risk: 0, impact: 0, rationale: 'One nullable column.' },
+        preset: { classRules: { schema: 'never' } },
+      })
+      expect(run.status).toBe('pr_ready')
+      expect(run.status).not.toBe('done')
+      expect(run.decision.outcome).toBe('awaiting_review')
+      expect(run.decision.reason).toBe('class_requires_review')
+      expect(run.decision.changeClass).toBe('schema')
+      // Routed to review ⇒ the record is `pending_review`, NOT counted as merged.
+      const rollup = await rollupFor(run.app, run.wsId, 'schema')
+      expect(rollup.pendingReview).toBe(1)
+      expect(rollup.merged).toBe(0)
+    })
+
+    it('never lets a class rule override a "manual review only" preset', async () => {
+      // Precedence: `autoMergeEnabled: false` is the MASTER switch. A workspace that flips a class
+      // to `always` on a manual-review preset must still get a human gate — otherwise the
+      // "manual review only" guarantee silently evaporates.
+      const run = await driveMergerRun({
+        changedFiles: ['docs/guide.md'],
+        assessment: { complexity: 0, risk: 0, impact: 0, rationale: 'Typo fix.' },
+        preset: { autoMergeEnabled: false, classRules: { docs: 'always' } },
+      })
+      expect(run.status).toBe('pr_ready')
+      expect(run.decision.outcome).toBe('awaiting_review')
+      expect(run.decision.reason).toBe('auto_merge_disabled')
+    })
+
+    it('records the reviewer-effort tag when a human confirms the merge from the notification card', async () => {
+      // The capture point: acting on the `merge_review` card with a `reviewEffort` merges the PR
+      // AND settles the run's record as `human_merged` + tagged, in one request. The card also
+      // carries the class + record id so the SPA can render the class's history and tag in place.
+      const run = await driveMergerRun({
+        changedFiles: ['src/login.ts'],
+        assessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'Risky refactor.' },
+      })
+      expect(run.status).toBe('pr_ready')
+
+      const snap = (await run.app.call<WorkspaceSnapshot>('GET', `/workspaces/${run.wsId}`)).body
+      const card = snap.notifications?.find((n) => n.type === 'merge_review')
+      expect(card, 'merge_review card').toBeDefined()
+      expect(card!.payload?.changeClass).toBe('source')
+      expect(card!.payload?.mergeTrackRecordId).toBeTruthy()
+
+      const acted = await run.app.call(
+        'POST',
+        `/workspaces/${run.wsId}/notifications/${card!.id}/act`,
+        { reviewEffort: 'none' },
+      )
+      expect(acted.status).toBe(200)
+
+      const rollup = await rollupFor(run.app, run.wsId, 'source')
+      expect(rollup.humanMerged).toBe(1)
+      expect(rollup.autoMerged).toBe(0)
+      expect(rollup.pendingReview).toBe(0)
+      // "Zero blocking comments" is exactly the evidence that would justify widening this class.
+      expect(rollup.effort).toEqual({ none: 1, minor: 0, major: 0, untagged: 0 })
+    })
+
+    it('merges without a tag when the human supplies none, and tags later through the record route', async () => {
+      // Tagging is ZERO-MANDATORY: an untagged act must merge cleanly and leave a null tag, and
+      // the standalone effort route must be able to fill it in afterwards (the same route the
+      // external-merge nudge and the inspector's merge controls use).
+      const run = await driveMergerRun({
+        changedFiles: ['src/login.test.ts'],
+        assessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'Risky.' },
+      })
+      const snap = (await run.app.call<WorkspaceSnapshot>('GET', `/workspaces/${run.wsId}`)).body
+      const card = snap.notifications!.find((n) => n.type === 'merge_review')!
+      // No body fields at all — the historical no-tag act.
+      const acted = await run.app.call(
+        'POST',
+        `/workspaces/${run.wsId}/notifications/${card.id}/act`,
+        {},
+      )
+      expect(acted.status).toBe(200)
+
+      const untagged = await rollupFor(run.app, run.wsId, 'test')
+      expect(untagged.humanMerged).toBe(1)
+      expect(untagged.effort.untagged).toBe(1)
+
+      const tagged = await run.app.call<MergeTrackRecord>(
+        'POST',
+        `/workspaces/${run.wsId}/merge-track-records/${card.payload!.mergeTrackRecordId}/effort`,
+        { reviewEffort: 'major' },
+      )
+      expect(tagged.status).toBe(200)
+      expect(tagged.body.reviewEffort).toBe('major')
+      // The decision is untouched by tagging — only the effort moves.
+      expect(tagged.body.decision).toBe('human_merged')
+
+      const after = await rollupFor(run.app, run.wsId, 'test')
+      expect(after.effort).toEqual({ none: 0, minor: 0, major: 1, untagged: 0 })
+    })
+
+    it('records the effort tag when a human merges through the BLOCK route (the inspector control)', async () => {
+      // The second capture point: `POST /blocks/:id/merge` is block-scoped (no notification in
+      // flight), so the record is resolved by BLOCK rather than by run. Asserting it here proves
+      // both facades wire that path, not just the notification one.
+      const run = await driveMergerRun({
+        changedFiles: ['docs/guide.md', 'src/api.ts'],
+        assessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'Risky.' },
+      })
+      expect(run.status).toBe('pr_ready')
+
+      const merged = await run.app.call('POST', `/workspaces/${run.wsId}/blocks/task_login/merge`, {
+        reviewEffort: 'minor',
+      })
+      expect(merged.status).toBe(200)
+      const snap = (await run.app.call<WorkspaceSnapshot>('GET', `/workspaces/${run.wsId}`)).body
+      expect(snap.blocks.find((b) => b.id === 'task_login')!.status).toBe('done')
+
+      const rollup = await rollupFor(run.app, run.wsId, 'source')
+      expect(rollup.humanMerged).toBe(1)
+      expect(rollup.effort).toEqual({ none: 0, minor: 1, major: 0, untagged: 0 })
+    })
+
+    it('records a rejection when the human dismisses the merge card instead of merging', async () => {
+      // Without this the record would sit at `pending_review` forever and the class's auto-merge
+      // share would be computed against a denominator that never settles.
+      const run = await driveMergerRun({
+        changedFiles: ['.github/workflows/ci.yml'],
+        assessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'Risky.' },
+      })
+      const snap = (await run.app.call<WorkspaceSnapshot>('GET', `/workspaces/${run.wsId}`)).body
+      const card = snap.notifications!.find((n) => n.type === 'merge_review')!
+      const dismissed = await run.app.call(
+        'POST',
+        `/workspaces/${run.wsId}/notifications/${card.id}/dismiss`,
+      )
+      expect(dismissed.status).toBe(200)
+
+      const rollup = await rollupFor(run.app, run.wsId, 'config')
+      expect(rollup.rejected).toBe(1)
+      expect(rollup.pendingReview).toBe(0)
+      expect(rollup.merged).toBe(0)
+    })
+
+    it('classifies as `unknown` and falls back to the score thresholds when no VCS client is wired', async () => {
+      // The pass-through guarantee. With no `resolveRunRepoContext` the changed-file list is
+      // unavailable, so the class is `unknown` — and `unknown` matches NO rule, so a preset that
+      // would otherwise always auto-merge this diff must fall back to the score comparison. This
+      // is what keeps a transient VCS outage from silently changing merge policy.
+      const app = harness.makeApp({
+        confidence: 1,
+        pullRequest: FAKE_PR,
+        mergeAssessment: { complexity: 0.95, risk: 0.95, impact: 0.95, rationale: 'Risky.' },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const preset = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+        name: 'Always source',
+        maxComplexity: 0.5,
+        maxRisk: 0.4,
+        maxImpact: 0.5,
+        ciMaxAttempts: 10,
+        maxRequirementIterations: 6,
+        maxRequirementConcernAllowed: 'none',
+        classRules: { source: 'always', docs: 'always', unknown: 'always' } as never,
+      })
+      // `unknown` is not an authorable class, so the request is rejected outright rather than
+      // silently storing a rule that could never match.
+      expect(preset.status).toBe(400)
+
+      const valid = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+        name: 'Always source',
+        maxComplexity: 0.5,
+        maxRisk: 0.4,
+        maxImpact: 0.5,
+        ciMaxAttempts: 10,
+        maxRequirementIterations: 6,
+        maxRequirementConcernAllowed: 'none',
+        classRules: { source: 'always' },
+      })
+      expect(valid.status).toBe(201)
+      expect(valid.body.classRules).toEqual({ source: 'always' })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        riskPolicyId: valid.body.id,
+      })
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build + merger',
+        agentKinds: ['coder', 'merger'],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      const ticked = await app.drive(wsId)
+      const exec = ticked.find((e) => e.blockId === 'task_login')!
+      const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+        outcome?: string
+        reason?: string
+        changeClass?: string
+      }
+      // No class ⇒ no rule ⇒ the busted ceilings decide, exactly as before the feature existed.
+      expect(decision.changeClass).toBeUndefined()
+      expect(decision.outcome).toBe('awaiting_review')
+      expect(decision.reason).toBe('exceeded_thresholds')
+      const rollup = await rollupFor(app, wsId, 'unknown')
+      expect(rollup.pendingReview).toBe(1)
+    })
+
+    it('keeps per-class rollups separate and returns every class in one request', async () => {
+      // The rollup is ONE SQL aggregate over the whole workspace, so this pins that the GROUP BY
+      // partitions correctly (two classes, distinct counts) and that classes with no rows still
+      // come back as zeros — the preset editor renders a row per class regardless.
+      const app = harness.makeApp(
+        {
+          confidence: 1,
+          pullRequest: FAKE_PR,
+          mergeAssessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'Trivial.' },
+        },
+        {
+          resolveRunRepoContext: async (_ws, blockId) => ({
+            // Classify by which task ran, so one workspace accumulates two different classes.
+            repo: repoWithChangedFiles(
+              blockId === 'task_login' ? ['docs/a.md'] : ['src/a.test.ts'],
+            ),
+            baseBranch: 'main',
+          }),
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build + merger',
+        agentKinds: ['coder', 'merger'],
+      })
+      // Two DIFFERENT seeded tasks, so one workspace accumulates two different classes.
+      for (const blockId of ['task_login', 'task_refresh']) {
+        const started = await app.call('POST', `/workspaces/${wsId}/blocks/${blockId}/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(started.status).toBe(201)
+        await app.drive(wsId)
+      }
+
+      const res = await app.call<MergeClassRollup[]>(
+        'GET',
+        `/workspaces/${wsId}/merge-track-records/rollups`,
+      )
+      expect(res.status).toBe(200)
+      const byClass = new Map(res.body.map((r) => [r.changeClass, r]))
+      expect(byClass.get('docs')?.autoMerged).toBe(1)
+      expect(byClass.get('test')?.autoMerged).toBe(1)
+      expect(byClass.get('source')?.total).toBe(0)
+      expect(byClass.get('schema')?.total).toBe(0)
+      // One response, every class — never one request per class.
+      expect(res.body).toHaveLength(7)
+    })
+  })
+}

@@ -1,5 +1,7 @@
 import {
   createRiskPolicyContract,
+  listMergeClassRollupsContract,
+  tagMergeReviewEffortContract,
   createModelPresetContract,
   deleteRiskPolicyContract,
   deleteModelPresetContract,
@@ -10,7 +12,7 @@ import {
   updateRiskPolicyContract,
   updateModelPresetContract,
 } from '@cat-factory/contracts'
-import type { UpdateRiskPolicyInput } from '~/types/merge'
+import type { ReviewEffort, UpdateRiskPolicyInput } from '~/types/merge'
 import type { CreateModelPresetInput, UpdateModelPresetInput } from '~/types/model-presets'
 import type { SendParams } from './client'
 import type { ApiContext } from './context'
@@ -44,6 +46,24 @@ export function presetsApi({ send, ws }: ApiContext) {
     // drifted one, or materialise a new built-in that appeared). Custom presets reject this.
     reseedRiskPolicy: (workspaceId: string, presetId: string) =>
       send(reseedRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+
+    // ---- merge track record (the per-class evidence behind the policy) -----
+    // Every class in ONE request (a single SQL aggregate server-side), so the preset editor can
+    // show each class's rule next to the numbers that justify widening it without fanning out.
+    listMergeClassRollups: (workspaceId: string) =>
+      send(listMergeClassRollupsContract, { pathPrefix: ws(workspaceId) }),
+
+    // Tag (or clear) how much review a merged PR actually needed.
+    tagMergeReviewEffort: (
+      workspaceId: string,
+      recordId: string,
+      reviewEffort: ReviewEffort | null,
+    ) =>
+      send(tagMergeReviewEffortContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { recordId },
+        body: { reviewEffort },
+      }),
 
     // ---- model presets (per-task model->agent mapping library) ------------
     listModelPresets: (workspaceId: string) =>

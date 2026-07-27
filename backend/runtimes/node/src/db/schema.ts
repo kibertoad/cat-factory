@@ -1353,6 +1353,10 @@ export const riskPolicies = pgTable(
     // Estimate gating for the implementation-fork decision phase, a JSON `StepGating` blob
     // (mirror of D1's `fork_decision` TEXT column). NULL ⇒ off in `auto` mode.
     fork_decision: text('fork_decision'),
+    // Per-change-class auto-merge rules, a JSON partial map from change class to
+    // `thresholds` | `always` | `never` (mirror of D1's `class_rules` TEXT column). `{}` — the
+    // default — means every class uses the score ceilings above, the historical behaviour.
+    class_rules: text('class_rules').notNull().default('{}'),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
     is_default: integer('is_default').notNull().default(0),
@@ -1362,6 +1366,53 @@ export const riskPolicies = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
+  ],
+)
+
+// Merge TRACK RECORD — one row per merge decision: the run's deterministic change class, the
+// merger's scores at the decision, what happened, and the reviewer-effort tag a human left
+// (mirror of D1 migration 0061's `merge_track_records`). Per-class rollups over this table are
+// SQL aggregates behind `DrizzleMergeTrackRecordRepository.rollupByClass`, never rows reduced in
+// JS. Provider-neutral: repo identity is `repo_id` + `provider`, never a GitHub-shaped id.
+export const mergeTrackRecords = pgTable(
+  'merge_track_records',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    // NULL for a record born from an externally-merged PR with no cat-factory run.
+    execution_id: text('execution_id'),
+    // docs | test | dependency | config | source | schema | unknown.
+    change_class: text('change_class').notNull(),
+    changed_file_count: integer('changed_file_count'),
+    // The merger's 0..1 axes; NULL when it produced no parseable assessment (or never ran).
+    complexity: doublePrecision('complexity'),
+    risk: doublePrecision('risk'),
+    impact: doublePrecision('impact'),
+    risk_policy_id: text('risk_policy_id'),
+    risk_policy_name: text('risk_policy_name'),
+    // pending_review | auto_merged | human_merged | external_merged | rejected.
+    decision: text('decision').notNull(),
+    // none | minor | major. NULL until tagged — tagging is a nudge, never a gate.
+    review_effort: text('review_effort'),
+    pr_number: integer('pr_number'),
+    pr_url: text('pr_url'),
+    repo_id: text('repo_id'),
+    provider: text('provider'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    resolved_at: bigint('resolved_at', { mode: 'number' }),
+    tagged_at: bigint('tagged_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // The per-class rollup reads a whole workspace grouped by class.
+    index('idx_merge_track_records_class').on(t.workspace_id, t.change_class),
+    // Settling a decision / tagging effort resolves by run.
+    index('idx_merge_track_records_execution').on(t.workspace_id, t.execution_id),
+    // The block-scoped merge controls read the block's most recent record.
+    index('idx_merge_track_records_block').on(t.workspace_id, t.block_id, t.created_at),
+    // External-merge attribution looks a record up by the PR the webhook named.
+    index('idx_merge_track_records_pr').on(t.workspace_id, t.repo_id, t.pr_number),
   ],
 )
 
@@ -2056,202 +2107,21 @@ export const subscriptionActivations = pgTable(
     index('idx_sub_activations_expiry').on(t.expires_at),
   ],
 )
-
-// GitHub App installation bindings (mirror of D1 migration 0004 + the account_id /
-// app_id columns from 0017 / 0019). The container executor reads this to resolve a
-// run's installation id and mint a short-lived push token; tokens are cached
-// in-memory by the auth adapter, never persisted here.
-export const githubInstallations = pgTable(
-  'github_installations',
-  {
-    installation_id: bigint('installation_id', { mode: 'number' }).primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    account_id: text('account_id'),
-    account_login: text('account_login').notNull(),
-    target_type: text('target_type').notNull(),
-    app_id: text('app_id'),
-    // Which VCS this connection talks to (github / gitlab). See contracts `GitHubConnection`
-    // + kernel `GitHubInstallation.provider`.
-    provider: text('provider').notNull().default('github'),
-    cached_token: text('cached_token'),
-    token_expires_at: bigint('token_expires_at', { mode: 'number' }),
-    // Durable, sealed access credential for a per-workspace PAT connection (a hosted GitLab
-    // connect seals the user's PAT here). Null for the GitHub-App path, which mints its own
-    // tokens. See kernel `GitHubInstallation.accessToken`.
-    access_token: text('access_token'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    uniqueIndex('idx_gh_install_workspace')
-      .on(t.workspace_id)
-      .where(sql`deleted_at IS NULL`),
-    index('idx_gh_install_account')
-      .on(t.account_id)
-      .where(sql`deleted_at IS NULL`),
-  ],
-)
-
-// Projection of a workspace's GitHub repositories (mirror of D1 migration 0004).
-// The container executor resolves a run's target repo from the service frame the block
-// sits under (via the account-owned `Service`, not any repo→block column).
-export const githubRepos = pgTable(
-  'github_repos',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
-    owner: text('owner').notNull(),
-    name: text('name').notNull(),
-    default_branch: text('default_branch'),
-    private: integer('private').notNull().default(0),
-    // Whether the repo is a monorepo hosting several services (link-owned — sync
-    // preserves it). See contracts `GitHubRepo.isMonorepo`.
-    is_monorepo: integer('is_monorepo').notNull().default(0),
-    // How the repo entered the projection: 'app' (shared GitHub App installation, visible
-    // to every member) or 'user_pat' (reachable only via the linker's personal token).
-    // Link-owned — sync preserves it. See contracts `GitHubRepo.linkedVia`.
-    linked_via: text('linked_via').notNull().default('app'),
-    // Which VCS the repo belongs to (github / gitlab) — the connection's provider, inherited
-    // by the repo. See contracts `GitHubRepo.provider`.
-    provider: text('provider').notNull().default('github'),
-    etag: text('etag'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.github_id] }),
-    index('idx_gh_repos_install').on(t.installation_id),
-  ],
-)
-
-// Per-user "repos my personal access token can reach" projection (mirror of D1). The
-// fail-closed cache the board redaction checks so a frame backed by a `user_pat` repo is
-// hidden from members who can't reach it, without a live GitHub call per snapshot. See the
-// kernel `UserRepoAccessRepository` port.
-export const githubUserRepoAccess = pgTable(
-  'github_user_repo_access',
-  {
-    user_id: text('user_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    owner: text('owner').notNull(),
-    name: text('name').notNull(),
-    default_branch: text('default_branch'),
-    private: integer('private').notNull().default(0),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.user_id, t.repo_github_id] }),
-    index('idx_gh_user_repo_access_repo').on(t.repo_github_id),
-  ],
-)
-
-// GitHub projection tables (mirror of D1 migration 0004; sync cursors re-keyed by
-// migration 0032). Local read models of a workspace's repos' branches / PRs / issues /
-// commits / check runs, populated by the inline GitHub sync. `protected`/`merged` are
-// 0/1 to mirror the D1 integer flags; soft-delete tombstones where the D1 tables have one.
-export const githubBranches = pgTable(
-  'github_branches',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    name: text('name').notNull(),
-    head_sha: text('head_sha').notNull(),
-    protected: integer('protected').notNull().default(0),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.name] })],
-)
-
-export const githubPullRequests = pgTable(
-  'github_pull_requests',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    number: integer('number').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    title: text('title').notNull(),
-    state: text('state').notNull(),
-    head_ref: text('head_ref'),
-    base_ref: text('base_ref'),
-    head_sha: text('head_sha'),
-    merged: integer('merged').notNull().default(0),
-    author: text('author'),
-    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] }),
-    index('idx_gh_pr_state').on(t.workspace_id, t.state),
-  ],
-)
-
-export const githubIssues = pgTable(
-  'github_issues',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    number: integer('number').notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    title: text('title').notNull(),
-    state: text('state').notNull(),
-    author: text('author'),
-    labels: text('labels').notNull().default('[]'),
-    gh_updated_at: bigint('gh_updated_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.number] })],
-)
-
-export const githubCommits = pgTable(
-  'github_commits',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    sha: text('sha').notNull(),
-    message: text('message').notNull(),
-    author: text('author'),
-    authored_at: bigint('authored_at', { mode: 'number' }),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.sha] })],
-)
-
-export const githubCheckRuns = pgTable(
-  'github_check_runs',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    github_id: bigint('github_id', { mode: 'number' }).notNull(),
-    head_sha: text('head_sha').notNull(),
-    name: text('name').notNull(),
-    status: text('status').notNull(),
-    conclusion: text('conclusion'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.repo_github_id, t.github_id] }),
-    index('idx_gh_checks_sha').on(t.workspace_id, t.repo_github_id, t.head_sha),
-  ],
-)
-
-// Incremental-sync bookkeeping, keyed by (installation, repo, kind) so a repo is
-// fetched once per org and fanned out (mirror of D1 migration 0032).
-export const githubSyncCursors = pgTable(
-  'github_sync_cursors',
-  {
-    installation_id: bigint('installation_id', { mode: 'number' }).notNull(),
-    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
-    kind: text('kind').notNull(),
-    etag: text('etag'),
-    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
-    since_iso: text('since_iso'),
-  },
-  (t) => [primaryKey({ columns: [t.installation_id, t.repo_github_id, t.kind] })],
-)
+// The VCS/projection tables (installations, repos, per-user repo access, and the branch /
+// pull-request / issue / commit / check-run / sync-cursor projections) live in
+// `tables/vcs.ts` — one cohesive group, extracted to keep this module inside its size budget —
+// and are re-exported below so every `from '../db/schema.js'` importer is unaffected.
+export {
+  githubInstallations,
+  githubRepos,
+  githubUserRepoAccess,
+  githubBranches,
+  githubPullRequests,
+  githubIssues,
+  githubCommits,
+  githubCheckRuns,
+  githubSyncCursors,
+} from './tables/vcs.js'
 
 // Binary-artifact METADATA (mirror of D1 migration 0017). The bytes live in a blob
 // backend keyed by `storage_key` (R2 / S3 / the `binary_artifact_blobs` table below);

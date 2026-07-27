@@ -32,6 +32,7 @@ const back = useIntegrationBack(open)
 const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
   { type: 'merge_review', label: t('slack.routable.merge_review') },
   { type: 'pipeline_complete', label: t('slack.routable.pipeline_complete') },
+  { type: 'merge_tag_request', label: t('slack.routable.merge_tag_request') },
   { type: 'ci_failed', label: t('slack.routable.ci_failed') },
   { type: 'test_failed', label: t('slack.routable.test_failed') },
   { type: 'requirement_review', label: t('slack.routable.requirement_review') },
@@ -54,6 +55,7 @@ const ROLE_OPTIONS = computed<{ label: string; value: SlackMemberRole }[]>(() =>
 const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
+  merge_tag_request: { enabled: false, channel: '' },
   ci_failed: { enabled: false, channel: '' },
   test_failed: { enabled: false, channel: '' },
   requirement_review: { enabled: false, channel: '' },

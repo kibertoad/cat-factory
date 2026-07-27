@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Notification } from '~/types/domain'
+import type { ReviewEffort } from '~/types/merge'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -13,6 +14,7 @@ const notifications = useNotificationsStore()
 const ui = useUiStore()
 const access = useWorkspaceAccess()
 const execution = useExecutionStore()
+const trackRecords = useMergeTrackRecordsStore()
 const toast = useToast()
 
 const busy = ref<string | null>(null)
@@ -34,6 +36,10 @@ type Accent = 'warning' | 'primary' | 'error'
 const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   merge_review: { icon: 'i-lucide-git-pull-request-arrow', color: 'warning' },
   pipeline_complete: { icon: 'i-lucide-circle-check', color: 'primary' },
+  // A PR merged directly on the provider left its merge track record untagged. Purely a nudge:
+  // "act" records the picked reviewer effort (nothing at all if none was picked) and dismissing
+  // it is always fine — the record stays valid untagged.
+  merge_tag_request: { icon: 'i-lucide-tag', color: 'primary' },
   ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error' },
   test_failed: { icon: 'i-lucide-flask-conical', color: 'error' },
   // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
@@ -89,6 +95,7 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
 const ACTION_KEYS: Record<Notification['type'], string> = {
   merge_review: 'layout.notifications.action.merge_review',
   pipeline_complete: 'layout.notifications.action.pipeline_complete',
+  merge_tag_request: 'layout.notifications.action.merge_tag_request',
   ci_failed: 'layout.notifications.action.ci_failed',
   test_failed: 'layout.notifications.action.test_failed',
   requirement_review: 'layout.notifications.action.requirement_review',
@@ -127,10 +134,57 @@ function accent(n: Notification): Accent {
   return isUrgent(n) ? 'error' : META[n.type].color
 }
 
+/**
+ * Which cards collect a reviewer-effort tag: the two that MERGE a PR, plus the post-hoc nudge for
+ * one that was merged on the provider. Everything else has nothing to tag.
+ */
+function collectsEffort(n: Notification): boolean {
+  return (
+    n.type === 'merge_review' || n.type === 'pipeline_complete' || n.type === 'merge_tag_request'
+  )
+}
+
+/**
+ * The human's picked effort per card, preselected from evidence rather than starting blank: if the
+ * run's `pr-reviewer` step actually recorded findings, review comments plausibly drove rework
+ * (`minor`); if it did not, the PR needed nothing (`none`). One tap either confirms that guess or
+ * corrects it. `undefined` means the card collects no tag at all.
+ */
+const effortByCard = reactive<Record<string, ReviewEffort | null>>({})
+
+/** Whether the run's PR review surfaced any findings — the default-preselection signal. */
+function hadReviewFindings(n: Notification): boolean {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  return (instance?.steps ?? []).some((s) => (s.prReview?.findings?.length ?? 0) > 0)
+}
+
+function effortFor(n: Notification): ReviewEffort | null {
+  if (!(n.id in effortByCard)) effortByCard[n.id] = hadReviewFindings(n) ? 'minor' : 'none'
+  return effortByCard[n.id] ?? null
+}
+
+/** The change class the engine recorded for the run, when classification resolved one. */
+function changeClassOf(n: Notification) {
+  return n.payload?.changeClass
+}
+
+// Load the per-class rollups ONCE, the first time an effort-collecting card is in the inbox, so a
+// merge card can show what that class has historically needed. Not part of the workspace snapshot
+// (it's settings-screen/card context, not board state) and a single request for every class.
+watch(
+  () => notifications.open.some(collectsEffort),
+  (needed) => {
+    if (needed && !trackRecords.loaded && !trackRecords.loading) void trackRecords.load()
+  },
+  { immediate: true },
+)
+
 async function act(n: Notification) {
   busy.value = n.id
   try {
-    await notifications.act(n.id)
+    // Only the merge cards carry a tag; passing `undefined` elsewhere keeps the historical
+    // no-body act, so a non-merge card's action is completely unchanged.
+    await notifications.act(n.id, collectsEffort(n) ? effortFor(n) : undefined)
     toast.add({
       title: t('layout.notifications.toast.acted'),
       color: 'success',
@@ -327,6 +381,14 @@ function revealDecision(n: Notification) {
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
               </a>
+              <MergeEffortChips
+                v-if="collectsEffort(n)"
+                :model-value="effortFor(n)"
+                :change-class="changeClassOf(n)"
+                :rollup="changeClassOf(n) ? trackRecords.byClass[changeClassOf(n)!] : null"
+                :disabled="busy === n.id || !access.canExecuteRuns.value"
+                @update:model-value="effortByCard[n.id] = $event"
+              />
               <div class="mt-2 flex items-center gap-1.5">
                 <UButton
                   data-testid="notification-act"

@@ -125,6 +125,11 @@ export {
   type RiskPolicyServiceDependencies,
 } from './modules/merge/RiskPolicyService.js'
 export {
+  MergeTrackRecordService,
+  type MergeTrackRecordServiceDependencies,
+  type RecordMergeDecisionInput,
+} from './modules/merge/MergeTrackRecordService.js'
+export {
   SandboxService,
   type SandboxServiceDependencies,
   type SandboxExperimentDetail,
@@ -289,6 +294,7 @@ export {
   type PreviewModule,
   type IncidentEnrichmentModule,
   type SlackModule,
+  type MergeTrackRecordModule,
   type RiskPoliciesModule,
   type SharedStacksModule,
   type PreflightsModule,

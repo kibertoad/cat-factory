@@ -66,6 +66,18 @@ export interface WebhookServiceDependencies {
    */
   repoFilesCache?: GroupCacheHandle<CachedRepoRead>
   /**
+   * Best-effort observer for a pull request MERGED outside cat-factory — a human clicking merge on
+   * GitHub/GitLab, bypassing the merge-review card. Wired to the merge track record so the run's
+   * record is attributed (`external_merged`) and a dismissible reviewer-effort nudge is raised.
+   *
+   * Deliberately a narrow seam rather than a repository dependency: this service belongs to the
+   * integration layer and knows nothing about blocks, runs, or merge policy. Invoked per LINKED
+   * workspace with only the provider-neutral `(repoId, prNumber)` the delivery named — which is
+   * exactly what the track record is keyed by, so no block lookup is needed. Absent (tests / the
+   * feature unwired) ⇒ nothing happens and the projection write is unaffected.
+   */
+  externalMergeObserver?: (workspaceId: string, repoId: string, prNumber: number) => Promise<void>
+  /**
    * Repo-sourced skill freshness (slice 4). When a push advances a branch, any skill source
    * linked to that repo may be stale, so the affected sources are looked up here (by the
    * pushed repo's owner/name, one indexed query — never a point-read per source) and handed
@@ -132,11 +144,23 @@ export class WebhookService {
         if (!pr) return
         const repoId = pullRepoGithubId(pr) ?? this.repoIdOf(root)
         if (repoId === null) return
-        await this.forEachLinkedWorkspace(installationId, repoId, (ws) =>
-          this.deps.pullRequestProjectionRepository.upsertMany(ws, [
+        await this.forEachLinkedWorkspace(installationId, repoId, async (ws) => {
+          await this.deps.pullRequestProjectionRepository.upsertMany(ws, [
             toPullRequestProjection(pr, repoId, now),
-          ]),
-        )
+          ])
+          // A merged close is a MERGE decision that happened outside the app. Notify the observer
+          // AFTER the projection write and swallow its failures: the projection is the primary
+          // job here, and the track record is a best-effort side channel that must never break
+          // webhook ingest (a thrown error would fail the queue job and retry the delivery).
+          if (pr.merged === true) {
+            try {
+              await this.deps.externalMergeObserver?.(ws, String(repoId), pr.number)
+            } catch {
+              // Best-effort: an un-attributed external merge simply keeps its `pending_review`
+              // record, which is strictly better than a stuck webhook.
+            }
+          }
+        })
         return
       }
       case 'issues': {

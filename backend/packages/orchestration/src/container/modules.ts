@@ -63,6 +63,7 @@ import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from '../modules/brainstorm/BrainstormService.js'
 import { NotificationService } from '../modules/notifications/NotificationService.js'
+import { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
 import { SandboxService } from '../modules/sandbox/SandboxService.js'
 import { SandboxRunService } from '../modules/sandbox/SandboxRunService.js'
@@ -78,17 +79,26 @@ import {
 import { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
+// The bigger multi-collaborator module shapes still live beside their wiring in the composition
+// root; the small single-/few-service ones come from `module-shapes.js`, so these factories carry
+// no type-import back-edge onto `container.ts` for them.
 import type {
   BootstrapModule,
-  BrainstormModule,
-  ClarityModule,
   CoreDependencies,
   DocumentsModule,
   EnvironmentsModule,
   FragmentLibraryModule,
   GitHubModule,
+  RunnersModule,
+  ServicesModule,
+  TasksModule,
+} from '../container.js'
+import type {
+  BrainstormModule,
+  ClarityModule,
   IncidentEnrichmentModule,
   KaizenModule,
+  MergeTrackRecordModule,
   ModelPresetsModule,
   NotificationsModule,
   PackageRegistriesModule,
@@ -98,16 +108,13 @@ import type {
   ReleaseHealthModule,
   RequirementsModule,
   RiskPoliciesModule,
-  RunnersModule,
   SandboxModule,
   ServiceFragmentDefaultsModule,
-  ServicesModule,
   SharedStacksModule,
   SlackModule,
-  TasksModule,
   TrackerModule,
   WorkspaceSettingsModule,
-} from '../container.js'
+} from './module-shapes.js'
 
 export function createServicesModule(deps: CoreDependencies): ServicesModule | undefined {
   const { serviceRepository, workspaceMountRepository } = deps
@@ -129,6 +136,12 @@ export function createServicesModule(deps: CoreDependencies): ServicesModule | u
 export function createGitHubModule(
   deps: CoreDependencies,
   caches: AppCaches,
+  /**
+   * Best-effort hook for a pull request merged OUTSIDE cat-factory (see
+   * `makeExternalMergeObserver`). Passed in rather than resolved here because it spans the merge
+   * track record + the notification inbox, neither of which this factory owns.
+   */
+  externalMergeObserver?: (workspaceId: string, repoId: string, prNumber: number) => Promise<void>,
 ): GitHubModule | undefined {
   const {
     githubClient,
@@ -198,6 +211,9 @@ export function createGitHubModule(
     // a runtime has a sync queue); unwired ⇒ the dispatch-time probe is the freshness backstop.
     skillSourceRepository: deps.skillSourceRepository,
     enqueueSkillResync: deps.enqueueSkillResync,
+    // Attribute a PR merged directly on the provider to its merge track record + nudge for the
+    // reviewer-effort tag the merge card would have collected. Unwired ⇒ no-op.
+    externalMergeObserver,
   })
   const service = new GitHubService({
     githubClient,
@@ -988,6 +1004,29 @@ export function createRiskPoliciesModule(
     riskPolicyCache: caches.riskPolicy,
   })
   return { service }
+}
+
+/**
+ * Assemble the merge track-record module when its repository is present: the per-class change
+ * classification the merge policy's per-class rules key off, plus the persisted evidence behind
+ * every merge decision. Absent ⇒ classification yields `unknown`, no per-class rule matches, and
+ * the merge path behaves exactly as it did before the feature existed.
+ */
+export function createMergeTrackRecordModule(
+  deps: CoreDependencies,
+): MergeTrackRecordModule | undefined {
+  const { mergeTrackRecordRepository } = deps
+  if (!mergeTrackRecordRepository) return undefined
+  return {
+    service: new MergeTrackRecordService({
+      mergeTrackRecordRepository,
+      workspaceRepository: deps.workspaceRepository,
+      clock: deps.clock,
+      // Reads the PR's changed-file list through the same run-repo seam the engine's pre/post-ops
+      // use — provider-neutral, so classification works identically on a GitLab deployment.
+      resolveRunRepoContext: deps.resolveRunRepoContext,
+    }),
+  }
 }
 
 /**

@@ -21,6 +21,7 @@ import { gitlabController } from './modules/gitlab/GitLabController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
+import { mergeTrackRecordController } from './modules/merge/MergeTrackRecordController.js'
 import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { preflightController } from './modules/preflight/PreflightController.js'
@@ -205,6 +206,7 @@ function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', riskPolicyController())
+  app.route('/workspaces/:workspaceId', mergeTrackRecordController())
   app.route('/workspaces/:workspaceId', sharedStackController())
   app.route('/workspaces/:workspaceId', preflightController())
   app.route('/workspaces/:workspaceId', sandboxController())

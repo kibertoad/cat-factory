@@ -34,10 +34,17 @@ const assessment = (over: Partial<MergeAssessment> = {}): MergeAssessment => ({
   ...over,
 })
 
-function makeResolver(over: Partial<MergeResolverDeps> & { preset?: typeof PRESET } = {}) {
+function makeResolver(
+  over: Partial<MergeResolverDeps> & {
+    preset?: Record<string, unknown>
+    /** The class the (stubbed) track-record service reports; omit for no service at all. */
+    changeClass?: string
+  } = {},
+) {
   const finalizeMerge = over.finalizeMerge ?? vi.fn().mockResolvedValue({ kind: 'merged' })
   const update = vi.fn().mockResolvedValue(undefined)
   const raise = vi.fn().mockResolvedValue(undefined)
+  const recordDecision = vi.fn().mockResolvedValue({ id: 'mtr_exec_1' })
   const deps: MergeResolverDeps = {
     blockRepository: {
       get: vi.fn().mockResolvedValue(BLOCK),
@@ -46,8 +53,18 @@ function makeResolver(over: Partial<MergeResolverDeps> & { preset?: typeof PRESE
     notificationService: { raise } as unknown as MergeResolverDeps['notificationService'],
     resolveRiskPolicy: vi.fn().mockResolvedValue(over.preset ?? PRESET),
     finalizeMerge,
+    // Only wired when the test supplies a class — otherwise the resolver runs with NO track-record
+    // service at all, which is the pass-through shape every pre-existing case below asserts.
+    ...(over.changeClass
+      ? {
+          mergeTrackRecord: {
+            classify: vi.fn().mockResolvedValue({ changeClass: over.changeClass, fileCount: 2 }),
+            recordDecision,
+          } as unknown as MergeResolverDeps['mergeTrackRecord'],
+        }
+      : {}),
   }
-  return { resolver: new MergeResolver(deps), finalizeMerge, update, raise }
+  return { resolver: new MergeResolver(deps), finalizeMerge, update, raise, recordDecision }
 }
 
 describe('MergeResolver.resolveMergerStep', () => {
@@ -155,5 +172,135 @@ describe('MergeResolver replay safety', () => {
     expect(finalizeMerge).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
     expect(raise).not.toHaveBeenCalled()
+  })
+
+  // ---- per-class auto-merge rules -----------------------------------------
+  // Precedence, most-significant first: `autoMergeEnabled: false` > the class rule > the
+  // credibility + threshold comparison. Each rung is pinned so a future edit can't reorder them.
+
+  it('auto-merges an over-threshold assessment when the class rule is `always`', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, classRules: { dependency: 'always' } },
+      changeClass: 'dependency',
+    })
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      INSTANCE,
+      assessment({ complexity: 0.99, risk: 0.99, impact: 0.99 }),
+    )
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+    expect(decision?.outcome).toBe('auto_merged')
+    // The reason names the RULE, so the banner never implies the scores were within range.
+    expect(decision?.reason).toBe('class_auto_merge')
+    expect(decision?.thresholds.classRule).toBe('always')
+    expect(decision?.changeClass).toBe('dependency')
+  })
+
+  it('auto-merges on an `always` class rule even with NO credible assessment', async () => {
+    // An explicit operator policy keyed on a DETERMINISTIC backend classification outranks the
+    // agent's self-report — including the empty-rationale backstop, which exists to distrust the
+    // agent, not the file list. (A pipeline may legitimately have no merger step at all.)
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, classRules: { docs: 'always' } },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, { not: 'an assessment' })
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+    expect(decision?.outcome).toBe('auto_merged')
+    expect(decision?.reason).toBe('class_auto_merge')
+  })
+
+  it('forces review on a within-threshold assessment when the class rule is `never`', async () => {
+    const { resolver, finalizeMerge, raise, update } = makeResolver({
+      preset: { ...PRESET, classRules: { schema: 'never' } },
+      changeClass: 'schema',
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(raise).toHaveBeenCalledOnce()
+    expect(update).toHaveBeenCalledWith('ws', 'task_login', { status: 'pr_ready', progress: 1 })
+    expect(decision?.outcome).toBe('awaiting_review')
+    expect(decision?.reason).toBe('class_requires_review')
+    expect(decision?.thresholds.classRule).toBe('never')
+  })
+
+  it('lets `autoMergeEnabled: false` beat an `always` class rule', async () => {
+    // The master switch. A "manual review only" preset must stay manual, or its whole guarantee
+    // evaporates the moment somebody widens one class.
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, autoMergeEnabled: false, classRules: { docs: 'always' } },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(decision?.reason).toBe('auto_merge_disabled')
+  })
+
+  it('ignores a rule for a DIFFERENT class than the run resolved', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, classRules: { docs: 'never' } },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+    expect(decision?.reason).toBe('within_thresholds')
+    // No rule applied ⇒ the field is omitted rather than reported as `thresholds`.
+    expect(decision?.thresholds.classRule).toBeUndefined()
+  })
+
+  it('falls back to the thresholds when the class is `unknown`, whatever rules exist', async () => {
+    // The load-bearing invariant: a diff we could not read must not change policy. Even a preset
+    // that widened every class leaves an unclassifiable PR on the score comparison.
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { docs: 'always', source: 'always', schema: 'always' },
+      },
+      changeClass: 'unknown',
+    })
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      INSTANCE,
+      assessment({ complexity: 0.99 }),
+    )
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(decision?.reason).toBe('exceeded_thresholds')
+    // `unknown` is not surfaced as a class on the decision — the field is simply absent.
+    expect(decision?.changeClass).toBeUndefined()
+  })
+
+  it('records the decision on the track record, with the classification threaded through', async () => {
+    // The classification is computed ONCE (before the policy decision, which needs it) and passed
+    // into the record write, so the merge path never pays for a second VCS call.
+    const { resolver, recordDecision } = makeResolver({ changeClass: 'source' })
+    await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(recordDecision).toHaveBeenCalledExactlyOnceWith('ws', {
+      block: BLOCK,
+      executionId: 'exec_1',
+      decision: 'auto_merged',
+      assessment: assessment(),
+      riskPolicyId: null,
+      riskPolicyName: 'Balanced',
+      classification: { changeClass: 'source', fileCount: 2 },
+    })
+  })
+
+  it('records a `pending_review` decision and puts the record on the review card', async () => {
+    const { resolver, recordDecision, raise } = makeResolver({ changeClass: 'source' })
+    await resolver.resolveMergerStep('ws', INSTANCE, assessment({ complexity: 0.99 }))
+    expect(recordDecision).toHaveBeenCalledExactlyOnceWith(
+      'ws',
+      expect.objectContaining({ decision: 'pending_review' }),
+    )
+    // The card carries the class + record id so the human can confirm-and-tag in one tap.
+    expect(raise).toHaveBeenCalledWith(
+      'ws',
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          changeClass: 'source',
+          mergeTrackRecordId: 'mtr_exec_1',
+        }),
+      }),
+    )
   })
 })

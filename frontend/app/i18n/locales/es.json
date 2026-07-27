@@ -1094,7 +1094,9 @@
         "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
         "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
         "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione.",
-        "merge_partial": "Algunas de las solicitudes de incorporación de la tarea se fusionaron, pero una posterior no pudo, por lo que el cambio espera a que una persona termine o revierta la fusión multirrepositorio."
+        "merge_partial": "Algunas de las solicitudes de incorporación de la tarea se fusionaron, pero una posterior no pudo, por lo que el cambio espera a que una persona termine o revierta la fusión multirrepositorio.",
+        "class_auto_merge": "Este preajuste fusiona siempre esta categoría de cambio de forma automática, así que no se compararon las puntuaciones.",
+        "class_requires_review": "Este preajuste envía siempre esta categoría de cambio a una persona, sean cuales sean las puntuaciones."
       },
       "scores": "Puntuaciones",
       "axis": {
@@ -1689,7 +1691,8 @@
         "fork_decision_pending": "Marcar como leído",
         "pr_review_ready": "Marcar como leída",
         "budget_paused": "Marcar como leída",
-        "key_drift": "Descartar credenciales obsoletas"
+        "key_drift": "Descartar credenciales obsoletas",
+        "merge_tag_request": "Registrar esfuerzo"
       },
       "toast": {
         "acted": "Marcado como resuelto",
@@ -2297,6 +2300,19 @@
         "onMissing": {
           "run": "Proponer igualmente",
           "skip": "Omitir"
+        }
+      },
+      "classRules": {
+        "heading": "Reglas por categoría de cambio",
+        "help": "Cada pull request se clasifica a partir de los archivos que modificó. Una categoría puede fusionarse siempre de forma automática, exigir siempre revisión, o usar los umbrales de arriba. Los recuentos muestran lo que esa categoría ha necesitado hasta ahora.",
+        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request sigue pasando por una persona. Una regla de categoría no puede anular eso.",
+        "noData": "Aún sin historial",
+        "record": "{merged} fusionados, {autoShare} automáticamente",
+        "frictionless": "{share} no necesitó comentarios",
+        "rule": {
+          "thresholds": "Usar los umbrales",
+          "always": "Fusionar siempre automáticamente",
+          "never": "Exigir siempre revisión"
         }
       }
     },
@@ -3220,7 +3236,8 @@
       "human_test_ready": "Listo para pruebas humanas",
       "visual_confirmation_ready": "Listo para confirmacion visual",
       "pr_review_ready": "Hallazgos de revisión de PR",
-      "initiative": "Actualizaciones de la iniciativa"
+      "initiative": "Actualizaciones de la iniciativa",
+      "merge_tag_request": "Solicitud de esfuerzo de revisión"
     },
     "role": {
       "engineering": "Ingenieria",
@@ -5138,6 +5155,24 @@
       "checkSourceFailed": "No se pudo comprobar la fuente",
       "sourceUnlinked": "Fuente desvinculada",
       "unlinkSourceFailed": "No se pudo desvincular la fuente"
+    }
+  },
+  "merge": {
+    "changeClass": {
+      "docs": "Documentación y textos",
+      "test": "Pruebas",
+      "dependency": "Actualización de dependencias",
+      "config": "Configuración y CI",
+      "source": "Código fuente",
+      "schema": "Esquema y migraciones",
+      "unknown": "Sin clasificar"
+    },
+    "effort": {
+      "prompt": "Esfuerzo de revisión",
+      "none": "Sin comentarios",
+      "minor": "Comentarios menores",
+      "major": "Retrabajo real",
+      "classHistory": "{merged} fusionados en esta categoría, {autoShare} de forma automática"
     }
   }
 }

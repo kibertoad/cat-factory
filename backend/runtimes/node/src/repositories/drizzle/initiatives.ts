@@ -139,6 +139,9 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     forkDecision: row.fork_decision
       ? (JSON.parse(row.fork_decision) as RiskPolicy['forkDecision'])
       : null,
+    // The column is NOT NULL DEFAULT '{}', but tolerate a null defensively: an empty rule map is
+    // the identity (every class falls back to the score ceilings).
+    classRules: row.class_rules ? (JSON.parse(row.class_rules) as RiskPolicy['classRules']) : {},
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
@@ -202,6 +205,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
       auto_merge_enabled: preset.autoMergeEnabled ? 1 : 0,
       fork_decision: preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
+      class_rules: JSON.stringify(preset.classRules ?? {}),
       version: preset.version ?? null,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
@@ -238,6 +242,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,
+            class_rules: values.class_rules,
             auto_merge_enabled: values.auto_merge_enabled,
             fork_decision: values.fork_decision,
             version: values.version,

@@ -7,7 +7,7 @@
 // banner — instead of the agent's raw JSON. Opened via the universal result-view host,
 // the same seam the requirements / tester windows use.
 import { computed } from 'vue'
-import type { MergeAxis, MergeDecision } from '@cat-factory/contracts'
+import type { ChangeClass, MergeAxis, MergeDecision } from '@cat-factory/contracts'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
@@ -68,6 +68,8 @@ const REASON_KEYS: Record<MergeDecision['reason'], string> = {
   no_assessment: 'panels.mergerResult.reason.no_assessment',
   merge_failed: 'panels.mergerResult.reason.merge_failed',
   merge_partial: 'panels.mergerResult.reason.merge_partial',
+  class_auto_merge: 'panels.mergerResult.reason.class_auto_merge',
+  class_requires_review: 'panels.mergerResult.reason.class_requires_review',
 }
 const OUTCOME_KEYS: Record<MergeDecision['outcome'], string> = {
   auto_merged: 'panels.mergerResult.outcome.auto_merged',
@@ -80,6 +82,28 @@ const AXIS_KEYS: Record<MergeAxis, string> = {
 }
 
 const outcomeText = computed(() => (decision.value ? t(OUTCOME_KEYS[decision.value.outcome]) : ''))
+
+// Per-change-class label — exhaustive over the union so a new class fails typecheck here until it
+// has a key. Only the classes a decision can actually carry are reachable (`unknown` never lands
+// on a decision: the engine omits the field instead), but the map stays total by construction.
+const CLASS_KEYS: Record<ChangeClass, string> = {
+  docs: 'merge.changeClass.docs',
+  test: 'merge.changeClass.test',
+  dependency: 'merge.changeClass.dependency',
+  config: 'merge.changeClass.config',
+  source: 'merge.changeClass.source',
+  schema: 'merge.changeClass.schema',
+  unknown: 'merge.changeClass.unknown',
+}
+
+/**
+ * The DETERMINISTIC change class the engine derived from the PR's changed files, when it resolved
+ * one. Shown beside the outcome so a reader sees WHAT KIND of change the decision was made about —
+ * which is what a `class_auto_merge` / `class_requires_review` reason is actually keyed on.
+ */
+const changeClassLabel = computed(() =>
+  decision.value?.changeClass ? t(CLASS_KEYS[decision.value.changeClass]) : null,
+)
 
 /** The three axes with their score + preset ceiling, for the bar rows. */
 const axes = computed(() => {
@@ -150,12 +174,23 @@ const reasonText = computed(() => {
               :class="merged ? 'text-emerald-300' : 'text-amber-300'"
             />
             <div class="min-w-0">
-              <p
-                class="text-sm font-semibold"
-                :class="merged ? 'text-emerald-200' : 'text-amber-200'"
-              >
-                {{ outcomeText }}
-              </p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p
+                  class="text-sm font-semibold"
+                  :class="merged ? 'text-emerald-200' : 'text-amber-200'"
+                >
+                  {{ outcomeText }}
+                </p>
+                <UBadge
+                  v-if="changeClassLabel"
+                  data-testid="merger-change-class"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                >
+                  {{ changeClassLabel }}
+                </UBadge>
+              </div>
               <p class="mt-0.5 text-[13px] leading-relaxed text-slate-300">{{ reasonText }}</p>
             </div>
           </div>

@@ -114,8 +114,6 @@ import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type {
   IterationCapChoice,
-  RequirementConcernLevel,
-  StepGating,
   RequirementReview,
   ClarityReview,
   BrainstormSession,
@@ -130,7 +128,11 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
-import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
+import type { GroupCacheHandle, RiskPolicyCacheValue } from '@cat-factory/kernel'
+import type { ReviewEffort } from '@cat-factory/kernel'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
+import { RunMergePolicy } from './RunMergePolicy.js'
+import type { ResolvedRunRiskPolicy } from './policy-types.js'
 import type { AgentExecutor, ResolveRunRepoContext, TestSecretRef } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -461,6 +463,14 @@ export interface ExecutionServiceDependencies {
    */
   riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
   /**
+   * Optional: the merge track record — the per-class change classification the merge policy's
+   * per-class rules key off, plus the best-effort record of every merge decision (and the
+   * reviewer-effort tag a human leaves). Absent (no repository wired / tests) ⇒ classification
+   * yields `unknown`, no per-class rule matches, nothing is persisted, and the merge path
+   * behaves exactly as it did before this existed.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
+  /**
    * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
    * ambient context, so a per-user PAT (when set) is preferred over the deployment's
    * App/env token (see `PatPreferringAppRegistry`). Absent → a pass-through
@@ -520,27 +530,7 @@ export interface BlueprintReconciler {
   ): Promise<unknown>
 }
 
-/**
- * The effective risk/merge policy for one run, as {@link ExecutionService.resolveRiskPolicy}
- * resolves it (the block's selected preset, else the workspace default, else the built-in).
- * Named here because the gate windows receive that resolver as a bound call-back and each
- * consumer reads only the subset it gates on.
- */
-export interface ResolvedRunRiskPolicy {
-  name: string
-  maxComplexity: number
-  maxRisk: number
-  maxImpact: number
-  ciMaxAttempts: number
-  maxRequirementIterations: number
-  maxRequirementConcernAllowed: RequirementConcernLevel
-  maxTesterQualityIterations: number
-  releaseWatchWindowMinutes: number
-  releaseMaxAttempts: number
-  humanReviewGraceMinutes: number
-  autoMergeEnabled: boolean
-  forkDecision?: StepGating | null
-}
+export type { ResolvedRunRiskPolicy } from './policy-types.js'
 
 /**
  * The execution engine. It orchestrates a pipeline of agent-performed steps and
@@ -621,8 +611,7 @@ export class ExecutionService {
   // `environmentProvisioning`) likewise live on {@link RunAdmission} (and the controllers).
   private readonly prMerger?: PullRequestMerger
   private readonly notifications?: NotificationService
-  private readonly riskPolicyRepository?: RiskPolicyRepository
-  private readonly riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
+  private readonly mergePolicy: RunMergePolicy
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly pokeInitiativeLoop?: (
@@ -687,6 +676,7 @@ export class ExecutionService {
     llmObservability,
     pullRequestMerger,
     riskPolicyRepository,
+    mergeTrackRecord,
     riskPolicyCache,
     ticketTrackerProvider,
     issueWriteback,
@@ -715,6 +705,14 @@ export class ExecutionService {
     this.idGenerator = idGenerator
     this.clock = clock
     this.stepGraph = new StepGraph(clock)
+    // The task's merge POLICY (which preset governs a run) + the EVIDENCE behind it (settling the
+    // run's merge track record when a human merges or declines), extracted as one collaborator so
+    // neither concern re-accretes onto the engine.
+    this.mergePolicy = new RunMergePolicy({
+      riskPolicyRepository,
+      riskPolicyCache,
+      mergeTrackRecord,
+    })
     this.runStateMachine = new RunStateMachine({
       executionRepository,
       blockRepository,
@@ -725,6 +723,7 @@ export class ExecutionService {
       clock,
       stepGraph: this.stepGraph,
       notificationService,
+      mergeTrackRecord,
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
       llmObservability,
@@ -775,6 +774,7 @@ export class ExecutionService {
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
+      mergeTrackRecord,
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
@@ -911,8 +911,6 @@ export class ExecutionService {
     )
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
-    this.riskPolicyRepository = riskPolicyRepository
-    this.riskPolicyCache = riskPolicyCache
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
@@ -1971,38 +1969,11 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve the merge threshold preset that governs a task: its explicitly-picked
-   * preset, else the workspace default, else the built-in {@link DEFAULT_RISK_POLICY}.
-   * Returns just the thresholds the engine compares against (+ the CI attempt budget).
+   * Resolve the merge threshold preset that governs a task — delegated to {@link RunMergePolicy}
+   * (preset resolution + its cache read-through live there, alongside the track-record settle).
    */
-  private async resolveRiskPolicy(
-    workspaceId: string,
-    block: Block,
-  ): Promise<ResolvedRunRiskPolicy> {
-    const repo = this.riskPolicyRepository
-    if (repo) {
-      // Read each preset through the cache slice when wired: the row is slow-moving admin config
-      // re-read on every gate evaluation. Group by workspace (one write drops the whole library),
-      // keyed per resolved id so a picked preset and the default cache separately. A null (deleted
-      // id / unseeded default) caches as a value and still falls through, exactly as an uncached
-      // read would (the `RiskPolicyCacheValue` wrapper).
-      const read = async (
-        key: string,
-        load: () => Promise<RiskPolicy | null>,
-      ): Promise<RiskPolicy | null> => {
-        const cache = this.riskPolicyCache
-        if (!cache) return load()
-        return (await cache.get(key, workspaceId, async () => ({ policy: await load() }))).policy
-      }
-      if (block.riskPolicyId) {
-        const id = block.riskPolicyId
-        const picked = await read(`picked:${id}`, () => repo.get(workspaceId, id))
-        if (picked) return picked
-      }
-      const fallback = await read('default', () => repo.getDefault(workspaceId))
-      if (fallback) return fallback
-    }
-    return DEFAULT_RISK_POLICY
+  private resolveRiskPolicy(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
+    return this.mergePolicy.resolve(workspaceId, block)
   }
 
   /**
@@ -2259,15 +2230,36 @@ export class ExecutionService {
     )
   }
 
-  /** Merge an open PR: a block moves from `pr_ready` to `done`. */
-  async mergePr(workspaceId: string, blockId: string): Promise<Block> {
+  /**
+   * Merge an open PR: a block moves from `pr_ready` to `done`. This is the HUMAN merge path —
+   * a `merge_review` / `pipeline_complete` notification act, or the inspector's merge control.
+   *
+   * `reviewEffort` records, in the same call, how much review the PR actually needed. It is
+   * always optional: an untagged merge settles the track record with a null tag and nothing
+   * downstream breaks. The record settle runs AFTER the merge and is best-effort inside the
+   * service, so no part of this feature can fail or block a merge.
+   */
+  async mergePr(
+    workspaceId: string,
+    blockId: string,
+    reviewEffort?: ReviewEffort | null,
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
     if (block.status !== 'pr_ready') {
       throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
     }
     await this.finalizeMerge(workspaceId, blockId)
+    await this.mergePolicy.recordHumanMerge(workspaceId, blockId, reviewEffort)
     return this.requireBlock(workspaceId, blockId)
+  }
+
+  /**
+   * Record that a human DECLINED to merge — they dismissed the review card rather than acting on
+   * it, so the class's rollup counts a rejection instead of a forever-`pending_review` row.
+   */
+  recordMergeRejection(workspaceId: string, executionId: string): Promise<void> {
+    return this.mergePolicy.recordRejection(workspaceId, executionId)
   }
 
   /**

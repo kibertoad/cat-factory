@@ -90,6 +90,7 @@ export class RiskPolicyService {
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
       autoMergeEnabled: input.autoMergeEnabled,
       forkDecision: input.forkDecision ?? null,
+      classRules: input.classRules,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -133,6 +134,9 @@ export class RiskPolicyService {
         : {}),
       ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
       ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
+      // Replaces the whole map rather than merging, so clearing a class's rule is a plain
+      // omission from the submitted set (there is no "delete this one key" wire shape).
+      ...(patch.classRules !== undefined ? { classRules: patch.classRules } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -223,6 +227,7 @@ export class RiskPolicyService {
       humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
       autoMergeEnabled: seed.autoMergeEnabled,
       forkDecision: seed.forkDecision,
+      classRules: seed.classRules,
       isDefault: seed.isDefault,
       version: seed.version,
     }

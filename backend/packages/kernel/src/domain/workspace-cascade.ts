@@ -69,6 +69,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'kaizen_gradings',
   'kaizen_verified_combos',
   'merge_threshold_presets',
+  'merge_track_records',
   'model_presets',
   'notifications',
   'observability_connections',

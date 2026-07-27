@@ -184,6 +184,7 @@ import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewReposit
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
+import { D1MergeTrackRecordRepository } from './repositories/D1MergeTrackRecordRepository'
 import { D1RiskPolicyRepository } from './repositories/D1RiskPolicyRepository'
 import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
 import {
@@ -677,6 +678,7 @@ export function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
+    mergeTrackRecordRepository: new D1MergeTrackRecordRepository({ db }),
     // Shared stacks (long-lived compose infra a consumer environment attaches to). CRUD +
     // persistence are runtime-symmetric; the Worker never brings a stack UP (no host daemon),
     // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".

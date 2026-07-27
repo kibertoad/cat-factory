@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import type { ExecutionInstance, Pipeline } from '~/types/domain'
 import type { RequestStepChangesInput } from '@cat-factory/contracts'
 import type { IterationCapChoice } from '~/types/execution'
+import type { ReviewEffort } from '~/types/merge'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -125,11 +126,15 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     })
   }
 
-  /** Merge an open PR (a task in `pr_ready`) — the server completes the task. */
-  async function mergePr(blockId: string) {
+  /**
+   * Merge an open PR (a task in `pr_ready`) — the server completes the task. `reviewEffort` records
+   * how much review the PR actually needed onto its merge track record in the same request; always
+   * optional (an untagged merge records a null tag and nothing downstream breaks).
+   */
+  async function mergePr(blockId: string, reviewEffort?: ReviewEffort | null) {
     const ws = useWorkspaceStore()
     try {
-      await api.mergeBlock(ws.requireId(), blockId)
+      await api.mergeBlock(ws.requireId(), blockId, reviewEffort)
       await ws.refresh()
     } catch (e) {
       runErrors.present(e, 'errors.action.mergeFailed')

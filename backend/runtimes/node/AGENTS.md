@@ -15,7 +15,10 @@ transport, and Node model provisioning.
 - `repositories/drizzle.ts` — the Drizzle repos implementing the kernel ports (the **twin** of
   the CF D1 repos; a 3.9k-line monolith slated for splitting — see
   `docs/refactoring-candidates.md` #1).
-- `db/schema.ts` + `drizzle/` (generated migrations) — the Postgres schema; `migrate()`
+- `db/schema.ts` + `db/tables/*` + `drizzle/` (generated migrations) — the Postgres schema.
+  `schema.ts` is the single entry point every repo imports; the VCS/projection tables live in
+  `db/tables/vcs.ts` and are re-exported from it (a size-budget split, so drizzle-kit and every
+  importer still see one module). `migrate()`
   (`db/migrate.ts`) bootstraps it idempotently on boot, failing fast with an actionable error on
   a ledger↔schema desync and wrapping apply failures with a recovery hint. `scripts/db-reset.mjs`
   (`pnpm db:reset`) is the destructive clean-slate recovery. Schemas are configurable for a shared

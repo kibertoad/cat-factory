@@ -385,6 +385,27 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The merge TRACK RECORD is the evidence side of the same merge policy, and every one of its
+  // methods takes the workspaceId as arg0 — so the whole surface is proxied, workspace-scoped and
+  // member-level exactly like the preset library above. It has to be: `MergeResolver` reads the
+  // classification and writes the record ON THE RUN PATH, so a mothership-mode node with these
+  // unproxied would resolve every per-class rule against an empty record set (silently reverting
+  // to the score ceilings) and lose every merge decision it made.
+  mergeTrackRecordRepository: {
+    // Run path: the merger step's decision write (first-write-wins) + the notification card's
+    // record lookup.
+    insertIfAbsent: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    getByExecution: { scope: { kind: 'workspace', arg: 0 } },
+    // The block-scoped merge controls resolve a block's most recent record to settle + tag it.
+    getLatestByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // External-merge attribution from the webhook ingest, keyed by `(repoId, prNumber)`.
+    getByPullRequest: { scope: { kind: 'workspace', arg: 0 } },
+    // Settling a decision + recording the reviewer-effort tag.
+    patch: { scope: { kind: 'workspace', arg: 0 } },
+    // The preset editor's per-class stats (ONE aggregate for every class).
+    rollupByClass: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // Shared stacks are a workspace-scoped, member-level config library (like merge presets): the
   // Infrastructure panel lists/creates/edits/deletes them and the board-load snapshot reads them.
   // All four repository methods take the workspaceId as arg0 — proxied to the mothership like the

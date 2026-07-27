@@ -17,6 +17,7 @@ import {
 } from '@cat-factory/contracts'
 import type { RequestStepChangesInput } from '@cat-factory/contracts'
 import type { IterationCapChoice } from '~/types/execution'
+import type { ReviewEffort } from '~/types/merge'
 import type { ApiContext } from './context'
 
 /** Run lifecycle (start/cancel/decisions/approvals/restart) + LLM metrics + spend. */
@@ -38,8 +39,14 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
     cancelExecution: (workspaceId: string, blockId: string) =>
       send(cancelExecutionContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
-    mergeBlock: (workspaceId: string, blockId: string) =>
-      send(mergeBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+    // `reviewEffort` records the reviewer-effort tag onto the block's merge track record in the
+    // same request as the merge (see the notification `act` counterpart). Always optional.
+    mergeBlock: (workspaceId: string, blockId: string, reviewEffort?: ReviewEffort | null) =>
+      send(mergeBlockContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: reviewEffort === undefined ? {} : { reviewEffort },
+      }),
 
     resolveDecision: (
       workspaceId: string,

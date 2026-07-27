@@ -21,15 +21,21 @@ optional module is `build(key, factory)`-declared once and emitted via `...modul
   start/retry/restart `assert*` preflights),
   `review-kinds.ts` (the requirements/clarity/brainstorm `ReviewKind` factories),
   `DeployerStepController` (the deployer provision fan-out + env projection),
-  `FollowUpGateController` (the follow-up companion gate + its human-action API), plus
-  `RunStateMachine`, `StepGraph`, the gate/companion/review controllers, and `*.logic.ts`
-  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …). The run/step lifecycle
-  reference is `docs/execution-state-machine.md`.
-- `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`, `merge/`,
+  `FollowUpGateController` (the follow-up companion gate + its human-action API),
+  `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
+  human merges or declines), plus `RunStateMachine`, `StepGraph`, the gate/companion/review
+  controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …).
+  The run/step lifecycle reference is `docs/execution-state-machine.md`.
+- `merge/` — the merge policy + its evidence: `RiskPolicyService` (the per-workspace
+  merge-threshold preset library, including the per-class `classRules`), `MergeTrackRecordService`
+  (deterministic change classification + the persisted record of every merge decision, the
+  reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
+  PR merged directly on the provider). See CLAUDE.md → "Merge track record".
+- `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, … — the other module services.
 - `validation/` — request validation.
 
-**See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Requirements review
-flow", "Gates vs agents"; `docs/execution-state-machine.md`; `docs/modularisation.md` +
+**See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
+"Requirements review flow", "Gates vs agents"; `docs/execution-state-machine.md`; `docs/modularisation.md` +
 `docs/refactoring-candidates.md` for the god-file backlog.

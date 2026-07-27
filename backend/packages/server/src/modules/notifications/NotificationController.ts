@@ -49,10 +49,13 @@ export function notificationController(): Hono<AppEnv> {
     const id = c.req.valid('param').notificationId
     const container = c.get('container')
     const userId = c.get('user')?.id
+    // All-optional body, so `{}` is the historical no-body act. A merge card may carry the
+    // reviewer-effort tag so confirming the merge and tagging it is ONE request.
+    const { reviewEffort } = c.req.valid('json')
     const acted = await notifications.service.act(
       workspaceId,
       id,
-      notificationActEffect(container, workspaceId, userId),
+      notificationActEffect(container, workspaceId, userId, reviewEffort),
     )
     return c.json(acted, 200)
   })
@@ -61,14 +64,23 @@ export function notificationController(): Hono<AppEnv> {
   buildHonoRoute(app, dismissNotificationContract, async (c) => {
     const notifications = requireNotifications(c)
     if (!notifications) return unavailable(c)
-    return c.json(
-      await notifications.service.resolve(
-        param(c, 'workspaceId'),
-        c.req.valid('param').notificationId,
-        'dismiss',
-      ),
-      200,
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const dismissed = await notifications.service.resolve(
+      workspaceId,
+      c.req.valid('param').notificationId,
+      'dismiss',
     )
+    // Dismissing a merge-decision card is a human DECLINING to merge. Record it so the class's
+    // rollup counts a rejection rather than leaving the record forever `pending_review` — which
+    // would silently inflate the auto-merge-share denominator. Best-effort inside the engine.
+    if (
+      (dismissed.type === 'merge_review' || dismissed.type === 'pipeline_complete') &&
+      dismissed.executionId
+    ) {
+      await container.executionService.recordMergeRejection(workspaceId, dismissed.executionId)
+    }
+    return c.json(dismissed, 200)
   })
 
   return app

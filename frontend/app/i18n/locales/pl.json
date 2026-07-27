@@ -1094,7 +1094,9 @@
         "no_rationale": "Scalający ocenił PR, ale nie podał uzasadnienia, więc werdyktowi nie można było zaufać na tyle, by scalić automatycznie; PR czeka na scalenie przez człowieka.",
         "no_assessment": "Scalający nie zwrócił możliwej do przetworzenia oceny, więc PR czeka na scalenie przez człowieka.",
         "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka.",
-        "merge_partial": "Część pull requestów zadania została scalona, ale kolejnego nie udało się scalić, więc zmiana czeka, aż człowiek dokończy lub cofnie scalanie wielorepozytoryjne."
+        "merge_partial": "Część pull requestów zadania została scalona, ale kolejnego nie udało się scalić, więc zmiana czeka, aż człowiek dokończy lub cofnie scalanie wielorepozytoryjne.",
+        "class_auto_merge": "Ten zestaw zawsze scala automatycznie tę kategorię zmian, więc oceny nie były porównywane.",
+        "class_requires_review": "Ten zestaw zawsze przekazuje tę kategorię zmian człowiekowi, niezależnie od ocen."
       },
       "scores": "Oceny",
       "axis": {
@@ -1689,7 +1691,8 @@
         "fork_decision_pending": "Oznacz jako przeczytane",
         "pr_review_ready": "Oznacz jako przeczytane",
         "budget_paused": "Oznacz jako przeczytane",
-        "key_drift": "Usuń nieaktualne poświadczenia"
+        "key_drift": "Usuń nieaktualne poświadczenia",
+        "merge_tag_request": "Zapisz nakład"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -2297,6 +2300,19 @@
         "onMissing": {
           "run": "Zaproponuj mimo to",
           "skip": "Pomiń"
+        }
+      },
+      "classRules": {
+        "heading": "Reguły dla kategorii zmian",
+        "help": "Każdy pull request jest klasyfikowany na podstawie zmienionych plików. Kategoria może być zawsze scalana automatycznie, zawsze wymagać przeglądu albo korzystać z progów powyżej. Liczby pokazują, czego ta kategoria wymagała do tej pory.",
+        "autoMergeOffWarning": "W tym zestawie automatyczne scalanie jest wyłączone, więc każdy pull request nadal trafia do człowieka. Reguła kategorii tego nie zmieni.",
+        "noData": "Brak historii",
+        "record": "Scalono {merged}, {autoShare} automatycznie",
+        "frictionless": "{share} bez żadnych uwag",
+        "rule": {
+          "thresholds": "Według progów oceny",
+          "always": "Zawsze scalaj automatycznie",
+          "never": "Zawsze wymagaj przeglądu"
         }
       }
     },
@@ -3220,7 +3236,8 @@
       "human_test_ready": "Gotowe do testow przez czlowieka",
       "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
       "pr_review_ready": "Uwagi z przeglądu PR",
-      "initiative": "Aktualizacje inicjatywy"
+      "initiative": "Aktualizacje inicjatywy",
+      "merge_tag_request": "Prośba o nakład przeglądu"
     },
     "role": {
       "engineering": "Inzynieria",
@@ -5138,6 +5155,24 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Źródło odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+    }
+  },
+  "merge": {
+    "changeClass": {
+      "docs": "Dokumentacja i teksty",
+      "test": "Testy",
+      "dependency": "Aktualizacja zależności",
+      "config": "Konfiguracja i CI",
+      "source": "Kod źródłowy",
+      "schema": "Schemat i migracje",
+      "unknown": "Niesklasyfikowane"
+    },
+    "effort": {
+      "prompt": "Nakład przeglądu",
+      "none": "Bez uwag",
+      "minor": "Drobne uwagi",
+      "major": "Istotne przeróbki",
+      "classHistory": "Scalono {merged} w tej kategorii, {autoShare} automatycznie"
     }
   }
 }

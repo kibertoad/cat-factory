@@ -518,6 +518,10 @@ export type {
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
 export type { RiskPolicyRepository } from './risk-policy-repositories.js'
+export type {
+  MergeTrackRecordRepository,
+  MergeTrackRecordPatch,
+} from './merge-track-record-repositories.js'
 export type { SharedStackRepository } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 export type { UserSettingsRepository } from './user-settings-repositories.js'

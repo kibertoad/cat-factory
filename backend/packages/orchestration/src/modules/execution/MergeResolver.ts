@@ -1,13 +1,17 @@
 import type {
   Block,
   BlockRepository,
+  ChangeClass,
   ExecutionInstance,
   MergeAssessment,
   MergeAxis,
+  MergeClassRules,
   MergeDecision,
 } from '@cat-factory/kernel'
 import { parseMergeAssessment } from '@cat-factory/contracts'
+import { resolveMergeClassRule } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
@@ -16,6 +20,8 @@ function pct(score: number): string {
 
 /** The auto-merge ceilings the resolver compares a merger assessment against. */
 interface MergeThresholds {
+  /** The resolved preset's id, absent when the built-in constant fallback was used. */
+  id?: string
   /** The resolved preset's display name (block pin → workspace default → built-in). */
   name: string
   maxComplexity: number
@@ -23,6 +29,11 @@ interface MergeThresholds {
   maxImpact: number
   /** When false, auto-merge is disabled outright — every PR is routed to human review. */
   autoMergeEnabled: boolean
+  /**
+   * Per-change-class rules. An absent class (or an absent map) means "use the ceilings above",
+   * so a preset with no rules behaves exactly as it did before this existed.
+   */
+  classRules?: MergeClassRules
 }
 
 /** The assessment axes that exceed their preset ceiling (empty when all are within). */
@@ -58,6 +69,13 @@ export interface MergeResolverDeps {
    * failure (block left `blocked` + notified), else `merged`.
    */
   finalizeMerge: (workspaceId: string, blockId: string) => Promise<FinalizeMergeResult>
+  /**
+   * The merge track record — classification (which the per-class rule keys off) plus the
+   * best-effort record of the decision. Absent (no repository wired / tests) ⇒ the class
+   * resolves `unknown`, no rule matches, nothing is persisted, and the resolver behaves exactly
+   * as it did before this existed.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
 }
 
 /**
@@ -98,14 +116,32 @@ export class MergeResolver {
     }
 
     const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+
+    // Classify the PR BEFORE deciding: the preset's per-class rule can short-circuit the score
+    // comparison entirely. One VCS call, swallowed on any failure into `unknown` — which no rule
+    // matches — so a classification fault can neither widen nor tighten the policy, and can
+    // never fail the merge. The result is threaded into the record write so we never pay twice.
+    const classification = (await this.deps.mergeTrackRecord?.classify(workspaceId, block)) ?? {
+      changeClass: 'unknown' as ChangeClass,
+      fileCount: 0,
+    }
+    const classRule = resolveMergeClassRule(preset.classRules, classification.changeClass)
+
     const thresholds: MergeDecision['thresholds'] = {
       presetName: preset.name,
       maxComplexity: preset.maxComplexity,
       maxRisk: preset.maxRisk,
       maxImpact: preset.maxImpact,
       autoMergeEnabled: preset.autoMergeEnabled,
+      ...(classRule !== 'thresholds' ? { classRule } : {}),
     }
-    const base = { assessment: assessment ?? undefined, thresholds } as const
+    const base = {
+      assessment: assessment ?? undefined,
+      thresholds,
+      ...(classification.changeClass !== 'unknown'
+        ? { changeClass: classification.changeClass }
+        : {}),
+    } as const
     // A credible assessment explains itself: a merger that actually examined the diff always
     // returns a rationale, while a merger that failed to inspect the change (the bug that
     // auto-merged on a bogus 0/0/0) returns bare, unexplained scores. The non-empty rationale
@@ -113,10 +149,29 @@ export class MergeResolver {
     const credible = assessment !== null && assessment.rationale.trim() !== ''
     const exceededAxes = assessment ? exceededAxesOf(assessment, preset) : []
 
-    // Auto-merge only when the preset ALLOWS it AND the assessment is a CREDIBLE
-    // within-threshold one. A "manual review only" preset (`autoMergeEnabled: false`)
-    // short-circuits, so every PR is routed to human review regardless of scores.
-    const within = preset.autoMergeEnabled && credible && exceededAxes.length === 0
+    // Auto-merge precedence, most-significant first:
+    //   1. `autoMergeEnabled: false` — the master switch. "Manual review only" stays manual and
+    //      a class rule can NEVER override it.
+    //   2. The class rule: `always` merges regardless of the scores (and regardless of the
+    //      rationale backstop — an explicit operator policy keyed on a DETERMINISTIC backend
+    //      classification outranks the agent's self-report); `never` always routes to a human.
+    //   3. The existing credibility + threshold comparison.
+    const within =
+      preset.autoMergeEnabled &&
+      (classRule === 'always' || (classRule !== 'never' && credible && exceededAxes.length === 0))
+    const mergeReason: MergeDecision['reason'] =
+      classRule === 'always' ? 'class_auto_merge' : 'within_thresholds'
+
+    const record = (decision: 'auto_merged' | 'pending_review') =>
+      this.deps.mergeTrackRecord?.recordDecision(workspaceId, {
+        block,
+        executionId: instance.id,
+        decision,
+        assessment,
+        riskPolicyId: preset.id ?? null,
+        riskPolicyName: preset.name,
+        classification,
+      })
 
     if (within) {
       try {
@@ -125,31 +180,50 @@ export class MergeResolver {
           // A multi-repo task merged some PRs but hit a failure part-way; `finalizeMerge`
           // already left the block `blocked` and raised the enumerated partial-merge card, so
           // the resolver only records the decision (no second review notification).
+          await record('pending_review')
           return { ...base, outcome: 'awaiting_review', reason: 'merge_partial', exceededAxes: [] }
         }
-        return { ...base, outcome: 'auto_merged', reason: 'within_thresholds', exceededAxes: [] }
+        await record('auto_merged')
+        return { ...base, outcome: 'auto_merged', reason: mergeReason, exceededAxes: [] }
       } catch {
         // Auto-merge failed outright (e.g. branch protection / conflict, or the first PR of a
         // multi-repo task): fall through to a review notification so a human can sort it out.
-        await this.raiseReviewAndBlock(workspaceId, instance, block, assessment)
+        const pending = await record('pending_review')
+        await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
+          changeClass: classification.changeClass,
+          recordId: pending?.id,
+        })
         return { ...base, outcome: 'awaiting_review', reason: 'merge_failed', exceededAxes }
       }
     }
 
-    await this.raiseReviewAndBlock(workspaceId, instance, block, assessment)
+    const pending = await record('pending_review')
+    await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
+      changeClass: classification.changeClass,
+      recordId: pending?.id,
+    })
     // Classify WHY review is needed, most-specific first, so the banner is precise. A
     // missing/unparseable assessment (`no_assessment`) is distinct from one that returned
     // scores but no rationale (`no_rationale`): the latter DID produce visible scores, so
-    // the banner must not claim there was no assessment at all.
+    // the banner must not claim there was no assessment at all. The class rule sits just under
+    // the master switch, matching the precedence the auto-merge branch above applies.
     const reason: MergeDecision['reason'] = !preset.autoMergeEnabled
       ? 'auto_merge_disabled'
-      : assessment === null
-        ? 'no_assessment'
-        : !credible
-          ? 'no_rationale'
-          : 'exceeded_thresholds'
+      : classRule === 'never'
+        ? 'class_requires_review'
+        : assessment === null
+          ? 'no_assessment'
+          : !credible
+            ? 'no_rationale'
+            : 'exceeded_thresholds'
     return { ...base, outcome: 'awaiting_review', reason, exceededAxes }
   }
+
+  /** The track-record context a review card carries so the human can tag in the same tap. */
+  private readonly trackContext = (ctx: { changeClass: ChangeClass; recordId?: string }) => ({
+    ...(ctx.changeClass !== 'unknown' ? { changeClass: ctx.changeClass } : {}),
+    ...(ctx.recordId ? { mergeTrackRecordId: ctx.recordId } : {}),
+  })
 
   /** Flip the block to `pr_ready` and raise the merge-review notification. */
   private async raiseReviewAndBlock(
@@ -157,12 +231,13 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
+    track: { changeClass: ChangeClass; recordId?: string },
   ): Promise<void> {
     await this.deps.blockRepository.update(workspaceId, block.id, {
       status: 'pr_ready',
       progress: 1,
     })
-    await this.raiseMergeReview(workspaceId, instance, block, assessment)
+    await this.raiseMergeReview(workspaceId, instance, block, assessment, track)
   }
 
   /** Raise a `merge_review` notification carrying the agent's assessment + the PR. */
@@ -171,6 +246,7 @@ export class MergeResolver {
     instance: ExecutionInstance,
     block: Block,
     assessment: MergeAssessment | null,
+    track: { changeClass: ChangeClass; recordId?: string },
   ): Promise<void> {
     if (!this.deps.notificationService) return
     const body = assessment
@@ -188,6 +264,9 @@ export class MergeResolver {
         ...(assessment ? { assessment } : {}),
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
+        // The change class + the record id, so the card can show what kind of change this is
+        // (with that class's history) and confirm-plus-tag it in one tap.
+        ...this.trackContext(track),
       },
     })
   }

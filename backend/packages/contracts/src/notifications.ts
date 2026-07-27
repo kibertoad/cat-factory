@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { platformAlertReasonSchema, platformObservabilityWindowSchema } from './observability.js'
+import { changeClassSchema, reviewEffortSchema } from './mergeTrackRecord.js'
 import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 
 // ---------------------------------------------------------------------------
@@ -59,6 +60,10 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          when the account recovers, and re-notifies only when the firing set
 //                          of conditions changes (not every sweep). Informational: clicking it
 //                          opens the operator dashboard; `act` just marks it read.
+//   - `merge_tag_request`— a pull request cat-factory opened was merged DIRECTLY on the VCS
+//                          provider (bypassing the merge card), so the merge track record has
+//                          no reviewer-effort tag. A lightweight, dismissible nudge asking for
+//                          one tap; it gates nothing and the record stays valid untagged.
 //   - `budget_paused`    — one or more runs were paused by the spend safeguard (the workspace,
 //                          account, or user budget is exhausted). Workspace-scoped (one card,
 //                          not one per run) and purely informational: the sweeper never re-drives
@@ -95,6 +100,7 @@ export const notificationTypeSchema = v.picklist([
   'platform_health',
   'budget_paused',
   'key_drift',
+  'merge_tag_request',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
@@ -110,7 +116,9 @@ export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
  * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
  * `release_regression`) — "the machine needs help", not "a human owes a review" — and
  * block-less/system cards (`platform_health`, `budget_paused`, `key_drift`, `initiative`) that
- * aren't tied to a reviewable task.
+ * aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR it concerns has
+ * ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review debt would
+ * friction task authoring over work that is finished.
  */
 export const REVIEW_WAIT_NOTIFICATION_TYPES = [
   'merge_review',
@@ -239,6 +247,18 @@ export const notificationPayloadSchema = v.object({
    * (D6.3) targets. Sorted by `(source, id)` so the identity is stable across sweeps.
    */
   driftAffected: v.optional(v.array(keyDriftAffectedSchema)),
+  /**
+   * The run's deterministic change class, on a `merge_review` / `pipeline_complete` /
+   * `merge_tag_request` card — so the human sees WHAT KIND of change they are being asked to
+   * review or tag, and the SPA can show that class's accumulated track record alongside.
+   */
+  changeClass: v.optional(changeClassSchema),
+  /**
+   * The merge track record the card's effort tag applies to. Carried on the merge-decision
+   * cards (so acting on one can tag in the same tap) and on a `merge_tag_request` (whose whole
+   * purpose is to tag it). Absent when no record was written (a best-effort side channel).
+   */
+  mergeTrackRecordId: v.optional(v.string()),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 
@@ -273,6 +293,20 @@ export type Notification = v.InferOutput<typeof notificationSchema>
 /** How a human resolved a notification from its card. */
 export const resolveNotificationActionSchema = v.picklist(['act', 'dismiss'])
 export type ResolveNotificationAction = v.InferOutput<typeof resolveNotificationActionSchema>
+
+/**
+ * Body of `POST /notifications/:id/act`. Every field is optional, so `{}` is the historical
+ * no-body behaviour.
+ *
+ * On a `merge_review` / `pipeline_complete` card, `reviewEffort` records — in the SAME tap that
+ * confirms the merge — how much review the PR actually needed, onto the run's merge track
+ * record. Omitting it is always fine: the record keeps a null tag and nothing downstream breaks
+ * (tagging is a nudge, never a gate).
+ */
+export const actNotificationSchema = v.object({
+  reviewEffort: v.optional(v.nullable(reviewEffortSchema)),
+})
+export type ActNotificationInput = v.InferOutput<typeof actNotificationSchema>
 
 // Remediation of a drifted sealed credential (ADR 0026 D6.3) is explicit + per-secret but has NO
 // HTTP contract: the in-app `key_drift` card action drops every credential it lists (batch), and

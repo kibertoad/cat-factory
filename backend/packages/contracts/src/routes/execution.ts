@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import { blockSchema, spendStatusSchema, usageReportSchema } from '../entities.js'
 import { executionInstanceSchema } from '../execution.js'
+import { mergeBlockSchema } from '../mergeTrackRecord.js'
 import { resolveIterationCapSchema } from '../iteration-cap.js'
 import {
   agentContextSnapshotSchema,
@@ -68,7 +69,10 @@ export const mergeBlockContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/merge`,
-  requestBodySchema: ContractNoBody,
+  // All-optional body: `{}` is the historical no-body merge. The inspector's merge control carries
+  // the reviewer-effort tag here so confirming the merge and tagging it is ONE request, exactly
+  // like the notification card's `act`.
+  requestBodySchema: mergeBlockSchema,
   responsesByStatusCode: { 200: blockSchema, ...errorResponses },
 })
 
