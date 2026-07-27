@@ -9,6 +9,7 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   Block,
+  BlockStatus,
   BlockType,
   Position,
   PreloadedBlocks,
@@ -801,18 +802,38 @@ export class BoardService {
   }
 
   /**
-   * Public-API: list a visible service's tasks — the whole subtree (tasks directly under
-   * the frame AND under its modules), excluding headless `internal` anchors. Returns null
-   * when the frame does not exist in the workspace, is not a visible service frame (a
-   * non-frame / internal / archived block), so the caller 404s.
+   * Public-API: list ONE BOUNDED PAGE of a visible service's tasks — the whole subtree (tasks
+   * directly under the frame AND under its modules), excluding headless `internal` anchors,
+   * optionally filtered to one status. Returns null when the frame does not exist in the
+   * workspace or is not a visible service frame (a non-frame / internal / archived block), so
+   * the caller 404s.
+   *
+   * Reads are SQL-bounded rather than "load the whole board and filter in JS": one point-read
+   * for the frame, one small child-id read for its modules, then a single paged
+   * `parent_id IN (...)` task query. That is exhaustive because a `task` may only be parented
+   * by a `frame` or a `module` (`canReparent`) — there is no deeper level to recurse through,
+   * so the general `descendantIds` walk (which needs every block in memory) is unnecessary here.
+   *
+   * `afterId` is the exclusive keyset cursor and ordering is by block id: blocks carry no
+   * creation timestamp, so id order is arbitrary but STABLE, which is what a cursor needs.
+   * Returns one extra row beyond `limit` when more exist, which the caller turns into its
+   * `nextCursor` — so "is there another page" costs no second query.
    */
-  async listServiceTasks(workspaceId: string, serviceId: string): Promise<Block[] | null> {
+  async listServiceTasksPage(
+    workspaceId: string,
+    serviceId: string,
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<{ tasks: Block[]; hasMore: boolean } | null> {
     await this.requireWorkspace(workspaceId)
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const frame = blocks.find((b) => b.id === serviceId)
+    const frame = await this.blockRepository.get(workspaceId, serviceId)
     if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
-    const subtree = descendantIds(blocks, serviceId)
-    return blocks.filter((b) => subtree.has(b.id) && b.level === 'task' && !b.internal)
+    const moduleIds = await this.blockRepository.listChildIds(workspaceId, serviceId, 'module')
+    const rows = await this.blockRepository.listTasksUnder(workspaceId, [serviceId, ...moduleIds], {
+      ...opts,
+      limit: opts.limit + 1,
+    })
+    const hasMore = rows.length > opts.limit
+    return { tasks: hasMore ? rows.slice(0, opts.limit) : rows, hasMore }
   }
 
   /** Add a module (sub-frame) inside a service. */

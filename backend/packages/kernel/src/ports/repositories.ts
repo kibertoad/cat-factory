@@ -1,6 +1,8 @@
 import type {
   AgentFailure,
   Block,
+  BlockLevel,
+  BlockStatus,
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,
@@ -157,6 +159,32 @@ export interface BlockRepository {
    * load-and-count in JS (an unbounded external caller could otherwise start runs without limit).
    */
   countActiveInternal(workspaceId: string): Promise<number>
+  /**
+   * One BOUNDED page of `task`-level blocks directly parented by any of `parentIds`, excluding
+   * the headless `internal` anchors. Backs the public API's paginated service-task list, which
+   * previously read the ENTIRE board (`listByWorkspace`) and filtered the subtree in JS — so a
+   * large board paid a full table read per external page request.
+   *
+   * The caller passes the service frame plus its module ids, which is the whole task subtree:
+   * a `task` may only be parented by a `frame` or a `module` (`canReparent`), so there is no
+   * deeper level to recurse through and this single `parent_id IN (...)` read is exhaustive.
+   *
+   * Ordered by `id` ASC — blocks carry no creation timestamp, so id order is arbitrary but
+   * STABLE, which is what a keyset cursor actually needs. `afterId` is exclusive. `limit` is the
+   * row cap (the caller reads one extra row to detect a further page).
+   */
+  listTasksUnder(
+    workspaceId: string,
+    parentIds: string[],
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]>
+  /**
+   * The ids of a container's direct children at one level — used to resolve a service frame's
+   * modules before {@link BlockRepository.listTasksUnder}, without loading the whole board.
+   * Bounded in practice by how many modules a service has (tens), and served by the
+   * `(workspace_id, parent_id)` index.
+   */
+  listChildIds(workspaceId: string, parentId: string, level: BlockLevel): Promise<string[]>
 }
 
 export interface PipelineRepository {
@@ -223,6 +251,30 @@ export interface ExecutionRepository {
    * from all the services it mounts without one round-trip per mount. Empty input → empty.
    */
   listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
+  /**
+   * One BOUNDED page of the workspace's HEADLESS initiative runs — executions whose anchor block
+   * is `internal` — newest first (`created_at DESC, id DESC`). This is the list form of the
+   * `loadPublicJob` double-scope: the `internal` predicate is applied in SQL by joining the
+   * anchor block, so the public list can NEVER surface an ordinary board run that merely shares
+   * the workspace. Filtering in JS after an unbounded `listByWorkspace` would be both an
+   * unbounded read and a scoping rule enforced in the wrong layer.
+   *
+   * `cursor` is an EXCLUSIVE keyset on the same `(createdAt, id)` composite the ordering uses —
+   * not a bare `createdAt`, because a burst of concurrent starts shares a millisecond and a
+   * timestamp-only cursor would silently drop the tied rows from the next page. `statuses`
+   * filters on the INTERNAL execution status (the caller expands the coarse public status it
+   * exposes); `since` is an inclusive lower bound on `created_at`. `limit` caps the rows (the
+   * caller reads one extra to detect a further page).
+   */
+  listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   /**

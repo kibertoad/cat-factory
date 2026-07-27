@@ -5,7 +5,7 @@ import type {
   LiveRunSummary,
   RunRef,
 } from '@cat-factory/kernel'
-import type { ExecutionInstance } from '@cat-factory/contracts'
+import type { ExecutionInstance, ExecutionStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
@@ -82,6 +82,47 @@ export class D1ExecutionRepository implements ExecutionRepository {
       out.push(...tryDecodeRows(results, rowToExecution, runContext))
     }
     return out
+  }
+
+  async listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // The `internal` scope is enforced by JOINing the anchor block, so an ordinary board run can
+    // never leak into the public job list. Driven by idx_agent_runs_workspace (workspace_id,
+    // created_at) walked in reverse, probing blocks by its (workspace_id, id) primary key.
+    const where = [`r.workspace_id = ?`, `r.kind = 'execution'`, `b.internal = 1`]
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.statuses && opts.statuses.length > 0) {
+      where.push(`r.status IN (${opts.statuses.map(() => '?').join(', ')})`)
+      binds.push(...opts.statuses)
+    }
+    if (opts.since != null) {
+      where.push(`r.created_at >= ?`)
+      binds.push(opts.since)
+    }
+    if (opts.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` are not skipped.
+      where.push(`(r.created_at < ? OR (r.created_at = ? AND r.id < ?))`)
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT r.* FROM agent_runs r
+         JOIN blocks b ON b.workspace_id = r.workspace_id AND b.id = r.block_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY r.created_at DESC, r.id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds, opts.limit)
+      .all<ExecutionRow>()
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(results, rowToExecution, runContext)
   }
 
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {

@@ -9,6 +9,7 @@ import {
   getPublicJobContract,
   getPublicRunContract,
   getPublicTaskContract,
+  listPublicJobsContract,
   listPublicNotificationsContract,
   listPublicPipelinesContract,
   listPublicServiceTasksContract,
@@ -46,6 +47,12 @@ import {
   isInlineOnlyPipeline,
 } from './publicApiAdmission.js'
 import { createParkAnnouncer, isParked } from './publicApiStream.js'
+import {
+  decodeCursor,
+  decodeTimeCursor,
+  encodeCursor,
+  internalStatusesFor,
+} from './publicApiPaging.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
 // gate (its `/api` prefix is in the authGate bypass list); every route authenticates IN-CONTROLLER
@@ -72,6 +79,11 @@ const SSE_REAUTH_MS = 5000
 /** Max headless "initiative" runs a single workspace may have in flight at once (a public-API
  *  concurrency backstop: bounds the LLM spend one — possibly leaked — key can drive). */
 const MAX_ACTIVE_INITIATIVE_RUNS = 5
+
+/** Default page sizes when a list request passes no `?limit=`. The hard ceiling (100) is enforced
+ *  by the query contract, so a caller can never ask for the whole table in one response. */
+const DEFAULT_JOB_PAGE = 25
+const DEFAULT_TASK_PAGE = 50
 
 function mapStatus(status: ExecutionStatus): PublicJobStatus {
   return status === 'done' ? 'succeeded' : status === 'failed' ? 'failed' : 'running'
@@ -370,6 +382,58 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     )
   })
 
+  // List the workspace's headless initiative jobs, newest first. Closes the gap where an
+  // integration that lost its stored job ids (a restart, a redeploy) could never re-discover its
+  // own in-flight runs, since `GET /jobs/:id` needs an id it no longer has. The `internal` scope
+  // is applied IN SQL by `listInternal` (the list form of `loadPublicJob`'s double-scope), so it
+  // can never enumerate the workspace's ordinary board runs.
+  buildHonoRoute(app, listPublicJobsContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const query = c.req.valid('query')
+    const limit = query.limit ?? DEFAULT_JOB_PAGE
+    // A malformed cursor is a 400, never a silent fall back to page 1 — a client paging on a
+    // corrupted cursor would otherwise re-serve the first page forever with no error to act on.
+    let cursor: { createdAt: number; id: string } | undefined
+    if (query.cursor) {
+      const decoded = decodeTimeCursor(query.cursor)
+      if (!decoded) {
+        return c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
+      }
+      cursor = decoded
+    }
+    // Ask for one extra row so "is there another page" needs no second query.
+    const rows = await c.get('container').executionRepository.listInternal(gate.auth.workspaceId, {
+      limit: limit + 1,
+      cursor,
+      statuses: query.status ? internalStatusesFor(query.status) : undefined,
+      since: query.since,
+    })
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+    const last = page[page.length - 1]
+    return c.json(
+      {
+        jobs: page.map(toPublicJob),
+        // The cursor rides the SAME `(createdAt, id)` composite the repository orders and filters
+        // on, so a burst of runs sharing a millisecond pages correctly instead of losing the ties.
+        nextCursor:
+          hasMore && last
+            ? encodeCursor(
+                last.createdAt ?? last.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
+                last.id,
+              )
+            : null,
+      },
+      200,
+    )
+  })
+
   // Poll a job's status + result. Scoped to the key's workspace AND to headless initiative runs
   // (see loadPublicJob), so a job in another workspace — or a normal board run — is a 404.
   buildHonoRoute(app, getPublicJobContract, async (c) => {
@@ -414,10 +478,15 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicJob(stopped), 200)
   })
 
+  registerJobStreamRoute(app)
+}
+
+function registerJobStreamRoute(app: Hono<AppEnv>): void {
   // Stream a job's progress + terminal completion over SSE. Implemented as a bounded poll over the
   // persisted execution (runtime-symmetric by construction — no per-facade event-hub wiring), so
   // it serves identically on the Worker and Node. Authenticated by the API key header (an external
-  // client can set headers, unlike a browser EventSource). Not a JSON contract, so a raw route.
+  // client can set headers, unlike a browser EventSource). Not a JSON contract, so a raw route —
+  // and its own registrar, so the job group stays inside the function-size budget.
   app.get('/api/v1/jobs/:id/events', async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) {
@@ -539,7 +608,12 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicTask(block, serviceId), 201)
   })
 
-  // List a service's tasks (whole subtree, headless anchors excluded).
+  // List a service's tasks (whole subtree, headless anchors excluded) — ONE bounded, keyset-
+  // paginated page, optionally filtered to a status. Previously unbounded: it read the entire
+  // board and filtered the subtree in JS, so a large service returned every task in one response
+  // and paid a full board read per request. `listServiceTasksPage` pushes the bound, the subtree
+  // and the status filter into SQL. Ordering is by the stable task id (blocks carry no
+  // timestamp), which is why there is no `since` filter here — see the query contract.
   buildHonoRoute(app, listPublicServiceTasksContract, async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) {
@@ -549,13 +623,36 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
       )
     }
     const { serviceId } = c.req.valid('param')
-    const tasks = await c
+    const query = c.req.valid('query')
+    // A malformed cursor is a 400, never a silent page 1 (see the jobs list for the rationale).
+    let afterId: string | undefined
+    if (query.cursor) {
+      const decoded = decodeCursor(query.cursor)
+      if (!decoded) {
+        return c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
+      }
+      afterId = decoded.id
+    }
+    const page = await c
       .get('container')
-      .boardService.listServiceTasks(gate.auth.workspaceId, serviceId)
-    if (!tasks) {
+      .boardService.listServiceTasksPage(gate.auth.workspaceId, serviceId, {
+        limit: query.limit ?? DEFAULT_TASK_PAGE,
+        afterId,
+        status: query.status,
+      })
+    if (!page) {
       return c.json({ error: { code: 'not_found', message: 'Service not found' } }, 404)
     }
-    return c.json({ tasks: tasks.map((t) => toPublicTask(t, serviceId)) }, 200)
+    const last = page.tasks[page.tasks.length - 1]
+    return c.json(
+      {
+        tasks: page.tasks.map((t) => toPublicTask(t, serviceId)),
+        // The sort key IS the id here, so the cursor carries it in both halves — keeping one
+        // cursor shape across every list on this surface.
+        nextCursor: page.hasMore && last ? encodeCursor(last.id, last.id) : null,
+      },
+      200,
+    )
   })
 
   // Get a task's status.

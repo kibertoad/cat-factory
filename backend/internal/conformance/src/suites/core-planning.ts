@@ -255,6 +255,191 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       ).toBe(404)
     })
 
+    // Tier 2 of the public-API initiative: the two list reads that used to be unbounded (the
+    // service-task list read the WHOLE board and filtered in JS) or absent entirely (the job
+    // list). Both now push their bound, subtree, filters and ordering into SQL through new
+    // repository ports, so these assert the D1 and Drizzle implementations page identically — a
+    // store that ordered differently, dropped the `internal` join, or mishandled the keyset fails
+    // here rather than silently mis-serving an external integration. Split in two (one per list)
+    // to stay within the per-function statement budget.
+    it('serves the bounded, keyset-paginated JOB list identically on every store', async () => {
+      const { call, createOrgWorkspace, drive } = harness.makeApp()
+      const { workspace } = await createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const created = await call<{ secret: string }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: 'external' },
+      )
+      const auth = { authorization: `Bearer ${created.body.secret}` }
+
+      // Three headless initiative runs, driven to completion so they settle `succeeded`.
+      for (const input of ['job one', 'job two', 'job three']) {
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_initiative_breakdown', input },
+              auth,
+            )
+          ).status,
+        ).toBe(202)
+      }
+      await drive(wsId)
+
+      type JobPage = { jobs: { jobId: string; status: string }[]; nextCursor: string | null }
+      const all = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
+      expect(all.status).toBe(200)
+      expect(all.body.jobs.length).toBe(3)
+      // Newest first, and the last page reports no further cursor.
+      expect(all.body.nextCursor).toBeNull()
+      expect(all.body.jobs.every((j) => j.status === 'succeeded')).toBe(true)
+      const order = all.body.jobs.map((j) => j.jobId)
+
+      // Keyset paging: two pages of 2 + 1 reproduce the single-page order exactly, with no row
+      // skipped or repeated (the composite `(createdAt, id)` cursor is what makes this hold for
+      // runs that share a millisecond — a timestamp-only cursor would drop the ties).
+      const first = await call<JobPage>('GET', '/api/v1/jobs?limit=2', undefined, auth)
+      expect(first.body.jobs.map((j) => j.jobId)).toEqual(order.slice(0, 2))
+      expect(first.body.nextCursor).toBeTruthy()
+      const second = await call<JobPage>(
+        'GET',
+        `/api/v1/jobs?limit=2&cursor=${encodeURIComponent(first.body.nextCursor!)}`,
+        undefined,
+        auth,
+      )
+      expect(second.body.jobs.map((j) => j.jobId)).toEqual(order.slice(2))
+      expect(second.body.nextCursor).toBeNull()
+
+      // Filters: a status nothing matches comes back empty; a future `since` likewise.
+      const failedOnly = await call<JobPage>('GET', '/api/v1/jobs?status=failed', undefined, auth)
+      expect(failedOnly.body.jobs).toEqual([])
+      const future = await call<JobPage>(
+        'GET',
+        `/api/v1/jobs?since=${Date.now() + 60_000}`,
+        undefined,
+        auth,
+      )
+      expect(future.body.jobs).toEqual([])
+
+      // A malformed cursor is an explicit 400, never a silent re-serve of page 1.
+      const bad = await call<{ error: { code: string } }>(
+        'GET',
+        '/api/v1/jobs?cursor=!!!not-base64!!!',
+        undefined,
+        auth,
+      )
+      expect(bad.status).toBe(400)
+      expect(bad.body.error.code).toBe('invalid_cursor')
+
+      // The `internal` scope is enforced in SQL: an ORDINARY board run in the same workspace is
+      // never enumerated, mirroring the single-job read's 404. This is the list form of the
+      // double-scope, and the assertion that would catch a store that dropped the anchor join.
+      expect(
+        (
+          await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+            pipelineId: 'pl_initiative_breakdown',
+          })
+        ).status,
+      ).toBe(201)
+      const boardRun = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+      const afterBoardRun = await call<JobPage>('GET', '/api/v1/jobs', undefined, auth)
+      expect(afterBoardRun.body.jobs.some((j) => j.jobId === boardRun.id)).toBe(false)
+      expect(afterBoardRun.body.jobs.length).toBe(3)
+    })
+
+    it('serves the bounded, keyset-paginated SERVICE-TASK list identically on every store', async () => {
+      const { call, createOrgWorkspace } = harness.makeApp()
+      const { workspace } = await createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const created = await call<{ secret: string }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: 'external' },
+      )
+      const auth = { authorization: `Bearer ${created.body.secret}` }
+
+      const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 900, y: 900 },
+      })
+      const serviceId = frame.body.id
+      // A module under the frame, so the page covers the WHOLE subtree — a task directly under
+      // the frame AND one nested in a module. That two-level walk is exactly what the new
+      // `listChildIds` + `listTasksUnder` pair replaces the old whole-board read with.
+      const module = await call<{ id: string }>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${serviceId}/modules`,
+        { name: 'Module A' },
+      )
+      const underFrame = await call<{ taskId: string }>(
+        'POST',
+        `/api/v1/services/${serviceId}/tasks`,
+        { title: 'Task under frame' },
+        auth,
+      )
+      const underModule = await call<{ id: string }>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${module.body.id}/tasks`,
+        { title: 'Task under module' },
+      )
+
+      type TaskPage = {
+        tasks: { taskId: string; status: string }[]
+        nextCursor: string | null
+      }
+      const tasks = await call<TaskPage>(
+        'GET',
+        `/api/v1/services/${serviceId}/tasks`,
+        undefined,
+        auth,
+      )
+      expect(tasks.status).toBe(200)
+      expect(new Set(tasks.body.tasks.map((t) => t.taskId))).toEqual(
+        new Set([underFrame.body.taskId, underModule.body.id]),
+      )
+      expect(tasks.body.nextCursor).toBeNull()
+      // Both stores order by the same stable key, so the paged sequence must equal the unpaged one.
+      const taskOrder = tasks.body.tasks.map((t) => t.taskId)
+
+      const tFirst = await call<TaskPage>(
+        'GET',
+        `/api/v1/services/${serviceId}/tasks?limit=1`,
+        undefined,
+        auth,
+      )
+      expect(tFirst.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(0, 1))
+      expect(tFirst.body.nextCursor).toBeTruthy()
+      const tSecond = await call<TaskPage>(
+        'GET',
+        `/api/v1/services/${serviceId}/tasks?limit=1&cursor=${encodeURIComponent(tFirst.body.nextCursor!)}`,
+        undefined,
+        auth,
+      )
+      expect(tSecond.body.tasks.map((t) => t.taskId)).toEqual(taskOrder.slice(1))
+      expect(tSecond.body.nextCursor).toBeNull()
+
+      // The status filter is pushed into SQL: both fresh tasks are `planned`, none are `done`.
+      const planned = await call<TaskPage>(
+        'GET',
+        `/api/v1/services/${serviceId}/tasks?status=planned`,
+        undefined,
+        auth,
+      )
+      expect(planned.body.tasks.length).toBe(2)
+      const done = await call<TaskPage>(
+        'GET',
+        `/api/v1/services/${serviceId}/tasks?status=done`,
+        undefined,
+        auth,
+      )
+      expect(done.body.tasks).toEqual([])
+
+      // A missing / non-service target still 404s (the guard survives the move to a paged read).
+      expect((await call('GET', `/api/v1/services/nope/tasks`, undefined, auth)).status).toBe(404)
+    })
+
     it('gates each route on the key scope ladder (read ⊂ write ⊂ admin) and deletes with admin', async () => {
       const { call, createOrgWorkspace } = harness.makeApp()
       const { workspace } = await createOrgWorkspace({ seed: true })

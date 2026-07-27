@@ -1,5 +1,5 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
-import type { Block } from '@cat-factory/contracts'
+import type { Block, BlockLevel, BlockStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
@@ -145,5 +145,48 @@ export class D1BlockRepository implements BlockRepository {
       .bind(workspaceId)
       .first<{ n: number }>()
     return row?.n ?? 0
+  }
+
+  async listChildIds(workspaceId: string, parentId: string, level: BlockLevel): Promise<string[]> {
+    // Served by idx_blocks_parent (workspace_id, parent_id).
+    const { results } = await this.db
+      .prepare('SELECT id FROM blocks WHERE workspace_id = ? AND parent_id = ? AND level = ?')
+      .bind(workspaceId, parentId, level)
+      .all<{ id: string }>()
+    return results.map((r) => r.id)
+  }
+
+  async listTasksUnder(
+    workspaceId: string,
+    parentIds: string[],
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]> {
+    if (parentIds.length === 0) return []
+    // A `task` may only hang off a `frame` or a `module`, so one `parent_id IN (...)` read over
+    // the frame + its modules covers the whole task subtree — no recursion needed. The IN list is
+    // bounded by the service's module count, comfortably inside D1's bind-parameter limit, so it
+    // needs no chunking (chunking would also break the single-query LIMIT).
+    const placeholders = parentIds.map(() => '?').join(', ')
+    const where = [
+      `workspace_id = ?`,
+      `parent_id IN (${placeholders})`,
+      `level = 'task'`,
+      // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
+      `(internal IS NULL OR internal = 0)`,
+    ]
+    const binds: (string | number)[] = [workspaceId, ...parentIds]
+    if (opts.status) {
+      where.push('status = ?')
+      binds.push(opts.status)
+    }
+    if (opts.afterId) {
+      where.push('id > ?')
+      binds.push(opts.afterId)
+    }
+    const { results } = await this.db
+      .prepare(`SELECT * FROM blocks WHERE ${where.join(' AND ')} ORDER BY id LIMIT ?`)
+      .bind(...binds, opts.limit)
+      .all<BlockRow>()
+    return tryDecodeRows(results, rowToBlock, blockContext)
   }
 }

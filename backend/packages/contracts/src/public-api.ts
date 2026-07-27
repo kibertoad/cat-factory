@@ -18,6 +18,30 @@ import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primiti
 // internals are never leaked: these are deliberately small projections of a `Block`.
 // ---------------------------------------------------------------------------
 
+// ---- shared pagination primitives (used by every bounded list on this surface) ----
+
+/**
+ * An OPAQUE keyset pagination cursor. Callers must treat it as a black box and echo it back
+ * verbatim — its encoding is an implementation detail (today a base64url `<sortKey>|<id>` pair)
+ * that may change. Keyset, not offset: an offset page shifts under concurrent inserts, silently
+ * skipping or repeating rows, which is exactly what a polling integration must never see.
+ */
+const cursorSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
+
+/**
+ * Rows one page may return. Arrives as a query STRING, so it is coerced then range-checked —
+ * the hard `maxValue` is what makes the bound a real backstop rather than a suggestion (a
+ * caller cannot ask for the whole table back by passing a huge limit).
+ */
+const pageLimitSchema = v.pipe(
+  v.string(),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(1),
+  v.maxValue(100),
+)
+
 /** Start an initiative run. */
 export const createInitiativeJobSchema = v.object({
   /** Id of a PUBLIC, inline pipeline (e.g. `pl_initiative_breakdown`). */
@@ -58,6 +82,41 @@ export const publicJobSchema = v.object({
   error: v.nullable(v.object({ code: v.string(), message: v.string() })),
 })
 export type PublicJob = v.InferOutput<typeof publicJobSchema>
+
+/**
+ * The workspace's headless initiative jobs, newest first, bounded. Closes the gap where an
+ * integration that lost its stored job ids (a restart, a fresh deployment) could never
+ * re-discover its own in-flight runs — `GET /jobs/:id` needs an id it no longer has.
+ *
+ * Scoped exactly like the single-job read: ONLY runs anchored on a headless internal block,
+ * so it can never enumerate the workspace's ordinary board runs.
+ */
+export const publicJobListSchema = v.object({
+  jobs: v.array(publicJobSchema),
+  /** Cursor for the next page, or null when this was the last page. See `publicTaskListSchema`. */
+  nextCursor: v.nullable(v.string()),
+})
+export type PublicJobList = v.InferOutput<typeof publicJobListSchema>
+
+/**
+ * Query params for `GET /api/v1/jobs`. `status` filters on the COARSE public job status, which
+ * the backend expands to the internal execution statuses it maps from (`running` covers a run
+ * that is running, spend-`paused`, or parked `blocked` — all of which read as `running`
+ * externally), so the filter agrees with the `status` field a caller sees on each job.
+ */
+export const listPublicJobsQuerySchema = v.object({
+  /** Rows per page (1..100); omitted → 25. */
+  limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
+  /** Return only jobs in this coarse status. */
+  status: v.optional(publicJobStatusSchema),
+  /** Return only jobs created at or after this epoch-ms stamp (the incremental-poll filter). */
+  since: v.optional(
+    v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0)),
+  ),
+})
+export type ListPublicJobsQuery = v.InferOutput<typeof listPublicJobsQuerySchema>
 
 /** The `202` returned by `POST /initiatives`: the job id + where to follow it. */
 export const initiativeAcceptedSchema = v.object({
@@ -119,8 +178,37 @@ export const publicTaskSchema = v.object({
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
-export const publicTaskListSchema = v.object({ tasks: v.array(publicTaskSchema) })
+export const publicTaskListSchema = v.object({
+  tasks: v.array(publicTaskSchema),
+  /**
+   * Cursor to pass as `?cursor=` for the next page, or null when this was the last page.
+   * A non-null cursor does NOT guarantee the next page is non-empty (it means "there may be
+   * more"), so a client pages until it comes back null.
+   */
+  nextCursor: v.nullable(v.string()),
+})
 export type PublicTaskList = v.InferOutput<typeof publicTaskListSchema>
+
+/**
+ * Query params for `GET /api/v1/services/:serviceId/tasks`. The list was previously unbounded —
+ * it read the whole board and filtered the service subtree in JS — so a big service returned
+ * every task in one response. It is now a bounded, keyset-paginated read with an optional
+ * status filter pushed into SQL.
+ *
+ * There is deliberately NO `since` here (unlike `/jobs`): a board block carries no creation or
+ * update timestamp, so a time filter would have to be faked. Ordering is therefore by the stable
+ * task id, NOT chronological — ids are random, not monotonic, so the order is deterministic and
+ * safe to page over but carries no "newest first" meaning.
+ */
+export const listPublicServiceTasksQuerySchema = v.object({
+  /** Rows per page (1..100); omitted → 50. */
+  limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
+  /** Return only tasks in this lifecycle status. */
+  status: v.optional(publicTaskStatusSchema),
+})
+export type ListPublicServiceTasksQuery = v.InferOutput<typeof listPublicServiceTasksQuerySchema>
 
 /**
  * Create a task under a service. A deliberately MINIMAL external input mapped onto the

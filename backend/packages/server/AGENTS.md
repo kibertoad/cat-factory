@@ -13,8 +13,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `modules/publicApi/` — the key-authenticated `/api/v1` surface (NOT behind the session gate):
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
   parked human decisions — the headless clarification loop), `publicApiAuth.ts` (the shared bearer
-  gate + `read ⊂ write ⊂ decide ⊂ admin` ladder) and `publicApiAdmission.ts` (what an external
-  caller may launch). See `docs/initiatives/headless-clarification-loop.md`.
+  gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
+  caller may launch) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
+  on the surface shares — `GET /jobs`, `GET /services/:id/tasks`). See
+  `docs/initiatives/headless-clarification-loop.md` and
+  `docs/initiatives/public-api-expansion.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`

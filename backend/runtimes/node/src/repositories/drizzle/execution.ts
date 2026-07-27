@@ -12,6 +12,7 @@ import type {
   DueSchedule,
   ExecutionInstance,
   ExecutionRepository,
+  ExecutionStatus,
   LiveRunSummary,
   Pipeline,
   PipelineRepository,
@@ -179,6 +180,54 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
       blockId: r.blockId ?? '',
       status: r.status as LiveRunSummary['status'],
     }))
+  }
+
+  async listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // The `internal` scope is enforced by JOINing the anchor block, so an ordinary board run can
+    // never leak into the public job list. Mirrors the D1 repo (same predicates, same ordering).
+    const filters = [
+      eq(agentRuns.workspace_id, workspaceId),
+      this.isExecution,
+      eq(blocks.internal, 1),
+    ]
+    if (opts.statuses && opts.statuses.length > 0) {
+      filters.push(inArray(agentRuns.status, opts.statuses))
+    }
+    if (opts.since != null) filters.push(gte(agentRuns.created_at, opts.since))
+    if (opts.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` are not skipped.
+      const cursor = opts.cursor
+      filters.push(
+        or(
+          lt(agentRuns.created_at, cursor.createdAt),
+          and(eq(agentRuns.created_at, cursor.createdAt), lt(agentRuns.id, cursor.id)),
+        )!,
+      )
+    }
+    const rows = await this.db
+      .select({ run: agentRuns })
+      .from(agentRuns)
+      .innerJoin(
+        blocks,
+        and(eq(blocks.workspace_id, agentRuns.workspace_id), eq(blocks.id, agentRuns.block_id)),
+      )
+      .where(and(...filters))
+      .orderBy(desc(agentRuns.created_at), desc(agentRuns.id))
+      .limit(opts.limit)
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(
+      rows.map((r) => r.run),
+      (r) => rowToExecution(r as ExecutionRow),
+      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+    )
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {

@@ -1,6 +1,6 @@
 # Initiative: public API expansion (`/api/v1` external surface)
 
-**Status:** in progress (Tier 1 task-lifecycle complete inc. delete; per-key scopes + Tier 2 pipeline discovery landed; Tier 3 notification inbox landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (Tier 1 task-lifecycle complete inc. delete; per-key scopes landed; **Tier 2 complete** — pipeline discovery + the bounded/paginated job & service-task lists; Tier 3 notification inbox landed. Remaining: #10 outbound webhooks, #12 usage read) · **Owner:** core · **Started:** 2026-07-16
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -67,11 +67,22 @@ The existing public surface IS the template; every new endpoint copies its shape
 
 ### Tier 2 — discovery metadata the lifecycle needs
 
-| #   | Endpoint                                                                                                                         | Backing internal capability                                                             | Status  | PR      |
-| --- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------- | ------- |
-| 7   | `GET /api/v1/pipelines` — id/name/steps + a headless-startable flag (closes the `pipeline_required`-with-no-way-to-discover gap) | `pipelineService.list` + `isHeadlessInlinePipeline`                                     | ✅ done | this PR |
-| 8   | `GET /api/v1/jobs` — list the workspace's initiative jobs (a restarted integration currently loses every job id)                 | `executionRepository` + internal-anchor scoping (`loadPublicJob` generalized to a list) | ⬜ todo |         |
-| 9   | Pagination + status/`since` filters on `GET /services/:id/tasks` (and the new `/jobs`)                                           | new bounded list port methods where needed (no JS-side filtering of unbounded reads)    | ⬜ todo |         |
+| #   | Endpoint                                                                                                                         | Backing internal capability                                                                                                                  | Status  | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 7   | `GET /api/v1/pipelines` — id/name/steps + a headless-startable flag (closes the `pipeline_required`-with-no-way-to-discover gap) | `pipelineService.list` + `isHeadlessInlinePipeline`                                                                                          | ✅ done | this PR |
+| 8   | `GET /api/v1/jobs` — list the workspace's initiative jobs (a restarted integration currently loses every job id)                 | `executionRepository.listInternal` — the `loadPublicJob` double-scope generalized to a list, with the `internal` anchor join pushed into SQL | ✅ done | this PR |
+| 9   | Pagination + status filters on `GET /services/:id/tasks` (and the new `/jobs`)                                                   | new bounded list port methods (`listInternal`, `listTasksUnder` + `listChildIds`), D1 ⇄ Drizzle + conformance-asserted                       | ✅ done | this PR |
+
+> **Note on #9 — there is deliberately NO `since` filter on the TASK list.** The original item
+> named `status`/`since` for both lists. `since` shipped for `/jobs` (`agent_runs.created_at` is a
+> real, indexed column) but is **not deliverable for tasks**: the `blocks` table carries no
+> creation or update timestamp, so a time filter would have to be faked from something that isn't
+> one. For the same reason the task list is ordered by the stable block **id**, not chronologically
+> — ids are random (`CryptoIdGenerator`), so the order is deterministic and safe to page over but
+> carries no "newest first" meaning. Adding a real `since` means adding a `created_at` column to
+> `blocks` (D1 ⇄ Drizzle + every insert site + the `publicTask` projection) — a wide change to the
+> hottest table in the system, deliberately NOT bundled into this slice. Pick it up as its own
+> item if a consumer asks for incremental task polling.
 
 ### Tier 3 — eventing & operations
 
@@ -123,6 +134,28 @@ The existing public surface IS the template; every new endpoint copies its shape
 - **No N+1** in the new list endpoints — a list projection that needs per-item lookups
   gets a batch port method (mirrored D1 ⇄ Drizzle + conformance assertion), never a loop
   of point-reads.
+- **Every list is KEYSET-paginated through `publicApiPaging.ts`, and the bound lives in SQL.**
+  The shared codec (`encodeCursor` / `decodeCursor` / `decodeTimeCursor`) is the ONE cursor shape
+  on this surface — do not hand-roll another. The rules a new list must follow:
+  - **Keyset, never offset.** An external caller polls, so an offset page shifts under concurrent
+    inserts and a row created between two pages either repeats or is skipped and never seen again.
+    A cursor is anchored to a row, so it cannot drift.
+  - **The cursor is the `(sortKey, id)` COMPOSITE, not the sort key alone.** A burst of concurrent
+    starts shares a millisecond; a timestamp-only cursor silently drops the tied rows from the next
+    page. Both the `ORDER BY` and the cursor predicate carry the id tiebreaker.
+  - **The cursor is opaque** (base64url on the wire, typed as a plain string in the contract) so
+    its shape can change without a contract break. It is NOT signed and needs no signing — it
+    carries a position, never authority, and every route re-applies its full workspace +
+    resource-class scope regardless of what the cursor says.
+  - **A malformed cursor is a 400 `invalid_cursor`**, never a silent fall back to page 1 — a
+    client paging on a corrupted cursor would otherwise loop the first page forever with no error.
+  - **Read `limit + 1` rows to decide `nextCursor`**, so "is there another page" costs no second
+    query. The hard ceiling (100) lives in the query contract, so a caller cannot ask for the whole
+    table; the per-route default lives beside the route.
+  - **A coarse public status filter must EXPAND to the internal statuses it maps from**
+    (`internalStatusesFor`): `running` covers `running`/`blocked`/`paused`, because all three read
+    as `running` externally — filtering on the literal row value would hide exactly the jobs a
+    caller polls for.
 - **Runtimes stay symmetric by construction** — this whole layer lives in
   `@cat-factory/server`; anything that needs persistence (webhooks table, key scopes)
   lands D1 ⇄ Drizzle together with a conformance assertion in the same PR.
