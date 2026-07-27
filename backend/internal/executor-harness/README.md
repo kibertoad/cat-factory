@@ -73,7 +73,16 @@ The implementation job (`POST /run`) is the canonical sequence:
 6. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
    ONLY if step 4 ended green. A spent budget returns an error result with the validation report
    and opens no PR. Absent `validationChecks` / `reproduction`, steps 4 and 5 do not happen at
-   all.
+   all. The PR's description prefers the agent-authored reviewer briefing over the generic
+   dispatch-time text the job body carries: a PR-opening agent is prompted to write one to the
+   `.cat-pr-description.md` sentinel at the checkout root (one per sibling repo in a multi-repo
+   run; an optional leading `# <title>` line, when it is the file's only `#` heading, sets the PR
+   title), and `src/pr-description.ts` lifts it — secret-scrubbed, size-capped with a visible
+   note, made inert for the host by `src/host-markdown.ts`, kept out of the commit like the
+   effort/follow-ups sentinels — onto `openPullRequest`. Absent or unusable ⇒ the fallback text,
+   unchanged. On a RESUMED run the PR already exists, so an agent briefing additionally refreshes
+   its title/description in place (carrying the engine's managed report region across); the
+   generic fallback never does, so a human's edit is safe.
 
 Bootstrap differs at the ends — it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a

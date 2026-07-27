@@ -5,6 +5,7 @@ import {
   composeBlockSystemPrompt,
   EFFORT_REPORT_GUIDANCE,
   FOLLOW_UP_GUIDANCE,
+  PR_DESCRIPTION_GUIDANCE,
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
   resolvePrNumber,
@@ -427,6 +428,11 @@ function buildCodingAgentBody(
           parts.multiRepoSection,
           parts.referenceReposSection,
           parts.referenceBranchesSection,
+          // Only a dispatch that OPENS a PR is asked for the reviewer briefing: an in-place
+          // fixer amends an existing PR (whose description it doesn't own) and a seed-only
+          // kind opens none, so prompting either for one would spend tokens on a file the
+          // harness reads for no PR.
+          opensPr ? PR_DESCRIPTION_GUIDANCE : undefined,
         ]),
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,

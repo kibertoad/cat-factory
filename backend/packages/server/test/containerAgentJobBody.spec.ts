@@ -218,6 +218,19 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(spec.noChangesIsError).toBe(false)
   })
 
+  // The reviewer-briefing (PR description) sentinel guidance rides ONLY a dispatch that opens a
+  // PR: the coder gets it; an in-place fixer (amends a PR whose description it doesn't own) and
+  // a code-commenter amend run do not.
+  it('asks a PR-opening coder for the reviewer briefing', async () => {
+    await executor.startJob(context('coder'))
+    expect(captured[0]!.spec.systemPrompt as string).toContain('PULL REQUEST DESCRIPTION')
+  })
+
+  it('does not ask an in-place fixer for the reviewer briefing', async () => {
+    await executor.startJob(context('fixer', { pullRequest: PR }))
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain('PULL REQUEST DESCRIPTION')
+  })
+
   // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
   // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
   // plus a "Reference repositories" system-prompt section naming the sibling directories.
