@@ -8,6 +8,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   RepoTreeEntry,
+  VcsConnectOption,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -26,6 +27,8 @@ export interface GitHubStoreContext {
   workspace: ReturnType<typeof useWorkspaceStore>
   available: Ref<boolean | null>
   connection: Ref<GitHubConnection | null>
+  /** The connect surfaces this deployment can serve (GitHub App / GitLab PAT / …). */
+  connectOptions: Ref<VcsConnectOption[]>
   installations: Ref<GitHubInstallationOption[]>
   loadingInstallations: Ref<boolean>
   repos: Ref<GitHubRepo[]>

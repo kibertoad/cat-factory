@@ -2571,8 +2571,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "Collega cat-factory a GitHub",
-      "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Installa la GitHub App sul tuo account o sulla tua organizzazione per continuare, e potrai concederle ogni repository oppure scegliere un sottoinsieme.",
+      "appIntro": "Installa la GitHub App sul tuo account o sulla tua organizzazione; potrai concederle ogni repository oppure scegliere un sottoinsieme.",
       "signedInAs": "Accesso effettuato come {login}",
       "signOut": "Esci"
     },
@@ -2646,7 +2645,6 @@
         "closed": "chiusa"
       },
       "toast": {
-        "disconnected": "GitHub disconnesso",
         "resync": "Risincronizzazione {status}",
         "reposUpdated": "Repository collegati aggiornati",
         "branchCreated": "Branch {name} creato",
@@ -2662,10 +2660,6 @@
         "createBranch": "Impossibile creare il branch",
         "openPr": "Impossibile aprire la pull request",
         "merge": "Impossibile effettuare il merge"
-      },
-      "confirmDisconnect": {
-        "title": "Disconnettere GitHub?",
-        "body": "L'app perderà l'accesso ai tuoi repository finché non ti riconnetti."
       }
     },
     "addService": {
@@ -5158,6 +5152,41 @@
       "checkSourceFailed": "Impossibile controllare la fonte",
       "sourceUnlinked": "Fonte scollegata",
       "unlinkSourceFailed": "Impossibile scollegare la fonte"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "Controllo del codice sorgente",
+      "patMeta": "Connesso con un token di accesso personale",
+      "confirmDisconnect": {
+        "title": "Disconnettere {provider}?",
+        "body": "L'app perderà l'accesso ai tuoi repository finché non ti riconnetti."
+      },
+      "toast": {
+        "disconnected": "{provider} disconnesso"
+      }
+    },
+    "connect": {
+      "or": "oppure",
+      "noneConfigured": "Per questo deployment non è configurata alcuna connessione al controllo del codice. Chiedi a un operatore di configurare una GitHub App o l'accesso a GitLab.",
+      "gitlab": {
+        "intro": "Incolla un token di accesso personale GitLab per collegare questo workspace. cat-factory lo usa per elencare i tuoi progetti, inviare branch e aprire merge request.",
+        "tokenLabel": "Token di accesso personale",
+        "scope": "Richiede l'ambito api",
+        "createToken": "Crea un token su GitLab",
+        "submit": "Collega GitLab",
+        "toast": {
+          "connected": "GitLab collegato"
+        },
+        "errors": {
+          "connect": "Impossibile collegare GitLab"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "Collega cat-factory a {provider}",
+      "titleAny": "Collega cat-factory ai tuoi repository",
+      "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare."
     }
   }
 }

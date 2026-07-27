@@ -1,4 +1,4 @@
-import type { ResyncRequest } from '~/types/domain'
+import type { ResyncRequest, VcsProvider } from '~/types/domain'
 import type { GitHubStoreContext } from './context'
 
 /**
@@ -6,6 +6,11 @@ import type { GitHubStoreContext } from './context'
  * triggering a resync of the projections. Extracted from the store setup; each operation closes
  * over the shared {@link GitHubStoreContext} so behaviour is identical to the original
  * in-closure functions — the split is purely to keep every function within the size budget.
+ *
+ * Disconnecting is the one operation that spans providers (a workspace holds at most one
+ * connection, of either kind), so it dispatches on the connection's `provider` through an
+ * exhaustive map — a new provider fails the typecheck here instead of silently falling back to
+ * the GitHub route.
  */
 export function createGitHubConnectionActions(ctx: GitHubStoreContext) {
   const { api, workspace, available, connection, installations, loadingInstallations } = ctx
@@ -34,8 +39,14 @@ export function createGitHubConnectionActions(ctx: GitHubStoreContext) {
     await load()
   }
 
+  const DISCONNECT_BY_PROVIDER: Record<VcsProvider, (workspaceId: string) => Promise<unknown>> = {
+    github: (id) => api.disconnectGitHub(id),
+    gitlab: (id) => api.disconnectGitLab(id),
+  }
+
   async function disconnect() {
-    await api.disconnectGitHub(workspace.requireId())
+    // Backends predating the discriminator omit `provider`; those connections are GitHub App ones.
+    await DISCONNECT_BY_PROVIDER[connection.value?.provider ?? 'github'](workspace.requireId())
     connection.value = null
     repos.value = []
     availableRepos.value = []

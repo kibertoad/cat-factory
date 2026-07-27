@@ -14,6 +14,7 @@ import { prReviewApi } from './api/prReview'
 import { fragmentsApi } from './api/fragments'
 import { skillsApi } from './api/skills'
 import { githubApi } from './api/github'
+import { vcsApi } from './api/vcs'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
 import { infraHandlersApi } from './api/infraHandlers'
@@ -142,6 +143,7 @@ export function useApi() {
     ...recurringApi(ctx),
     ...sandboxApi(ctx),
     ...githubApi(ctx),
+    ...vcsApi(ctx),
     ...slackApi(ctx),
     ...bootstrapApi(ctx),
     ...userSecretsApi(ctx),

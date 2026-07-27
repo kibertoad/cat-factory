@@ -78,9 +78,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   docs/issues/scenarios. Decisions resolve via `DecisionModal`.
 - **Pipeline builder** (`components/pipeline`) — assemble/edit agent chains and
   watch `PipelineProgress`.
-- **Integrations** — modals/panels for `github`, `bootstrap`, `documents`,
-  `tasks`, `requirements` (review), `scenarios` (acceptance), and `fragments`
-  (the prompt-fragment library).
+- **Integrations** — modals/panels for `github` (the source-control panel, shared
+  by every VCS provider), `vcs` (the GitLab personal-access-token connect),
+  `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
+  (acceptance), and `fragments` (the prompt-fragment library).
 - **Auth** (`components/auth`) — `AuthGate` / `LoginScreen` / `UserMenu`; the app
   is gated when the backend requires sign-in.
 

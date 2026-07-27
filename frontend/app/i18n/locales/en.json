@@ -3119,8 +3119,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "Connect cat-factory to GitHub",
-      "intro": "cat-factory works by opening pull requests on your repositories. Install the GitHub App on your account or organization to continue, and you can grant it every repository or pick a subset.",
+      "appIntro": "Install the GitHub App on your account or organization; you can grant it every repository or pick a subset.",
       "signedInAs": "Signed in as {login}",
       "signOut": "Sign out"
     },
@@ -3194,7 +3193,6 @@
         "closed": "closed"
       },
       "toast": {
-        "disconnected": "GitHub disconnected",
         "resync": "Resync {status}",
         "reposUpdated": "Linked repositories updated",
         "branchCreated": "Branch {name} created",
@@ -3210,10 +3208,6 @@
         "createBranch": "Could not create branch",
         "openPr": "Could not open pull request",
         "merge": "Could not merge"
-      },
-      "confirmDisconnect": {
-        "title": "Disconnect GitHub?",
-        "body": "The app will lose access to your repositories until you reconnect."
       }
     },
     "addService": {
@@ -5287,6 +5281,41 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "Source control",
+      "patMeta": "Connected with a personal access token",
+      "confirmDisconnect": {
+        "title": "Disconnect {provider}?",
+        "body": "The app will lose access to your repositories until you reconnect."
+      },
+      "toast": {
+        "disconnected": "{provider} disconnected"
+      }
+    },
+    "connect": {
+      "or": "or",
+      "noneConfigured": "No source-control connection is configured for this deployment. Ask an operator to set up a GitHub App or GitLab access.",
+      "gitlab": {
+        "intro": "Paste a GitLab personal access token to connect this workspace. cat-factory uses it to list your projects, push branches and open merge requests.",
+        "tokenLabel": "Personal access token",
+        "scope": "Needs the api scope",
+        "createToken": "Create a token on GitLab",
+        "submit": "Connect GitLab",
+        "toast": {
+          "connected": "GitLab connected"
+        },
+        "errors": {
+          "connect": "Could not connect GitLab"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "Connect cat-factory to {provider}",
+      "titleAny": "Connect cat-factory to your repositories",
+      "intro": "cat-factory works by opening pull requests on your repositories. Connect your repository host to continue."
     }
   }
 }

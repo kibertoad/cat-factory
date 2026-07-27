@@ -415,6 +415,18 @@ gitlabEngineClient`)**, wired in every facade — keep it distinct from the App-
   (`selectVcsConnectDeps` Node ⇄ `selectWorkerVcsConnectDeps` Worker). This is the connect (browse/
   link/sync) surface only — the engine's gate/merge still rides the single-token `engineVcsClient`;
   per-workspace engine routing is a follow-up (see `docs/initiatives/gitlab-ui-parity.md`).
+- **What the SPA may CONNECT comes from one capability route, never inferred from a connection
+  read.** Because the `github` module builds for EITHER provider, a 200 from `GET /github/connection`
+  says nothing about which connect surface is usable — so **`GET /workspaces/:ws/vcs/connect-options`**
+  (`VcsConnectController`, `@cat-factory/server`) is the single signal, returning `{ provider, method
+}` pairs derived from what the facade wired (`config.github.enabled && container.github` ⇒
+  `github/app`; a wired `vcsConnectionService` ⇒ that service's provider + `pat`). The `github` store
+  probes it alongside the connection and exposes `canConnectGitHubApp` / `canConnectGitLabPat` /
+  `soleConnectProvider`; `GitHubPanel.vue` + `GitHubOnboarding.vue` render only the offered surfaces
+  (`components/vcs/GitLabConnect.vue` is the PAT one). Presentation switches in ONE place —
+  `app/utils/vcs.ts` for brand label/icon/token-URL `Record<VcsProvider, …>` constants, and
+  provider-parameterised `vcs.*` i18n keys for prose. Adding a provider means extending those
+  Records (the typecheck fails until you do), never a component fork.
 - **The migration is incremental** — the kernel _ports_ are neutralized, but many _entity_ types
   (`GitHubRepo`, the `github_repos`/`github_installations` projection tables) are still GitHub-named
   and reused as-is (their shapes aren't GitHub-specific; "Phase 1 … folds the entity names too"). So

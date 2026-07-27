@@ -4,13 +4,15 @@
 // pull requests and issues the backend caches in D1. Mirrors the document-source
 // connect/import surface, but for GitHub. Writes (new branch, open/merge PR,
 // comment) go straight to the repo via the backend's installation token.
-import type { GitHubPullRequest, GitHubRepo } from '~/types/domain'
+import type { GitHubPullRequest, GitHubRepo, VcsProvider } from '~/types/domain'
 // Explicit import: the auto-import name for a component nested under a
 // like-named directory (github/GitHubConnect) doesn't match the `<GitHubConnect>`
 // tag, so it silently renders as an empty element. Importing it directly binds
 // the tag unambiguously.
 import GitHubConnect from './GitHubConnect.vue'
+import GitLabConnect from '~/components/vcs/GitLabConnect.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -25,6 +27,32 @@ const open = computed({
   },
 })
 const back = useIntegrationBack(open)
+
+// Provider-aware chrome: once connected, the panel is titled for the provider the workspace
+// actually connected; before that it names the sole connectable provider, or stays neutral when
+// the deployment serves several. Brand names are verbatim in every locale (see `~/utils/vcs`).
+const chromeProvider = computed(() =>
+  github.connected ? github.provider : github.soleConnectProvider,
+)
+const panelTitle = computed(() =>
+  chromeProvider.value ? VCS_PROVIDER_LABELS[chromeProvider.value] : t('vcs.panel.title'),
+)
+const providerIcon = computed(() =>
+  chromeProvider.value ? VCS_PROVIDER_ICONS[chromeProvider.value] : 'i-lucide-git-branch',
+)
+
+// What the connection line says under the account: a GitHub App connection is identified by its
+// installation, a PAT connection by the credential it rides. Keyed by an exhaustive Record of
+// literal `t()` keys, so a new provider fails the typecheck rather than rendering App vocabulary.
+const CONNECTION_META: Record<VcsProvider, () => string> = {
+  github: () =>
+    t('github.panel.installationMeta', {
+      targetType: github.connection?.targetType ?? '',
+      id: github.connection?.installationId ?? '',
+    }),
+  gitlab: () => t('vcs.panel.patMeta'),
+}
+const connectionMeta = computed(() => CONNECTION_META[github.provider]())
 
 // On open: refresh projections when connected. The not-connected state renders
 // <GitHubConnect>, which discovers and links installations on its own.
@@ -48,8 +76,10 @@ function notifyError(title: string, e: unknown) {
 
 async function disconnect() {
   const ok = await confirm({
-    title: t('github.panel.confirmDisconnect.title'),
-    description: t('github.panel.confirmDisconnect.body'),
+    title: t('vcs.panel.confirmDisconnect.title', {
+      provider: VCS_PROVIDER_LABELS[github.provider],
+    }),
+    description: t('vcs.panel.confirmDisconnect.body'),
     variant: 'destructive',
     confirmLabel: t('common.disconnect'),
     icon: 'i-lucide-unplug',
@@ -57,7 +87,10 @@ async function disconnect() {
   if (!ok) return
   try {
     await github.disconnect()
-    toast.add({ title: t('github.panel.toast.disconnected'), icon: 'i-lucide-unplug' })
+    toast.add({
+      title: t('vcs.panel.toast.disconnected', { provider: VCS_PROVIDER_LABELS[github.provider] }),
+      icon: 'i-lucide-unplug',
+    })
   } catch (e) {
     notifyError(t('github.panel.errors.disconnect'), e)
   }
@@ -241,19 +274,32 @@ async function merge(pr: GitHubPullRequest) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="GitHub" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="panelTitle" :ui="{ content: 'max-w-2xl' }">
     <template #title>
-      <IntegrationBackTitle title="GitHub" @back="back" />
+      <IntegrationBackTitle :title="panelTitle" @back="back" />
     </template>
     <template #body>
       <div class="space-y-5">
         <!-- not connected: connect -->
         <template v-if="!github.connected">
-          <p class="text-sm text-slate-400">
-            {{ t('github.panel.connectIntro') }}
+          <!-- One connect surface per method the deployment actually serves: the App
+               installation picker only where a GitHub App is configured, the PAT box only
+               where the per-workspace GitLab connect is wired. -->
+          <template v-if="github.canConnectGitHubApp">
+            <p class="text-sm text-slate-400">{{ t('github.panel.connectIntro') }}</p>
+            <GitHubConnect />
+          </template>
+          <USeparator
+            v-if="github.canConnectGitHubApp && github.canConnectGitLabPat"
+            :label="t('vcs.connect.or')"
+          />
+          <GitLabConnect v-if="github.canConnectGitLabPat" />
+          <p
+            v-if="!github.canConnectGitHubApp && !github.canConnectGitLabPat"
+            class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
+          >
+            {{ t('vcs.connect.noneConfigured') }}
           </p>
-
-          <GitHubConnect />
         </template>
 
         <!-- connected: manage + browse -->
@@ -263,19 +309,12 @@ async function merge(pr: GitHubPullRequest) {
             class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
           >
             <div class="flex items-center gap-2 min-w-0">
-              <UIcon name="i-lucide-github" class="h-5 w-5 text-slate-300" />
+              <UIcon :name="providerIcon" class="h-5 w-5 text-slate-300" />
               <div class="min-w-0">
                 <div class="truncate text-sm text-slate-200">
                   {{ github.connection?.accountLogin }}
                 </div>
-                <div class="text-[11px] text-slate-500">
-                  {{
-                    t('github.panel.installationMeta', {
-                      targetType: github.connection?.targetType,
-                      id: github.connection?.installationId,
-                    })
-                  }}
-                </div>
+                <div class="text-[11px] text-slate-500">{{ connectionMeta }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">

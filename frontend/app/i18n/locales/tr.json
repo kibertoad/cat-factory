@@ -3044,8 +3044,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "cat-factory'yi GitHub'a bağla",
-      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için GitHub App'i hesabınıza veya kuruluşunuza yükleyin; her depoyu verebilir veya bir alt küme seçebilirsiniz.",
+      "appIntro": "GitHub App'i hesabınıza veya kuruluşunuza yükleyin; her depoyu verebilir veya bir alt küme seçebilirsiniz.",
       "signedInAs": "{login} olarak oturum açıldı",
       "signOut": "Oturumu kapat"
     },
@@ -3119,7 +3118,6 @@
         "closed": "kapalı"
       },
       "toast": {
-        "disconnected": "GitHub bağlantısı kesildi",
         "resync": "{status} yeniden senkronize et",
         "reposUpdated": "Bağlı depolar güncellendi",
         "branchCreated": "{name} dalı oluşturuldu",
@@ -3135,10 +3133,6 @@
         "createBranch": "Dal oluşturulamadı",
         "openPr": "Pull request açılamadı",
         "merge": "Birleştirilemedi"
-      },
-      "confirmDisconnect": {
-        "title": "GitHub bağlantısı kesilsin mi?",
-        "body": "Yeniden bağlanana kadar uygulama depolarınıza erişimini kaybedecek."
       }
     },
     "addService": {
@@ -5158,6 +5152,41 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynağın bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynağın bağlantısı kaldırılamadı"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "Kaynak denetimi",
+      "patMeta": "Kişisel erişim belirteciyle bağlandı",
+      "confirmDisconnect": {
+        "title": "{provider} bağlantısı kesilsin mi?",
+        "body": "Yeniden bağlanana kadar uygulama depolarınıza erişimini kaybedecek."
+      },
+      "toast": {
+        "disconnected": "{provider} bağlantısı kesildi"
+      }
+    },
+    "connect": {
+      "or": "veya",
+      "noneConfigured": "Bu dağıtım için yapılandırılmış bir kaynak denetimi bağlantısı yok. Bir operatörden GitHub App veya GitLab erişimi kurmasını isteyin.",
+      "gitlab": {
+        "intro": "Bu çalışma alanını bağlamak için bir GitLab kişisel erişim belirteci yapıştırın. cat-factory bunu projelerinizi listelemek, dal göndermek ve merge request açmak için kullanır.",
+        "tokenLabel": "Kişisel erişim belirteci",
+        "scope": "api kapsamı gerekir",
+        "createToken": "GitLab'da belirteç oluştur",
+        "submit": "GitLab'ı bağla",
+        "toast": {
+          "connected": "GitLab bağlandı"
+        },
+        "errors": {
+          "connect": "GitLab bağlanamadı"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "cat-factory'yi {provider}'a bağla",
+      "titleAny": "cat-factory'yi depolarınıza bağlayın",
+      "intro": "cat-factory, depolarınızda pull request'ler açarak çalışır. Devam etmek için depo sağlayıcınızı bağlayın."
     }
   }
 }

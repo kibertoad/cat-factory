@@ -1,6 +1,6 @@
 # Initiative: GitLab product-surface parity (SPA)
 
-**Status:** in progress (slice 1 audit + provider pre-slice landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (connect flow landed end to end — backend + UI) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -53,7 +53,7 @@ pipelines entirely through the UI, at feature parity with GitHub.
 | 1   | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker)                                                     | ✅ done | #1138   |
 | 1b  | **Provider pre-slice (gates all visual work):** add + populate a `provider: VcsProvider` discriminator on the repo/connection wire types + projections, symmetric across both runtimes, with a conformance assertion | ✅ done | this PR |
 | 2a  | Per-workspace GitLab PAT connect flow — **backend** (persistence + connect service/controller + provider-routing client, both runtimes + conformance)                                                                | ✅ done | this PR |
-| 2b  | Per-workspace GitLab PAT connect flow — **connect UI** mirroring `GitHubConnect.vue` (provider-aware labels/icons, gitlab connection probe, i18n)                                                                    | ⬜ todo |         |
+| 2b  | Per-workspace GitLab PAT connect flow — **connect UI** mirroring `GitHubConnect.vue` (provider-aware labels/icons, gitlab connection probe, i18n)                                                                    | ✅ done | this PR |
 | 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                                                                           | ⬜ todo |         |
 | 4   | Webhook setup surface (register the GitLab webhook + secret for a connected project)                                                                                                                                 | ⬜ todo |         |
 | 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons — i18n'd, all locales                                                                                                                         | ⬜ todo |         |
@@ -205,6 +205,45 @@ Slice 2a landed the backend of the per-workspace GitLab PAT connect. Read this b
   `GITLAB_TOKEN`), NOT the per-workspace client — so per-workspace engine routing is a deliberate
   later slice, and the connect feature is currently gated on a deployment `GITLAB_TOKEN` being set
   (`config.gitlab.enabled`) plus a sealing key. Note this when picking up slice 3+.
+
+## Findings (slice 2b — connect UI)
+
+Slice 2b put the connect flow in front of users. Read this before slice 3 (project browse) or
+slice 5 (the copy pass) — it establishes where provider presentation is decided.
+
+- **A capability route, because the connection reads can't answer "what can I connect?".** Since
+  2a the `github` module builds for EITHER provider, so a 200 from `GET /github/connection` says
+  nothing about whether an App is installable — a GitLab-only deployment would have rendered the
+  App installation picker (and then failed listing installations). The single signal is now
+  `GET /workspaces/:ws/vcs/connect-options` (`VcsConnectController`, `@cat-factory/server`,
+  `integrations.manage`), returning `{ provider, method }` pairs derived from what the facade
+  actually wired: `config.github.enabled && container.github` ⇒ `github/app`, a wired
+  `vcsConnectionService` ⇒ `<its provider>/pat`. It reports CAPABILITY only — the workspace's
+  current connection (and its `provider`) still comes from `GET /github/connection`. Pure shared
+  HTTP layer over container fields, so it is runtime-symmetric with no per-facade wiring.
+- **No GitLab store, and no forked components** (the target pattern held). The store additions
+  live on `useGitHubStore`: `connectOptions` (resolved by the same single-flight probe, in
+  parallel with the connection read and degrading to `[]` on its own), the derived
+  `canConnectGitHubApp` / `canConnectGitLabPat` / `soleConnectProvider`, `provider` (the connected
+  provider, defaulting to `github`), and `connectGitLab(pat)`. `disconnect()` now dispatches
+  through an exhaustive `Record<VcsProvider, …>` so a GitLab connection is never torn down via the
+  GitHub route.
+- **`components/vcs/GitLabConnect.vue` is a new surface, not a copy** — GitLab has nothing to
+  discover and nowhere to redirect, so it is a PAT field + the `api`-scope hint + a token-creation
+  link, with the upstream validation error shown inline (it says WHY the token was rejected, which
+  a generic toast would flatten). `GitHubPanel.vue` and `GitHubOnboarding.vue` render each connect
+  surface only where the deployment serves it, and say so when it serves none.
+- **Where presentation switches: `app/utils/vcs.ts`.** Brand labels / icons / token-creation URLs
+  are exhaustive `Record<VcsProvider, …>` constants (brand names stay verbatim in every locale, so
+  they are constants, not catalog keys — the convention `LoginScreen.vue` already used, now lifted
+  out of it and shared). PROSE is provider-parameterised i18n under the new `vcs.*` namespace
+  (`{provider}` placeholders), which is the shape slice 5 should extend rather than replace: the
+  App-specific `github.onboarding.title`/`intro` and `github.panel.confirmDisconnect` /
+  `toast.disconnected` keys are GONE, replaced by `vcs.onboarding.*` / `vcs.panel.*` (all 10
+  locales). `github.onboarding.appIntro` is what remains GitHub-App-specific.
+- **Still GitHub-hardcoded, and still slice 3/5's job:** `stores/github.ts`'s `repoUrl` /
+  `pullUrl` / `issueUrl` builders and `AddServiceFromRepoModal.vue`'s `manageInstallUrl`. They now
+  have `github.provider` to switch on — the data is no longer the blocker, only the work is.
 
 ## Conventions & gotchas
 
