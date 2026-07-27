@@ -271,6 +271,94 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.heartbeatAt).toBeUndefined()
   })
 
+  it('maps the live bugfix reproduction proof when the manifest points at it', async () => {
+    // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
+    // verdict WHILE the repair loop runs, exactly like a Cloudflare/local container. Absent the
+    // mapping (below) a pool-backed bugfix PR would carry no reproduction section at all —
+    // indistinguishable from a run that never declared one.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: {
+        status: 'reproduced',
+        command: 'npm test -- repro',
+        testPaths: ['a.test.ts'],
+        attempts: 2,
+        maxAttempts: 3,
+        base: { exitCode: 1, passed: false, outputTail: 'BOOM', durationMs: 12, timedOut: false },
+        final: { exitCode: 0, passed: true },
+        at: 1_700_000_000_000,
+      },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const view = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.reproductionReport?.status).toBe('reproduced')
+    expect(view.reproductionReport?.attempts).toBe(2)
+    expect(view.reproductionReport?.base).toEqual({
+      exitCode: 1,
+      passed: false,
+      outputTail: 'BOOM',
+      durationMs: 12,
+    })
+    expect(view.reproductionReport?.final?.passed).toBe(true)
+  })
+
+  it('reads an UNRECOGNISED verdict as `inconclusive`, never as proof', async () => {
+    // The status reaches a pull request as a statement about a defect. The safe reading of "I do
+    // not know what this says" is that nothing was demonstrated — a scheduler that invents a
+    // status must not be able to launder it into `reproduced`.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: { status: 'totally-fine', command: 'npm test', testPaths: 'nope' },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const view = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.reproductionReport?.status).toBe('inconclusive')
+    // A non-array `testPaths` degrades to empty rather than failing the whole poll.
+    expect(view.reproductionReport?.testPaths).toEqual([])
+    expect(view.reproductionReport?.base).toBeUndefined()
+  })
+
+  it('injects nothing when the manifest maps no reproduction path, or the envelope is unusable', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      reproductionReport: { status: 'reproduced', command: 'npm test' },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.reproductionReport).toBeUndefined()
+
+    // Mapped, but the envelope names no command — nothing report-shaped to coerce.
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', reproductionReport: { status: 'x' } })
+    const withProof: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, reproductionReportPath: 'reproductionReport' },
+    }
+    const malformed = await provider.poll({
+      manifest: withProof,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(malformed.reproductionReport).toBeUndefined()
+  })
+
   it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
     // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
     // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the

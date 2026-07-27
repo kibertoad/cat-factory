@@ -107,8 +107,14 @@ const REPRO_TEST_SYSTEM_PROMPT =
   'BEFORE the fix and again AFTER it, and only a command that fails before and passes after ' +
   'counts as proof that the bug was real and is gone. Give the NARROWEST command that runs your ' +
   'reproduction test(s) — a whole-suite command makes the proof slow and lets unrelated ' +
-  'failures muddy it. If the repository needs an install step before tests can run in a clean ' +
-  'checkout, give it as "setupCommand"; omit the field when none is needed.\n' +
+  'failures muddy it.\n' +
+  'Both runs happen in a FRESH checkout of this repository — no dependencies installed, nothing ' +
+  'built, and none of the state your working copy has accumulated. So if the tests need an ' +
+  'install or build step to run at all there, you MUST give that step as "setupCommand" (e.g. ' +
+  '"pnpm install", "npm ci", "pip install -e ."). Omit it only when the tests genuinely run in a ' +
+  'bare checkout with nothing installed. Getting this wrong is the most common way the proof ' +
+  'fails: without the setup step the command errors identically before AND after the fix, which ' +
+  'proves nothing and is reported as unverified.\n' +
   'If you return "not_reproducible", you MUST also fill "alternativeVerification" with what you ' +
   'checked instead (a manual trace, a log correlation, a review of the affected code path) so ' +
   'the pull request records a real statement rather than a blank.\n\n' +

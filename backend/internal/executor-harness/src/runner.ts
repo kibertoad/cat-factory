@@ -1,6 +1,7 @@
 import { redactSecrets } from './redact.js'
 import type { FollowUpLine } from './follow-ups.js'
 import type { ValidationReport } from './validation-checks.js'
+import type { ReproductionReport } from './reproduction-proof.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
@@ -38,6 +39,14 @@ export interface RunOptions {
    * buffer): a published attempt is final, and the loop republishes a whole new one per round.
    */
   onValidationReport?: (report: ValidationReport) => void
+  /**
+   * Receives each completed BUGFIX REPRODUCTION PROOF attempt the moment the harness finishes
+   * running the declared check against both trees, so the backend can surface a failed
+   * verification WHILE the repair loop still runs rather than only in the terminal result.
+   * Latest-wins (NOT a drain buffer), exactly like {@link onValidationReport}: a published
+   * attempt is final, and the loop republishes a whole new one — with a fresh `at` — per round.
+   */
+  onReproductionProof?: (report: ReproductionReport) => void
   /**
    * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
    * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
@@ -177,6 +186,14 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * next round republishes). Absent for a job whose service configured no checks.
    */
   validationReport?: ValidationReport
+  /**
+   * The LATEST completed bugfix reproduction-proof attempt (see
+   * `docs/initiatives/bugfix-reproduction-proof.md`). Like {@link validationReport} — and unlike
+   * {@link spans}/{@link followUps} — this is a whole-value latest publish, not drain-on-read, so
+   * re-reading it on a later poll is harmless and a dropped poll loses nothing. Absent for a job
+   * that carried no reproduction declaration.
+   */
+  reproductionReport?: ReproductionReport
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -442,6 +459,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onValidationReport: (report) => {
           entry.validationReport = report
+        },
+        onReproductionProof: (report) => {
+          entry.reproductionReport = report
         },
         onCallMetric: (call) => {
           // Stamp the job-scoped sequence on the metric OBJECT: the handler keeps the same

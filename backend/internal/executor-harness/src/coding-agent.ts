@@ -14,6 +14,7 @@ import type {
 } from './job.js'
 import {
   branchAheadOfBase,
+  changedFilesSinceBase,
   branchHasCommitsSince,
   cloneExistingBranch,
   cloneRepo,
@@ -47,6 +48,11 @@ import {
   type ValidationChecksSpec,
   type ValidationReport,
 } from './validation-checks.js'
+import {
+  runReproductionLoop,
+  type ReproductionReport,
+  type ReproductionSpec,
+} from './reproduction-proof.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -118,6 +124,16 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    */
   validationChecks?: ValidationChecksSpec
   /**
+   * BUGFIX REPRODUCTION PROOF: the run's declared reproduction command + test files. When set, the
+   * harness runs that command against the pre-fix tree AND the tree the PR will open from, feeding
+   * a failed verification back to the agent while budget remains, and attaches the verdict to the
+   * outcome. Unlike {@link validationChecks} it NEVER gates the pull request — an unproven
+   * reproduction is weak evidence, which is a reviewer's call, not a machine's. Set only for a
+   * dispatch that opens a PR and whose run carries a declaration. See
+   * `docs/initiatives/bugfix-reproduction-proof.md`.
+   */
+  reproduction?: ReproductionSpec
+  /**
    * A repo-sourced Claude Skill to make available for this run (a `skill` step, slice 2). Threaded
    * into {@link runAgentInWorkspace}, which installs it harness-aware: natively under the ISOLATED
    * `CLAUDE_CONFIG_DIR` for a leased-credential claude-code run, `.cat-context/skill/` for everything
@@ -158,6 +174,12 @@ export interface CodingAgentOutcome {
    * the caller must open no PR and fail the job with this as the evidence.
    */
   validationReport?: ValidationReport
+  /**
+   * The bugfix reproduction proof's LAST attempt (present only when
+   * {@link CodingAgentSpec.reproduction} was set). Evidence, never a gate: `inconclusive` is
+   * attached to a perfectly successful run and the PR still opens.
+   */
+  reproductionReport?: ReproductionReport
 }
 
 /**
@@ -323,6 +345,64 @@ export async function runCodingAgent(
         opts.onPhase?.('agent')
         logger.info('coding-agent: running agent', { serviceDirectory })
         let agentRun = await runAgentPass(spec.userPrompt)
+        const foldPass = (run: typeof agentRun): void => {
+          agentRun = mergeAgentPasses(agentRun, run)
+        }
+        // The new files the agent left unadded, folded into either loop's repair prompt. Both
+        // loops judge state the push will NOT carry unless it is committed — the checks run
+        // against the working tree, the proof against committed trees — so an unadded file is
+        // exactly the thing to name. A throw degrades to "no warning" inside each loop.
+        const listUncommittedNewFiles = (): Promise<string[]> =>
+          listUntrackedFiles(workDir, opts.signal)
+
+        // BUGFIX REPRODUCTION PROOF: run the run's declared reproduction command against the
+        // pre-fix tree and the tree the PR will open from, and record whether it was red then
+        // green. Runs BEFORE the validation loop below, deliberately: validation is the GATE
+        // ("only a green checkout opens a PR"), so it has to stay the last thing that touches the
+        // tree — otherwise a reproduction repair round could leave the checkout red behind it and
+        // the PR would open anyway. Keyed purely off the job body carrying a spec (no agent-kind
+        // switch); absent ⇒ a no-op and the flow below is byte-for-byte what it was.
+        const reproduction = spec.reproduction
+        let reproductionReport: ReproductionReport | undefined
+        if (reproduction && (await producedWork(dir, spec, baseSha, resumed, opts))) {
+          opts.onPhase?.('reproduction')
+          reproductionReport = await runReproductionLoop({
+            dir,
+            baseSha,
+            // Re-read per attempt: a repair pass commits, so the final tree moves under the loop.
+            // `producedWork` has already committed forgotten tracked edits, and each repair round
+            // re-commits before the next read.
+            resolveFinalSha: async () => {
+              await commitTrackedEdits(dir, spec.commitMessage, signal)
+              return headCommit(dir, signal)
+            },
+            ...(serviceDirectory ? { serviceDirectory } : {}),
+            spec: reproduction,
+            logger,
+            opts,
+            runAgentPass,
+            onAgentPass: foldPass,
+            listUncommittedNewFiles,
+            // Only a RESUMED run can have a pre-fix tree that already carries work: a fresh run
+            // branched off base, so `baseSha` IS base. Wiring the probe unconditionally would buy
+            // an always-empty answer for the price of a fetch — and a fresh clone is shallow, so
+            // it could not resolve a merge base to answer with anyway. Lazy inside the loop: it
+            // only runs if a tree comes back green.
+            ...(resumed
+              ? {
+                  listBaseTreeChanges: () =>
+                    changedFilesSinceBase(
+                      dir,
+                      spec.repo.baseBranch,
+                      spec.ghToken,
+                      baseSha,
+                      opts.signal,
+                    ),
+                }
+              : {}),
+          })
+          opts.onPhase?.('agent')
+        }
         // PRE-PR VALIDATION: run the service's configured checks against the checkout and, while
         // they fail and budget remains, hand the captured output back to the agent and run it
         // again. Sits BETWEEN the agent and the finalize/push/PR step so a red checkout never
@@ -338,17 +418,16 @@ export async function runCodingAgent(
             logger,
             opts,
             runAgentPass,
-            onAgentPass: (run) => {
-              agentRun = mergeAgentPasses(agentRun, run)
-            },
+            onAgentPass: foldPass,
             // The checks run against the WORKING TREE, but only tracked edits are staged for the
             // push — so a repair round can go green on a new file the PR would never contain.
             // Name those files in the next repair prompt so the agent adds them.
-            listUncommittedNewFiles: () => listUntrackedFiles(workDir, opts.signal),
+            listUncommittedNewFiles,
           })
         }
         outcome = await finalizeCodingRun({
           validationReport,
+          reproductionReport,
           dir,
           spec,
           logger,
@@ -499,6 +578,8 @@ async function prepareCodingCheckout(
 async function finalizeCodingRun(args: {
   /** The pre-PR validation loop's last attempt, attached to the outcome (absent when unconfigured). */
   validationReport?: ValidationReport
+  /** The reproduction proof's last attempt, attached to the outcome (absent when unconfigured). */
+  reproductionReport?: ReproductionReport
   dir: string
   spec: CodingAgentSpec
   logger: Logger
@@ -515,6 +596,7 @@ async function finalizeCodingRun(args: {
 }): Promise<CodingAgentOutcome> {
   const {
     validationReport,
+    reproductionReport,
     dir,
     spec,
     logger,
@@ -618,6 +700,9 @@ async function finalizeCodingRun(args: {
   // reaches the PR-opening caller); attach its verdict for the caller to gate on and for the
   // backend to record on the step.
   if (validationReport) outcome.validationReport = validationReport
+  // The reproduction proof: attached to EVERY outcome, including a no-op or an `inconclusive`
+  // verdict. It is evidence about the change, not a gate on it — see the loop's D6 note.
+  if (reproductionReport) outcome.reproductionReport = reproductionReport
   return outcome
 }
 

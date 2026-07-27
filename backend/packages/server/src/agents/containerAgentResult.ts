@@ -54,9 +54,16 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
   const withValidation = result.validationReport
     ? { ...mapped, validationReport: result.validationReport }
     : mapped
-  return result.effortReport
-    ? { ...withValidation, effortReport: result.effortReport }
+  // The bugfix reproduction proof, likewise orthogonal to the kind-specific channels. Attached on
+  // the SUCCESS path too, and for every verdict: `inconclusive` is not a failure, it is the honest
+  // statement that the reproduction could not be demonstrated — dropping it here would leave the
+  // PR report unable to tell that apart from a run where the phase never ran at all.
+  const withReproduction = result.reproductionReport
+    ? { ...withValidation, reproductionReport: result.reproductionReport }
     : withValidation
+  return result.effortReport
+    ? { ...withReproduction, effortReport: result.effortReport }
+    : withReproduction
 }
 
 /**
@@ -409,6 +416,10 @@ export function buildRunningUpdate(
     // A published validation attempt is FINAL; the harness republishes a NEW attempt rather
     // than mutating the last one, so forwarding the latest on every poll is safe.
     ...(view.validationReport ? { validationReport: view.validationReport } : {}),
+    // Likewise for the reproduction proof: a published attempt is FINAL and the harness
+    // republishes a whole NEW one (with a fresh `at`) per repair round, so forwarding the latest
+    // on every poll is safe — and is what makes a failed verification visible while the loop runs.
+    ...(view.reproductionReport ? { reproductionReport: view.reproductionReport } : {}),
   }
   return view.progress
     ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
@@ -419,11 +430,13 @@ export function buildRunningUpdate(
  * The structured failure metadata a terminal runner view carries, forwarded so the engine
  * classifies a failure without regex-matching `error`: the harness's `failureCause`, its
  * extended redacted `detail`, the serving `backend`, the transport's container-eviction verdict
- * (which the driver recovers on its own budget), and — for a job that failed because its pre-PR
- * validation stayed red until the attempt budget was spent — the validation report that is the
- * EVIDENCE behind the failure. The report is read off the terminal result first (authoritative)
- * and falls back to the view's last live publish, so a transport that forwards no terminal body
- * still surfaces it. Every field is absent on an older harness image.
+ * (which the driver recovers on its own budget), and the two pre-PR verification reports — the
+ * validation one, which for a job that failed because its checks stayed red until the attempt
+ * budget was spent is the EVIDENCE behind the failure, and the reproduction proof, which a job
+ * that died for an unrelated reason after the proof ran still legitimately carries. Each is read
+ * off the terminal result first (authoritative) and falls back to the view's last live publish,
+ * so a transport that forwards no terminal body still surfaces it. Every field is absent on an
+ * older harness image.
  */
 export function buildFailureMeta(view: RunnerJobView): {
   failureCause?: HarnessFailureCause
@@ -431,13 +444,19 @@ export function buildFailureMeta(view: RunnerJobView): {
   backend?: string
   evicted?: ContainerEvictionKind
   validationReport?: unknown
+  reproductionReport?: unknown
 } {
   const validationReport = view.result?.validationReport ?? view.validationReport
+  // A job that died for an UNRELATED reason after the proof ran still has a verdict worth keeping
+  // — a failed verification never fails a job by itself, so a report present here describes work
+  // that genuinely happened. Read terminal-first, view-fallback, exactly like the validation one.
+  const reproductionReport = view.result?.reproductionReport ?? view.reproductionReport
   return {
     ...(view.failureCause ? { failureCause: view.failureCause } : {}),
     ...(view.detail ? { detail: view.detail } : {}),
     ...(view.backend ? { backend: view.backend } : {}),
     ...(view.evicted ? { evicted: view.evicted } : {}),
     ...(validationReport ? { validationReport } : {}),
+    ...(reproductionReport ? { reproductionReport } : {}),
   }
 }
