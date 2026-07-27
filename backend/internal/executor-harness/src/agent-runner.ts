@@ -12,11 +12,13 @@ import {
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
+  ProgressGuard,
   publishCallMetric,
   type CallMetricPublisher,
   type HarnessCallMetric,
   type PiRunOutcome,
   type PiRunStats,
+  type ProgressGuardLimits,
   type TodoProgress,
 } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
@@ -101,6 +103,17 @@ export interface SubscriptionRunOptions {
   extraEnv?: Record<string, string>
   /** Aborting this kills the CLI (the job's inactivity/max-duration watchdog). */
   signal?: AbortSignal
+  /**
+   * Fully-resolved no-progress guard limits (env defaults merged loosen-only with the kind's
+   * tuning + any complexity-scaled allowance). When set, the claude-code runner runs the SAME
+   * {@link ProgressGuard} as Pi over the CLI's tool stream and kills a run that has plainly
+   * stopped making progress (no-edit probing, error-retry loop, web rabbit-hole) rather than
+   * letting it burn the whole wall-clock budget. Omitted ⇒ the guard is disabled for this run
+   * (only the external watchdog bounds it), preserving the pre-guard behaviour.
+   */
+  guardLimits?: ProgressGuardLimits
+  /** Whether this run is expected to edit files (false for assess-only runs); gates the no-edit bound. */
+  expectsEdits?: boolean
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
@@ -382,6 +395,41 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     if (progress) opts.onProgress(progress)
   }
 
+  // No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
+  // absent on this path until now. Claude Code reports a tool CALL (its name) on the `assistant`
+  // turn and that call's RESULT (`is_error`) on the following `user` turn, so correlate them by
+  // `tool_use` id to feed the guard a {name,isError} signal. A tripped guard aborts the CLI via
+  // `guardAbort` (folded into streamCli's signal below) and the run then fails with its
+  // diagnostic. Disabled when the caller supplies no limits (only the external watchdog bounds it).
+  const guard = opts.guardLimits
+    ? new ProgressGuard(opts.guardLimits, opts.expectsEdits ?? true)
+    : undefined
+  const toolNames = new Map<string, string>()
+  const guardAbort = new AbortController()
+  let guardReason: string | undefined
+
+  // Feed a user turn's settled tool calls to the guard, pairing each `tool_result`'s `is_error`
+  // with the name captured for its `tool_use` id on the assistant turn. The FIRST reason trips
+  // it: record the diagnostic and abort the CLI (streamCli's close handler rejects; the catch
+  // below surfaces `guardReason` over the generic abort message). A standalone closure so the
+  // per-block loop doesn't nest onEvent past the readable-depth limit.
+  const feedGuard = (content: unknown[]): void => {
+    if (!guard || guardReason) return
+    for (const block of content) {
+      if (!isObject(block) || block.type !== 'tool_result') continue
+      const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
+      const name = id ? toolNames.get(id) : undefined
+      if (id) toolNames.delete(id)
+      if (!name) continue
+      const reason = guard.observeSignal({ name, isError: block.is_error === true })
+      if (reason) {
+        guardReason = reason
+        guardAbort.abort()
+        return
+      }
+    }
+  }
+
   const onEvent = (event: Record<string, unknown>): void => {
     const type = event.type
     if (type === 'assistant' && isObject(event.message)) {
@@ -391,7 +439,13 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       stats.assistantChars += text.length
       stats.toolCalls += toolUses
       for (const block of content) {
-        if (isObject(block) && block.type === 'tool_use' && block.name === 'TodoWrite') {
+        if (!isObject(block) || block.type !== 'tool_use') continue
+        // Remember each call's name against its id so the guard can pair it with the
+        // `is_error` its `tool_result` carries on the next `user` turn.
+        if (typeof block.id === 'string' && typeof block.name === 'string') {
+          toolNames.set(block.id, block.name)
+        }
+        if (block.name === 'TodoWrite') {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
           if (progress) lastTodo = progress
         }
@@ -422,6 +476,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         sliceTracker.onUser(content)
         planTracker.onUser(content)
         emitProgress()
+        feedGuard(content)
         messages.push({ role: 'tool', content })
       }
     } else if (type === 'result') {
@@ -488,6 +543,12 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       })
     : undefined
 
+  // Fold the guard's abort into the run signal so a tripped guard kills the CLI the same way the
+  // external watchdog does; `guardReason` (set above) distinguishes the two at the catch below.
+  const runSignal = opts.signal
+    ? AbortSignal.any([opts.signal, guardAbort.signal])
+    : guardAbort.signal
+
   try {
     const { stderrTail } = await streamCli(
       {
@@ -509,7 +570,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         ],
       },
       prompt,
-      opts,
+      { ...opts, signal: runSignal },
       env,
       opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
       onEvent,
@@ -524,6 +585,11 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       usage,
       subagents,
     })
+  } catch (err) {
+    // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
+    // message, so replace it with the guard's actionable diagnostic (mirrors runPi's failure).
+    if (guardReason) throw new Error(guardReason)
+    throw err
   } finally {
     await subagents?.stop()
     if (configHome) {

@@ -16,6 +16,19 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 // Unknown ids (e.g. a fragment removed from the catalog after selection) are
 // skipped so a stale selection never breaks a run.
 
+/**
+ * How verbose the folded best-practice standards should be:
+ *  - `full` (default) — the fragment's full `body`. Reviewer / deep kinds, and any kind not
+ *    marked as an implementer, get this.
+ *  - `brief` — the fragment's condensed `brief` variant when it defines one (else its full
+ *    `body`). Chosen for implementer kinds (coder / fixer / …) that run a long agentic loop
+ *    whose system prompt is re-sent on EVERY turn, so a terser standard cuts the per-turn
+ *    (and cache-read) context cost without dropping the standard entirely.
+ * Resolved per kind by `standardsVerbosityFor` (the `brief-standards` trait) at the dispatch
+ * chokepoint and threaded through {@link composeBlockSystemPrompt}.
+ */
+export type StandardsVerbosity = 'full' | 'brief'
+
 /** One resolved best-practice standard to fold into the prompt: its body + reference label. */
 export interface ComposableFragment {
   id: string
@@ -45,13 +58,25 @@ function escapeAttr(value: string): string {
  * — rather than concatenated into one blob, so the agent can tell the standards apart and cite
  * a specific one by title (what the code/PR reviewers' adherence report relies on).
  */
-function foldStandards(baseSystem: string, fragments: ComposableFragment[]): string {
+function foldStandards(
+  baseSystem: string,
+  fragments: ComposableFragment[],
+  verbosity: StandardsVerbosity = 'full',
+): string {
   if (fragments.length === 0) return baseSystem
   const blocks = fragments.map((fragment) => {
     const label = fragment.title?.trim() || fragment.id
+    // Implementer kinds fold the condensed `brief` when the fragment defines one; everyone
+    // else (and any fragment without a `brief`) gets the full `body`. The brief is looked up
+    // from the pool by id rather than threaded through every fragment-resolution site, so it
+    // applies uniformly to both the id-resolved and engine-resolved (`resolvedFragments`)
+    // sources; a tenant/document-backed fragment absent from the static pool keeps its full
+    // body. `getFragment` is already the composer's resolution source (see below).
+    const brief = verbosity === 'brief' ? getFragment(fragment.id)?.brief?.trim() : undefined
+    const body = brief || fragment.body.trim()
     return [
       `<best-practice-standard id="${escapeAttr(fragment.id)}" title="${escapeAttr(label)}">`,
-      fragment.body.trim(),
+      body,
       '</best-practice-standard>',
     ].join('\n')
   })
@@ -66,12 +91,16 @@ function foldStandards(baseSystem: string, fragments: ComposableFragment[]): str
   ].join('\n')
 }
 
-export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = []): string {
+export function composeSystemPrompt(
+  baseSystem: string,
+  fragmentIds: string[] = [],
+  verbosity: StandardsVerbosity = 'full',
+): string {
   const fragments = fragmentIds
     .map((id) => getFragment(id))
     .filter((fragment): fragment is NonNullable<typeof fragment> => fragment !== undefined)
     .map((fragment) => ({ id: fragment.id, title: fragment.title, body: fragment.body }))
-  return foldStandards(baseSystem, fragments)
+  return foldStandards(baseSystem, fragments, verbosity)
 }
 
 /** How a kind's resolved best-practice standards reach the agent. See {@link composeBlockSystemPrompt}. */
@@ -118,10 +147,11 @@ export function composeBlockSystemPrompt(
   block: ComposableBlock,
   delivery: StandardsDelivery,
   standardsDelivered = false,
+  verbosity: StandardsVerbosity = 'full',
 ): string {
   if (delivery === 'context-files' && standardsDelivered) return baseSystem
   if (block.resolvedFragments && block.resolvedFragments.length > 0) {
-    return foldStandards(baseSystem, block.resolvedFragments)
+    return foldStandards(baseSystem, block.resolvedFragments, verbosity)
   }
-  return composeSystemPrompt(baseSystem, block.fragmentIds)
+  return composeSystemPrompt(baseSystem, block.fragmentIds, verbosity)
 }

@@ -882,6 +882,13 @@ export class RunDispatcher {
       runId: executionId,
       workspaceId,
       agentKind: step.agentKind,
+      // Re-supply the model captured at dispatch (persisted on the step at `step.model`, see
+      // above). The poll site can't resolve the model ref itself, so without this the container
+      // executor's `pollJob` sees `handle.model === undefined`, `recordStepResult` records model
+      // 'unknown', and `SpendService.parseModel('unknown')` splits that into provider "unknown" /
+      // model "" — corrupting the token_usage row for EVERY subscription-harness (container) step.
+      // The sync `run()` path already carried the rich handle; this fixes the durable poll path too.
+      model: step.model,
     })
     if (update.state === 'running') {
       return this.handleRunningPoll(workspaceId, executionId, instance, update, step.jobId)

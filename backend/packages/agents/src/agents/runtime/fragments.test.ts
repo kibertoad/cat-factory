@@ -1,3 +1,4 @@
+import { getFragment } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
 
@@ -72,6 +73,55 @@ describe('composeBlockSystemPrompt', () => {
       expect(out).toContain('<best-practice-standard id="be-errors" title="Backend errors">')
       expect(out).toContain('Wrap errors.')
     })
+  })
+})
+
+// Implementer kinds (coder/fixer/…) fold each standard's CONDENSED `brief` instead of its full
+// `body`, to shrink the system prompt that is re-sent on every turn of their long agentic loop.
+// The brief is looked up from the pool by id, so it applies to both the id-resolved and the
+// engine-resolved (`resolvedFragments`) sources.
+describe("foldStandards verbosity: 'brief'", () => {
+  it("folds a fragment's condensed brief for an implementer kind, not its full body", () => {
+    const brief = getFragment('node.performance')?.brief
+    expect(brief).toBeTruthy() // the built-in defines one
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      {
+        resolvedFragments: [
+          { id: 'node.performance', title: 'Node performance', body: 'FULL_BODY_MARKER' },
+        ],
+      },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain(brief as string)
+    expect(out).not.toContain('FULL_BODY_MARKER')
+  })
+
+  it('falls back to the full body when the fragment defines no brief', () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      { resolvedFragments: [{ id: 'not-in-pool', title: 'X', body: 'FULL_ONLY' }] },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain('FULL_ONLY')
+  })
+
+  it("uses the full body under the default 'full' verbosity even when a brief exists", () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      {
+        resolvedFragments: [
+          { id: 'node.performance', title: 'Node performance', body: 'FULL_BODY_MARKER' },
+        ],
+      },
+      'prompt',
+    )
+    expect(out).toContain('FULL_BODY_MARKER')
+    expect(out).not.toContain(getFragment('node.performance')?.brief as string)
   })
 })
 

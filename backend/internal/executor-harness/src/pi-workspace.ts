@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RepoSpec, SkillSpec } from './job.js'
@@ -272,6 +272,13 @@ export async function runAgentInWorkspace(
       ...(spec.skill ? { skill: spec.skill } : {}),
       ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
       signal: opts.signal,
+      // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
+      // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
+      // no-edit allowance, so a claude-code run that stops making progress is killed early
+      // instead of burning the full wall-clock budget. The claude runner consumes it; codex
+      // ignores it for now (its stream isn't wired to the guard).
+      guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+      expectsEdits: spec.expectsEdits ?? true,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
       // Stream this run's per-call telemetry to the job's live drain. The subscription
@@ -303,11 +310,18 @@ export async function runAgentInWorkspace(
   }
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
+  // Only include the blueprint orientation note when the checkout actually ships `blueprints/`
+  // (a managed cat-factory service); external repos don't have one, so the note would be dead
+  // guidance re-sent every turn. Best-effort — a stat failure just omits the note.
+  const hasBlueprints = await stat(join(spec.dir, 'blueprints'))
+    .then((s) => s.isDirectory())
+    .catch(() => false)
   await writeAgentsContext(spec.systemPrompt, {
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
+    hasBlueprints,
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })

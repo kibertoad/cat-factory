@@ -785,6 +785,30 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(guard.observe({ type: 'agent_end', messages: [] })).toBeNull()
   })
 
+  // The claude-code runner drives the SAME guard via observeSignal (it correlates a tool_use
+  // name with its tool_result's is_error), so Claude Code's tool names must classify the same
+  // way Pi's do: Read/Grep/Glob = exploration, TodoWrite = planning, WebSearch/WebFetch = web
+  // (all exempt from the no-edit bound), Bash = action, NotebookEdit = a file edit.
+  it('runs the same no-edit logic over claude-code tool signals (observeSignal)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const exempt = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Read', 'Grep', 'Glob', 'TodoWrite', 'WebSearch', 'WebFetch']) {
+      for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name, isError: false })
+    }
+    expect(reason).toBeNull()
+    // Bash (an action) without an edit past the threshold still trips the no-edit bound.
+    for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name: 'Bash', isError: false })
+    expect(reason).toMatch(/no progress/i)
+
+    // A NotebookEdit counts as a file edit, so the no-edit bound never trips.
+    const edits = new ProgressGuard(limits)
+    for (const name of ['Bash', 'Read', 'NotebookEdit', 'Bash', 'Bash', 'Bash', 'Bash']) {
+      reason = edits.observeSignal({ name, isError: false })
+    }
+    expect(reason).toBeNull()
+  })
+
   it('reads limits from the environment, falling back to defaults', () => {
     expect(progressGuardLimitsFromEnv({})).toEqual(DEFAULT_PROGRESS_GUARD_LIMITS)
     expect(
@@ -929,11 +953,26 @@ describe('web search (rpiv-web-tools) configuration', () => {
 })
 
 describe('writeAgentsContext', () => {
-  async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
+  async function readContext(opts?: {
+    webSearch?: boolean
+    guidance?: string
+    hasBlueprints?: boolean
+  }): Promise<string> {
     const home = await stubTempHome()
     await writeAgentsContext('ROLE PROMPT', opts)
     return readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
   }
+
+  it('appends the blueprint orientation note only when the checkout ships blueprints/', async () => {
+    expect(await readContext()).not.toMatch(/Service blueprint/i)
+    expect(await readContext({ hasBlueprints: true })).toMatch(/Service blueprint/i)
+  })
+
+  it('does not append its own spec-reading block (sourced from the backend spec-aware trait)', async () => {
+    // The harness used to emit a near-duplicate "Service specification" block; it is now
+    // contributed once by the spec-aware trait, so a spec-aware Pi run no longer carries it twice.
+    expect(await readContext({ hasBlueprints: true })).not.toMatch(/Service specification/i)
+  })
 
   it('omits the web-tools guidance by default', async () => {
     const md = await readContext()

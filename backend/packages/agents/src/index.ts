@@ -53,15 +53,22 @@ export {
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
   INTERVIEW_GATE_TRAIT,
+  BRIEF_STANDARDS_TRAIT,
   SPEC_AWARE_GUIDANCE,
   STANDARD_AGENT_TRAITS,
   traitsFor,
   hasTrait,
   traitGuidanceFor,
+  standardsVerbosityFor,
 } from './agents/kinds/traits.js'
 // Per-agent-kind execution tuning (today: progress-guard knobs) folded into a container
 // dispatch's job body. Loosen-only, so a kind's normal pattern isn't killed mid-progress.
-export { type AgentTuning, type AgentGuardTuning, agentTuningFor } from './agents/kinds/tuning.js'
+export {
+  type AgentTuning,
+  type AgentGuardTuning,
+  agentTuningFor,
+  withComplexityAllowance,
+} from './agents/kinds/tuning.js'
 // Agent configuration-contribution catalog (the descriptors surfaced on task
 // creation / inspector, frozen once the contributing step runs).
 export {

@@ -17,6 +17,8 @@ export const reactFragments: PromptFragment[] = [
       '- Keep server state (fetched data) separate from UI state; use a data-fetching cache for it.',
       '- Make effects depend on exactly what they use, and clean them up to avoid leaks.',
     ].join('\n'),
+    brief:
+      'React state: keep it local, lift only when genuinely shared; derive during render instead of duplicating; global store only for cross-cutting state; keep server state separate (data-fetching cache); effects depend on exactly what they use and clean up.',
     appliesTo: { blockTypes: ['frontend'] },
   },
 ]

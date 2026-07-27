@@ -106,21 +106,12 @@ for a module that is directly relevant to your task, when you need its summary a
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 
-// Appended to every AGENTS.md so an agent treats the persisted spec as the
-// PRESCRIPTIVE source (what must be true) and the acceptance scenarios its work must
-// satisfy. Harmless when no spec exists yet — the files simply aren't there.
-const SPEC_GUIDANCE = `
-
-## Service specification (the prescriptive spec)
-
-If a \`spec/\` folder exists, it is the specification for this service. It is sharded
-by a module (domain) → feature (group) taxonomy. **Read \`spec/overview.md\` first** —
-it states what MUST be true and indexes the modules and their features (with links).
-Open \`spec/modules/<module>/<feature>.md\` (or its \`.json\` for exact detail) for the
-feature you are working on — it carries that feature's requirements AND the domain
-rules scoped to it. \`spec/features/<module>/<feature>.feature\` are the Gherkin
-acceptance scenarios your work must satisfy — treat them as the source of truth for
-behaviour and tests. Read only the modules/features relevant to your task.`
+// NOTE: the spec-reading guidance is NOT appended here. It is contributed once, backend-side, by
+// the `spec-aware` trait (`SPEC_AWARE_GUIDANCE` in @cat-factory/agents), which lands in the
+// composed system prompt for every spec-aware kind on BOTH harness paths. This harness used to
+// append a near-duplicate block, so a spec-aware Pi run carried the guidance twice; the claude-code
+// path never appended it. Sourcing it solely from the trait dedupes the Pi prompt and makes the two
+// paths consistent. (A non-spec-aware kind is deliberately not told to read the spec.)
 
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context
@@ -144,6 +135,12 @@ export async function writeAgentsContext(
     serviceDirectory?: string
     contextFiles?: ContextFileInfo[]
     multiRepo?: boolean
+    /**
+     * Whether the checkout actually ships a `blueprints/` folder. The blueprint orientation
+     * note is only appended when it does — otherwise it is ~10 lines of dead guidance (re-sent
+     * every turn) pointing at files that don't exist. Absent/false ⇒ the note is omitted.
+     */
+    hasBlueprints?: boolean
   } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
@@ -167,9 +164,14 @@ export async function writeAgentsContext(
   // Point the agent at any linked context the backend materialised into the checkout
   // (requirements / RFCs / PRDs / tracker issues) so it reads them on demand.
   const context = contextGuidance(opts.contextFiles ?? [])
+  // Only orient the agent to `blueprints/` when the checkout actually has them — otherwise the
+  // note is dead weight re-sent on every turn. The spec-reading guidance is NOT appended here
+  // (see the note above `writeAgentsContext`): it comes solely from the backend `spec-aware`
+  // trait, so a spec-aware run no longer carries it twice.
+  const blueprint = opts.hasBlueprints ? BLUEPRINT_GUIDANCE : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
+    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
     'utf8',
   )
 }
@@ -797,6 +799,9 @@ const FILE_EDIT_TOOLS = new Set([
   'str_replace',
   'multiedit',
   'create',
+  // Claude Code tool names (the guard now runs on the claude-code stream too): Edit/Write/
+  // MultiEdit already match above; NotebookEdit is its own tool.
+  'notebookedit',
 ])
 
 // Planning/bookkeeping tools that are neither file edits nor the environment-probing
@@ -805,7 +810,9 @@ const FILE_EDIT_TOOLS = new Set([
 // todo list before its first edit (common on a large task) would otherwise be killed
 // for "no edits" purely from planning calls. They still reset the consecutive-error
 // streak (a successful call means the agent isn't wedged). Matched case-insensitively.
-const PLANNING_TOOLS = new Set(['todo'])
+// `todo` is Pi's tool; `TodoWrite` and the incremental `TaskCreate`/`TaskUpdate` pair are
+// Claude Code's plan vocabularies — all pure bookkeeping, exempt from the no-edit bound.
+const PLANNING_TOOLS = new Set(['todo', 'todowrite', 'taskcreate', 'taskupdate'])
 
 // Read-only exploration tools: reading/searching the repo is legitimate work-up to an
 // edit, NOT the environment-probing the no-edit bound targets, so they don't count
@@ -827,15 +834,18 @@ const EXPLORATION_TOOLS = new Set([
   'head',
   'tail',
   'stat',
-  // rpiv-web-tools: querying/reading the web is read-only research up to an edit,
-  // not the environment-probing the no-edit bound targets, so it doesn't count.
+  // rpiv-web-tools (Pi) + Claude Code's WebSearch/WebFetch: querying/reading the web is
+  // read-only research up to an edit, not the environment-probing the no-edit bound targets.
   'web_search',
   'web_fetch',
+  'websearch',
+  'webfetch',
 ])
 
-// The rpiv-web-tools calls, tracked separately so an unbounded run of them (with no
-// other tool call between) can be caught as a search loop — see `maxConsecutiveWebCalls`.
-const WEB_TOOLS = new Set(['web_search', 'web_fetch'])
+// The web-tool calls, tracked separately so an unbounded run of them (with no other tool
+// call between) can be caught as a search loop — see `maxConsecutiveWebCalls`. Covers both
+// Pi's `web_search`/`web_fetch` and Claude Code's `WebSearch`/`WebFetch`.
+const WEB_TOOLS = new Set(['web_search', 'web_fetch', 'websearch', 'webfetch'])
 
 /** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
 export function progressGuardLimitsFromEnv(
@@ -916,6 +926,17 @@ export class ProgressGuard {
   observe(event: Record<string, unknown>): string | null {
     const tool = toolCallSignal(event)
     if (!tool) return null
+    return this.observeSignal(tool)
+  }
+
+  /**
+   * Feed one already-parsed tool-call signal (name + error flag), returning a diagnostic reason
+   * when the run should abort, else null. Split out of {@link observe} so a caller whose stream
+   * is NOT Pi's `tool_execution_end` envelope — the claude-code runner, which correlates a
+   * `tool_use` block's name with its `tool_result`'s `is_error` — can drive the SAME guard logic
+   * without synthesising a fake Pi event.
+   */
+  observeSignal(tool: { name: string; isError: boolean }): string | null {
     const name = tool.name.toLowerCase()
     // The error streak tracks ANY tool call (a planning call still proves the agent
     // isn't wedged in a failing-op loop), so it's updated before the planning skip.

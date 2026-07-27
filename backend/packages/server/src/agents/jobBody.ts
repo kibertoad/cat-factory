@@ -9,6 +9,7 @@ import {
   isReadOnlyAgentKind,
   resolvePrNumber,
   standardsDeliveredAsFiles,
+  standardsVerbosityFor,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -134,6 +135,9 @@ export function buildKindBody(
     context.block,
     registry.standardsDelivery(context.agentKind),
     standardsDeliveredAsFiles(context.injectedContextFiles),
+    // Implementer kinds (coder/fixer/…) fold the condensed `brief` standards; reviewer/planner
+    // kinds get the full bodies. See `standardsVerbosityFor` / the `brief-standards` trait.
+    standardsVerbosityFor(context.agentKind, registry),
   )
   // Every container agent is asked to end its run by writing a short effort self-assessment
   // (how hard the work was, what reduced its effectiveness, the obstacles) to a sentinel file
@@ -939,6 +943,7 @@ function buildMigratedBuiltInBody(
           context.block,
           registry.standardsDelivery(context.agentKind),
           standardsDeliveredAsFiles(context.injectedContextFiles),
+          standardsVerbosityFor(context.agentKind, registry),
         ),
         registry,
         onCallUserPrompt(context, repo, registry),
