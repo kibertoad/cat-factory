@@ -1,5 +1,12 @@
 # @cat-factory/gates
 
+## 0.7.27
+
+### Patch Changes
+
+- Updated dependencies [1f8ca48]
+  - @cat-factory/kernel@0.159.0
+
 ## 0.7.26
 
 ### Patch Changes
