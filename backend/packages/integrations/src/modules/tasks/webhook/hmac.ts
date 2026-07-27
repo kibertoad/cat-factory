@@ -30,8 +30,11 @@ export interface HmacHeaderScheme {
  * 401 and must not distinguish "no header" from "bad digest" to a caller. Two guards are
  * load-bearing:
  *
- * - **Empty secret fails closed.** An empty HMAC key is a key an attacker also has, so an
- *   unconfigured connection must never accept a delivery it can verify by construction.
+ * - **Empty secret fails closed, and does so FIRST.** An empty HMAC key is a key an attacker also
+ *   has, so an unconfigured connection must never accept a delivery it can verify by construction.
+ *   The guard also has to precede `importKey`, which REJECTS a zero-length key with a `DataError`
+ *   — a throw here would reach the tracker as a 500 (and a redelivery loop) instead of the terse
+ *   401 the receiver intends.
  * - **The comparison is timing-safe.** A byte-at-a-time early return leaks the expected digest to
  *   anyone willing to send a few thousand deliveries.
  */
