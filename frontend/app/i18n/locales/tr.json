@@ -512,6 +512,8 @@
         "env_test_not_a_frame": "Ortam öz testi hizmet başına çalışır, bu yüzden yalnızca bir hizmette başlatılabilir; bir modülde veya görevde değil.",
         "env_test_infraless": "Bu hizmet için yapılandırılmış geçici ortam sağlama yok, bu yüzden öz testin sınayacağı bir şey yok.",
         "env_test_not_provisionable": "Bu hizmetin bir sağlama türü var ancak henüz onun için çözümlenen bir çalışma alanı işleyicisi yok, bu yüzden sağlama çalışamaz. Bir ortam işleyicisi yapılandır.",
+        "env_test_not_provisionable_no_handler": "Bu hizmetin sağlama türü için yapılandırılmış bir çalışma alanı ortam işleyicisi yok. Altyapı → Test ortamları bölümünde bir tane kaydet — özel bir sağlayıcı için, kabul ettiği manifest id bu hizmetin sabitlediğiyle eşleşen bir Custom (remote-custom) işleyicisi.",
+        "env_test_not_provisionable_type_mismatch": "Birden fazla ortam işleyicisi bu hizmetin sağlama türüyle eşleşebilir. Tam olarak biri çözümlensin diye bu hizmet için bir manifest id sabitle ya da Altyapı → Test ortamları bölümündeki çakışan işleyiciyi kaldır.",
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil."
       },
       "action": {

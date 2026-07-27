@@ -255,7 +255,15 @@ async function generateOrFixManifest() {
 // it failed at. The returned run is tracked live (by frame id) via the workspace stream store.
 const envTest = useEnvironmentTestStore()
 const envTestStarting = ref(false)
-const envTestError = ref<string | null>(null)
+// The self-test's start/stop error. Structured (not a bare string) so the not-provisionable case
+// can render its remedy prose PLUS a one-click jump to the environment-handler config; every other
+// case is plain text.
+interface EnvTestError {
+  text: string
+  /** Show the "Configure infrastructure" deep-link — only the not-provisionable handler case. */
+  configurable?: boolean
+}
+const envTestError = ref<EnvTestError | null>(null)
 // The newest self-test run for this frame — re-attaches after a reconnect (the run is carried in
 // the snapshot while running), so the live stage keeps showing without a locally-held id.
 const envTestRun = computed(() => envTest.runForBlock(props.block.id))
@@ -291,14 +299,30 @@ const ENV_TEST_CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}
   env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
 }
 
-function envTestErrorText(e: unknown): string {
-  const reason = parseConflict(e)?.reason
+function buildEnvTestError(e: unknown): EnvTestError {
+  const parsed = parseConflict(e)
+  const reason = parsed?.reason
+  // No workspace handler resolves for the service's provision type. Word the SPECIFIC case —
+  // nothing configured vs. an ambiguous match (carried on `details.handlerIssue`, distinct from the
+  // `env_test_not_provisionable` code) — and offer the one-click jump to the Infrastructure →
+  // Test-environments handler config.
+  if (reason === 'env_test_not_provisionable') {
+    const ambiguous = parsed?.details.handlerIssue === 'type-mismatch'
+    return {
+      text: t(
+        ambiguous
+          ? 'errors.conflict.description.env_test_not_provisionable_type_mismatch'
+          : 'errors.conflict.description.env_test_not_provisionable_no_handler',
+      ),
+      configurable: true,
+    }
+  }
   const key =
     reason && reason in ENV_TEST_CONFLICT_KEYS
       ? ENV_TEST_CONFLICT_KEYS[reason as keyof typeof ENV_TEST_CONFLICT_KEYS]
       : undefined
-  if (key && te(key)) return t(key)
-  return apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
+  if (key && te(key)) return { text: t(key) }
+  return { text: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)) }
 }
 
 async function startEnvTest() {
@@ -308,7 +332,7 @@ async function startEnvTest() {
   try {
     await envTest.start(props.block.id)
   } catch (e) {
-    envTestError.value = envTestErrorText(e)
+    envTestError.value = buildEnvTestError(e)
   } finally {
     envTestStarting.value = false
   }
@@ -320,7 +344,7 @@ async function stopEnvTest() {
   try {
     await envTest.stop(run.id)
   } catch (e) {
-    envTestError.value = envTestErrorText(e)
+    envTestError.value = buildEnvTestError(e)
   }
 }
 
@@ -1072,9 +1096,23 @@ function setSize(value: InstanceSize) {
         </template>
       </p>
 
-      <p v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
-        {{ envTestError }}
-      </p>
+      <div v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
+        <p>{{ envTestError.text }}</p>
+        <!-- Only the not-provisionable handler case is one-click fixable: jump to Infrastructure →
+             Test environments, where the workspace's per-type environment handler is registered. -->
+        <UButton
+          v-if="envTestError.configurable"
+          class="mt-1.5"
+          icon="i-lucide-settings"
+          size="xs"
+          color="neutral"
+          variant="soft"
+          data-testid="env-test-configure-handler"
+          @click="ui.openProviderConnection('environment')"
+        >
+          {{ t('errors.conflict.action.configureInfrastructure') }}
+        </UButton>
+      </div>
     </div>
   </InspectorSection>
 </template>
