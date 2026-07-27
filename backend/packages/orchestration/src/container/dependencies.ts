@@ -557,7 +557,7 @@ export interface CoreDependencies {
    * supplied (and the environments module is wired), `createCore` builds an
    * `EnvironmentHandlerSeeder` over them and exposes it on the container: the runtime
    * boot-backfills every existing workspace and `WorkspaceService.create` seeds each new one, so a
-   * deployment (e.g. a Kargo adapter) supplies the infra handler from its config instead of a human
+   * deployment (via a custom environment adapter) supplies the infra handler from its config instead of a human
    * filling the Infrastructure → Test environments form. Seeding is idempotent + per-seed
    * fault-tolerant. Absent / empty ⇒ no seeding.
    */
