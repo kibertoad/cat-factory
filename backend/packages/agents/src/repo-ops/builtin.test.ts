@@ -402,4 +402,80 @@ describe('specPromotionPostOp', () => {
       ),
     ).resolves.toBeUndefined()
   })
+
+  // `readServiceSpec` SALVAGES: a requirement that fails validation is dropped so the rest of
+  // the tree survives the read. Re-rendering a shard from that view would COMMIT the drop, so a
+  // state flip on one requirement would silently delete an unrelated one. The post-op refuses
+  // to rewrite any shard that did not round-trip byte-for-byte.
+  describe('never rewrites a shard that did not round-trip', () => {
+    /** Add a requirement the lenient writer allowed but the strict read drops (title > 120). */
+    async function withUnreadableRequirement(repo: FakeRepo, shardPath: string): Promise<string> {
+      const shard = JSON.parse((await repo.getFile(shardPath))!.content)
+      shard.requirements.push({
+        id: 'req-oversized',
+        title: 'x'.repeat(130),
+        statement: 'The system SHALL survive a lenient write.',
+        kind: 'functional',
+        priority: 'must',
+        state: 'aspirational',
+        sourceBlockIds: [],
+        acceptance: [],
+      })
+      const content = `${JSON.stringify(shard, null, 2)}\n`
+      await repo.commitFiles({
+        branch: 'cat-factory/task_login',
+        message: 'lenient write',
+        files: [{ path: shardPath, content }],
+      })
+      repo.commits.length = 0
+      return content
+    }
+
+    it('leaves the shard, its markdown and its tags alone rather than dropping a requirement', async () => {
+      const repo = await repoWithSpec()
+      const shardPath = [...repo.paths()].find(
+        (p) => p.startsWith('spec/modules/') && p.endsWith('.json') && !p.endsWith('_module.json'),
+      )!
+      const ids = Object.keys(await statesOf(repo))
+      const victim = JSON.parse((await repo.getFile(shardPath))!.content).requirements[0].id
+      expect(ids).toContain(victim)
+      const before = await withUnreadableRequirement(repo, shardPath)
+
+      await specPromotionPostOp(
+        testerCtx(repo, {
+          requirementVerdicts: [{ requirementId: victim, status: 'met' }],
+        }),
+      )
+
+      // Nothing was committed at all: the only promotable requirement lives in the shard the
+      // read could not reproduce.
+      expect(repo.commits).toHaveLength(0)
+      // The requirement the read dropped is still on the branch — the whole point.
+      expect((await repo.getFile(shardPath))!.content).toBe(before)
+      expect((await repo.getFile(shardPath))!.content).toContain('req-oversized')
+      // And the tag was NOT cleared, so the shard and the Gherkin never disagree.
+      const featurePath = [...repo.paths()].find((p) => p.endsWith('.feature'))!
+      expect((await repo.getFile(featurePath))!.content).toContain('@aspirational')
+    })
+
+    it('still promotes requirements in the OTHER, intact shards', async () => {
+      const repo = await repoWithSpec()
+      const shards = [...repo.paths()]
+        .filter(
+          (p) =>
+            p.startsWith('spec/modules/') && p.endsWith('.json') && !p.endsWith('_module.json'),
+        )
+        .sort()
+      expect(shards.length).toBeGreaterThan(1)
+      await withUnreadableRequirement(repo, shards[0]!)
+      const intact = JSON.parse((await repo.getFile(shards[1]!))!.content).requirements[0].id
+
+      await specPromotionPostOp(
+        testerCtx(repo, { requirementVerdicts: [{ requirementId: intact, status: 'met' }] }),
+      )
+
+      expect((await statesOf(repo))[intact]).toBe('established')
+      expect(repo.commits[0]!.files.map((f) => f.path)).not.toContain(shards[0])
+    })
+  })
 })

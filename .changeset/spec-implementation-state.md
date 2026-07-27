@@ -18,13 +18,16 @@ scenarios `@aspirational` so a runner can skip them.
 **Promotion is mechanical.** A tester's first OBSERVED pass flips a requirement to
 `established`, via a deterministic post-op over the checkout-free `RepoFiles` port — not a model
 decision and not a side table. It is idempotent by content, so a replayed durable step commits
-nothing.
+nothing, and it only ever rewrites a group shard that round-tripped byte-for-byte: promotion
+flips a field, it never restructures the tree or drops a requirement the salvaging read could
+not reproduce. It lands on the run's PR branch, or on the base branch when the pipeline opens no
+PR.
 
 **Requirement → evidence.** The tester now reports `requirementVerdicts` keyed by the SPEC's own
 requirement ids (surfaced as a `# requirement: <id>` comment on each scenario), and the PR
 verification report joins them back to `spec/` to render a per-requirement table. Verdicts are
 three-valued — `met` / `not_met` / `not_covered` — so "we didn't check" and "it's broken" never
-read the same.
+read the same. The join reads EVERY tester step, matching what promotion does.
 
 BREAKING (wire): `PR_VERIFICATION_REPORT_VERSION` is bumped to `2` — the report JSON gains a
 required `requirements` section. Per the repo's pre-1.0 policy there is no compatibility shim; an

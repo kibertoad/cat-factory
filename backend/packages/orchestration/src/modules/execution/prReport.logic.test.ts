@@ -1,4 +1,5 @@
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { hostMarkdown } from '@cat-factory/kernel'
 import { parsePrVerificationReport } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
@@ -409,9 +410,9 @@ const SPEC = {
   ],
 }
 
-const testerStep = (requirementVerdicts?: unknown) =>
+const testerStepOf = (agentKind: string, requirementVerdicts?: unknown) =>
   step({
-    agentKind: 'tester-api',
+    agentKind,
     test: {
       attempts: 1,
       maxAttempts: 3,
@@ -425,6 +426,9 @@ const testerStep = (requirementVerdicts?: unknown) =>
       },
     },
   } as unknown as Partial<PipelineStep> & { agentKind: string })
+
+const testerStep = (requirementVerdicts?: unknown) =>
+  testerStepOf('tester-api', requirementVerdicts)
 
 describe('requirement → evidence section', () => {
   it('joins the tester verdicts to the spec by requirement id', () => {
@@ -543,5 +547,50 @@ describe('requirement → evidence section', () => {
     const login = report.requirements.entries.find((e) => e.id === 'req-login')!
     expect(login.verdict).toBe('met')
     expect(report.requirements.met).toBe(1)
+  })
+
+  it('merges the verdicts of EVERY tester step, as promotion does', () => {
+    // A pipeline carrying both tester kinds promotes off both, so a report reading only the
+    // last one would show `not checked` against a requirement the spec records as established.
+    const report = composePrVerificationReport(
+      instance([
+        testerStepOf('tester-api', [{ requirementId: 'req-login', status: 'met', detail: 'api' }]),
+        testerStepOf('tester-ui', [{ requirementId: 'req-sso', status: 'met', detail: 'ui' }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+
+    const byId = Object.fromEntries(report.requirements.entries.map((e) => [e.id, e]))
+    expect(byId['req-login']!.verdict).toBe('met')
+    expect(byId['req-sso']!.verdict).toBe('met')
+    expect(report.requirements.met).toBe(2)
+    expect(report.requirements.notCovered).toBe(1)
+  })
+
+  it('keeps the FIRST tester’s observation when two testers disagree', () => {
+    // Same rule as a duplicate inside one report: a later `not_covered` must never erase an
+    // earlier observation, or a UI tester that skipped an API requirement would blank it.
+    const report = composePrVerificationReport(
+      instance([
+        testerStepOf('tester-api', [{ requirementId: 'req-login', status: 'met', detail: 'api' }]),
+        testerStepOf('tester-ui', [{ requirementId: 'req-login', status: 'not_covered' }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    expect(report.requirements.entries.find((e) => e.id === 'req-login')!.verdict).toBe('met')
+  })
+
+  it('clamps a pathological tester detail to what the table can show', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([{ requirementId: 'req-login', status: 'met', detail: 'x'.repeat(5000) }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    const detail = report.requirements.entries.find((e) => e.id === 'req-login')!.detail!
+    // Bounded in the COMPOSED object, not just the rendered cell — an unbounded value only
+    // inflates the machine-readable block until the body-size backstop drops it wholesale.
+    expect(detail.length).toBeLessThanOrEqual(hostMarkdown.MAX_CELL_CHARS)
+    expect(detail.endsWith('…')).toBe(true)
   })
 })

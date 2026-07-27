@@ -195,6 +195,11 @@ export class PrVerificationReportController {
    * the verdicts were made against, so pairing a later re-read with those same verdicts would
    * be less truthful, not more — and the promotion post-op rewrites the spec on this very
    * branch right after the tester settles.
+   *
+   * Only an ANSWER is memoised — a tree that was read, or a repo that demonstrably carries no
+   * `spec/`. A FAILURE (an unresolvable repo, a throwing transport) is not: caching it would
+   * turn one flaky read into "the spec could not be read" on every remaining publish of the
+   * run, when the very next settlement would have succeeded.
    */
   private async serviceSpec(
     workspaceId: string,
@@ -209,23 +214,21 @@ export class PrVerificationReportController {
     if (!testerReported) return null
     const cached = this.specByRun.get(instance.id)
     if (cached !== undefined) return cached
-    let spec: SpecDoc | null = null
     try {
       const ctx = await resolve(workspaceId, instance.blockId)
-      if (ctx) {
-        // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
-        // the PR branch and has not merged yet, so the default branch would be missing exactly
-        // the requirements the tester just ruled on.
-        const view = await readServiceSpec(ctx.repo, prBranch ?? ctx.baseBranch)
-        spec = view.present ? view.spec : null
-      }
+      if (!ctx) return null
+      // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
+      // the PR branch and has not merged yet, so the default branch would be missing exactly
+      // the requirements the tester just ruled on.
+      const view = await readServiceSpec(ctx.repo, prBranch ?? ctx.baseBranch)
+      const spec = view.present ? view.spec : null
+      this.rememberSpec(instance.id, spec)
+      return spec
     } catch {
       // Best-effort, like every other part of this hook: an unreadable spec reports `absent`
-      // with a note, and never fails the run.
-      spec = null
+      // with a note, never fails the run, and is re-attempted on the next settlement.
+      return null
     }
-    this.rememberSpec(instance.id, spec)
-    return spec
   }
 
   /** Per-execution spec memo, bounded exactly like {@link lastPublished}. */

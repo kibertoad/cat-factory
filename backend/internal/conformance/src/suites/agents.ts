@@ -925,6 +925,12 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const shard = commits[0]!.files.find((f) => f.path === 'spec/modules/auth/login.json')
         expect(shard).toBeDefined()
         expect(JSON.parse(shard!.content).requirements[0].state).toBe('established')
+        // BRANCH, pinned deliberately: this pipeline opens no PR, so the promotion lands on the
+        // base branch. That is the intended reading of a tester-only regression sweep — the
+        // tester exercised THAT tree, and there is no PR to defer the bookkeeping to. A run
+        // that does open a PR promotes on the PR branch instead, so it is reviewed in the same
+        // spec diff as the requirement it promotes (see `RunRepoOpsController`).
+        expect(commits[0]!.branch).toBe('main')
       })
     })
 

@@ -327,8 +327,12 @@ export class RunRepoOpsController {
    *  - the tester kinds' promotion post-op takes the same `pullRequest?.branch ?? baseBranch`
    *    fallthrough as blueprints, which is what it wants: a tester runs after the coder opened
    *    the PR, so the promotion lands on the PR branch and is reviewed in the SAME spec diff as
-   *    the requirement it promotes. (A tester run with no PR open falls back to base and
-   *    promotes nothing, since a spec it never tested against has no met verdicts.)
+   *    the requirement it promotes — and is discarded with the PR if it never merges.
+   *    A tester-only run with NO PR open (a regression sweep against the default branch) does
+   *    promote straight onto base, deliberately: the tester exercised THAT tree, so recording
+   *    what it observed there is the true statement, and there is no PR to defer it to. The
+   *    commit is spec bookkeeping — a `state` flip on requirements a tester just passed — never
+   *    task work. Pinned by `defineAgentConformance`, which asserts the branch.
    */
   private async builtInRepoOpBranch(
     agentKind: string,

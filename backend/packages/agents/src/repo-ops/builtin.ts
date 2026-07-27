@@ -278,12 +278,55 @@ function metRequirementIds(result: AgentRunResult | undefined): Set<string> {
 }
 
 /**
+ * Whether a canonical path is a per-group JSON shard — `spec/modules/<module>/<group>.json`,
+ * the ONLY canonical file that stores requirements and rules. `_module.json` is the module's
+ * own identity, and `service.json` / `overview.md` are indexes.
+ */
+function isGroupShard(path: string): boolean {
+  if (!path.startsWith(`${SPEC_MODULES_DIR}/`) || !path.endsWith('.json')) return false
+  const rest = path.slice(SPEC_MODULES_DIR.length + 1).split('/')
+  return rest.length === 2 && rest[1] !== '_module.json'
+}
+
+/** The requirement ids a RENDERED group shard carries (we produced it, so it always parses). */
+function requirementIdsIn(content: string): string[] {
+  const parsed = JSON.parse(content) as { requirements?: { id?: unknown }[] }
+  return (parsed.requirements ?? [])
+    .map((r) => asString(r?.id))
+    .filter((id): id is string => id !== undefined)
+}
+
+/**
+ * The group shard whose data governs whether `path` may be rewritten: the shard itself, or —
+ * for the human-readable `spec/modules/<module>/<group>.md` render — the shard it is derived
+ * from. Null for files that carry no requirement data of their own.
+ */
+function governingGroupShard(path: string): string | null {
+  if (isGroupShard(path)) return path
+  if (path.startsWith(`${SPEC_MODULES_DIR}/`) && path.endsWith('.md')) {
+    const shard = `${path.slice(0, -'.md'.length)}.json`
+    return isGroupShard(shard) ? shard : null
+  }
+  return null
+}
+
+/**
  * POST-OP for the tester kinds: promote every spec requirement the Tester OBSERVED to pass
  * from `aspirational` to `established`, and commit the updated shards onto the run's branch.
  *
  * Reads the spec back from the branch (the tester's own result carries no spec), re-renders
  * only the canonical shards, and surgically drops the now-stale `@aspirational` tag from the
  * seed-once Gherkin files — never re-rendering those, so a pass-2 acceptance polish survives.
+ *
+ * NON-DESTRUCTIVE BY CONSTRUCTION. `readServiceSpec` is deliberately SALVAGING: a requirement
+ * or rule that fails validation (one field past a cap the lenient writer never enforced) is
+ * dropped so the rest of the tree survives the read. Re-rendering from that view would commit
+ * the drop — a state flip on one requirement silently deleting an unrelated one. So every
+ * GROUP SHARD is diffed against a BASELINE render taken BEFORE promotion: a shard whose
+ * committed bytes don't match its own baseline did not round-trip losslessly, so neither it,
+ * nor the markdown derived from it, nor the `@aspirational` tag of a requirement inside it is
+ * touched. A path the render would CREATE (a shifted collision suffix) is skipped rather than
+ * added beside the original — promotion never restructures the tree, it only flips a field.
  *
  * BEST-EFFORT: a throwing post-op fails its step, and promotion is bookkeeping — a spec that
  * failed to promote must never turn a green tester run red. Every failure path is a silent
@@ -297,23 +340,65 @@ export const specPromotionPostOp: RepoOp = async (ctx) => {
     const view = await readServiceSpec(ctx.repo, ctx.branch)
     if (!view.present || !view.spec) return
 
+    // Materialised BEFORE the in-place promotion below, so it captures the tree exactly as the
+    // read reconstructed it. A committed group shard that differs from this lost something on
+    // the way in, and must not be rewritten from it.
+    const baseline = new Map(renderSpecFiles(view.spec).map((f) => [f.path, f.content]))
+
     const promoted = promoteRequirementStates(view.spec, met)
     if (promoted.length === 0) return
 
     // Re-render the canonical shards only. The seed-once feature files are NOT re-rendered
     // (that would discard pass-2 polish); their stale tag is edited in place below.
     const canonical = renderSpecFiles(view.spec)
-    const files: RenderedFile[] = []
+    const committed = new Map<string, string | null>()
     for (const f of canonical) {
       const existing = await ctx.repo.getFile(f.path, ctx.branch)
-      if (!existing || existing.content !== f.content) files.push(f)
+      committed.set(f.path, existing?.content ?? null)
     }
 
+    // A group shard is SAFE when its committed bytes are either the pre-promotion baseline
+    // (it round-tripped losslessly) or the post-promotion render (a replay). Anything else
+    // means the read dropped or rewrote something, and neither that shard nor the markdown
+    // derived from it may be rewritten from the view.
+    const safeShards = new Set<string>()
+    for (const f of canonical) {
+      if (!isGroupShard(f.path)) continue
+      const existing = committed.get(f.path)
+      if (existing == null) continue
+      if (existing === baseline.get(f.path) || existing === f.content) safeShards.add(f.path)
+    }
+
+    // The ids whose state change will actually LAND: those living in a safe shard. A
+    // requirement stranded in an unsafe one keeps both its `aspirational` shard entry and its
+    // `@aspirational` tag, so the two never disagree — clearing the tag alone would make a
+    // runner exercise a scenario the spec still calls unbuilt, the unsafe direction of the
+    // "a stale tag only ever costs a skip" trade.
+    const promotedSet = new Set(promoted)
+    const landed = new Set<string>()
+    for (const f of canonical) {
+      if (!isGroupShard(f.path) || !safeShards.has(f.path)) continue
+      for (const id of requirementIdsIn(f.content)) if (promotedSet.has(id)) landed.add(id)
+    }
+    if (landed.size === 0) return
+
+    const files: RenderedFile[] = []
+    for (const f of canonical) {
+      const existing = committed.get(f.path) ?? null
+      // Absent ⇒ a path this render would CREATE; equal ⇒ already current (a replay).
+      if (existing === null || existing === f.content) continue
+      // Every other canonical file (`service.json`, `_module.json`, `overview.md`) is a pure
+      // index over data that lives in the shards, so rewriting it can lose nothing.
+      const shard = governingGroupShard(f.path)
+      if (shard && !safeShards.has(shard)) continue
+      files.push(f)
+    }
+
+    // The feature files were already fetched by `readServiceSpec` — edit the content in hand
+    // rather than re-reading each one off the branch.
     for (const feature of view.features) {
-      const current = await ctx.repo.getFile(feature.path, ctx.branch)
-      if (!current) continue
-      const updated = clearAspirationalTag(current.content, promoted)
-      if (updated !== current.content) files.push({ path: feature.path, content: updated })
+      const updated = clearAspirationalTag(feature.content, landed)
+      if (updated !== feature.content) files.push({ path: feature.path, content: updated })
     }
 
     // Nothing actually differs ⇒ a replay. Commit nothing.
@@ -321,8 +406,8 @@ export const specPromotionPostOp: RepoOp = async (ctx) => {
 
     await ctx.repo.commitFiles({
       branch: ctx.branch,
-      message: `Promote ${promoted.length} verified requirement${
-        promoted.length === 1 ? '' : 's'
+      message: `Promote ${landed.size} verified requirement${
+        landed.size === 1 ? '' : 's'
       } to established`,
       files,
     })

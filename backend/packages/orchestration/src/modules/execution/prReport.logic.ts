@@ -66,6 +66,20 @@ function cap<T>(items: readonly T[], label: string, truncations: string[]): T[] 
   return kept
 }
 
+/**
+ * Scrub a requirement verdict's evidence and clamp it to what the table can actually show.
+ * The rendered cell is truncated at {@link hostMarkdown.MAX_CELL_CHARS} regardless, so
+ * carrying more than that into the report only inflates the machine-readable JSON block —
+ * which the body-size backstop then drops WHOLESALE. One pathological tester `detail` should
+ * not cost the reader the entire JSON block.
+ */
+function verdictDetail(value: string | null | undefined): string | null {
+  const text = scrub(value)
+  if (!text) return null
+  if (text.length <= hostMarkdown.MAX_CELL_CHARS) return text
+  return `${text.slice(0, hostMarkdown.MAX_CELL_CHARS - 1)}…`
+}
+
 /** The non-run inputs the composer needs beyond the instance itself. */
 export interface PrReportInputs {
   block: Block
@@ -330,6 +344,11 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
  * `spec` is null when it could not be read at all (no VCS wired, no repo resolved, a transport
  * failure) — distinct from a spec that IS readable but records no requirements. Both produce an
  * `absent` section, with notes that say which.
+ *
+ * Unlike the single-step `tests` section this reads EVERY tester step, because promotion does:
+ * a pipeline carrying both `tester-api` and `tester-ui` promotes off both kinds' verdicts, so a
+ * report joining only the last of them would show `not checked` against requirements the spec
+ * already records as `established`. The contract's two consumers have to agree.
  */
 function composeRequirements(
   instance: ExecutionInstance,
@@ -337,12 +356,8 @@ function composeRequirements(
   truncations: string[],
 ): PrVerificationReport['requirements'] {
   const empty = { entries: [], met: 0, notMet: 0, notCovered: 0, total: 0 }
-  const testerStep = findStep(
-    instance,
-    (s) => isTesterKind(s.agentKind),
-    (s) => s.test?.lastReport != null,
-  )
-  if (!testerStep) {
+  const testerSteps = instance.steps.filter((s) => isTesterKind(s.agentKind))
+  if (testerSteps.length === 0) {
     return {
       status: 'absent',
       note:
@@ -351,8 +366,8 @@ function composeRequirements(
       ...empty,
     }
   }
-  const report = testerStep.test?.lastReport
-  if (!report) {
+  const reports = testerSteps.map((s) => s.test?.lastReport).filter((r) => r != null)
+  if (reports.length === 0) {
     return {
       status: 'absent',
       note: 'The tester step produced no report, so no requirement was ruled on.',
@@ -369,12 +384,15 @@ function composeRequirements(
     }
   }
 
-  // Index the tester's verdicts by requirement id. A duplicate id keeps the FIRST verdict:
-  // the alternative (last-wins) would let a trailing `not_covered` quietly erase a real
-  // observation earlier in the same list.
+  // Index the verdicts by requirement id, across every tester step in pipeline order. A
+  // duplicate id keeps the FIRST verdict — whether it repeats within one report or across two
+  // testers — because last-wins would let a trailing `not_covered` quietly erase a real
+  // observation, which is the one thing this section exists to prevent.
   const verdicts = new Map<string, RequirementVerdict>()
-  for (const verdict of report.requirementVerdicts ?? []) {
-    if (!verdicts.has(verdict.requirementId)) verdicts.set(verdict.requirementId, verdict)
+  for (const report of reports) {
+    for (const verdict of report.requirementVerdicts ?? []) {
+      if (!verdicts.has(verdict.requirementId)) verdicts.set(verdict.requirementId, verdict)
+    }
   }
 
   const rows: PrReportRequirement[] = []
@@ -390,7 +408,7 @@ function composeRequirements(
           priority: req.priority,
           state: req.state ?? 'aspirational',
           verdict: verdict?.status ?? 'not_covered',
-          detail: verdict?.detail ? scrubbed(verdict.detail) : null,
+          detail: verdictDetail(verdict?.detail),
           criteriaCount: (req.acceptance ?? []).length,
         })
       }

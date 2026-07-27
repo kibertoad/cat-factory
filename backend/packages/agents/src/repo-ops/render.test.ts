@@ -213,15 +213,15 @@ describe('spec rendering', () => {
     expect(files['spec/features/identity/auth.feature']).toBe(
       `Feature: Identity — Auth
 
-  @must @aspirational
   # requirement: req-login
+  @must @aspirational
   Scenario: Login (#1)
     Given a user
     When they log in
     Then they get a token
 
-  @must @aspirational
   # requirement: req-login
+  @must @aspirational
   Scenario: Login (#2)
     Given bad creds
     When they log in
@@ -231,8 +231,8 @@ describe('spec rendering', () => {
     expect(files['spec/features/identity/auth-2.feature']).toBe(
       `Feature: Identity — Auth
 
-  @aspirational
   # requirement: req-logout
+  @aspirational
   Scenario: Logout
     Given a session
     When they log out
@@ -272,8 +272,8 @@ describe('spec rendering', () => {
     expect(files['spec/features/identity/auth.feature']).toBe(
       `Feature: Identity — Auth
 
-  @must
   # requirement: req-login
+  @must
   Scenario: Login
     Given a user
     When they log in
@@ -480,15 +480,15 @@ describe('requirement implementation state', () => {
 describe('clearAspirationalTag', () => {
   const feature = `Feature: Identity — Auth
 
-  @must @aspirational
   # requirement: req-login
+  @must @aspirational
   Scenario: Login
     Given a user
     When they log in
     Then a token
 
-  @aspirational
   # requirement: req-sso
+  @aspirational
   Scenario: SSO
     Given an idp
     When they log in
@@ -497,9 +497,9 @@ describe('clearAspirationalTag', () => {
 
   it('drops the tag only for promoted ids, keeping sibling tags', () => {
     const out = clearAspirationalTag(feature, ['req-login'])
-    expect(out).toContain('  @must\n  # requirement: req-login')
+    expect(out).toContain('  # requirement: req-login\n  @must')
     // The untouched requirement keeps its tag.
-    expect(out).toContain('  @aspirational\n  # requirement: req-sso')
+    expect(out).toContain('  # requirement: req-sso\n  @aspirational')
   })
 
   it('removes a tag line that becomes empty rather than leaving a blank tag', () => {
@@ -510,7 +510,7 @@ describe('clearAspirationalTag', () => {
     // line in a committed artifact (and a diff on every promotion).
     expect(out.split('\n').filter((l) => /^[ \t]+$/.test(l))).toHaveLength(0)
     // The other requirement's tag line is untouched.
-    expect(out).toContain('  @must @aspirational\n  # requirement: req-login')
+    expect(out).toContain('  # requirement: req-login\n  @must @aspirational')
   })
 
   it('is a no-op when nothing matches, so a polished file is never mangled', () => {

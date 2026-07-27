@@ -567,10 +567,21 @@ unrelated runs. Design + the withdrawn alternative:
   `established` requirement: a failing test the run answers for, not a spec edit.
 - **Idempotent by CONTENT** (re-read, recompute, byte-compare), which is the durable driver's replay
   answer. No marker row.
+- **It rewrites ONLY a shard that round-tripped byte-for-byte.** `readServiceSpec` SALVAGES (a
+  requirement past a cap the lenient writer never enforced is dropped so the rest of the tree
+  survives the read), so re-rendering from that view would commit the drop — a state flip on one
+  requirement deleting an unrelated one. Every group shard is diffed against a baseline render taken
+  BEFORE the flip; a mismatch leaves the shard, its markdown AND its scenarios' tags untouched, so
+  the shard and the Gherkin can never disagree. A path the render would CREATE is skipped too:
+  promotion flips a field, it never restructures the tree.
+- **It lands on the PR branch, or on BASE when no PR is open.** The second case is a tester-only
+  regression sweep: the tester exercised that tree, and there is no PR to defer the bookkeeping to.
+  Pinned by a conformance assertion on the commit's branch.
 - **The Gherkin files are SEED-ONCE**, so promotion does NOT re-render them (that would discard a
-  pass-2 polish): it surgically drops the stale `@aspirational` token from the tag line above the
-  `# requirement: <id>` anchor, and no-ops when a polished file lost the anchor. The JSON shard is the
-  source of truth for state; the tag is a runner convenience.
+  pass-2 polish): it surgically drops the stale `@aspirational` token from the tag line below the
+  `# requirement: <id>` anchor, and no-ops when a polished file lost the anchor. The anchor LEADS the
+  tag line (a comment between tags and `Scenario:` is not portable across Gherkin parsers). The JSON
+  shard is the source of truth for state; the tag is a runner convenience.
 - **The spec-writer must never claim `established`** — the prompt says so, and `coerceRequirement`
   defaults an absent/garbled `state` to `aspirational`, so a model cannot promote by assertion.
 
@@ -783,11 +794,16 @@ agent's prose claims. Form:
   already determined, so the settlements before the tester stay at zero repo calls), and the
   reassembled tree is cached per execution id. The memo deliberately holds the spec AS THE TESTER SAW
   IT — the promotion post-op rewrites it on this same branch straight after, so re-reading would pair
-  fresh state with stale verdicts. Read through the same `resolveRunRepoContext` seam the repo-ops
-  controller uses, so it is facade-symmetric by construction; unwired ⇒ `absent` with a note.
+  fresh state with stale verdicts. Only an ANSWER is memoised (a tree, or a repo with no `spec/`),
+  never a FAILURE: caching one flaky read would report "the spec could not be read" for the rest of
+  the run. Read through the same `resolveRunRepoContext` seam the repo-ops controller uses, so it is
+  facade-symmetric by construction; unwired ⇒ `absent` with a note.
   Verdicts are three-valued (`met`/`not_met`/`not_covered`) because "we didn't check" and "it's
   broken" must never render the same, and a requirement's implementation state travels WITH its
-  verdict so `not_covered` on an `aspirational` one reads as expected, not as a coverage gap.
+  verdict so `not_covered` on an `aspirational` one reads as expected, not as a coverage gap. Unlike
+  every other section this reads EVERY tester step, because promotion does: a pipeline with both
+  `tester-api` and `tester-ui` would otherwise report `not checked` against requirements the spec
+  already records as `established`.
 - **A section whose producing step didn't run says so** (`status: 'absent'` + a note); a silently
   missing section reads exactly like a clean one. Same for a CAPPED list: every cap records what it
   dropped in the report's `truncations` log.

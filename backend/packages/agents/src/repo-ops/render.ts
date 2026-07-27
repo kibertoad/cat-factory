@@ -482,7 +482,9 @@ export function promoteRequirementStates(doc: SpecDoc, metIds: Iterable<string>)
  * A SURGICAL edit rather than a re-render, because feature files are SEED-ONCE: the spec
  * post-op writes one only when absent, so a later pass-2 acceptance polish survives a re-run.
  * Re-rendering to refresh a tag would throw that polish away. Anchored on the
- * `# requirement: <id>` comment the render emits directly above each scenario's tag line.
+ * `# requirement: <id>` comment the render emits directly ABOVE each scenario's tag line
+ * (see {@link renderSpecFeatureFiles} for why the comment leads rather than sits between the
+ * tags and the `Scenario:` keyword).
  *
  * Degrades to a no-op when a polished file no longer carries the anchor comment or the tag
  * line: the JSON shard stays the single source of truth for state, and the tag is a runner
@@ -497,23 +499,20 @@ export function clearAspirationalTag(content: string, promotedIds: Iterable<stri
   for (let i = 0; i < lines.length; i++) {
     const marker = /^\s*#\s*requirement:\s*(\S+)\s*$/.exec(lines[i]!)
     if (!marker || !wanted.has(marker[1]!)) continue
-    // The tag line, when there is one, sits immediately above the anchor comment.
-    const prev = i - 1
-    if (prev < 0) continue
-    const tagLine = lines[prev]!
+    // The tag line, when there is one, sits immediately BELOW the anchor comment.
+    const next = i + 1
+    if (next >= lines.length) continue
+    const tagLine = lines[next]!
     if (!/^\s*@/.test(tagLine)) continue
-    const indent = /^(\s*)/.exec(tagLine)![1]!
-    const kept = tagLine
-      .trim()
-      .split(/\s+/)
-      .filter((t) => t !== '@aspirational')
-    if (kept.length === tagLine.trim().split(/\s+/).length) continue
+    const tokens = tagLine.trim().split(/\s+/)
+    const kept = tokens.filter((t) => t !== '@aspirational')
+    if (kept.length === tokens.length) continue
     changed = true
     if (kept.length === 0) {
-      lines.splice(prev, 1)
-      i--
+      lines.splice(next, 1)
     } else {
-      lines[prev] = `${indent}${kept.join(' ')}`
+      const indent = /^(\s*)/.exec(tagLine)![1]!
+      lines[next] = `${indent}${kept.join(' ')}`
     }
   }
   return changed ? lines.join('\n') : content
@@ -735,6 +734,11 @@ export function renderSpecFiles(doc: SpecDoc): RenderedFile[] {
  *    Gherkin tag is a bare word: an arbitrary requirement id (dots, colons, slashes from a
  *    model-supplied `id`) is not safely expressible as one, and a mangled tag would silently
  *    break the join.
+ *
+ * The comment LEADS the tag line rather than sitting between the tags and `Scenario:`. Tags
+ * attach to the keyword that follows them, and parsers differ on whether a comment may
+ * interrupt that pair; leading it keeps the tag line adjacent to its scenario under every
+ * Gherkin dialect. {@link clearAspirationalTag} depends on this order.
  */
 export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
   const files: RenderedFile[] = []
@@ -750,8 +754,8 @@ export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
           ...(r.priority === 'must' ? ['@must'] : []),
           ...(aspirational ? ['@aspirational'] : []),
         ]
-        if (tags.length > 0) scenarios.push(`  ${tags.join(' ')}`)
         scenarios.push(`  # requirement: ${r.id}`)
+        if (tags.length > 0) scenarios.push(`  ${tags.join(' ')}`)
         scenarios.push(`  Scenario: ${name}`)
         if (a.given) scenarios.push(`    Given ${a.given}`)
         if (a.when) scenarios.push(`    When ${a.when}`)
