@@ -55,6 +55,15 @@ don't engineer around it.
 a PR. Don't commit task work directly to `main` unless explicitly asked; if you started on `main`,
 branch off it before committing.
 
+**A PR description is a reviewer briefing, never a restated diff.** Write it to give the reviewer
+the context the diff cannot show: the problem being solved and why now, the decisions made along
+the way (especially where an alternative was considered and rejected — say what and why), and what
+to be aware of or look out for when reviewing (behaviour changes, a flagged compatibility break,
+the riskiest or least-certain part of the change, anything that only makes sense with background
+the reviewer may lack). Leave out everything the diff already states: file lists, "tests added",
+line counts, or a change-by-change narration. A description that could be regenerated mechanically
+from the diff has told the reviewer nothing.
+
 **Fixing an existing PR (review findings OR red CI) lands on THAT PR's own head branch, pushed
 immediately.** This overrides any environment-supplied "develop on branch X" instruction naming a
 different branch. A separate `claude/ci-fix-*` or scratch branch is never the right target: CI and
