@@ -1,0 +1,30 @@
+# The preview stack's entry point: the static SPA built from the checkout under test, served by
+# Caddy, which also reverse-proxies the API so both halves share ONE origin.
+#
+# Build from the REPO ROOT (the build context is the whole pnpm workspace):
+#   docker build -f deploy/preview/compose/Dockerfile.web -t cat-factory-preview-web .
+#
+# Sibling `Dockerfile.web.dockerignore` keeps node_modules/dist/.git out of the context.
+
+FROM node:24-slim AS build
+WORKDIR /app
+ENV CI=true
+RUN corepack enable
+
+# The SPA's API base is baked in at build time (`ssr: false`), and a preview stack's host port is
+# only known at `up` time — so the ONLY value that can work here is the EMPTY one: same-origin,
+# relative requests, resolved against whatever origin Caddy ends up published on.
+ENV NUXT_PUBLIC_API_BASE=""
+
+COPY . .
+
+# Through Turbo, not the package script: the `generate` task `dependsOn: ["^build"]`, so
+# @cat-factory/contracts (consumed via the @cat-factory/app layer) is compiled before Vite
+# resolves it.
+RUN pnpm install --frozen-lockfile \
+  && pnpm exec turbo run generate --filter=@cat-factory/deploy-frontend
+
+FROM caddy:2-alpine AS runtime
+COPY --from=build /app/deploy/frontend/.output/public /srv
+COPY deploy/preview/compose/Caddyfile /etc/caddy/Caddyfile
+EXPOSE 8080

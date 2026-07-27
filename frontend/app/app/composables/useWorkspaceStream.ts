@@ -1,5 +1,6 @@
 import { ref, onScopeDispose } from 'vue'
 import type { WorkspaceEvent } from '~/types/domain'
+import { wsOriginFor } from '~/utils/apiOrigin'
 
 /**
  * Subscribes to the backend's per-workspace WebSocket event stream and keeps the
@@ -50,8 +51,10 @@ export function useWorkspaceStream() {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let boardDebounce: ReturnType<typeof setTimeout> | null = null
 
-  // http→ws, https→wss (apiBase is an absolute origin, see nuxt.config.ts).
-  const wsBase = String(apiBase).replace(/^http/, 'ws')
+  // http→ws, https→wss. `apiBase` is an absolute origin on a split-origin deployment (see
+  // nuxt.config.ts) and EMPTY on a same-origin one (one proxy in front of the SPA + the API —
+  // the compose preview stack), where the socket origin comes from the page instead.
+  const wsBase = wsOriginFor(String(apiBase), import.meta.client ? window.location.origin : '')
 
   // A coarse board refresh (the resync on reconnect, and the `board` event fan-out) must not be
   // left silently stale by ONE transient failure: retry a few times with backoff so a blip

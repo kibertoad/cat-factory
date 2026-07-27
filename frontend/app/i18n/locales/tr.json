@@ -800,6 +800,7 @@
         "infraless": "Altyapısız",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Cloudflare Workers önizlemesi",
         "custom": "Özel"
       },
       "composePath": "docker-compose yolu",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw manifestleri olduğu gibi uygular. Kustomize önce bir overlay oluşturur (kapsayıcı dağıtım adaptörü gerekir).",
       "customManifestId": "Özel manifest türü",
       "customManifestIdPlaceholder": "Bir manifest türü seçin",
+      "cloudflareHint": "Burada yapılandırılacak bir şey yok: her pull request için izlenecek adımlar bu deponun kendi önizleme iş akışında. Hesabı ve adlandırmayı seçmek için Altyapı bölümünden bir Cloudflare Workers işleyicisi bağlayın.",
       "customNoTypes": "Henüz özel manifest türü tanımlanmadı. Altyapı penceresinden bir tane ekleyin.",
       "customManifestIdHint": "Bu servisin ürettiği özel tür; çalışma alanının yapılandırdığı remote-custom işleyiciyle eşleştirilir.",
       "customManifestPath": "Manifest yolu (isteğe bağlı)",
@@ -2190,7 +2192,26 @@
         "loading": "Altyapı ayarları yükleniyor…",
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
-        "customNoun": "bu işleyici"
+        "customNoun": "bu işleyici",
+        "cloudflareNoun": "Cloudflare işleyicisini"
+      },
+      "cloudflare": {
+        "intro": "Hedef deponun kendi önizleme iş akışını tetikleyerek her pull request için bir Cloudflare Worker ayağa kaldırır. cat-factory Cloudflare ile hiçbir zaman doğrudan konuşmaz: bir dağıtım oluşturur, durumunu okur ve kaldırmak için inactive durumu yazar.",
+        "label": "Görünen ad",
+        "subdomain": "workers.dev alt alan adı",
+        "subdomainHint": "Önizleme adresi https://WORKER.SUBDOMAIN.workers.dev olur — yalnızca alt alan adı etiketini girin, \".workers.dev\" olmadan.",
+        "token": "VCS API belirteci",
+        "tokenPlaceholder": "İnce ayarlı bir belirteç yapıştırın",
+        "tokenKeep": "Kayıtlı belirteci korumak için boş bırakın",
+        "tokenHint": "Depo üzerinde yalnızca \"Deployments: read & write\" yetkisi gerekir.",
+        "repo": "İş akışının bulunduğu depo (isteğe bağlı)",
+        "repoHint": "Her hizmet çerçevesinin kendi deposunu kullanmak için boş bırakın. Yalnızca tek bir depo birden çok hizmetin önizleme iş akışını barındırıyorsa sabitleyin.",
+        "advanced": "Gelişmiş",
+        "workerTemplate": "Worker adı şablonu",
+        "environmentTemplate": "Dağıtım ortamı adı şablonu",
+        "templateHint": "Bunlar önizleme iş akışıyla yapılan anlaşmadır: cat-factory adresi bunlardan türetir ve iş akışı kaynaklarını aynı şekilde adlandırır. Referans iş akışının adlandırmasını kullanmak için boş bırakın. Kullanılabilir yer tutucular: pullNumber, branch, blockId.",
+        "apiBaseUrl": "VCS API taban adresi",
+        "connectedAs": "Önizlemeler {subdomain}.workers.dev üzerine dağıtılır."
       }
     },
     "providerConnection": {
@@ -4426,6 +4447,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Özel",
       "infraless": "Altyapısız"
     },
@@ -4433,6 +4455,7 @@
       "local-docker": "Yerel Docker",
       "local-k3s": "Yerel k3s",
       "remote-kubernetes": "Uzak Kubernetes",
+      "cloudflare": "Cloudflare önizlemesi",
       "remote-custom": "Uzak özel (HTTP)",
       "none": "Yok"
     }

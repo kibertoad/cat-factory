@@ -800,6 +800,7 @@
         "infraless": "Sin infraestructura",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Vista previa de Cloudflare Workers",
         "custom": "Personalizado"
       },
       "composePath": "Ruta de docker-compose",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw aplica los manifiestos tal cual. Kustomize construye primero un overlay (requiere el adaptador de despliegue en contenedor).",
       "customManifestId": "Tipo de manifiesto personalizado",
       "customManifestIdPlaceholder": "Elige un tipo de manifiesto",
+      "cloudflareHint": "Aquí no hay nada que configurar: la receta por pull request vive en el flujo de trabajo de vista previa de este repositorio. Conecta un controlador de Cloudflare Workers en Infraestructura para elegir la cuenta y los nombres.",
       "customNoTypes": "Aún no hay tipos de manifiesto personalizados. Añade uno en la ventana de Infraestructura.",
       "customManifestIdHint": "El tipo personalizado que produce este servicio, emparejado con un gestor remote-custom que configura el espacio de trabajo.",
       "customManifestPath": "Ruta del manifiesto (opcional)",
@@ -2854,7 +2856,26 @@
         "loading": "Cargando la configuración de infraestructura…",
         "kubeNoun": "el controlador de Kubernetes",
         "kubeOverrideNoun": "la anulación de Kubernetes",
-        "customNoun": "este controlador"
+        "customNoun": "este controlador",
+        "cloudflareNoun": "el controlador de Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "Levanta un Worker de Cloudflare por cada pull request activando el flujo de trabajo de vista previa del repositorio de destino. cat-factory nunca habla directamente con Cloudflare: crea un despliegue, lee su estado y publica un estado inactive para desmontarlo.",
+        "label": "Nombre visible",
+        "subdomain": "Subdominio de workers.dev",
+        "subdomainHint": "La URL de vista previa será https://WORKER.SUBDOMAIN.workers.dev: introduce solo la etiqueta del subdominio, sin \".workers.dev\".",
+        "token": "Token de la API del VCS",
+        "tokenPlaceholder": "Pega un token de permisos detallados",
+        "tokenKeep": "Déjalo en blanco para conservar el token guardado",
+        "tokenHint": "Necesita \"Deployments: read & write\" en el repositorio, y nada más.",
+        "repo": "Repositorio del flujo de trabajo (opcional)",
+        "repoHint": "Déjalo en blanco para usar el repositorio propio de cada frame de servicio. Fíjalo solo cuando un repositorio contenga el flujo de vista previa de varios servicios.",
+        "advanced": "Avanzado",
+        "workerTemplate": "Plantilla del nombre del Worker",
+        "environmentTemplate": "Plantilla del nombre del entorno de despliegue",
+        "templateHint": "Son el contrato con el flujo de vista previa: cat-factory deriva la URL de ellas y el flujo nombra sus recursos igual. Déjalas en blanco para usar la nomenclatura del flujo de referencia. Marcadores disponibles: pullNumber, branch, blockId.",
+        "apiBaseUrl": "URL base de la API del VCS",
+        "connectedAs": "Las vistas previas se despliegan en {subdomain}.workers.dev."
       }
     },
     "modelPolicy": {
@@ -4414,6 +4435,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Personalizado",
       "infraless": "Sin infraestructura"
     },
@@ -4421,6 +4443,7 @@
       "local-docker": "Docker local",
       "local-k3s": "k3s local",
       "remote-kubernetes": "Kubernetes remoto",
+      "cloudflare": "Vista previa de Cloudflare",
       "remote-custom": "Personalizado remoto (HTTP)",
       "none": "Ninguno"
     }

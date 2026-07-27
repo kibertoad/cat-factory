@@ -110,6 +110,8 @@ function engineToProvisionType(engine: InfraEngine): ProvisionType {
     case 'local-k3s':
     case 'remote-kubernetes':
       return 'kubernetes'
+    case 'cloudflare':
+      return 'cloudflare'
     case 'remote-custom':
       return 'custom'
     case 'none':
@@ -1368,6 +1370,14 @@ export class EnvironmentConnectionService {
     if (engine === 'local-docker') {
       if (!('manifest' in config)) throw new ValidationError('Expected a compose config')
       return { engine, manifest: config.manifest }
+    }
+    // The Cloudflare preview carries no service-owned half (no manifest source, no compose
+    // path), so the handler config IS the backend config. It still needs a branch here or the
+    // legacy single-connection endpoint would be the one surface where a built-in backend
+    // cannot be registered at all — which is what the conformance assertion caught.
+    if (engine === 'cloudflare') {
+      if (!('cloudflare' in config)) throw new ValidationError('Expected a Cloudflare config')
+      return { engine, cloudflare: config.cloudflare }
     }
     throw new ValidationError(`Cannot bridge a connection onto engine '${engine}'`)
   }

@@ -16,6 +16,7 @@ const { t, d } = useI18n()
 const PROVISION_TYPE_KEYS: Record<ProvisionType, string> = {
   kubernetes: 'environments.provisionType.kubernetes',
   'docker-compose': 'environments.provisionType.docker-compose',
+  cloudflare: 'environments.provisionType.cloudflare',
   custom: 'environments.provisionType.custom',
   infraless: 'environments.provisionType.infraless',
 }
@@ -23,6 +24,7 @@ const ENGINE_KEYS: Record<InfraEngine, string> = {
   'local-docker': 'environments.engine.local-docker',
   'local-k3s': 'environments.engine.local-k3s',
   'remote-kubernetes': 'environments.engine.remote-kubernetes',
+  cloudflare: 'environments.engine.cloudflare',
   'remote-custom': 'environments.engine.remote-custom',
   none: 'environments.engine.none',
 }

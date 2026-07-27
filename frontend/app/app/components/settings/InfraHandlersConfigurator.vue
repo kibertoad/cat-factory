@@ -6,6 +6,8 @@
 //                      service-owned, configured on the service).
 //   - docker-compose → handled by the runtime's local Docker capability — informational, no
 //                      connection (a DinD-capable runner stands the service's compose stack up).
+//   - cloudflare     → the built-in per-PR Cloudflare Workers preview, driven over the VCS
+//                      deployments API. Its whole section lives in CloudflareHandlerSection.vue.
 //   - custom         → the custom-manifest-type catalog editor + a `remote-custom` HTTP handler
 //                      per custom type (matched to a service's pinned `manifestId`).
 // In LOCAL mode each handler additionally offers a per-USER override (this-machine only),
@@ -25,6 +27,7 @@ type RemoteCustomConfig = Extract<InfraHandlerConfig, { engine: 'remote-custom' 
 import KubernetesEngineForm from '~/components/settings/KubernetesEngineForm.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
+import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -541,6 +544,10 @@ function notifyError(e: unknown) {
       </h3>
       <p class="text-[12px] text-slate-400">{{ t('settings.infrastructure.dockerComposeInfo') }}</p>
     </section>
+
+    <!-- cloudflare: a self-contained section (see the component's own note on why it is not
+         another branch here). -->
+    <CloudflareHandlerSection />
 
     <!-- custom: the catalog editor + a remote-custom HTTP handler per custom type. -->
     <section class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">

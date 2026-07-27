@@ -29,8 +29,18 @@ const k8sConfig: EnvironmentBackendConfig = {
 const registry = defaultEnvironmentBackendRegistry()
 
 describe('environment-backends registry', () => {
-  it('registers both built-in kinds', () => {
-    expect(registry.kinds().sort()).toEqual(['kubernetes', 'manifest'])
+  it('registers every built-in kind', () => {
+    expect(registry.kinds().sort()).toEqual(['cloudflare', 'kubernetes', 'manifest'])
+  })
+
+  it('routes each built-in engine to exactly one backend', () => {
+    // `byEngine` is what the per-provision-type handler resolution keys on, so a built-in that
+    // declares no engine (or steals another's) is unreachable — or silently hijacks a run.
+    expect(registry.byEngine('remote-custom')?.kind).toBe('manifest')
+    expect(registry.byEngine('local-k3s')?.kind).toBe('kubernetes')
+    expect(registry.byEngine('remote-kubernetes')?.kind).toBe('kubernetes')
+    expect(registry.byEngine('cloudflare')?.kind).toBe('cloudflare')
+    expect(registry.byEngine('none')).toBeUndefined()
   })
 
   it('manifest backend builds an HttpEnvironmentProvider and reports the manifest secret keys', () => {

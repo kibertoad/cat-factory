@@ -20,6 +20,7 @@ const BUILTIN_BACKEND_KINDS: Record<ProviderConnectionKind, BackendKindOption[]>
   environment: [
     { kind: 'manifest', label: 'HTTP manifest', engines: ['remote-custom'] },
     { kind: 'kubernetes', label: 'Kubernetes', engines: ['local-k3s', 'remote-kubernetes'] },
+    { kind: 'cloudflare', label: 'Cloudflare Workers', engines: ['cloudflare'] },
   ],
   'runner-pool': [
     { kind: 'manifest', label: 'HTTP manifest pool' },
