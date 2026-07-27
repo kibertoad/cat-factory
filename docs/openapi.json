@@ -200,6 +200,18 @@
                     ],
                     "type": "object"
                   },
+                  "changeClass": {
+                    "enum": [
+                      "docs",
+                      "test",
+                      "dependency",
+                      "config",
+                      "source",
+                      "schema",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  },
                   "driftAffected": {
                     "items": {
                       "properties": {
@@ -253,6 +265,9 @@
                       "complete",
                       "checkpoint"
                     ],
+                    "type": "string"
+                  },
+                  "mergeTrackRecordId": {
                     "type": "string"
                   },
                   "mergedRepos": {
@@ -436,7 +451,8 @@
               "initiative",
               "platform_health",
               "budget_paused",
-              "key_drift"
+              "key_drift",
+              "merge_tag_request"
             ],
             "type": "string"
           }
