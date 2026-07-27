@@ -4,6 +4,7 @@ import type {
   CommitFilesInput,
   GateRegistry,
   GateStepState,
+  JudgeRegistry,
   PipelineRegistry,
   ProviderRegistry,
   RepoFiles,
@@ -12,7 +13,9 @@ import type {
 import {
   InitiativePresetRegistry,
   defaultGateRegistry,
+  defaultJudgeRegistry,
   defaultPipelineRegistry,
+  stubJudgeContext,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
   seedPipelines,
@@ -37,6 +40,9 @@ import {
   renderComplianceReport,
   renderResearchReport,
   wireLicenseProvider,
+  ORG_SCOPE_PIPELINE_ID,
+  SCOPE_JUDGE_KIND,
+  SCOPE_RUBRIC_FRAGMENT_ID,
 } from './index.js'
 
 // Agent kinds + initiative presets + gates + step resolvers + pipelines live on app-owned
@@ -47,6 +53,7 @@ let gateRegistry: GateRegistry
 let stepResolverRegistry: StepResolverRegistry
 let providerRegistry: ProviderRegistry
 let pipelineRegistry: PipelineRegistry
+let judgeRegistry: JudgeRegistry
 beforeEach(() => {
   registry = defaultAgentKindRegistry()
   initiativePresetRegistry = new InitiativePresetRegistry()
@@ -54,12 +61,14 @@ beforeEach(() => {
   stepResolverRegistry = defaultStepResolverRegistry()
   providerRegistry = defaultProviderRegistry()
   pipelineRegistry = defaultPipelineRegistry()
+  judgeRegistry = defaultJudgeRegistry()
   registerExampleCustomAgents(
     registry,
     initiativePresetRegistry,
     gateRegistry,
     stepResolverRegistry,
     pipelineRegistry,
+    judgeRegistry,
   )
 })
 
@@ -503,5 +512,49 @@ describe('example org research-and-apply preset', () => {
     expect(decorated.items[1]?.description).toContain(derivedPath)
     // seedPlan never touches phase shape.
     expect(decorated.phases.map((p) => p.id)).toEqual(['research', 'apply'])
+  })
+})
+
+describe('example scope-adherence judge', () => {
+  it('registers on the app-owned judge registry with the org\'s differentiators only', () => {
+    const entry = judgeRegistry.factories().find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)
+    expect(entry).toBeDefined()
+    const judge = entry!.factory(stubJudgeContext())
+    // A judge supplies its rubric, its failure disposition and where to bounce — and nothing
+    // else. No state machine, no threshold comparison, no park: the engine owns all of that.
+    expect(judge.rubric.name).toBe('Scope adherence')
+    expect(judge.rubric.body).toContain('nothing beyond it')
+    expect(judge.onFail).toBe('bounce')
+    expect(judge.bounceTargets).toEqual(['coder'])
+    // The rubric names a fragment id, so a workspace can override the body through the prompt
+    // library it already uses — which is why this package ships no rubric storage.
+    expect(judge.rubric.fragmentId).toBe(SCOPE_RUBRIC_FRAGMENT_ID)
+    // Presentation makes it a first-class palette block; the engine defaults its result view.
+    expect(judge.presentation?.label).toBe('Scope Adherence')
+  })
+
+  it('parses its extended verdict shape and degrades a noisy field instead of dropping it', () => {
+    const entry = judgeRegistry.factories().find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)!
+    const parse = entry.factory(stubJudgeContext()).parseVerdict!
+    const verdict = parse({
+      score: 0.4,
+      summary: 'Refactored an unrelated module.',
+      // A score out of the 0..1 range on ONE finding must not discard the finding beside it.
+      findings: [{ title: 'Unrelated refactor', severity: 'nonsense' }],
+      outOfScopeAreas: ['src/unrelated'],
+    }) as { score: number; findings: { title: string; severity: string }[] }
+    expect(verdict.score).toBe(0.4)
+    expect(verdict.findings[0]?.title).toBe('Unrelated refactor')
+    expect(verdict.findings[0]?.severity).toBe('medium')
+  })
+
+  it('registers a pipeline that gives the judge a producing step to bounce to', () => {
+    // A judge with nothing before it degrades a bounce to a park, so the shipped pipeline must
+    // place it AFTER the coder — otherwise the example would silently demonstrate the wrong thing.
+    const pipeline = pipelineRegistry.registered().find((p) => p.id === ORG_SCOPE_PIPELINE_ID)!
+    expect(pipeline).toBeDefined()
+    expect(pipeline.agentKinds.indexOf(SCOPE_JUDGE_KIND)).toBeGreaterThan(
+      pipeline.agentKinds.indexOf('coder'),
+    )
   })
 })
