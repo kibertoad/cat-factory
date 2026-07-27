@@ -3,6 +3,8 @@
 '@cat-factory/integrations': minor
 '@cat-factory/contracts': minor
 '@cat-factory/server': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/agents': minor
 '@cat-factory/local-server': patch
 ---
 
@@ -51,9 +53,39 @@ Also in this slice:
   committed trees, and the push would miss it too) instead of yielding a verdict computed without
   the reproduction in it.
 
+What the verdict will and will not claim:
+
+- **A green pre-fix tree no longer blames the test when the tree is not actually fix-free.** A
+  resumed run's pre-fix tree is the work branch as it stood when the pass started — which, after a
+  mid-run eviction, already carries that same step's committed partial fix. The check then passes
+  there for a reason unrelated to the test, so the proof probes (on a green base only, memoised)
+  whether the tree carries non-test work, reports that instead of "your test does not demonstrate
+  the defect", and spends no repair round. An unavailable answer degrades to the plain diagnosis.
+- **Declared test paths are refused for git pathspec magic** (`:(glob)`, `*`, `?`, `[…]`) as well
+  as traversal, in both the engine's sanitizer and the harness's own. `--` stops a path being read
+  as a revision but not as a pathspec, so a glob would apply most of the final tree onto the base
+  worktree and green it — turning a good reproduction into a false "the test does not capture the
+  defect", from model-authored input.
+- **Two identical failures read as an environment problem, not an ineffective fix**, and two
+  timeouts read as a watchdog kill. Neither is evidence for "the change does nothing".
+- **A timed-out tree spends no repair round**, joining setup failures and the prior-work base: in
+  all three the agent is not what is wrong, so a round can only add cost.
+- **The phase carries a wall-clock ceiling** (`REPRODUCTION_TOTAL_BUDGET_MS`, 45m) on top of the
+  attempt budget. Attempts multiply two full tree runs each, and the phase's own heartbeat
+  deliberately stops the job inactivity watchdog from firing, so nothing else bounded it.
+  Exceeding it settles `inconclusive` with its own note — a cost limit, never a verdict.
+- **The `repro-test` prompt now states that both runs happen in a fresh checkout** and that
+  `setupCommand` is required when the tests need an install or build to run there. Omitting it is
+  the most common way the proof ends up proving nothing.
+
+Both pre-PR verification phases now spawn through one shared `runCapturedCommand` seam (watchdog,
+abort handling, exit-code conventions, scrub-then-bound capture) instead of two near-verbatim
+copies, and the capture keeps a small margin so a secret straddling the rolling cut is still whole
+when it is scrubbed.
+
 Unconfigured means unchanged: no `reproduction` on the job body ⇒ the harness's existing path,
 byte for byte.
 
-Runner image bumped to `1.57.0`. The PR-report section that renders this is Phase C.
+Runner image bumped to `1.57.1`. The PR-report section that renders this is Phase C.
 
 Design + phase checklist: `docs/initiatives/bugfix-reproduction-proof.md`.

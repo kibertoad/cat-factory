@@ -1350,6 +1350,38 @@ phase checklist: [`docs/initiatives/bugfix-reproduction-proof.md`](./docs/initia
   base worktree — a whole-tree checkout would drag the fix across and green it. Red-for-the-wrong-
   REASON is a stated limitation, not something the harness detects; both outputs ride the report so
   a human can see why. Do not let a later iteration claim more.
+- **Declared test paths are refused for git PATHSPEC MAGIC, not just traversal** (both in the
+  engine's `isSafeTestPath` and the harness's own copy — keep them in step). They are handed to
+  `git checkout <finalSha> -- <path>`, where `--` stops a path being read as a REVISION but does
+  NOTHING about pathspec syntax: `:(glob)**`, `*`, `src/*.test.ts` are all valid pathspecs, so one
+  would apply far more of the final tree onto the base worktree than the reproduction — dragging
+  the fix across and greening the base. These strings are MODEL-AUTHORED, so that is a reachable
+  input. A refused path counts as an omission (`omittedTestPaths`), never a silent shortening.
+- **A GREEN pre-fix tree is only interpretable once you know what that tree IS.** In the designed
+  flow `baseSha` is the reproduction step's test commit, so green there means the test does not
+  demonstrate the defect. But a coder container evicted mid-run has already committed and
+  checkpoint-pushed its work, and the re-dispatch RESUMES that branch — `baseSha` then carries this
+  same step's own partial fix, the check legitimately passes, and stating "your test does not
+  demonstrate the defect" is false AND spends the whole repair budget inviting the agent to weaken
+  a perfectly good reproduction. So on a green base (and ONLY then — it costs a fetch) the harness
+  probes `changedFilesSinceBase`; non-test changes there mean the note says so and NO repair round
+  is spent. The probe is memoised per loop and degrades to the plain diagnosis when it cannot
+  answer (a shallow clone has no reachable merge base) — an unavailable answer must never suppress
+  a diagnosis on a guess.
+- **Repairable is an explicit OUTPUT of an attempt, not something re-derived from the report.**
+  Three shapes are NOT repairable, all for the same reason — the agent is not what is wrong, so a
+  round can only add cost or damage: a failed **setup** (it did not declare that command), a
+  **timed-out** tree (a watchdog kill is not a failing assertion), and the **prior-work base**
+  above.
+- **The phase is bounded twice: `maxAttempts` rounds AND `REPRODUCTION_TOTAL_BUDGET_MS`** (45m).
+  Attempts multiply two full tree runs each, and the phase's own heartbeat deliberately stops the
+  job-level inactivity watchdog from firing — which removes the accidental backstop it would
+  otherwise have had, so the wall-clock budget is what actually bounds it. Checked at phase
+  boundaries (real bound = budget + at most one command watchdog); exceeding it settles
+  `inconclusive` with a note, never a run failure.
+- **Both pre-PR phases spawn through ONE seam** — `captured-command.ts`'s `runCapturedCommand`
+  (watchdog, abort, exit-code conventions 124/127/130, scrub-then-bound capture). They were two
+  near-verbatim copies, which is how a fix to one silently misses the other.
 - **A failed verification is a REPAIR, not a run failure.** The captured output goes back to the
   agent (with an explicit rule against weakening the reproduction) while budget remains, then
   degrades to `inconclusive` with the PR still opening. Deliberately the OPPOSITE disposition from

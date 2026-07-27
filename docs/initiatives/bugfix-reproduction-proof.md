@@ -297,7 +297,7 @@ Notes for Phase B (which consumes all of this):
 
 ### Phase B — the harness phase + image bump
 
-Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image `1.57.0`.
+Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image `1.57.1`.
 
 | Item                                                                                      | Status | PR  |
 | ----------------------------------------------------------------------------------------- | ------ | --- |
@@ -332,7 +332,32 @@ Notes for Phase C (which renders all of this):
   "only a green checkout opens a PR", which is the stronger invariant.
 - **A setup failure is not repairable** and short-circuits the loop with zero agent passes: the
   setup command comes from the reproduction step's declaration, so a repair pass cannot change it,
-  and burning the budget against a broken environment buys nothing.
+  and burning the budget against a broken environment buys nothing. Two more shapes joined it in
+  review, for the same underlying reason (the agent is not what is wrong): a **timed-out** tree,
+  and a **pre-fix tree that already carries non-test work**. Repairability is therefore an explicit
+  OUTPUT of an attempt (`ReproductionAttempt.repairable`), not re-derived from the report by a
+  later reader — the two new cases are knowable only where the attempt ran.
+- **A green base is NOT self-explanatory, and Phase C must not render it as though it were.** A
+  resumed run's `baseSha` is the work branch as it stood when the pass started; after an eviction
+  that is this same coder step's own interrupted work, fix included, so the check passes for a
+  reason that has nothing to do with the test. The harness now probes `changedFilesSinceBase` on a
+  green base only (it costs a fetch), memoised per loop, and reports the ambiguity in the `note`
+  instead of blaming the test — degrading to the plain diagnosis when the probe cannot answer.
+  **Phase C should render the note verbatim rather than re-deriving a cause from `base.passed`**,
+  which is exactly the inference that was wrong.
+- **The declared paths are refused for git PATHSPEC MAGIC** (`:(glob)`, `*`, `?`, `[…]`) as well as
+  traversal, in BOTH sanitizers. `--` stops a path being read as a revision but not as a pathspec,
+  so a glob would apply most of the final tree onto the base worktree and green it — a
+  model-authored input turning a good reproduction into "the test does not capture the defect".
+- **The phase carries a wall-clock ceiling** (`REPRODUCTION_TOTAL_BUDGET_MS`, 45m) on top of
+  `maxAttempts`, because the heartbeat deliberately disables the only other backstop (the job
+  inactivity watchdog) and attempts multiply two full tree runs each. Exceeding it is an
+  `inconclusive` with its own note — a cost limit, never a verdict about the fix.
+- **The `repro-test` prompt now states that both runs happen in a FRESH checkout** and that
+  `setupCommand` is mandatory when tests need an install/build there. Without it the command errors
+  identically on both trees, which is honest (`inconclusive`) but means the feature almost never
+  produces proof for a dependency-installing repo — the most likely reason a fielded Phase C
+  renders "unverified" more often than expected.
 - **The harness never emits `declared_infeasible`** — a concede dispatches no proof, so the engine
   mints that verdict (Phase A's `concededReproductionReport`). Phase C's renderer sees all three.
 - **`agent.ts` is at 1,494 of its 1,500-line budget.** The next slice that touches it should expect

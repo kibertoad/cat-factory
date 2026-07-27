@@ -649,6 +649,46 @@ export async function branchAheadOfBase(
 }
 
 /**
+ * The files `commitish` changes relative to its merge base with the PR base branch — i.e.
+ * everything the work branch has added on top of base, `git diff --name-only <base>...<commitish>`.
+ *
+ * The BUGFIX REPRODUCTION PROOF uses this to answer the one question that decides whether a GREEN
+ * pre-fix tree means anything: does that tree ALREADY carry non-test work committed on this
+ * branch? A resumed run's `baseSha` is whatever the branch tip was when this pass started, which
+ * in the designed flow is the reproduction step's test commit — but after an eviction it is this
+ * same coder step's own interrupted work, fix included. Reporting "the check passed before your
+ * change, so it does not demonstrate the defect" in that case is simply false.
+ *
+ * `undefined` means "could not determine" (a shallow clone with no reachable merge base, a fetch
+ * failure, an unknown ref), never an empty list: the caller must degrade to its prior behaviour
+ * rather than read a failed probe as "the tree is clean".
+ *
+ * NUL-delimited so a path containing a newline (legal in git) cannot split into two entries.
+ */
+export async function changedFilesSinceBase(
+  dir: string,
+  baseBranch: string,
+  ghToken: string,
+  commitish: string,
+  signal?: AbortSignal,
+): Promise<string[] | undefined> {
+  try {
+    await git(['fetch', 'origin', `+refs/heads/${baseBranch}:refs/cat-factory/base`], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    })
+    const out = await git(['diff', '--name-only', '-z', `refs/cat-factory/base...${commitish}`], {
+      cwd: dir,
+      signal,
+    })
+    return out.split('\0').filter((p) => p !== '')
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Whether the checked-out branch has a real, examinable diff against
  * `origin/<baseBranch>` — i.e. the base branch's remote-tracking ref exists (so the
  * merge base resolves) AND there are changes between that merge base and HEAD. The

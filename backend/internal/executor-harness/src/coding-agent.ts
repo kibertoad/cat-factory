@@ -14,6 +14,7 @@ import type {
 } from './job.js'
 import {
   branchAheadOfBase,
+  changedFilesSinceBase,
   branchHasCommitsSince,
   cloneExistingBranch,
   cloneRepo,
@@ -382,6 +383,23 @@ export async function runCodingAgent(
             runAgentPass,
             onAgentPass: foldPass,
             listUncommittedNewFiles,
+            // Only a RESUMED run can have a pre-fix tree that already carries work: a fresh run
+            // branched off base, so `baseSha` IS base. Wiring the probe unconditionally would buy
+            // an always-empty answer for the price of a fetch — and a fresh clone is shallow, so
+            // it could not resolve a merge base to answer with anyway. Lazy inside the loop: it
+            // only runs if a tree comes back green.
+            ...(resumed
+              ? {
+                  listBaseTreeChanges: () =>
+                    changedFilesSinceBase(
+                      dir,
+                      spec.repo.baseBranch,
+                      spec.ghToken,
+                      baseSha,
+                      opts.signal,
+                    ),
+                }
+              : {}),
           })
           opts.onPhase?.('agent')
         }

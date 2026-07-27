@@ -165,6 +165,53 @@ describe('runReproductionProof', () => {
     expect(report.note).toContain('both')
   })
 
+  it('reads two IDENTICAL failures as an environment problem rather than an ineffective fix', async () => {
+    // Two trees that differ only by the change, failing the exact same way, is far more often one
+    // broken environment failing both ways — a missing dependency, an uninstalled toolchain, a
+    // collection error — than a fix that does nothing. Offering both readings with equal weight
+    // leaves a reviewer to guess at precisely the moment the evidence points somewhere.
+    await commitWork(dir, { test: true })
+    const finalSha = await commitWork(dir, { message: 'a change that fixes nothing' })
+
+    const { report } = await runReproductionProof({
+      dir,
+      baseSha,
+      finalSha,
+      spec: { ...SPEC, command: 'exit 42' },
+      attempt: 1,
+      logger: log,
+      opts: { log },
+    })
+
+    expect(report.status).toBe('inconclusive')
+    expect(report.note).toContain('Both trees failed the SAME way (exit 42)')
+  })
+
+  it('says the change is ineffective when the two failures DIFFER', async () => {
+    // Two DIFFERENT failures mean the change did something — just not enough — so the reading
+    // above (one environment failing both trees identically) does not apply.
+    await commitWork(dir, { test: true })
+    await writeFile(join(dir, 'fix.txt'), 'partial\n', 'utf8')
+    const finalSha = await commitWork(dir, { message: 'a partial fix' })
+
+    const { report } = await runReproductionProof({
+      dir,
+      baseSha,
+      finalSha,
+      spec: {
+        ...SPEC,
+        command: 'grep -q fixed fix.txt || { grep -q partial fix.txt && exit 3; exit 1; }',
+      },
+      attempt: 1,
+      logger: log,
+      opts: { log },
+    })
+
+    expect(report.base?.exitCode).toBe(1)
+    expect(report.final?.exitCode).toBe(3)
+    expect(report.note).toContain('does not make the check pass')
+  })
+
   it('runs the setup command in BOTH worktrees, and flags a setup failure rather than calling it a red tree', async () => {
     const finalSha = await commitWork(dir, { test: true, fix: true })
     const marker = join(dir, 'setup-runs.log')
@@ -340,13 +387,14 @@ describe('runReproductionLoop', () => {
   })
 
   it('reports `inconclusive` without running anything when the branch never advanced', async () => {
+    const published: ReproductionReport[] = []
     const report = await runReproductionLoop({
       dir,
       baseSha,
       resolveFinalSha: () => headCommit(dir),
       spec: SPEC,
       logger: log,
-      opts: { log },
+      opts: { log, onReproductionProof: (r) => published.push(r) },
       runAgentPass: async () => {
         throw new Error('must not repair — there is nothing to verify')
       },
@@ -354,6 +402,9 @@ describe('runReproductionLoop', () => {
 
     expect(report.status).toBe('inconclusive')
     expect(report.note).toContain('no commit beyond the pre-fix tree')
+    // Published like every other settled attempt: a verdict that only reaches the terminal result
+    // is invisible while the job runs, and an absent section reads as "the phase never ran".
+    expect(published).toEqual([report])
   })
 
   it('prunes every round’s worktrees, so a multi-round loop cannot accumulate them', async () => {
@@ -378,6 +429,176 @@ describe('runReproductionLoop', () => {
   })
 })
 
+// A RESUMED run's pre-fix tree is the work branch as it stood when this pass started. In the
+// designed flow that is the reproduction step's test commit — but a coder container evicted
+// mid-run has already committed and checkpoint-pushed its work, so the re-dispatch resumes a
+// branch that carries this same step's own partial fix. The check then legitimately passes on the
+// "pre-fix" tree, and calling that "your test does not demonstrate the defect" is both false and
+// an invitation to weaken a reproduction that is fine.
+describe('a pre-fix tree that already carries work', () => {
+  it('does not blame the test — and spends no repair round — when the base carries non-test work', async () => {
+    // The base tree ALREADY has the fix (an interrupted earlier pass committed it), so the check
+    // is green there for a reason that has nothing to do with the test.
+    const resumedTip = await commitWork(dir, { test: true, fix: true })
+    const finalSha = await commitWork(dir, { message: 'more work on top' })
+    let passes = 0
+
+    const report = await runReproductionLoop({
+      dir,
+      baseSha: resumedTip,
+      resolveFinalSha: async () => finalSha,
+      spec: SPEC,
+      logger: log,
+      opts: { log },
+      listBaseTreeChanges: async () => ['check.sh', 'fix.txt'],
+      runAgentPass: async () => {
+        passes += 1
+      },
+    })
+
+    expect(report.status).toBe('inconclusive')
+    expect(report.base?.passed).toBe(true)
+    expect(report.note).toContain('ALREADY carries non-test work')
+    expect(report.note).toContain('fix.txt')
+    // The declared test file is not "prior work" — it is the reproduction itself.
+    expect(report.note).not.toContain('check.sh')
+    expect(passes).toBe(0)
+  })
+
+  it('still blames the test when the base carries ONLY the declared reproduction', async () => {
+    // The legitimate green-base case the guard must not suppress: the branch carries the test and
+    // nothing else, so the test really does pass without a fix.
+    const resumedTip = await commitWork(dir, { test: true, fix: true })
+    const finalSha = await commitWork(dir, { message: 'more work on top' })
+    let passes = 0
+
+    const report = await runReproductionLoop({
+      dir,
+      baseSha: resumedTip,
+      resolveFinalSha: async () => finalSha,
+      spec: { ...SPEC, maxAttempts: 2 },
+      logger: log,
+      opts: { log },
+      listBaseTreeChanges: async () => ['check.sh'],
+      runAgentPass: async () => {
+        passes += 1
+      },
+    })
+
+    expect(report.note).toContain('does not demonstrate the defect')
+    expect(passes).toBe(1)
+  })
+
+  it('falls back to the plain diagnosis when the provenance probe cannot answer', async () => {
+    // A shallow clone has no reachable merge base. An unavailable answer must degrade to the old
+    // behaviour, never suppress a diagnosis on a guess.
+    const resumedTip = await commitWork(dir, { test: true, fix: true })
+    const finalSha = await commitWork(dir, { message: 'more work on top' })
+
+    const report = await runReproductionLoop({
+      dir,
+      baseSha: resumedTip,
+      resolveFinalSha: async () => finalSha,
+      spec: { ...SPEC, maxAttempts: 1 },
+      logger: log,
+      opts: { log },
+      listBaseTreeChanges: async () => undefined,
+      runAgentPass: async () => {},
+    })
+
+    expect(report.note).toContain('does not demonstrate the defect')
+  })
+
+  it('probes the pre-fix tree at most ONCE across a whole loop', async () => {
+    // Three rounds that each hit the green base, so each one asks the provenance question.
+    const resumedTip = await commitWork(dir, { test: true, fix: true })
+    await commitWork(dir, { message: 'this pass’s work' })
+    let probes = 0
+    let passes = 0
+
+    await runReproductionLoop({
+      dir,
+      baseSha: resumedTip,
+      resolveFinalSha: () => headCommit(dir),
+      spec: { ...SPEC, maxAttempts: 3 },
+      logger: log,
+      opts: { log },
+      // Answers a question about `baseSha`, which never moves — and costs a fetch each time.
+      listBaseTreeChanges: async () => {
+        probes += 1
+        return ['check.sh']
+      },
+      runAgentPass: async () => {
+        passes += 1
+        await commitWork(dir, { message: `round ${passes}` })
+      },
+    })
+
+    expect(passes).toBe(2)
+    expect(probes).toBe(1)
+  })
+})
+
+describe('the phase’s cost ceiling', () => {
+  const restore = { ...process.env }
+  afterEach(() => {
+    process.env = { ...restore }
+  })
+
+  it('settles `inconclusive` when the whole-phase time budget is spent, running no agent round', async () => {
+    // Attempts multiply two full tree runs each, and the phase's heartbeat deliberately stops the
+    // job-level inactivity watchdog from ever cutting it short — so this budget is the only thing
+    // bounding the phase's wall clock.
+    process.env.REPRODUCTION_TOTAL_BUDGET_MS = '1'
+    await commitWork(dir, { test: true })
+    let passes = 0
+
+    const report = await runReproductionLoop({
+      dir,
+      baseSha,
+      resolveFinalSha: () => headCommit(dir),
+      spec: SPEC,
+      logger: log,
+      opts: { log },
+      runAgentPass: async () => {
+        passes += 1
+      },
+    })
+
+    expect(report.status).toBe('inconclusive')
+    expect(report.note).toContain('time budget')
+    // A cost limit is not a verdict about the fix, so it never fails the run.
+    expect(passes).toBe(0)
+  })
+
+  it('does not spend repair rounds on a timed-out tree', async () => {
+    // A watchdog kill is not a failing assertion the agent can act on, and each round would cost
+    // two more full tree runs to learn the same thing.
+    process.env.REPRODUCTION_COMMAND_TIMEOUT_MS = '100'
+    await commitWork(dir, { test: true })
+    let passes = 0
+
+    const report = await runReproductionLoop({
+      dir,
+      baseSha,
+      resolveFinalSha: () => headCommit(dir),
+      spec: { ...SPEC, command: 'sleep 30', maxAttempts: 3 },
+      logger: log,
+      opts: { log },
+      runAgentPass: async () => {
+        passes += 1
+      },
+    })
+
+    expect(report.base?.timedOut).toBe(true)
+    expect(report.final?.timedOut).toBe(true)
+    // And it is reported as a watchdog kill, not as "a missing dependency" or "the fix does
+    // nothing" — neither of which the two identical exit-124s are evidence for.
+    expect(report.note).toContain('TIMED OUT on both')
+    expect(passes).toBe(0)
+  })
+})
+
 describe('parseReproductionSpec', () => {
   it('returns undefined for a body with no usable command, so the run is unchanged', () => {
     expect(parseReproductionSpec(undefined)).toBeUndefined()
@@ -398,6 +619,37 @@ describe('parseReproductionSpec', () => {
     expect(spec?.testPaths).toEqual(['ok/a.test.ts', 'b/c.test.ts'])
     // 1 dropped by the engine + 3 refused here.
     expect(spec?.omittedTestPaths).toBe(4)
+  })
+
+  it('refuses git PATHSPEC MAGIC, which would drag the fix onto the pre-fix tree', () => {
+    // `--` stops a path being read as a REVISION but does nothing about pathspec syntax, so a
+    // glob would apply far more of the final tree onto the base worktree than the declared
+    // reproduction — greening the base and reporting a perfectly good test as worthless.
+    const spec = parseReproductionSpec({
+      command: 'npm test',
+      testPaths: [
+        'ok/a.test.ts',
+        ':(glob)**',
+        ':/etc/x',
+        '*',
+        'src/*.test.ts',
+        'src/a?.test.ts',
+        'src/[ab].test.ts',
+      ],
+    })
+
+    expect(spec?.testPaths).toEqual(['ok/a.test.ts'])
+    expect(spec?.omittedTestPaths).toBe(6)
+  })
+
+  it('refuses an over-long path, matching the engine’s own cap', () => {
+    const spec = parseReproductionSpec({
+      command: 'npm test',
+      testPaths: [`${'a'.repeat(401)}.ts`],
+    })
+
+    expect(spec?.testPaths).toEqual([])
+    expect(spec?.omittedTestPaths).toBe(1)
   })
 
   it('clamps the attempt budget and defaults a missing one', () => {

@@ -1,10 +1,8 @@
-import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runCapturedCommand } from './captured-command.js'
 import { addWorktree, checkoutPathsFrom, pathsPresentAtCommit, removeWorktree } from './git.js'
-import { killChildProcess, spawnDetached } from './process.js'
-import { MAX_CAPTURED_OUTPUT_CHARS, redactSecrets } from './redact.js'
 import type { RunOptions } from './runner.js'
 import type { Logger } from './logger.js'
 
@@ -93,9 +91,9 @@ export interface ReproductionReport {
 
 /**
  * Per-phase output kept on the REPORT (what crosses the wire and lands in the run's persisted
- * `detail` blob). Deliberately smaller than {@link MAX_CAPTURED_OUTPUT_CHARS}, which is what the
- * AGENT sees in its repair prompt — the same split, for the same reasons, as the pre-PR
- * validation report's {@link file://./validation-checks.ts} tail.
+ * `detail` blob). Deliberately smaller than `MAX_CAPTURED_OUTPUT_CHARS` (`redact.ts`), which is
+ * what the AGENT sees in its repair prompt — the same split, for the same reasons, as the pre-PR
+ * validation report's tail (`validation-checks.ts`).
  */
 export const REPRODUCTION_REPORT_TAIL_CHARS = 4_000
 
@@ -133,6 +131,27 @@ export function reproductionCommandTimeoutMs(): number {
 export function reproductionHeartbeatMs(): number {
   const n = Number(process.env.REPRODUCTION_HEARTBEAT_MS)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 30_000
+}
+
+/**
+ * The ceiling on the WHOLE proof phase — every attempt, both trees, setup included. Overridable
+ * via env; defaults to 45 minutes.
+ *
+ * The per-command watchdog bounds one command, not the phase, and the phase multiplies: a spent
+ * budget is `maxAttempts` × two trees × (setup + check), each of which may legitimately run for
+ * {@link reproductionCommandTimeoutMs}. At stock settings that is hours of container time spent
+ * BEFORE the pre-PR validation loop has run its own rounds, and nothing else stops it — the
+ * heartbeat deliberately keeps the job-level inactivity watchdog from firing, which is exactly
+ * what removes the accidental backstop the phase would otherwise have had.
+ *
+ * Enforced at PHASE boundaries (before each tree's run, and before each repair round) rather than
+ * mid-command: a command already carries its own watchdog, so the real bound is this budget plus
+ * at most one command's timeout. Exceeding it settles `inconclusive` with a note saying so —
+ * never a run failure, exactly like every other unproven shape.
+ */
+export function reproductionTotalBudgetMs(): number {
+  const n = Number(process.env.REPRODUCTION_TOTAL_BUDGET_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 45 * 60_000
 }
 
 /**
@@ -179,13 +198,38 @@ export function parseReproductionSpec(value: unknown): ReproductionSpec | undefi
   }
 }
 
-/** A repo-relative path with no traversal, no root/drive anchor, and no leading dash. */
+/**
+ * A repo-relative path with no traversal, no root/drive anchor, no leading dash, and no git
+ * PATHSPEC MAGIC. Must stay in step with the engine's `isSafeTestPath`
+ * (`orchestration/src/modules/execution/reproductionProof.logic.ts`) — this is the harness's own
+ * trust boundary, not a duplicate of the engine's for its own sake.
+ *
+ * The magic exclusion is the load-bearing part and is easy to miss: these strings are handed to
+ * `git checkout <finalSha> -- <path>`, where `--` stops a path being read as a REVISION but does
+ * nothing about pathspec syntax. `:(glob)**`, `*`, `foo/*.ts` are all valid pathspecs, so a
+ * model-authored path containing one would apply far more of the final tree onto the pre-fix
+ * worktree than the declared reproduction — dragging the fix across and GREENING the base. That
+ * lands as an `inconclusive` reading "the check passed before your change", which is the exact
+ * false diagnosis this feature exists to remove, and it is under the model's control. A dropped
+ * path is counted as an omission, so the report says the pre-fix tree was rebuilt from an
+ * incomplete set rather than implying a clean verdict.
+ */
 function isSafeTestPath(path: string): boolean {
-  if (path.length === 0) return false
+  if (path.length === 0 || path.length > REPRODUCTION_MAX_TEST_PATH_CHARS) return false
   if (path.startsWith('/') || path.startsWith('~') || path.startsWith('-')) return false
+  // A leading `:` opens pathspec magic (`:(glob)`, `:(exclude)`, `:/`), and the wildcard
+  // metacharacters make any path a glob wherever they appear.
+  if (path.startsWith(':') || /[*?[\]]/.test(path)) return false
   if (/^[a-zA-Z]:\//.test(path)) return false
   return !path.split('/').includes('..')
 }
+
+/**
+ * Longest accepted declared test path. A DELIBERATE DUPLICATE of
+ * `REPRODUCTION_MAX_TEST_PATH_CHARS` in `@cat-factory/contracts` (the published image takes no
+ * schema dependency) — keep the two in step.
+ */
+const REPRODUCTION_MAX_TEST_PATH_CHARS = 400
 
 /** Everything one proof attempt needs. Every field is per-job; nothing is read from a global. */
 export interface ReproductionProofArgs {
@@ -201,6 +245,28 @@ export interface ReproductionProofArgs {
   attempt: number
   logger: Logger
   opts: RunOptions
+  /** Epoch ms after which no further phase may START (see {@link reproductionTotalBudgetMs}). */
+  deadlineAt?: number
+  /**
+   * The files the PRE-FIX tree already changes relative to the PR base branch, or `undefined`
+   * when that could not be determined. Consulted ONLY when the base tree comes back green — see
+   * {@link priorWorkAtBase} for why a green base is otherwise misdiagnosed.
+   */
+  listBaseTreeChanges?: () => Promise<string[] | undefined>
+}
+
+/** One proof attempt: the report, the full tails for a repair prompt, and whether to repair. */
+export interface ReproductionAttempt {
+  report: ReproductionReport
+  fullTails: Map<string, string>
+  /**
+   * Whether spending an agent repair round on this outcome can plausibly change it. An explicit
+   * OUTPUT of the attempt rather than something re-derived from the report, because the two
+   * unrepairable shapes are known only here: a broken environment (the agent cannot change a
+   * setup command it did not declare) and a pre-fix tree that already carries this run's own
+   * earlier work (nothing is wrong with the test, so "make it exercise the defect" is bad advice).
+   */
+  repairable: boolean
 }
 
 /**
@@ -219,8 +285,8 @@ export interface ReproductionProofArgs {
  */
 export async function runReproductionProof(
   args: ReproductionProofArgs,
-): Promise<{ report: ReproductionReport; fullTails: Map<string, string> }> {
-  const { dir, baseSha, finalSha, serviceDirectory, spec, attempt, logger, opts } = args
+): Promise<ReproductionAttempt> {
+  const { dir, baseSha, finalSha, serviceDirectory, spec, attempt, logger, opts, deadlineAt } = args
   const fullTails = new Map<string, string>()
   const heartbeat = setInterval(() => opts.onActivity?.(), reproductionHeartbeatMs())
   heartbeat.unref?.()
@@ -229,6 +295,24 @@ export async function runReproductionProof(
   const root = await mkdtemp(join(tmpdir(), 'cat-repro-'))
   const baseDir = join(root, 'base')
   const finalDir = join(root, 'final')
+  /** Every return below is one of these — the invariant fields are stated once. */
+  const settle = (
+    fields: Partial<ReproductionReport>,
+    repairable: boolean,
+  ): ReproductionAttempt => ({
+    report: {
+      status: 'inconclusive',
+      command: spec.command,
+      testPaths: [...spec.testPaths],
+      ...(spec.omittedTestPaths ? { omittedTestPaths: spec.omittedTestPaths } : {}),
+      attempts: attempt,
+      maxAttempts: spec.maxAttempts,
+      ...fields,
+      at: Date.now(),
+    },
+    fullTails,
+    repairable,
+  })
   try {
     // The proof runs against COMMITTED trees, so a declared test the agent never `git add`ed is
     // invisible to it — and equally invisible to the push, which is the more important half to
@@ -237,20 +321,14 @@ export async function runReproductionProof(
     const missing = spec.testPaths.filter((p) => !present.includes(p))
     if (spec.testPaths.length > 0 && present.length === 0) {
       logger.warn('reproduction: no declared test file is committed', { missing })
-      return {
-        report: {
-          status: 'inconclusive',
-          command: spec.command,
-          testPaths: [...spec.testPaths],
-          ...(spec.omittedTestPaths ? { omittedTestPaths: spec.omittedTestPaths } : {}),
-          attempts: attempt,
-          maxAttempts: spec.maxAttempts,
+      return settle(
+        {
           note: `None of the declared reproduction test files are committed on the branch (${missing.join(', ')}), so the pre-fix tree could not be reconstructed.`,
-          at: Date.now(),
         },
-        fullTails,
-      }
+        true,
+      )
     }
+    if (budgetSpent(deadlineAt)) return settle({ note: BUDGET_NOTE }, false)
 
     await addWorktree(dir, baseDir, baseSha, opts.signal)
     await checkoutPathsFrom(baseDir, finalSha, present, opts.signal)
@@ -274,21 +352,18 @@ export async function runReproductionProof(
     // only confirm what is already not proof — and each phase costs a full setup + test run. The
     // report's `final` is documented as absent in exactly this case.
     if (base.passed || base.setupFailed) {
-      return {
-        report: {
-          status: 'inconclusive',
-          command: spec.command,
-          testPaths: [...spec.testPaths],
-          ...(spec.omittedTestPaths ? { omittedTestPaths: spec.omittedTestPaths } : {}),
-          base,
-          attempts: attempt,
-          maxAttempts: spec.maxAttempts,
-          note: noteFor(base, undefined, missing),
-          at: Date.now(),
-        },
-        fullTails,
-      }
+      // A GREEN base is the one outcome whose meaning depends on what the pre-fix tree actually
+      // is, so establish that before naming a cause — see {@link priorWorkAtBase}.
+      const priorWork = base.passed ? await priorWorkAtBase(args, logger) : undefined
+      return settle(
+        { base, note: noteFor(base, undefined, missing, priorWork) },
+        // A setup failure and a base that already carries the fix are both unrepairable, for the
+        // same underlying reason: the agent is not what is wrong, so a repair round can only make
+        // things worse (here, by inviting it to weaken a reproduction test that is fine).
+        !base.setupFailed && !priorWork?.length,
+      )
     }
+    if (budgetSpent(deadlineAt)) return settle({ base, note: BUDGET_NOTE }, false)
 
     await addWorktree(dir, finalDir, finalSha, opts.signal)
     const finalRun = await runPhase({
@@ -312,10 +387,16 @@ export async function runReproductionProof(
         final,
         attempts: attempt,
         maxAttempts: spec.maxAttempts,
-        ...(reproduced && missing.length === 0 ? {} : { note: noteFor(base, final, missing) }),
+        ...(reproduced && missing.length === 0
+          ? {}
+          : { note: noteFor(base, final, missing, undefined) }),
         at: Date.now(),
       },
       fullTails,
+      // A timed-out or un-runnable FINAL tree is not something a repair pass fixes: the agent is
+      // handed a watchdog kill or a broken environment, not a failing assertion it can act on,
+      // and each round costs another two full tree runs to learn the same thing.
+      repairable: !reproduced && !final.setupFailed && !final.timedOut && !base.timedOut,
     }
   } finally {
     clearInterval(heartbeat)
@@ -326,16 +407,72 @@ export async function runReproductionProof(
   }
 }
 
+/** Whether the whole-phase budget is spent (see {@link reproductionTotalBudgetMs}). */
+function budgetSpent(deadlineAt: number | undefined): boolean {
+  return deadlineAt !== undefined && Date.now() >= deadlineAt
+}
+
+const BUDGET_NOTE =
+  'The reproduction proof ran out of its time budget before it could finish, so no verdict was reached. This is a cost limit, not a statement about the fix.'
+
+/**
+ * The non-test changes the PRE-FIX tree already carries relative to the PR base branch, when that
+ * can be determined (`undefined` when it cannot, and only ever consulted for a GREEN base).
+ *
+ * This is what makes a green base interpretable. The pre-fix tree is `baseSha` — the work branch
+ * as it stood when this pass STARTED — which in the designed bugfix flow is the reproduction
+ * step's test commit and nothing else, so green there genuinely means "the test does not
+ * demonstrate the defect". But a coder container that is evicted mid-run has already committed
+ * and checkpoint-pushed its work, and the re-dispatch RESUMES that branch: `baseSha` then carries
+ * this same step's own partial fix, the check legitimately passes on it, and the old diagnosis
+ * stated as fact that the agent's test was worthless — then spent the whole repair budget telling
+ * it to "make the test actually exercise the defect", which invites weakening a perfectly good
+ * reproduction. Non-test changes at the base are the signal that separates the two.
+ *
+ * Best-effort by construction: the probe needs the base branch and a reachable merge base, and a
+ * fresh clone is shallow. An unavailable answer degrades to the original diagnosis rather than
+ * suppressing one.
+ */
+async function priorWorkAtBase(
+  args: ReproductionProofArgs,
+  logger: Logger,
+): Promise<string[] | undefined> {
+  if (!args.listBaseTreeChanges) return undefined
+  let changed: string[] | undefined
+  try {
+    changed = await args.listBaseTreeChanges()
+  } catch (error) {
+    logger.warn('reproduction: could not inspect the pre-fix tree’s provenance', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
+  if (!changed) return undefined
+  const declared = new Set(args.spec.testPaths)
+  const priorWork = changed.filter((p) => !declared.has(p))
+  if (priorWork.length > 0) {
+    logger.info('reproduction: the pre-fix tree already carries non-test work', {
+      count: priorWork.length,
+      files: priorWork.slice(0, 10),
+    })
+  }
+  return priorWork
+}
+
 /**
  * One line naming the shape that was observed, for the report and the step card. Every
  * non-`reproduced` outcome gets one: a bare `inconclusive` with no explanation is indistinguishable
  * from a rendering bug, which is how "nobody tried" creeps back in through the door this feature
  * closed.
+ *
+ * `priorWork` (see {@link priorWorkAtBase}) is what stops the green-base line asserting a cause it
+ * cannot know. Nothing here ever states more than was measured.
  */
 function noteFor(
   base: ReproductionPhaseOutcome,
   final: ReproductionPhaseOutcome | undefined,
   missing: readonly string[],
+  priorWork: readonly string[] | undefined,
 ): string {
   const incomplete = missing.length
     ? ` Declared test file(s) not committed on the branch and therefore not part of the check: ${missing.join(', ')}.`
@@ -344,6 +481,11 @@ function noteFor(
     return `The setup command failed in the pre-fix worktree (exit ${base.exitCode}), so neither tree could be checked. This is an environment problem, not a verdict about the fix.${incomplete}`
   }
   if (base.passed) {
+    if (priorWork?.length) {
+      const shown = priorWork.slice(0, 5).join(', ')
+      const more = priorWork.length > 5 ? `, +${priorWork.length - 5} more` : ''
+      return `The declared check PASSED on the pre-fix tree, but that tree ALREADY carries non-test work committed on this branch (${shown}${more}) — most likely an earlier, interrupted pass of this same step. So this says nothing about whether the test demonstrates the defect, and no fix-free tree was available to check it against.${incomplete}`
+    }
     return `The declared check PASSED on the pre-fix tree, so it does not demonstrate the defect.${incomplete}`
   }
   if (!final) {
@@ -353,7 +495,18 @@ function noteFor(
     return `The pre-fix tree was red (exit ${base.exitCode}), but the setup command failed in the final worktree (exit ${final.exitCode}), so the fix could not be checked.${incomplete}`
   }
   if (!final.passed) {
-    return `The declared check FAILED on both the pre-fix tree (exit ${base.exitCode}) and the final tree (exit ${final.exitCode}) — the change does not make it pass, or the check is failing for an environmental reason.${incomplete}`
+    // Identical failures on two trees that differ only by the fix are far more often one
+    // environment failing both ways — a missing toolchain, an absent dependency, a collection
+    // error — than a fix that does nothing. Say which reading the evidence favours instead of
+    // offering both with equal weight and leaving the reviewer to guess.
+    if (base.timedOut && final.timedOut) {
+      return `The declared check TIMED OUT on both the pre-fix tree and the final tree, so neither run reached a verdict. The command is too slow for the proof's watchdog, or it hangs — either way this says nothing about the fix.${incomplete}`
+    }
+    const identical = base.exitCode === final.exitCode
+    const reading = identical
+      ? `Both trees failed the SAME way (exit ${base.exitCode}), which usually means the check never ran meaningfully in either — a missing dependency or setup step — rather than that the fix does nothing.`
+      : 'The change does not make the check pass.'
+    return `The declared check FAILED on both the pre-fix tree (exit ${base.exitCode}) and the final tree (exit ${final.exitCode}). ${reading}${incomplete}`
   }
   return `The reproduction was demonstrated (red at the pre-fix tree, green at the final tree).${incomplete}`
 }
@@ -378,8 +531,8 @@ async function runPhase(args: {
   const cwd = serviceDirectory ? join(worktree, serviceDirectory) : worktree
   if (spec.setupCommand) {
     logger.info('reproduction: running setup', { phase })
-    const setup = await runOneCommand(cwd, spec.setupCommand, logger, opts)
-    if (!setup.passed) {
+    const setup = await runOneCommand(cwd, spec.setupCommand, phase, logger, opts)
+    if (!setup.outcome.passed) {
       logger.warn('reproduction: setup failed', { phase, exitCode: setup.outcome.exitCode })
       return {
         outcome: { ...setup.outcome, setupFailed: true },
@@ -388,107 +541,34 @@ async function runPhase(args: {
     }
   }
   logger.info('reproduction: running declared check', { phase })
-  const check = await runOneCommand(cwd, spec.command, logger, opts)
+  const check = await runOneCommand(cwd, spec.command, phase, logger, opts)
   logger.info('reproduction: phase finished', { phase, exitCode: check.outcome.exitCode })
   return { outcome: check.outcome, ...(check.fullTail ? { fullTail: check.fullTail } : {}) }
 }
 
 /**
- * Run ONE command as `sh -c` in `cwd`, capturing a bounded, secret-scrubbed tail of its combined
- * stdout+stderr. The exit code is the verdict — computed here by the harness, never self-reported
- * by the model. A watchdog kills the process tree on timeout and an aborted run resolves non-zero,
- * so the proof is never what blocks a job from settling.
- *
- * The child inherits the JOB's environment (`RunOptions.agentEnv` layered over the process env),
- * not a mutated global: the harness spawns this itself rather than through the agent, so without
- * the explicit merge a native-mode job would run its setup without the private-registry npmrc
- * pointer (and, had this been staged in `process.env`, against a sibling job's state).
+ * Run ONE of the phase's commands through the shared {@link runCapturedCommand} seam and shape it
+ * as a phase outcome. The exit code is the verdict — computed by the harness, never self-reported
+ * by the model, which is what this whole feature replaces.
  */
 async function runOneCommand(
   cwd: string,
   command: string,
+  phase: 'base' | 'final',
   logger: Logger,
   opts: RunOptions,
-): Promise<{ outcome: ReproductionPhaseOutcome; passed: boolean; fullTail?: string }> {
-  const timeoutMs = reproductionCommandTimeoutMs()
-  const startedAt = Date.now()
-  return new Promise((resolve) => {
-    let out = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn('sh', ['-c', command], {
-      cwd,
-      detached: spawnDetached,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...opts.agentEnv },
-    })
-    const capture = (chunk: Buffer): void => {
-      out = (out + chunk.toString('utf8')).slice(-MAX_CAPTURED_OUTPUT_CHARS)
-    }
-    child.stdout?.on('data', capture)
-    child.stderr?.on('data', capture)
-    const finish = (exitCode: number): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      const trimmed = out.trim()
-      // Scrub BEFORE truncating: a token straddling the cut would otherwise survive as a partial,
-      // and the pattern rules need the whole assignment to match.
-      const scrubbed = trimmed ? redactSecrets(trimmed) : ''
-      resolve({
-        outcome: {
-          exitCode,
-          passed: exitCode === 0,
-          ...(scrubbed ? { outputTail: tailFor(scrubbed) } : {}),
-          durationMs: Date.now() - startedAt,
-          ...(timedOut ? { timedOut: true } : {}),
-        },
-        passed: exitCode === 0,
-        ...(scrubbed ? { fullTail: scrubbed } : {}),
-      })
-    }
-    const timer = setTimeout(() => {
-      logger.warn('reproduction: command timed out', { timeoutMs })
-      timedOut = true
-      killChildProcess(child, undefined, logger)
-      finish(124) // conventional timeout exit code (a non-zero fail)
-    }, timeoutMs)
-    timer.unref?.()
-    const onAbort = (): void => {
-      killChildProcess(child, undefined, logger)
-      finish(130) // aborted (a non-zero fail)
-    }
-    opts.signal?.addEventListener('abort', onAbort, { once: true })
-    child.on('error', (err) => {
-      logger.warn('reproduction: command failed to spawn', {
-        error: err instanceof Error ? err.message : String(err),
-      })
-      finish(127) // spawn error / command not found (a non-zero fail)
-    })
-    child.on('close', (code) => finish(code ?? 1))
+): Promise<{ outcome: ReproductionPhaseOutcome; fullTail?: string }> {
+  const { fullTail, ...run } = await runCapturedCommand({
+    cwd,
+    command,
+    timeoutMs: reproductionCommandTimeoutMs(),
+    reportTailChars: REPRODUCTION_REPORT_TAIL_CHARS,
+    logLabel: 'reproduction',
+    logFields: { phase },
+    logger,
+    opts,
   })
-}
-
-/** Bound an already-scrubbed output tail to what the REPORT carries. */
-function tailFor(scrubbed: string): string {
-  if (scrubbed.length <= REPRODUCTION_REPORT_TAIL_CHARS) return scrubbed
-  const trimmed = scrubbed.length - REPRODUCTION_REPORT_TAIL_CHARS
-  return `…(${trimmed} earlier chars trimmed)\n${scrubbed.slice(-REPRODUCTION_REPORT_TAIL_CHARS)}`
-}
-
-/**
- * Whether a failed verification is worth spending a repair round on.
- *
- * A setup failure is NOT: the setup command was declared by the reproduction step, the agent
- * cannot change it from inside a repair pass, and burning the whole budget re-running an agent
- * against a broken environment produces nothing but cost. Everything else — a green base (the test
- * does not demonstrate the defect) or a red final tree (the change does not fix it) — is squarely
- * the agent's to act on.
- */
-function isRepairable(report: ReproductionReport): boolean {
-  if (report.base?.setupFailed || report.final?.setupFailed) return false
-  return true
+  return { outcome: run, ...(fullTail ? { fullTail } : {}) }
 }
 
 /**
@@ -591,9 +671,14 @@ export function buildReproductionRepairPrompt(
  * failing the run would throw away a fix that may well be correct. The report says plainly what
  * was and was not proven.
  *
- * `onAttempt` publishes each completed attempt on the job view (a fresh `at` per publish, which
- * the engine's change detection relies on), so the loop is observable while it runs; `onAgentPass`
- * lets the caller fold each repair pass's stats/usage/telemetry into the run's totals.
+ * Every settled attempt — including the ones that never ran a tree — is published on the job view
+ * (a fresh `at` per publish, which the engine's change detection relies on), so the loop is
+ * observable while it runs; `onAgentPass` lets the caller fold each repair pass's
+ * stats/usage/telemetry into the run's totals.
+ *
+ * The loop is bounded twice over: by `maxAttempts` rounds, and by the wall-clock
+ * {@link reproductionTotalBudgetMs} — attempts multiply two full tree runs each, and the phase's
+ * own heartbeat deliberately stops the job-level inactivity watchdog from ever cutting it short.
  */
 export async function runReproductionLoop<TRun>(args: {
   dir: string
@@ -608,8 +693,16 @@ export async function runReproductionLoop<TRun>(args: {
   onAgentPass?: (run: TRun) => void
   /** The new files left uncommitted in the checkout, folded into each repair prompt. */
   listUncommittedNewFiles?: () => Promise<string[]>
+  /**
+   * The files the PRE-FIX tree already changes relative to the PR base branch (see
+   * `priorWorkAtBase`). Invariant across attempts — `baseSha` never moves — so it is resolved at
+   * most once and memoised here rather than re-probed per round.
+   */
+  listBaseTreeChanges?: () => Promise<string[] | undefined>
 }): Promise<ReproductionReport> {
   const { dir, baseSha, resolveFinalSha, serviceDirectory, spec, logger, opts } = args
+  const deadlineAt = Date.now() + reproductionTotalBudgetMs()
+  const listBaseTreeChanges = memoiseBaseTreeChanges(args.listBaseTreeChanges)
   let attempt = 1
   for (;;) {
     const finalSha = await resolveFinalSha()
@@ -619,7 +712,7 @@ export async function runReproductionLoop<TRun>(args: {
       logger.info('reproduction: final tree equals the pre-fix tree — nothing to verify', {
         attempt,
       })
-      return {
+      const report: ReproductionReport = {
         status: 'inconclusive',
         command: spec.command,
         testPaths: [...spec.testPaths],
@@ -629,8 +722,13 @@ export async function runReproductionLoop<TRun>(args: {
         note: 'The branch carries no commit beyond the pre-fix tree, so there was no change to verify a reproduction against.',
         at: Date.now(),
       }
+      // Published like every other settled attempt: a verdict that reaches the step only in the
+      // terminal result is invisible for as long as the job keeps running, and "the step shows no
+      // reproduction section" is exactly what a reader cannot distinguish from "it never ran".
+      opts.onReproductionProof?.(report)
+      return report
     }
-    const { report, fullTails } = await runReproductionProof({
+    const { report, fullTails, repairable } = await runReproductionProof({
       dir,
       baseSha,
       finalSha,
@@ -639,13 +737,15 @@ export async function runReproductionLoop<TRun>(args: {
       attempt,
       logger,
       opts,
+      deadlineAt,
+      ...(listBaseTreeChanges ? { listBaseTreeChanges } : {}),
     })
     opts.onReproductionProof?.(report)
     if (report.status === 'reproduced') {
       logger.info('reproduction: proved', { attempt })
       return report
     }
-    if (!isRepairable(report)) {
+    if (!repairable) {
       logger.warn('reproduction: not repairable by the agent — settling', {
         attempt,
         note: report.note,
@@ -659,6 +759,10 @@ export async function runReproductionLoop<TRun>(args: {
       })
       return report
     }
+    if (budgetSpent(deadlineAt)) {
+      logger.warn('reproduction: time budget spent — recording inconclusive', { attempt })
+      return { ...report, note: `${report.note ? `${report.note} ` : ''}${BUDGET_NOTE}` }
+    }
     attempt += 1
     logger.info('reproduction: repairing', { nextAttempt: attempt })
     opts.onPhase?.('reproduction-repair')
@@ -667,6 +771,19 @@ export async function runReproductionLoop<TRun>(args: {
     args.onAgentPass?.(run)
     opts.onPhase?.('agent')
   }
+}
+
+/**
+ * Memoise the pre-fix tree's provenance probe across a loop's attempts. It costs a fetch of the
+ * base branch and answers a question about `baseSha`, which never moves — so re-running it each
+ * round would be one network round-trip per attempt for an answer that cannot have changed.
+ */
+function memoiseBaseTreeChanges(
+  probe: (() => Promise<string[] | undefined>) | undefined,
+): (() => Promise<string[] | undefined>) | undefined {
+  if (!probe) return undefined
+  let pending: Promise<string[] | undefined> | undefined
+  return () => (pending ??= probe())
 }
 
 /**
