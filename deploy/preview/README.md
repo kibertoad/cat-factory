@@ -72,9 +72,10 @@ you need a preview that can run agents.
 
 Through cat-factory, the environment backend rewrites this file before running it: host ports
 are forced ephemeral so concurrent per-PR stacks never collide, and `web`'s port is published
-and read back to form the environment URL. That is also why the file uses no bind mounts, no
-`env_file` and no `include:` — the backend refuses all three, because they resolve against the
-host and bypass its isolation checks.
+and read back to form the environment URL. `include:`, cross-file `extends`, and `privileged`
+are refused outright by the backend, in every mode. Bind mounts and `env_file` are avoided too
+— build-from-source mode would accept in-checkout relative ones, but this file must also stay
+runnable in image mode and by hand, where they resolve against a directory that is not there.
 
 ## The cloudflare track
 

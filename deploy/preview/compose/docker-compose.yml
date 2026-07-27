@@ -17,8 +17,13 @@
 # full "develop cat-factory with cat-factory" guide.
 #
 # Deliberate properties (all load-bearing for the compose environment backend):
-#   - NO bind mounts, NO `env_file`, NO `include:`, NO `privileged` — the backend refuses all
-#     of them (they resolve against the host, bypassing its isolation guards).
+#   - NO `include:`, no cross-file `extends: { file }`, no `privileged` — the backend refuses
+#     these outright, in every mode (an included file is merged by the daemon and bypasses the
+#     whole isolation guard; `privileged` is refused on a shared host daemon).
+#   - NO bind mounts and NO `env_file` either, even though build-from-source mode would allow
+#     IN-CHECKOUT relative ones: this file must stay runnable in image mode and by hand, where
+#     both resolve against a directory that isn't there. Anything a service needs is inlined
+#     as `environment:` below.
 #   - Every build context is repo-relative (`../../..` = the checkout root), so it resolves
 #     inside the clone the provider makes; `--project-directory` is this file's directory.
 #   - Every service has a healthcheck: `up --wait` gates on them, and the status poll reads

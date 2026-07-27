@@ -13,43 +13,68 @@ name: Preview environment (Cloudflare)
 # filesystem or a container:
 #
 #   provision -> cat-factory POSTs a deployment for the PR head. That fires the `deployment`
-#                event below. The response echoes back the deployment's `payload`, which is
-#                where the environment URL comes from (see "Why the URL is deterministic").
+#                event below, and the deployment id it returns is the environment's handle.
+#   status    -> cat-factory reads that deployment's statuses; `success` means live. This is
+#                a REAL readiness signal, which is why the built-in Cloudflare backend can
+#                report `provisioning` honestly instead of asserting `ready` up front.
 #   teardown  -> cat-factory posts an `inactive` status, which fires the teardown job.
 #
-# Why the URL is DETERMINISTIC and not read back from the deploy. The generic HTTP environment
-# backend settles a provision synchronously — whatever the provision call returns is what the
-# deployer records and the tester is handed; there is no built-in poll-until-ready for it. A
-# Cloudflare deploy takes minutes, so a "read the URL back afterwards" design would hand the
-# tester a null URL. The per-PR Worker name is chosen by us, so its workers.dev URL is known
-# before anything is built: cat-factory sends it in the deployment `payload` and gets it
-# straight back. What remains is a readiness window, and that is what the `pull_request`
-# trigger is for — the environment is built when the branch is PUSHED (long before a run
-# reaches its deployer step), and a later `deployment` event for a SHA that is already
-# deployed short-circuits to success instead of rebuilding.
+# The environment URL is DETERMINISTIC (`cat-factory-pr-<n>.<subdomain>.workers.dev`) because
+# the per-PR Worker name is ours to choose — the backend derives it before anything is built
+# rather than reading it back from a deploy that takes minutes. The readiness gap that leaves
+# is closed by the `status` request above, NOT by racing the build: the environment is
+# recorded `provisioning` and every reconcile point converges on the deployment's real status.
+# A `deployment` event for a SHA that is already deployed short-circuits to success instead of
+# rebuilding, so a run that follows a setup-change build costs nothing.
 #
-# SECURITY. This workflow deploys PR code with the `preview` environment's credentials. Both
-# triggers are restricted to branches of THIS repository (a fork PR is skipped outright), and
-# the credentials it uses must be preview-only: a Cloudflare token scoped to the preview
+# SECURITY. This workflow deploys PR code with the `preview` environment's credentials, so
+# every path that can reach a build must prove the code is a branch of THIS repository:
+#   - `pull_request`   — the job `if` refuses a fork head repo outright.
+#   - `deployment`     — a deployment can name an ARBITRARY sha, including a fork PR head
+#                        (those live in this repo as `refs/pull/<n>/head`). The "Verify the
+#                        deployed commit" step below requires the sha to be the HEAD of a
+#                        real branch here, which a fork PR head never is.
+# The credentials must also be preview-only: a Cloudflare token scoped to the preview
 # resources, and a THROWAWAY GitHub App whose private key opens nothing real. Never give this
 # environment the production token or the production App key.
 
 on:
-  # The warm path: build the environment as soon as the branch moves, so it is live well
-  # before any pipeline asks for it.
+  # The SETUP-CHANGE path, and deliberately nothing more. This is NOT how previews normally
+  # get built — cat-factory itself does that, over the `deployment` trigger below, when a run
+  # reaches its deployer step. Building on every PR would spend ~10 minutes of CI and create a
+  # Worker + three D1 databases + a container application for changes that will never ask for
+  # an environment, and leak every one of them for a PR that never runs a pipeline.
+  #
+  # What it IS for: this stack is configuration with no unit tests, so a change to the
+  # configuration itself gets exercised end to end on the PR that makes it. The path filter is
+  # therefore the blast radius of the setup, not of the product. `closed` is the leak guard —
+  # the same filter matches, so every environment this path creates is also torn down here.
   pull_request:
-    types: [opened, synchronize, reopened]
-  # The provision path: cat-factory (or a human) creating a deployment.
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - '.github/workflows/preview-env.yml'
+      - 'deploy/preview/**'
+      # The template mirrors production's binding shape and READS the executor image out of it.
+      - 'deploy/backend/wrangler.toml'
+      # The image the compose stack's `backend` service is built from.
+      - 'deploy/node/Dockerfile'
+  # The PRIMARY path: cat-factory (or a human) creating a deployment. Not path-filtered — a
+  # provision request is explicit, and it deploys whatever commit it names.
   deployment:
   # The teardown path: cat-factory posting an `inactive` status. Statuses this workflow writes
   # itself use GITHUB_TOKEN, which never re-triggers a workflow, so there is no loop.
   deployment_status:
 
 concurrency:
-  # One environment per PR. Not `cancel-in-progress`: cancelling a half-applied deploy would
-  # leave migrations applied against a Worker that never got its new code.
+  # One environment per PR, across ALL THREE triggers. The key must be the SAME string
+  # everywhere or the serialization is a no-op: a `pull_request` build keyed `1413` and a
+  # `deployment` build keyed `pr-1413` would run concurrently and race on `d1 create` /
+  # `deploy` / `secret put`, and a teardown could delete the Worker under a live build.
+  # Not `cancel-in-progress`: cancelling a half-applied deploy would leave migrations applied
+  # against a Worker that never got its new code.
   group: >-
     preview-env-${{ github.event.pull_request.number
+    && format('pr-{0}', github.event.pull_request.number)
     || github.event.deployment.environment
     || github.event.deployment_status.deployment.environment }}
   cancel-in-progress: false
@@ -60,9 +85,12 @@ jobs:
   deploy:
     name: Deploy preview environment
     # Same-repo branches only — a fork PR has no access to the preview credentials, and
-    # deploying a fork's code with them is exactly what must not happen.
+    # deploying a fork's code with them is exactly what must not happen. The `deployment`
+    # path can still name a fork sha, so it is additionally checked at run time (see
+    # "Verify the deployed commit").
     if: >-
       (github.event_name == 'pull_request'
+        && github.event.action != 'closed'
         && github.event.pull_request.head.repo.full_name == github.repository)
       || github.event_name == 'deployment'
     runs-on: ubuntu-latest
@@ -92,10 +120,20 @@ jobs:
           SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
         run: |
           set -euo pipefail
+          # Previews are OPT-IN infrastructure: until the one-time `preview` environment setup
+          # exists there is nothing to build. The warm path must then be a clean no-op — failing
+          # it would paint a red check on every PR in a repository that never asked for previews.
+          # A `deployment` event is an explicit request, so THAT still fails loudly.
           if [ -z "${SUBDOMAIN}" ]; then
+            if [ "$EVENT" = "pull_request" ]; then
+              echo "::notice::Preview environments are not configured (vars.CLOUDFLARE_WORKERS_SUBDOMAIN is unset) — skipping. See deploy/preview/README.md."
+              echo "configured=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "::error::vars.CLOUDFLARE_WORKERS_SUBDOMAIN is not set (see deploy/preview/README.md)"
             exit 1
           fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = "pull_request" ]; then
             pr="$PR_FROM_PR"; sha="$SHA_FROM_PR"; ref="$BRANCH_FROM_PR"
           else
@@ -137,35 +175,65 @@ jobs:
             echo "statuses_url=/repos/${REPO}/deployments/${deployment}/statuses"
           } >> "$GITHUB_OUTPUT"
 
-      # A `deployment` event for a SHA this workflow already deployed is a REGISTRATION, not a
-      # new build: cat-factory provisions when a run reaches its deployer step, which is
-      # normally minutes after the branch push already built this exact commit. Re-report the
-      # existing environment instead of spending another 10 minutes on an identical deploy.
-      - name: Skip a rebuild of an already-deployed commit
-        id: warm
-        if: github.event_name == 'deployment'
+      # A deployment names an arbitrary sha, and a FORK PR's head commit lives in this
+      # repository as `refs/pull/<n>/head` — so "the sha is in this repo" is NOT the boundary.
+      # Requiring it to be the HEAD OF A BRANCH here is: a fork's head is never that, while
+      # every same-repo PR head is. Without this, anyone able to create a deployment (the
+      # fine-grained token cat-factory holds is exactly that) could have unreviewed fork code
+      # built with the `preview` environment's credentials.
+      - name: Verify the deployed commit is a branch of this repository
+        if: github.event_name == 'deployment' && steps.id.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          SHA: ${{ steps.id.outputs.sha }}
+        run: |
+          set -euo pipefail
+          branches="$(gh api "/repos/${REPO}/commits/${SHA}/branches-where-head" --jq 'length')"
+          if [ "${branches:-0}" -lt 1 ]; then
+            echo "::error::commit ${SHA} is not the head of any branch in ${REPO} — refusing to build it with the preview credentials"
+            exit 1
+          fi
+
+      # Two questions, one gate, so every build step below carries ONE condition:
+      #  - are previews configured at all (a `pull_request` on an unconfigured repo is a no-op)?
+      #  - is this a REGISTRATION of an already-built commit rather than a new build? cat-factory
+      #    provisions when a run reaches its deployer step, normally minutes after the branch push
+      #    already built this exact commit; re-report that environment instead of spending another
+      #    ten minutes on an identical deploy.
+      - name: Decide whether to build
+        id: gate
+        if: steps.id.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
           PR: ${{ steps.id.outputs.pr }}
           SHA: ${{ steps.id.outputs.sha }}
           THIS_DEPLOYMENT: ${{ steps.id.outputs.deployment }}
         run: |
           set -euo pipefail
           hit=false
-          # A lookup failure must not fail the deploy — it only means we cannot prove the commit
-          # is already live, and rebuilding is always the safe answer.
-          ids="$(gh api "/repos/${REPO}/deployments?environment=pr-${PR}&sha=${SHA}&per_page=20" --jq '.[].id' || true)"
-          for id in $ids; do
-            if [ "$id" != "$THIS_DEPLOYMENT" ]; then
-              state="$(gh api "/repos/${REPO}/deployments/${id}/statuses?per_page=1" --jq '.[0].state // ""' || true)"
-              if [ "$state" = "success" ]; then hit=true; break; fi
-            fi
-          done
-          echo "already_deployed=${hit}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "deployment" ]; then
+            # A lookup failure must not fail the deploy — it only means we cannot prove the commit
+            # is already live, and rebuilding is always the safe answer.
+            ids="$(gh api "/repos/${REPO}/deployments?environment=pr-${PR}&sha=${SHA}&per_page=20" --jq '.[].id' || true)"
+            for id in $ids; do
+              if [ "$id" != "$THIS_DEPLOYMENT" ]; then
+                state="$(gh api "/repos/${REPO}/deployments/${id}/statuses?per_page=1" --jq '.[0].state // ""' || true)"
+                if [ "$state" = "success" ]; then hit=true; break; fi
+              fi
+            done
+          fi
+          build=true
+          if [ "$hit" = "true" ]; then build=false; fi
+          {
+            echo "already_deployed=${hit}"
+            echo "build=${build}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Mark the deployment in progress
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
@@ -175,13 +243,13 @@ jobs:
             -f description='Building the preview environment' >/dev/null
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         with:
           persist-credentials: false
           ref: ${{ steps.id.outputs.sha }}
 
       - name: Setup pnpm + Node + install
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         uses: ./.github/actions/setup
         with:
           node-modules-cache: 'false'
@@ -192,7 +260,7 @@ jobs:
       # data, so an unresolvable id fails the job.
       - name: Ensure the per-PR D1 databases
         id: d1
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -228,7 +296,7 @@ jobs:
       # Rendered BESIDE the production wrangler.toml so `main` and every `migrations_dir`
       # resolve exactly as production's do.
       - name: Render the preview wrangler config
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         env:
           PR_NUMBER: ${{ steps.id.outputs.pr }}
           D1_ID: ${{ steps.d1.outputs.primary }}
@@ -265,7 +333,7 @@ jobs:
 
       # Schema first: this PR's code may rely on this PR's migrations.
       - name: Apply D1 migrations
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         working-directory: deploy/backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -279,11 +347,11 @@ jobs:
 
       # Through Turbo so @cat-factory/worker and its workspace dependencies build in order.
       - name: Build the Worker bundle
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         run: pnpm exec turbo run build --filter=@cat-factory/worker
 
       - name: Deploy the preview Worker
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -295,7 +363,7 @@ jobs:
       # the crypto secrets seal nothing that outlives the environment, and the App private key
       # belongs to a throwaway App — see deploy/preview/README.md.
       - name: Upload the preview secrets
-        if: steps.warm.outputs.already_deployed != 'true'
+        if: steps.gate.outputs.build == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -321,14 +389,14 @@ jobs:
       # The SPA is static, so its API origin is baked in at build time — and unlike the compose
       # stack the Worker's URL is known beforehand, so this is a normal split-origin build.
       - name: Generate the preview SPA
-        if: steps.warm.outputs.already_deployed != 'true' && vars.PREVIEW_PAGES_PROJECT != ''
+        if: steps.gate.outputs.build == 'true' && vars.PREVIEW_PAGES_PROJECT != ''
         env:
           NUXT_PUBLIC_API_BASE: ${{ steps.id.outputs.url }}
         run: pnpm exec turbo run generate --filter=@cat-factory/deploy-frontend
 
       - name: Deploy the SPA to Pages
         id: spa
-        if: steps.warm.outputs.already_deployed != 'true' && vars.PREVIEW_PAGES_PROJECT != ''
+        if: steps.gate.outputs.build == 'true' && vars.PREVIEW_PAGES_PROJECT != ''
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -354,18 +422,26 @@ jobs:
           STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
           API_URL: ${{ steps.id.outputs.url }}
           SPA_URL: ${{ steps.spa.outputs.url }}
-          WARM: ${{ steps.warm.outputs.already_deployed }}
+          WARM: ${{ steps.gate.outputs.already_deployed }}
         run: |
           set -euo pipefail
           description='Preview environment ready'
           if [ "$WARM" = "true" ]; then
             description='Preview environment already live for this commit'
           fi
+          # `auto_inactive=false` is DELIBERATE, not a default worth inheriting. GitHub would
+          # otherwise inactivate prior deployments of this environment as a side effect of this
+          # status — and an `inactive` status is precisely this workflow's teardown trigger. It
+          # happens to be safe today (these deployments are transient, and GITHUB_TOKEN-authored
+          # events never re-trigger a workflow), but resting a DESTRUCTIVE trigger on two
+          # implicit platform behaviours is not a thing to leave implicit.
           if [ -n "$SPA_URL" ]; then
-            gh api "$STATUSES_URL" -f state=success -f environment_url="$API_URL" \
+            gh api "$STATUSES_URL" -f state=success -F auto_inactive=false \
+              -f environment_url="$API_URL" \
               -f log_url="$SPA_URL" -f description="$description" >/dev/null
           else
-            gh api "$STATUSES_URL" -f state=success -f environment_url="$API_URL" \
+            gh api "$STATUSES_URL" -f state=success -F auto_inactive=false \
+              -f environment_url="$API_URL" \
               -f description="$description" >/dev/null
           fi
 
@@ -379,20 +455,31 @@ jobs:
           STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -euo pipefail
           if [ -n "${STATUSES_URL}" ]; then
-            gh api "$STATUSES_URL" -f state=failure -f log_url="$RUN_URL" \
+            gh api "$STATUSES_URL" -f state=failure -F auto_inactive=false \
+              -f log_url="$RUN_URL" \
               -f description='Preview environment build failed' >/dev/null
           fi
 
-  # Teardown. cat-factory's manifest posts an `inactive` status when the environment is torn
-  # down (explicitly, on TTL expiry, or when a re-provision supersedes it); that is the signal
-  # to delete the real resources. Every delete is tolerant of an already-absent resource, so a
-  # second teardown is a no-op rather than a red run.
+  # Teardown, from EITHER end of the environment's life:
+  #
+  #  - cat-factory posts an `inactive` status when it tears the environment down (explicitly,
+  #    on TTL expiry, or when a re-provision supersedes it). This is the normal path.
+  #  - the PR CLOSES. Nothing else covers this: the `inactive` status only ever arrives for an
+  #    environment cat-factory itself provisioned, so an environment built by the setup-change
+  #    path above — on a PR that never ran a pipeline — would otherwise hold a Worker, three D1
+  #    databases and a container application forever. A TTL does not help; it is cat-factory's,
+  #    not GitHub's.
+  #
+  # Every delete tolerates an already-absent resource, so the two paths overlapping (or a second
+  # teardown of the same PR) is a no-op rather than a red run.
   teardown:
     name: Tear down preview environment
     if: >-
-      github.event_name == 'deployment_status'
-      && github.event.deployment_status.state == 'inactive'
+      (github.event_name == 'deployment_status'
+        && github.event.deployment_status.state == 'inactive')
+      || (github.event_name == 'pull_request' && github.event.action == 'closed')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: preview
@@ -406,24 +493,40 @@ jobs:
       - name: Resolve the preview identity
         id: id
         env:
+          EVENT: ${{ github.event_name }}
           ENVIRONMENT_NAME: ${{ github.event.deployment_status.deployment.environment }}
+          PR_FROM_PR: ${{ github.event.pull_request.number }}
+          SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
         run: |
           set -euo pipefail
-          pr="${ENVIRONMENT_NAME#pr-}"
+          # Nothing was ever created on an unconfigured repository, so there is nothing to
+          # delete — and the delete would fail on missing credentials rather than say so.
+          if [ -z "${SUBDOMAIN}" ]; then
+            echo "::notice::Preview environments are not configured — nothing to tear down."
+            echo "pr=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = "pull_request" ]; then
+            pr="$PR_FROM_PR"
+          else
+            pr="${ENVIRONMENT_NAME#pr-}"
+          fi
           case "$pr" in
             ''|*[!0-9]*)
-              echo "::error::deployment environment '${ENVIRONMENT_NAME}' is not of the form pr-<number>"
+              echo "::error::could not resolve a numeric PR to tear down (environment '${ENVIRONMENT_NAME:-}')"
               exit 1
               ;;
           esac
           echo "pr=${pr}" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm + Node + install
+        if: steps.id.outputs.pr != ''
         uses: ./.github/actions/setup
         with:
           node-modules-cache: 'false'
 
       - name: Delete the Worker and its databases
+        if: steps.id.outputs.pr != ''
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

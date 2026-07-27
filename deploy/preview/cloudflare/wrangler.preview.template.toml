@@ -15,9 +15,17 @@
 #   ${EXECUTOR_IMAGE}     the executor-harness image, read out of the production wrangler.toml
 #   ${GITHUB_APP_ID}      the preview GitHub App's id (a THROWAWAY app — see ../README.md)
 #
-# Everything a preview deliberately does NOT get:
-#   - the DeployContainer binding (a preview never provisions Kubernetes environments itself),
+# Everything a preview deliberately does NOT get, and what each omission costs:
+#   - the DeployContainer binding — a preview never provisions Kubernetes environments itself,
+#     so a render-needing k8s config fails loudly there. Nothing else notices.
+#   - the ARTIFACT_BUCKET R2 binding — the binary-artifact store is off, so the
+#     visual-confirmation gate has nowhere to put screenshots. Everything else is unaffected.
+#     Add an `[[r2_buckets]]` block (per-PR bucket, deleted on teardown) if you need that gate.
+#   - the PROVISIONING_DB binding — the provisioning event log is off (env/runner/container
+#     attempts aren't recorded).
 #   - a queue/backfill surface beyond the crons below,
+#   - the daily `0 3 * * *` retention sweep — a preview is reaped long before any retention
+#     window elapses, so it would only ever be a no-op.
 #   - any production secret: the crypto secrets and the App private key are preview-only and
 #     uploaded per PR by the workflow.
 
@@ -125,10 +133,16 @@ GITHUB_API_BASE = "https://api.github.com"
 ENVIRONMENT = "preview"
 TESTING_NO_AUTH = "true"
 AUTH_DEV_OPEN = "true"
-# A lone `*` is the explicit opt-in to reflecting any origin. It is the right value HERE and
-# nowhere near production: the preview SPA's Pages URL is minted by the same workflow run that
-# deploys this Worker, so it cannot be baked into the config being deployed. Auth is off in a
-# preview anyway, so there is no session for a hostile origin to ride.
+# A lone `*` is the explicit opt-in to reflecting any origin, and it is the right value HERE
+# only because of what a preview already is. Be clear-eyed about that: with TESTING_NO_AUTH
+# above, this Worker is a PUBLICLY REACHABLE, COMPLETELY UNAUTHENTICATED deployment — anyone
+# who learns the workers.dev URL can drive its API and its LLM proxy. CORS is not what is
+# holding anything back, and tightening it would not change that; the containment is that the
+# environment is throwaway by construction (its own databases, throwaway crypto secrets, a
+# throwaway App key, torn down with the PR) and is billed to a preview-only Cloudflare account.
+# The value is `*` because the preview SPA's Pages URL is minted by the same workflow run that
+# deploys this Worker, so it cannot be baked into the config being deployed.
+# NEVER carry this pairing (`*` + TESTING_NO_AUTH) anywhere near a real deployment.
 CORS_ALLOWED_ORIGINS = "*"
 RUNNERS_ENABLED = "false"
 OBSERVABILITY_ENABLED = "false"

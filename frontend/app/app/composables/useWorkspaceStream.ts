@@ -1,5 +1,6 @@
 import { ref, onScopeDispose } from 'vue'
 import type { WorkspaceEvent } from '~/types/domain'
+import { wsOriginFor } from '~/utils/apiOrigin'
 
 /**
  * Subscribes to the backend's per-workspace WebSocket event stream and keeps the
