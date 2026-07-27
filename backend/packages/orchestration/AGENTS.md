@@ -1,12 +1,23 @@
 # `@cat-factory/orchestration` — delivery-workflow engine + domain composition root
 
 **Entry:** `src/index.ts`; `src/container.ts` — `createCore()`, the domain composition root
-(the `CoreDependencies`/`Core` contract + the always-present spine assembly). The ~30
+(the `Core` contract + the always-present spine assembly). Its dependency contract,
+`CoreDependencies`, is ~815 lines of pure declaration and lives in its own
+`src/container/dependencies.ts`, re-exported from `container.ts` so every import site is
+unchanged — add a new dependency field there, not here. The ~30
 optional-module factory functions live in `src/container/modules.ts`, and their optional
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`
 — see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
-`OptionalCoreModules` (registry-assembled).
+`OptionalCoreModules` (registry-assembled). `createCore` itself is kept under its per-function
+line budget by four verbatim slice extractions, each registering in the SAME order (which IS
+dependency order for the registry) and returning only what the rest of `createCore` consumes:
+`container/foundation.ts` (notifications/settings, board/workspace/account/user + account
+onboarding), `container/platform-modules.ts` (observability, the provisioning event log, the
+preflight → shared-stacks → environments → handler-seeder chain, and the documents → fragment
+library → skill library chain), `container/engine-collaborators.ts` (the services the engine needs
+BEFORE it is constructed) and `container/engine-dependent-modules.ts` (the modules that drive the
+assembled engine). Grow one of these rather than `container.ts` itself.
 
 **Where things live** (`src/modules/*`, one dir per concern):
 

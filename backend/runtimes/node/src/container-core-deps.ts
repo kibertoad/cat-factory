@@ -281,6 +281,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
     // Claude). Applied only at first seed, so a user's later manual default choice wins.
     defaultModelPresetId: options.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
+    // A deployment's pre-declared environment-handler seeds. `createCore` builds the seeder over
+    // them (when the environments module is wired) and exposes it for the boot backfill + the
+    // WorkspaceService on-create hook. Undefined ⇒ no seeding. The local facade rides this via `o`.
+    seedEnvironmentHandlers: options.seedEnvironmentHandlers,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`

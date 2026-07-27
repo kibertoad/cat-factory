@@ -27,6 +27,7 @@ import {
 } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
+import type { EnvironmentHandlerSeeder } from '@cat-factory/kernel'
 import { createNotificationsModule, createWorkspaceSettingsModule } from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -48,6 +49,11 @@ export interface CoreFoundationParams {
   pipelineRegistry: CoreRuntime['pipelineRegistry']
   /** Late-bound spend-service accessor (built after the foundation) for the account-budget cache. */
   getSpendService: () => SpendService | undefined
+  /**
+   * Late-bound environment-handler-seeder accessor (built after the foundation, over the
+   * environments module) so `WorkspaceService.create` seeds a new board's declared infra handlers.
+   */
+  getEnvironmentHandlerSeeder: () => EnvironmentHandlerSeeder | undefined
 }
 
 export interface CoreFoundation {
@@ -73,6 +79,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     taskTypeRegistry,
     pipelineRegistry,
     getSpendService,
+    getEnvironmentHandlerSeeder,
   } = params
 
   // Built up-front (before the board + execution engine) so the board's review-debt friction
@@ -111,6 +118,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     pipelineRegistry,
     // A board delete drops its cached access decisions (workspace-rbac).
     workspaceAccessCache: caches.workspaceAccess,
+    // Late-bound (the seeder is built after the foundation, over the environments module): `create`
+    // seeds a new board's deployment-declared environment handlers. Absent seeder ⇒ no seeding.
+    getEnvironmentHandlerSeeder,
   })
   // Workspace-RBAC roster + access-mode management (workspace-rbac, slice 5). Present only when
   // the member repository is wired (both facades wire it; tests/no-roster leave it absent, so the

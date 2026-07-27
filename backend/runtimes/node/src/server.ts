@@ -265,6 +265,16 @@ export async function start(
      */
     defaultModelPresetId?: string
     /**
+     * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
+     * deploy-app wrapper passes this so the server auto-registers the deployment's infra handlers
+     * per workspace with no manual SPA step — e.g. a Kargo adapter feeding its handler from
+     * `.kargo.yml`. Forwarded onto the `NodeContainerOptions` handed to `buildContainer` (so it
+     * rides through `createCore`), and used AFTER listen to boot-backfill every existing workspace;
+     * new workspaces are seeded by `WorkspaceService.create`. Also reaches `buildLocalContainer` via
+     * the local facade's builder. Omitted ⇒ no seeding.
+     */
+    seedEnvironmentHandlers?: NodeContainerOptions['seedEnvironmentHandlers']
+    /**
      * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
      * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
      * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
@@ -428,6 +438,46 @@ function startBackgroundSweepers(deps: {
   }
 }
 
+/**
+ * Boot backfill for a deployment's declared environment-handler seeds: idempotently ensure each
+ * seed exists for EVERY existing workspace, so a deployment that ships handler seeds doesn't need a
+ * per-workspace manual SPA step (new workspaces are covered by `WorkspaceService.create`). A no-op
+ * when the environments module / seeder isn't wired, or no seeds were declared (the seeder itself is
+ * then a no-op). BEST-EFFORT: a per-workspace failure is logged and skipped, and a total failure
+ * (e.g. the workspace enumeration itself) is caught — a seed failure must never crash boot. Shared
+ * by the Node boot (after listen) and the local mothership boot (which doesn't run `bootServer`).
+ *
+ * Enumerates via `workspaceService.list(null)` — a null `WorkspaceVisibility` returns ALL boards
+ * (the auth-disabled path) — which is exactly the boot-time "every workspace" set. (The container
+ * exposes `workspaceService`, not a bare `workspaceRepository`; `list` delegates to
+ * `listVisible(null)`.)
+ */
+export async function backfillEnvironmentHandlerSeeds(
+  container: Pick<ServerContainer, 'environmentHandlerSeeder' | 'workspaceService'>,
+  log: { warn(obj: object, msg?: string): void },
+): Promise<void> {
+  const seeder = container.environmentHandlerSeeder
+  if (!seeder) return
+  try {
+    const workspaces = await container.workspaceService.list(null)
+    for (const ws of workspaces) {
+      try {
+        await seeder.ensureForWorkspace(ws.id)
+      } catch (err) {
+        log.warn(
+          { workspaceId: ws.id, err: err instanceof Error ? err.message : String(err) },
+          'environment-handler seed backfill failed for workspace',
+        )
+      }
+    }
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'environment-handler seed backfill could not enumerate workspaces',
+    )
+  }
+}
+
 /** The real boot sequence, wrapped by {@link start} so a {@link ConfigValidationError} falls back. */
 async function bootServer(
   options: NonNullable<Parameters<typeof start>[0]>,
@@ -540,6 +590,10 @@ async function bootServer(
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,
+    // Forward the deployment's environment-handler seeds onto `o` so they reach `createCore`
+    // (and, via the local facade's builder, `buildLocalContainer`). The boot backfill below runs
+    // the resulting `container.environmentHandlerSeeder` over every existing workspace.
+    seedEnvironmentHandlers: options.seedEnvironmentHandlers,
   })
   bootClock.mark('container')
   // ADR 0026 D6.2: a one-shot drift sweep at boot — attempt to decrypt every sealed credential
@@ -656,6 +710,12 @@ async function bootServer(
     stopPlatformMetrics,
     stopPlatformHealth,
   } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
+
+  // Backfill the deployment's declared environment-handler seeds onto every existing workspace
+  // (idempotent; new workspaces are seeded by WorkspaceService.create). FIRE-AND-FORGET after the
+  // listener binds so it never delays serving; best-effort + fully logged inside, and a no-op when
+  // no seeder/seeds are wired — a seed failure must never crash boot.
+  void backfillEnvironmentHandlerSeeds(container, logger)
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process

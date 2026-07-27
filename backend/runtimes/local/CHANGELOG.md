@@ -1,5 +1,78 @@
 # @cat-factory/local-server
 
+## 0.76.0
+
+### Minor Changes
+
+- 1f8ca48: Let a deployment declare environment-handler seeds so infra handlers are registered programmatically instead of via the SPA.
+
+  A deployment can now pass `seedEnvironmentHandlers` (a list of `RegisterHandlerInput`) to `start()` / `startLocal()`. The server idempotently ensures each seed's `environment_connections` handler exists for **every existing workspace at boot** (a best-effort, fire-and-forget backfill over `workspaceService.list(null)`) and for **each newly-created workspace** (`WorkspaceService.create`), so a service's declared provision type resolves a handler with no manual Infrastructure → Test environments step. Seeding is idempotent (a handler already present for a `(provisionType, manifestId)` is skipped) and per-seed fault-tolerant (a bad seed is logged and skipped, never crashing boot or workspace creation).
+
+  New: the `EnvironmentHandlerSeeder` kernel port, the deployment-neutral `createEnvironmentHandlerSeeder` (`@cat-factory/integrations`), a late-bound `getEnvironmentHandlerSeeder` dependency on `WorkspaceService`, an `environmentHandlerSeeder` handle on the container, and the exported `backfillEnvironmentHandlerSeeds` runtime helper.
+
+### Patch Changes
+
+- Updated dependencies [1f8ca48]
+  - @cat-factory/kernel@0.159.0
+  - @cat-factory/integrations@0.97.0
+  - @cat-factory/orchestration@0.140.0
+  - @cat-factory/node-server@0.117.0
+  - @cat-factory/agents@0.69.7
+  - @cat-factory/gitlab@0.13.3
+  - @cat-factory/server@0.149.1
+  - @cat-factory/executor-harness@1.56.0
+
+## 0.75.0
+
+### Minor Changes
+
+- 5a58b9d: Pre-PR validation: configurable check commands run in the container before a PR is opened.
+
+  A service frame can now declare validation commands (install / lint / test / build). After the
+  coder settles, the executor-harness runs them against the checkout **before** opening a pull
+  request; a failure is handed back to the agent with the captured output and the loop retries
+  under a per-service attempt budget (default 3). Only a passing checkout opens a PR — an
+  exhausted budget fails the step with the last captured output and opens nothing, so broken
+  lint/tests never become public PR churn.
+
+  - New per-service config store (`validation_configs`, D1 ⇄ Drizzle) resolved up the frame chain,
+    managed via `GET|PUT|DELETE /workspaces/:ws/services/:blockId/validation-checks` and a new
+    service-inspector panel.
+  - The resolved commands ride the job body (no transport-specific wiring), so this works
+    identically on the Cloudflare container, a self-hosted runner pool, and local container/native.
+  - Command output is truncated and secret-scrubbed, surfaced live on the step while the repair
+    loop runs and persisted on `PipelineStep.validation` for observability.
+  - Unconfigured services are unaffected: no commands resolved, no loop, no job-body field.
+
+  BREAKING for self-hosted runner pools only: a pool that wants the LIVE repair-loop view should
+  map the new `validationReportPath` in its response manifest (the terminal result envelope is
+  forwarded without any manifest change).
+
+  Review follow-ups in this PR:
+
+  - The check loop now feeds the run's inactivity watchdog. `JOB_INACTIVITY_MS` (default 10 min) is
+    tighter than a single command's own watchdog (default 15 min), so a legitimately slow
+    `install`/`test`/`build` previously aborted the whole run as "inactivity" instead of reporting a
+    validation failure.
+  - Repair prompts now name any NEW files left un-`git add`ed. The checks run against the working
+    tree but only tracked edits are pushed, so an unadded file could take the loop green on work the
+    pull request would never contain.
+  - Checks resolve from the service frame the engine already walked to, instead of re-deriving it —
+    removing two block reads from every agent dispatch.
+
+### Patch Changes
+
+- Updated dependencies [5a58b9d]
+  - @cat-factory/executor-harness@1.56.0
+  - @cat-factory/contracts@0.164.0
+  - @cat-factory/kernel@0.158.0
+  - @cat-factory/integrations@0.96.0
+  - @cat-factory/orchestration@0.139.0
+  - @cat-factory/server@0.149.0
+  - @cat-factory/node-server@0.116.0
+  - @cat-factory/agents@0.69.6
+  - @cat-factory/gitlab@0.13.2
+
 ## 0.74.2
 
 ### Patch Changes

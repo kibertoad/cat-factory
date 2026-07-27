@@ -52,6 +52,21 @@ export interface EnvironmentConnectionRecord {
   deletedAt: number | null
 }
 
+/**
+ * Idempotently ensures a deployment's pre-declared environment handlers (rows in
+ * `environment_connections`) exist for a workspace. A deployment (e.g. a Kargo adapter) declares
+ * its handler seeds in config; the server ensures each is registered for every existing workspace
+ * at boot AND for each newly-created workspace — so a service's provision type resolves a handler
+ * WITHOUT a human filling the Infrastructure → Test environments form. Idempotent (a seed already
+ * present is skipped) and per-seed fault-tolerant (a bad seed is logged + skipped, never thrown).
+ *
+ * Kept intentionally free of integrations knowledge — the port speaks only `workspaceId`; the
+ * concrete seeder (built over `EnvironmentConnectionService`) lives in `@cat-factory/integrations`.
+ */
+export interface EnvironmentHandlerSeeder {
+  ensureForWorkspace(workspaceId: string): Promise<void>
+}
+
 export interface EnvironmentConnectionRepository {
   /** Every live handler the workspace has registered (batched — no per-type point reads). */
   listByWorkspace(workspaceId: string): Promise<EnvironmentConnectionRecord[]>

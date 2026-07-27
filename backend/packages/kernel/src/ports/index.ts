@@ -333,6 +333,7 @@ export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-pol
 export type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
+  EnvironmentHandlerSeeder,
   EnvironmentRecord,
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,

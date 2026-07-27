@@ -15,9 +15,9 @@ import {
   createServiceFragmentDefaultsModule,
 } from './container/modules.js'
 import { resolveCoreRuntime } from './container/runtime.js'
+import { createPlatformModules } from './container/platform-modules.js'
 import { createCoreFoundation } from './container/foundation.js'
 import { createEngineCollaborators } from './container/engine-collaborators.js'
-import { createInfrastructureModules } from './container/infrastructure-modules.js'
 import { registerEngineDependentModules } from './container/engine-dependent-modules.js'
 
 import type {} from '@cat-factory/kernel'
@@ -35,6 +35,8 @@ import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
+
+import type { EnvironmentHandlerSeeder } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -343,6 +345,12 @@ export interface OptionalCoreModules {
   tasks?: TasksModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
+  /**
+   * The deployment-declared environment-handler seeder, present only when the environments module
+   * is wired. The runtime reads it to boot-backfill every existing workspace (and it is late-bound
+   * into `WorkspaceService` for the on-create hook). A no-op when no seeds were declared.
+   */
+  environmentHandlerSeeder?: EnvironmentHandlerSeeder
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
   /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
@@ -456,6 +464,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   const modules = new ModuleRegistry()
   // Late-bound: accountService reads the below-built spendService via `getSpendService`.
   let spendServiceRef: SpendService | undefined
+  // Late-bound: WorkspaceService.create reads the environment-handler seeder via
+  // `getEnvironmentHandlerSeeder`; it is built AFTER the foundation (below, over the environments
+  // module's connection service), so the workspace service resolves it at call time, not now.
+  let environmentHandlerSeederRef: EnvironmentHandlerSeeder | undefined
   // The foundation slice (notifications/settings, board/workspace/account/user + the account-
   // onboarding modules) is built up-front as a cohesive collaborator; see container/foundation.ts.
   const { notifications, settings, boardService, workspaceService, accountService, userService } =
@@ -467,6 +479,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       taskTypeRegistry,
       pipelineRegistry,
       getSpendService: () => spendServiceRef,
+      getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
     })
   const pipelineService = new PipelineService({ ...dependencies, pipelineRegistry })
   const spendService = new SpendService({
@@ -498,38 +511,26 @@ export function createCore(dependencies: CoreDependencies): Core {
         }
       : undefined,
   )
-  const llmObservability = modules.build('llmObservability', () =>
-    dependencies.llmCallMetricRepository
-      ? new LlmObservabilityService({
-          llmCallMetricRepository: dependencies.llmCallMetricRepository,
-          idGenerator: dependencies.idGenerator,
-          clock: dependencies.clock,
-          recordPrompts: dependencies.recordLlmPrompts ?? true,
-          traceSink: dependencies.llmTraceSink,
-          workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
-          workspaceSettingsCache: caches.workspaceSettings,
-        })
-      : undefined,
-  )
-  modules.build('platformObservability', () =>
-    dependencies.platformMetricsRepository
-      ? new PlatformObservabilityService({
-          platformMetricsRepository: dependencies.platformMetricsRepository,
-          clock: dependencies.clock,
-        })
-      : undefined,
-  )
-  // The provisioning event log + the ordered preflight → shared-stacks → environments and
-  // documents → fragment-library → skill-library chains, whose registration order IS their
-  // dependency order; lifted into `container/infrastructure-modules.ts` for the per-function
-  // line budget, with that order preserved.
-  const { environments, fragmentLibrary, skillLibrary } = createInfrastructureModules({
+  // The platform slice: observability, the provisioning event log, the infrastructure chain
+  // (preflight → shared stacks → environments → the deployment-declared handler seeder) and the
+  // content chain (documents → fragment library → skill library). Lifted into
+  // `container/platform-modules.ts` for the per-function line budget; it registers in the SAME
+  // order — which IS dependency order for the module registry — and returns only what the engine
+  // below consumes.
+  const {
+    llmObservability,
+    environments,
+    environmentHandlerSeeder,
+    fragmentLibrary,
+    skillLibrary,
+  } = createPlatformModules({
     dependencies,
     modules,
     caches,
     executionEventPublisher,
     boardService,
   })
+  environmentHandlerSeederRef = environmentHandlerSeeder
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired
