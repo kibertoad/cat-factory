@@ -150,14 +150,18 @@ Do NOT carry over: the table and its migrations, the repositories and RPC allow-
 accretion hook and extraction prompt, `AgentRunContext.acceptanceCriteria` and its prompt section,
 `TestReport.criteriaVerdicts`, and the `PR_VERIFICATION_REPORT_VERSION` bump.
 
-Two changes made on that branch during review are worth keeping regardless, and should be
-cherry-picked onto `main` as their own small PR:
+One change made on that branch during review stands on its own and has been split out as
+**PR #1394** (against `main`, without the acceptance-criteria arm):
 
-- **`checkWorkspaceFieldListScope` deduplicates workspace ids** before resolving accounts
-  (`server/src/persistence/rpc-scope.logic.ts`) — a batch write's scope check was an N+1.
 - **`board/removal-cascade.ts`** — the block-delete side-table reclaims (service + mounts,
-  initiative) extracted out of `BoardService.removeBlock`, which was at its size budget. Drop the
-  acceptance-criteria arm; the extraction itself is a straight improvement.
+  initiative) extracted out of `BoardService.removeBlock`, which sat ~20 lines under its
+  file-size budget. #1387 needed a third reclaim there and tripped the guard; the extraction is a
+  straight improvement whether or not any of this initiative ships.
+
+Nothing else on the branch is portable. In particular the `checkWorkspaceFieldListScope`
+workspace-id deduplication is NOT cherry-pickable: that scope rule does not exist on `main` — it
+was introduced by #1387 for the criteria table's `upsertMany`, so it leaves with it. The lesson it
+taught survives in the gotchas below and is worth applying to the next batch-write scope rule.
 
 ## Conventions & gotchas carried forward
 
