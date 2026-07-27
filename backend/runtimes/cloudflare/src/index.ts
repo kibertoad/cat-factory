@@ -681,6 +681,7 @@ export default {
     validateRegistrationsOnce({
       agentKindRegistry,
       gateRegistry,
+      judgeRegistry,
       pipelineRegistry,
       taskTypeRegistry,
       onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),

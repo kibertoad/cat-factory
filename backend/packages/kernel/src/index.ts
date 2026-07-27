@@ -194,6 +194,7 @@ export {
   type JudgeDispositionInput,
   type JudgeDispositionResult,
   JUDGE_SEVERITY_RANK,
+  annotateOutOfRangeScore,
   disposeJudgeVerdict,
   renderJudgeRework,
 } from './domain/judge-logic.js'

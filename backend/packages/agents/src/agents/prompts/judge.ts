@@ -50,13 +50,51 @@ export const JUDGE_SYSTEM_PROMPT =
 /** Trim + cap one prior step's output so a long transcript can't blow the assessment prompt. */
 const MAX_PRIOR_OUTPUT_CHARS = 6_000
 
+/**
+ * The TOTAL budget across every prior output folded into one assessment. The per-entry cap alone
+ * is not a bound: a long pipeline multiplies it (fifteen steps × 6k is ~90 KB of prompt on every
+ * judge round, and a bounce pays it again). Spending the budget NEWEST-first is deliberate — the
+ * work under review is what the last steps produced, and an early `spec-writer` transcript is
+ * context a judge can afford to lose before it loses the diff it is scoring.
+ */
+const MAX_PRIOR_OUTPUT_TOTAL_CHARS = 24_000
+
+function clip(body: string, limit: number): string {
+  return body.length > limit ? `${body.slice(0, limit)}\n…[truncated]` : body
+}
+
 function renderPriorOutput(entry: { agentKind: string; output: string }): string {
-  const body = entry.output.trim()
-  const clipped =
-    body.length > MAX_PRIOR_OUTPUT_CHARS
-      ? `${body.slice(0, MAX_PRIOR_OUTPUT_CHARS)}\n…[truncated]`
-      : body
-  return `--- Output of the "${entry.agentKind}" step ---\n${clipped}`
+  return `--- Output of the "${entry.agentKind}" step ---\n${clip(entry.output.trim(), MAX_PRIOR_OUTPUT_CHARS)}`
+}
+
+/**
+ * Fold the prior outputs into the prompt within {@link MAX_PRIOR_OUTPUT_TOTAL_CHARS}, keeping the
+ * NEWEST and saying plainly what was dropped. Silence here would be the worst option: a judge
+ * that scored a subset of the work while its summary reads as if it saw all of it is a verdict a
+ * human cannot calibrate — the same reason the PR verification report logs its truncations.
+ */
+function renderPriorOutputs(entries: { agentKind: string; output: string }[]): string[] {
+  const kept: string[] = []
+  let spent = 0
+  let dropped = 0
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const rendered = renderPriorOutput(entries[i]!)
+    if (spent + rendered.length > MAX_PRIOR_OUTPUT_TOTAL_CHARS && kept.length > 0) {
+      dropped = i + 1
+      break
+    }
+    spent += rendered.length
+    kept.unshift(rendered)
+  }
+  const lines = kept.flatMap((body) => [body, ''])
+  if (dropped > 0) {
+    lines.push(
+      `[${dropped} earlier step output(s) omitted to fit the review budget. Score only what you ` +
+        `were shown, and say in the summary if a rubric point needed the omitted context.]`,
+      '',
+    )
+  }
+  return lines
 }
 
 /**
@@ -82,7 +120,7 @@ export function renderJudgePrompt(subject: JudgeSubject): string {
   lines.push('')
   if (subject.priorOutputs.length > 0) {
     lines.push('The work under review (the outputs the run produced so far):', '')
-    for (const entry of subject.priorOutputs) lines.push(renderPriorOutput(entry), '')
+    lines.push(...renderPriorOutputs(subject.priorOutputs))
   } else {
     lines.push('The run produced no step output to review yet.', '')
   }

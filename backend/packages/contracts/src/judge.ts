@@ -169,3 +169,40 @@ export type ResolveJudgeInput = v.InferOutput<typeof resolveJudgeSchema>
 export function parseJudgeVerdict(value: unknown): JudgeVerdict {
   return v.parse(judgeVerdictSchema, value)
 }
+
+/** The minimum a step must expose for {@link activeJudgeStepIndex} to rank it. */
+export interface JudgeBearingStep {
+  judge?: JudgeStepState | null
+}
+
+/**
+ * The index of the run's ACTIVE judge step, or `-1` — the single definition of "which judge is
+ * this about", shared by the engine (`JudgeStepController.getActive`), the public API's decision
+ * projection, the notification inbox's reveal, and the SPA's optimistic echo. A pipeline may
+ * place more than one judge, and those surfaces each grew their own scan with a DIFFERENT
+ * precedence, so the state the API returned and the step the SPA wrote it back onto could
+ * disagree about which rubric a verdict belonged to.
+ *
+ * The precedence:
+ *  1. a step PARKED awaiting a decision — that is definitionally the judge a human or a headless
+ *     caller is answering, so it wins even when the run's cursor has moved past it;
+ *  2. the step the run is currently on (an `evaluating` / `bouncing` judge mid-flight);
+ *  3. the LAST step carrying judge state — the most recently settled verdict, which is what is
+ *     worth showing once nothing is live.
+ *
+ * Returns an INDEX rather than the step so the one definition serves callers that need the
+ * position (opening a step window) as well as those that need the state, without a generic whose
+ * inference differs between the backend's `PipelineStep` and the SPA's step type.
+ */
+export function activeJudgeStepIndex(
+  steps: readonly JudgeBearingStep[],
+  currentStep?: number,
+): number {
+  const parked = steps.findIndex((s) => s.judge?.status === 'awaiting_decision')
+  if (parked >= 0) return parked
+  if (currentStep != null && steps[currentStep]?.judge) return currentStep
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i]?.judge) return i
+  }
+  return -1
+}

@@ -44,6 +44,19 @@ makes for polling gates.
   `hostMarkdown` helpers and scrubbed like every other model-authored field.
 - A parked verdict is answerable from the SPA's new judge window **and** from
   `POST /api/v1/runs/:runId/decisions/judge/resolve` — both call the same service method.
+- `validateRegistrations` accepts the `judgeRegistry`: a judge kind counts as a legal pipeline
+  step, its `presentation.resultView` is checked like an agent kind's, and a judge kind that
+  collides with a gate kind is a boot error (the gate handler would silently claim the step).
+- A judge's deployment-default model is its own `CoreDependencies.judgeModel` /
+  `judgeResolveModel`, falling back to the inline reviewers' — the fallback is what keeps
+  "no per-facade wiring" true; the named deps are so the answer is in the dependency contract.
+
+Also adds `GATE_CLEARED_NOTIFICATION_TYPES` to `@cat-factory/contracts` — the shared list of
+auto-raised parking cards the engine dismisses once a run advances past the park it raised them
+for. `NotificationService.clearWaitingDecision` now iterates that contract instead of a
+hard-coded literal, so a new parking surface cannot be added to the notification union while
+staying invisible to the clear (which left an answered card open for the escalation sweep to
+flip red as "Overdue").
 
 The `merger` is deliberately NOT rewritten onto this: it owns terminal block status and a real,
 credential-bearing merge, and stays a privileged built-in. See

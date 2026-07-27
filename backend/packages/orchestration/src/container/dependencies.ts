@@ -742,6 +742,21 @@ export interface CoreDependencies {
    */
   requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
   /**
+   * Default model a JUDGE step's rubric assessment uses when the block pins none and the
+   * workspace has no per-kind default. Absent ⇒ the inline-reviewer default above
+   * (`requirementReviewModel ?? documentPlannerModel`), which is why no facade has to wire
+   * anything for judges to work: a deployment that can run a requirements review can run a
+   * judge. Set it only to point judges at a DIFFERENT model from the reviewers — the reason it
+   * is its own dependency rather than a silent reuse a reader has to go find in `createCore`.
+   */
+  judgeModel?: ModelRef
+  /**
+   * Resolve a block's pinned model id to a ref for a judge assessment. Absent ⇒
+   * {@link requirementReviewResolveModel} (the same deployment-aware resolver the agent
+   * executor and the inline reviewers use).
+   */
+  judgeResolveModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
    * Override the test quality-control companion's inline reviewer. Normally `createCore`
    * builds a {@link TesterQualityReviewService} from the model-provider deps; injecting a
    * reviewer here replaces that (the cross-runtime conformance suite drives the full QC loop

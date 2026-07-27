@@ -68,6 +68,16 @@ export function disposeJudgeVerdict(input: JudgeDispositionInput): JudgeDisposit
         note: 'No preceding producing step to bounce to, so the verdict needs a human decision.',
       }
     }
+    if (maxBounces <= 0) {
+      // A budget of 0 is "never bounce" (the `mp_manual_review` preset ships exactly this), NOT
+      // a budget that ran out. Reporting it as "spent 0/0" describes a rework round that was
+      // never on offer, which reads to an operator like a bug in the judge rather than the
+      // policy they chose.
+      return {
+        disposition: 'park',
+        note: "This task's preset allows no rework rounds, so the verdict goes straight to a human.",
+      }
+    }
     if (bounces >= maxBounces) {
       return {
         disposition: 'park',
@@ -77,6 +87,42 @@ export function disposeJudgeVerdict(input: JudgeDispositionInput): JudgeDisposit
     return { disposition: 'bounce' }
   }
   return { disposition: 'park' }
+}
+
+/**
+ * Explain a verdict whose score was silently zeroed because the model answered on the wrong
+ * scale. Both the canonical `judgeVerdictSchema` and a registration's own schema wrap `score` in
+ * a `v.fallback(… minValue(0), maxValue(1) …, 0)`, so a model that replied `85` (a 0..100 scale)
+ * yields a verdict scoring **0.00** beside a perfectly sensible summary — which reads to a
+ * reviewer as "the work is worthless" rather than "the judge could not read the number".
+ *
+ * The zero itself is correct and deliberate (an unreadable verdict must land on the cautious
+ * side of the threshold), so this does NOT rescale or rescue it — rescaling would be guessing at
+ * the model's intent on the permissive side. It only makes the cause visible: a `critical`
+ * finding stating what came back, which the window, the PR report and a bounced producer's
+ * rework brief all already render.
+ *
+ * Returns the verdict unchanged when the raw score was absent or in range.
+ */
+export function annotateOutOfRangeScore(raw: unknown, verdict: JudgeVerdict): JudgeVerdict {
+  if (verdict.score !== 0) return verdict
+  const rawScore = (raw as { score?: unknown } | null | undefined)?.score
+  if (typeof rawScore !== 'number' || !Number.isFinite(rawScore)) return verdict
+  if (rawScore >= 0 && rawScore <= 1) return verdict
+  return {
+    ...verdict,
+    findings: [
+      {
+        title: 'The rubric assessment scored on the wrong scale',
+        detail:
+          `The review replied with a score of ${rawScore}, which is outside the required 0..1 ` +
+          `range, so it was recorded as 0 rather than guessed at. The findings below (if any) ` +
+          `are still the review's own.`,
+        severity: 'critical',
+      },
+      ...(verdict.findings ?? []),
+    ],
+  }
 }
 
 /**

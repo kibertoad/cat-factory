@@ -154,6 +154,114 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
 
       const after = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
       expect(after.status).toBe('done')
+
+      // The park's card must be GONE once the park is answered. It is auto-raised purely to say
+      // "a run is waiting"; left open, the escalation sweep later flips a settled decision red
+      // ("Overdue"). This shipped broken once — `judge_review` was added to the parking surfaces
+      // but not to the engine's clear list — so it is asserted on both runtimes.
+      const cards = await app.call<{ type: string; status: string }[]>(
+        'GET',
+        `/workspaces/${workspace.id}/notifications`,
+      )
+      expect(cards.body.filter((n) => n.type === 'judge_review' && n.status === 'open')).toEqual([])
+    })
+
+    it('sends the work back to the producer when a human resolves the park with bounce', async () => {
+      // `onFail: 'park'` — so the ONLY way the producer re-runs is the human's explicit choice.
+      // That is what separates this from the automatic-bounce case above.
+      const judgeRegistry = makeJudgeRegistry('park')
+      const judgeAssessor = fakeAssessor([0.2, 0.95])
+      const app = harness.makeApp({ asyncKinds: ['coder'] }, { judgeRegistry, judgeAssessor })
+      const { workspace } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Build + scope judge',
+        agentKinds: ['coder', 'scope-judge'],
+      })
+      await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+
+      const parked = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(parked.status).toBe('blocked')
+
+      const resolved = await app.call<JudgeStepState>(
+        'POST',
+        `/workspaces/${workspace.id}/executions/${parked.id}/judge/resolve`,
+        { choice: 'bounce', feedback: 'Drop the unrelated refactor.' },
+      )
+      expect(resolved.status).toBe(200)
+      expect(resolved.body.status).toBe('bouncing')
+      expect(resolved.body.resolution?.choice).toBe('bounce')
+      expect(resolved.body.resolution?.feedback).toBe('Drop the unrelated refactor.')
+
+      const after = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(after.status).toBe('done')
+      const { judge } = judgeStep(after)
+      expect(judge?.status).toBe('passed')
+      // The producer really re-ran and the judge really re-scored it.
+      expect(judgeAssessor.calls).toBe(2)
+      expect(judge?.rounds?.map((r) => r.disposition)).toEqual(['park', 'pass'])
+      // A human-bought round is NOT charged against the preset budget — they already decided,
+      // and charging it would let the next AUTOMATIC round be silently refused.
+      expect(judge?.bounces).toBe(0)
+    })
+
+    it('fails the run when a human resolves the park with stop', async () => {
+      const judgeRegistry = makeJudgeRegistry('park')
+      const app = harness.makeApp(
+        { asyncKinds: ['coder'] },
+        { judgeRegistry, judgeAssessor: fakeAssessor([0.2]) },
+      )
+      const { workspace } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Build + scope judge',
+        agentKinds: ['coder', 'scope-judge'],
+      })
+      await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+
+      const parked = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(parked.status).toBe('blocked')
+
+      const resolved = await app.call<JudgeStepState>(
+        'POST',
+        `/workspaces/${workspace.id}/executions/${parked.id}/judge/resolve`,
+        { choice: 'stop' },
+      )
+      expect(resolved.status).toBe(200)
+      expect(resolved.body.status).toBe('failed')
+      expect(resolved.body.resolution?.choice).toBe('stop')
+
+      const after = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(after.status).toBe('failed')
+    })
+
+    it('rejects a resolve when the run is not parked on a verdict', async () => {
+      // The park's arbitration is what stops two surfaces (the SPA window and the public API)
+      // both answering; a resolve against an unparked run must be a clean 409, not a mutation.
+      const judgeRegistry = makeJudgeRegistry('park')
+      const app = harness.makeApp(
+        { asyncKinds: ['coder'] },
+        { judgeRegistry, judgeAssessor: fakeAssessor([0.9]) },
+      )
+      const { workspace } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Build + scope judge',
+        agentKinds: ['coder', 'scope-judge'],
+      })
+      await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      const exec = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+
+      const resolved = await app.call(
+        'POST',
+        `/workspaces/${workspace.id}/executions/${exec.id}/judge/resolve`,
+        { choice: 'proceed' },
+      )
+      expect(resolved.status).toBe(409)
     })
 
     it('bounces the producing step with rework feedback, then passes on the re-judgement', async () => {

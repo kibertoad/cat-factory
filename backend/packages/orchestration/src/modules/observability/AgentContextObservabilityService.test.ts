@@ -207,6 +207,12 @@ describe('AgentContextObservabilityService', () => {
     expect(extras.webSearch).toBe(false)
   })
 
+  // An explicit timeout, not the 5s default: the FIXTURE here is genuinely expensive — twelve
+  // 512 KiB bodies (~6 MiB) each swept by `redactSecrets` — and measures ~4.3s on an idle
+  // machine, i.e. it was already inside 15% of the default budget and would fail on any loaded
+  // runner. The assertion itself is deterministic; only building the input is slow, so the
+  // budget is what needed stating. (Shrinking the bodies is not an option — overflowing the
+  // aggregate cap several times over IS what this test exercises.)
   it('bounds the total snapshot size, preserving the prompts over trailing files', async () => {
     const { repo, rows } = fakeRepo()
     const svc = new AgentContextObservabilityService({
@@ -243,5 +249,5 @@ describe('AgentContextObservabilityService', () => {
       stored.userPrompt.length +
       stored.contextFiles.reduce((n, f) => n + f.content.length, 0)
     expect(totalChars).toBeLessThan(MAX_AGENT_CONTEXT_TOTAL_CHARS + 1024)
-  })
+  }, 30_000)
 })
