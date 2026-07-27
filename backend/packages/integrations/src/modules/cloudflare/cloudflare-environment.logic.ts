@@ -107,6 +107,13 @@ function sanitizeNameFragment(value: string): string {
 export interface CloudflareTarget {
   owner: string
   repo: string
+  /**
+   * The git ref the deployment names — always the PR HEAD BRANCH, never a sha. The host
+   * resolves a branch against its own refs, so a branch that does not exist there is refused;
+   * a sha would happily name a fork PR head (which lives in the base repo as
+   * `refs/pull/<n>/head`) and get it built with the preview credentials.
+   */
+  ref: string
   /** The deployment environment name — the contract with the repo's preview workflow. */
   environmentName: string
   /** The per-PR Worker name the URL is derived from. */
@@ -143,6 +150,20 @@ export function resolveCloudflareTarget(
     }
   }
 
+  // The deployment must name a ref, and only a branch is safe to name (see `CloudflareTarget`).
+  // A PR always has a head branch, so an absent one means the provision context was not wired —
+  // refuse rather than substitute something that would create a deployment of the wrong thing.
+  const ref = ctx?.branch?.trim()
+  if (!ref) {
+    return {
+      ok: false,
+      error:
+        'The run did not supply a head branch, so there is no ref to deploy. This is a wiring ' +
+        'problem rather than a configuration one — the deployer resolves the branch from the ' +
+        "coder step's pull request.",
+    }
+  }
+
   const configured = config.repo?.trim()
   const [owner, repo] = configured
     ? (configured.split('/') as [string, string])
@@ -158,7 +179,7 @@ export function resolveCloudflareTarget(
 
   const vars = {
     pullNumber,
-    ...(ctx?.branch === undefined ? {} : { branch: ctx.branch }),
+    branch: ref,
     ...(ctx?.blockId === undefined ? {} : { blockId: ctx.blockId }),
   }
   const environmentName = renderNameTemplate(
@@ -181,6 +202,7 @@ export function resolveCloudflareTarget(
     target: {
       owner,
       repo,
+      ref,
       environmentName,
       workerName,
       url: `https://${workerName}.${config.workersSubdomain}.workers.dev`,

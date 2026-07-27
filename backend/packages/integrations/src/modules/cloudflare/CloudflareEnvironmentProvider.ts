@@ -92,15 +92,15 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
     const { target } = resolved
     const fields = provisionFieldsFor(target)
 
-    // Re-provisioning the SAME commit is the common case, not the exception: the deployer
-    // runs on every attempt of a run, and the repo's own setup-change path may already have
-    // built this exact sha. Reuse that deployment instead of stacking another one — it makes
-    // provisioning idempotent per (environment, sha), which is what the durable driver's
-    // replay needs, and it lets an already-built environment settle `ready` immediately.
+    // Re-provisioning the SAME branch is the common case, not the exception: the deployer runs
+    // on every attempt of a run, and the repository's own setup-change path may already have
+    // built this head. Reuse that deployment instead of stacking another one — it makes
+    // provisioning idempotent per (environment, ref), which is what the durable driver's replay
+    // needs, and it lets an already-built environment settle `ready` immediately.
     const existing = await this.findLiveDeployment(
       config,
       target,
-      req.provisionContext?.branch,
+      resolved.target.ref,
       req.resolveSecret,
     )
     if (existing) {
@@ -108,7 +108,7 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
         externalId: String(existing.id),
         url: target.url,
         status: existing.status,
-        expiresAt: this.expiryFor(config),
+        expiresAt: null,
         access: null,
         fields,
       }
@@ -120,11 +120,11 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
       `/repos/${target.owner}/${target.repo}/deployments`,
       req.resolveSecret,
       {
-        // The BRANCH, not the sha, when we have one: a deployment created for a branch is
-        // resolved by the host against its own refs, so a ref that does not exist in this
-        // repository is refused there rather than becoming a build of someone else's code.
-        ref:
-          req.provisionContext?.branch ?? req.provisionContext?.pullUrl ?? target.environmentName,
+        // The BRANCH, never a raw sha: the host resolves a branch against its OWN refs, so a
+        // branch that does not exist here is refused there. A sha would happily name a fork PR
+        // head (those live in the base repo as `refs/pull/<n>/head`) and get it built with the
+        // preview credentials — the same boundary the workflow re-checks on its side.
+        ref: target.ref,
         environment: target.environmentName,
         auto_merge: false,
         required_contexts: [],
@@ -150,7 +150,10 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
       url: target.url,
       // Honest, and the whole reason this is a native backend: the build has not run yet.
       status: 'provisioning',
-      expiresAt: this.expiryFor(config),
+      // Left to the provisioning service, which applies the manifest's `defaultTtlMs` against
+      // the record's own `createdAt`. Computing a deadline here too would be a second source of
+      // truth for the same number, and the two would drift the first time one of them changed.
+      expiresAt: null,
       access: null,
       fields,
     }
@@ -294,11 +297,6 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
   }
 
   // --- internals ----------------------------------------------------------
-
-  /** The environment's TTL-derived expiry, or null when the config sets none. */
-  private expiryFor(config: CloudflareEnvironmentConfig): number | null {
-    return config.defaultTtlMs === undefined ? null : Date.now() + config.defaultTtlMs
-  }
 
   /**
    * The newest deployment for this (environment, ref) whose latest status is not terminal, so

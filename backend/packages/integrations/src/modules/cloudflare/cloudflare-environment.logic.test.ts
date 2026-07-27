@@ -77,6 +77,7 @@ describe('resolveCloudflareTarget', () => {
       target: {
         owner: 'acme',
         repo: 'widgets',
+        ref: 'feat/x',
         environmentName: 'pr-1413',
         workerName: 'cat-factory-pr-1413',
         url: 'https://cat-factory-pr-1413.my-account.workers.dev',
@@ -110,8 +111,11 @@ describe('resolveCloudflareTarget', () => {
   // URL nothing would ever answer — recorded as a READY environment.
   it.each([
     ['no provision context at all', undefined],
-    ['a context with no pull number', { repoOwner: 'acme', repoName: 'widgets' }],
-    ['a non-positive pull number', { pullNumber: 0, repoOwner: 'acme', repoName: 'widgets' }],
+    ['a context with no pull number', { repoOwner: 'acme', repoName: 'widgets', branch: 'b' }],
+    [
+      'a non-positive pull number',
+      { pullNumber: 0, repoOwner: 'acme', repoName: 'widgets', branch: 'b' },
+    ],
   ])('refuses %s instead of minting an empty name', (_label, provisionContext) => {
     const result = resolveCloudflareTarget(BASE, provisionContext)
     expect(result.ok).toBe(false)
@@ -119,9 +123,21 @@ describe('resolveCloudflareTarget', () => {
   })
 
   it('refuses when neither a pinned repo nor a block repo is resolvable', () => {
-    const result = resolveCloudflareTarget(BASE, { pullNumber: 5 })
+    const result = resolveCloudflareTarget(BASE, { pullNumber: 5, branch: 'b' })
     expect(result.ok).toBe(false)
     expect(!result.ok && result.error).toMatch(/repository/i)
+  })
+
+  // A deployment must name a ref, and only a BRANCH is safe to name: the host resolves it
+  // against its own refs, whereas a sha would happily name a fork PR head.
+  it('refuses when the run supplied no head branch', () => {
+    const result = resolveCloudflareTarget(BASE, {
+      pullNumber: 5,
+      repoOwner: 'acme',
+      repoName: 'widgets',
+    })
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.error).toMatch(/branch/i)
   })
 })
 
@@ -151,6 +167,7 @@ describe('provisionFieldsFor', () => {
       pullNumber: 9,
       repoOwner: 'acme',
       repoName: 'widgets',
+      branch: 'feat/x',
     })
     expect(result.ok && provisionFieldsFor(result.target)).toEqual({
       owner: 'acme',
