@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.107.1
+
+### Patch Changes
+
+- Updated dependencies [45fddb6]
+  - @cat-factory/orchestration@0.145.1
+  - @cat-factory/server@0.155.1
+
 ## 0.107.0
 
 ### Minor Changes
