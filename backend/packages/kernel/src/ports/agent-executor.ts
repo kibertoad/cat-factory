@@ -148,6 +148,12 @@ export interface AgentRunContext {
   reproduction?: {
     command: string
     testPaths: string[]
+    /**
+     * How many declared test paths the engine dropped while resolving (over the cap, absolute,
+     * traversing, over-long). Carried so the proof can state that the pre-fix tree was rebuilt
+     * from an incomplete reproduction rather than silently reporting a verdict about it.
+     */
+    omittedTestPaths?: number
     setupCommand?: string
     maxAttempts: number
   }

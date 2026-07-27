@@ -607,7 +607,6 @@ export class AgentContextBuilder {
     }
   }
 
-  /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   /**
    * The service frame's PRE-PR VALIDATION CHECKS, already shaped as a spread-ready fragment (`{}`
    * when the resolver is unwired, the block has no service frame, the service configured none, or
@@ -618,33 +617,6 @@ export class AgentContextBuilder {
    * every other frame-scoped resolver in that wave — so the ancestry walk still runs exactly once
    * per dispatch rather than a second time just for this read.
    */
-  /**
-   * The BUGFIX REPRODUCTION PROOF spec for this dispatch, as a spreadable `{ reproduction? }` —
-   * the same branch-free shape as {@link validationChecksFor}, and for the same reason: the
-   * `buildContext` call site is at its complexity ceiling.
-   *
-   * Unlike every other resolver here this is PURE and reads nothing: the declaration is already
-   * on the run's own steps (the prior `repro-test` step's structured outcome), so it costs no
-   * round-trip and needs no degrade-on-throw swallow. Reuses the service's pre-PR validation
-   * repair budget when one is configured, so an operator meets ONE attempt-budget concept rather
-   * than two. Absent ⇒ no context field ⇒ no job-body field ⇒ the harness's existing path.
-   */
-  private reproductionFor(
-    agentKind: string,
-    agentConfig: Block['agentConfig'],
-    instance: ExecutionInstance,
-    validationChecks: { validationChecks?: ResolvedValidationChecks },
-  ): { reproduction?: ResolvedReproduction } {
-    const reproduction = resolveReproductionSpec({
-      agentKind,
-      agentConfig,
-      steps: instance.steps,
-      currentStep: instance.currentStep,
-      maxAttempts: validationChecks.validationChecks?.maxAttempts,
-    })
-    return reproduction ? { reproduction } : {}
-  }
-
   private async validationChecksFor(
     workspaceId: string,
     frame: Block | null,
@@ -662,6 +634,36 @@ export class AgentContextBuilder {
     }
   }
 
+  /**
+   * The BUGFIX REPRODUCTION PROOF spec for this dispatch, as a spreadable `{ reproduction? }` —
+   * the same branch-free shape as {@link validationChecksFor}, and for the same reason: the
+   * `buildContext` call site is at its complexity ceiling.
+   *
+   * Unlike every other resolver here this is PURE and reads nothing: the declaration is already
+   * on the run's own steps (the prior `repro-test` step's structured outcome), so it costs no
+   * round-trip and needs no degrade-on-throw swallow. Reuses the service's pre-PR validation
+   * repair budget when one is configured, so an operator meets ONE attempt-budget concept rather
+   * than two — a service that set that budget to fail fast gets a matching number of proof
+   * rounds, which is the intended coupling, not a leak. Absent ⇒ no context field ⇒ no job-body
+   * field ⇒ the harness's existing path.
+   */
+  private reproductionFor(
+    agentKind: string,
+    agentConfig: Block['agentConfig'],
+    instance: ExecutionInstance,
+    validationChecks: { validationChecks?: ResolvedValidationChecks },
+  ): { reproduction?: ResolvedReproduction } {
+    const reproduction = resolveReproductionSpec({
+      agentKind,
+      agentConfig,
+      steps: instance.steps,
+      currentStep: instance.currentStep,
+      maxAttempts: validationChecks.validationChecks?.maxAttempts,
+    })
+    return reproduction ? { reproduction } : {}
+  }
+
+  /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
     return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
   }

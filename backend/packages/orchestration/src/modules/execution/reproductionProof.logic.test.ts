@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { PipelineStep } from '@cat-factory/kernel'
+import type { PipelineStep, RunnerReproductionReport } from '@cat-factory/kernel'
+import type { ReproductionReport } from '@cat-factory/contracts'
+import { REPRODUCTION_MAX_COMMAND_CHARS, REPRODUCTION_MAX_TEST_PATHS } from '@cat-factory/contracts'
 import {
   applyReproductionReport,
   concededReproductionReport,
@@ -23,6 +25,12 @@ const fullDeclaration = {
   testPaths: ['a.test.ts'],
   command: 'pnpm vitest run a.test.ts',
 }
+
+// The kernel's `RunnerReproductionReport` mirrors the contracts schema BY HAND (kernel carries no
+// valibot dependency), so nothing but this assignment stops the two drifting apart on a rename.
+// Only this direction is asserted: a PARSED report must always be publishable as the wire shape,
+// whose `at` is optional because an older harness image may omit it.
+const _mirrorsTheWireShape = (report: ReproductionReport): RunnerReproductionReport => report
 
 describe('resolveReproductionTriState', () => {
   it('defaults to auto and degrades an unknown value rather than throwing', () => {
@@ -56,6 +64,21 @@ describe('reproductionDeclarationFrom', () => {
 
   it('returns undefined when no reproduction step ran', () => {
     expect(reproductionDeclarationFrom([step({}), step({})], 2)).toBeUndefined()
+  })
+
+  // `reproTestOutcome` falls back to `not_reproducible` for an unreadable reply — fine as a hint
+  // to the coder, fatal here, because this feature PUBLISHES that value as the agent's own
+  // structural declaration. A reply that never named an outcome must read as "no declaration".
+  it.each([[{}], [{ testPaths: [], notes: 'hi' }], [{ outcome: 'nonsense' }], [null], ['text']])(
+    'ignores a reproduction step whose reply declared no outcome (%o)',
+    (custom) => {
+      expect(reproductionDeclarationFrom([reproStep(custom), step({})], 2)).toBeUndefined()
+    },
+  )
+
+  it('falls back to an EARLIER step that did declare one', () => {
+    const steps = [reproStep(fullDeclaration), reproStep({}), step({})]
+    expect(reproductionDeclarationFrom(steps, 2)?.command).toBe('pnpm vitest run a.test.ts')
   })
 })
 
@@ -130,6 +153,97 @@ describe('resolveReproductionSpec', () => {
     expect(resolveReproductionSpec({ ...args, currentStep: 1 })).toBeUndefined()
   })
 
+  it('does not invent a spec for `always` when the run declared nothing', () => {
+    // `always` is not "run something regardless" — fabricating a command would produce a verdict
+    // about a test that does not exist.
+    expect(
+      resolveReproductionSpec({
+        ...base,
+        agentKind: 'coder',
+        agentConfig: { 'coder.reproductionProof': 'always' },
+        steps: [step({})],
+      }),
+    ).toBeUndefined()
+  })
+
+  // The declared strings are MODEL-AUTHORED and reach `sh -c` / a worktree write, so the
+  // resolution boundary is where they are bounded.
+  describe('bounds the declared command and paths', () => {
+    it('declines the spec for an over-long command or setup command', () => {
+      const long = 'x'.repeat(REPRODUCTION_MAX_COMMAND_CHARS + 1)
+      expect(
+        resolveReproductionSpec({
+          ...base,
+          agentKind: 'coder',
+          steps: [reproStep({ ...fullDeclaration, command: long })],
+        }),
+      ).toBeUndefined()
+      // An over-long SETUP command declines the whole spec too: running the final tree with a
+      // setup the base tree never got is exactly how a false `reproduced` is manufactured.
+      expect(
+        resolveReproductionSpec({
+          ...base,
+          agentKind: 'coder',
+          steps: [reproStep({ ...fullDeclaration, setupCommand: long })],
+        }),
+      ).toBeUndefined()
+    })
+
+    it('drops absolute, traversing and over-long paths, and COUNTS what it dropped', () => {
+      const spec = resolveReproductionSpec({
+        ...base,
+        agentKind: 'coder',
+        steps: [
+          reproStep({
+            ...fullDeclaration,
+            testPaths: [
+              'src/a.test.ts',
+              '/etc/passwd',
+              '../../outside.test.ts',
+              'src/../b.test.ts',
+              '~/secrets',
+              'C:/windows/system32',
+              'x'.repeat(500),
+              '',
+            ],
+          }),
+        ],
+      })
+      // Only the repo-relative, traversal-free path survives. The six rejects are COUNTED so the
+      // proof can say the pre-fix tree was rebuilt from an incomplete reproduction; the empty
+      // string is not a rejection, just noise, so it isn't counted.
+      expect(spec?.testPaths).toEqual(['src/a.test.ts'])
+      expect(spec?.omittedTestPaths).toBe(6)
+    })
+
+    it('caps the list and counts the overflow rather than truncating silently', () => {
+      const spec = resolveReproductionSpec({
+        ...base,
+        agentKind: 'coder',
+        steps: [
+          reproStep({
+            ...fullDeclaration,
+            testPaths: Array.from(
+              { length: REPRODUCTION_MAX_TEST_PATHS + 3 },
+              (_, i) => `t${i}.ts`,
+            ),
+          }),
+        ],
+      })
+      expect(spec?.testPaths).toHaveLength(REPRODUCTION_MAX_TEST_PATHS)
+      expect(spec?.omittedTestPaths).toBe(3)
+    })
+
+    it('omits the counter entirely when nothing was dropped', () => {
+      const spec = resolveReproductionSpec({
+        ...base,
+        agentKind: 'coder',
+        steps: [reproStep(fullDeclaration)],
+      })
+      expect(spec).not.toHaveProperty('omittedTestPaths')
+    })
+  })
+
   it('still resolves for a partial reproduction (worth proving)', () => {
     const spec = resolveReproductionSpec({
       ...base,
@@ -169,6 +283,25 @@ describe('concededReproductionReport', () => {
   it('is undefined for a run that reproduced, or that never declared', () => {
     expect(concededReproductionReport([reproStep(fullDeclaration)], 1, 0)).toBeUndefined()
     expect(concededReproductionReport([step({})], 1, 0)).toBeUndefined()
+  })
+
+  it('mints NOTHING for a malformed reply the schema would default to not_reproducible', () => {
+    // The dangerous case: `{}` parses cleanly (every field has a fallback) and would otherwise be
+    // published as "the agent declared this bug non-reproducible" — a claim it never made.
+    expect(concededReproductionReport([reproStep({})], 1, 0)).toBeUndefined()
+  })
+
+  it('says so when a real concede named neither a reason nor an alternative', () => {
+    // A blank infeasibility card is indistinguishable from a rendering bug — and from a run that
+    // never tried, which is the whole thing this feature closes.
+    const report = concededReproductionReport(
+      [reproStep({ outcome: 'not_reproducible', testPaths: [] })],
+      1,
+      7,
+    )
+    expect(report?.status).toBe('declared_infeasible')
+    expect(report?.note).toContain('no reason')
+    expect(report?.reason).toBeUndefined()
   })
 })
 
@@ -254,5 +387,23 @@ describe('recordReproductionOutcome', () => {
     const s = step({})
     recordReproductionOutcome(s, undefined, { steps: [step({}), s], currentStep: 1 }, 99)
     expect(s.reproduction).toBeUndefined()
+  })
+
+  it('keeps the harness verdict a live poll already applied, without falling through', () => {
+    // The terminal result re-offers the same report, so `applyReproductionReport` reports no
+    // change — the concede branch must not then overwrite a real proof with older news.
+    const s = step({})
+    const harness = {
+      status: 'reproduced' as const,
+      command: 'c',
+      testPaths: [],
+      attempts: 1,
+      maxAttempts: 3,
+      at: 5,
+    }
+    const run = { steps: [conceded, s], currentStep: 1 }
+    recordReproductionOutcome(s, harness, run, 99)
+    recordReproductionOutcome(s, { ...harness }, run, 100)
+    expect(s.reproduction?.status).toBe('reproduced')
   })
 })

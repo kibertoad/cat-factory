@@ -389,6 +389,11 @@ export interface RunnerReproductionReport {
   command: string
   /** The declared test file(s) constituting the reproduction. */
   testPaths: string[]
+  /**
+   * How many declared paths were dropped before the proof ran. Non-zero means the pre-fix tree
+   * was rebuilt from an INCOMPLETE reproduction, which the report states rather than implies.
+   */
+  omittedTestPaths?: number
   /** The pre-fix tree's run; absent for `declared_infeasible`. */
   base?: RunnerReproductionPhase
   /** The final tree's run; absent for `declared_infeasible`. */

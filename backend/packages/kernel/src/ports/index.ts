@@ -391,6 +391,8 @@ export type {
   RunnerJobRef,
   RunnerJobResult,
   RunnerJobView,
+  RunnerReproductionPhase,
+  RunnerReproductionReport,
   RunnerTransport,
   RunnerValidationReport,
 } from './runner-transport.js'

@@ -28,15 +28,43 @@ export const reproductionProofModeSchema = v.picklist(['auto', 'always', 'off'])
 export type ReproductionProofMode = v.InferOutput<typeof reproductionProofModeSchema>
 
 /**
+ * Read the tri-state out of a free-form `agentConfig` value, degrading any unknown/stale/
+ * hand-edited entry to the default `auto` rather than throwing. THE single place the union is
+ * interpreted — an engine that hand-rolled its own literal comparison would silently drift from
+ * the schema the moment a fourth mode is added.
+ */
+export function parseReproductionProofMode(value: unknown): ReproductionProofMode {
+  return v.parse(v.fallback(reproductionProofModeSchema, 'auto'), value)
+}
+
+/**
  * How many agent+verify rounds the proof loop may run before it gives up and records
  * `inconclusive`. Shares the pre-PR validation budget's shape and default so an operator meets
  * one concept, not two.
  */
 export const REPRODUCTION_DEFAULT_MAX_ATTEMPTS = 3
-export const REPRODUCTION_MAX_ATTEMPTS_CEILING = 10
 
-/** At most this many declared test paths — the loop applies them one by one, so the list stays short. */
+/**
+ * At most this many declared test paths — the loop applies them one by one, so the list stays
+ * short. Anything beyond the cap is DROPPED, and the count of what was dropped rides
+ * {@link resolvedReproductionSchema}'s `omittedTestPaths` so the harness (and the PR report) can
+ * say the pre-fix tree was reconstructed from an incomplete set. A silent truncation here would
+ * be worse than a visible one: a dropped path can leave the base tree without the reproduction,
+ * which greens it and reads as "the test does not capture the defect".
+ */
 export const REPRODUCTION_MAX_TEST_PATHS = 20
+
+/**
+ * Longest accepted declared command / setup command. These are MODEL-AUTHORED strings that the
+ * harness runs through `sh -c`, so they are bounded at the engine's resolution boundary before
+ * they ever reach a job body: a "command" past this length is not the narrow test invocation the
+ * prompt asks for, and the engine declines the whole spec rather than shipping it (no proof is
+ * strictly better than a proof built on a command nobody can read).
+ */
+export const REPRODUCTION_MAX_COMMAND_CHARS = 2_000
+
+/** Longest accepted declared test path. Beyond it the path is dropped and counted as omitted. */
+export const REPRODUCTION_MAX_TEST_PATH_CHARS = 400
 
 /**
  * The RESOLVED reproduction spec a dispatch carries: what to run and which files constitute the
@@ -52,12 +80,20 @@ export const resolvedReproductionSchema = v.object({
    */
   command: v.string(),
   /**
-   * The test file(s) that constitute the reproduction. Used to reconstruct the pre-fix tree when
-   * the run did NOT resume a branch that already carries them: the declared paths are applied
-   * onto the base worktree, never a whole-tree checkout (which would drag the fix across and
-   * green the base).
+   * The test file(s) that constitute the reproduction, each a repo-relative path with no `..`
+   * segment (the engine drops anything else — see `omittedTestPaths`). Used to reconstruct the
+   * pre-fix tree when the run did NOT resume a branch that already carries them: the declared
+   * paths are applied onto the base worktree, never a whole-tree checkout (which would drag the
+   * fix across and green the base).
    */
   testPaths: v.array(v.string()),
+  /**
+   * How many declared paths the engine DROPPED while resolving this spec (over the cap, empty,
+   * absolute, traversing, or over-long). Present only when non-zero, and carried so the proof
+   * can state that the pre-fix tree was rebuilt from an incomplete reproduction rather than
+   * quietly reporting a verdict about it. See {@link REPRODUCTION_MAX_TEST_PATHS}.
+   */
+  omittedTestPaths: v.optional(v.number()),
   /**
    * Optional command that makes a FRESH worktree runnable (a dependency install). Run in BOTH
    * worktrees or neither — an asymmetric setup is exactly how a false `reproduced` is produced.
@@ -113,6 +149,13 @@ export const reproductionReportSchema = v.object({
   /** The command that was run against both trees (empty for `declared_infeasible`). */
   command: v.fallback(v.string(), ''),
   testPaths: v.fallback(v.array(v.fallback(v.string(), '')), []),
+  /**
+   * How many declared paths were dropped before the proof ran (see the resolved spec's field of
+   * the same name). Non-zero means the pre-fix tree was rebuilt from an INCOMPLETE reproduction,
+   * which the report must say rather than imply — an omission is exactly what turns a green base
+   * into a misleading "the test does not capture the defect".
+   */
+  omittedTestPaths: v.fallback(v.optional(v.number()), undefined),
   /** The pre-fix tree's run. Absent for `declared_infeasible`. */
   base: v.fallback(v.optional(reproductionPhaseOutcomeSchema), undefined),
   /** The final tree's run. Absent for `declared_infeasible`, or when the base run settled it. */

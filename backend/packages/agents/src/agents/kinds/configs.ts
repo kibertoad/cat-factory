@@ -12,7 +12,17 @@ export const PLAYWRIGHT_E2E_TARGET_CONFIG_ID = 'playwright.e2eTarget'
 /** The Coder's implementation-fork decision tri-state (auto / always / off). */
 export const CODER_FORK_DECISION_CONFIG_ID = 'coder.forkDecision'
 
-/** The bugfix reproduction-proof tri-state (auto / always / off). */
+/**
+ * The bugfix reproduction-proof tri-state (auto / always / off), read by the engine's
+ * `resolveReproductionTriState`.
+ *
+ * Deliberately NOT yet contributed as a task-facing descriptor: the verification phase itself is
+ * Phase B of `docs/initiatives/bugfix-reproduction-proof.md` and the PR-report section is Phase
+ * C, so a control rendered today would promise behaviour that does not exist — and `always`
+ * would be indistinguishable from `auto` until the tracker-issue gating (D2) lands. The id and
+ * the accepted wire values ship now so the descriptor is a pure addition later; a value set by
+ * hand or by a deployment is already honoured.
+ */
 export const CODER_REPRODUCTION_PROOF_CONFIG_ID = 'coder.reproductionProof'
 
 const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescriptor[]>> = {
@@ -27,20 +37,6 @@ const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescrip
       options: [
         { value: 'auto', label: 'Auto (gate on risk policy)' },
         { value: 'always', label: 'Always propose' },
-        { value: 'off', label: 'Off' },
-      ],
-      default: 'auto',
-    },
-    {
-      id: CODER_REPRODUCTION_PROOF_CONFIG_ID,
-      agentKind: 'coder',
-      label: 'Bugfix reproduction proof',
-      description:
-        'Verify the run’s declared reproduction test mechanically — run it against the code before the fix (expect failure) and against the final tree (expect success) — and publish both captured outputs on the pull request. `auto` runs it when the pipeline produced a reproduction declaration; `always` attempts it regardless; `off` never does.',
-      type: 'select',
-      options: [
-        { value: 'auto', label: 'Auto (when the run declares a reproduction)' },
-        { value: 'always', label: 'Always attempt' },
         { value: 'off', label: 'Off' },
       ],
       default: 'auto',

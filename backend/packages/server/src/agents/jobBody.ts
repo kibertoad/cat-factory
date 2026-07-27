@@ -363,6 +363,12 @@ function buildPrePrVerification(
           reproduction: {
             command: reproduction.command,
             testPaths: [...reproduction.testPaths],
+            // Non-zero ⇒ the pre-fix tree will be rebuilt from an INCOMPLETE reproduction, which
+            // the harness must be able to say in its report rather than let a green base read as
+            // "the test does not capture the defect".
+            ...(reproduction.omittedTestPaths
+              ? { omittedTestPaths: reproduction.omittedTestPaths }
+              : {}),
             ...(reproduction.setupCommand ? { setupCommand: reproduction.setupCommand } : {}),
             maxAttempts: reproduction.maxAttempts,
           },

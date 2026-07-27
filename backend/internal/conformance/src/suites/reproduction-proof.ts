@@ -38,10 +38,16 @@ export function defineReproductionProofConformance(harness: ConformanceHarness):
         })
       ).body
 
-    /** The `repro-test` structured outcome a run declares (the seam the proof reads). */
+    /**
+     * The `repro-test` structured outcome a run declares (the seam the proof reads). The second
+     * path is deliberately a traversal: these paths are applied onto a base worktree, so the
+     * engine drops anything that isn't repo-relative and COUNTS it — asserted below, because a
+     * facade that threaded the raw declaration would ship a job body that writes outside the
+     * checkout.
+     */
     const declaration = {
       outcome: 'reproduced',
-      testPaths: ['src/auth/login.test.ts'],
+      testPaths: ['src/auth/login.test.ts', '../../etc/passwd'],
       notes: 'Login rejects a valid token after refresh.',
       command: 'pnpm vitest run src/auth/login.test.ts',
       setupCommand: 'pnpm install --frozen-lockfile',
@@ -74,7 +80,10 @@ export function defineReproductionProofConformance(harness: ConformanceHarness):
       const coderContext = contexts.find((c) => c.agentKind === 'coder')
       expect(coderContext?.reproduction).toMatchObject({
         command: 'pnpm vitest run src/auth/login.test.ts',
+        // The traversing path is gone, and the drop is RECORDED — a proof run against a tree
+        // rebuilt from an incomplete reproduction has to be able to say so.
         testPaths: ['src/auth/login.test.ts'],
+        omittedTestPaths: 1,
         setupCommand: 'pnpm install --frozen-lockfile',
       })
       expect(coderContext?.reproduction?.maxAttempts).toBeGreaterThan(0)

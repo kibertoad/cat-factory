@@ -236,7 +236,7 @@ which is exactly why the "unconfigured means unchanged" assertions matter more t
 | Contracts `reproduction.ts`: spec + report schemas; `PipelineStep.reproduction`              | done   |     |
 | `reproTestOutcome` gains `command` / `setupCommand` / `alternativeVerification` (+ prompt)   | done   |     |
 | Kernel: `AgentRunContext.reproduction`, `RunnerJobView`/`RunnerJobResult.reproductionReport` | done   |     |
-| `coder.reproductionProof` agent-config descriptor + lenient tri-state resolution             | done   |     |
+| `coder.reproductionProof` config id + lenient tri-state resolution (descriptor → Phase D)    | done   |     |
 | Pure `reproductionProof.logic.ts` (tri-state + declaration → spec) + unit tests              | done   |     |
 | `AgentContextBuilder` threading + `jobBody` forward gated on `opensPr`                       | done   |     |
 | Engine records `step.reproduction` from all three poll paths                                 | done   |     |
@@ -244,6 +244,36 @@ which is exactly why the "unconfigured means unchanged" assertions matter more t
 
 Notes for Phase B (which consumes all of this):
 
+- **The task-facing DESCRIPTOR is deliberately deferred to Phase D**, though the config id and the
+  accepted wire values ship here. Two reasons, both fatal to shipping the control now: it would
+  render a select promising a verification (Phase B) and a PR section (Phase C) that do not exist;
+  and until the D2 tracker-issue gating lands, `always` resolves identically to `auto`, so the
+  control would offer two options a user cannot tell apart. A value set by hand or by a deployment
+  is already honoured, so adding the descriptor later is a pure addition.
+- **The declared strings are MODEL-AUTHORED and bounded at the engine's resolution boundary**, the
+  last point we control before they reach a job body: `REPRODUCTION_MAX_COMMAND_CHARS` on the
+  command and setup command (over-length declines the whole spec — an over-long setup command must
+  NOT be silently dropped, since running the final tree with a setup the base never got is exactly
+  the D4 asymmetry), and `isSafeTestPath` on each declared path (repo-relative, no `..`, no root or
+  drive anchor, length-capped) because Phase B APPLIES those paths onto the base worktree.
+- **Every dropped path is COUNTED into `ResolvedReproduction.omittedTestPaths`** and rides the job
+  body. Phase B must echo it onto the report (`ReproductionReport.omittedTestPaths`) and Phase C
+  must render it: a dropped path can leave the base tree without the reproduction, which greens it
+  and reads as "the test does not capture the defect" — a silent truncation would launder a broken
+  input into a verdict.
+- **A declaration is only trusted when the raw reply NAMED an outcome.** `reproTestOutcome` falls
+  back to `not_reproducible` for an unreadable reply — right for telling the coder there is no
+  trustworthy test, wrong here, because this feature publishes that value as the agent's own
+  structural declaration. `reproductionDeclarationFrom` therefore requires the literal, and a real
+  concede that named neither a reason nor an alternative gets an explicit `note` rather than a
+  blank card.
+- **`sameReproductionReport` participates on `at`**, so the harness MUST stamp a fresh timestamp on
+  every publish; every other compared field is one whose change a reviewer would see, so a
+  same-timestamp republish that altered the verdict still lands.
+- **`resetStepForRerun` clears `step.reproduction`.** Unlike the validation report — which a re-run
+  re-produces whenever checks are configured — this one can legitimately go present → absent, since
+  a looped-back `repro-test` step has its `custom` cleared and the re-dispatch then resolves no
+  spec. Left in place it would describe a tree that no longer exists.
 - **`setupCommand` was added beyond the original sketch** and is load-bearing for D4: without it,
   a fresh worktree in any repo needing an install fails BOTH phases. That is reported as
   `inconclusive` (correct, not dangerous), but it makes the feature useless on most repos, so the
@@ -267,14 +297,15 @@ Notes for Phase B (which consumes all of this):
 
 ### Phase B — the harness phase + image bump
 
-| Item                                                                                   | Status | PR  |
-| -------------------------------------------------------------------------------------- | ------ | --- |
-| `executor-harness/src/reproduction-proof.ts`: symmetric worktrees, red/green, teardown | todo   |     |
-| Declared-test application onto the base worktree (non-resumed case only, D4)           | todo   |     |
-| Heartbeat + per-job args; live publish on `RunnerJobView`, terminal on the result      | todo   |     |
-| Repair feedback on a failed verification, inside the existing budget (D6)              | todo   |     |
-| **Concurrency test**: two jobs keep their worktrees isolated (required, D5)            | todo   |     |
-| Image-tag bump ritual: harness `version` + 3 pins (`pnpm sync:image-tags`) + changeset | todo   |     |
+| Item                                                                                      | Status | PR  |
+| ----------------------------------------------------------------------------------------- | ------ | --- |
+| `executor-harness/src/reproduction-proof.ts`: symmetric worktrees, red/green, teardown    | todo   |     |
+| Declared-test application onto the base worktree (non-resumed case only, D4)              | todo   |     |
+| Echo `omittedTestPaths` from the job body onto the report; stamp a fresh `at` per publish | todo   |     |
+| Heartbeat + per-job args; live publish on `RunnerJobView`, terminal on the result         | todo   |     |
+| Repair feedback on a failed verification, inside the existing budget (D6)                 | todo   |     |
+| **Concurrency test**: two jobs keep their worktrees isolated (required, D5)               | todo   |     |
+| Image-tag bump ritual: harness `version` + 3 pins (`pnpm sync:image-tags`) + changeset    | todo   |     |
 
 ### Phase C — the PR report section
 
@@ -287,11 +318,12 @@ Notes for Phase B (which consumes all of this):
 
 ### Phase D — SPA surfacing
 
-| Item                                                                                   | Status | PR  |
-| -------------------------------------------------------------------------------------- | ------ | --- |
-| Step result surfacing for `step.reproduction` (shared shell trailing section or panel) | todo   |     |
-| Task-config control for the tri-state (descriptor renders automatically — verify)      | todo   |     |
-| i18n keys in ALL locales (the locale-parity gate) + `data-testid`s                     | todo   |     |
+| Item                                                                                     | Status | PR  |
+| ---------------------------------------------------------------------------------------- | ------ | --- |
+| Step result surfacing for `step.reproduction` (shared shell trailing section or panel)   | todo   |     |
+| `coder.reproductionProof` descriptor in `configs.ts` (deferred from Phase A — see above) | todo   |     |
+| Task-config control for the tri-state (descriptor renders automatically — verify)        | todo   |     |
+| i18n keys in ALL locales (the locale-parity gate) + `data-testid`s                       | todo   |     |
 
 ### Phase E — `pl_bugfix` gains a `repro-test` step
 
