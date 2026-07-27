@@ -127,6 +127,22 @@ describe('TaskConnectionService — inbound webhook configuration', () => {
     expect(rows.get('ws1:jira')?.credentials.apiToken).toBe('token-1')
   })
 
+  it('edits the reply allow-list WITHOUT rotating the secret', async () => {
+    // Tightening the allow-list is what an operator does when a tracker turns out to be more
+    // public than they thought. If that rotated the secret as a side effect, the tracker's
+    // configured webhook would start failing until they re-pasted it — a security control that
+    // costs an outage is one people learn not to touch.
+    const { service, rows } = makeService([connected])
+    const minted = await service.mintWebhookSecret('ws1', 'jira')
+
+    const state = await service.updateWebhookReplyAllow('ws1', 'jira', '  ada, grace  ')
+    expect(state).toMatchObject({ configured: true, replyAllow: 'ada, grace' })
+    // The stored secret is untouched, so a delivery signed with what the operator already pasted
+    // into the tracker keeps verifying.
+    expect(rows.get('ws1:jira')?.credentials.webhookSecret).toBe(minted.secret)
+    expect(rows.get('ws1:jira')?.credentials.apiToken).toBe('token-1')
+  })
+
   it('PRESERVES the webhook secret across a credential rotation', async () => {
     // The silent failure this exists to stop: `connect` replaces the whole credential bag with the
     // one the provider's `normalizeConnection` returns, which carries only VENDOR credentials. So

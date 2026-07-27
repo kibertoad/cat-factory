@@ -18,6 +18,7 @@ import {
   taskSourceStateSchema,
   taskSourceWebhookSchema,
   taskSourceWebhookSecretSchema,
+  updateTaskSourceWebhookSchema,
 } from '../tasks.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -116,6 +117,16 @@ export const configureTaskSourceWebhookContract = defineApiContract({
   pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
   requestBodySchema: configureTaskSourceWebhookSchema,
   responsesByStatusCode: { 201: taskSourceWebhookSecretSchema, ...errorResponses },
+})
+
+// Edit the reply allow-list WITHOUT rotating the secret — see `updateTaskSourceWebhookSchema` for
+// why this is not folded into the mint above.
+export const updateTaskSourceWebhookContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
+  requestBodySchema: updateTaskSourceWebhookSchema,
+  responsesByStatusCode: { 200: taskSourceWebhookSchema, ...errorResponses },
 })
 
 export const clearTaskSourceWebhookContract = defineApiContract({

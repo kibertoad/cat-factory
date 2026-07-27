@@ -17,6 +17,7 @@ import {
   setTaskSourceEnabledContract,
   spawnEpicContract,
   taskSourceKindSchema,
+  updateTaskSourceWebhookContract,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -217,6 +218,19 @@ export function taskSourceController(): Hono<AppEnv> {
       c.req.valid('json'),
     )
     return c.json(minted, 201)
+  })
+
+  // Edit the reply allow-list WITHOUT rotating the secret. Its own route because rotation is
+  // destructive on return, and tightening the allow-list must not cost an outage.
+  buildHonoRoute(app, updateTaskSourceWebhookContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const state = await tasks.connectionService.updateWebhookReplyAllow(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').replyAllow,
+    )
+    return c.json(state, 200)
   })
 
   // Stop accepting deliveries. The connection itself is untouched — polling intake and imports

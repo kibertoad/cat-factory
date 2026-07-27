@@ -293,6 +293,66 @@ export function defineTrackerWebhookConformance(harness: ConformanceHarness): vo
       expect(await app.drive(ws)).toHaveLength(before.length)
     })
 
+    it('edits the reply allow-list WITHOUT rotating the secret, and enforces it', async () => {
+      // Two properties in one, because they only mean anything together: the operator can tighten
+      // who may drive a run from a ticket, and doing so does NOT invalidate the secret already
+      // pasted into the vendor's webhook form. A control that costs an outage is one nobody uses.
+      const app = harness.makeApp()
+      const { call } = app
+      const { ws, blockId, secret, externalId } = await setupTracker(app)
+      // TWO findings, answering ONE: leaving a finding open keeps the review parked, so this case
+      // never reaches the auto-incorporation that would need a real model.
+      await app.seedReadyReview(ws, blockId, 2)
+      const before = await call<RequirementReview>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/requirement-review`,
+      )
+      const itemId = before.body.items[0]!.id
+
+      const patched = await call<{ replyAllow: string; configured: boolean }>(
+        'PATCH',
+        `/workspaces/${ws}/task-sources/jira/webhook`,
+        { replyAllow: 'ada@acme.test' },
+      )
+      expect(patched.status).toBe(200)
+      expect(patched.body).toMatchObject({ replyAllow: 'ada@acme.test', configured: true })
+
+      // The ORIGINAL secret still verifies — nothing was rotated behind the operator's back.
+      const offList = await deliver(app, ws, secret, {
+        kind: 'comment',
+        source: 'jira',
+        externalId,
+        commentId: 'off-list-1',
+        body: `@cat-factory answer ${itemId} from someone not on the list`,
+        author: { id: 'u9', handle: 'stranger', email: 's@acme.test', bot: false },
+      })
+      expect(offList.status).toBe(202)
+
+      // …and the allow-list is actually enforced: an author outside it changes nothing, silently.
+      const unchanged = await call<RequirementReview>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/requirement-review`,
+      )
+      expect(unchanged.body.items[0]!.status).toBe('open')
+      expect(unchanged.body.items[0]!.reply).toBeNull()
+
+      // The listed author drives the same review through the same secret.
+      const allowed = await deliver(app, ws, secret, {
+        kind: 'comment',
+        source: 'jira',
+        externalId,
+        commentId: 'on-list-1',
+        body: `@cat-factory answer ${itemId} eu-west-1`,
+        author: { id: 'u2', handle: 'ada', email: 'ada@acme.test', bot: false },
+      })
+      expect(allowed.status).toBe(202)
+      const applied = await call<RequirementReview>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/requirement-review`,
+      )
+      expect(applied.body.items[0]!.reply).toContain('eu-west-1')
+    })
+
     it('clearing the secret stops accepting deliveries without disconnecting the source', async () => {
       const app = harness.makeApp()
       const { call } = app

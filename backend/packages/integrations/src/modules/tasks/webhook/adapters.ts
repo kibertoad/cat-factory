@@ -36,6 +36,12 @@ const LINEAR_SCHEME = { header: 'linear-signature', prefix: '' }
  * NOTE the deliberate scope: only `issues` and `issue_comment` are consumed. A `pull_request`
  * delivery is a VCS concern that already rides `/github/webhooks` — routing it here too would
  * double-project it.
+ *
+ * GitHub also sends `issue_comment` for comments on PULL REQUESTS, and those are mapped here like
+ * any other. That is harmless rather than wrong: issues and PRs share one number space per repo,
+ * so a PR comment's `externalId` can never collide with a real issue's, and it simply finds no
+ * linked task and is ignored. The practical consequence is that a reply command typed on a PR does
+ * nothing — the loop is anchored to the issue the work was requested on.
  */
 export const githubIssuesWebhookAdapter: TaskSourceWebhookAdapter = {
   verify: (secret, delivery) =>

@@ -70,6 +70,13 @@ there is **no new table and no migration** for it. It is minted by
 `GET` on the same path, so an operator can paste both into the vendor's webhook form. Rotation is a
 re-POST; the old secret stops verifying immediately (backwards compatibility is a non-goal).
 
+Because rotation is destructive on return, **editing the reply allow-list has its own `PATCH`** on
+the same path rather than riding the mint. Tightening that list is exactly what an operator does
+when a tracker turns out to be more public than they thought, and answering that with a silently
+rotated secret would take deliveries down until they re-pasted it into the vendor — a security
+control that costs an outage is one people learn not to touch. `POST` still accepts an optional
+`replyAllow` so first-time setup stays one round trip.
+
 ### D2 — One neutral event shape; providers own their vendor parsing
 
 `TrackerWebhookEvent` is `issue` | `comment`, keyed `(source, externalId)` — the task projection's
@@ -188,7 +195,7 @@ assumes the union is closed except the (already existing) per-kind switches.
 | --- | --------------------------------------------------------------------------------- | ------- |
 | 1.1 | `TrackerWebhookEvent` + `TaskSourceWebhookAdapter` kernel port                    | ✅ done |
 | 1.2 | GitHub / Jira / Linear adapters (shared HMAC helper, per-vendor header + parse)   | ✅ done |
-| 1.3 | Per-connection webhook secret: mint/read endpoints + sealed credential storage    | ✅ done |
+| 1.3 | Per-connection webhook secret: mint/read/patch/clear + sealed credential storage  | ✅ done |
 | 1.4 | `TrackerWebhookIngest` gateway seam + `taskWebhookController`                     | ✅ done |
 | 1.5 | CF queue consumer ⇄ pg-boss `tracker.sync` worker + inline fallback, both facades | ✅ done |
 
@@ -213,7 +220,8 @@ assumes the union is closed except the (already existing) per-kind switches.
 ## Deferred, deliberately
 
 - **No SPA panel for the webhook secret.** It is managed over
-  `GET|POST|DELETE /workspaces/:ws/task-sources/:source/webhook` (behind `integrations.manage`),
+  `GET|POST|PATCH|DELETE /workspaces/:ws/task-sources/:source/webhook` (behind
+  `integrations.manage`),
   exactly as slice 1 of the clarification-loop initiative left the notification webhook. Setting it
   up is a one-time operator action that ALSO requires pasting into the vendor's own webhook form —
   a surface the SPA cannot cover — so a panel saves half a round trip. Worth adding when a

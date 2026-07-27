@@ -21,6 +21,7 @@ import {
 } from '@cat-factory/kernel'
 import {
   isAllowedReplyAuthor,
+  isPlatformAuthoredComment,
   parseReviewReplyCommands,
   type ReviewReplyCommand,
 } from '../writeback/reviewReplies.logic.js'
@@ -169,6 +170,14 @@ export class TrackerWebhookService {
     const markers = this.deps.commentIngestRepository
     if (!gateway || !markers) return { kind: 'ignored', reason: 'replies_not_wired' }
 
+    // Our OWN comments, refused structurally before anything else. The author-side bot check below
+    // catches them on GitHub and Jira, but Linear flags no bots and the default allow-list admits
+    // any author — so on Linear an acknowledgement is an allowed author commenting on an issue we
+    // are linked to, and an ack that could re-enter its own ingest is an unbounded comment loop
+    // rather than a duplicate (each ack carries a fresh comment id, so the claim cannot stop it).
+    // Cheap, vendor-independent, and it holds whatever a future renderer writes.
+    if (isPlatformAuthoredComment(event.body)) return { kind: 'ignored', reason: 'self_authored' }
+
     const commands = parseReviewReplyCommands(event.body)
     if (commands.length === 0) return { kind: 'ignored', reason: 'no_commands' }
 
@@ -201,6 +210,13 @@ export class TrackerWebhookService {
     // re-answer on the next delivery. A `failed` marker is re-claimable so a transient failure is
     // retried; a long-abandoned `pending` one is re-claimable too, so an ingester killed mid-apply
     // does not silence that comment forever.
+    //
+    // A claim that ERRORS is deliberately allowed to propagate rather than being read as "someone
+    // else has it". `false` means another delivery owns the ingest — a fact this one can act on —
+    // whereas a store failure means NOTHING is known and nothing was written: reporting it as
+    // already-ingested would ack the delivery, drop the reporter's answer, and leave no trace, all
+    // while looking like a successful dedup. Letting it throw hands the delivery back to the retry
+    // machinery the whole claim exists to make safe.
     const at = this.now()
     const key = {
       workspaceId,
@@ -208,9 +224,10 @@ export class TrackerWebhookService {
       externalId: event.externalId,
       commentId: event.commentId,
     }
-    const claimed = await markers
-      .claim(key, { now: at, reclaimPendingBefore: at - TRACKER_COMMENT_INGEST_CLAIM_TTL_MS })
-      .catch(() => false)
+    const claimed = await markers.claim(key, {
+      now: at,
+      reclaimPendingBefore: at - TRACKER_COMMENT_INGEST_CLAIM_TTL_MS,
+    })
     if (!claimed) return { kind: 'ignored', reason: 'already_ingested' }
 
     try {

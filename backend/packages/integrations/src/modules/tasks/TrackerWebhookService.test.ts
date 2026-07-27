@@ -8,6 +8,7 @@ import type {
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
 import { TrackerWebhookService, type ReviewReplyGateway } from './TrackerWebhookService.js'
+import { renderReviewReplyAck } from '../writeback/reviewReplies.logic.js'
 
 // The runtime-neutral half of tracker-webhook handling. The cross-runtime conformance suite pins
 // that both facades WIRE this (receiver → gateway → service → the SPA's own review methods); these
@@ -328,6 +329,76 @@ describe('TrackerWebhookService — ticket replies', () => {
       expect.objectContaining({ status: 'failed' }),
       expect.any(Number),
     )
+  })
+})
+
+describe('TrackerWebhookService — ingest safety', () => {
+  it('propagates a claim STORE FAILURE instead of reading it as already-ingested', async () => {
+    // The failure mode this guards is silent and looks like success: nothing is written, the
+    // delivery is acked, `ignored` comes back, and the reporter's answer is gone with no trace.
+    // `false` means another delivery owns the ingest; an error means NOTHING is known, and the
+    // apply is idempotent precisely so the queue can retry it.
+    const { gateway, calls } = makeGateway(review([item('a')]))
+    const service = makeService(gateway, {
+      commentIngestRepository: {
+        claim: async () => {
+          throw new Error('store down')
+        },
+        settle: async () => {},
+        get: async () => null,
+      },
+    })
+    await expect(service.handle('ws1', comment('@cat-factory answer a hi'))).rejects.toThrow(
+      'store down',
+    )
+    expect(calls).toEqual([])
+  })
+
+  it('never ingests a comment the platform itself authored', async () => {
+    // Linear flags no bots and the default allow-list admits any author, so our own ack is an
+    // ALLOWED author commenting on an issue we are linked to. Without the marker guard an ack
+    // whose text ever began with the trigger would answer itself forever — each ack carries a
+    // fresh comment id, so the ingest claim cannot stop it.
+    const { gateway, calls } = makeGateway(review([item('a')]))
+    const markers = makeMarkers()
+    const service = makeService(gateway, { commentIngestRepository: markers })
+    const ourOwn = renderReviewReplyAck({
+      reviewId: 'rrv_1',
+      runId: 'run_1',
+      outcome: 'awaiting',
+      answered: [],
+      dismissed: [],
+      outstanding: [{ id: 'a', title: 'Finding a', detail: 'd' }],
+      rejected: [],
+    })
+    const outcome = await service.handle(
+      'ws1',
+      comment(`${ourOwn}\n@cat-factory answer a looped`, {
+        source: 'linear',
+        author: { id: 'bot-user', handle: 'cat-factory', email: null, bot: false },
+      }),
+    )
+    expect(outcome).toEqual({ kind: 'ignored', reason: 'self_authored' })
+    // Not merely un-applied: never even claimed, so it costs no marker row either.
+    expect(markers.claims).toBe(0)
+    expect(calls).toEqual([])
+  })
+
+  it('ignores a bare mention rather than acking it as an unrecognised command', async () => {
+    // Tagging the bot in discussion is not a malformed command sheet. Treating it as one consumes
+    // a claim and answers a human question with "unrecognised command".
+    const { gateway, calls } = makeGateway(review([item('a')]))
+    const markers = makeMarkers()
+    const ack = vi.fn(makeAckSpy)
+    const service = makeService(gateway, {
+      commentIngestRepository: markers,
+      issueWriteback: { postReviewReplyAck: ack },
+    })
+    const outcome = await service.handle('ws1', comment('@cat-factory'))
+    expect(outcome).toEqual({ kind: 'ignored', reason: 'no_commands' })
+    expect(ack).not.toHaveBeenCalled()
+    expect(markers.claims).toBe(0)
+    expect(calls).toEqual([])
   })
 })
 

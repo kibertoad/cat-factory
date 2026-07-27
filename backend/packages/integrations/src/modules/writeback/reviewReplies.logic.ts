@@ -32,6 +32,33 @@ import type {
 const TRIGGER = '@cat-factory'
 
 /**
+ * The prefix every comment the PLATFORM writes onto a tracker issue opens with — the question
+ * echo and the reply acknowledgement alike. Exported so both renderers use the one constant and
+ * {@link isPlatformAuthoredComment} can never drift from what they emit.
+ */
+export const PLATFORM_COMMENT_MARKER = '🤖 '
+
+/**
+ * Whether a comment body is one WE wrote.
+ *
+ * The identity checks in {@link isAllowedReplyAuthor} are the first line of defence, but they are
+ * not complete by construction: Linear flags no bots on a comment author (`bot: false`, honestly
+ * reported) and the default allow-list admits any author, so on Linear the platform's own
+ * acknowledgement is an ALLOWED author commenting on an issue it is linked to. Today no loop
+ * results, but only because no line of an ack happens to begin with the trigger — an invariant
+ * spread across two renderers, enforced by nothing, and one edit away from an unbounded
+ * comment loop (each ack carries a fresh comment id, so the ingest claim cannot stop it).
+ *
+ * So the guard is STRUCTURAL rather than incidental: a body whose first non-blank line opens with
+ * the marker is ours, and is never ingested. It costs one string comparison and removes the whole
+ * class of failure, on every vendor, whatever a future renderer says.
+ */
+export function isPlatformAuthoredComment(body: string): boolean {
+  const first = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? ''
+  return first.trimStart().startsWith(PLATFORM_COMMENT_MARKER.trimEnd())
+}
+
+/**
  * Longest answer text accepted from one command. An answer becomes `item.reply`, which is fed to
  * the incorporation model as delimited untrusted input — so this is a prompt-budget bound, not a
  * storage one. Generous enough for a real paragraph-scale answer; a reporter with more to say has
@@ -60,14 +87,17 @@ export type ReviewReplyCommand =
  * Returns an EMPTY array for a comment with no trigger line — which the caller treats as "ignore
  * this comment entirely", never as an error and never as something to acknowledge. That silence is
  * deliberate: most comments on a linked issue are ordinary human discussion, and acking them would
- * turn every thread into a bot conversation.
+ * turn every thread into a bot conversation. A BARE mention (`@cat-factory` with no verb after it)
+ * counts as discussion for the same reason and yields nothing.
  *
  * An `answer`'s text continues onto following lines until the next trigger line or the end of the
  * comment, so a multi-paragraph answer needs no escaping.
  *
  * An unrecognised verb yields `{ verb: 'unknown' }` rather than being dropped: D4 requires it to be
  * REPORTED in the follow-up, because a reporter who typed `@cat-factory reply CF-2 …` and heard
- * nothing back would reasonably conclude the whole mechanism is broken.
+ * nothing back would reasonably conclude the whole mechanism is broken. That is a near-MISS at a
+ * command and stays reported; the bare mention above is not an attempt at one at all, which is the
+ * line between the two.
  */
 export function parseReviewReplyCommands(comment: string): ReviewReplyCommand[] {
   const lines = comment.slice(0, MAX_COMMENT_CHARS).split(/\r?\n/)
@@ -91,6 +121,13 @@ export function parseReviewReplyCommands(comment: string): ReviewReplyCommand[] 
     const rest = raw.trim().slice(TRIGGER.length).trim()
     const [verb = '', ...tail] = rest.split(/\s+/)
     const line = raw.trim()
+    // A BARE mention (`@cat-factory`, or the trigger followed only by prose) is not a malformed
+    // command — it is someone tagging us in discussion. Reporting it as `unknown` would be worse
+    // than useless: a non-empty command list drives the whole ingest (projection read, review
+    // read, a consumed claim) and ends in a follow-up comment telling a human who asked a question
+    // that their "command" was unrecognised. Skipping it keeps the parser's own promise that a
+    // comment with no commands is ignored ENTIRELY.
+    if (!verb) continue
     switch (verb.toLowerCase()) {
       case 'answer': {
         const itemId = tail[0]
@@ -184,7 +221,7 @@ const MAX_OUTSTANDING = 25
  * a broken integration.
  */
 export function renderReviewReplyAck(ack: ReviewReplyAck): string {
-  const lines: string[] = ['🤖 ' + outcomeLine(ack)]
+  const lines: string[] = [PLATFORM_COMMENT_MARKER + outcomeLine(ack)]
   const applied: string[] = []
   if (ack.answered.length > 0) applied.push(`answered ${idList(ack.answered)}`)
   if (ack.dismissed.length > 0) applied.push(`dismissed ${idList(ack.dismissed)}`)

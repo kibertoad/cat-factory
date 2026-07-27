@@ -1389,6 +1389,11 @@ export function createRecurringModule(
     taskConnectionService,
     // Pushes a `block-added` board event when the reused block is created, so it appears live.
     executionEventPublisher,
+    // Gives `triggerForIssueEvent`'s per-schedule isolation somewhere to report to; without it a
+    // webhook-fired schedule that consistently fails leaves no trace at all.
+    ...(deps.logger
+      ? { log: (event: Record<string, unknown>, msg: string) => deps.logger!.warn(event, msg) }
+      : {}),
   })
   return { service }
 }

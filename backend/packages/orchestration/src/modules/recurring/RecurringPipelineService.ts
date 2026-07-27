@@ -24,6 +24,7 @@ import {
   assertFound,
   ConflictError,
   CredentialRequiredError,
+  getErrorMessage,
   requireWorkspace,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -67,6 +68,13 @@ export interface RecurringPipelineServiceDependencies {
    * already carried the created schedule, so an emit failure never fails the create.
    */
   executionEventPublisher?: ExecutionEventPublisher
+  /**
+   * Structural log sink for the paths that deliberately swallow a failure. Today that is
+   * {@link RecurringPipelineService.triggerForIssueEvent}, whose per-schedule isolation would
+   * otherwise leave a webhook-fired schedule failing with NO trace anywhere — the operator sees
+   * only "push intake never happens". Absent ⇒ those paths stay silent, as they were.
+   */
+  log?: (event: Record<string, unknown>, msg: string) => void
 }
 
 /**
@@ -129,6 +137,7 @@ export class RecurringPipelineService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly taskConnectionService?: TaskConnectionService
   private readonly events?: ExecutionEventPublisher
+  private readonly log?: (event: Record<string, unknown>, msg: string) => void
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -143,6 +152,7 @@ export class RecurringPipelineService {
     this.workspaceMountRepository = deps.workspaceMountRepository
     this.taskConnectionService = deps.taskConnectionService
     this.events = deps.executionEventPublisher
+    this.log = deps.log
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -461,10 +471,25 @@ export class RecurringPipelineService {
       // `fire`'s own internal error handling, extended to the errors it deliberately rethrows.
       try {
         if (await this.fire(workspaceId, schedule, { now })) fired++
-      } catch {
-        // Swallowed on purpose: the caller is a webhook consumer whose only lever is retry, and
-        // retrying would re-fire every OTHER matching schedule too. The polling sweep remains the
-        // backstop for whatever this fire could not start.
+      } catch (error) {
+        // NOT rethrown: the caller is a webhook consumer whose only lever is retry, and retrying
+        // would re-fire every OTHER matching schedule too. The polling sweep remains the backstop
+        // for whatever this fire could not start.
+        //
+        // But not silent either. This is the one path where a failure has no other trace — the
+        // delivery still 202s, `fired` just comes back lower, and a consistently-failing schedule
+        // reads as "push intake simply doesn't work" with nothing to grep for. So it must leave a
+        // log line, exactly as `TrackerWebhookService` does for its own silent drop.
+        this.log?.(
+          {
+            workspaceId,
+            scheduleId: schedule.id,
+            source: event.source,
+            externalId: event.externalId,
+            err: getErrorMessage(error),
+          },
+          'webhook-triggered schedule fire failed',
+        )
       }
     }
     return fired

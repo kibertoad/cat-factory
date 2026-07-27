@@ -64,16 +64,22 @@ issue gets a follow-up comment naming what was applied, what is still outstandin
 rejected and why.
 
 **Configuration is per connection and needs no new table.** The webhook secret rides the
-connection's existing sealed credential bag, minted / rotated / cleared through
-`GET|POST|DELETE /workspaces/:ws/task-sources/:source/webhook` (behind `integrations.manage`) and
-returned exactly once. The workspace rides the URL path because a tracker delivery carries no
+connection's existing sealed credential bag, managed through
+`GET|POST|PATCH|DELETE /workspaces/:ws/task-sources/:source/webhook` (behind `integrations.manage`)
+and returned exactly once. `POST` mints or rotates; `PATCH` edits the reply allow-list WITHOUT
+rotating, because tightening that list is what an operator does when a tracker turns out to be more
+public than they thought and answering it with a silently rotated secret would take deliveries down
+until they re-pasted it into the vendor. The workspace rides the URL path because a tracker delivery carries no
 installation id to resolve one from, and scanning every workspace's connections for one whose
 secret verifies would be a deployment-wide N+1 on every unauthenticated POST. **An unconfigured
 secret fails closed** — an empty HMAC key is one an attacker also has.
 
 Reply text is untrusted third-party input, and on a public repo anyone can write it. Three layers:
-bots are refused first (the platform's own acknowledgement comes back as a delivery, so without
-that check the ack feeds itself), then the connection's optional `webhookReplyAllow` list — an
+the platform's own comments are refused first — by the vendor bot flag where there is one, and by
+a structural marker check everywhere, since Linear flags no bots and the default allow-list admits
+any author (an acknowledgement that could re-enter its own ingest is an unbounded comment loop, not
+a duplicate: each carries a fresh comment id, so the ingest claim cannot stop it). Then the
+connection's optional `webhookReplyAllow` list — an
 unauthorized reply is dropped **silently**, with no follow-up, because replying would confirm the
 hook exists and hand an attacker an oracle. Reply text becomes `item.reply`, the same field the SPA
 writes, capped and `redactSecrets`-scrubbed before it persists; the grammar has no verb reaching
@@ -85,7 +91,10 @@ Idempotency is an atomic claim on a new `tracker_comment_ingests` table
 — every tracker redelivers and every queue retries, so without it one reporter comment would answer
 the same finding twice. It copies the `review_question_posts` design verbatim, including its answer
 to "what if the claimer dies": a `failed` row is re-claimable, `applied` is terminal, and a
-`pending` one is re-claimable once abandoned. Both stores are pinned by a new cross-runtime parity
+`pending` one is re-claimable once abandoned. A claim that ERRORS propagates rather than being read
+as "already ingested" — the apply is idempotent precisely so the queue can retry it, and swallowing
+the error would drop a reporter's answer while reporting a successful dedup. Both stores are pinned
+by a new cross-runtime parity
 suite, alongside conformance assertions that drive the whole receiver → gateway → service chain on
 each facade.
 

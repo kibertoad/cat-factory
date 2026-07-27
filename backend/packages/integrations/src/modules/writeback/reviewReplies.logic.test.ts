@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   isAllowedReplyAuthor,
+  isPlatformAuthoredComment,
   parseReviewReplyCommands,
   renderReviewReplyAck,
 } from './reviewReplies.logic.js'
+import { renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import type { ReviewReplyAck, TrackerCommentAuthor } from '@cat-factory/kernel'
 
 const author = (over: Partial<TrackerCommentAuthor> = {}): TrackerCommentAuthor => ({
@@ -115,9 +117,72 @@ describe('parseReviewReplyCommands', () => {
     })
   })
 
+  it('ignores a BARE mention — tagging the bot is discussion, not a malformed command', () => {
+    // A non-empty command list drives the whole ingest (projection read, review read, a consumed
+    // claim) and ends in a follow-up telling a human who asked a question that their "command" was
+    // unrecognised. A trigger with no verb after it is not an attempt at a command at all.
+    expect(parseReviewReplyCommands('@cat-factory')).toEqual([])
+    expect(parseReviewReplyCommands('  @cat-factory  ')).toEqual([])
+    expect(parseReviewReplyCommands('@cat-factory\n@cat-factory')).toEqual([])
+  })
+
+  it('still REPORTS a near-miss at a real command (D4)', () => {
+    // The line between the two: `reply` is someone reaching for `answer` and getting it wrong, and
+    // hearing nothing back would read as the whole mechanism being broken.
+    expect(parseReviewReplyCommands('@cat-factory reply rri_1 yes')).toEqual([
+      { verb: 'unknown', line: '@cat-factory reply rri_1 yes' },
+    ])
+  })
+
   it('bounds a pathological paste', () => {
     const many = Array.from({ length: 500 }, (_, i) => `@cat-factory dismiss rri_${i}`).join('\n')
     expect(parseReviewReplyCommands(many).length).toBeLessThanOrEqual(50)
+  })
+})
+
+describe('isPlatformAuthoredComment', () => {
+  // The structural half of the self-comment guard. The author-side bot flag covers GitHub and
+  // Jira, but Linear flags no bots and the default allow-list admits any author — so on Linear our
+  // own acknowledgement is an allowed author on an issue we are linked to. Today no loop results
+  // only because no ack line happens to start with the trigger; that is an invariant across two
+  // renderers enforced by nothing, and a loop (fresh comment id every time, so the ingest claim
+  // cannot stop it) is a far worse failure than the duplicate it would look like.
+  it('recognises BOTH platform-authored comment renderers', () => {
+    const ack = renderReviewReplyAck({
+      reviewId: 'rrv_1',
+      runId: 'run_1',
+      outcome: 'awaiting',
+      answered: ['rri_1'],
+      dismissed: [],
+      outstanding: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
+      rejected: [],
+    })
+    expect(isPlatformAuthoredComment(ack)).toBe(true)
+
+    const questions = renderReviewQuestionsComment({
+      workspaceId: 'ws1',
+      reviewId: 'rrv_1',
+      iteration: 1,
+      maxIterations: 3,
+      issueRef: 'jira:ENG-1',
+      runId: 'run_1',
+      findings: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
+    } as never)
+    expect(isPlatformAuthoredComment(questions)).toBe(true)
+  })
+
+  it('does not mistake a human comment for one of ours', () => {
+    expect(isPlatformAuthoredComment('@cat-factory answer rri_1 eu-west-1')).toBe(false)
+    expect(isPlatformAuthoredComment('')).toBe(false)
+    // A human QUOTING our comment further down still gets their reply read: only the first
+    // non-blank line decides, so the guard cannot be used to silence someone else's answer.
+    expect(isPlatformAuthoredComment('@cat-factory answer rri_1 yes\n\n> 🤖 as you said')).toBe(
+      false,
+    )
+  })
+
+  it('tolerates leading blank lines, which trackers add freely', () => {
+    expect(isPlatformAuthoredComment('\n\n  🤖 Thanks — that answers everything.')).toBe(true)
   })
 })
 

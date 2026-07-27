@@ -441,6 +441,36 @@ export class TaskConnectionService {
   }
 
   /**
+   * Edit the reply allow-list, leaving the webhook secret untouched.
+   *
+   * Deliberately NOT folded into {@link mintWebhookSecret}: that call rotates, and rotation is
+   * destructive the instant it returns. Tightening the allow-list is precisely what an operator
+   * does when a tracker turns out to be more public than they thought, and answering that with a
+   * silently rotated secret would take deliveries down until they re-pasted it into the vendor —
+   * a security control that costs an outage is a security control people avoid using.
+   */
+  async updateWebhookReplyAllow(
+    workspaceId: string,
+    source: TaskSourceKind,
+    replyAllow: string,
+  ): Promise<TaskSourceWebhookState> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const record = await this.requireConnection(workspaceId, source)
+    const credentials: TaskCredentials = {
+      ...record.credentials,
+      [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: replyAllow.trim(),
+    }
+    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    return {
+      source,
+      supported: this.deps.registry.get(source)?.webhook != null,
+      configured: trackerWebhookSecret(credentials) !== '',
+      deliveryPath: trackerWebhookPath(workspaceId, source),
+      replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+    }
+  }
+
+  /**
    * Clear the inbound-webhook secret, so deliveries stop being accepted (they 503 at the receiver,
    * which is the honest answer: the operator turned this off). The connection itself is untouched
    * — polling intake and imports keep working exactly as before.

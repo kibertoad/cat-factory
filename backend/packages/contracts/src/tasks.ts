@@ -61,11 +61,29 @@ export const taskSourceWebhookSecretSchema = v.object({
 })
 export type TaskSourceWebhookSecret = v.InferOutput<typeof taskSourceWebhookSecretSchema>
 
-/** Mint (or rotate) the connection's webhook secret, optionally setting the reply allow-list. */
+/**
+ * Mint (or rotate) the connection's webhook secret, optionally seeding the reply allow-list in the
+ * same call so first-time setup is one round trip. Editing the allow-list LATER goes through
+ * {@link updateTaskSourceWebhookSchema} instead — rotation is destructive (the tracker's configured
+ * secret stops verifying immediately), so it must never be a side effect of an unrelated edit.
+ */
 export const configureTaskSourceWebhookSchema = v.object({
   replyAllow: v.optional(v.pipe(v.string(), v.maxLength(2_000))),
 })
 export type ConfigureTaskSourceWebhookInput = v.InferOutput<typeof configureTaskSourceWebhookSchema>
+
+/**
+ * Edit the reply allow-list, leaving the secret alone.
+ *
+ * Its own route because tightening the allow-list is exactly what an operator does when a tracker
+ * turns out to be more public than they thought — and folding it into the mint would answer that
+ * with a rotated secret and a dead webhook until they re-paste it. `replyAllow` is required here:
+ * a PATCH with nothing to set is a caller mistake, not a no-op.
+ */
+export const updateTaskSourceWebhookSchema = v.object({
+  replyAllow: v.pipe(v.string(), v.maxLength(2_000)),
+})
+export type UpdateTaskSourceWebhookInput = v.InferOutput<typeof updateTaskSourceWebhookSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------
 // `credentialFieldSchema` is shared with the document-source contracts: a
