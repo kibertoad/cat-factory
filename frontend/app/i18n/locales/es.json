@@ -2608,6 +2608,11 @@
         "body": "Almacena el contexto completo proporcionado a cada agente: los prompts compuestos, los fragmentos de buenas prácticas incorporados y el contenido íntegro de los archivos inyectados en su contenedor, para poder inspeccionarlo después en la vista de observabilidad. Los cuerpos se conservan durante la misma ventana que la telemetría de LLM por llamada. Desactívalo para dejar de almacenarlo (las instantáneas existentes se eliminan por retención).",
         "toggle": "Almacenar el contexto completo del agente"
       },
+      "prReport": {
+        "heading": "Informe de verificación en la pull request",
+        "body": "Mantiene un informe de verificación en la pull request de cada ejecución: el veredicto de CI, el informe del probador, el ciclo de vida del entorno efímero y la evaluación de fusión, como hechos registrados y no como afirmaciones del agente. Las credenciales se depuran antes de escribir nada. Desactívalo para dejar de publicarlo; un informe ya presente se deja tal cual.",
+        "toggle": "Publicar el informe de verificación en las pull requests"
+      },
       "retention": {
         "heading": "Retención de capturas de pantalla",
         "body": "Cuánto tiempo conservar las capturas de pantalla del probador de UI y las imágenes de diseño de referencia con las que se comparan (la verificación visual). Un trabajo de limpieza diario elimina tanto los bytes de las imágenes como sus metadatos cuando superan esta ventana.",

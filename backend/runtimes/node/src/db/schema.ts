@@ -1317,6 +1317,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
+  publish_pr_verification_report: integer('publish_pr_verification_report').notNull().default(1),
   // Retention window (days) for binary artifacts (UI screenshots + reference designs)
   // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
   artifact_retention_days: integer('artifact_retention_days').notNull().default(14),

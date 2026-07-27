@@ -116,6 +116,7 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     openPullRequest: (i, ref, input) => vcs.openPullRequest(conn(i), toRepoRef(ref), input),
     updatePullRequest: (i, ref, n, patch) =>
       vcs.updatePullRequest(conn(i), toRepoRef(ref), n, patch),
+    getPullRequestBody: (i, ref, n) => vcs.getPullRequestBody(conn(i), toRepoRef(ref), n),
     getPullRequestMergeability: (i, ref, n) =>
       vcs.getPullRequestMergeability(conn(i), toRepoRef(ref), n),
     mergePullRequest: (i, ref, n, input) => vcs.mergePullRequest(conn(i), toRepoRef(ref), n, input),

@@ -292,5 +292,8 @@ export class FakeVcsClient implements VcsClient {
   async updatePullRequest(): Promise<GitHubPullRequest> {
     return { number: 1 } as unknown as GitHubPullRequest
   }
+  async getPullRequestBody(): Promise<string | null> {
+    return null
+  }
   async deleteBranch(): Promise<void> {}
 }

@@ -16,6 +16,9 @@ else imports its **ports** and domain types from here.
   `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
   `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
+- `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
+  behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
+  port is in `ports/pr-report.ts`, the composer in orchestration).
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,

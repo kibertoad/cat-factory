@@ -1,8 +1,6 @@
 import type {
   AgentFailureKind,
-  ResolveBinaryArtifactStore,
   Block,
-  BlueprintService,
   ExecutionInstance,
   FollowUpsStepState,
   ForkDecisionStepState,
@@ -16,7 +14,6 @@ import type {
   PullRequestMerger,
   StepReviewComment,
   SubscriptionActivationRepository,
-  TicketTrackerProvider,
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import {
@@ -32,13 +29,6 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type {
-  GateRegistry,
-  InitiativePresetRegistry,
-  ProviderRegistry,
-  RunInitiatorScope,
-  StepResolverRegistry,
-} from '@cat-factory/kernel'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -49,9 +39,7 @@ import {
 import {
   assertFound,
   ConflictError,
-  type ModelRef,
   NotFoundError,
-  type ProviderCapabilities,
   RunContendedError,
   ValidationError,
   type SubscriptionVendor,
@@ -68,15 +56,10 @@ import {
   HUMAN_REVIEW_AGENT_KIND,
 } from './ci.logic.js'
 import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp.logic.js'
-import {
-  AgentContextBuilder,
-  type DocumentUrlResolver,
-  type FragmentBodyResolver,
-  type SkillResolver,
-} from './AgentContextBuilder.js'
+import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
-import { RunStateMachine, type KaizenScheduler } from './RunStateMachine.js'
+import { RunStateMachine } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
 import { inferTechnicalLabel } from './technical.logic.js'
@@ -96,22 +79,13 @@ import {
 import { TesterController } from './TesterController.js'
 import { RalphController } from './RalphController.js'
 import { isRalphKind, resolveRalphConfig, seedRalphState } from './ralph.logic.js'
-import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
-import type { InitiativeService } from '../initiative/InitiativeService.js'
-import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
-import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import { DocInterviewController } from './DocInterviewController.js'
-import type { ForkChatService } from './ForkChatService.js'
 import { isReentrantDecisionResume } from './reentrancy.logic.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
-import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
-import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
-import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
-import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type {
   IterationCapChoice,
   RequirementConcernLevel,
@@ -121,9 +95,7 @@ import type {
   BrainstormSession,
   BrainstormStage,
 } from '@cat-factory/kernel'
-import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type {
-  AccountRepository,
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
@@ -131,389 +103,26 @@ import type {
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
-import type { AgentExecutor, ResolveRunRepoContext, TestSecretRef } from '@cat-factory/kernel'
+import type { AgentExecutor } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import type { DocumentRepository } from '@cat-factory/kernel'
-import type { TaskRepository } from '@cat-factory/kernel'
-import type {
-  DocInterviewRepository,
-  InitiativeRepository,
-  RequirementReviewRepository,
-} from '@cat-factory/kernel'
-import type { ClarityReviewRepository } from '@cat-factory/kernel'
-import type { BrainstormSessionRepository } from '@cat-factory/kernel'
-import type {
-  BugIntakeService,
-  EnvironmentProvisioningService,
-  EnvironmentTeardownService,
-} from '@cat-factory/integrations'
-import type { BranchUpdater } from '@cat-factory/kernel'
 import { dependenciesMet, descendantIds, serviceOf } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { buildResumedInstance, planResumedSteps, planRestartFromStep } from './retry.logic.js'
+import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
+import { PrVerificationReportController } from './PrVerificationReportController.js'
 
-export interface ExecutionServiceDependencies {
-  workspaceRepository: WorkspaceRepository
-  blockRepository: BlockRepository
-  pipelineRepository: PipelineRepository
-  executionRepository: ExecutionRepository
-  /**
-   * Resolves the owning account of a workspace so a service that pins no cloud
-   * provider falls back to the account's `defaultCloudProvider` at dispatch.
-   */
-  accountRepository: AccountRepository
-  idGenerator: IdGenerator
-  clock: Clock
-  agentExecutor: AgentExecutor
-  /**
-   * The app-owned agent-kind registry, threaded through to the trait/inline-surface checks
-   * and a registered kind's pre/post-op hooks. `createCore` defaults it to
-   * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
-   */
-  agentKindRegistry: AgentKindRegistry
-  /**
-   * The app-owned polling-gate registry (the built-in `@cat-factory/gates` suite installed by
-   * the facade + any deployment-registered gates), threaded to the dispatcher's gate machine.
-   * `createCore` defaults it to `defaultGateRegistry()` (empty) when a facade doesn't inject one.
-   */
-  gateRegistry: GateRegistry
-  /**
-   * The app-owned step-completion-resolver registry (deployment-registered resolvers),
-   * threaded to the dispatcher. `createCore` defaults it to `defaultStepResolverRegistry()`.
-   */
-  stepResolverRegistry: StepResolverRegistry
-  /**
-   * The app-owned provider registry (gate data sources keyed by {@link ProviderToken}), threaded
-   * to the dispatcher's gate machine so its {@link GateContext} reads the wired providers.
-   * `createCore` defaults it to `defaultProviderRegistry()` (empty ⇒ every gate passes through).
-   */
-  providerRegistry: ProviderRegistry
-  /**
-   * The app-owned initiative-preset registry, threaded into the context builder so a spawned /
-   * planning run resolves its preset steering. `createCore` defaults it to
-   * `defaultInitiativePresetRegistry()` when a facade doesn't inject the shared instance.
-   */
-  initiativePresetRegistry: InitiativePresetRegistry
-  workRunner: WorkRunner
-  executionEventPublisher: ExecutionEventPublisher
-  boardService: BoardService
-  spendService: SpendService
-  /**
-   * Optional: when the document-source integration is configured, documents
-   * linked to a block are resolved here and fed to the agent as extra context.
-   */
-  documentRepository?: DocumentRepository
-  /**
-   * Optional: canonicalises a URL named in a block's description to the document's stable
-   * `(source, externalId)` (via the document providers' `parseRef`) so a pasted design/doc
-   * link auto-matches its imported page even when the URL carries title/tracking noise.
-   * Forwarded to {@link AgentContextBuilder}; absent → url-string matching only.
-   */
-  documentUrlResolver?: DocumentUrlResolver
-  /**
-   * Optional: when the task-source integration is configured, tracker issues
-   * linked to a block are resolved here and fed to the agent as extra context.
-   */
-  taskRepository?: TaskRepository
-  /**
-   * Optional: when the requirements-review feature is configured, a block's
-   * reworked ("incorporated") requirements are read here. When present they REPLACE
-   * the block's description + linked docs/tasks as the agent context (for every
-   * step) and become the per-task input the spec-writer aggregates. Absent
-   * → the engine uses the original description + docs/tasks unchanged.
-   */
-  requirementReviewRepository?: RequirementReviewRepository
-  /**
-   * Optional: when the interactive document-interview feature is configured (WS5), a block's
-   * synthesized authoring brief is read here and folded into the doc-writer's context. Absent
-   * → the writer runs off the raw outline/description unchanged.
-   */
-  docInterviewRepository?: DocInterviewRepository
-  /**
-   * Optional: the requirements-review feature's service, present when the reviewer is
-   * wired. Drives the special `requirements-review` gate step (run reviewer inline, the
-   * iterative answer → incorporate → re-review loop). Absent → the gate step passes
-   * through so pipelines run unchanged without the feature.
-   */
-  requirementReviewService?: RequirementReviewService
-  /**
-   * Optional: the interactive document-interview service (WS5). When wired, the
-   * `doc-interviewer` step converses with the human (park/answer/resume) to refine a
-   * document's scope/structure and synthesizes an authoring brief the writer starts from.
-   * Absent (or no model) → the interviewer step passes through so document pipelines run
-   * unchanged off the raw outline.
-   */
-  docInterviewService?: DocInterviewService
-  /**
-   * Optional: the inline grounded-chat responder for the implementation-fork decision phase.
-   * When wired, a human chat turn about the surfaced forks is answered by an inline LLM in the
-   * durable driver; absent (no model) the chat degrades to a canned "chat unavailable" reply so
-   * pick / custom still work. Passed to the {@link ForkDecisionController}.
-   */
-  forkChatService?: ForkChatService
-  /**
-   * Optional: the inline reviewer for the test quality-control companion. When wired (and a
-   * Tester step has the companion enabled), each Tester report is audited for coverage before
-   * the greenlight/fixer decision and an inadequate report loops the Tester. Passed straight
-   * to the {@link TesterController}. Absent → QC is a pass-through.
-   */
-  testerQualityReviewer?: TesterQualityReviewer
-  /**
-   * Optional: the Kaizen agent's scheduler. When wired, a run reaching a terminal state
-   * schedules a post-run grading for each completed agent step (skipping verified combos).
-   * Structural so the engine doesn't depend on the concrete service. Absent → no grading.
-   */
-  kaizenScheduler?: KaizenScheduler
-  /**
-   * Optional: persistence for the clarity-review (bug-report triage) feature. Read here
-   * to substitute a converged clarified report as the downstream agent context (the
-   * mirror of `requirementReviewRepository`). Absent → no substitution.
-   */
-  clarityReviewRepository?: ClarityReviewRepository
-  /**
-   * Optional: the clarity-review feature's service, present when the reviewer is wired.
-   * Drives the special `clarity-review` gate step (inline reviewer + the iterative
-   * answer → incorporate → re-review loop). Absent → the gate step passes through.
-   */
-  clarityReviewService?: ClarityReviewService
-  /**
-   * Optional: the brainstorm (structured-dialogue) feature's services, one per stage, present
-   * when the brainstorm module is wired. Drive the special `requirements-brainstorm` /
-   * `architecture-brainstorm` gate steps (inline option-generator + the iterative propose →
-   * pick → incorporate → re-run loop). Absent → the gate steps pass through.
-   */
-  brainstormServices?: Record<BrainstormStage, BrainstormService>
-  /**
-   * Optional: persistence for the brainstorm feature. Read by the agent-context builder to
-   * surface a converged `architecture-brainstorm` direction to the architect (the mirror of
-   * `requirementReviewRepository`). Absent → no substitution.
-   */
-  brainstormSessionRepository?: BrainstormSessionRepository
-  /**
-   * Optional: resolves fragment ids against the merged tenant catalog (managed +
-   * document-backed fragments), live-resolving linked Confluence/Notion/GitHub
-   * documents at run time. Wired only when the prompt-fragment library is
-   * configured; absent → the engine resolves against the static built-in pool.
-   */
-  fragmentResolver?: FragmentBodyResolver
-  /**
-   * Optional: resolves a `skill` step's picked skill to its instructions + resource bodies for
-   * the run (see {@link SkillResolver}). Wired only when the repo-sourced Claude Skills library is
-   * configured; a skill step dispatched with this unwired fails loudly rather than running blank.
-   */
-  skillResolver?: SkillResolver
-  /**
-   * Optional: when the individual-usage subscription store is configured, a finished
-   * run's per-run credential activation is deleted here the moment it reaches a terminal
-   * state, bounding standing exposure to the run's own lifetime (the TTL sweep is the
-   * backstop). Absent → activations are reclaimed by the TTL sweep alone.
-   */
-  subscriptionActivationRepository?: SubscriptionActivationRepository
-  /**
-   * Optional: resolve a workspace's per-agent-kind default model id (the same resolver
-   * the container executor uses for dispatch). The personal-credential gate consults it
-   * so a run whose block has NO pinned model but whose workspace default resolves to an
-   * individual-usage vendor is still gated up-front — matching what dispatch will resolve,
-   * instead of starting and then failing on a missing activation. Absent → the gate sees
-   * only the block's pinned model (env-routing defaults are operator-level and not gated).
-   */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
-  /**
-   * Optional: resolve the provider capabilities (configured direct keys +
-   * subscription vendors + whether Cloudflare AI is enabled) for a workspace and the
-   * run initiator. The start guard uses it to block a pipeline whose steps' canonical
-   * models have no usable provider. Absent → the guard is skipped (tests / unconfigured
-   * facades), exactly like the existing optional engine deps.
-   */
-  resolveProviderCapabilities?: (
-    workspaceId: string,
-    initiatedBy?: string | null,
-  ) => Promise<ProviderCapabilities>
-  /**
-   * Optional: whether a container-only subscription harness ref (`claude-code` / `codex`)
-   * can run as an INLINE LLM call in this deployment (local mode's ambient CLI). The preset
-   * satisfiability guard uses it so an inline step pinned to a subscription model is
-   * satisfiable where the harness runs inline, and refused where it doesn't (Node/Worker).
-   * From `config.agents.inlineHarnessRef`; absent → no inline harness support.
-   */
-  inlineHarnessRef?: (ref: ModelRef) => boolean
-  /**
-   * Optional: when the environment integration is configured, a `deployer` step
-   * provisions an ephemeral environment deterministically through this service
-   * (no LLM), and downstream steps discover the resulting env via it.
-   */
-  environmentProvisioning?: EnvironmentProvisioningService
-  /**
-   * Optional: resolve the NON-secret refs (key + description) of the sensitive test credentials
-   * for a run block's service frame, folded into the tester prompt by the context builder.
-   * Wired from the facade's `TestSecretsService`; absent ⇒ no advertised secrets. NEVER values.
-   */
-  resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
-  /**
-   * Optional: resolves the binary-artifact store (UI screenshots + reference design images)
-   * for a workspace's account; the `visual-confirmation` gate reads it. Absent (or resolving
-   * to null — storage not configured) → the gate passes through (auto-advances), since there
-   * is nowhere to read screenshots from.
-   */
-  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
-  /**
-   * Optional: tears down ephemeral environments. Wired alongside
-   * {@link environmentProvisioning}; the `human-test` gate uses it to destroy an env on
-   * confirm / recreate / on-demand. Absent → the gate's destroy/recreate is a no-op.
-   */
-  environmentTeardown?: EnvironmentTeardownService
-  /**
-   * Optional: merges the repo default branch into a block's PR branch server-side. Wired
-   * when GitHub is configured; the `human-test` gate's "pull latest main" action uses it
-   * (a clean merge rebuilds the env; a conflict escalates to the conflict-resolver). Absent
-   * → pulling main is unavailable on the gate.
-   */
-  branchUpdater?: BranchUpdater
-  /**
-   * Optional: when the board-scan module is configured, a `blueprints` step's
-   * decomposition tree is reconciled onto the board through this (BoardScanService).
-   * Absent → a blueprint step still runs and commits its in-repo files, but the
-   * board isn't auto-updated from it.
-   */
-  blueprintReconciler?: BlueprintReconciler
-  /**
-   * Optional: when the initiatives module is wired, the `initiative-planner` step's
-   * plan draft is ingested into the block's initiative entity through this, and the
-   * `initiative-committer` step flips it to `executing` + mirrors the in-repo
-   * tracker. Absent → the initiative steps fail loudly (an initiative pipeline is
-   * meaningless without the module) while every other pipeline runs unchanged.
-   */
-  initiativeService?: InitiativeService
-  /**
-   * Optional: the initiative store, wired into the agent-context builder so an
-   * `initiative`-level run carries the interview + analysis context into the analyst/planner
-   * prompts. Same repo the {@link initiativeService} wraps; absent → those steps run off the
-   * raw block description.
-   */
-  initiativeRepository?: InitiativeRepository
-  /**
-   * Optional: the inline interviewer for the interactive-planning gate (slice 2). When
-   * wired, the `initiative-interviewer` step interviews the human (park/answer/resume) and
-   * synthesizes the goal/constraints brief onto the entity before the analyst/planner run.
-   * Absent (or no model) → the interviewer step passes through and planning runs off the
-   * raw block description. Requires {@link initiativeService} to persist the interview state.
-   */
-  initiativeInterviewService?: InitiativeInterviewService
-  /**
-   * Best-effort poke of the initiative execution loop (slice 3): called after a spawned task's
-   * PR merges (`finalizeMerge`), so its owning initiative reconciles + advances immediately
-   * rather than on the next cron sweep. Threaded through to the {@link RunStateMachine} for the
-   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired. The
-   * optional `harvest` (slice 4) carries the settling run's follow-ups + failure cause.
-   */
-  pokeInitiativeLoop?: (
-    workspaceId: string,
-    initiativeBlockId: string,
-    harvest?: InitiativeRunHarvest,
-  ) => void
-  /**
-   * Optional: raises human-actionable notifications (a PR needs a merge decision,
-   * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
-   * transition the block but no notification surfaces (tests).
-   */
-  notificationService?: NotificationService
-  /**
-   * Optional: resolves a workspace's runtime settings so {@link ExecutionService.start}
-   * can enforce the per-service running-task limit. Absent → the limit is never enforced
-   * (tests / unconfigured facades start runs unbounded).
-   */
-  workspaceSettingsService?: WorkspaceSettingsService
-  // The CI / mergeability / release-health / incident-enrichment providers the built-in
-  // gates used to read are no longer engine dependencies: the gate suite ships as
-  // `@cat-factory/gates` and a facade wires those providers into it via its `wireX` handles
-  // (see "Keep the runtimes symmetric"). The engine only holds the merge collaborators below
-  // (the `merger` resolver stays a privileged built-in — see buildStepResolverRegistry).
-  /**
-   * Optional: performs the real GitHub merge when a task should become `done`.
-   * Absent → `done` is a board-only flip (tests); when wired, `done` provably
-   * means the PR was merged on the remote.
-   */
-  pullRequestMerger?: PullRequestMerger
-  /**
-   * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
-   * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_RISK_POLICY}.
-   */
-  riskPolicyRepository?: RiskPolicyRepository
-  /**
-   * Optional: the {@link AppCaches.riskPolicy} slice — read-through for `resolveRiskPolicy`
-   * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →
-   * every resolve hits the repository (tests / no cache wired). Invalidated by
-   * `RiskPolicyService` on every preset write.
-   */
-  riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
-  /**
-   * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
-   * ambient context, so a per-user PAT (when set) is preferred over the deployment's
-   * App/env token (see `PatPreferringAppRegistry`). Absent → a pass-through
-   * (`(_, fn) => fn()`), so tests/conformance run unchanged.
-   */
-  runInitiatorScope?: RunInitiatorScope
-  /**
-   * Optional: files a GitHub issue / Jira ticket for the `tracker` step (the
-   * tech-debt recurring pipeline). Absent → the `tracker` step passes through
-   * without filing anything, so the engine works unchanged when no tracker is wired.
-   */
-  ticketTrackerProvider?: TicketTrackerProvider
-  /**
-   * Optional: writes back to a task's linked tracker issue(s) as its PR progresses
-   * (comment on PR open; comment + close as resolved on merge). Gated by the
-   * workspace's writeback settings + the per-task override. Absent → no writeback,
-   * so the engine works unchanged when no tracker writeback is wired.
-   */
-  issueWriteback?: IssueWritebackProvider
-  /**
-   * Optional: the recurring `bug-intake` step's read-and-claim helper. When wired, a `bug-intake`
-   * step pulls one matching open issue from the schedule's configured tracker board, claims it, and
-   * seeds the reused block from it; absent (no task sources wired) → the step is a no-op that
-   * completes the run without touching the block, so the engine works unchanged.
-   */
-  bugIntakeService?: BugIntakeService
-  /**
-   * Optional: the LLM observability sink. When wired, each emit rolls the per-run
-   * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
-   * board shows tokens / output-limit headroom / transport-vs-execution latency
-   * live. Absent (tests / unconfigured) → steps carry no `metrics`.
-   */
-  llmObservability?: LlmObservabilityService
-  /**
-   * Optional: resolve a block's run repo (installation + repo + default branch) bound to
-   * a checkout-free {@link RepoFiles} so a registered custom kind's pre/post-op hooks
-   * read/commit a targeted subset of the repo WITHOUT a checkout. A facade composes it
-   * from its wired `GitHubClient` + `resolveRepoTarget` (`makeResolveRunRepoContext`).
-   * Absent (tests / GitHub not connected) → pre/post-ops are skipped.
-   */
-  resolveRunRepoContext?: ResolveRunRepoContext
-  /**
-   * Optional: assert the workspace has a usable container-agent backend before a run
-   * starts (local mode delegating agents to a runner pool that isn't registered throws a
-   * clean {@link ConflictError} here). Absent → no start-time check (Cloudflare/Node have
-   * a fixed backend; a missing local pool still fails loudly at dispatch).
-   */
-  assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
-}
-
-/** Reconciles a Blueprinter step's tree onto the board in place (BoardScanService). */
-export interface BlueprintReconciler {
-  reconcileBlueprint(
-    workspaceId: string,
-    frameId: string | null,
-    service: BlueprintService,
-  ): Promise<unknown>
-}
+// The engine's injected-collaborator contract lives next door (a ~350-line declaration block
+// that was crowding this file against its size budget); re-exported here so every existing
+// importer — including the package index — keeps resolving it from `ExecutionService.js`.
+export type {
+  BlueprintReconciler,
+  ExecutionServiceDependencies,
+} from './ExecutionServiceDependencies.js'
 
 /**
  * The effective risk/merge policy for one run, as {@link ExecutionService.resolveRiskPolicy}
@@ -699,6 +308,10 @@ export class ExecutionService {
     stepResolverRegistry,
     providerRegistry,
     initiativePresetRegistry,
+    prVerificationReportPublisher,
+    workspaceSettingsRepository,
+    appBaseUrl,
+    logger,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -880,6 +493,18 @@ export class ExecutionService {
         this.initiativeInterviewController,
         this.docInterviewController,
       ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
+      // Keeps the run's verification report on its PR as each step settles (a hook, not a
+      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
+      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
+      prVerificationReport: new PrVerificationReportController({
+        blockRepository,
+        clock,
+        publisher: prVerificationReportPublisher,
+        taskRepository,
+        workspaceSettingsRepository,
+        appBaseUrl,
+        logger,
+      }),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,

@@ -145,6 +145,10 @@ useKeyboardShortcuts()
 
 // Load the board from the backend before rendering it.
 onMounted(() => {
+  // Consume a run deep link (`?ws=…&block=…&run=…&view=observability`) BEFORE init, so the
+  // board it names is the one that opens. This is what makes the observability link on an
+  // engine-published PR verification report resolve.
+  useRunDeepLink()
   void workspace.init()
   // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
   // window pre-seeded with the provisioned connection so the user only pastes the token + saves.

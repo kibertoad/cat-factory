@@ -1,6 +1,7 @@
 import { describe } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { defineExecutionGatesConformance } from './execution-gates.js'
+import { defineExecutionPrReportConformance } from './execution-pr-report.js'
 import { defineExecutionReviewConformance } from './execution-review.js'
 import { defineExecutionTesterConformance } from './execution-tester.js'
 
@@ -13,5 +14,6 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
     defineExecutionTesterConformance(harness)
     defineExecutionReviewConformance(harness)
     defineExecutionGatesConformance(harness)
+    defineExecutionPrReportConformance(harness)
   })
 }

@@ -290,6 +290,16 @@ export interface VcsClient {
     number: number,
     patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
   ): Promise<GitHubPullRequest>
+  /**
+   * Read a PR's current description/body verbatim (`null` when it has none). Backs the
+   * engine's verification-report upsert, which splices a marker-delimited region into the
+   * body it just read — see the {@link GitHubClient} counterpart.
+   */
+  getPullRequestBody(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
   /** Read a PR's lazily-computed mergeability (the gate normalises the result). */
   getPullRequestMergeability(
     connection: VcsConnectionRef,

@@ -149,6 +149,7 @@ const draft = reactive({
   taskLimitShared: 5 as number,
   perType: {} as Record<LimitTaskType, number>,
   storeAgentContext: true,
+  publishPrVerificationReport: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   reviewFrictionMode: 'off' as ReviewFrictionMode,
@@ -167,6 +168,7 @@ function hydrate() {
   const pt = s.taskLimitPerType ?? {}
   for (const t of TASK_TYPES) draft.perType[t] = pt[t] ?? 3
   draft.storeAgentContext = s.storeAgentContext
+  draft.publishPrVerificationReport = s.publishPrVerificationReport
   draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
   draft.reviewFrictionMode = s.reviewFrictionMode
@@ -222,6 +224,7 @@ async function save() {
             )
           : null,
       storeAgentContext: draft.storeAgentContext,
+      publishPrVerificationReport: draft.publishPrVerificationReport,
       artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
       reviewFrictionMode: draft.reviewFrictionMode,
@@ -417,6 +420,22 @@ async function save() {
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
                 <span class="text-sm text-slate-200">{{
                   t('settings.workspaceSettings.observability.toggle')
+                }}</span>
+              </label>
+            </section>
+
+            <!-- Engine-maintained PR verification report -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.prReport.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.prReport.body') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <USwitch v-model="draft.publishPrVerificationReport" size="sm" />
+                <span class="text-sm text-slate-200">{{
+                  t('settings.workspaceSettings.prReport.toggle')
                 }}</span>
               </label>
             </section>

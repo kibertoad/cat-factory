@@ -2608,6 +2608,11 @@
         "body": "Stockez le contexte complet fourni à chaque agent : les prompts composés, les fragments de bonnes pratiques intégrés et le contenu intégral des fichiers injectés dans son conteneur, afin de pouvoir l'inspecter plus tard dans la vue d'observabilité. Les corps sont conservés pendant la même fenêtre que la télémétrie LLM par appel. Désactivez pour cesser de le stocker (les instantanés existants sont supprimés par la rétention).",
         "toggle": "Stocker le contexte complet de l'agent"
       },
+      "prReport": {
+        "heading": "Rapport de vérification sur la pull request",
+        "body": "Maintient un rapport de vérification sur la pull request de chaque exécution : le verdict de CI, le rapport du testeur, le cycle de vie de l'environnement éphémère et l'évaluation de fusion, sous forme de faits constatés plutôt que d'affirmations de l'agent. Les identifiants sont expurgés avant toute écriture. Désactivez pour cesser de le publier ; un rapport déjà présent reste inchangé.",
+        "toggle": "Publier le rapport de vérification sur les pull requests"
+      },
       "retention": {
         "heading": "Rétention des captures d'écran",
         "body": "Combien de temps conserver les captures d'écran du testeur d'UI et les images de conception de référence auxquelles elles sont comparées (la vérification visuelle). Un nettoyage quotidien supprime à la fois les octets des images et leurs métadonnées une fois qu'ils dépassent cette fenêtre.",

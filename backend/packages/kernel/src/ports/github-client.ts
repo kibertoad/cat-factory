@@ -720,6 +720,19 @@ export interface GitHubClient {
     patch: { title?: string; body?: string; state?: 'open' | 'closed'; base?: string },
   ): Promise<GitHubPullRequest>
   /**
+   * Read a PR's current description/body verbatim (`null` when the PR has none, or can't be
+   * read). The read half of the engine's verification-report upsert: the report is a
+   * marker-delimited region of the PR body, so the publisher MUST splice against the body as
+   * it is right now — writing a body composed from anything else would clobber a concurrent
+   * human edit. Deliberately NOT part of the {@link GitHubPullRequest} projection, which is a
+   * sync cursor and never carries prose.
+   */
+  getPullRequestBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
    * Read a PR's lazily-computed mergeability. GitHub computes `mergeable` /
    * `mergeable_state` asynchronously, so `mergeable` is `null` until it is ready;
    * `mergeableState === 'dirty'` is its signal that the PR conflicts with its base.

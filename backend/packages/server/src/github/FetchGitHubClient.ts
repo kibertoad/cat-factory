@@ -1258,6 +1258,18 @@ export class FetchGitHubClient implements GitHubClient {
     return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
   }
 
+  /** The PR's current description, for the verification report's read-splice-write upsert. */
+  async getPullRequestBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+      installationId,
+    })
+    return ((json ?? {}) as { body?: string | null }).body ?? null
+  }
+
   async getPullRequestMergeability(
     installationId: number,
     ref: GitHubRepoRef,

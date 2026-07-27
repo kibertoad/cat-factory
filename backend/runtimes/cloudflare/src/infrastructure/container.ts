@@ -226,7 +226,11 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import { GitHubDocQualityProvider, GitHubPullRequestReviewProvider } from '@cat-factory/server'
+import {
+  GitHubDocQualityProvider,
+  GitHubPrReportPublisher,
+  GitHubPullRequestReviewProvider,
+} from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -760,6 +764,14 @@ export function selectMergeLifecycleDeps(
       blockRepository,
     })
     deps.pullRequestMerger = new GitHubPullRequestMerger({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+    // Keeps the engine-maintained verification report current on each run's PR. Reads through
+    // the same engine VCS client, so a GitLab-only deployment gets it too (runtime symmetry
+    // with the Node facade's `githubGateDeps`).
+    deps.prVerificationReportPublisher = new GitHubPrReportPublisher({
       githubClient,
       resolveRepoTarget,
       blockRepository,
