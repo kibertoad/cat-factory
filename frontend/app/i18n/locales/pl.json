@@ -3061,8 +3061,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "Połącz cat-factory z GitHub",
-      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Zainstaluj aplikację GitHub na swoim koncie lub w organizacji, aby kontynuować, i możesz przyznać jej wszystkie repozytoria albo wybrać ich podzbiór.",
+      "appIntro": "Zainstaluj aplikację GitHub na swoim koncie lub w organizacji; możesz przyznać jej wszystkie repozytoria albo wybrać ich podzbiór.",
       "signedInAs": "Zalogowano jako {login}",
       "signOut": "Wyloguj się"
     },
@@ -3136,7 +3135,6 @@
         "closed": "zamknięte"
       },
       "toast": {
-        "disconnected": "Rozłączono z GitHub",
         "resync": "Ponowna synchronizacja {status}",
         "reposUpdated": "Zaktualizowano powiązane repozytoria",
         "branchCreated": "Utworzono gałąź {name}",
@@ -3152,10 +3150,6 @@
         "createBranch": "Nie udało się utworzyć gałęzi",
         "openPr": "Nie udało się otworzyć pull requesta",
         "merge": "Nie udało się scalić"
-      },
-      "confirmDisconnect": {
-        "title": "Rozłączyć GitHub?",
-        "body": "Aplikacja utraci dostęp do Twoich repozytoriów do ponownego połączenia."
       }
     },
     "addService": {
@@ -5175,6 +5169,41 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Źródło odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "Kontrola źródeł",
+      "patMeta": "Połączono za pomocą osobistego tokenu dostępu",
+      "confirmDisconnect": {
+        "title": "Rozłączyć {provider}?",
+        "body": "Aplikacja utraci dostęp do Twoich repozytoriów do ponownego połączenia."
+      },
+      "toast": {
+        "disconnected": "Rozłączono z {provider}"
+      }
+    },
+    "connect": {
+      "or": "lub",
+      "noneConfigured": "W tym wdrożeniu nie skonfigurowano połączenia z systemem kontroli źródeł. Poproś operatora o skonfigurowanie aplikacji GitHub lub dostępu do GitLab.",
+      "gitlab": {
+        "intro": "Wklej osobisty token dostępu GitLab, aby połączyć ten obszar roboczy. cat-factory używa go do wyświetlania Twoich projektów, wypychania gałęzi i otwierania merge requestów.",
+        "tokenLabel": "Osobisty token dostępu",
+        "scope": "Wymaga zakresu api",
+        "createToken": "Utwórz token w GitLab",
+        "submit": "Połącz GitLab",
+        "toast": {
+          "connected": "Połączono z GitLab"
+        },
+        "errors": {
+          "connect": "Nie udało się połączyć z GitLab"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "Połącz cat-factory z {provider}",
+      "titleAny": "Połącz cat-factory ze swoimi repozytoriami",
+      "intro": "cat-factory działa, otwierając pull requesty w Twoich repozytoriach. Połącz swojego dostawcę repozytoriów, aby kontynuować."
     }
   }
 }

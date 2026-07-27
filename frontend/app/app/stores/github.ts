@@ -9,6 +9,8 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   RepoTreeEntry,
+  VcsConnectOption,
+  VcsProvider,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
@@ -17,6 +19,7 @@ import { useServicesStore } from '~/stores/services'
 import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
 import { createGitHubConnectionActions } from '~/stores/github/connection'
 import { createGitHubRepoActions } from '~/stores/github/repoActions'
+import { createVcsConnectActions } from '~/stores/github/vcsConnect'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -33,8 +36,10 @@ export const useGitHubStore = defineStore('github', () => {
 
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
-  /** The workspace's App installation, or null when not yet connected. */
+  /** The workspace's VCS connection (App installation or PAT), or null when not connected. */
   const connection = ref<GitHubConnection | null>(null)
+  /** The connect surfaces this deployment serves; resolved by the probe alongside `connection`. */
+  const connectOptions = ref<VcsConnectOption[]>([])
   /** Discovered App installations for the connect picker; loaded on demand. */
   const installations = ref<GitHubInstallationOption[]>([])
   const loadingInstallations = ref(false)
@@ -58,6 +63,26 @@ export const useGitHubStore = defineStore('github', () => {
   const syncing = ref(false)
 
   const connected = computed(() => connection.value !== null)
+  /**
+   * The provider backing the current connection. Presentation (labels, icons, host/URL shapes)
+   * keys off this; a connection from a backend predating the discriminator is a GitHub App one.
+   */
+  const provider = computed<VcsProvider>(() => connection.value?.provider ?? 'github')
+  /** Whether the deployment can serve a GitHub App connect / a per-workspace GitLab PAT connect. */
+  const canConnectGitHubApp = computed(() =>
+    connectOptions.value.some((o) => o.provider === 'github' && o.method === 'app'),
+  )
+  const canConnectGitLabPat = computed(() =>
+    connectOptions.value.some((o) => o.provider === 'gitlab' && o.method === 'pat'),
+  )
+  /**
+   * The single provider this deployment can connect, or null when it offers several (or none) —
+   * what the connect copy keys off so a one-provider deployment never says "choose a provider".
+   */
+  const soleConnectProvider = computed<VcsProvider | null>(() => {
+    const providers = new Set(connectOptions.value.map((o) => o.provider))
+    return providers.size === 1 ? [...providers][0]! : null
+  })
   /** Whether cat-factory can create repos under the connected account itself. */
   const canCreateRepos = computed(() => connection.value?.canCreateRepos === true)
   /**
@@ -104,17 +129,29 @@ export const useGitHubStore = defineStore('github', () => {
     return base ? `${base}/issues/${issue.number}` : null
   }
 
-  /** Probe the integration: resolves `available` and the current connection. */
+  /**
+   * Probe the integration: resolves `available`, the current connection, and which connect
+   * surfaces the deployment serves. The capability read rides the same round trip (it is what
+   * the not-connected UI renders from), and degrades to "no connect surface" on its own.
+   */
   async function runProbe() {
     if (!workspace.workspaceId) return
     try {
-      const { connection: conn } = await api.getGitHubConnection(workspace.requireId())
+      const [{ connection: conn }, options] = await Promise.all([
+        api.getGitHubConnection(workspace.requireId()),
+        api
+          .listVcsConnectOptions(workspace.requireId())
+          .then((r) => r.options)
+          .catch(() => []),
+      ])
       available.value = true
       connection.value = conn
+      connectOptions.value = options
     } catch {
       // 503 (integration disabled) or any error → hide the UI entry points.
       available.value = false
       connection.value = null
+      connectOptions.value = []
     }
   }
   // Single-flight the probe (app-startup initiative, item 12): `probe()` still re-reads on demand,
@@ -162,6 +199,7 @@ export const useGitHubStore = defineStore('github', () => {
     workspace,
     available,
     connection,
+    connectOptions,
     installations,
     loadingInstallations,
     repos,
@@ -180,6 +218,7 @@ export const useGitHubStore = defineStore('github', () => {
   }
   const connectionActions = createGitHubConnectionActions(context)
   const repoActions = createGitHubRepoActions(context)
+  const vcsConnectActions = createVcsConnectActions(context)
 
   /**
    * Drop the per-workspace projection + connection state (called on workspace switch)
@@ -189,6 +228,7 @@ export const useGitHubStore = defineStore('github', () => {
   function reset() {
     available.value = null
     connection.value = null
+    connectOptions.value = []
     installations.value = []
     repos.value = []
     availableRepos.value = []
@@ -201,6 +241,7 @@ export const useGitHubStore = defineStore('github', () => {
   return {
     available,
     connection,
+    connectOptions,
     installations,
     loadingInstallations,
     repos,
@@ -213,6 +254,10 @@ export const useGitHubStore = defineStore('github', () => {
     loading,
     syncing,
     connected,
+    provider,
+    canConnectGitHubApp,
+    canConnectGitLabPat,
+    soleConnectProvider,
     canCreateRepos,
     missingWorkflowsPermission,
     repoFor,
@@ -229,6 +274,7 @@ export const useGitHubStore = defineStore('github', () => {
     repoFiles,
     ...connectionActions,
     ...repoActions,
+    ...vcsConnectActions,
     reset,
   }
 })

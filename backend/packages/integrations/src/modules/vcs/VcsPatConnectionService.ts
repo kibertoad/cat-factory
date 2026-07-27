@@ -57,6 +57,11 @@ function toConnection(installation: GitHubInstallation): GitHubConnection {
 export class VcsPatConnectionService {
   constructor(private readonly deps: VcsPatConnectionServiceDependencies) {}
 
+  /** The provider this service connects — what the connect-capability route advertises. */
+  get provider(): VcsProvider {
+    return this.deps.provider
+  }
+
   /**
    * Connect (or re-connect) a workspace with a pasted PAT. Idempotent per workspace: the
    * installation id is derived from the workspace id, so re-connecting with a fresh token

@@ -3073,8 +3073,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "cat-factory を GitHub に接続",
-      "intro": "cat-factory はリポジトリ上でプルリクエストを開くことで動作します。続行するにはアカウントまたは組織に GitHub App をインストールしてください。すべてのリポジトリを許可することも、一部を選択することもできます。",
+      "appIntro": "アカウントまたは組織に GitHub App をインストールしてください。すべてのリポジトリを許可することも、一部を選択することもできます。",
       "signedInAs": "{login} としてサインイン中",
       "signOut": "サインアウト"
     },
@@ -3148,7 +3147,6 @@
         "closed": "クローズ"
       },
       "toast": {
-        "disconnected": "GitHubの接続を解除しました",
         "resync": "{status}を再同期",
         "reposUpdated": "リンクされたリポジトリを更新しました",
         "branchCreated": "ブランチ{name}を作成しました",
@@ -3164,10 +3162,6 @@
         "createBranch": "ブランチを作成できませんでした",
         "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
-      },
-      "confirmDisconnect": {
-        "title": "GitHub を切断しますか？",
-        "body": "再接続するまでアプリはリポジトリにアクセスできなくなります。"
       }
     },
     "addService": {
@@ -5187,6 +5181,41 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "ソース管理",
+      "patMeta": "個人用アクセストークンで接続済み",
+      "confirmDisconnect": {
+        "title": "{provider} を切断しますか？",
+        "body": "再接続するまでアプリはリポジトリにアクセスできなくなります。"
+      },
+      "toast": {
+        "disconnected": "{provider} の接続を解除しました"
+      }
+    },
+    "connect": {
+      "or": "または",
+      "noneConfigured": "このデプロイにはソース管理の接続が設定されていません。GitHub App または GitLab へのアクセスの設定を運用者に依頼してください。",
+      "gitlab": {
+        "intro": "GitLab の個人用アクセストークンを貼り付けて、このワークスペースを接続します。cat-factory はこれを使ってプロジェクトの一覧取得、ブランチのプッシュ、マージリクエストの作成を行います。",
+        "tokenLabel": "個人用アクセストークン",
+        "scope": "api スコープが必要です",
+        "createToken": "GitLab でトークンを作成",
+        "submit": "GitLab に接続",
+        "toast": {
+          "connected": "GitLab に接続しました"
+        },
+        "errors": {
+          "connect": "GitLab に接続できませんでした"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "cat-factory を {provider} に接続",
+      "titleAny": "cat-factory をリポジトリに接続",
+      "intro": "cat-factory はリポジトリ上でプルリクエストを開くことで動作します。続行するにはリポジトリホストを接続してください。"
     }
   }
 }
