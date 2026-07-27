@@ -27,6 +27,9 @@ export interface ResolvedRunRiskPolicy {
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
+  /** Judge steps: the minimum verdict score to advance, and the rework bounce budget. */
+  judgeMinScore: number
+  judgeMaxBounces: number
   autoMergeEnabled: boolean
   forkDecision?: StepGating | null
   /**

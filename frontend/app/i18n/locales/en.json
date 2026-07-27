@@ -534,7 +534,8 @@
         "env_test_not_a_frame": "Not a service",
         "env_test_infraless": "Nothing to test",
         "env_test_not_provisionable": "Environment handler not configured",
-        "env_test_no_vcs": "Git provider not connected"
+        "env_test_no_vcs": "Git provider not connected",
+        "env_test_connection_failed": "Environment connection failed"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -556,7 +557,12 @@
         "env_test_not_provisionable": "This service has a provision type, but no workspace handler resolves for it yet, so provisioning can't run. Configure an environment handler.",
         "env_test_not_provisionable_no_handler": "No workspace environment handler is configured for this service's provision type. In Infrastructure → Test environments, register one — for a custom provider, a Custom (remote-custom) handler whose accepted manifest id matches the one this service pins.",
         "env_test_not_provisionable_type_mismatch": "More than one environment handler could match this service's provision type. Pin a manifest id for this service so exactly one resolves, or remove the overlapping handler in Infrastructure → Test environments.",
-        "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one."
+        "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one.",
+        "env_test_connection_failed": "The environment handler for this service failed its connection test. Check its endpoint, credentials and project settings, then re-test the connection.",
+        "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
+        "@env_test_connection_failed_detail": {
+          "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
+        }
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1790,6 +1796,7 @@
         "initiative": "Mark read",
         "markRead": "Mark read",
         "fork_decision_pending": "Mark read",
+        "judge_review": "Mark read",
         "pr_review_ready": "Mark read",
         "budget_paused": "Mark read",
         "key_drift": "Drop stale credentials",
@@ -3881,6 +3888,43 @@
       "suffixNotNeeded": "· not needed yet",
       "gatedCommit": "Gated commit",
       "footer": "A gate runs a programmatic precheck and only spins up the {helper} when it fails; a green check advances with nothing spun up."
+    }
+  },
+  "judge": {
+    "subtitle": "Scores this run's work against a rubric, then advances, asks, or sends it back",
+    "empty": "This step has not produced a verdict yet.",
+    "notScored": "Not scored",
+    "threshold": "threshold {threshold}",
+    "rubricOverridden": "workspace rubric",
+    "reworkRounds": "rework {spent}/{budget}",
+    "findingsHeading": "What the rubric flagged",
+    "roundsHeading": "Review rounds",
+    "round": "Round {round}",
+    "decisionHeading": "Your decision",
+    "decisionDescription": "Proceed anyway, send the work back for rework, or stop the run.",
+    "feedbackPlaceholder": "Optional guidance to include when sending the work back…",
+    "proceed": "Proceed anyway",
+    "bounce": "Send back for rework",
+    "stop": "Stop the run",
+    "status": {
+      "evaluating": "Reviewing",
+      "awaitingDecision": "Needs a decision",
+      "bouncing": "Reworking",
+      "passed": "Passed",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "disposition": {
+      "pass": "Passed",
+      "park": "Asked a human",
+      "bounce": "Sent back for rework",
+      "fail": "Failed the run"
     }
   },
   "requirements": {

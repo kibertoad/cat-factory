@@ -492,7 +492,8 @@
         "env_test_not_a_frame": "Bir hizmet değil",
         "env_test_infraless": "Test edilecek bir şey yok",
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
-        "env_test_no_vcs": "Git sağlayıcısı bağlı değil"
+        "env_test_no_vcs": "Git sağlayıcısı bağlı değil",
+        "env_test_connection_failed": "Ortam bağlantısı başarısız"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -514,7 +515,9 @@
         "env_test_not_provisionable": "Bu hizmetin bir sağlama türü var ancak henüz onun için çözümlenen bir çalışma alanı işleyicisi yok, bu yüzden sağlama çalışamaz. Bir ortam işleyicisi yapılandır.",
         "env_test_not_provisionable_no_handler": "Bu hizmetin sağlama türü için yapılandırılmış bir çalışma alanı ortam işleyicisi yok. Altyapı → Test ortamları bölümünde bir tane kaydet — özel bir sağlayıcı için, kabul ettiği manifest id bu hizmetin sabitlediğiyle eşleşen bir Custom (remote-custom) işleyicisi.",
         "env_test_not_provisionable_type_mismatch": "Birden fazla ortam işleyicisi bu hizmetin sağlama türüyle eşleşebilir. Tam olarak biri çözümlensin diye bu hizmet için bir manifest id sabitle ya da Altyapı → Test ortamları bölümündeki çakışan işleyiciyi kaldır.",
-        "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil."
+        "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
+        "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
+        "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1721,6 +1724,7 @@
         "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle",
         "fork_decision_pending": "Okundu olarak işaretle",
+        "judge_review": "Okundu olarak işaretle",
         "pr_review_ready": "Okundu işaretle",
         "budget_paused": "Okundu işaretle",
         "key_drift": "Eski kimlik bilgilerini kaldır",
@@ -3750,6 +3754,43 @@
       "suffixNotNeeded": "· henüz gerekli değil",
       "gatedCommit": "Kapı altındaki commit",
       "footer": "Bir kapı, programatik bir ön kontrol çalıştırır ve yalnızca başarısız olduğunda {helper} öğesini devreye sokar; yeşil bir kontrol, hiçbir şey devreye girmeden ilerler."
+    }
+  },
+  "judge": {
+    "subtitle": "Bu çalışmanın işini bir değerlendirme ölçütüne göre puanlar; sonra devam eder, sorar ya da geri gönderir",
+    "empty": "Bu adım henüz bir karar üretmedi.",
+    "notScored": "Puanlanmadı",
+    "threshold": "eşik {threshold}",
+    "rubricOverridden": "çalışma alanı ölçütü",
+    "reworkRounds": "yeniden çalışma {spent}/{budget}",
+    "findingsHeading": "Ölçütün işaretledikleri",
+    "roundsHeading": "İnceleme turları",
+    "round": "{round}. tur",
+    "decisionHeading": "Kararınız",
+    "decisionDescription": "Yine de devam edin, işi düzeltilmek üzere geri gönderin ya da çalışmayı durdurun.",
+    "feedbackPlaceholder": "Geri gönderirken eklenecek isteğe bağlı yönlendirme…",
+    "proceed": "Yine de devam et",
+    "bounce": "Düzeltme için geri gönder",
+    "stop": "Çalışmayı durdur",
+    "status": {
+      "evaluating": "İnceleniyor",
+      "awaitingDecision": "Karar gerekiyor",
+      "bouncing": "Düzeltiliyor",
+      "passed": "Geçti",
+      "failed": "Başarısız",
+      "skipped": "Atlandı"
+    },
+    "severity": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "critical": "Kritik"
+    },
+    "disposition": {
+      "pass": "Geçti",
+      "park": "Bir kişiye sordu",
+      "bounce": "Düzeltme için geri gönderildi",
+      "fail": "Çalışma başarısız oldu"
     }
   },
   "requirements": {

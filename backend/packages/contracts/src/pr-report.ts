@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { judgeDispositionSchema, judgeFindingSchema } from './judge.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
@@ -204,6 +205,48 @@ export const prReportObservabilitySchema = v.object({
 })
 export type PrReportObservability = v.InferOutput<typeof prReportObservabilitySchema>
 
+/**
+ * One JUDGE step's recorded verdict (the fourth step-taxonomy bucket). Composed from the step's
+ * own `judge` state — never by re-running the assessment, which would cost a second model call
+ * and could disagree with the verdict the engine actually acted on (the same rule the CI
+ * section follows about re-probing its provider).
+ *
+ * The rubric BODY is deliberately not carried: it is deployment/workspace policy text, often
+ * long, and the reviewer acts on the findings. Every string here is model-authored and is
+ * rendered through kernel's `hostMarkdown` helpers plus `redactSecrets`.
+ */
+export const prReportJudgeSchema = v.object({
+  /** The judge step's `agentKind`, which names WHICH judge scored the work. */
+  stepKind: v.string(),
+  rubricName: v.nullable(v.string()),
+  /** Whether the workspace overrode the registration's default rubric with its own fragment. */
+  rubricOverridden: v.boolean(),
+  /** The verdict's score, and the per-task threshold it was compared against. */
+  score: v.nullable(v.number()),
+  threshold: v.nullable(v.number()),
+  /** What the engine did: pass / park for a human / bounce for rework / fail the run. */
+  disposition: v.nullable(judgeDispositionSchema),
+  /** The judge's prose justification. */
+  summary: v.nullable(v.string()),
+  /** What the rubric flagged (capped like every other list; see `truncations`). */
+  findings: v.array(judgeFindingSchema),
+  /** Rework rounds spent, and the ceiling from the task's merge preset. */
+  bounces: v.number(),
+  maxBounces: v.number(),
+  /** The model that produced the verdict. */
+  model: v.nullable(v.string()),
+})
+export type PrReportJudge = v.InferOutput<typeof prReportJudgeSchema>
+
+/** The run's judge verdicts. `absent` when the pipeline placed no judge step (or none settled). */
+export const prReportJudgesSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says why the section is empty when `status` is `absent`. */
+  note: v.optional(v.nullable(v.string())),
+  verdicts: v.array(prReportJudgeSchema),
+})
+export type PrReportJudges = v.InferOutput<typeof prReportJudgesSchema>
+
 export const prVerificationReportSchema = v.object({
   /** See {@link PR_VERIFICATION_REPORT_VERSION}. */
   version: v.number(),
@@ -214,6 +257,7 @@ export const prVerificationReportSchema = v.object({
   tests: prReportTestsSchema,
   environments: prReportEnvironmentsSchema,
   merge: prReportMergeSchema,
+  judges: prReportJudgesSchema,
   observability: prReportObservabilitySchema,
   /**
    * What the report had to leave out to stay inside a pull-request body, one human-readable

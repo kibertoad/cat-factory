@@ -26,6 +26,10 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+// The default judge assessor (the inline LLM verdict producer). Exported so a facade or a test
+// harness can build/replace it explicitly; `createCore` builds one from the model-provider deps
+// by default, so a deployment normally never names it. See `docs/initiatives/judge-registry.md`.
+export { JudgeService, type JudgeServiceDeps } from './modules/execution/JudgeService.js'
 export type { TesterQualityOutcome } from './modules/execution/testerQuality.logic.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 // The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
@@ -50,6 +54,15 @@ export {
   StepResolverRegistry,
   defaultStepResolverRegistry,
   stubResolverContext,
+  type JudgeRubric,
+  type JudgeSubject,
+  type JudgeAssessor,
+  type JudgeDefinition,
+  type JudgeContext,
+  type JudgeFactory,
+  JudgeRegistry,
+  defaultJudgeRegistry,
+  stubJudgeContext,
 } from '@cat-factory/kernel'
 export {
   driveExecution,

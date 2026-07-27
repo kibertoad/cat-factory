@@ -297,6 +297,7 @@ const ENV_TEST_CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}
   env_test_infraless: 'errors.conflict.title.env_test_infraless',
   env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
   env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
+  env_test_connection_failed: 'errors.conflict.title.env_test_connection_failed',
 }
 
 function buildEnvTestError(e: unknown): EnvTestError {
@@ -314,6 +315,18 @@ function buildEnvTestError(e: unknown): EnvTestError {
           ? 'errors.conflict.description.env_test_not_provisionable_type_mismatch'
           : 'errors.conflict.description.env_test_not_provisionable_no_handler',
       ),
+      configurable: true,
+    }
+  }
+  // The handler resolved but its live connection probe failed. The provider's OWN message is the
+  // actionable part ("Kargo project 'X' was not found"), so wrap it in localized prose rather than
+  // replacing it with a generic sentence — and offer the same jump, since the fix is in the
+  // handler's connection config.
+  if (reason === 'env_test_connection_failed' && parsed?.message) {
+    return {
+      text: t('errors.conflict.description.env_test_connection_failed_detail', {
+        detail: parsed.message,
+      }),
       configurable: true,
     }
   }

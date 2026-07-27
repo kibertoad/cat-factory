@@ -97,6 +97,11 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
       detectionConventions: o.detectionConventions,
       testerQualityReviewer: o.testerQualityReviewer,
+      // - judgeRegistry + judgeAssessor: a deployment-registered rubric judge + a deterministic
+      //   verdict producer, so the pass / park / bounce / fail loop (and the unwired
+      //   pass-through) is driven against real D1 with no model.
+      judgeRegistry: o.judgeRegistry,
+      judgeAssessor: o.judgeAssessor,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       agentKindRegistry: o.agentKindRegistry,

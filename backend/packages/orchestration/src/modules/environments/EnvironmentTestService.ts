@@ -1,6 +1,7 @@
 import type {
   Block,
   Clock,
+  ConnectionTestResult,
   EnvironmentHandle,
   EnvironmentTestRun,
   ExecutionEventPublisher,
@@ -39,6 +40,17 @@ export interface EnvironmentTestProvisioning {
     service: NonNullable<Block['provisioning']>,
     initiatedBy?: string | null,
   ): Promise<{ ok: boolean; reason?: string }>
+  /**
+   * Probe the resolved provider's live connection (token/endpoint reachable) without persisting —
+   * `null` when the provider has no probe (or `infraless`). The self-test runs this as a pre-flight
+   * so a bad connection (e.g. a wrong project id or a rejected token) fails fast, BEFORE a throwaway
+   * branch is created, instead of opaquely mid-provision.
+   */
+  testProvisioning(
+    workspaceId: string,
+    service: NonNullable<Block['provisioning']>,
+    initiatedBy?: string | null,
+  ): Promise<ConnectionTestResult | null>
   startProvision(args: ProvisionArgs, ref: RunnerJobRef): Promise<ProvisionDispatch>
   pollProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<RunnerJobView>
   finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle>
@@ -208,6 +220,22 @@ export class EnvironmentTestService {
         // environment handler" jump off (`details.reason`). `handlerIssue` lets the SPA still
         // word the specific case — nothing configured vs. an ambiguous match.
         gate.reason ? { handlerIssue: gate.reason } : undefined,
+      )
+    }
+    // Pre-flight the provider's live connection (token accepted, endpoint/project reachable) BEFORE
+    // creating the throwaway branch, so a connection-level misconfiguration — a rejected token, or a
+    // wrong project/endpoint — surfaces up front as an actionable 409 carrying the provider's own
+    // message, instead of failing opaquely mid-provision (and churning a create+delete of the temp
+    // branch). Providers without a `testConnection` (or `infraless`) return null ⇒ nothing to probe.
+    const probe = await this.deps.provisioning.testProvisioning(
+      workspaceId,
+      provisioning,
+      initiatedBy,
+    )
+    if (probe && !probe.ok) {
+      throw new ConflictError(
+        probe.message || 'The environment provider connection could not be validated.',
+        'env_test_connection_failed',
       )
     }
     // Resolve the git provider up front so a missing VCS is a real 409 (the SPA keys its

@@ -166,6 +166,15 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
       run: (ui) => ui.openGitHub(),
     },
   },
+  env_test_connection_failed: {
+    titleKey: 'errors.conflict.title.env_test_connection_failed',
+    descriptionKey: 'errors.conflict.description.env_test_connection_failed',
+    action: {
+      labelKey: 'errors.conflict.action.configureInfrastructure',
+      icon: 'i-lucide-settings',
+      run: (ui) => ui.openProviderConnection('environment'),
+    },
+  },
   // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
   // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
   // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +

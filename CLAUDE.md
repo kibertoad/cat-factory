@@ -1629,7 +1629,7 @@ regression, spawns an **`on-call`** agent to investigate — it never auto-rever
 
 ## Gates vs agents (the step taxonomy)
 
-A pipeline step's `agentKind` puts it in one of three buckets. Most engine handling
+A pipeline step's `agentKind` puts it in one of FOUR buckets. Most engine handling
 keys off which bucket, so know them before adding a step:
 
 - **Agents** — a container or inline LLM does the work (`coder`, `architect`,
@@ -1672,6 +1672,38 @@ keys off which bucket, so know them before adding a step:
 - **One-shot engine steps** — non-LLM steps with bespoke handling: `tracker` (files a
   ticket), `deployer` (provisions an env), `requirements-review` (inline reviewer + park
   loop). Not gates because they don't poll-or-escalate.
+- **Judges** — an inline LLM scores the run's work against a **rubric**, the engine compares the
+  verdict to a **per-task threshold** (the merge preset's `judgeMinScore`), and disposes:
+  advance / park for a human / **bounce** the producing step with the findings as `rework` /
+  fail the run. This is the promoted form of the "structured assessment vs per-task threshold"
+  family (requirements auto-pass, the merger, on-call) — see
+  [`docs/initiatives/judge-registry.md`](./docs/initiatives/judge-registry.md).
+  **Adding a judge is a new registry entry, not a new copy of the machinery** — the same promise
+  `registerGate` makes. One generic driver (`JudgeStepController.evaluate`, the `evaluateGate`
+  analogue) owns the state machine; a `JudgeDefinition` supplies only its rubric, `parseVerdict`,
+  `threshold`/`attemptBudget` (read off the preset), `onFail` and `bounceTargets`.
+  - **A judge is NOT a gate**: a gate's `probe()` is a cheap programmatic precheck whose whole
+    point is to spin nothing up when it passes, with a `pending` state to poll and a helper
+    CONTAINER to escalate to. A judge always costs a model call, has no pending state, and yields
+    a score. And it is **NOT a `StepCompletionResolver`**: a resolver returns a `StepResolution`
+    and cannot park or loop the run — the ceiling deployments hit before this existed.
+  - The registry is an **app-owned `JudgeRegistry`** (`kernel/domain/judge-registry.ts`,
+    `defaultJudgeRegistry()`), threaded through `CoreDependencies.judgeRegistry` beside
+    `gateRegistry`. It is EMPTY by default — the platform ships no built-in judges.
+  - The verdict producer is the injectable **`JudgeAssessor`** seam. `createCore` builds the
+    inline `JudgeService` from the model-provider deps every facade already wires, so **judges
+    need no per-facade wiring**; an absent/disabled assessor makes every judge step a
+    **pass-through** (`status: 'skipped'` + a note), which is what keeps existing pipelines and
+    the conformance/e2e suites byte-for-byte unchanged. A test harness injects a deterministic
+    fake through the same seam.
+  - All live state rides **`step.judge`** (`JudgeStepState`) — no side table, so it is
+    runtime-symmetric by construction (the `forkDecision` precedent). It deliberately survives
+    `resetStepForRerun`, or a bounce would erase the verdict it is looping on.
+  - A rubric's per-workspace override is a **prompt-library fragment** (`JudgeRubric.fragmentId`,
+    resolved through the engine's existing `fragmentResolver`) — which is why this feature adds no
+    rubric table.
+  - A failing verdict NEVER silently advances: a bounce with a spent budget, or with no producing
+    step to bounce to, degrades to a **park** and records why.
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It is a
   `StepCompletionResolver` (`buildStepResolverRegistry`) but a different archetype from the
   light, externally-authorable resolvers (output reshaping / notification / repo follow-up,
@@ -1680,9 +1712,11 @@ keys off which bucket, so know them before adding a step:
   gate's provider precheck → escalate). So it keeps its engine-internal access (`MergeResolver`,
   `resolveMergePreset`, the real merge) rather than the minimal public `ResolverContext`. The
   public step-resolver seam is scoped to that light follow-up; `ownsTerminalStatus` is
-  built-in-only. (`requirements-review` auto-pass + `on-call` share the same "structured
-  assessment vs per-task threshold" shape — a latent "verdict gate" family, not promoted to an
-  abstraction until a second externally-authored member needs it.)
+  built-in-only. That is also why the merger was NOT rewritten onto the judge machine when the
+  verdict-gate family was promoted: handing the public seam `ownsTerminalStatus` and a real,
+  credential-bearing merge is exactly what this reservation forbids. (`requirements-review`
+  auto-pass may be re-expressed on the judge machine later as strangler work — tracked in
+  `docs/initiatives/judge-registry.md`, deliberately not done in the promotion itself.)
 
 The same "precheck, then skip the expensive work if it's unnecessary" idea applies to
 the inline requirements-incorporation companion: `hasNotesToIncorporate`

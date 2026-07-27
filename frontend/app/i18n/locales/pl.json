@@ -492,7 +492,8 @@
         "env_test_not_a_frame": "To nie usługa",
         "env_test_infraless": "Nie ma czego testować",
         "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
-        "env_test_no_vcs": "Dostawca Git nie jest połączony"
+        "env_test_no_vcs": "Dostawca Git nie jest połączony",
+        "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -514,7 +515,9 @@
         "env_test_not_provisionable": "Ta usługa ma typ udostępniania, ale nie ma jeszcze dla niego żadnego mechanizmu obsługi w przestrzeni roboczej, więc udostępnianie nie może zostać uruchomione. Skonfiguruj mechanizm obsługi środowiska.",
         "env_test_not_provisionable_no_handler": "Dla typu udostępniania tej usługi nie skonfigurowano żadnego mechanizmu obsługi środowiska w przestrzeni roboczej. W sekcji Infrastruktura → Środowiska testowe zarejestruj jeden — dla dostawcy niestandardowego mechanizm obsługi Custom (remote-custom), którego akceptowany manifest id odpowiada temu, który przypina ta usługa.",
         "env_test_not_provisionable_type_mismatch": "Do typu udostępniania tej usługi może pasować więcej niż jeden mechanizm obsługi środowiska. Przypnij manifest id do tej usługi, aby rozwiązywany był dokładnie jeden, albo usuń nakładający się mechanizm obsługi w sekcji Infrastruktura → Środowiska testowe.",
-        "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym."
+        "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym.",
+        "env_test_connection_failed": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
+        "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1721,6 +1724,7 @@
         "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane",
         "fork_decision_pending": "Oznacz jako przeczytane",
+        "judge_review": "Oznacz jako przeczytane",
         "pr_review_ready": "Oznacz jako przeczytane",
         "budget_paused": "Oznacz jako przeczytane",
         "key_drift": "Usuń nieaktualne poświadczenia",
@@ -3738,6 +3742,43 @@
       "suffixNotNeeded": "· jeszcze niepotrzebne",
       "gatedCommit": "Commit z bramką",
       "footer": "Bramka wykonuje programowe wstępne sprawdzenie i uruchamia {helper} tylko, gdy się nie powiedzie; zielone sprawdzenie przechodzi dalej bez uruchamiania czegokolwiek."
+    }
+  },
+  "judge": {
+    "subtitle": "Ocenia pracę tego przebiegu według rubryki, a potem kontynuuje, pyta lub odsyła ją z powrotem",
+    "empty": "Ten krok nie wydał jeszcze werdyktu.",
+    "notScored": "Bez oceny",
+    "threshold": "próg {threshold}",
+    "rubricOverridden": "rubryka przestrzeni roboczej",
+    "reworkRounds": "poprawki {spent}/{budget}",
+    "findingsHeading": "Co zgłosiła rubryka",
+    "roundsHeading": "Rundy przeglądu",
+    "round": "Runda {round}",
+    "decisionHeading": "Twoja decyzja",
+    "decisionDescription": "Kontynuuj mimo wszystko, odeślij pracę do poprawki albo zatrzymaj przebieg.",
+    "feedbackPlaceholder": "Opcjonalne wskazówki dołączane przy odsyłaniu pracy…",
+    "proceed": "Kontynuuj mimo wszystko",
+    "bounce": "Odeślij do poprawki",
+    "stop": "Zatrzymaj przebieg",
+    "status": {
+      "evaluating": "Przegląd",
+      "awaitingDecision": "Wymaga decyzji",
+      "bouncing": "W poprawkach",
+      "passed": "Zaliczone",
+      "failed": "Niezaliczone",
+      "skipped": "Pominięte"
+    },
+    "severity": {
+      "low": "Niska",
+      "medium": "Średnia",
+      "high": "Wysoka",
+      "critical": "Krytyczna"
+    },
+    "disposition": {
+      "pass": "Zaliczone",
+      "park": "Zapytano człowieka",
+      "bounce": "Odesłane do poprawki",
+      "fail": "Przebieg nieudany"
     }
   },
   "requirements": {

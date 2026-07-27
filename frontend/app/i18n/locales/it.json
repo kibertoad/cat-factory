@@ -1831,6 +1831,7 @@
         "initiative": "Segna come letto",
         "markRead": "Segna come letto",
         "fork_decision_pending": "Segna come letto",
+        "judge_review": "Segna come letto",
         "pr_review_ready": "Segna come letto",
         "budget_paused": "Segna come letto",
         "key_drift": "Elimina credenziali obsolete",
@@ -4162,7 +4163,8 @@
         "env_test_not_a_frame": "Non è un servizio",
         "env_test_infraless": "Niente da testare",
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
-        "env_test_no_vcs": "Provider Git non connesso"
+        "env_test_no_vcs": "Provider Git non connesso",
+        "env_test_connection_failed": "Connessione all'ambiente non riuscita"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4184,7 +4186,9 @@
         "env_test_not_provisionable": "Questo servizio ha un tipo di provisioning, ma non è ancora disponibile alcun handler del workspace, quindi il provisioning non può essere eseguito. Configura un handler dell'ambiente.",
         "env_test_not_provisionable_no_handler": "Nessun handler dell'ambiente del workspace è configurato per il tipo di provisioning di questo servizio. In Infrastruttura → Ambienti di test, registrane uno — per un provider personalizzato, un handler Custom (remote-custom) il cui manifest id accettato corrisponde a quello che questo servizio fissa.",
         "env_test_not_provisionable_type_mismatch": "Più di un handler dell'ambiente potrebbe corrispondere al tipo di provisioning di questo servizio. Fissa un manifest id per questo servizio in modo che se ne risolva esattamente uno, oppure rimuovi l'handler sovrapposto in Infrastruttura → Ambienti di test.",
-        "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno."
+        "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
+        "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
+        "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -4371,6 +4375,43 @@
       "suffixNotNeeded": "· non ancora necessario",
       "gatedCommit": "Commit sottoposto a gate",
       "footer": "Un gate esegue una verifica preliminare programmatica e avvia il {helper} solo in caso di esito negativo; un controllo verde avanza senza avviare nulla."
+    }
+  },
+  "judge": {
+    "subtitle": "Valuta il lavoro di questa esecuzione con una rubrica, poi prosegue, chiede o lo rimanda indietro",
+    "empty": "Questo passo non ha ancora prodotto un verdetto.",
+    "notScored": "Non valutato",
+    "threshold": "soglia {threshold}",
+    "rubricOverridden": "rubrica dello spazio di lavoro",
+    "reworkRounds": "revisione {spent}/{budget}",
+    "findingsHeading": "Cosa ha segnalato la rubrica",
+    "roundsHeading": "Cicli di revisione",
+    "round": "Ciclo {round}",
+    "decisionHeading": "La tua decisione",
+    "decisionDescription": "Procedere comunque, rimandare il lavoro in revisione o fermare l'esecuzione.",
+    "feedbackPlaceholder": "Indicazioni facoltative da allegare al rinvio…",
+    "proceed": "Procedi comunque",
+    "bounce": "Rimanda in revisione",
+    "stop": "Ferma l'esecuzione",
+    "status": {
+      "evaluating": "In revisione",
+      "awaitingDecision": "Serve una decisione",
+      "bouncing": "In rilavorazione",
+      "passed": "Superato",
+      "failed": "Fallito",
+      "skipped": "Saltato"
+    },
+    "severity": {
+      "low": "Bassa",
+      "medium": "Media",
+      "high": "Alta",
+      "critical": "Critica"
+    },
+    "disposition": {
+      "pass": "Superato",
+      "park": "Ha chiesto a una persona",
+      "bounce": "Rimandato in revisione",
+      "fail": "Esecuzione fallita"
     }
   },
   "consensus": {

@@ -492,7 +492,8 @@
         "env_test_not_a_frame": "Pas un service",
         "env_test_infraless": "Rien à tester",
         "env_test_not_provisionable": "Gestionnaire d'environnement non configuré",
-        "env_test_no_vcs": "Fournisseur Git non connecté"
+        "env_test_no_vcs": "Fournisseur Git non connecté",
+        "env_test_connection_failed": "Échec de la connexion à l'environnement"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -514,7 +515,9 @@
         "env_test_not_provisionable": "Ce service a un type de provisionnement, mais aucun gestionnaire de l'espace de travail ne s'y applique encore, le provisionnement ne peut donc pas s'exécuter. Configurez un gestionnaire d'environnement.",
         "env_test_not_provisionable_no_handler": "Aucun gestionnaire d'environnement de l'espace de travail n'est configuré pour le type de provisionnement de ce service. Dans Infrastructure → Environnements de test, enregistrez-en un — pour un fournisseur personnalisé, un gestionnaire Custom (remote-custom) dont le manifest id accepté correspond à celui que ce service épingle.",
         "env_test_not_provisionable_type_mismatch": "Plusieurs gestionnaires d'environnement pourraient correspondre au type de provisionnement de ce service. Épinglez un manifest id pour ce service afin qu'un seul se résolve, ou supprimez le gestionnaire qui se chevauche dans Infrastructure → Environnements de test.",
-        "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun."
+        "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun.",
+        "env_test_connection_failed": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion.",
+        "env_test_connection_failed_detail": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion : {detail}. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1721,6 +1724,7 @@
         "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu",
         "fork_decision_pending": "Marquer comme lu",
+        "judge_review": "Marquer comme lu",
         "pr_review_ready": "Marquer comme lu",
         "budget_paused": "Marquer comme lu",
         "key_drift": "Supprimer les identifiants obsolètes",
@@ -3738,6 +3742,43 @@
       "suffixNotNeeded": "· pas encore nécessaire",
       "gatedCommit": "Commit sous condition",
       "footer": "Une condition exécute une vérification préalable programmatique et ne lance le {helper} qu'en cas d'échec ; une vérification verte avance sans rien lancer."
+    }
+  },
+  "judge": {
+    "subtitle": "Note le travail de cette exécution selon une grille, puis poursuit, demande ou le renvoie",
+    "empty": "Cette étape n'a pas encore produit de verdict.",
+    "notScored": "Non noté",
+    "threshold": "seuil {threshold}",
+    "rubricOverridden": "grille de l'espace de travail",
+    "reworkRounds": "reprise {spent}/{budget}",
+    "findingsHeading": "Ce que la grille a signalé",
+    "roundsHeading": "Tours de revue",
+    "round": "Tour {round}",
+    "decisionHeading": "Votre décision",
+    "decisionDescription": "Poursuivre malgré tout, renvoyer le travail pour reprise ou arrêter l'exécution.",
+    "feedbackPlaceholder": "Consignes facultatives à joindre au renvoi…",
+    "proceed": "Poursuivre malgré tout",
+    "bounce": "Renvoyer pour reprise",
+    "stop": "Arrêter l'exécution",
+    "status": {
+      "evaluating": "Revue en cours",
+      "awaitingDecision": "Décision requise",
+      "bouncing": "Reprise en cours",
+      "passed": "Réussi",
+      "failed": "Échoué",
+      "skipped": "Ignoré"
+    },
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyenne",
+      "high": "Élevée",
+      "critical": "Critique"
+    },
+    "disposition": {
+      "pass": "Réussi",
+      "park": "A demandé à une personne",
+      "bounce": "Renvoyé pour reprise",
+      "fail": "Exécution échouée"
     }
   },
   "requirements": {

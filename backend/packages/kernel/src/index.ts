@@ -174,6 +174,30 @@ export {
   stubResolverContext,
 } from './domain/step-resolver-registry.js'
 
+// Installation-level extension point for JUDGES — the fourth step-taxonomy bucket (an LLM
+// assessment against a rubric, compared to a per-task threshold, disposed as
+// advance/park/bounce/fail). A deployment registers its own judge on the app-owned registry
+// the composition root injects. See `domain/judge-registry.ts` + `domain/judge-logic.ts` and
+// `docs/initiatives/judge-registry.md`.
+export {
+  type JudgeRubric,
+  type JudgeSubject,
+  type JudgeAssessor,
+  type JudgeDefinition,
+  type JudgeContext,
+  type JudgeFactory,
+  JudgeRegistry,
+  defaultJudgeRegistry,
+  stubJudgeContext,
+} from './domain/judge-registry.js'
+export {
+  type JudgeDispositionInput,
+  type JudgeDispositionResult,
+  JUDGE_SEVERITY_RANK,
+  disposeJudgeVerdict,
+  renderJudgeRework,
+} from './domain/judge-logic.js'
+
 // Typed provider registry: the deployment-supplied data sources a gate (or other
 // extension) probes, keyed by an opaque {@link ProviderToken}. Replaces the per-provider
 // module-global wire/get boilerplate. See `domain/provider-registry.ts`.

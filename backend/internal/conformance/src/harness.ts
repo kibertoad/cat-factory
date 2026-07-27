@@ -17,6 +17,8 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   GateRegistry,
+  JudgeAssessor,
+  JudgeRegistry,
   InitiativePresetRegistry,
   StepResolverRegistry,
   InitiativeRepository,
@@ -505,6 +507,21 @@ export interface ConformanceAppOptions {
    * instance into its container build. Absent → the facade's default (empty) resolver registry.
    */
   stepResolverRegistry?: StepResolverRegistry
+  /**
+   * Inject the app-owned JUDGE registry (the fourth step-taxonomy bucket), pre-loaded with a
+   * rubric judge, so the suite can assert a deployment-registered judge resolves + drives
+   * identically on EVERY runtime. Each facade harness threads the SAME instance into its
+   * container build. Absent → the facade's default (empty) judge registry.
+   */
+  judgeRegistry?: JudgeRegistry
+  /**
+   * Inject the judge's verdict producer (a deterministic fake in the suite) so the whole loop —
+   * pass / park / bounce / fail — is driven on EVERY runtime without a real model, and so the
+   * UNWIRED pass-through can be asserted by handing over a disabled one. Each facade harness
+   * threads it into its core overrides (the `judgeAssessor` seam `createCore` reads); absent ⇒
+   * the facade's model-derived assessor (a pass-through with no model wired).
+   */
+  judgeAssessor?: JudgeAssessor
   /**
    * Inject the app-owned initiative-preset registry, pre-loaded with a CUSTOM preset, so the suite
    * can assert a deployment-registered preset resolves identically on EVERY runtime (its snapshot

@@ -7,7 +7,11 @@ import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { type GitHubClient, defaultProviderRegistry, defaultVcsRegistry } from '@cat-factory/kernel'
-import { defaultStepResolverRegistry, resolvePresetModelForKind } from '@cat-factory/orchestration'
+import {
+  defaultJudgeRegistry,
+  defaultStepResolverRegistry,
+  resolvePresetModelForKind,
+} from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
@@ -97,6 +101,10 @@ function resolveNodeAppRegistries(options: NodeContainerOptions) {
     // The app-owned step-resolver registry: the injected instance else an empty default (the
     // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
     stepResolverRegistry: options.stepResolverRegistry ?? defaultStepResolverRegistry(),
+    // The app-owned JUDGE registry (the fourth step-taxonomy bucket): the injected instance
+    // (conformance / a deployment pre-loads it) else an empty default — the platform ships no
+    // built-in judges. See `docs/initiatives/judge-registry.md`.
+    judgeRegistry: options.judgeRegistry ?? defaultJudgeRegistry(),
     // The app-owned initiative-preset registry: the injected instance else the built-ins-only
     // default (generic / docs-refresh / tech-migration).
     initiativePresetRegistry: options.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),

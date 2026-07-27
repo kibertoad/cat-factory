@@ -41,6 +41,7 @@ import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import {
+  defaultJudgeRegistry,
   defaultStepResolverRegistry,
   sweepBinaryArtifactRetention,
   validateRegistrationsOnce,
@@ -137,6 +138,10 @@ const gateRegistry = gateRegistryWithBuiltins()
 // One app-owned step-resolver registry (empty by default), shared the same way; a deployment
 // registers its custom resolvers on this instance before the first request.
 const stepResolverRegistry = defaultStepResolverRegistry()
+// One app-owned JUDGE registry (empty by default — the platform ships no built-in judges), shared
+// by every per-request container; a deployment registers its rubric judges on this instance before
+// the first request. See `docs/initiatives/judge-registry.md`.
+const judgeRegistry = defaultJudgeRegistry()
 // One app-owned pipeline registry (empty by default), shared by every per-request container AND
 // the boot-time validation below; a deployment registers its extra pipelines on this instance
 // before the first request so they seed into every new workspace and validate at boot.
@@ -149,6 +154,7 @@ const app = createApp({
   overrides: {
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     pipelineRegistry,
     taskTypeRegistry,
