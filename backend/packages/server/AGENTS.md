@@ -15,7 +15,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   parked human decisions — the headless clarification loop), `publicApiAuth.ts` (the shared bearer
   gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
   caller may launch) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
-  on the surface shares — `GET /jobs`, `GET /services/:id/tasks`). See
+  on the surface shares — `GET /jobs`, `GET /services/:id/tasks` — plus the coarse-status
+  projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
+  definition of a run's sort key so a cursor can never name a different value than the query
+  orders by). See
   `docs/initiatives/headless-clarification-loop.md` and
   `docs/initiatives/public-api-expansion.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,

@@ -312,6 +312,29 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(second.body.jobs.map((j) => j.jobId)).toEqual(order.slice(2))
       expect(second.body.nextCursor).toBeNull()
 
+      // Walk the whole list one row at a time: every job must be visited EXACTLY once, in the
+      // same order, and the walk must terminate. This is the general keyset guard — a cursor
+      // minted from anything other than the value the query orders by (the `agent_runs.created_at`
+      // COLUMN, which `rowToExecution` projects onto `createdAt` for exactly this reason) skips or
+      // repeats rows here. The same-millisecond tie is pinned at the mapper/unit level, since a
+      // conformance run cannot force two inserts into one clock tick.
+      const walked: string[] = []
+      let cursor: string | null = null
+      for (let guard = 0; guard <= order.length; guard++) {
+        const url: string = `/api/v1/jobs?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+        const page: { status: number; body: JobPage } = await call<JobPage>(
+          'GET',
+          url,
+          undefined,
+          auth,
+        )
+        walked.push(...page.body.jobs.map((j) => j.jobId))
+        cursor = page.body.nextCursor
+        if (!cursor) break
+      }
+      expect(cursor).toBeNull()
+      expect(walked).toEqual(order)
+
       // Filters: a status nothing matches comes back empty; a future `since` likewise.
       const failedOnly = await call<JobPage>('GET', '/api/v1/jobs?status=failed', undefined, auth)
       expect(failedOnly.body.jobs).toEqual([])
@@ -332,6 +355,12 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       )
       expect(bad.status).toBe(400)
       expect(bad.body.error.code).toBe('invalid_cursor')
+
+      // A junk `limit`/`since` is rejected at the contract, not silently coerced: `Number()` would
+      // read `1e9` and `0x64` as plausible page sizes and blow straight past the hard ceiling.
+      for (const query of ['limit=abc', 'limit=0', 'limit=101', 'limit=1e2', 'since=yesterday']) {
+        expect((await call('GET', `/api/v1/jobs?${query}`, undefined, auth)).status).toBe(400)
+      }
 
       // The `internal` scope is enforced in SQL: an ORDINARY board run in the same workspace is
       // never enumerated, mirroring the single-job read's 404. This is the list form of the

@@ -33,6 +33,7 @@ import type {
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { ExecutionRow } from '@cat-factory/server'
 import {
+  adoptCreatedAt,
   decodeEnum,
   executionToDetail,
   parseIssueIntakeColumn,
@@ -288,6 +289,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
 
   async upsert(workspaceId: string, execution: ExecutionInstance): Promise<void> {
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
     // every board that mounts it via `listByService`; refreshed on every write so it follows a
@@ -304,7 +306,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
         block_id: execution.blockId,
         status: execution.status,
         detail,
-        created_at: now,
+        created_at: createdAt,
         updated_at: now,
         workflow_instance_id: execution.id,
         service_id: serviceIdSub,
@@ -342,6 +344,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     // and the index predicate exactly; the insert columns mirror upsert (service_id subquery,
     // rev 0).
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     const terminalOrReplaced = opts?.replaceId
@@ -370,7 +373,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
           block_id: execution.blockId,
           status: execution.status,
           detail,
-          created_at: now,
+          created_at: createdAt,
           updated_at: now,
           workflow_instance_id: execution.id,
           service_id: serviceIdSub,

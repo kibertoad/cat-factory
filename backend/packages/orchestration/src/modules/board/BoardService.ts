@@ -15,7 +15,7 @@ import type {
   PreloadedBlocks,
   ServiceConnection,
 } from '@cat-factory/kernel'
-import { assertFound, NotFoundError, ValidationError } from '@cat-factory/kernel'
+import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
   BlockRepository,
@@ -52,6 +52,7 @@ import type {
   ReviewFrictionSettingsReader,
 } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
+import { PublicBoardReads } from './publicBoardReads.js'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 export type {
@@ -168,6 +169,8 @@ export class BoardService {
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
   private readonly reviewFrictionGuard: ReviewFrictionGuard
+  /** The external `/api/v1` board surface (see publicBoardReads.ts). */
+  private readonly publicReads: PublicBoardReads
 
   constructor({
     workspaceRepository,
@@ -203,6 +206,12 @@ export class BoardService {
       clock,
       settings: reviewFrictionSettings,
       notifications: reviewFrictionNotifications,
+    })
+    this.publicReads = new PublicBoardReads({
+      blockRepository,
+      requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
+      addTask: (workspaceId, containerId, input, createdBy) =>
+        this.addTask(workspaceId, containerId, input, createdBy),
     })
   }
 
@@ -583,6 +592,14 @@ export class BoardService {
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
+    // The SAME containment rule reparent enforces, applied at CREATE: a task may only live under
+    // a service frame or a module. An `epic`/`initiative` is a grouping node that tasks join via
+    // their `epicId`/`initiativeId` membership link, never by parentage — and a task parented to
+    // one would be invisible to every reader that resolves the subtree structurally (the public
+    // API's `listServiceTasks`), so let the create fail here rather than silently orphan it.
+    if (!canReparent('task', container)) {
+      throw new ValidationError(`A task cannot be placed inside a ${container.level}`)
+    }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     // Opt-in review-debt friction: refuse (or require acknowledgement for) authoring a new task
     // while too many tasks sit parked on human review. Runs in the ACTING workspace's context
@@ -745,95 +762,36 @@ export class BoardService {
   }
 
   // --- Public-API board reads/writes -----------------------------------------
-  // The external `/api/v1` surface (see PublicApiController) works with a key's OWN
-  // workspace only. These methods are STRICTLY scoped to `workspaceId` — they read via
-  // `listByWorkspace` / `get`, which never surface a service merely MOUNTED from another
-  // workspace (those are homed elsewhere), so a key can only touch its own board. They
-  // key on the FRAME BLOCK id (`serviceId` in the wire contract), and always exclude the
-  // headless `internal` anchors. Internals stay excluded here exactly as the board
-  // snapshot excludes them.
+  // Delegated to {@link PublicBoardReads}: the external `/api/v1` surface is its own cohesive
+  // collaborator because the whole group shares a contract the rest of the board does not — a
+  // key's OWN workspace only, keyed on the frame block id, headless `internal` anchors always
+  // excluded. See that file for the scoping rationale on each read.
 
   /** Public-API: the workspace's board services (visible service frames). */
-  async listServices(workspaceId: string): Promise<Block[]> {
-    await this.requireWorkspace(workspaceId)
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    return blocks.filter((b) => b.level === 'frame' && !b.internal && !b.archived)
+  listServices(workspaceId: string): Promise<Block[]> {
+    return this.publicReads.listServices(workspaceId)
   }
 
-  /**
-   * Public-API: create a task under a visible SERVICE FRAME the workspace owns. Rejects a
-   * missing / non-frame / internal / archived container, then delegates to {@link addTask}
-   * (which reuses all the normal placement + task-type validation). Headless / no initiator.
-   */
-  async addServiceTask(
-    workspaceId: string,
-    serviceId: string,
-    input: AddTaskInput,
-  ): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    const frame = await this.blockRepository.get(workspaceId, serviceId)
-    if (!frame || frame.internal) throw new NotFoundError('service', serviceId)
-    if (frame.level !== 'frame') {
-      throw new ValidationError('Tasks can only be created under a service')
-    }
-    if (frame.archived) throw new ValidationError('Cannot add a task to an archived service')
-    return this.addTask(workspaceId, serviceId, input, null)
+  /** Public-API: create a task under a visible service frame the workspace owns. */
+  addServiceTask(workspaceId: string, serviceId: string, input: AddTaskInput): Promise<Block> {
+    return this.publicReads.addServiceTask(workspaceId, serviceId, input)
   }
 
-  /**
-   * Public-API: fetch a board task + its enclosing service frame, scoped to the workspace.
-   * Returns null when no such task exists in the workspace, it is not a `task`-level block,
-   * it is a headless `internal` anchor, or it has no resolvable enclosing service frame — so
-   * the caller (and any external key) sees only real, board-visible tasks it owns. The frame
-   * is returned in full (not just its id) so a caller can gate on service state (e.g. refuse
-   * to START a task under an archived service, while still allowing its status to be READ).
-   */
-  async getServiceTask(
+  /** Public-API: a board task + its enclosing service frame; null when not externally visible. */
+  getServiceTask(
     workspaceId: string,
     taskId: string,
   ): Promise<{ block: Block; service: Block } | null> {
-    await this.requireWorkspace(workspaceId)
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const block = blocks.find((b) => b.id === taskId)
-    if (!block || block.level !== 'task' || block.internal) return null
-    const frame = serviceOf(blocks, block)
-    if (!frame) return null
-    return { block, service: frame }
+    return this.publicReads.getServiceTask(workspaceId, taskId)
   }
 
-  /**
-   * Public-API: list ONE BOUNDED PAGE of a visible service's tasks — the whole subtree (tasks
-   * directly under the frame AND under its modules), excluding headless `internal` anchors,
-   * optionally filtered to one status. Returns null when the frame does not exist in the
-   * workspace or is not a visible service frame (a non-frame / internal / archived block), so
-   * the caller 404s.
-   *
-   * Reads are SQL-bounded rather than "load the whole board and filter in JS": one point-read
-   * for the frame, one small child-id read for its modules, then a single paged
-   * `parent_id IN (...)` task query. That is exhaustive because a `task` may only be parented
-   * by a `frame` or a `module` (`canReparent`) — there is no deeper level to recurse through,
-   * so the general `descendantIds` walk (which needs every block in memory) is unnecessary here.
-   *
-   * `afterId` is the exclusive keyset cursor and ordering is by block id: blocks carry no
-   * creation timestamp, so id order is arbitrary but STABLE, which is what a cursor needs.
-   * Returns one extra row beyond `limit` when more exist, which the caller turns into its
-   * `nextCursor` — so "is there another page" costs no second query.
-   */
-  async listServiceTasksPage(
+  /** Public-API: one bounded, keyset-paginated page of a service's task subtree. */
+  listServiceTasksPage(
     workspaceId: string,
     serviceId: string,
     opts: { limit: number; afterId?: string; status?: BlockStatus },
   ): Promise<{ tasks: Block[]; hasMore: boolean } | null> {
-    await this.requireWorkspace(workspaceId)
-    const frame = await this.blockRepository.get(workspaceId, serviceId)
-    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
-    const moduleIds = await this.blockRepository.listChildIds(workspaceId, serviceId, 'module')
-    const rows = await this.blockRepository.listTasksUnder(workspaceId, [serviceId, ...moduleIds], {
-      ...opts,
-      limit: opts.limit + 1,
-    })
-    const hasMore = rows.length > opts.limit
-    return { tasks: hasMore ? rows.slice(0, opts.limit) : rows, hasMore }
+    return this.publicReads.listServiceTasksPage(workspaceId, serviceId, opts)
   }
 
   /** Add a module (sub-frame) inside a service. */

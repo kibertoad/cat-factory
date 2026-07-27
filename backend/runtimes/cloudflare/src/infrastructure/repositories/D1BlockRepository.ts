@@ -1,5 +1,5 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
-import type { Block, BlockLevel, BlockStatus } from '@cat-factory/contracts'
+import type { Block, BlockStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
@@ -147,34 +147,25 @@ export class D1BlockRepository implements BlockRepository {
     return row?.n ?? 0
   }
 
-  async listChildIds(workspaceId: string, parentId: string, level: BlockLevel): Promise<string[]> {
-    // Served by idx_blocks_parent (workspace_id, parent_id).
-    const { results } = await this.db
-      .prepare('SELECT id FROM blocks WHERE workspace_id = ? AND parent_id = ? AND level = ?')
-      .bind(workspaceId, parentId, level)
-      .all<{ id: string }>()
-    return results.map((r) => r.id)
-  }
-
-  async listTasksUnder(
+  async listServiceTasks(
     workspaceId: string,
-    parentIds: string[],
+    frameId: string,
     opts: { limit: number; afterId?: string; status?: BlockStatus },
   ): Promise<Block[]> {
-    if (parentIds.length === 0) return []
-    // A `task` may only hang off a `frame` or a `module`, so one `parent_id IN (...)` read over
-    // the frame + its modules covers the whole task subtree — no recursion needed. The IN list is
-    // bounded by the service's module count, comfortably inside D1's bind-parameter limit, so it
-    // needs no chunking (chunking would also break the single-query LIMIT).
-    const placeholders = parentIds.map(() => '?').join(', ')
+    // A `task` may only hang off a `frame` or a `module`, so "parented by the frame, or by a
+    // module of the frame" covers the whole task subtree — no recursion needed. The module leg is
+    // a SUBQUERY, not an id list bound from a prior read: D1 rejects any statement with more than
+    // 100 bound parameters, so an `IN (...)` over the modules would hard-fail on a service that
+    // accumulated ~96 of them. Both legs ride idx_blocks_parent (workspace_id, parent_id).
     const where = [
       `workspace_id = ?`,
-      `parent_id IN (${placeholders})`,
+      `(parent_id = ? OR parent_id IN (
+          SELECT id FROM blocks WHERE workspace_id = ? AND parent_id = ? AND level = 'module'))`,
       `level = 'task'`,
       // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
       `(internal IS NULL OR internal = 0)`,
     ]
-    const binds: (string | number)[] = [workspaceId, ...parentIds]
+    const binds: (string | number)[] = [workspaceId, frameId, workspaceId, frameId]
     if (opts.status) {
       where.push('status = ?')
       binds.push(opts.status)

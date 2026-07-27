@@ -19,9 +19,7 @@ import {
   stopPublicTaskContract,
   updatePublicTaskContract,
   type ExecutionInstance,
-  type ExecutionStatus,
   type PublicJob,
-  type PublicJobStatus,
   type PublicPipeline,
   type PublicRun,
   type PublicService,
@@ -52,6 +50,8 @@ import {
   decodeTimeCursor,
   encodeCursor,
   internalStatusesFor,
+  jobSortKey,
+  mapStatus,
 } from './publicApiPaging.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
@@ -85,10 +85,6 @@ const MAX_ACTIVE_INITIATIVE_RUNS = 5
 const DEFAULT_JOB_PAGE = 25
 const DEFAULT_TASK_PAGE = 50
 
-function mapStatus(status: ExecutionStatus): PublicJobStatus {
-  return status === 'done' ? 'succeeded' : status === 'failed' ? 'failed' : 'running'
-}
-
 /** Project a persisted execution onto the external job resource (no block/board internals). */
 function toPublicJob(execution: ExecutionInstance): PublicJob {
   const status = mapStatus(execution.status)
@@ -115,9 +111,9 @@ function toPublicJob(execution: ExecutionInstance): PublicJob {
     jobId: execution.id,
     status,
     pipelineId: execution.pipelineId,
-    // The run's own creation stamp (set at start); older runs fall back to the earliest step start.
-    createdAt:
-      execution.createdAt ?? execution.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
+    // The run's own creation stamp — the SAME value the list's keyset cursor is minted from
+    // (`jobSortKey`), so a caller can page and correlate on one consistent number.
+    createdAt: jobSortKey(execution),
     result,
     error,
   }
@@ -163,8 +159,7 @@ function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
     runId: execution.id,
     taskId: block.id,
     status: execution.status,
-    createdAt:
-      execution.createdAt ?? execution.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
+    createdAt: jobSortKey(execution),
     currentStep: execution.currentStep,
     steps: execution.steps.map((s) => ({
       agentKind: s.agentKind,
@@ -422,13 +417,9 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         jobs: page.map(toPublicJob),
         // The cursor rides the SAME `(createdAt, id)` composite the repository orders and filters
         // on, so a burst of runs sharing a millisecond pages correctly instead of losing the ties.
-        nextCursor:
-          hasMore && last
-            ? encodeCursor(
-                last.createdAt ?? last.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
-                last.id,
-              )
-            : null,
+        // `jobSortKey` is that shared definition — the sort key here is by construction the value
+        // `agent_runs.created_at` holds for this row, never a second stamp taken elsewhere.
+        nextCursor: hasMore && last ? encodeCursor(jobSortKey(last), last.id) : null,
       },
       200,
     )

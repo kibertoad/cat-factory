@@ -9,7 +9,7 @@ import type { ExecutionInstance, ExecutionStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
+import { adoptCreatedAt, type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
 
 const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
 
@@ -149,6 +149,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // `error`/`failure`/`workflow_instance_id` are deliberately left out of the
     // conflict update so they survive normal step writes (see markFailed).
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
@@ -178,7 +179,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         // Instance id == execution id today; stored for forward-compatibility.
         execution.id,
@@ -204,6 +205,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // unconditional pre-delete would remove a concurrent winner and re-open the race). The
     // ON CONFLICT target MUST mirror the index predicate exactly.
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // `replaceId ?? null`: with no replaceId, `id = NULL` matches nothing, so only terminal
     // rows are cleared.
@@ -232,7 +234,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         execution.id,
         workspaceId,

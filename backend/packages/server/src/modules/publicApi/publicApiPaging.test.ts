@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { type ExecutionInstance, executionStatusSchema } from '@cat-factory/contracts'
 import {
   decodeCursor,
   decodeTimeCursor,
   encodeCursor,
   internalStatusesFor,
+  jobSortKey,
 } from './publicApiPaging.js'
 
 // The keyset-cursor codec behind the public `/api/v1` list endpoints. It is the piece that makes
@@ -45,8 +47,16 @@ describe('publicApiPaging', () => {
       expect(decodeCursor(btoa('sortkey|'))).toBeNull() // empty id
     })
 
-    it('rejects a time cursor whose sort key is not numeric', () => {
-      expect(decodeTimeCursor(encodeCursor('not-a-number', 'exec_1'))).toBeNull()
+    it('rejects a time cursor whose sort key is not a plain epoch-ms integer', () => {
+      // `Number()` alone would read every one of these as a plausible position (0, 1000, 16, -5)
+      // and resume paging from somewhere the query never ordered by, instead of 400-ing.
+      for (const sortKey of ['not-a-number', ' ', '1e3', '0x10', '-5', '1.5', '']) {
+        expect(decodeTimeCursor(encodeCursor(sortKey, 'exec_1'))).toBeNull()
+      }
+      expect(decodeTimeCursor(encodeCursor(1_700_000_000_123, 'exec_1'))).toEqual({
+        createdAt: 1_700_000_000_123,
+        id: 'exec_1',
+      })
     })
   })
 
@@ -63,6 +73,27 @@ describe('publicApiPaging', () => {
     it('maps the terminal statuses one-to-one', () => {
       expect(internalStatusesFor('succeeded')).toEqual(['done'])
       expect(internalStatusesFor('failed')).toEqual(['failed'])
+    })
+
+    it('covers EVERY execution status across the three coarse filters', () => {
+      // The expansion is derived from `mapStatus` over the full union, so this holds by
+      // construction — the assertion is here to fail loudly if that derivation is ever replaced
+      // by a hand-written list that a new `ExecutionStatus` member could fall out of.
+      const covered = (['running', 'succeeded', 'failed'] as const).flatMap(internalStatusesFor)
+      expect(new Set(covered)).toEqual(new Set(executionStatusSchema.options))
+      expect(covered.length).toBe(executionStatusSchema.options.length) // no status in two buckets
+    })
+  })
+
+  describe('jobSortKey', () => {
+    it('is the run creation stamp, which the mapper projects from the row column', () => {
+      expect(jobSortKey({ createdAt: 1_700_000_000_123 } as ExecutionInstance)).toBe(
+        1_700_000_000_123,
+      )
+    })
+
+    it('falls back to 0 only for a run that was never persisted', () => {
+      expect(jobSortKey({} as ExecutionInstance)).toBe(0)
     })
   })
 })

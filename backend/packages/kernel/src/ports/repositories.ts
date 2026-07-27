@@ -1,7 +1,6 @@
 import type {
   AgentFailure,
   Block,
-  BlockLevel,
   BlockStatus,
   ExecutionInstance,
   ExecutionStatus,
@@ -160,31 +159,30 @@ export interface BlockRepository {
    */
   countActiveInternal(workspaceId: string): Promise<number>
   /**
-   * One BOUNDED page of `task`-level blocks directly parented by any of `parentIds`, excluding
-   * the headless `internal` anchors. Backs the public API's paginated service-task list, which
-   * previously read the ENTIRE board (`listByWorkspace`) and filtered the subtree in JS — so a
-   * large board paid a full table read per external page request.
+   * One BOUNDED page of a service frame's `task`-level blocks — the WHOLE task subtree (tasks
+   * directly under the frame AND under its modules), excluding the headless `internal` anchors.
+   * Backs the public API's paginated service-task list, which previously read the ENTIRE board
+   * (`listByWorkspace`) and filtered the subtree in JS — so a large board paid a full table read
+   * per external page request.
    *
-   * The caller passes the service frame plus its module ids, which is the whole task subtree:
-   * a `task` may only be parented by a `frame` or a `module` (`canReparent`), so there is no
-   * deeper level to recurse through and this single `parent_id IN (...)` read is exhaustive.
+   * The subtree resolves in ONE query: a `task` may only be parented by a `frame` or a `module`
+   * (enforced by `canReparent` on reparent AND by `BoardService.addTask` on create), so
+   * "parented by the frame, or by a module of the frame" is exhaustive — there is no deeper
+   * level to recurse through, which is what makes the general `descendantIds` walk (and its
+   * whole-board read) unnecessary here. The module leg is a SUBQUERY rather than an id list
+   * resolved by a prior read: D1 hard-rejects a statement with more than 100 bound parameters
+   * (see `chunkForIn`), so an `IN (...)` over a service's modules would 500 on a service that
+   * accumulated ~96 of them — and blueprint reconciliation only ever ADDS modules.
    *
    * Ordered by `id` ASC — blocks carry no creation timestamp, so id order is arbitrary but
    * STABLE, which is what a keyset cursor actually needs. `afterId` is exclusive. `limit` is the
    * row cap (the caller reads one extra row to detect a further page).
    */
-  listTasksUnder(
+  listServiceTasks(
     workspaceId: string,
-    parentIds: string[],
+    frameId: string,
     opts: { limit: number; afterId?: string; status?: BlockStatus },
   ): Promise<Block[]>
-  /**
-   * The ids of a container's direct children at one level — used to resolve a service frame's
-   * modules before {@link BlockRepository.listTasksUnder}, without loading the whole board.
-   * Bounded in practice by how many modules a service has (tens), and served by the
-   * `(workspace_id, parent_id)` index.
-   */
-  listChildIds(workspaceId: string, parentId: string, level: BlockLevel): Promise<string[]>
 }
 
 export interface PipelineRepository {

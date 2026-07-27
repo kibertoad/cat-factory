@@ -1457,7 +1457,13 @@ export const executionInstanceSchema = v.object({
   /**
    * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
    * creation timestamp independent of when its first step actually starts (the public-API
-   * job view reports it as `createdAt`). Absent on legacy runs persisted before this field.
+   * job view reports it as `createdAt`).
+   *
+   * On a run READ BACK from storage this is the `agent_runs.created_at` COLUMN — the value
+   * chronological reads order by — so a keyset cursor minted from a run names exactly the
+   * position the next query resumes at. The insert adopts whatever the instance was stamped with
+   * at start (`adoptCreatedAt`), so the in-memory run and its row never disagree. Optional only
+   * because a run assembled in memory has not been persisted yet.
    */
   createdAt: v.optional(v.number()),
   /**

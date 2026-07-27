@@ -39,8 +39,23 @@ chronological**, and there is deliberately no `since` filter on the task list: t
 carries no creation timestamp, so a time filter would have to be faked. See
 `docs/initiatives/public-api-expansion.md` for what adding one would cost.
 
-Backed by three new repository port methods — `ExecutionRepository.listInternal`,
-`BlockRepository.listTasksUnder` and `BlockRepository.listChildIds` — implemented on **both** the
-D1 and Drizzle stores and pinned by a new cross-runtime conformance assertion, so a store that
-ordered differently, dropped the `internal` join, or mishandled the keyset fails a test rather
-than silently mis-serving an integration.
+Backed by two new repository port methods — `ExecutionRepository.listInternal` and
+`BlockRepository.listServiceTasks` — implemented on **both** the D1 and Drizzle stores and pinned
+by new cross-runtime conformance assertions, so a store that ordered differently, dropped the
+`internal` join, or mishandled the keyset fails a test rather than silently mis-serving an
+integration. Each resolves its scope in ONE query (the `internal` anchor join; the frame's modules
+as a subquery rather than a bound id list, which D1's 100-parameter ceiling would reject on a
+service with ~96 modules).
+
+Two adjacent fixes the lists depend on:
+
+- `ExecutionInstance.createdAt` is now projected from the `agent_runs.created_at` COLUMN instead of
+  the run's `detail` JSON, and an insert adopts the instance's own stamp. The two used to be
+  separate `clock.now()` calls milliseconds apart, so a keyset cursor minted from the entity named
+  a position slightly ahead of the row it pointed at — silently skipping any run inserted in that
+  window whenever two starts landed in the same millisecond. The redundant `detail.createdAt` is
+  gone (stale copies on existing rows are simply ignored, then dropped on the next write).
+- `BoardService.addTask` now enforces the same containment rule `canReparent` applies on a move: a
+  task may only be created under a service frame or a module. A task parented to an `epic` /
+  `initiative` grouping node was structurally orphaned — invisible to any reader that resolves a
+  service subtree, including this task list.

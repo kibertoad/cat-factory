@@ -3,9 +3,9 @@ import type { Block } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
-// The public-API board reads/writes (`listServices` / `getServiceTask` / `listServiceTasks` /
+// The public-API board reads/writes (`listServices` / `getServiceTask` / `listServiceTasksPage` /
 // `addServiceTask`) back the external `/api/v1` services+tasks surface. They are pure, workspace-
-// scoped projections over `listByWorkspace` / `get` that must exclude headless `internal` anchors
+// scoped projections over the bounded block reads that must exclude headless `internal` anchors
 // and treat archived services consistently. The Worker integration spec covers the wire round-trip;
 // these assert the projection/guard logic directly, independent of the runtime facades.
 describe('BoardService — public-API board reads/writes', () => {
@@ -36,35 +36,35 @@ describe('BoardService — public-API board reads/writes', () => {
       blockRepository: {
         get: async (ws: string, id: string) => (ws === WS ? (blocksMap.get(id) ?? null) : null),
         listByWorkspace: async (ws: string) => (ws === WS ? [...blocksMap.values()] : []),
-        // In-memory stand-ins for the two BOUNDED reads the paginated task list uses. They
-        // reproduce the repositories' contract (id-ordered, exclusive `afterId`, `internal`
-        // anchors excluded, hard `limit`) so the service's paging arithmetic is exercised for
-        // real; the D1 ⇄ Drizzle implementations are pinned by the conformance suite instead.
-        listChildIds: async (ws: string, parentId: string, level: string) =>
-          ws === WS
-            ? [...blocksMap.values()]
-                .filter((b) => b.parentId === parentId && b.level === level)
-                .map((b) => b.id)
-            : [],
-        listTasksUnder: async (
+        // In-memory stand-in for the BOUNDED subtree read the paginated task list uses. It
+        // reproduces the repositories' contract (frame + its modules, id-ordered, exclusive
+        // `afterId`, `internal` anchors excluded, hard `limit`) so the service's paging arithmetic
+        // is exercised for real; the D1 ⇄ Drizzle SQL is pinned by the conformance suite instead.
+        listServiceTasks: async (
           ws: string,
-          parentIds: string[],
+          frameId: string,
           opts: { limit: number; afterId?: string; status?: string },
-        ) =>
-          ws === WS
-            ? [...blocksMap.values()]
-                .filter(
-                  (b) =>
-                    b.level === 'task' &&
-                    !b.internal &&
-                    b.parentId != null &&
-                    parentIds.includes(b.parentId) &&
-                    (!opts.status || b.status === opts.status) &&
-                    (!opts.afterId || b.id > opts.afterId),
-                )
-                .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-                .slice(0, opts.limit)
-            : [],
+        ) => {
+          if (ws !== WS) return []
+          const parents = new Set([
+            frameId,
+            ...[...blocksMap.values()]
+              .filter((b) => b.parentId === frameId && b.level === 'module')
+              .map((b) => b.id),
+          ])
+          return [...blocksMap.values()]
+            .filter(
+              (b) =>
+                b.level === 'task' &&
+                !b.internal &&
+                b.parentId != null &&
+                parents.has(b.parentId) &&
+                (!opts.status || b.status === opts.status) &&
+                (!opts.afterId || b.id > opts.afterId),
+            )
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            .slice(0, opts.limit)
+        },
       },
     } as unknown as BoardServiceDependencies
     return new BoardService(deps)

@@ -71,7 +71,7 @@ The existing public surface IS the template; every new endpoint copies its shape
 | --- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
 | 7   | `GET /api/v1/pipelines` — id/name/steps + a headless-startable flag (closes the `pipeline_required`-with-no-way-to-discover gap) | `pipelineService.list` + `isHeadlessInlinePipeline`                                                                                          | ✅ done | this PR |
 | 8   | `GET /api/v1/jobs` — list the workspace's initiative jobs (a restarted integration currently loses every job id)                 | `executionRepository.listInternal` — the `loadPublicJob` double-scope generalized to a list, with the `internal` anchor join pushed into SQL | ✅ done | this PR |
-| 9   | Pagination + status filters on `GET /services/:id/tasks` (and the new `/jobs`)                                                   | new bounded list port methods (`listInternal`, `listTasksUnder` + `listChildIds`), D1 ⇄ Drizzle + conformance-asserted                       | ✅ done | this PR |
+| 9   | Pagination + status filters on `GET /services/:id/tasks` (and the new `/jobs`)                                                   | new bounded list port methods (`listInternal`, `listServiceTasks`), D1 ⇄ Drizzle + conformance-asserted                                      | ✅ done | this PR |
 
 > **Note on #9 — there is deliberately NO `since` filter on the TASK list.** The original item
 > named `status`/`since` for both lists. `since` shipped for `/jobs` (`agent_runs.created_at` is a
@@ -155,7 +155,21 @@ The existing public surface IS the template; every new endpoint copies its shape
   - **A coarse public status filter must EXPAND to the internal statuses it maps from**
     (`internalStatusesFor`): `running` covers `running`/`blocked`/`paused`, because all three read
     as `running` externally — filtering on the literal row value would hide exactly the jobs a
-    caller polls for.
+    caller polls for. DERIVE that expansion from the projection (`mapStatus`) over the full union,
+    never a hand-written list a new enum member can silently fall out of.
+  - **The cursor's sort key MUST be the exact value the query orders by** — the same field, from
+    the same source, not a second stamp of "about the same" thing. The jobs list mints it through
+    the shared `jobSortKey`, and `ExecutionInstance.createdAt` is projected from the
+    `agent_runs.created_at` COLUMN (never the `detail` JSON, which is stamped a few milliseconds
+    earlier at `ExecutionService.start`). A cursor a hair ahead of its row silently swallows every
+    row inserted in the gap — invisible until two runs start inside one millisecond.
+  - **A numeric query param is digit-checked BEFORE coercion.** `Number()` accepts `' '`, `1e9`
+    and `0x64`, so a bare `v.transform(Number)` turns junk into a plausible limit/cursor position
+    instead of a 400. Same for the cursor's decoded sort key (`decodeTimeCursor`).
+  - **A dynamic `IN (...)` is NOT how you scope a subtree.** D1 hard-rejects a statement with more
+    than 100 bound parameters, so an id list resolved by a prior read (a service's modules, say)
+    is a 500 waiting for the board to grow. Push it down as a SUBQUERY —
+    `BlockRepository.listServiceTasks` is the reference — which also drops the extra round trip.
 - **Runtimes stay symmetric by construction** — this whole layer lives in
   `@cat-factory/server`; anything that needs persistence (webhooks table, key scopes)
   lands D1 ⇄ Drizzle together with a conformance assertion in the same PR.

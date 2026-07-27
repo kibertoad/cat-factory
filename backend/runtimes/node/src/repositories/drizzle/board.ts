@@ -6,7 +6,6 @@
 
 import type {
   Block,
-  BlockLevel,
   BlockPatch,
   BlockRepository,
   BlockStatus,
@@ -457,33 +456,28 @@ export class DrizzleBlockRepository implements BlockRepository {
     return row?.n ?? 0
   }
 
-  async listChildIds(workspaceId: string, parentId: string, level: BlockLevel): Promise<string[]> {
-    // Served by the (workspace_id, parent_id) index. Mirrors the D1 repo.
-    const rows = await this.db
+  async listServiceTasks(
+    workspaceId: string,
+    frameId: string,
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]> {
+    // A `task` may only hang off a `frame` or a `module`, so "parented by the frame, or by a
+    // module of the frame" covers the whole task subtree — no recursion needed. The module leg is
+    // a subquery rather than a bound id list, mirroring the D1 repo (same predicates, same `id`
+    // ordering) — see its comment for why the id list is not an option there.
+    const moduleIds = this.db
       .select({ id: blocks.id })
       .from(blocks)
       .where(
         and(
           eq(blocks.workspace_id, workspaceId),
-          eq(blocks.parent_id, parentId),
-          eq(blocks.level, level),
+          eq(blocks.parent_id, frameId),
+          eq(blocks.level, 'module'),
         ),
       )
-    return rows.map((r) => r.id)
-  }
-
-  async listTasksUnder(
-    workspaceId: string,
-    parentIds: string[],
-    opts: { limit: number; afterId?: string; status?: BlockStatus },
-  ): Promise<Block[]> {
-    if (parentIds.length === 0) return []
-    // A `task` may only hang off a `frame` or a `module`, so one `parent_id IN (...)` read over
-    // the frame + its modules covers the whole task subtree — no recursion needed. Mirrors the D1
-    // repo (same predicates, same `id` ordering).
     const filters = [
       eq(blocks.workspace_id, workspaceId),
-      inArray(blocks.parent_id, parentIds),
+      or(eq(blocks.parent_id, frameId), inArray(blocks.parent_id, moduleIds))!,
       eq(blocks.level, 'task'),
       // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
       or(isNull(blocks.internal), eq(blocks.internal, 0))!,

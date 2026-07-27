@@ -29,17 +29,30 @@ import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primiti
 const cursorSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
 
 /**
- * Rows one page may return. Arrives as a query STRING, so it is coerced then range-checked —
- * the hard `maxValue` is what makes the bound a real backstop rather than a suggestion (a
- * caller cannot ask for the whole table back by passing a huge limit).
+ * Rows one page may return. Arrives as a query STRING, so it is digit-checked BEFORE the numeric
+ * coercion — `Number()` alone also accepts `1e9`, `0x64` and `' '`, which would read as plausible
+ * limits rather than the 400 a malformed request deserves. The hard `maxValue` is what makes the
+ * bound a real backstop rather than a suggestion (a caller cannot ask for the whole table back by
+ * passing a huge limit).
  */
 const pageLimitSchema = v.pipe(
   v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number'),
   v.transform(Number),
   v.number(),
   v.integer(),
   v.minValue(1),
   v.maxValue(100),
+)
+
+/** An epoch-ms query filter: digits only, for the same reason as {@link pageLimitSchema}. */
+const epochMsQuerySchema = v.pipe(
+  v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number of epoch milliseconds'),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(0),
 )
 
 /** Start an initiative run. */
@@ -112,9 +125,7 @@ export const listPublicJobsQuerySchema = v.object({
   /** Return only jobs in this coarse status. */
   status: v.optional(publicJobStatusSchema),
   /** Return only jobs created at or after this epoch-ms stamp (the incremental-poll filter). */
-  since: v.optional(
-    v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0)),
-  ),
+  since: v.optional(epochMsQuerySchema),
 })
 export type ListPublicJobsQuery = v.InferOutput<typeof listPublicJobsQuerySchema>
 

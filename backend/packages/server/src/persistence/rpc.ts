@@ -228,6 +228,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     findByIds: { scope: { kind: 'blockList', arg: 0 } },
     // Cross-service: compose a board's blocks from every service it mounts.
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    // One bounded page of a service frame's task subtree (the public API's paginated task list).
+    listServiceTasks: { scope: { kind: 'workspace', arg: 0 } },
   },
   pipelineRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -251,6 +253,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     markFailed: { scope: { kind: 'workspace', arg: 0 } },
     // Cross-service: compose a board's runs from every service it mounts.
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    // One bounded page of the workspace's headless (`internal`-anchored) runs — the public API's
+    // job list. Workspace-scoped like every other list read here.
+    listInternal: { scope: { kind: 'workspace', arg: 0 } },
   },
   accountRepository: {
     // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).

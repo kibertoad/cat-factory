@@ -1,4 +1,9 @@
-import type { ExecutionStatus, PublicJobStatus } from '@cat-factory/contracts'
+import {
+  type ExecutionInstance,
+  type ExecutionStatus,
+  executionStatusSchema,
+  type PublicJobStatus,
+} from '@cat-factory/contracts'
 
 // Keyset pagination for the public `/api/v1` list endpoints.
 //
@@ -45,27 +50,51 @@ export function decodeCursor(cursor: string): PublicCursor | null {
   return { sortKey, id }
 }
 
-/** Decode a cursor whose sort key is a numeric (epoch-ms) stamp; null when malformed. */
+/**
+ * Decode a cursor whose sort key is a numeric (epoch-ms) stamp; null when malformed. The sort key
+ * must be plain digits — `Number()` alone would happily read `' '` as 0, `'1e3'` as 1000 and
+ * `'0x10'` as 16, turning a corrupt cursor into a plausible-looking position instead of the 400
+ * the caller needs.
+ */
 export function decodeTimeCursor(cursor: string): { createdAt: number; id: string } | null {
   const parsed = decodeCursor(cursor)
-  if (!parsed) return null
+  if (!parsed || !/^\d+$/.test(parsed.sortKey)) return null
   const createdAt = Number(parsed.sortKey)
-  if (!Number.isFinite(createdAt)) return null
+  if (!Number.isSafeInteger(createdAt)) return null
   return { createdAt, id: parsed.id }
 }
 
 /**
- * Expand the COARSE public job status a caller filters on into the internal execution statuses
- * it maps from, so the filter agrees with the `status` each returned job actually carries. The
- * mapping is the inverse of the controller's `mapStatus`: everything that is neither `done` nor
- * `failed` reads as `running` externally, so a `running` filter must admit the parked
- * (`blocked`) and spend-gated (`paused`) runs too — filtering on the literal `running` row value
- * would hide exactly the jobs a caller polls for.
+ * Project an internal execution status onto the COARSE status an external caller sees: everything
+ * that is neither finished nor failed reads as `running` (a parked `blocked` run and a spend-gated
+ * `paused` one are both "still going" from outside).
+ */
+export function mapStatus(status: ExecutionStatus): PublicJobStatus {
+  return status === 'done' ? 'succeeded' : status === 'failed' ? 'failed' : 'running'
+}
+
+/**
+ * Expand the coarse public status a caller filters on into the internal statuses it maps from, so
+ * the filter agrees with the `status` each returned job actually carries — filtering on the
+ * literal `running` row value would hide exactly the parked/spend-gated jobs a caller polls for.
+ *
+ * DERIVED from {@link mapStatus} over the full `ExecutionStatus` union rather than hand-listed, so
+ * a new member cannot silently fall out of the filter: whatever `mapStatus` says a status reads as
+ * externally is what this admits, by construction.
  */
 export function internalStatusesFor(status: PublicJobStatus): ExecutionStatus[] {
-  if (status === 'succeeded') return ['done']
-  if (status === 'failed') return ['failed']
-  return ['running', 'blocked', 'paused']
+  return executionStatusSchema.options.filter((internal) => mapStatus(internal) === status)
+}
+
+/**
+ * The chronological sort key of a run — the ONE definition shared by the `createdAt` a job
+ * resource reports and the keyset cursor the list mints, so the two can never drift apart (a
+ * cursor naming anything other than the value the query orders by silently skips rows).
+ *
+ * A persisted run always carries it: the mapper projects `agent_runs.created_at` onto the entity.
+ */
+export function jobSortKey(execution: ExecutionInstance): number {
+  return execution.createdAt ?? 0
 }
 
 function base64UrlEncode(value: string): string {
