@@ -10,9 +10,17 @@ import type {
   RequirementItem,
   RequirementKind,
   RequirementPriority,
+  RequirementState,
   SpecModule,
 } from '~/types/spec'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import {
+  filterRequirementsByState,
+  requirementState,
+  summarizeRequirementStates,
+  summarizeSpecStates,
+  type RequirementStateFilter,
+} from './ServiceSpecWindow.logic'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -20,6 +28,16 @@ const serviceSpec = useServiceSpecStore()
 
 type ViewMode = 'structured' | 'gherkin'
 const mode = ref<ViewMode>('structured')
+// Which half of the spec the reader wants: everything, only what the service is observed to
+// honour, or only what is agreed but not built yet.
+//
+// DELIBERATELY STICKY ACROSS GROUPS, and reset only on open (alongside the view mode and the
+// selection). "Show me what this service has actually proven" is a question about the SERVICE,
+// so re-answering it on every group click would defeat the filter the moment the reader
+// navigates. The cost is that a group with no match renders empty, which is why that case says
+// so and offers a way back rather than leaving the reader stranded in a filter they may have
+// set several groups ago.
+const stateFilter = ref<RequirementStateFilter>('all')
 // Selected feature group, keyed by its module + group index so a name collision can't
 // cross-select. Null = show the service overview.
 const selected = ref<{ m: number; g: number } | null>(null)
@@ -27,6 +45,7 @@ const selected = ref<{ m: number; g: number } | null>(null)
 const { open, blockId, close } = useResultView('service-spec', {
   onOpen: ({ blockId }) => {
     mode.value = 'structured'
+    stateFilter.value = 'all'
     selected.value = null
     void serviceSpec.load(blockId)
   },
@@ -109,8 +128,46 @@ const KIND_LABELS: Record<RequirementKind, string> = {
   constraint: t('spec.kind.constraint'),
 }
 
+// Exhaustive implementation-state → presentation map. `established` is the only state that
+// means "the service is observed to do this"; everything else is a behaviour that has been
+// agreed and not yet seen to hold, which must never read as standing behaviour.
+const STATE_META: Record<RequirementState, { label: string; chip: string; icon: string }> = {
+  established: {
+    label: t('spec.state.established'),
+    chip: 'success',
+    icon: 'i-lucide-circle-check',
+  },
+  aspirational: {
+    label: t('spec.state.aspirational'),
+    chip: 'neutral',
+    icon: 'i-lucide-circle-dashed',
+  },
+}
+
+// The state filter's three choices. The two state choices REUSE the badge labels rather than
+// carrying their own catalog keys: a chip that reads differently from the badge it filters for
+// is a translation bug waiting to happen, and one key per state cannot drift from itself. Only
+// `all` needs a key of its own, and it is a literal `t()` so the typed-key drift guard stays live.
+const STATE_FILTERS: { value: RequirementStateFilter; label: string }[] = [
+  { value: 'all', label: t('spec.state.filter.all') },
+  { value: 'established', label: STATE_META.established.label },
+  { value: 'aspirational', label: STATE_META.aspirational.label },
+]
+
+// Service-wide rollup, shown on the overview pane: how much of the written-down behaviour the
+// service is actually known to honour.
+const specStates = computed(() => summarizeSpecStates(modules.value))
+// The selected group's rollup + the requirements the filter admits.
+const groupStates = computed(() => summarizeRequirementStates(selectedGroup.value?.requirements))
+const visibleRequirements = computed(() =>
+  filterRequirementsByState(selectedGroup.value?.requirements, stateFilter.value),
+)
+
 function reqCount(group: RequirementGroup): number {
   return group.requirements?.length ?? 0
+}
+function stateMeta(item: RequirementItem) {
+  return STATE_META[requirementState(item)]
 }
 function priorityMeta(item: RequirementItem) {
   return PRIORITY_META[item.priority] ?? PRIORITY_META.could
@@ -265,6 +322,21 @@ function kindLabel(item: RequirementItem): string {
             {{ spec.summary }}
           </p>
           <p v-else class="mt-2 text-sm text-slate-500">{{ t('spec.noSummary') }}</p>
+          <!-- implementation-state rollup: how much of the written-down behaviour is observed
+               to hold, rather than merely agreed -->
+          <div
+            v-if="specStates.total > 0"
+            class="mt-4 flex flex-wrap items-center gap-2 text-xs"
+            data-testid="spec-state-rollup"
+          >
+            <UBadge color="success" variant="subtle" size="sm">
+              {{ t('spec.state.establishedCount', { count: specStates.established }) }}
+            </UBadge>
+            <UBadge color="neutral" variant="subtle" size="sm">
+              {{ t('spec.state.aspirationalCount', { count: specStates.aspirational }) }}
+            </UBadge>
+            <span class="text-slate-500">{{ t('spec.state.rollupHint') }}</span>
+          </div>
           <p class="mt-4 text-xs text-slate-500">
             {{
               hasGherkin
@@ -303,15 +375,84 @@ function kindLabel(item: RequirementItem): string {
             <div v-if="reqCount(selectedGroup) === 0" class="mt-4 text-sm text-slate-500">
               {{ t('spec.noRequirements') }}
             </div>
+            <!-- per-group implementation-state rollup + the filter over the two halves -->
+            <div
+              v-else
+              class="mt-4 flex flex-wrap items-center justify-between gap-2"
+              data-testid="spec-state-filter"
+            >
+              <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+                <UIcon :name="STATE_META.established.icon" class="h-3.5 w-3.5 text-emerald-400" />
+                {{
+                  t('spec.state.groupRollup', {
+                    established: groupStates.established,
+                    total: groupStates.total,
+                  })
+                }}
+              </div>
+              <div class="flex items-center rounded-lg border border-slate-700 p-0.5">
+                <UButton
+                  v-for="option in STATE_FILTERS"
+                  :key="option.value"
+                  :color="stateFilter === option.value ? 'primary' : 'neutral'"
+                  :variant="stateFilter === option.value ? 'soft' : 'ghost'"
+                  size="xs"
+                  :data-testid="`spec-state-filter-${option.value}`"
+                  @click="
+                    () => {
+                      stateFilter = option.value
+                    }
+                  "
+                >
+                  {{ option.label }}
+                </UButton>
+              </div>
+            </div>
+            <!-- the filter can legitimately empty a non-empty group; say so rather than
+                 rendering a blank pane that reads like "no requirements". The filter is sticky
+                 across groups, so the reader may have set it several groups ago — offer the way
+                 back here rather than making them find the toggle again. -->
+            <div
+              v-if="reqCount(selectedGroup) > 0 && visibleRequirements.length === 0"
+              class="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500"
+              data-testid="spec-state-filter-empty"
+            >
+              {{ t('spec.state.noneMatchFilter') }}
+              <UButton
+                color="primary"
+                variant="link"
+                size="xs"
+                class="p-0"
+                data-testid="spec-state-filter-reset"
+                @click="
+                  () => {
+                    stateFilter = 'all'
+                  }
+                "
+              >
+                {{ t('spec.state.showAll') }}
+              </UButton>
+            </div>
             <ul class="mt-4 space-y-4">
               <li
-                v-for="req in selectedGroup.requirements ?? []"
+                v-for="req in visibleRequirements"
                 :key="req.id"
                 class="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
               >
                 <div class="flex items-start justify-between gap-3">
                   <h3 class="text-sm font-semibold text-slate-100">{{ req.title }}</h3>
                   <div class="flex shrink-0 items-center gap-1.5">
+                    <!-- implementation state: agreed vs observed to hold. The distinction the
+                         build prompt and the tester act on, so a reader must see it too. -->
+                    <UBadge
+                      :color="stateMeta(req).chip as any"
+                      variant="subtle"
+                      size="sm"
+                      :icon="stateMeta(req).icon"
+                      :data-testid="`spec-requirement-state-${requirementState(req)}`"
+                    >
+                      {{ stateMeta(req).label }}
+                    </UBadge>
                     <UBadge :color="priorityMeta(req).chip as any" variant="subtle" size="sm">
                       {{ priorityMeta(req).label }}
                     </UBadge>

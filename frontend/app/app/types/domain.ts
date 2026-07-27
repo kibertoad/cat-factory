@@ -55,6 +55,8 @@ export type {
   TestConcern,
   TestOutcome,
   TestReport,
+  RequirementVerdict,
+  RequirementVerdictStatus,
   TestScreenshot,
   AgentKind,
   AgentCategory,

@@ -1202,7 +1202,13 @@
       "fixing": "· fixing…",
       "tested": "Tested",
       "outcomes": "Outcomes",
-      "concerns": "Concerns"
+      "concerns": "Concerns",
+      "requirementVerdicts": {
+        "title": "Requirement verdicts",
+        "met": "Met",
+        "notMet": "Not met",
+        "notCovered": "Not checked"
+      }
     },
     "stepMeta": {
       "stateLabel": "State",
@@ -4300,6 +4306,25 @@
       "functional": "Functional",
       "nonfunctional": "Non-functional",
       "constraint": "Constraint"
+    },
+    "state": {
+      "established": "Established",
+      "@established": {
+        "description": "Implementation-state label: the service is OBSERVED to honour this requirement (a tester exercised its acceptance criteria and they passed). Contrast with \"aspirational\". Translate as \"verified/proven\", not as \"founded\"."
+      },
+      "aspirational": "Aspirational",
+      "@aspirational": {
+        "description": "Implementation-state label: the requirement is AGREED but not yet observed to hold (typically not built yet). Contrast with \"established\". Translate as \"planned/intended\", not as \"ambitious\"."
+      },
+      "establishedCount": "Established: {count}",
+      "aspirationalCount": "Aspirational: {count}",
+      "groupRollup": "Established: {established}/{total}",
+      "rollupHint": "\"Established\" means a tester observed the behaviour hold; \"aspirational\" means it is agreed but not built yet.",
+      "noneMatchFilter": "No requirements in this group match the filter.",
+      "showAll": "Show all",
+      "filter": {
+        "all": "All"
+      }
     },
     "acceptance": {
       "given": "Given",

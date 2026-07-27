@@ -1142,7 +1142,13 @@
       "fixing": "· correction…",
       "tested": "Testé",
       "outcomes": "Résultats",
-      "concerns": "Préoccupations"
+      "concerns": "Préoccupations",
+      "requirementVerdicts": {
+        "title": "Verdicts par exigence",
+        "met": "Satisfaite",
+        "notMet": "Non satisfaite",
+        "notCovered": "Non vérifiée"
+      }
     },
     "stepMeta": {
       "stateLabel": "État",
@@ -4136,6 +4142,19 @@
       "functional": "Fonctionnel",
       "nonfunctional": "Non fonctionnel",
       "constraint": "Contrainte"
+    },
+    "state": {
+      "established": "Vérifié",
+      "aspirational": "Prévu",
+      "establishedCount": "Vérifié: {count}",
+      "aspirationalCount": "Prévu: {count}",
+      "groupRollup": "Vérifié: {established}/{total}",
+      "rollupHint": "« Vérifié » signifie qu’un testeur a observé le comportement ; « prévu » signifie qu’il est validé mais pas encore implémenté.",
+      "noneMatchFilter": "Aucune exigence de ce groupe ne correspond au filtre.",
+      "showAll": "Tout afficher",
+      "filter": {
+        "all": "Tout"
+      }
     },
     "acceptance": {
       "given": "Given",

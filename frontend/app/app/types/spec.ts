@@ -10,6 +10,7 @@
 export type {
   RequirementPriority,
   RequirementKind,
+  RequirementState,
   AcceptanceCriterion,
   RequirementItem,
   DomainRule,

@@ -584,6 +584,17 @@ unrelated runs. Design + the withdrawn alternative:
   shard is the source of truth for state; the tag is a runner convenience.
 - **The spec-writer must never claim `established`** — the prompt says so, and `coerceRequirement`
   defaults an absent/garbled `state` to `aspirational`, so a model cannot promote by assertion.
+- **The human surface is the SPA and is FRONTEND-ONLY**: `ServiceSpecWindow.vue` badges each
+  requirement's state (per-group rollup + state filter, counting in `ServiceSpecWindow.logic.ts`)
+  and `StepTestReport.vue` renders the tester's `requirementVerdicts`. `ServiceSpecView` already
+  carries `state` and the verdicts already ride `step.testReport`, so surfacing either needs no
+  endpoint and no backend change. Both are enum-keyed lookups, so both take the exhaustive
+  `Record` guard over the closed union, but their FALLBACKS differ on purpose: a state coerces to
+  `aspirational` (the cautious answer, and the one the domain gives), while a verdict does NOT
+  coerce — there is no cautious verdict, so an unknown one renders the raw code in a colour
+  distinct from all three known ones rather than borrowing `not_covered`'s grey and reading as
+  "we didn't check". The state filter is sticky across groups, so the emptied-group notice carries
+  a reset; the filter chips reuse the badge labels rather than duplicating catalog keys.
 
 ### Requirements review (iterative gate step + dedicated window)
 
