@@ -342,6 +342,19 @@ export async function buildOpenApiDoc() {
       required: true,
       schema: { type: 'string' },
     }))
+    // Query params (pagination cursors, page limits, status/`since` filters). Without these the
+    // published spec documents a bounded list endpoint as if it took no arguments, so an external
+    // integration reading it cannot discover how to page at all. One `in: 'query'` entry per
+    // top-level key of the contract's query schema, carrying its description + constraints.
+    if (isSchema(contract.requestQuerySchema)) {
+      const query = normalizeJsonSchema(
+        toJsonSchema(contract.requestQuerySchema, { errorMode: 'ignore', definitions: defs }),
+      )
+      const required = new Set(query.required ?? [])
+      for (const [name, schema] of Object.entries(query.properties ?? {})) {
+        params.push({ name, in: 'query', required: required.has(name), schema })
+      }
+    }
     if (params.length) operation.parameters = params
 
     if (isSchema(contract.requestBodySchema)) {

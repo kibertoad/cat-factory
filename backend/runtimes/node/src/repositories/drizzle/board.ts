@@ -8,6 +8,7 @@ import type {
   Block,
   BlockPatch,
   BlockRepository,
+  BlockStatus,
   Service,
   ServiceFragmentDefaultsRepository,
   ServicePatch,
@@ -33,7 +34,7 @@ import {
   rowToWorkspace,
   tryDecodeRows,
 } from '@cat-factory/server'
-import { and, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   agentRuns,
@@ -453,6 +454,43 @@ export class DrizzleBlockRepository implements BlockRepository {
         ),
       )
     return row?.n ?? 0
+  }
+
+  async listServiceTasks(
+    workspaceId: string,
+    frameId: string,
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]> {
+    // A `task` may only hang off a `frame` or a `module`, so "parented by the frame, or by a
+    // module of the frame" covers the whole task subtree — no recursion needed. The module leg is
+    // a subquery rather than a bound id list, mirroring the D1 repo (same predicates, same `id`
+    // ordering) — see its comment for why the id list is not an option there.
+    const moduleIds = this.db
+      .select({ id: blocks.id })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspace_id, workspaceId),
+          eq(blocks.parent_id, frameId),
+          eq(blocks.level, 'module'),
+        ),
+      )
+    const filters = [
+      eq(blocks.workspace_id, workspaceId),
+      or(eq(blocks.parent_id, frameId), inArray(blocks.parent_id, moduleIds))!,
+      eq(blocks.level, 'task'),
+      // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
+      or(isNull(blocks.internal), eq(blocks.internal, 0))!,
+    ]
+    if (opts.status) filters.push(eq(blocks.status, opts.status))
+    if (opts.afterId) filters.push(gt(blocks.id, opts.afterId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(and(...filters))
+      .orderBy(blocks.id)
+      .limit(opts.limit)
+    return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 }
 

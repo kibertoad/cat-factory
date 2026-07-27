@@ -819,6 +819,14 @@ export interface ExecutionRow {
   error: string | null
   /** JSON-encoded AgentFailure; null unless the run failed. */
   failure: string | null
+  /**
+   * Epoch-ms row creation stamp, written once on insert and NEVER touched by an update. This is
+   * the AUTHORITATIVE creation time and the column every chronological read orders on
+   * (`listByWorkspace`, `listInternal`), so the entity's `createdAt` is projected from it rather
+   * than from the `detail` JSON — a keyset cursor minted from the entity has to name the exact
+   * value the query orders by, or a page silently skips rows.
+   */
+  created_at: number
   // Lease for the cron sweeper; not surfaced on the entity.
   updated_at: number
   workflow_instance_id: string | null
@@ -841,8 +849,6 @@ interface ExecutionDetail {
   failureHistory?: AgentFailure[]
   /** Successful outputs a restart discarded, oldest→newest (see {@link ExecutionInstance.outputHistory}). */
   outputHistory?: PriorStepOutput[]
-  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
-  createdAt?: number
   /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
   notes?: string[]
   /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
@@ -1006,8 +1012,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // safe reading: a run whose intake we can't prove was headless never pushes its parked
     // questions out to a tracker issue.
     ...(is(intakeOriginSchema, detail.intakeOrigin) ? { intakeOrigin: detail.intakeOrigin } : {}),
-    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
-    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
+    // Epoch-ms creation time, read from the ROW COLUMN — the value chronological reads order by,
+    // so a keyset cursor minted from this entity names exactly the position the query resumes at.
+    createdAt: row.created_at,
     // Investigation diagnostics ride in `detail` too (only present once a container step
     // dispatched); dropped if malformed so a bad record can't brick the snapshot decode.
     ...(() => {
@@ -1020,6 +1027,23 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
 }
 
 /** Build the `agent_runs.detail` JSON for an execution instance (shared by both repos). */
+/**
+ * Resolve the `created_at` an INSERT should write, and back-fill it onto the instance.
+ *
+ * The row column is the authoritative creation stamp — it is what every chronological read
+ * orders by and what a keyset cursor names — while `ExecutionInstance.createdAt` is stamped
+ * earlier, at `ExecutionService.start`. Taking a fresh `clock.now()` here instead would make the
+ * two disagree by the milliseconds in between, and a cursor minted from the entity would then
+ * name a position slightly ahead of the row it points at, silently skipping any run inserted in
+ * that window. So the insert adopts the instance's stamp when it has one, and an instance with
+ * none (a run assembled outside `start`) adopts the row's — either way they end up identical.
+ *
+ * Shared by both facades' `upsert`/`insertLive`; an UPDATE never touches `created_at`.
+ */
+export function adoptCreatedAt(instance: ExecutionInstance, now: number): number {
+  return (instance.createdAt ??= now)
+}
+
 export function executionToDetail(instance: ExecutionInstance): string {
   return JSON.stringify({
     pipelineId: instance.pipelineId,
@@ -1037,7 +1061,6 @@ export function executionToDetail(instance: ExecutionInstance): string {
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
     // Likewise the successful-output trail: only present once a restart discarded a completed step.
     outputHistory: instance.outputHistory?.length ? instance.outputHistory : undefined,
-    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
     // Likewise only persist run-start notes when there is something to flag.
     notes: instance.notes?.length ? instance.notes : undefined,
     // The resolved bindings are stamped once at start; only a frontend run carries any.

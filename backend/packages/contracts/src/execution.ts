@@ -10,9 +10,10 @@ import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
-// The polling-GATE step-state cluster lives in its own module (the `forkDecision.ts` /
-// `judge.ts` shape); `PipelineStep` composes it back in below.
+// The polling-GATE and the human-verdict-gate step-state clusters each live in their own
+// module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
+import { humanTestStepStateSchema, visualConfirmStepStateSchema } from './human-verdict-gates.js'
 import {
   environmentStatusSchema,
   infraEngineSchema,
@@ -26,9 +27,11 @@ import { stepOptionsSchema } from './entities.js'
 // ---------------------------------------------------------------------------
 // Run / execution runtime state: the shapes that describe an in-flight run and
 // its steps' live state — human decisions, subtasks, review comments, companion
-// verdicts, approvals, agent-run failures, the gate / tester / human-test /
-// visual-confirm step-state machines, per-step metrics, the pipeline STEP (the
-// runtime instance of a pipeline's step), and the execution instance itself.
+// verdicts, approvals, agent-run failures, the tester step-state machine,
+// per-step metrics, the pipeline STEP (the runtime instance of a pipeline's
+// step), and the execution instance itself. The gate (`gate.ts`) and
+// human-verdict-gate (`human-verdict-gates.ts`) step-state clusters live in
+// their own modules and are composed back into `PipelineStep` here.
 // Split out of entities.ts (which keeps the board / pipeline-definition / model
 // / workspace shapes); re-exported from the package barrel, so consumers are
 // unaffected. Depends on entities.ts (for stepOptionsSchema); entities.ts does
@@ -486,151 +489,6 @@ export type DeployEnvState = v.InferOutput<typeof deployEnvStateSchema>
 /** Per-frame deploy outcomes keyed by service-frame block id; see {@link deployEnvStateSchema}. */
 export const deployEnvsSchema = v.record(v.string(), deployEnvStateSchema)
 export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
-
-export const humanTestEnvironmentSchema = v.object({
-  /** The `environments` row id, so the window can fetch access creds / re-poll status. */
-  id: v.string(),
-  /** The provisioned public URL the human tests against (null while still provisioning). */
-  url: v.nullable(v.string()),
-  /** The environment lifecycle status; see {@link environmentStatusSchema}. */
-  status: environmentStatusSchema,
-  /** Epoch ms the environment expires (TTL), when known. */
-  expiresAt: v.optional(v.nullable(v.number())),
-})
-export type HumanTestEnvironment = v.InferOutput<typeof humanTestEnvironmentSchema>
-
-/**
- * One round of human-driven remediation on a `human-test` gate: the human wrote findings and
- * asked for a fix (helper `fixer`), or pulled main and hit a conflict (helper
- * `conflict-resolver`). Appended when the round opens and stamped with its outcome once the
- * helper job settles, so the window can show the full history of what was asked and how it ended.
- */
-export const humanTestRoundSchema = v.object({
-  /** The kind of round — a findings-driven fix or a pull-main-with-conflicts resolve. */
-  kind: v.picklist(['fix', 'pull-main']),
-  /** The human's findings prompt (fix), or a one-line note for the pull-main round. */
-  findings: v.string(),
-  /** The helper container kind this round dispatched (`fixer` / `conflict-resolver`). */
-  helperKind: v.string(),
-  /** The helper job's id while it ran, for cross-referencing the run timeline. */
-  jobId: v.optional(v.nullable(v.string())),
-  /** How the helper ended once its job settled. Absent while still in flight. */
-  outcome: v.optional(v.nullable(v.picklist(['completed', 'failed']))),
-  /** Epoch ms the round opened (the human clicked Request fix / Pull main). */
-  at: v.number(),
-})
-export type HumanTestRound = v.InferOutput<typeof humanTestRoundSchema>
-
-/**
- * State a `human-test` gate carries while it runs. Unlike a polling gate (`ci`/`conflicts`)
- * there is no programmatic verdict — the HUMAN is the verdict — so the step spins up an
- * ephemeral environment, parks for a person to validate it, and on demand dispatches the same
- * helpers the other gates use (the Tester's `fixer` for findings; the `conflict-resolver` for a
- * conflicting pull-main). Phases:
- *   - `provisioning`        — an environment is being stood up (the driver polls until ready).
- *   - `awaiting_human`      — parked: the human tests the env and confirms / requests a fix / etc.
- *   - `fixing`              — a `fixer` job (from the human's findings) is in flight.
- *   - `resolving_conflicts` — a `conflict-resolver` job (from a conflicting pull-main) is in flight.
- *   - `passed`             — the human confirmed; the env is torn down and the run advances.
- */
-export const humanTestStepStateSchema = v.object({
-  phase: v.picklist(['provisioning', 'awaiting_human', 'fixing', 'resolving_conflicts', 'passed']),
-  /** The live ephemeral environment (null in degraded manual mode / after destroy). */
-  environment: v.optional(v.nullable(humanTestEnvironmentSchema)),
-  /**
-   * Why no environment was auto-provisioned — set in degraded manual mode (no env provider
-   * wired, or provisioning errored) so the window can explain it and let the human test
-   * against the PR branch manually. Absent when an env was provisioned.
-   */
-  degradedReason: v.optional(v.nullable(v.string())),
-  /** How many helper (fixer / conflict-resolver) attempts have been dispatched so far. */
-  attempts: v.number(),
-  /** Ceiling on helper attempts, resolved from the task's merge preset (`ciMaxAttempts`). */
-  maxAttempts: v.number(),
-  /** The PR head commit being tested, when known. */
-  headSha: v.optional(v.nullable(v.string())),
-  /** Append-only history of fix / pull-main rounds; see {@link humanTestRoundSchema}. */
-  rounds: v.optional(v.array(humanTestRoundSchema)),
-  /**
-   * Transient action the human requested while the gate is parked — recorded on the parked
-   * step and consumed by the durable driver when it re-enters the gate (the analogue of
-   * `pendingIncorporation` on a requirements gate). Cleared once the driver acts on it.
-   */
-  pendingAction: v.optional(
-    v.nullable(
-      v.object({
-        type: v.picklist(['confirm', 'request-fix', 'pull-main', 'recreate']),
-        /** The findings prompt for a `request-fix` action. */
-        findings: v.optional(v.string()),
-      }),
-    ),
-  ),
-})
-export type HumanTestStepState = v.InferOutput<typeof humanTestStepStateSchema>
-
-/**
- * One actual-vs-reference pairing the visual-confirmation gate shows the human: a logical
- * view, the screenshot the UI tester captured of it (`actualArtifactId`), and the reference
- * design image for the same view when one was uploaded (`referenceArtifactId`). Either side
- * may be absent (a captured view with no reference, or a reference whose view wasn't captured).
- */
-export const visualConfirmPairSchema = v.object({
-  view: v.string(),
-  actualArtifactId: v.optional(v.nullable(v.string())),
-  referenceArtifactId: v.optional(v.nullable(v.string())),
-})
-export type VisualConfirmPair = v.InferOutput<typeof visualConfirmPairSchema>
-
-/** One human-requested fix round on a visual-confirmation gate (dispatches the `fixer`). */
-export const visualConfirmRoundSchema = v.object({
-  findings: v.string(),
-  helperKind: v.string(),
-  jobId: v.optional(v.nullable(v.string())),
-  outcome: v.optional(v.nullable(v.picklist(['completed', 'failed']))),
-  at: v.number(),
-})
-export type VisualConfirmRound = v.InferOutput<typeof visualConfirmRoundSchema>
-
-/**
- * State a `visual-confirmation` gate carries while it runs. Like `human-test` there is no
- * programmatic verdict — a HUMAN reviews the UI tester's screenshots against the uploaded
- * reference designs and approves, or requests a fix (which dispatches the `fixer` and then
- * re-captures via the UI tester). Phases:
- *   - `awaiting_human`— parked: the human reviews actual-vs-reference and approves / requests a fix.
- *   - `fixing`        — a `fixer` job (from the human's findings) is in flight.
- *   - `approved`      — the human approved; the run advances.
- *
- * (A dedicated `capturing` phase for an auto re-run of the UI tester after a fix is deferred
- * until that loop is wired — see the visual-confirmation handover doc — so it is intentionally
- * absent from the picklist rather than carried as dead state.)
- */
-export const visualConfirmStepStateSchema = v.object({
-  phase: v.picklist(['awaiting_human', 'fixing', 'approved']),
-  /** The actual-vs-reference pairs the human reviews, refreshed on each (re)capture. */
-  pairs: v.optional(v.array(visualConfirmPairSchema)),
-  /** Set when no screenshots could be gathered (no UI tester ran / no storage) — manual mode. */
-  degradedReason: v.optional(v.nullable(v.string())),
-  /** How many fixer attempts have been dispatched so far. */
-  attempts: v.number(),
-  /** Ceiling on fixer attempts, resolved from the task's merge preset (`ciMaxAttempts`). */
-  maxAttempts: v.number(),
-  /** Append-only history of fix rounds; see {@link visualConfirmRoundSchema}. */
-  rounds: v.optional(v.array(visualConfirmRoundSchema)),
-  /**
-   * Transient action the human requested while parked — consumed by the durable driver
-   * when it re-enters the gate. Cleared once acted on.
-   */
-  pendingAction: v.optional(
-    v.nullable(
-      v.object({
-        type: v.picklist(['approve', 'request-fix', 'recapture']),
-        /** The findings prompt for a `request-fix` action. */
-        findings: v.optional(v.string()),
-      }),
-    ),
-  ),
-})
-export type VisualConfirmStepState = v.InferOutput<typeof visualConfirmStepStateSchema>
 
 /**
  * Per-step LLM observability rollup: a compact aggregate over every model call the
@@ -1271,7 +1129,13 @@ export const executionInstanceSchema = v.object({
   /**
    * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
    * creation timestamp independent of when its first step actually starts (the public-API
-   * job view reports it as `createdAt`). Absent on legacy runs persisted before this field.
+   * job view reports it as `createdAt`).
+   *
+   * On a run READ BACK from storage this is the `agent_runs.created_at` COLUMN — the value
+   * chronological reads order by — so a keyset cursor minted from a run names exactly the
+   * position the next query resumes at. The insert adopts whatever the instance was stamped with
+   * at start (`adoptCreatedAt`), so the in-memory run and its row never disagree. Optional only
+   * because a run assembled in memory has not been persisted yet.
    */
   createdAt: v.optional(v.number()),
   /**

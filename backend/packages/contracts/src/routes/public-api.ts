@@ -9,6 +9,9 @@ import {
   createInitiativeJobSchema,
   createPublicTaskSchema,
   initiativeAcceptedSchema,
+  listPublicJobsQuerySchema,
+  listPublicServiceTasksQuerySchema,
+  publicJobListSchema,
   publicJobSchema,
   publicNotificationListSchema,
   publicPipelineListSchema,
@@ -68,6 +71,18 @@ export const createInitiativeJobContract = defineApiContract({
   responsesByStatusCode: { 202: initiativeAcceptedSchema, ...errorResponses },
 })
 
+/**
+ * List the workspace's headless initiative jobs (newest first, keyset-paginated). Scoped to the
+ * runs THIS surface created — an internal-anchored run — exactly like the single-job read, so an
+ * external key can never enumerate the workspace's ordinary board runs.
+ */
+export const listPublicJobsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/jobs',
+  requestQuerySchema: listPublicJobsQuerySchema,
+  responsesByStatusCode: { 200: publicJobListSchema, ...errorResponses },
+})
+
 export const getPublicJobContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: idParams,
@@ -109,10 +124,15 @@ export const createPublicTaskContract = defineApiContract({
   responsesByStatusCode: { 201: publicTaskSchema, ...errorResponses },
 })
 
-/** List a service's tasks (the whole subtree — tasks under the frame and its modules). */
+/**
+ * List a service's tasks (the whole subtree — tasks under the frame and its modules), bounded
+ * and keyset-paginated with an optional status filter. Ordered by the stable task id, which is
+ * deterministic but NOT chronological (see `listPublicServiceTasksQuerySchema`).
+ */
 export const listPublicServiceTasksContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: serviceIdParams,
+  requestQuerySchema: listPublicServiceTasksQuerySchema,
   pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
   responsesByStatusCode: { 200: publicTaskListSchema, ...errorResponses },
 })

@@ -1,5 +1,5 @@
 import type { BlockPatch, BlockRepository } from '@cat-factory/kernel'
-import type { Block } from '@cat-factory/contracts'
+import type { Block, BlockStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
@@ -145,5 +145,39 @@ export class D1BlockRepository implements BlockRepository {
       .bind(workspaceId)
       .first<{ n: number }>()
     return row?.n ?? 0
+  }
+
+  async listServiceTasks(
+    workspaceId: string,
+    frameId: string,
+    opts: { limit: number; afterId?: string; status?: BlockStatus },
+  ): Promise<Block[]> {
+    // A `task` may only hang off a `frame` or a `module`, so "parented by the frame, or by a
+    // module of the frame" covers the whole task subtree — no recursion needed. The module leg is
+    // a SUBQUERY, not an id list bound from a prior read: D1 rejects any statement with more than
+    // 100 bound parameters, so an `IN (...)` over the modules would hard-fail on a service that
+    // accumulated ~96 of them. Both legs ride idx_blocks_parent (workspace_id, parent_id).
+    const where = [
+      `workspace_id = ?`,
+      `(parent_id = ? OR parent_id IN (
+          SELECT id FROM blocks WHERE workspace_id = ? AND parent_id = ? AND level = 'module'))`,
+      `level = 'task'`,
+      // `internal` is a nullable flag: an ordinary block stores NULL, an anchor stores 1.
+      `(internal IS NULL OR internal = 0)`,
+    ]
+    const binds: (string | number)[] = [workspaceId, frameId, workspaceId, frameId]
+    if (opts.status) {
+      where.push('status = ?')
+      binds.push(opts.status)
+    }
+    if (opts.afterId) {
+      where.push('id > ?')
+      binds.push(opts.afterId)
+    }
+    const { results } = await this.db
+      .prepare(`SELECT * FROM blocks WHERE ${where.join(' AND ')} ORDER BY id LIMIT ?`)
+      .bind(...binds, opts.limit)
+      .all<BlockRow>()
+    return tryDecodeRows(results, rowToBlock, blockContext)
   }
 }

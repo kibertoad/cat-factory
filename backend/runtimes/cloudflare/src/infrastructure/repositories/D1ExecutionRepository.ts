@@ -5,11 +5,11 @@ import type {
   LiveRunSummary,
   RunRef,
 } from '@cat-factory/kernel'
-import type { ExecutionInstance } from '@cat-factory/contracts'
+import type { ExecutionInstance, ExecutionStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
+import { adoptCreatedAt, type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
 
 const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
 
@@ -84,6 +84,47 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return out
   }
 
+  async listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // The `internal` scope is enforced by JOINing the anchor block, so an ordinary board run can
+    // never leak into the public job list. Driven by idx_agent_runs_workspace (workspace_id,
+    // created_at) walked in reverse, probing blocks by its (workspace_id, id) primary key.
+    const where = [`r.workspace_id = ?`, `r.kind = 'execution'`, `b.internal = 1`]
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.statuses && opts.statuses.length > 0) {
+      where.push(`r.status IN (${opts.statuses.map(() => '?').join(', ')})`)
+      binds.push(...opts.statuses)
+    }
+    if (opts.since != null) {
+      where.push(`r.created_at >= ?`)
+      binds.push(opts.since)
+    }
+    if (opts.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` are not skipped.
+      where.push(`(r.created_at < ? OR (r.created_at = ? AND r.id < ?))`)
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT r.* FROM agent_runs r
+         JOIN blocks b ON b.workspace_id = r.workspace_id AND b.id = r.block_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY r.created_at DESC, r.id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds, opts.limit)
+      .all<ExecutionRow>()
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(results, rowToExecution, runContext)
+  }
+
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const row = await this.db
       .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`)
@@ -108,6 +149,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // `error`/`failure`/`workflow_instance_id` are deliberately left out of the
     // conflict update so they survive normal step writes (see markFailed).
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block so the run is discoverable by service (in-org
     // sharing): a shared service's runs surface on every board that mounts it via
@@ -137,7 +179,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         // Instance id == execution id today; stored for forward-compatibility.
         execution.id,
@@ -163,6 +205,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // unconditional pre-delete would remove a concurrent winner and re-open the race). The
     // ON CONFLICT target MUST mirror the index predicate exactly.
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // `replaceId ?? null`: with no replaceId, `id = NULL` matches nothing, so only terminal
     // rows are cleared.
@@ -191,7 +234,7 @@ export class D1ExecutionRepository implements ExecutionRepository {
         execution.blockId,
         execution.status,
         detail,
-        now,
+        createdAt,
         now,
         execution.id,
         workspaceId,

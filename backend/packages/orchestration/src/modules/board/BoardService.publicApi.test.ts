@@ -3,9 +3,9 @@ import type { Block } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
-// The public-API board reads/writes (`listServices` / `getServiceTask` / `listServiceTasks` /
+// The public-API board reads/writes (`listServices` / `getServiceTask` / `listServiceTasksPage` /
 // `addServiceTask`) back the external `/api/v1` services+tasks surface. They are pure, workspace-
-// scoped projections over `listByWorkspace` / `get` that must exclude headless `internal` anchors
+// scoped projections over the bounded block reads that must exclude headless `internal` anchors
 // and treat archived services consistently. The Worker integration spec covers the wire round-trip;
 // these assert the projection/guard logic directly, independent of the runtime facades.
 describe('BoardService — public-API board reads/writes', () => {
@@ -36,6 +36,35 @@ describe('BoardService — public-API board reads/writes', () => {
       blockRepository: {
         get: async (ws: string, id: string) => (ws === WS ? (blocksMap.get(id) ?? null) : null),
         listByWorkspace: async (ws: string) => (ws === WS ? [...blocksMap.values()] : []),
+        // In-memory stand-in for the BOUNDED subtree read the paginated task list uses. It
+        // reproduces the repositories' contract (frame + its modules, id-ordered, exclusive
+        // `afterId`, `internal` anchors excluded, hard `limit`) so the service's paging arithmetic
+        // is exercised for real; the D1 ⇄ Drizzle SQL is pinned by the conformance suite instead.
+        listServiceTasks: async (
+          ws: string,
+          frameId: string,
+          opts: { limit: number; afterId?: string; status?: string },
+        ) => {
+          if (ws !== WS) return []
+          const parents = new Set([
+            frameId,
+            ...[...blocksMap.values()]
+              .filter((b) => b.parentId === frameId && b.level === 'module')
+              .map((b) => b.id),
+          ])
+          return [...blocksMap.values()]
+            .filter(
+              (b) =>
+                b.level === 'task' &&
+                !b.internal &&
+                b.parentId != null &&
+                parents.has(b.parentId) &&
+                (!opts.status || b.status === opts.status) &&
+                (!opts.afterId || b.id > opts.afterId),
+            )
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            .slice(0, opts.limit)
+        },
       },
     } as unknown as BoardServiceDependencies
     return new BoardService(deps)
@@ -86,18 +115,44 @@ describe('BoardService — public-API board reads/writes', () => {
     })
   })
 
-  describe('listServiceTasks', () => {
+  describe('listServiceTasksPage', () => {
+    const page = (limit = 50, over: { afterId?: string; status?: Block['status'] } = {}) => ({
+      limit,
+      ...over,
+    })
+
     it('lists the whole subtree (frame + module tasks), excluding internal anchors', async () => {
-      const ids = (await build(seed()).listServiceTasks(WS, 'f1'))?.map((b) => b.id)
-      expect(new Set(ids)).toEqual(new Set(['t1', 't2'])) // t3 (internal) excluded
+      const got = await build(seed()).listServiceTasksPage(WS, 'f1', page())
+      expect(got?.tasks.map((b) => b.id)).toEqual(['t1', 't2']) // t3 (internal) excluded
+      expect(got?.hasMore).toBe(false)
+    })
+
+    it('pages through the subtree on the id keyset without skipping or repeating a task', async () => {
+      const svc = build(seed())
+      const first = await svc.listServiceTasksPage(WS, 'f1', page(1))
+      expect(first?.tasks.map((b) => b.id)).toEqual(['t1'])
+      // `hasMore` comes from the extra row the service asks for, so it needs no second query.
+      expect(first?.hasMore).toBe(true)
+
+      const second = await svc.listServiceTasksPage(WS, 'f1', page(1, { afterId: 't1' }))
+      expect(second?.tasks.map((b) => b.id)).toEqual(['t2'])
+      // The last page reports no more, so the caller emits a null cursor and stops.
+      expect(second?.hasMore).toBe(false)
+    })
+
+    it('filters to one status', async () => {
+      const blocks = seed()
+      blocks.find((b) => b.id === 't2')!.status = 'done'
+      const got = await build(blocks).listServiceTasksPage(WS, 'f1', page(50, { status: 'done' }))
+      expect(got?.tasks.map((b) => b.id)).toEqual(['t2'])
     })
 
     it('returns null for a missing / non-frame / internal / archived service', async () => {
       const svc = build(seed())
-      expect(await svc.listServiceTasks(WS, 'nope')).toBeNull()
-      expect(await svc.listServiceTasks(WS, 't1')).toBeNull() // a task, not a frame
-      expect(await svc.listServiceTasks(WS, 'f2')).toBeNull() // internal
-      expect(await svc.listServiceTasks(WS, 'f3')).toBeNull() // archived
+      expect(await svc.listServiceTasksPage(WS, 'nope', page())).toBeNull()
+      expect(await svc.listServiceTasksPage(WS, 't1', page())).toBeNull() // a task, not a frame
+      expect(await svc.listServiceTasksPage(WS, 'f2', page())).toBeNull() // internal
+      expect(await svc.listServiceTasksPage(WS, 'f3', page())).toBeNull() // archived
     })
   })
 

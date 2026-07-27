@@ -12,6 +12,7 @@ import type {
   DueSchedule,
   ExecutionInstance,
   ExecutionRepository,
+  ExecutionStatus,
   LiveRunSummary,
   Pipeline,
   PipelineRepository,
@@ -32,6 +33,7 @@ import type {
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { ExecutionRow } from '@cat-factory/server'
 import {
+  adoptCreatedAt,
   decodeEnum,
   executionToDetail,
   parseIssueIntakeColumn,
@@ -181,6 +183,54 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     }))
   }
 
+  async listInternal(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // The `internal` scope is enforced by JOINing the anchor block, so an ordinary board run can
+    // never leak into the public job list. Mirrors the D1 repo (same predicates, same ordering).
+    const filters = [
+      eq(agentRuns.workspace_id, workspaceId),
+      this.isExecution,
+      eq(blocks.internal, 1),
+    ]
+    if (opts.statuses && opts.statuses.length > 0) {
+      filters.push(inArray(agentRuns.status, opts.statuses))
+    }
+    if (opts.since != null) filters.push(gte(agentRuns.created_at, opts.since))
+    if (opts.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` are not skipped.
+      const cursor = opts.cursor
+      filters.push(
+        or(
+          lt(agentRuns.created_at, cursor.createdAt),
+          and(eq(agentRuns.created_at, cursor.createdAt), lt(agentRuns.id, cursor.id)),
+        )!,
+      )
+    }
+    const rows = await this.db
+      .select({ run: agentRuns })
+      .from(agentRuns)
+      .innerJoin(
+        blocks,
+        and(eq(blocks.workspace_id, agentRuns.workspace_id), eq(blocks.id, agentRuns.block_id)),
+      )
+      .where(and(...filters))
+      .orderBy(desc(agentRuns.created_at), desc(agentRuns.id))
+      .limit(opts.limit)
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(
+      rows.map((r) => r.run),
+      (r) => rowToExecution(r as ExecutionRow),
+      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+    )
+  }
+
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
     const rows = await this.db
       .select()
@@ -239,6 +289,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
 
   async upsert(workspaceId: string, execution: ExecutionInstance): Promise<void> {
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     // Stamp `service_id` from the run's block (subquery) so a shared service's runs surface on
     // every board that mounts it via `listByService`; refreshed on every write so it follows a
@@ -255,7 +306,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
         block_id: execution.blockId,
         status: execution.status,
         detail,
-        created_at: now,
+        created_at: createdAt,
         updated_at: now,
         workflow_instance_id: execution.id,
         service_id: serviceIdSub,
@@ -293,6 +344,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     // and the index predicate exactly; the insert columns mirror upsert (service_id subquery,
     // rev 0).
     const now = this.clock.now()
+    const createdAt = adoptCreatedAt(execution, now)
     const detail = executionToDetail(execution)
     const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
     const terminalOrReplaced = opts?.replaceId
@@ -321,7 +373,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
           block_id: execution.blockId,
           status: execution.status,
           detail,
-          created_at: now,
+          created_at: createdAt,
           updated_at: now,
           workflow_instance_id: execution.id,
           service_id: serviceIdSub,

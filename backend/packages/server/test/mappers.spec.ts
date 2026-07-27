@@ -234,6 +234,7 @@ describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
       }),
       error: null,
       failure: null,
+      created_at: 1,
       updated_at: 1,
       workflow_instance_id: null,
     }
@@ -258,6 +259,7 @@ describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
         occurredAt: 1,
         lastSubtasks: null,
       }),
+      created_at: 1,
       updated_at: 1,
       workflow_instance_id: null,
     }
@@ -281,6 +283,7 @@ describe('legacy numeric user ids (pre-#94, repaired on read)', () => {
         occurredAt: 1,
         lastSubtasks: null,
       }),
+      created_at: 1,
       updated_at: 1,
       workflow_instance_id: null,
     }
@@ -301,6 +304,7 @@ describe('rowToExecution', () => {
     }),
     error: null,
     failure: null,
+    created_at: 100,
     updated_at: 123,
     workflow_instance_id: 'exec_1',
   }
@@ -447,6 +451,17 @@ describe('rowToExecution', () => {
     const persisted = executionToDetail({ ...rowToExecution(base), outputHistory: [good] })
     expect(rowToExecution({ ...base, detail: persisted }).outputHistory).toEqual([good])
     expect(JSON.parse(executionToDetail(rowToExecution(base))).outputHistory).toBeUndefined()
+  })
+
+  it('reads createdAt from the ROW COLUMN, never from the detail JSON', () => {
+    // The column is what every chronological read orders by, so it is what a keyset cursor must
+    // name. A stale `createdAt` left in an older row's detail must not win over it — a cursor
+    // minted from the detail value would point at a position the query never resumes at, and the
+    // rows in between would be skipped for good.
+    const stale = JSON.stringify({ ...JSON.parse(base.detail), createdAt: 999_999 })
+    expect(rowToExecution({ ...base, detail: stale }).createdAt).toBe(base.created_at)
+    // …and it is never written back out, so the redundant copy dies with the next write.
+    expect(JSON.parse(executionToDetail(rowToExecution(base))).createdAt).toBeUndefined()
   })
 })
 
