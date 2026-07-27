@@ -223,8 +223,16 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
         {},
         { judgeRegistry: makeJudgeRegistry('park'), judgeAssessor: fakeAssessor([1]) },
       )
-      const snapshot = await app.createWorkspace()
-      const entry = (snapshot.customAgentKinds ?? []).find((k) => k.kind === 'scope-judge')
+      const { workspace } = await app.createWorkspace()
+      // Read the snapshot back through the app UNDER TEST rather than trusting whatever
+      // `createWorkspace` returned: in mothership mode the board is created on the mothership
+      // while the SPA is served by the laptop node, and it is the node's projection that must
+      // advertise the judge. (The custom-agent-kind suite reads it the same way.)
+      const snap = await app.call<{ customAgentKinds?: { kind: string; container: boolean; presentation: { label: string; resultView?: string } }[] }>(
+        'GET',
+        `/workspaces/${workspace.id}`,
+      )
+      const entry = (snap.body.customAgentKinds ?? []).find((k) => k.kind === 'scope-judge')
       expect(entry).toBeDefined()
       expect(entry?.presentation.label).toBe('Scope judge')
       // A judge's assessment is an inline LLM call, never a container dispatch.
