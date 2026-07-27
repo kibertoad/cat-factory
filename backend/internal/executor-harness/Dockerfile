@@ -90,9 +90,9 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # must be installed WITHOUT `--ignore-scripts` — otherwise the `claude` / `codex`
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
-ARG PI_VERSION=0.80.6
-ARG CLAUDE_CODE_VERSION=2.1.207
-ARG CODEX_VERSION=0.144.1
+ARG PI_VERSION=0.82.1
+ARG CLAUDE_CODE_VERSION=2.1.220
+ARG CODEX_VERSION=0.145.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -144,8 +144,8 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=1.20.0
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=1.20.0
+ARG PI_TODO_EXTENSION_VERSION=2.1.0
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.1.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \
