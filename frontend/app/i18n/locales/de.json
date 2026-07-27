@@ -760,6 +760,11 @@
         "body": "Speichere den vollständigen Kontext, der jedem Agenten bereitgestellt wird: die zusammengesetzten Prompts, die eingefügten Best-Practice-Fragmente und den vollständigen Inhalt der in seinen Container injizierten Dateien, sodass er später in der Observability-Ansicht inspiziert werden kann. Die Inhalte werden für denselben Zeitraum wie die LLM-Telemetrie pro Aufruf aufbewahrt. Deaktivieren, um die Speicherung zu stoppen (bestehende Snapshots werden durch die Aufbewahrung bereinigt).",
         "toggle": "Vollständigen Agentenkontext speichern"
       },
+      "prReport": {
+        "heading": "Verifizierungsbericht im Pull Request",
+        "body": "Pflegt einen Verifizierungsbericht im Pull Request jedes Laufs: das CI-Ergebnis, den Bericht des Testers, den Lebenszyklus der kurzlebigen Umgebung und die Merge-Bewertung – als erfasste Fakten statt als Behauptungen des Agenten. Zugangsdaten werden vor dem Schreiben entfernt. Zum Beenden ausschalten; ein bereits vorhandener Bericht bleibt unverändert.",
+        "toggle": "Verifizierungsbericht in Pull Requests veröffentlichen"
+      },
       "retention": {
         "heading": "Screenshot-Aufbewahrung",
         "body": "Wie lange die vom UI-Tester aufgenommenen Screenshots und die Referenz-Designbilder, gegen die sie geprüft werden (das visuelle Bestätigungs-Gate), aufbewahrt werden. Ein täglicher Cleanup-Job löscht sowohl die Bild-Bytes als auch ihre Metadaten, sobald sie älter als dieser Zeitraum sind.",

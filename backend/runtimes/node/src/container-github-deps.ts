@@ -29,12 +29,14 @@ import {
   type AppConfig,
   type GitHubAppRegistry,
   type ResolveRepoTarget,
+  type ResolveRepoOrigin,
   FetchGitHubClient,
   FetchGitHubProvisioningClient,
   GitHubBranchUpdater,
   GitHubCiStatusProvider,
   GitHubDocQualityProvider,
   GitHubMergeabilityProvider,
+  GitHubPrReportPublisher,
   GitHubPullRequestMerger,
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
@@ -145,6 +147,12 @@ export interface NodeGitHubDepsInput {
   gitlabEngineClient: GitHubClient | undefined
   providerRegistry: ProviderRegistry
   resolveRepoTarget: ResolveRepoTarget
+  /**
+   * Maps a resolved repo to its origin. Threaded through so the verification report states the
+   * deployment's real provider instead of assuming GitHub; absent ⇒ the shared `githubRepoOrigin`
+   * default, exactly as on every other clone/dispatch path.
+   */
+  resolveRepoOrigin?: ResolveRepoOrigin
   githubInstallationRepository: GitHubInstallationRepository
   repoProjectionRepository: RepoProjectionRepository
   blockRepository: BlockRepository
@@ -324,6 +332,14 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
         githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository,
+      }),
+      // Keeps the engine-maintained verification report current on each run's PR. Reads
+      // through the same `engineVcsClient`, so a GitLab-only deployment gets it too.
+      prVerificationReportPublisher: new GitHubPrReportPublisher({
+        githubClient: engineVcsClient,
+        resolveRepoTarget,
+        blockRepository,
+        resolveRepoOrigin: input.resolveRepoOrigin,
       }),
     }
   }

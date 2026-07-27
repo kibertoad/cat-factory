@@ -30,6 +30,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
   external transports). Each pairs a mothership-side controller + `ServerContainer` seam with the
   client half a mothership-mode node consumes.
-- `github/FetchGitHubClient.ts` — the GitHub client.
+- `github/FetchGitHubClient.ts` — the GitHub client. Its siblings implement the engine-facing
+  VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
+  deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,
+  `GitHubPullRequestMerger`, `GitHubBranchUpdater`, and `GitHubPrReportPublisher` (upserts the
+  verification report as a marker-delimited region of the PR description).
 
 **See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Multi-runtime facades", "Conventions".

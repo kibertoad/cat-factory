@@ -292,6 +292,13 @@ export class ProviderRoutingGitHubClient implements GitHubClient {
   ): Promise<GitHubPullRequest> {
     return (await this.route(installationId)).updatePullRequest(installationId, ref, number, patch)
   }
+  async getPullRequestBody(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return (await this.route(installationId)).getPullRequestBody(installationId, ref, number)
+  }
   async getPullRequestMergeability(
     installationId: number,
     ref: GitHubRepoRef,

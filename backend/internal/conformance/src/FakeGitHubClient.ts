@@ -328,6 +328,21 @@ export class FakeGitHubClient implements GitHubClient {
     }
   }
 
+  /**
+   * PR bodies served by {@link getPullRequestBody}, keyed by `owner/repo#number`. Seed one to
+   * exercise the verification report's read-splice-write upsert against an existing body; an
+   * unseeded PR reads as an empty description.
+   */
+  pullRequestBodies = new Map<string, string>()
+
+  async getPullRequestBody(
+    _installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    return this.pullRequestBodies.get(`${ref.owner}/${ref.repo}#${number}`) ?? null
+  }
+
   /** Canned mergeability returned by getPullRequestMergeability (override per test). */
   mergeability: { mergeable: boolean | null; mergeableState: string; headSha: string | null } = {
     mergeable: true,

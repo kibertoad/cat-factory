@@ -247,6 +247,10 @@ export {
   type GitHubPullRequestMergerDependencies,
 } from './github/GitHubPullRequestMerger.js'
 export {
+  GitHubPrReportPublisher,
+  type GitHubPrReportPublisherDependencies,
+} from './github/GitHubPrReportPublisher.js'
+export {
   HmacSigner,
   TOKEN_AUDIENCE,
   type MachinePayload,
