@@ -1,0 +1,68 @@
+{
+  "$comment": [
+    "The environment manifest for the CLOUDFLARE preview track. Paste it into a `remote-custom`",
+    "infra handler (Infrastructure -> Test environments) on the workspace that develops",
+    "cat-factory, register the secret `githubToken`, and point the backend service frame at it",
+    "with provisioning { type: 'custom', manifestId: 'cat-factory-cloudflare-preview' }.",
+    "See ../README.md and ../../../docs/dogfooding.md for the full walkthrough.",
+    "",
+    "The management API is GITHUB'S OWN Deployments API: no bespoke control-plane service to run,",
+    "and every call is plain outbound HTTPS — which is what makes it work from the Cloudflare",
+    "Worker facade, where there is no Docker daemon and no filesystem.",
+    "",
+    "  provision -> POST a deployment for the PR head. GitHub fires the `deployment` event, which",
+    "               runs .github/workflows/preview-env.yml, and echoes our `payload` back in the",
+    "               response — which is where the environment URL comes from.",
+    "  teardown  -> POST an `inactive` status on that deployment, which fires the workflow's",
+    "               teardown job (deletes the per-PR Worker and its D1 databases).",
+    "",
+    "TWO DELIBERATE CHOICES, both consequences of the generic HTTP backend settling a provision",
+    "SYNCHRONOUSLY (what the provision call returns is what the deployer records and the tester",
+    "is handed — there is no poll-until-ready for this backend):",
+    "",
+    "  1. `url` comes from the request's own payload, not from the deploy. The per-PR Worker name",
+    "     is ours to choose, so `https://cat-factory-pr-<n>.<subdomain>.workers.dev` is knowable",
+    "     before anything is built. Substitute your account's workers.dev subdomain below.",
+    "     Reading it back from the deploy instead would hand the tester `null`.",
+    "  2. There is NO `status` request. Without one the backend echoes what provision captured",
+    "     (ready + that URL) on every refresh. With one, the GitHub statuses endpoint returns an",
+    "     ARRAY whose shape does not carry the payload, so a refresh would map the URL back to",
+    "     null and erase it. The workflow still writes real statuses — they are the human-facing",
+    "     record on the PR, and the `inactive` one is the teardown trigger.",
+    "",
+    "The readiness window this leaves (a deployment registered before its build finishes) is what",
+    "the workflow's `pull_request` trigger closes: the environment is built when the branch is",
+    "pushed, minutes before a pipeline reaches its deployer step.",
+    "",
+    "Replace OWNER/REPO and SUBDOMAIN, then register the secret `githubToken`: a fine-grained",
+    "token on that repo with Deployments: read & write and nothing else. Provision inputs",
+    "available here are {{input.branch}}, {{input.pullNumber}}, {{input.repoOwner}},",
+    "{{input.repoName}}, {{input.blockId}} and {{input.pullUrl}}."
+  ],
+  "providerId": "cat-factory-cloudflare-preview",
+  "label": "cat-factory preview (Cloudflare, via GitHub Deployments)",
+  "baseUrl": "https://api.github.com",
+  "auth": {
+    "type": "bearer",
+    "secretRef": { "key": "githubToken" }
+  },
+  "provision": {
+    "method": "POST",
+    "pathTemplate": "/repos/OWNER/REPO/deployments",
+    "headers": [{ "name": "accept", "value": "application/vnd.github+json" }],
+    "bodyTemplate": "{\"ref\":\"{{input.branch}}\",\"environment\":\"pr-{{input.pullNumber}}\",\"auto_merge\":false,\"required_contexts\":[],\"transient_environment\":true,\"description\":\"cat-factory preview\",\"payload\":{\"pullNumber\":\"{{input.pullNumber}}\",\"blockId\":\"{{input.blockId}}\",\"url\":\"https://cat-factory-pr-{{input.pullNumber}}.SUBDOMAIN.workers.dev\"}}",
+    "timeoutMs": 20000
+  },
+  "teardown": {
+    "method": "POST",
+    "pathTemplate": "/repos/OWNER/REPO/deployments/{{provision.externalId}}/statuses",
+    "headers": [{ "name": "accept", "value": "application/vnd.github+json" }],
+    "bodyTemplate": "{\"state\":\"inactive\",\"description\":\"cat-factory teardown\"}",
+    "timeoutMs": 20000
+  },
+  "response": {
+    "urlPath": "payload.url",
+    "externalIdPath": "id"
+  },
+  "defaultTtlMs": 14400000
+}

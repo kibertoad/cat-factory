@@ -1,0 +1,112 @@
+# cat-factory's OWN per-PR preview stack — the whole product built from the checkout under
+# test and published on ONE origin.
+#
+# This is what cat-factory's `deployer` step stands up when cat-factory develops cat-factory
+# on a LOCAL (or plain-Node-with-Docker) deployment: provision type `docker-compose`, compose
+# path `deploy/preview/compose/docker-compose.yml`, build-from-source ON. The provider clones
+# the PR head, rewrites this file into an isolation-safe project (host ports forced ephemeral
+# so concurrent per-PR stacks never collide), runs `docker compose build` + `up --wait`, and
+# hands the tester `http://localhost:<ephemeral-port>` — the `web` service below.
+#
+# Run it by hand exactly the same way (from this directory):
+#
+#   docker compose up --build --wait     # then open the printed http://localhost:8080
+#   docker compose down -v               # stack + database volume
+#
+# See ../README.md for how to wire it into a board, and ../../../docs/dogfooding.md for the
+# full "develop cat-factory with cat-factory" guide.
+#
+# Deliberate properties (all load-bearing for the compose environment backend):
+#   - NO bind mounts, NO `env_file`, NO `include:`, NO `privileged` — the backend refuses all
+#     of them (they resolve against the host, bypassing its isolation guards).
+#   - Every build context is repo-relative (`../../..` = the checkout root), so it resolves
+#     inside the clone the provider makes; `--project-directory` is this file's directory.
+#   - Every service has a healthcheck: `up --wait` gates on them, and the status poll reads
+#     them to classify the environment as provisioning / ready / failed.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: cat
+      POSTGRES_PASSWORD: cat
+      POSTGRES_DB: catfactory
+    volumes:
+      - preview-pg:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cat -d catfactory']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # The Node facade — the SAME image the real Node deployment ships (deploy/node/Dockerfile),
+  # so a preview exercises the artifact, not a preview-only variant of it. It migrates the
+  # database on boot, so there is no separate migration service.
+  backend:
+    build:
+      context: ../../..
+      dockerfile: deploy/node/Dockerfile
+    environment:
+      # The compose network resolves `postgres`; the stack owns this database exclusively.
+      DATABASE_URL: postgres://cat:cat@postgres:5432/catfactory
+      PORT: '8787'
+      # Non-production ENVIRONMENT is what makes the two auth knobs below honourable at all —
+      # the config loader refuses them in a production-like environment.
+      ENVIRONMENT: preview
+      # A preview environment has NO user directory and no OAuth app: run it with no auth at
+      # all, so a tester agent can drive the REST API and a human can open the board without
+      # signing in. `TESTING_NO_AUTH` implies dev-open AND tells the SPA it may render the
+      # board anonymously instead of gating to the login screen.
+      TESTING_NO_AUTH: 'true'
+      AUTH_DEV_OPEN: 'true'
+      # THROWAWAY secrets. They are here (rather than injected) on purpose: a preview stack
+      # must come up unattended with no credential plumbing, and nothing of value is ever
+      # sealed under them — the stack and its volume are destroyed with the environment.
+      # Override them from the environment if you point a stack at anything real.
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-preview-session-secret-not-a-real-secret-0000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-cHJldmlldy1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE=}
+      HARNESS_SHARED_SECRET: ${HARNESS_SHARED_SECRET:-preview-harness-shared-secret}
+      # Same-origin: `web` proxies the API, so no cross-origin allow-list is needed.
+      CORS_ALLOWED_ORIGINS: ''
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:24-slim ships no curl/wget; Node's global fetch is the dependency-free probe.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      # The first boot runs the migrations, so allow a generous start window before the
+      # healthcheck's failures start counting.
+      start_period: 90s
+      retries: 10
+
+  # The single published entry point: the static SPA plus a reverse proxy to the API on ONE
+  # origin. Single-origin is not cosmetic — the SPA's API base is baked in at build time and a
+  # preview stack's host port is only assigned at `up` time, so a same-origin build (relative
+  # API base) is the only thing that can work here. It also removes CORS from the picture.
+  web:
+    build:
+      context: ../../..
+      dockerfile: deploy/preview/compose/Dockerfile.web
+    ports:
+      # The environment backend rewrites this to an ephemeral host port and reads the assigned
+      # one back with `docker compose port web 8080`; the fixed mapping is for manual runs.
+      - '8080:8080'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8080/']
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 10
+
+volumes:
+  preview-pg:

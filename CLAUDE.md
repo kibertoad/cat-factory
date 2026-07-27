@@ -308,6 +308,13 @@ real-time transport, model provisioning).
   registered purely through the public app-owned registries. See "Custom agents".
 - `deploy/{backend,node,local,frontend}` — example deployments carrying the production config
   (`wrangler.toml` / `Dockerfile` / `.env.example`) on top of the libraries.
+- `deploy/preview` — the per-PR TEST environments for THIS repo (not a package): the
+  single-origin compose stack a local deployment provisions, and the per-PR Cloudflare Worker a
+  Worker deployment provisions over the GitHub Deployments API. Board wiring lives in
+  [`docs/dogfooding.md`](./docs/dogfooding.md). Two constraints bite when editing them: the
+  compose file must stay free of bind mounts / `env_file` / `include:` (the compose backend
+  refuses all three), and the SPA there is built with an EMPTY `apiBase` because a preview's
+  host port is only assigned at `up` time — same-origin is the only topology that can work.
 
 ### Local container adapters
 

@@ -1,0 +1,134 @@
+# Per-PR preview Worker — the TEMPLATE the preview workflow renders (envsubst) into
+# `deploy/backend/wrangler.pr.toml` before deploying. See ../README.md.
+#
+# It lives beside the production `deploy/backend/wrangler.toml` once rendered, so every
+# relative path (`main`, `migrations_dir`) resolves exactly as production's does. Keep the
+# BINDING SHAPE in step with that file: the Worker code resolves bindings by name, so a
+# binding production gained and this template didn't is a preview that boots misconfigured.
+#
+# Placeholders (all substituted by the workflow; a missing one fails the render):
+#   ${PR_NUMBER}          the pull request number — the isolation key for every named resource
+#   ${D1_ID}              per-PR primary D1 database id
+#   ${D1_TELEMETRY_ID}    per-PR telemetry D1 database id
+#   ${D1_SANDBOX_ID}      per-PR sandbox D1 database id
+#   ${WORKERS_SUBDOMAIN}  the account's workers.dev subdomain (for WORKER_PUBLIC_URL)
+#   ${EXECUTOR_IMAGE}     the executor-harness image, read out of the production wrangler.toml
+#   ${GITHUB_APP_ID}      the preview GitHub App's id (a THROWAWAY app — see ../README.md)
+#
+# Everything a preview deliberately does NOT get:
+#   - the DeployContainer binding (a preview never provisions Kubernetes environments itself),
+#   - a queue/backfill surface beyond the crons below,
+#   - any production secret: the crypto secrets and the App private key are preview-only and
+#     uploaded per PR by the workflow.
+
+name = "cat-factory-pr-${PR_NUMBER}"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# The version/deployment URL the environment record points at.
+workers_dev = true
+preview_urls = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# One database set PER PR: a preview must be able to run this PR's migrations without
+# touching another PR's data (that is the whole reason previews are per-PR rather than one
+# shared staging Worker). The workflow creates them on first deploy and deletes them on
+# teardown.
+[[d1_databases]]
+binding = "DB"
+database_name = "cat_factory_pr_${PR_NUMBER}"
+database_id = "${D1_ID}"
+migrations_dir = "node_modules/@cat-factory/worker/migrations"
+
+[[d1_databases]]
+binding = "TELEMETRY_DB"
+database_name = "cat_factory_pr_${PR_NUMBER}_telemetry"
+database_id = "${D1_TELEMETRY_ID}"
+migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
+
+[[d1_databases]]
+binding = "SANDBOX_DB"
+database_name = "cat_factory_pr_${PR_NUMBER}_sandbox"
+database_id = "${D1_SANDBOX_ID}"
+migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
+
+[ai]
+binding = "AI"
+
+[[workflows]]
+binding = "EXECUTION_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-execution"
+class_name = "ExecutionWorkflow"
+
+[[workflows]]
+binding = "GITHUB_BACKFILL_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-github-backfill"
+class_name = "GitHubBackfillWorkflow"
+
+[[workflows]]
+binding = "BOOTSTRAP_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-bootstrap"
+class_name = "BootstrapWorkflow"
+
+[[workflows]]
+binding = "ENV_CONFIG_REPAIR_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-env-config-repair"
+class_name = "EnvConfigRepairWorkflow"
+
+[[workflows]]
+binding = "ENV_TEST_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-env-test"
+class_name = "EnvironmentTestWorkflow"
+
+# The runner backend. It is NOT optional scenery: the Worker refuses to assemble its agent
+# executor without a runner (EXEC_CONTAINER or a registered pool) and serves the
+# misconfigured app instead — so a preview without this binding would answer every request
+# with a config error. `max_instances` is deliberately tiny: a preview is exercised by a
+# tester, not by a fleet.
+[[containers]]
+class_name = "ExecutionContainer"
+image = "${EXECUTOR_IMAGE}"
+max_instances = 2
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "EXEC_CONTAINER"
+class_name = "ExecutionContainer"
+
+[[durable_objects.bindings]]
+name = "WORKSPACE_EVENTS"
+class_name = "WorkspaceEventsHub"
+
+# A fresh Worker starts from an empty migration history, so its SQLite-backed classes are
+# declared in ONE tag rather than replaying production's v1→v4 rename history.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ExecutionContainer", "WorkspaceEventsHub"]
+
+# The durable-execution sweepers (stale runs, expired environments, activation TTLs) — a run
+# started in a preview must recover exactly as it does in production.
+[triggers]
+crons = ["*/2 * * * *"]
+
+[vars]
+DECISION_TIMEOUT = "24 hours"
+WORKER_PUBLIC_URL = "https://cat-factory-pr-${PR_NUMBER}.${WORKERS_SUBDOMAIN}.workers.dev"
+GITHUB_APP_ID = "${GITHUB_APP_ID}"
+GITHUB_API_BASE = "https://api.github.com"
+# `preview` is a non-production ENVIRONMENT, which is what makes TESTING_NO_AUTH honourable:
+# a preview has no user directory and no OAuth callback, so it runs with no auth at all —
+# the tester drives the REST API and a human opens the board without signing in.
+ENVIRONMENT = "preview"
+TESTING_NO_AUTH = "true"
+AUTH_DEV_OPEN = "true"
+# A lone `*` is the explicit opt-in to reflecting any origin. It is the right value HERE and
+# nowhere near production: the preview SPA's Pages URL is minted by the same workflow run that
+# deploys this Worker, so it cannot be baked into the config being deployed. Auth is off in a
+# preview anyway, so there is no session for a hostile origin to ride.
+CORS_ALLOWED_ORIGINS = "*"
+RUNNERS_ENABLED = "false"
+OBSERVABILITY_ENABLED = "false"

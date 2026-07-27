@@ -1,0 +1,442 @@
+name: Preview environment (Cloudflare)
+
+# Per-PR preview environment on the REAL Cloudflare runtime: its own Worker
+# (`cat-factory-pr-<n>`), its own D1 databases, its own SPA Pages preview.
+#
+# This is the CLOUDFLARE half of "cat-factory develops cat-factory" — the environment a
+# cat-factory `deployer` step points a tester at when the orchestrator itself runs on Workers
+# and so has no Docker daemon to run the compose stack on (deploy/preview/compose). The whole
+# setup is documented in deploy/preview/README.md and docs/dogfooding.md.
+#
+# The control plane is the GitHub Deployments API, so cat-factory needs nothing but outbound
+# HTTPS to api.github.com — no bespoke management service, and nothing that assumes a
+# filesystem or a container:
+#
+#   provision -> cat-factory POSTs a deployment for the PR head. That fires the `deployment`
+#                event below. The response echoes back the deployment's `payload`, which is
+#                where the environment URL comes from (see "Why the URL is deterministic").
+#   teardown  -> cat-factory posts an `inactive` status, which fires the teardown job.
+#
+# Why the URL is DETERMINISTIC and not read back from the deploy. The generic HTTP environment
+# backend settles a provision synchronously — whatever the provision call returns is what the
+# deployer records and the tester is handed; there is no built-in poll-until-ready for it. A
+# Cloudflare deploy takes minutes, so a "read the URL back afterwards" design would hand the
+# tester a null URL. The per-PR Worker name is chosen by us, so its workers.dev URL is known
+# before anything is built: cat-factory sends it in the deployment `payload` and gets it
+# straight back. What remains is a readiness window, and that is what the `pull_request`
+# trigger is for — the environment is built when the branch is PUSHED (long before a run
+# reaches its deployer step), and a later `deployment` event for a SHA that is already
+# deployed short-circuits to success instead of rebuilding.
+#
+# SECURITY. This workflow deploys PR code with the `preview` environment's credentials. Both
+# triggers are restricted to branches of THIS repository (a fork PR is skipped outright), and
+# the credentials it uses must be preview-only: a Cloudflare token scoped to the preview
+# resources, and a THROWAWAY GitHub App whose private key opens nothing real. Never give this
+# environment the production token or the production App key.
+
+on:
+  # The warm path: build the environment as soon as the branch moves, so it is live well
+  # before any pipeline asks for it.
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # The provision path: cat-factory (or a human) creating a deployment.
+  deployment:
+  # The teardown path: cat-factory posting an `inactive` status. Statuses this workflow writes
+  # itself use GITHUB_TOKEN, which never re-triggers a workflow, so there is no loop.
+  deployment_status:
+
+concurrency:
+  # One environment per PR. Not `cancel-in-progress`: cancelling a half-applied deploy would
+  # leave migrations applied against a Worker that never got its new code.
+  group: >-
+    preview-env-${{ github.event.pull_request.number
+    || github.event.deployment.environment
+    || github.event.deployment_status.deployment.environment }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy preview environment
+    # Same-repo branches only — a fork PR has no access to the preview credentials, and
+    # deploying a fork's code with them is exactly what must not happen.
+    if: >-
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || github.event_name == 'deployment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Scopes the preview credentials to this job and applies the environment's protection rules.
+    environment: preview
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      # Resolve the PR number, the SHA to deploy, and the deployment record to report on —
+      # from either trigger. `deployments: write` also lets the pull_request path CREATE the
+      # record, so both paths report through the same statuses and teardown has a handle.
+      - name: Resolve the preview identity
+        id: id
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_PR: ${{ github.event.pull_request.number }}
+          SHA_FROM_PR: ${{ github.event.pull_request.head.sha }}
+          BRANCH_FROM_PR: ${{ github.event.pull_request.head.ref }}
+          ENVIRONMENT_NAME: ${{ github.event.deployment.environment }}
+          SHA_FROM_DEPLOYMENT: ${{ github.event.deployment.sha }}
+          REF_FROM_DEPLOYMENT: ${{ github.event.deployment.ref }}
+          DEPLOYMENT_ID: ${{ github.event.deployment.id }}
+          SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUBDOMAIN}" ]; then
+            echo "::error::vars.CLOUDFLARE_WORKERS_SUBDOMAIN is not set (see deploy/preview/README.md)"
+            exit 1
+          fi
+          if [ "$EVENT" = "pull_request" ]; then
+            pr="$PR_FROM_PR"; sha="$SHA_FROM_PR"; ref="$BRANCH_FROM_PR"
+          else
+            # The environment name is the contract: `pr-<number>`. Every per-PR resource is
+            # named after it, so a malformed one must stop here rather than create resources
+            # nobody can find or delete.
+            pr="${ENVIRONMENT_NAME#pr-}"
+            sha="$SHA_FROM_DEPLOYMENT"; ref="$REF_FROM_DEPLOYMENT"
+          fi
+          case "$pr" in
+            ''|*[!0-9]*)
+              echo "::error::could not resolve a numeric PR for this event (environment '${ENVIRONMENT_NAME:-}')"
+              exit 1
+              ;;
+          esac
+          url="https://cat-factory-pr-${pr}.${SUBDOMAIN}.workers.dev"
+          deployment="$DEPLOYMENT_ID"
+          if [ "$EVENT" = "pull_request" ]; then
+            # The warm path owns no deployment yet; create one so this build is recorded and
+            # teardown has something to act on. The payload carries the URL, which is exactly
+            # what cat-factory's provision call reads back.
+            deployment="$(gh api "/repos/${REPO}/deployments" \
+              -f ref="$sha" \
+              -f environment="pr-${pr}" \
+              -F auto_merge=false \
+              -F transient_environment=true \
+              -f description='cat-factory preview (branch push)' \
+              --raw-field 'required_contexts=[]' \
+              --raw-field "payload={\"pullNumber\":\"${pr}\",\"url\":\"${url}\"}" \
+              --jq '.id')"
+          fi
+          {
+            echo "pr=${pr}"
+            echo "sha=${sha}"
+            echo "ref=${ref}"
+            echo "url=${url}"
+            echo "worker=cat-factory-pr-${pr}"
+            echo "deployment=${deployment}"
+            echo "statuses_url=/repos/${REPO}/deployments/${deployment}/statuses"
+          } >> "$GITHUB_OUTPUT"
+
+      # A `deployment` event for a SHA this workflow already deployed is a REGISTRATION, not a
+      # new build: cat-factory provisions when a run reaches its deployer step, which is
+      # normally minutes after the branch push already built this exact commit. Re-report the
+      # existing environment instead of spending another 10 minutes on an identical deploy.
+      - name: Skip a rebuild of an already-deployed commit
+        id: warm
+        if: github.event_name == 'deployment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.id.outputs.pr }}
+          SHA: ${{ steps.id.outputs.sha }}
+          THIS_DEPLOYMENT: ${{ steps.id.outputs.deployment }}
+        run: |
+          set -euo pipefail
+          hit=false
+          # A lookup failure must not fail the deploy — it only means we cannot prove the commit
+          # is already live, and rebuilding is always the safe answer.
+          ids="$(gh api "/repos/${REPO}/deployments?environment=pr-${PR}&sha=${SHA}&per_page=20" --jq '.[].id' || true)"
+          for id in $ids; do
+            if [ "$id" != "$THIS_DEPLOYMENT" ]; then
+              state="$(gh api "/repos/${REPO}/deployments/${id}/statuses?per_page=1" --jq '.[0].state // ""' || true)"
+              if [ "$state" = "success" ]; then hit=true; break; fi
+            fi
+          done
+          echo "already_deployed=${hit}" >> "$GITHUB_OUTPUT"
+
+      - name: Mark the deployment in progress
+        if: steps.warm.outputs.already_deployed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
+        run: |
+          set -euo pipefail
+          gh api "$STATUSES_URL" -f state=in_progress \
+            -f description='Building the preview environment' >/dev/null
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.warm.outputs.already_deployed != 'true'
+        with:
+          persist-credentials: false
+          ref: ${{ steps.id.outputs.sha }}
+
+      - name: Setup pnpm + Node + install
+        if: steps.warm.outputs.already_deployed != 'true'
+        uses: ./.github/actions/setup
+        with:
+          node-modules-cache: 'false'
+
+      # Per-PR databases. `d1 create` is not idempotent, so a re-deploy of the same PR reuses
+      # the existing database: create, then read the id back either way. The id is what the
+      # rendered config binds — a wrong one would silently point this preview at another PR's
+      # data, so an unresolvable id fails the job.
+      - name: Ensure the per-PR D1 databases
+        id: d1
+        if: steps.warm.outputs.already_deployed != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ steps.id.outputs.pr }}
+        working-directory: deploy/backend
+        run: |
+          set -euo pipefail
+          ensure_db() {
+            name="$1"
+            pnpm exec wrangler d1 create "$name" >/dev/null 2>&1 || true
+            # `d1 info --json` can be preceded by wrangler banner lines, so parse from the
+            # first JSON token rather than assuming the whole stream is the document.
+            id="$(pnpm exec wrangler d1 info "$name" --json | node -e \
+              'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const i=s.search(/[[{]/);if(i<0)process.exit(1);const j=JSON.parse(s.slice(i));const o=Array.isArray(j)?j[0]:j;const v=o?.uuid??o?.database_id??o?.id;if(!v)process.exit(1);process.stdout.write(String(v))})')"
+            if [ -z "$id" ]; then
+              echo "::error::could not resolve the id of D1 database ${name}"
+              exit 1
+            fi
+            echo "$id"
+          }
+          # Assigned first, THEN written out: a plain assignment propagates the function's
+          # failure under `set -e`, whereas `echo "$(ensure_db …)"` would swallow it and hand the
+          # render step an empty database id.
+          primary="$(ensure_db "cat_factory_pr_${PR}")"
+          telemetry="$(ensure_db "cat_factory_pr_${PR}_telemetry")"
+          sandbox="$(ensure_db "cat_factory_pr_${PR}_sandbox")"
+          {
+            echo "primary=${primary}"
+            echo "telemetry=${telemetry}"
+            echo "sandbox=${sandbox}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Rendered BESIDE the production wrangler.toml so `main` and every `migrations_dir`
+      # resolve exactly as production's do.
+      - name: Render the preview wrangler config
+        if: steps.warm.outputs.already_deployed != 'true'
+        env:
+          PR_NUMBER: ${{ steps.id.outputs.pr }}
+          D1_ID: ${{ steps.d1.outputs.primary }}
+          D1_TELEMETRY_ID: ${{ steps.d1.outputs.telemetry }}
+          D1_SANDBOX_ID: ${{ steps.d1.outputs.sandbox }}
+          WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          GITHUB_APP_ID: ${{ vars.PREVIEW_GITHUB_APP_ID }}
+        run: |
+          set -euo pipefail
+          # The executor image is READ OUT of the production config rather than pinned in the
+          # template, so a preview can never drift onto a stale harness image.
+          EXECUTOR_IMAGE="$(grep -oE 'registry\.cloudflare\.com/[^"]*cat-factory-executor:[^"]*' deploy/backend/wrangler.toml | head -n1 || true)"
+          if [ -z "${EXECUTOR_IMAGE}" ]; then
+            echo "::error::could not read the executor image out of deploy/backend/wrangler.toml"
+            exit 1
+          fi
+          export EXECUTOR_IMAGE
+          # The placeholder list is envsubst's own argument syntax — LITERAL text, not something
+          # the shell should expand.
+          # shellcheck disable=SC2016
+          envsubst \
+            '${PR_NUMBER} ${D1_ID} ${D1_TELEMETRY_ID} ${D1_SANDBOX_ID} ${WORKERS_SUBDOMAIN} ${EXECUTOR_IMAGE} ${GITHUB_APP_ID}' \
+            < deploy/preview/cloudflare/wrangler.preview.template.toml \
+            > deploy/backend/wrangler.pr.toml
+          # A leftover placeholder would deploy a Worker bound to a database that does not
+          # exist; fail here instead of finding out at runtime. Both patterns are literal.
+          # shellcheck disable=SC2016
+          if grep -q '\${' deploy/backend/wrangler.pr.toml; then
+            echo "::error::unsubstituted placeholders remain in the rendered config"
+            # shellcheck disable=SC2016
+            grep -n '\${' deploy/backend/wrangler.pr.toml
+            exit 1
+          fi
+
+      # Schema first: this PR's code may rely on this PR's migrations.
+      - name: Apply D1 migrations
+        if: steps.warm.outputs.already_deployed != 'true'
+        working-directory: deploy/backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ steps.id.outputs.pr }}
+        run: |
+          set -euo pipefail
+          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox"; do
+            pnpm exec wrangler d1 migrations apply "$db" --remote -c wrangler.pr.toml
+          done
+
+      # Through Turbo so @cat-factory/worker and its workspace dependencies build in order.
+      - name: Build the Worker bundle
+        if: steps.warm.outputs.already_deployed != 'true'
+        run: pnpm exec turbo run build --filter=@cat-factory/worker
+
+      - name: Deploy the preview Worker
+        if: steps.warm.outputs.already_deployed != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: deploy/backend
+        run: pnpm exec wrangler deploy -c wrangler.pr.toml
+
+      # Secrets are uploaded AFTER the first deploy (a Worker must exist to hold them) and on
+      # every re-deploy, so a rotated preview secret takes effect. All four are preview-only:
+      # the crypto secrets seal nothing that outlives the environment, and the App private key
+      # belongs to a throwaway App — see deploy/preview/README.md.
+      - name: Upload the preview secrets
+        if: steps.warm.outputs.already_deployed != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AUTH_SESSION_SECRET: ${{ secrets.PREVIEW_AUTH_SESSION_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.PREVIEW_ENCRYPTION_KEY }}
+          HARNESS_SHARED_SECRET: ${{ secrets.PREVIEW_HARNESS_SHARED_SECRET }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.PREVIEW_GITHUB_APP_PRIVATE_KEY }}
+        working-directory: deploy/backend
+        run: |
+          set -euo pipefail
+          put() {
+            # An unset optional secret is SKIPPED rather than written as an empty string, which
+            # the config loader would read as "configured" and fail on differently.
+            if [ -n "${2:-}" ]; then
+              printf '%s' "$2" | pnpm exec wrangler secret put "$1" -c wrangler.pr.toml
+            fi
+          }
+          put AUTH_SESSION_SECRET "$AUTH_SESSION_SECRET"
+          put ENCRYPTION_KEY "$ENCRYPTION_KEY"
+          put HARNESS_SHARED_SECRET "$HARNESS_SHARED_SECRET"
+          put GITHUB_APP_PRIVATE_KEY "$GITHUB_APP_PRIVATE_KEY"
+
+      # The SPA is static, so its API origin is baked in at build time — and unlike the compose
+      # stack the Worker's URL is known beforehand, so this is a normal split-origin build.
+      - name: Generate the preview SPA
+        if: steps.warm.outputs.already_deployed != 'true' && vars.PREVIEW_PAGES_PROJECT != ''
+        env:
+          NUXT_PUBLIC_API_BASE: ${{ steps.id.outputs.url }}
+        run: pnpm exec turbo run generate --filter=@cat-factory/deploy-frontend
+
+      - name: Deploy the SPA to Pages
+        id: spa
+        if: steps.warm.outputs.already_deployed != 'true' && vars.PREVIEW_PAGES_PROJECT != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.PREVIEW_PAGES_PROJECT }}
+          BRANCH: pr-${{ steps.id.outputs.pr }}
+        working-directory: deploy/frontend
+        run: |
+          set -euo pipefail
+          out="$(pnpm exec wrangler pages deploy --project-name "$PROJECT" --branch "$BRANCH")"
+          echo "$out"
+          # The URL is read out of wrangler's own output; an unrecognised format costs the
+          # convenience link on the deployment status, never the deploy itself.
+          url="$(printf '%s' "$out" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -n1 || true)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      # `success` is what a human (and the GitHub UI) reads as "this environment is live".
+      # `environment_url` is the API, not the SPA: the environment belongs to the backend
+      # SERVICE frame, and a frontend frame binds to it (the harness builds and serves the SPA
+      # itself for a UI test). The browsable SPA preview rides `log_url` for humans.
+      - name: Publish the environment URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
+          API_URL: ${{ steps.id.outputs.url }}
+          SPA_URL: ${{ steps.spa.outputs.url }}
+          WARM: ${{ steps.warm.outputs.already_deployed }}
+        run: |
+          set -euo pipefail
+          description='Preview environment ready'
+          if [ "$WARM" = "true" ]; then
+            description='Preview environment already live for this commit'
+          fi
+          if [ -n "$SPA_URL" ]; then
+            gh api "$STATUSES_URL" -f state=success -f environment_url="$API_URL" \
+              -f log_url="$SPA_URL" -f description="$description" >/dev/null
+          else
+            gh api "$STATUSES_URL" -f state=success -f environment_url="$API_URL" \
+              -f description="$description" >/dev/null
+          fi
+
+      # A failure must be REPORTED: cat-factory records the environment optimistically at
+      # provision time, so a silent failure would leave a tester pointed at a URL that never
+      # comes up, with nothing on the PR to explain it.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "${STATUSES_URL}" ]; then
+            gh api "$STATUSES_URL" -f state=failure -f log_url="$RUN_URL" \
+              -f description='Preview environment build failed' >/dev/null
+          fi
+
+  # Teardown. cat-factory's manifest posts an `inactive` status when the environment is torn
+  # down (explicitly, on TTL expiry, or when a re-provision supersedes it); that is the signal
+  # to delete the real resources. Every delete is tolerant of an already-absent resource, so a
+  # second teardown is a no-op rather than a red run.
+  teardown:
+    name: Tear down preview environment
+    if: >-
+      github.event_name == 'deployment_status'
+      && github.event.deployment_status.state == 'inactive'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: preview
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve the preview identity
+        id: id
+        env:
+          ENVIRONMENT_NAME: ${{ github.event.deployment_status.deployment.environment }}
+        run: |
+          set -euo pipefail
+          pr="${ENVIRONMENT_NAME#pr-}"
+          case "$pr" in
+            ''|*[!0-9]*)
+              echo "::error::deployment environment '${ENVIRONMENT_NAME}' is not of the form pr-<number>"
+              exit 1
+              ;;
+          esac
+          echo "pr=${pr}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          node-modules-cache: 'false'
+
+      - name: Delete the Worker and its databases
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ steps.id.outputs.pr }}
+        working-directory: deploy/backend
+        run: |
+          set -euo pipefail
+          # The Worker goes FIRST: while it lives it holds connections to the databases below
+          # and its crons keep firing, so deleting them first would leave a live Worker
+          # erroring against missing bindings.
+          pnpm exec wrangler delete --name "cat-factory-pr-${PR}" --force || \
+            echo "Worker cat-factory-pr-${PR} already absent."
+          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox"; do
+            pnpm exec wrangler d1 delete "$db" --skip-confirmation || \
+              echo "D1 database ${db} already absent."
+          done
