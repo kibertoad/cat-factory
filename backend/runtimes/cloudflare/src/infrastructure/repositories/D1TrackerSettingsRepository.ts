@@ -7,6 +7,7 @@ interface TrackerRow {
   linear_team_id: string | null
   writeback_comment_on_pr_open: number
   writeback_resolve_on_merge: number
+  writeback_questions_on_park: number
   updated_at: number
 }
 
@@ -30,6 +31,7 @@ export class D1TrackerSettingsRepository implements TrackerSettingsRepository {
       linearTeamId: row.linear_team_id,
       writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
       writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
+      writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
       updatedAt: row.updated_at,
     }
   }
@@ -39,14 +41,16 @@ export class D1TrackerSettingsRepository implements TrackerSettingsRepository {
       .prepare(
         `INSERT INTO tracker_settings
            (workspace_id, tracker, jira_project_key, linear_team_id,
-            writeback_comment_on_pr_open, writeback_resolve_on_merge, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+            writeback_comment_on_pr_open, writeback_resolve_on_merge,
+            writeback_questions_on_park, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            tracker = excluded.tracker,
            jira_project_key = excluded.jira_project_key,
            linear_team_id = excluded.linear_team_id,
            writeback_comment_on_pr_open = excluded.writeback_comment_on_pr_open,
            writeback_resolve_on_merge = excluded.writeback_resolve_on_merge,
+           writeback_questions_on_park = excluded.writeback_questions_on_park,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -56,6 +60,7 @@ export class D1TrackerSettingsRepository implements TrackerSettingsRepository {
         settings.linearTeamId,
         settings.writebackCommentOnPrOpen ? 1 : 0,
         settings.writebackResolveOnMerge ? 1 : 0,
+        settings.writebackQuestionsOnPark ? 1 : 0,
         settings.updatedAt,
       )
       .run()

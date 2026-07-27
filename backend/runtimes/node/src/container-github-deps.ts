@@ -67,6 +67,7 @@ import {
   DrizzleTaskRepository,
   DrizzleTaskSourceSettingsRepository,
 } from './repositories/tasks.js'
+import { DrizzleReviewQuestionPostRepository } from './repositories/drizzle/settings.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 
 // The engine's CI/mergeability gate reads never persist rate-limit snapshots (that is the
@@ -556,6 +557,12 @@ function buildNodeIssueWriteback(args: {
     trackerSettingsRepository,
     taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
     fetchImpl: fetch,
+    // Idempotency markers for the headless clarification loop's question echo — without them
+    // the writeback passes through, since a replaying driver would otherwise re-post.
+    reviewQuestionPostRepository: sourced(
+      'reviewQuestionPostRepository',
+      (d) => new DrizzleReviewQuestionPostRepository(d),
+    ),
     ...(githubClient && resolveWritebackIssue
       ? {
           commentOnGitHubIssue: async (workspaceId, externalId, body) => {

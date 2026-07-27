@@ -14,6 +14,10 @@ import type {
   ModelPresetRepository,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
+  ReviewQuestionPostKey,
+  ReviewQuestionPostRecord,
+  ReviewQuestionPostRepository,
+  ReviewQuestionPostStatus,
   TrackerSettings,
   TrackerSettingsRepository,
   UserSettings,
@@ -30,6 +34,7 @@ import {
   localSettings,
   modelPresets,
   notificationWebhooks,
+  reviewQuestionPosts,
   trackerSettings,
   userSettings,
   workspaceSettings,
@@ -223,6 +228,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
       linearTeamId: row.linear_team_id,
       writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
       writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
+      writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
       updatedAt: row.updated_at,
     }
   }
@@ -237,6 +243,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
         linear_team_id: settings.linearTeamId,
         writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
         writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
+        writeback_questions_on_park: settings.writebackQuestionsOnPark ? 1 : 0,
         updated_at: settings.updatedAt,
       })
       .onConflictDoUpdate({
@@ -247,6 +254,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
           linear_team_id: settings.linearTeamId,
           writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
           writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
+          writeback_questions_on_park: settings.writebackQuestionsOnPark ? 1 : 0,
           updated_at: settings.updatedAt,
         },
       })
@@ -508,5 +516,89 @@ export class DrizzleLocalSettingsRepository implements LocalSettingsRepository {
         target: localSettings.id,
         set: { config: record.config, updated_at: record.updatedAt },
       })
+  }
+}
+
+/**
+ * Idempotency markers for the headless clarification loop's question writeback — one row per
+ * `(workspace, review, iteration, linked issue)` in `review_question_posts` (mirror of the D1
+ * `D1ReviewQuestionPostRepository`).
+ *
+ * {@link claim} is a single atomic statement on purpose: an insert that, on conflict, only
+ * updates a row already marked `failed`, with `RETURNING` reporting whether either half fired.
+ * A read-then-write would let two concurrent driver replays both decide to post.
+ */
+export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  private where(key: ReviewQuestionPostKey) {
+    return and(
+      eq(reviewQuestionPosts.workspace_id, key.workspaceId),
+      eq(reviewQuestionPosts.review_id, key.reviewId),
+      eq(reviewQuestionPosts.iteration, key.iteration),
+      eq(reviewQuestionPosts.issue_ref, key.issueRef),
+    )
+  }
+
+  async claim(key: ReviewQuestionPostKey, now: number): Promise<boolean> {
+    const claimed = await this.db
+      .insert(reviewQuestionPosts)
+      .values({
+        workspace_id: key.workspaceId,
+        review_id: key.reviewId,
+        iteration: key.iteration,
+        issue_ref: key.issueRef,
+        status: 'pending',
+        attempts: 1,
+        error: null,
+        updated_at: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          reviewQuestionPosts.workspace_id,
+          reviewQuestionPosts.review_id,
+          reviewQuestionPosts.iteration,
+          reviewQuestionPosts.issue_ref,
+        ],
+        set: {
+          status: 'pending',
+          attempts: sql`${reviewQuestionPosts.attempts} + 1`,
+          error: null,
+          updated_at: now,
+        },
+        setWhere: eq(reviewQuestionPosts.status, 'failed'),
+      })
+      .returning({ issueRef: reviewQuestionPosts.issue_ref })
+    return claimed.length > 0
+  }
+
+  async settle(
+    key: ReviewQuestionPostKey,
+    outcome: { status: 'posted' } | { status: 'failed'; error: string },
+    now: number,
+  ): Promise<void> {
+    await this.db
+      .update(reviewQuestionPosts)
+      .set({
+        status: outcome.status,
+        error: outcome.status === 'failed' ? outcome.error : null,
+        updated_at: now,
+      })
+      .where(this.where(key))
+  }
+
+  async get(key: ReviewQuestionPostKey): Promise<ReviewQuestionPostRecord | null> {
+    const [row] = await this.db.select().from(reviewQuestionPosts).where(this.where(key)).limit(1)
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      reviewId: row.review_id,
+      iteration: row.iteration,
+      issueRef: row.issue_ref,
+      status: row.status as ReviewQuestionPostStatus,
+      attempts: row.attempts,
+      error: row.error,
+      updatedAt: row.updated_at,
+    }
   }
 }

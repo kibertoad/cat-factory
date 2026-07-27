@@ -518,16 +518,22 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         const patched = await app.call<Block>(
           'PATCH',
           `/workspaces/${wsId}/blocks/${task.body.id}`,
-          { trackerCommentOnPrOpen: 'on', trackerResolveOnMerge: 'off' },
+          {
+            trackerCommentOnPrOpen: 'on',
+            trackerResolveOnMerge: 'off',
+            trackerQuestionsOnPark: 'on',
+          },
         )
         expect(patched.body.trackerCommentOnPrOpen).toBe('on')
         expect(patched.body.trackerResolveOnMerge).toBe('off')
+        expect(patched.body.trackerQuestionsOnPark).toBe('on')
 
         // The overrides survive a snapshot round-trip identically across both stores.
         const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         const stored = snapshot.body.blocks.find((b) => b.id === task.body.id)!
         expect(stored.trackerCommentOnPrOpen).toBe('on')
         expect(stored.trackerResolveOnMerge).toBe('off')
+        expect(stored.trackerQuestionsOnPark).toBe('on')
 
         // Clearing an override (back to inheriting the workspace setting) drops the field.
         const cleared = await app.call<Block>(
@@ -537,6 +543,40 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         )
         expect(cleared.body.trackerCommentOnPrOpen ?? null).toBeNull()
         expect(cleared.body.trackerResolveOnMerge).toBe('off')
+        expect(cleared.body.trackerQuestionsOnPark).toBe('on')
+      })
+
+      it('round-trips the headless question-writeback workspace toggle', async () => {
+        // The opt-in that admits the headless clarification loop's question echo. It rides the
+        // same `tracker_settings` row as the PR toggles on both stores, so a facade that forgot
+        // the column would silently leave every headless park un-echoed.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const off = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+        expect(off.body.writebackQuestionsOnPark).toBe(false)
+
+        const on = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+          tracker: 'github',
+          writebackQuestionsOnPark: true,
+        })
+        expect(on.body.writebackQuestionsOnPark).toBe(true)
+
+        const reread = await app.call<TrackerSettings>(
+          'GET',
+          `/workspaces/${wsId}/tracker-settings`,
+        )
+        expect(reread.body.writebackQuestionsOnPark).toBe(true)
+
+        // Omitting it on a later PUT resets it to off, exactly like the sibling toggles — the
+        // settings row is replaced wholesale, not merged.
+        const reset = await app.call<TrackerSettings>(
+          'PUT',
+          `/workspaces/${wsId}/tracker-settings`,
+          { tracker: 'github' },
+        )
+        expect(reset.body.writebackQuestionsOnPark).toBe(false)
       })
     })
 

@@ -120,6 +120,7 @@ export interface BlockRow {
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
+  tracker_questions_on_park?: string | null
   /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
   internal?: number | null
   /** Archive marker: 1 ⇒ an archived service frame hidden from the board (restorable); null ⇒ normal. */
@@ -657,6 +658,7 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
   optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+  optField('trackerQuestionsOnPark', { clearOnEmpty: true }),
   // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
   optBoolIntField('internal'),
   // Archive marker for a service frame: 1/0 column, toggled by archive/restore.

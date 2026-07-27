@@ -1031,6 +1031,7 @@
       "issueWriteback": "Zapis zwrotny do zgłoszenia",
       "commentOnPrOpen": "Komentarz przy otwarciu PR",
       "closeOnMerge": "Zamknij przy scaleniu",
+      "questionsOnPark": "Pytaj przy wstrzymaniu",
       "writebackHint": "Zapisuje zwrotnie do powiązanego zgłoszenia w trackerze tego zadania. Nadpisuje domyślne obszaru roboczego.",
       "responsibleProduct": "Odpowiedzialny produkt",
       "responsibleEmpty": "Nieprzypisane. Ustaw właściciela produktu, aby powiadamiać go, gdy recenzja wymagań oznaczy to zadanie.",
@@ -2199,6 +2200,10 @@
         "resolveOnMerge": {
           "label": "Zamknij jako rozwiązane, gdy PR zostanie scalony",
           "help": "Skomentuj, że PR został scalony, a następnie zamknij / rozwiąż powiązane zgłoszenie."
+        },
+        "questionsOnPark": {
+          "label": "Publikuj otwarte pytania wstrzymanego uruchomienia headless",
+          "help": "Gdy uruchomienie rozpoczęte przez API wstrzymuje się, aby doprecyzować wymagania, opublikuj jego otwarte pytania — każde z identyfikatorem, który ma wskazać odpowiedź — w powiązanym zgłoszeniu. Zadania rozpoczęte w aplikacji pozostają bez zmian."
         }
       },
       "probeFailure": {

@@ -24,6 +24,7 @@ function build(opts: { extra?: NotificationChannel[]; realtime?: boolean } = {})
     config: { slack: { enabled: false }, agents: { routing: {} } } as unknown as AppConfig,
     repos: {} as never,
     sourced: (_name, buildRepo) => buildRepo(undefined as never),
+    clock: { now: () => 0 },
     ...(opts.realtime ? { realtimeSink: { broadcast } } : {}),
     standardAgentExecutor: { tag: 'standard' } as never,
     modelProviderResolver: (() => {}) as never,

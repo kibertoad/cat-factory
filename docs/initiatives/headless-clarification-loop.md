@@ -1,6 +1,6 @@
 # Initiative: headless clarification loop
 
-**Status:** in progress (slice 1 landed; slice 2 next) · **Owner:** core · **Started:** 2026-07-26
+**Status:** in progress (slices 1 + 2a landed; slice 2b next) · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -31,12 +31,22 @@ converges — with the SPA flow completely unchanged.
 
 ## Slices
 
-| #   | Slice                                                                                | Status         | PR      |
-| --- | ------------------------------------------------------------------------------------ | -------------- | ------- |
-| 1   | Parked decisions over the public API (surface, admission, intake origin, park-out)   | 🟡 in progress | this PR |
-| 2   | Questions out to the linked tracker issue, replies back in (headless-origin, opt-in) | ⬜ todo        |         |
+| #   | Slice                                                                              | Status         | PR      |
+| --- | ---------------------------------------------------------------------------------- | -------------- | ------- |
+| 1   | Parked decisions over the public API (surface, admission, intake origin, park-out) | ✅ done        | #1368   |
+| 2a  | Questions OUT to the linked tracker issue (headless-origin, opt-in, idempotent)    | 🟡 in progress | this PR |
+| 2b  | Replies back IN (the D4 grammar, per-provider ingest, identity, loop policy)       | ⬜ todo        |         |
 
 Detailed per-item checklists live at the end of each slice section.
+
+**Why slice 2 is split.** As designed in D4–D8 it is two independent halves with a clean seam
+between them: the question comment (persistence + the engine park hook) and the reply ingest (a
+grammar, two ingest transports, an identity allow-list, cursor dedup, follow-up comments). 2a is
+useful on its own — the comment renders each finding's stable id, which is exactly what
+`POST /api/v1/runs/:runId/decisions/requirements/items/:itemId/reply` from slice 1 takes, so the
+loop already closes over the API. 2b then upgrades the answer channel from "the API, using the ids
+we posted" to "reply in the ticket". Landing them together would have made one PR roughly three
+times the size of slice 1 with no reviewable seam in the middle.
 
 ---
 
@@ -325,21 +335,79 @@ registry the `headlessStartable` flag is computed against.
 - **The scope ladder is index-ordered.** `PUBLIC_API_SCOPES` order IS the ladder;
   inserting a tier shifts `admin`'s index, which is fine (stored values are strings) but any
   code comparing raw indices across a version boundary is not.
+- **A tracker-writeback surface runs in the DURABLE driver, so it must be idempotent by a
+  CLAIM, not by a post-hoc marker.** The gate step replays; writing the marker after a
+  successful post still double-posts when the process dies in between. Both facades therefore
+  express `claim` as ONE atomic insert-or-conditionally-update that reports ownership, and the
+  parity suite exists specifically because the two dialects express it very differently
+  (`ON CONFLICT … DO UPDATE … WHERE … RETURNING` vs Drizzle's `setWhere`). Slice 2b's cursor
+  dedup is the same shape — copy the marker repo, don't invent a read-then-write.
+- **`TrackerSettingsService.put` REPLACES the row.** Any new setting must be added to the SPA's
+  save payload in the same change, or an operator saving the tracker panel silently resets it.
+- **Adding a workspace-scoped table means one line in `WORKSPACE_SCOPED_TABLES`** (kernel
+  `domain/workspace-cascade.ts`) — both facades' delete cascade is driven from it, and a
+  completeness test fails the build if a `workspace_id` table is missing.
 
 ---
 
-## Slice 2 — questions out to the ticket, replies back in
+## Slice 2a — questions out to the ticket
+
+### What lands
+
+- **`writebackQuestionsOnPark`** on `TrackerSettings` + the per-task `Block.trackerQuestionsOnPark`
+  override, resolved through the existing `resolveWritebackFlag` (the same shape as the
+  PR-open/PR-merge flags), with both surfaced in the SPA beside their siblings.
+- **`IssueWritebackProvider.postReviewQuestions`** — the provider half: the workspace opt-in, the
+  linked-issue lookup, the rendered comment, and the per-issue idempotency marker. It reuses the
+  existing per-provider comment paths (GitHub comment / Jira ADF / Linear GraphQL) unchanged.
+- **The engine half**: `shouldPostReviewQuestions` / `buildReviewQuestionPost`
+  (`reviewQuestionWriteback.logic.ts`) plus a single `ReviewGateController.park()` that EVERY
+  requirements park funnels through, so a future branch cannot forget the echo.
+- **`review_question_posts`**, D1 ⇄ Drizzle + a repository-parity conformance suite.
+
+### Checklist
+
+| #    | Item                                                                             | Status  |
+| ---- | -------------------------------------------------------------------------------- | ------- |
+| 2a.1 | `writebackQuestionsOnPark` setting + `trackerQuestionsOnPark` block override     | ✅ done |
+| 2a.2 | `postReviewQuestions` port + `IssueWritebackService` implementation              | ✅ done |
+| 2a.3 | Comment renderer (stable ids, iteration, the answer channel, capped + declared)  | ✅ done |
+| 2a.4 | Engine park hook, gated on `intakeOrigin === 'public-api'`                       | ✅ done |
+| 2a.5 | `review_question_posts` persistence, D1 ⇄ Drizzle, wired in both facades         | ✅ done |
+| 2a.6 | Conformance: marker parity (the atomic claim) + the settings/override round-trip | ✅ done |
+| 2a.7 | SPA: the workspace toggle + the per-task override, all 10 locales                | ✅ done |
+| 2a.8 | Docs sweep + changeset                                                           | ✅ done |
+
+**On the subject scope.** The echo rides the REQUIREMENTS subject only (`ReviewKind.questionsOnPark`).
+The clarity gate already echoes its questions from its own `review()` closure as INTAKE semantics —
+every run, UI or headless, ungated by the workspace writeback settings — so opting it in here would
+post the same questions twice. A brainstorm dialogue has no linked-issue surface at all.
+
+**On D8's in-app fallback.** The design asked for a failed question post to raise the in-app
+`requirement_review` card so the park is never invisible. That card is already raised
+unconditionally by `IterativeReviewService.notifyFindings` on every reviewer pass that yields
+findings — on the review path, entirely independent of any tracker — so the fallback holds by
+construction and a second card would only duplicate it. What the writeback adds instead is that the
+failure is not SILENT: the provider returns a `{ posted, skipped, failed }` outcome, the gate logs
+a failure through the facade logger, and the marker row keeps the last error and stays re-claimable
+so the next driver replay retries it. Recorded here rather than papered over with a redundant card.
+
+**Deferred from slice 2a (deliberately).**
+
+- The comment is markdown rendered through the existing per-provider paths; no per-provider
+  formatting variant (a Jira ADF table, a Linear-native block) — worth it only if a reader complains.
+- No follow-up comment when the review settles. That belongs with 2b, where a reply can settle it.
+
+## Slice 2b — replies back in
 
 Design settled in D4–D8 above. Implementation notes to carry in:
 
-- Fires ONLY for `intakeOrigin === 'public-api'` runs whose workspace enables the new
-  `writebackQuestionsOnPark` tracker setting (workspace default + per-task override, resolved
-  through the existing `resolveWritebackFlag` — the same shape as the PR-open/PR-merge flags).
-  A UI-started task posts no question comments regardless of linked issues.
-- The comment renders each finding with its stable item id (D4) through the tracker module's
-  existing per-provider comment paths (Jira ADF / Linear GraphQL / GitHub comment) that
-  `IssueWritebackService` already uses.
-- New persistence, both runtimes: `review_question_posts` (idempotency marker, D8) and
-  `tracker_comment_cursors` (ingest dedup, D5).
-- Conformance: a fake tracker connection drives park → question posted exactly once across
-  replays → simulated reply → resume; plus the unauthorized-reply and settled-review cases.
+- The reply grammar (D4) parses against the SAME finding ids `renderReviewQuestionsComment`
+  (`@cat-factory/integrations`) already renders — import `issueRefFor` / the renderer rather than
+  re-deriving either, so a change to one cannot silently desync the two halves.
+- Per-provider ingest (D5) + `tracker_comment_cursors` for dedup, both runtimes.
+- The identity allow-list (D7) and the loop policy (D6), including the follow-up comment that
+  slice 2a deliberately left out.
+- Conformance: a fake tracker connection drives park → question posted exactly once across replays
+  (the 2a marker suite already pins the second half) → simulated reply → resume; plus the
+  unauthorized-reply and settled-review cases.

@@ -1172,6 +1172,22 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   (`ExecutionInstance.intakeOrigin`, `ui` | `public-api`, in the `detail` JSON, carried across
   retry/restart) — a UI-started task's overseer is in the SPA and its behaviour is unchanged. See
   [`docs/initiatives/headless-clarification-loop.md`](./docs/initiatives/headless-clarification-loop.md).
+- **A HEADLESS park also ECHOES its open findings onto the task's linked tracker issue(s)**, opt-in
+  per workspace (`TrackerSettings.writebackQuestionsOnPark`, per-task override
+  `Block.trackerQuestionsOnPark`, resolved through the shared `resolveWritebackFlag`). Every
+  requirements park funnels through the single `ReviewGateController.park()`, which consults the
+  pure `shouldPostReviewQuestions` (`reviewQuestionWriteback.logic.ts`) — `intakeOrigin ===
+'public-api'`, a parking status, at least one OPEN finding — then calls
+  `IssueWritebackProvider.postReviewQuestions`. The comment renders each finding's **stable id**,
+  which is exactly what the `/api/v1/runs/:runId/decisions/…/items/:itemId/reply` route above takes.
+  Two rules govern anything added here: the echo rides the **requirements** subject only
+  (`ReviewKind.questionsOnPark` — the clarity gate already echoes its questions as INTAKE semantics
+  from its own `review()` closure, for every run, so opting it in would double-post), and because
+  the post runs in the **durable driver**, whose steps replay, it is idempotent by an ATOMIC CLAIM
+  on `review_question_posts` (`(workspace, review, iteration, issue)`, D1 ⇄ Drizzle) taken BEFORE
+  the comment — never by a marker written after it. A `failed` marker is re-claimable so a tracker
+  outage retries; `posted` is terminal for that iteration. Best-effort throughout: the park happens
+  regardless, and the in-app `requirement_review` card the reviewer pass raises is unaffected.
 
 ## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
 

@@ -3,6 +3,7 @@ import type {
   BlockRepository,
   ExecutionInstance,
   ExecutionRepository,
+  IssueWritebackProvider,
   PipelineStep,
   RequirementConcernLevel,
   RequestRecommendationItem,
@@ -13,6 +14,11 @@ import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel
 import { hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 import type { AdvanceResult } from './advance.js'
+import type { PrReportLogger } from './PrVerificationReportController.js'
+import {
+  buildReviewQuestionPost,
+  shouldPostReviewQuestions,
+} from './reviewQuestionWriteback.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 
@@ -96,6 +102,16 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   autoRecommend?(workspaceId: string, blockId: string): Promise<void>
   /** Push a live review-changed event so an open window/inspector reflects the new status. */
   emit(workspaceId: string, review: TReview): Promise<void>
+  /**
+   * Whether a HEADLESS park of this subject echoes its open findings onto the block's linked
+   * tracker issue(s) — the requirements loop only (see
+   * `docs/initiatives/headless-clarification-loop.md`).
+   *
+   * The clarity gate deliberately does NOT opt in: it already echoes its questions from its
+   * own `review()` closure as INTAKE semantics (every run, UI or headless, ungated by the
+   * workspace writeback settings), and opting in here would post the same questions twice.
+   */
+  readonly questionsOnPark?: boolean
 }
 
 /**
@@ -113,6 +129,14 @@ export interface ReviewGateControllerDeps {
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
+  /**
+   * Issue-tracker writeback, used here for ONE thing: echoing a parked HEADLESS review's open
+   * findings onto the block's linked issue(s) so a caller with no in-app surface learns what
+   * the run is waiting for. Absent (tests, no tracker) → parks behave exactly as before.
+   */
+  issueWriteback?: IssueWritebackProvider
+  /** Structured logger for the best-effort writeback above. Absent → failures are silent. */
+  logger?: PrReportLogger
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
@@ -170,8 +194,8 @@ export class ReviewGateController {
     const pendingRec = step.pendingRecommendation
     if (pendingRec && kind.fillRecommendations) {
       step.pendingRecommendation = null
-      await kind.fillRecommendations(workspaceId, block.id)
-      return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+      const filled = await kind.fillRecommendations(workspaceId, block.id)
+      return this.park(kind, workspaceId, instance, step, block, filled)
     }
 
     // Re-entry: the human answered the findings and asked to incorporate. Do the (slow)
@@ -195,7 +219,7 @@ export class ReviewGateController {
       // At the cap, raise a notification so the three-choice decision is discoverable.
       if (review.status === 'exceeded')
         await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
-      return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+      return this.park(kind, workspaceId, instance, step, block, review)
     }
 
     // Fresh entry: run the initial reviewer pass with the task's preset knobs (shared with
@@ -215,6 +239,58 @@ export class ReviewGateController {
     }
     if (review.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
+    return this.park(kind, workspaceId, instance, step, block, review)
+  }
+
+  /**
+   * Park a review gate on its human decision — after best-effort echoing the still-open
+   * findings onto the block's linked tracker issue(s) when the run entered HEADLESSLY.
+   *
+   * Every park in {@link evaluate} funnels through here so the echo cannot be forgotten by a
+   * future branch, and so the SPA path is provably untouched: {@link shouldPostReviewQuestions}
+   * refuses anything whose `intakeOrigin` is not `public-api`.
+   *
+   * The echo is best-effort in the strongest sense — the park itself must happen regardless,
+   * because a run that failed to park is a run that answers nobody. A failure is logged
+   * rather than swallowed silently; the park stays discoverable in-app either way via the
+   * review's own `requirement_review` card, which the reviewer pass already raised.
+   */
+  private async park<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    review: TReview,
+  ): Promise<AdvanceResult> {
+    const writeback = this.deps.issueWriteback
+    // `intakeOrigin` first: it is a free in-memory check and the scope boundary of the whole
+    // feature, so a UI-started run pays nothing at all for the re-read below.
+    if (writeback && kind.questionsOnPark && instance.intakeOrigin === 'public-api') {
+      // Re-read the review: the auto-recommendation pass above may have answered findings
+      // since `review` was taken, and the echo must ask only what is still genuinely open.
+      const fresh = (await kind.getForBlock(workspaceId, block.id).catch(() => null)) ?? review
+      if (shouldPostReviewQuestions(instance, fresh)) {
+        try {
+          const outcome = await writeback.postReviewQuestions(
+            workspaceId,
+            block,
+            buildReviewQuestionPost(instance, fresh),
+          )
+          if (outcome.failed > 0) {
+            this.deps.logger?.warn(
+              { workspaceId, runId: instance.id, reviewId: fresh.id, ...outcome },
+              'review question writeback failed for some linked issues',
+            )
+          }
+        } catch (e) {
+          this.deps.logger?.warn(
+            { workspaceId, runId: instance.id, reviewId: fresh.id, err: String(e) },
+            'review question writeback threw',
+          )
+        }
+      }
+    }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
   }
 

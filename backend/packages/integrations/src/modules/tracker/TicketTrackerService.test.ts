@@ -26,6 +26,7 @@ function makeSettings(over: Partial<TrackerSettings>): TrackerSettings {
     linearTeamId: null,
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
+    writebackQuestionsOnPark: false,
     updatedAt: 0,
     ...over,
   }

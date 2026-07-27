@@ -20,6 +20,7 @@ const EMPTY: Omit<TrackerSettings, 'updatedAt'> = {
   linearTeamId: null,
   writebackCommentOnPrOpen: false,
   writebackResolveOnMerge: false,
+  writebackQuestionsOnPark: false,
 }
 
 /** Read/write a workspace's issue-tracker selection (one row per workspace). */
@@ -51,6 +52,9 @@ export class TrackerSettingsService {
       // kept regardless of the filing tracker selection above. Default off.
       writebackCommentOnPrOpen: input.writebackCommentOnPrOpen ?? false,
       writebackResolveOnMerge: input.writebackResolveOnMerge ?? false,
+      // The headless clarification loop's question echo (see the contract): only consulted for
+      // runs started through the public API, so it is safe to keep alongside the PR toggles.
+      writebackQuestionsOnPark: input.writebackQuestionsOnPark ?? false,
       updatedAt: this.clock.now(),
     }
     await this.repo.put(workspaceId, settings)
