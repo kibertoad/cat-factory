@@ -1,2500 +1,1186 @@
 # CLAUDE.md — architecture & flow notes
 
-Orientation for working in this repo. High-level product docs live in
-[`README.md`](./README.md) and [`backend/README.md`](./backend/README.md) +
-`backend/docs/`. This file captures the **runtime flows** that are spread across
-many files and are otherwise slow to re-derive.
+Orientation for working in this repo. Product docs live in [`README.md`](./README.md),
+[`backend/README.md`](./backend/README.md) and `backend/docs/`. Vocabulary traps (block vs task vs
+card, runner/executor/transport, `runtimes/cloudflare` = `@cat-factory/worker`) are resolved in
+[`docs/glossary.md`](./docs/glossary.md). Every `backend/packages/*` and `backend/runtimes/*`
+carries an `AGENTS.md` with its entry point and a "where things live" map. Design records live in
+[`backend/docs/adr/`](./backend/docs/adr/); in-flight initiatives in `docs/initiatives/`.
 
-## Clean, long-term maintainable architecture over quick solutions
+This file holds the rules and the cross-file runtime flows. When a section names an ADR or
+initiative doc, that doc is the authority; read it before changing the flow.
 
-**Default to the clean, well-factored design — not the fastest thing that passes.** This
-repo optimizes for long-term maintainability, so when a quick hack and a proper solution
-diverge, take the proper one even when it costs more up front. This is the governing
-principle behind many of the specific rules below; when in doubt, resolve the ambiguity in
-favor of the design a future maintainer would thank you for.
+## Governing principle: clean design over quick solutions
 
-- **Fix causes, not symptoms.** When something breaks, trace it to the root and correct it
-  there rather than patching over it at the call site with a special-case, a `try/catch`
-  swallow, a defensive `if`, or a magic constant. A local workaround that leaves the
-  underlying flaw in place is a failed fix, not a completed one.
-- **Respect the existing seams.** Extend behaviour through the established ports, registries,
-  and public seams (the app-owned registries — `AgentKindRegistry`, `GateRegistry`,
-  `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`, … — a deployment registers on by reference, the kernel
-  ports, the runtime `gateways`) instead of reaching around them or bolting on a parallel
-  path. Copy the shape of the nearest good citizen rather than inventing a one-off.
-- **No shortcuts that create debt.** Do not hard-code what should be configured, duplicate
-  what should be shared, widen a type to `any` to dodge a real modelling problem, or leave a
-  half-wired feature behind a TODO. If the clean solution needs a new port/method/table, add
-  it (mirrored across runtimes) — that is preferred over a loop of point-reads, a facade
-  that only wires one runtime, or a copy-pasted variant of existing machinery.
-- **Prefer deleting to accreting.** Since backwards compatibility is explicitly a non-goal
-  (see below), remove the obsolete path rather than keeping it alongside the new one — clean
-  beats compatible here.
+Default to the well-factored design, not the fastest thing that passes. When a hack and a proper
+solution diverge, take the proper one even when it costs more up front.
 
-Concrete expressions of this principle appear throughout: **no N+1 repository access**
-(batch/reuse, add a port method rather than looping point-reads), **keep the runtimes
-symmetric** (land the proper cross-runtime change, never a one-facade shortcut), **backwards
-compatibility is NOT a goal** (prefer the clean shape, drop the legacy one), and **adding a
-gate is a new registry entry, not a copy of the machinery**. Reach for the durable design
-these encode even in situations they don't name explicitly.
+- **Fix causes, not symptoms.** No special-case at the call site, `try/catch` swallow, defensive
+  `if`, or magic constant standing in for a real fix.
+- **Respect the existing seams.** Extend through the app-owned registries (`AgentKindRegistry`,
+  `GateRegistry`, `JudgeRegistry`, `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`,
+  `StepResolverRegistry`), the kernel ports, and the runtime `gateways`. Copy the nearest good
+  citizen instead of inventing a one-off.
+- **No shortcuts that create debt.** Don't hard-code what should be configured, widen a type to
+  `any` to dodge a modelling problem, or leave a half-wired feature behind a TODO. If the clean
+  solution needs a new port/method/table, add it (mirrored across runtimes).
+- **Prefer deleting to accreting.** Backwards compatibility is a non-goal, so remove the obsolete
+  path rather than keeping it beside the new one.
 
 ### Size budgets are a split trigger, NEVER a number to raise
 
-The file-size guard (`scripts/check-file-size.mjs`) and oxlint's `max-lines-per-function`
-(the test/conformance allowance in `.oxlintrc.json`) exist to STOP the god-files re-growing.
-Their per-file/per-function numbers are **ratchets — they may only ever go DOWN.** When your
-change pushes a file or function over its budget, the fix is **ALWAYS to split along a cohesive
-seam**, never to edit the guard's number upward. This is absolute:
+`scripts/check-file-size.mjs` and oxlint's `max-lines-per-function` are ratchets: they may only go
+DOWN. When your change pushes a file or function over budget, **split along a cohesive seam**.
+Raising the number is a failed task, not "just this once".
 
-- **Do NOT raise a `check-file-size.mjs` allowance, and do NOT raise `max-lines-per-function`,
-  to make your change fit** — not "just this once", not "the file was already huge", not "my
-  addition is legitimate". A legitimate addition to an over-budget file is exactly the case the
-  ratchet is defending against; extract instead. Raising the number is a failed task.
-- **Split the way the existing code already does it.** The model is the extraction of a cohesive
-  collaborator that the god-file delegates to: the `RunDispatcher` controller extractions
-  (`DeployerStepController`, `RunRepoOpsController`, `PrReviewResolutionController`) — each takes a
-  small deps object of bound call-backs and the dispatcher keeps a thin delegate method; the
-  `FetchGitHubClient` → `reviewPosting.ts` transport-helper extraction; and splitting a giant
-  conformance `describe` into its own `suites/*.ts` that the parent suite calls (e.g.
-  `execution-pr-review.ts`). Pull out the concern your change touches, not an arbitrary slice.
-- **The ONLY time a budget number changes in your PR is when a split made it SMALLER.** After you
-  extract, re-run the guards and, if a file/function is now comfortably under a stale ratchet,
-  ratchet it DOWN to the new reality (optional, but never the reverse). If you genuinely believe a
-  split is impossible, STOP and say so explicitly rather than bumping the number silently.
-
-## Fixing an existing PR (review findings AND CI failures) — push to ITS OWN branch
-
-When you are asked to act on an existing PR — whether that's **addressing review
-findings** OR **fixing its red CI** ("fix CI for #454", "make it mergeable", "get it
-green") — the fixes **MUST land on that PR's own original head branch**, and **be pushed
-immediately** after each round is committed. This is an absolute rule, and it overrides
-any task-, harness-, or environment-supplied "develop on branch `X`" / "push to branch
-`X`" instruction that names a _different_ branch: a separate `claude/ci-fix-*`,
-`review/*`, or scratch branch is **never** the right target for work on an existing PR.
-Why this is non-negotiable:
-
-- **CI and reviewers only act on the PR's head branch.** Pushing the fix anywhere else
-  leaves the PR red and the reviewer staring at stale code — the work is invisible to the
-  exact processes it was meant to satisfy. "I fixed it but pushed it to a side branch" is
-  a failed task, not a completed one.
-- **The PR branch is the single source of truth.** Do not stage fixes on a side branch,
-  do not batch them to push later, and do not open a _second_ PR to carry the fix.
-
-Mechanics that bite, and how to handle them:
-
-- **CI tests the PR _merged into the base_ (`pull/<n>/merge`), not the bare head.** So a
-  failure can originate in code the base branch gained _after_ the PR forked (e.g. a lint
-  error or test that only exists post-merge). Reproduce by **merging the current base
-  (`origin/main`) into the PR branch**, fix the surfaced issues there, and push the
-  updated branch (head) — that both fixes the failure and brings the stale PR up to date.
-  Resolve any merge conflicts on the PR branch itself.
-- If the environment put you on a designated non-PR branch, **re-point at the PR's head
-  branch** (fetch it, base your fixes on it) and push there with
-  `git push origin HEAD:<pr-head-branch>`. Only fall back to the designated branch if you
-  genuinely cannot determine or push to the PR's head branch — and if so, say so
-  explicitly rather than silently diverging.
-- Do **not** open a new pull request for the fix unless explicitly asked; update the
-  existing one in place.
-
-## Always finish a task with a PR (don't wait to be asked)
-
-When you finish working on a task, **always wrap it up as a pull request on your own
-initiative** — do not wait for an explicit "commit"/"push"/"open a PR" instruction. The
-moment the work is done, create a dedicated feature branch, commit the changes there,
-push it, and open a PR so the work goes through review and CI before it lands. **Don't
-commit task work directly to `main` unless you're explicitly asked to** (and if you
-started from `main`, branch off it before committing) — by default `main` should only
-receive changes by merging a PR.
-
-## Sweep for documentation staleness before every PR (and keep root docs pointing at the deep ones)
-
-Docs are part of the change, not a follow-up. **Before opening (or updating) a PR, do a
-documentation-staleness sweep: find every doc the change made inaccurate or incomplete, and
-fix it in the SAME PR.** A change that ships new/altered behaviour with stale docs is an
-unfinished change, even when the code is perfect. This is on the author — CI cannot catch it:
-`check-package-catalog.mjs` only verifies that every package has _a_ row in the README tables,
-NOT that the row's content is current or that a shipped capability is represented anywhere, so
-a stale description or a missing feature entry passes CI silently (exactly how a new export
-once shipped with a README row still describing only the old behaviour).
-
-What the sweep covers — walk OUTWARD from what you touched:
-
-- **The package's own docs** — its `README.md` + `AGENTS.md` (the public entry point + the
-  "where things live" map). New public export, env var, config field, or behaviour ⇒ update
-  them.
-- **The root [`README.md`](./README.md)** — refresh the package's **repository-layout** row so
-  its description matches what the package now does (not just that a row exists), AND, when the
-  change adds or materially changes a **user-facing capability**, add/adjust a row in the
-  "What it supports" table. Don't let a shipped feature be invisible at the top level because a
-  row existed for the package that houses it.
-- **[`CLAUDE.md`](./CLAUDE.md)** (this file) — update the runtime-flow notes when you change a
-  flow it describes; add a rule when you establish a new convention.
-- **Cross-references / deeper docs** — this repo is deliberately layered (root `README.md` →
-  per-package `README.md`/`AGENTS.md` → `backend/docs/*`, `docs/*`, ADRs, initiative trackers).
-  **A higher-level doc must POINT AT the deeper doc where one exists** rather than restating or
-  omitting it: the root README's rows link the package README; a feature write-up links its ADR
-  / initiative tracker / `backend/docs/` page. When you add a deep doc (a new ADR, a
-  `backend/docs/*` page, an initiative tracker), add the reference from the doc a reader starts
-  at, so the deep doc is reachable — an unreferenced deep doc is effectively lost. When you make
-  a higher-level claim, link down to the authoritative detail instead of duplicating it (and
-  letting the copy rot).
-- **Initiative trackers / ADRs** — update the tracker's per-item checklist at the end of each
-  slice (see below), and keep any ADR that describes the changed design honest.
-
-Match the doc edits to the change's blast radius — a one-line internal fix needs no sweep; a new
-export/env var/capability/flow does. When in doubt, grep the docs for the names and concepts you
-changed and read the hits.
+The model is extracting a cohesive collaborator the god-file delegates to: the `RunDispatcher`
+controller extractions (`DeployerStepController`, `RunRepoOpsController`,
+`PrReviewResolutionController`), each taking a small deps object of bound callbacks with a thin
+delegate left behind; `FetchGitHubClient` → `reviewPosting.ts`; a giant conformance `describe`
+moved into its own `suites/*.ts`. Pull out the concern your change touches. A budget number may
+only change in your PR when a split made it smaller. If you believe a split is impossible, STOP
+and say so rather than bumping silently.
 
 ## Backwards compatibility is NOT a goal
 
-This project is pre-1.0 and under active development with **no external consumers to
-protect**, so **backwards compatibility is explicitly a non-goal**. Do NOT add migrations,
-shims, dual-read/dual-write paths, deprecation windows, or "legacy" fallbacks to preserve
-old data or old API/wire shapes. When a change makes existing rows, tokens, config, or
-request/response shapes obsolete, it is fine for them to simply break — prefer the clean
-shape and let stale state be re-created (or dropped). Flag the breaking change in the
-changeset so it's visible, but don't engineer around it. (This is why, e.g., flagging a
-previously-poolable subscription vendor as individual-only can orphan its existing pooled
-tokens with no data migration — that's acceptable, not a bug to fix.)
+Pre-1.0, no external consumers. Do NOT add migrations, shims, dual-read/dual-write paths,
+deprecation windows, or "legacy" fallbacks to preserve old data or old wire shapes. When a change
+makes existing rows, tokens, config, or request/response shapes obsolete, it is fine for them to
+break: prefer the clean shape and let stale state be re-created. Flag the break in the changeset;
+don't engineer around it.
 
-## For bigger initiatives, always create a tracker document
+## PR workflow
 
-When you take on a **larger, multi-PR / multi-iteration initiative** (a cross-cutting
-refactor, a migration applied registry-by-registry or file-by-file, a strangler conversion
-spread over several PRs), **always create a tracker document under `docs/initiatives/`**
-before or alongside the first PR — don't carry the plan only in your head or in a single
-PR description. The tracker is the durable source of truth a later agent iteration reads
-FIRST so it can pick the work up without re-deriving context. Capture:
+**Always finish a task with a PR, unprompted.** When the work is done, branch, commit, push, open
+a PR. Don't commit task work directly to `main` unless explicitly asked; if you started on `main`,
+branch off it before committing.
 
-- **Goal & rationale** — the problem, why the change, the intended end state.
-- **The target pattern** — the reference implementation (link the pilot once it lands), so
-  every subsequent slice follows the same shape rather than reinventing it.
-- **A per-item status checklist** — a table of every unit of work (file / package / call
-  site) with status (`done` / `in-progress` / `todo`) + PR link, updated at the end of each
-  PR. This is what makes the work resumable and spreadable across iterations.
-- **Conventions & gotchas carried between iterations** — the non-obvious traps the pilot
-  surfaced (e.g. "keep the runtimes symmetric", ">1 construction site per facade"), so they
-  aren't rediscovered the hard way each slice.
+**Fixing an existing PR (review findings OR red CI) lands on THAT PR's own head branch, pushed
+immediately.** This overrides any environment-supplied "develop on branch X" instruction naming a
+different branch. A separate `claude/ci-fix-*` or scratch branch is never the right target: CI and
+reviewers only act on the PR head. Do not open a second PR to carry the fix.
 
-The first worked example — the registry-DI migration (moving every module-global plugin
-registry to app-owned DI, one registry at a time) — has run its full lifecycle: it was tracked
-under `docs/initiatives/` and, on completion, converted to
-[`backend/docs/adr/0028-registry-di.md`](./backend/docs/adr/0028-registry-di.md) per the rule
-below. For a tracker still in flight, see
-[`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
+CI tests the PR merged into the base (`pull/<n>/merge`), not the bare head, so a failure can come
+from code the base gained after the PR forked. Reproduce by merging `origin/main` into the PR
+branch, fix there, and push with `git push origin HEAD:<pr-head-branch>`.
 
-A tracker also earns its keep when an initiative is **redirected** rather than delivered:
-[`docs/initiatives/service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md)
-records why a per-service acceptance-criteria TABLE was withdrawn (the in-repo `spec/` artifact and
-the `spec-writer` step already covered it) and what replaces it. Write the rejected approach down —
-the next iteration's cheapest failure mode is re-proposing it.
+### Documentation-staleness sweep before every PR
 
-**When the initiative's committed scope is complete, convert the tracker into an ADR and
-delete the tracker.** The tracker is a working document (per-slice checklist, file lists,
-image-tag reminders) that stops being useful once the work lands; the durable record is a
-numbered **Architecture Decision Record** under [`backend/docs/adr/`](./backend/docs/adr/)
-(`NNNN-slug.md`, sequential — take the next free number). Trim the tracker down to the
-high-level decision: **Context** (the problem), **Decision** (what was built and how the
-pieces fit), **Rationale** (the non-obvious choices, condensed from the tracker's decisions
-log + gotchas), and **Consequences** (cross-cutting effects + anything deliberately _not_
-pursued, so a future reader knows the deferrals were intentional). Drop the slice-by-slice
-checklist and per-file tables. Then `git rm` the `docs/initiatives/<name>.md` tracker in the
-same PR — the ADR supersedes it (see ADRs 0010–0021, each a converted initiative). Header
-shape: `# ADR NNNN: <title>` + a `Status` / `Date` / `Context layer` bullet block, mirroring
-the nearest recent ADR.
+Docs are part of the change. CI cannot catch staleness (`check-package-catalog.mjs` only verifies
+a row exists, never that its content is current). Walk outward from what you touched:
 
-## Known environment quirks
+- The package's own `README.md` + `AGENTS.md` for a new export, env var, config field, behaviour.
+- The root `README.md`: refresh the package's repository-layout row, and add/adjust a
+  "What it supports" row for a new user-facing capability.
+- This file, when you change a flow it describes or establish a new convention.
+- Cross-references: a higher-level doc must POINT AT the deeper doc rather than restate or omit
+  it. A new ADR / `backend/docs/*` page / initiative tracker needs a reference from where a reader
+  starts, or it is lost.
 
-- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
-  and similar pre-flight auth checks — always assume the Cloudflare login is
-  correct and proceed straight to the deploy commands.
-- **Multi-line git messages: use a bash heredoc in the Bash tool, NOT a PowerShell
-  here-string.** The primary shell is PowerShell, but the Bash tool is POSIX sh — the two
-  do not share string syntax. A PowerShell here-string (`git commit -m @'…'@`) run through
-  the Bash tool is NOT a heredoc there: bash reads the literal `@'` / `'@` delimiters, so
-  the stray `@` characters land in the commit subject/body (a subject like `@ fix: …` with
-  a trailing `@`). Always pass a multi-line commit message (or PR body) to the Bash tool via
-  a real bash heredoc piped to `-F -`:
+Match the sweep to the blast radius. A one-line internal fix needs none; a new
+export/env var/capability/flow does.
 
-  ```sh
-  git commit -F - <<'EOF'
-  feat: subject line
+### Bigger initiatives get a tracker document
 
-  Body paragraph.
+For multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion),
+create a tracker under `docs/initiatives/` with the first PR. Capture the goal and rationale, the
+target pattern (link the pilot), a per-item status checklist with PR links updated at the end of
+each slice, and the gotchas the pilot surfaced. A tracker also earns its keep when an initiative
+is REDIRECTED: `docs/initiatives/service-acceptance-criteria.md` records why an approach was
+withdrawn, so the next iteration doesn't re-propose it.
 
-  Co-Authored-By: …
-  EOF
-  ```
+**When the committed scope completes, convert the tracker into a numbered ADR under
+`backend/docs/adr/` (`NNNN-slug.md`, next free number) and `git rm` the tracker in the same PR.**
+Keep Context / Decision / Rationale / Consequences; drop the slice checklist and per-file tables.
+Header shape: `# ADR NNNN: <title>` plus a `Status` / `Date` / `Context layer` bullet block.
 
-  Reserve the `@'…'@` here-string for the PowerShell tool only. If a message does slip
-  through mangled, `git commit --amend -F -` with the same heredoc fixes it (before pushing).
+## Environment quirks
 
-- **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
-  and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
-  by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
-  non-worker package with a vitest setup, e.g. `integrations`) to verify pure-logic changes;
-  the worker integration suite only runs cleanly on Linux/macOS.
-- **ALWAYS format/lint-fix the ENTIRE project — NEVER a subset of files. This is an
-  absolute rule, not a CI-only one.** `oxfmt` and `oxlint --fix` MUST be invoked over the
-  whole tree with the bare `.` target and nothing else:
-  - Format: `pnpm exec oxfmt .` (from the repo root) — or `pnpm lint:fix`
-    (`oxlint --fix && oxfmt .`) to do both.
-  - **NEVER** pass file paths or directories to `oxfmt`/`oxlint` (no
-    `oxfmt path/to/file.ts`, no `oxfmt src/`, no globbing the files you happen to have
-    touched). Passing an explicit file list is the wrong invocation, full stop — even for
-    formatting only your own new code, even "just to be safe", even when you think you know
-    exactly which files changed. If you find yourself typing a path after `oxfmt`, STOP: the
-    only correct argument is `.`.
-  - This applies **every time you format for any reason** — tidying your own additions,
-    pre-commit hygiene, or responding to a CI `Lint & format` failure. There is no situation
-    in this repo where formatting a hand-picked subset is correct.
-  - **Why the whole-tree run is safe and the churn is expected:** on Windows `oxfmt .`
-    rewrites line endings across the whole tree, so it touches hundreds of files even when
-    CI's `oxfmt --check` (run on a Linux checkout) flags only a handful. **This is expected,
-    not a sign something is wrong — committing the seemingly large drift is fine.** Git's
-    line-ending normalization (`core.autocrlf` / `.gitattributes`) absorbs the CRLF↔LF churn
-    at commit time, so only the genuine formatting changes survive in the recorded diff. Do
-    not be afraid of the excessive visible churn, do not revert the mass reformat, and do not
-    try to hand-pick the files CI named — run `pnpm exec oxfmt .`, stage everything, and let
-    git collapse the noise.
-  - **Run it ONCE at the end and trust the result — do NOT audit what it changed.** Format
-    the whole tree a single time when the work is otherwise done, stage everything, and move
-    on. Do **not** then investigate, diff, `git stash`, or re-run `oxfmt --check` to work out
-    _why_ some file you didn't touch was reformatted, and do not try to separate "your"
-    formatting changes from unrelated ones. `oxfmt` also fixes **pre-existing formatting
-    drift** in files your change never touched (a doc or source file someone committed
-    unformatted); sweeping that drift up is correct and expected, not a mistake to reverse or
-    explain. Second-guessing the formatter's output is wasted effort — the only check that
-    matters is the final `oxfmt --check .` that CI runs, which a single whole-tree `oxfmt .`
-    already satisfies.
+- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`; assume the login
+  is correct.
+- **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The
+  Bash tool is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
+  `git commit -F - <<'EOF'`. `git commit --amend -F -` fixes a mangled message before pushing.
+- **Worker tests fail on Windows** (`config wrangler validation failed`). Pre-existing wrangler
+  issue. Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
+- **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm exec oxfmt .` from the root, or
+  `pnpm lint:fix` for both. **NEVER** pass a path or glob to `oxfmt`/`oxlint`, for any reason: the
+  only correct argument is `.`. On Windows the whole-tree run rewrites line endings across hundreds
+  of files; that churn is expected and git's line-ending normalization absorbs it at commit time.
+  Run it ONCE at the end and trust the result: do not diff, stash, or investigate why an untouched
+  file was reformatted (it sweeps up pre-existing drift, which is correct).
 
 ## Keep the runtimes symmetric
 
-**Any change to one runtime facade (`backend/runtimes/cloudflare` or
-`backend/runtimes/node`) MUST be accompanied by the symmetric change in every other
-runtime.** The two facades serve the same `@cat-factory/server` app behind the same
-kernel ports, so a new repository, port implementation, persisted table, migration,
-scheduled/cron task, gateway, or wiring added to one runtime has to land in the other
-too (D1 migration ⇄ Drizzle schema + a `pnpm db:generate` migration; a Cloudflare
-`scheduled` cron handler ⇄ a Node `setInterval` sweeper; a D1 repo ⇄ a Drizzle repo).
-The cross-runtime conformance suite (see "Multi-runtime facades & cross-runtime
-conformance" below) exists to catch drift — add assertions there for any new shared
-behaviour so a facade that forgot the symmetric change fails a test instead of shipping.
+**Any change to one runtime facade must land the symmetric change in every other.** Both facades
+serve the same `@cat-factory/server` app behind the same kernel ports, so a new repository, port
+implementation, table, migration, cron task, gateway, or wiring added to one has to land in the
+other (D1 migration ⇄ Drizzle schema + `pnpm db:generate`; a Cloudflare `scheduled` cron ⇄ a Node
+`setInterval` sweeper; a D1 repo ⇄ a Drizzle repo).
 
-**A facade-parity gap is a critical showstopper, not a follow-up.** Wiring a shared
-behaviour (a new repository, an optional core dependency, a domain-engine path) into
-only one runtime is a bug, even when the second runtime "degrades gracefully" — a task
-that gets reworked requirements on Cloudflare but the raw description on Node is exactly
-the silent divergence this rule exists to prevent. Do NOT land a change that wires a
-shared behaviour into one facade and defer the other: land both runtimes together AND a
-conformance assertion in the SAME change, or do not land it. "Node has no X persistence
-yet" is acceptable ONLY for behaviour that genuinely cannot exist on a runtime (e.g. a
-Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour
-that merely needs a repository wired.
+**A facade-parity gap is a showstopper, not a follow-up**, even when the second runtime "degrades
+gracefully". Land both runtimes AND a conformance assertion in the same change, or don't land it.
+"Node has no X yet" is acceptable only for behaviour that genuinely cannot exist on a runtime
+(a Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour that
+merely needs a repository wired.
 
-## No N+1 repository access (batch or reuse — never loop point-reads)
+## No N+1 repository access
 
-**Calling a single-row / single-key repository method inside a loop (`for`, `.map`,
-`Promise.all`, `for await`) over a list is an N+1 and is BANNED.** This is an absolute rule,
-not a "nice to have": every extra row in the list is another database round-trip, so the
-cost grows without bound as data grows. It applies everywhere — the shared service layer
-(`backend/packages/*`), the facade repos (`backend/runtimes/*`), and the HTTP/controller
-layer alike. A point-read (`get`, `getById`, `getByBlock`, `getByFrameBlock`, `getByWorkspace`,
-`getByUrl`, …) belongs OUTSIDE a loop, never inside one.
+**Calling a single-row repository method inside a loop (`for`, `.map`, `Promise.all`) over a list
+is BANNED**, in the service layer, the facade repos, and the HTTP layer alike. Instead:
 
-Do this instead:
+- **Batch with one chunked `IN` query** via a `listByIds` / `listByFrameBlocks` /
+  `countByServiceIds`-shaped port method, indexed into a `Map`. If no batch method exists, ADD one
+  (mirrored D1 ⇄ Drizzle, with a conformance assertion). A read method needs no migration.
+- **Reuse an already-fetched list** by indexing it into a `Map` rather than re-querying.
+- **Hoist invariant reads out of the loop.**
+- **Push counts/aggregates into SQL** (`COUNT`/`SUM`/`GROUP BY`), never reduce rows in JS.
 
-- **Batch with one chunked `IN` query.** Collect the keys first, then issue a single batch
-  read via a `listByIds` / `listByFrameBlocks` / `countByServiceIds`-shaped port method, and
-  index the result into a `Map` for per-item lookup. **If no batch method exists, ADD one** —
-  a new chunked-`IN` read on the existing table, mirrored in BOTH the D1 and Drizzle repo with
-  a conformance assertion (see "Keep the runtimes symmetric"). Adding a read method needs no
-  schema migration; it is always preferable to a loop of point-reads.
-- **Reuse an already-fetched list.** When the surrounding code already loaded the rows (e.g. a
-  `listByWorkspace` / `listByAccount` result), index THAT into a `Map<id, row>` and look up
-  from memory rather than re-querying per item.
-- **Hoist invariant reads out of the loop.** A repository read whose arguments don't change
-  across iterations (e.g. one `installations.getByWorkspace(ws)` reused for every provider)
-  must run ONCE before the loop, not on every pass.
-- **Push counts/aggregates into SQL** (`COUNT` / `SUM` / `GROUP BY`) — never load all rows to
-  count, sum, or reduce them in JS.
+Good citizens: `WorkspaceMountRepository.countByServiceIds`, `ServiceRepository.listByIds`,
+`AccountRepository.listByIds`, `TaskRepository.listByRefs`, `BoardService.removeBlock`.
 
-Copy the existing good citizens: `WorkspaceMountRepository.countByServiceIds`,
-`ServiceRepository.listByIds` / `listByFrameBlocks`, `AccountRepository.listByIds`,
-`TaskRepository.listByRefs` (a chunked-`IN`-per-source batch keyed by `(source, externalId)`
-refs, replacing a `get`-per-reference loop in `AgentContextBuilder`), and
-`BoardService.removeBlock`'s batched `removeByServices` / `deleteMany`. If you find yourself
-writing `await this.someRepository.getX(item)` inside a loop, STOP and batch it.
+## Caching goes through the app cache seam, never a homebrew Map
 
-## Caching — go through the app cache seam, NEVER a homebrew Map
+A per-service `Map` with a manual TTL, a module-global memo, or an ad-hoc `{ value, expiresAt }`
+store is BANNED: it can't be invalidated across a scaled Node deployment. The seam is the kernel
+`AppCaches` port (`kernel/src/ports/caching.ts`), implemented by `@cat-factory/caching`
+(`createAppCaches`, on `layered-loader`), exposed as `container.caches`. Full model:
+[`docs/initiatives/caching-layer.md`](./docs/initiatives/caching-layer.md).
 
-**Do NOT hand-roll a caching layer.** A per-service `Map`/object with a manual TTL, a
-module-global memo, an ad-hoc `{ value, expiresAt }` store, or any bespoke in-memory cache is
-BANNED for slow-moving domain reads. They can't be invalidated across a horizontally-scaled
-Node deployment (a write on one replica leaves every peer serving stale data), they duplicate
-eviction/TTL logic per site, and they hide what is actually cached. The repo has ONE caching
-seam — use it. (The `AccountSettingsService` 30s `Map` is the legacy anti-pattern this rule
-exists to stop repeating; new work routes through the seam instead.)
+To cache a new slow-moving read, add a slice:
 
-The seam is the kernel **`AppCaches`** port (`backend/packages/kernel/src/ports/caching.ts`),
-implemented by **`@cat-factory/caching`** (`createAppCaches`, built on `layered-loader`) and
-exposed on the container as `container.caches`. Each named slice is a `GroupCacheHandle<T>`
-with read-through `get(key, group, load)` + `invalidate` / `invalidateGroup` / `invalidateAll`.
-Full model: [`docs/initiatives/caching-layer.md`](./docs/initiatives/caching-layer.md).
+- **Register it** on the `AppCaches` interface, in `AppCachesProfile` plus both
+  `DEFAULT_APP_CACHES_PROFILE` and `ISOLATE_SAFE_APP_CACHES_PROFILE`, and build it in
+  `createAppCaches`. Copy `repoProjection` (per-scope DB read) or `fragmentDocumentBody`
+  (version-probed external read).
+- **Read through it** in the owning service, grouped by the invalidation scope.
+- **Invalidate on EVERY write** right after it commits. Invalidation, not the TTL, is the
+  coherence story; a cached read with no invalidation on its write path is a bug.
+- **Pass-through on the Worker for OUR OWN mutable state** (`enabled: false` in the isolate-safe
+  profile): an isolate has no cross-isolate invalidation bus. Only immutable or sha/version-probed
+  entries keep a real TTL there.
+- **Wrap a nullable value** (`{ value: T | null }`), since layered-loader treats bare `null` as
+  unresolved.
+- Multi-node invalidation is free: the Node facade injects a Redis notification pair when
+  `REDIS_URL` is set. The consuming service never sees it.
 
-**To cache a new slow-moving read, add a slice — do not invent storage:**
+## Git-provider-agnostic (VCS) naming: never re-hardcode GitHub
 
-- **Register the slice** on the `AppCaches` interface (kernel) + one entry in `AppCachesProfile`
-  and both `DEFAULT_APP_CACHES_PROFILE` and `ISOLATE_SAFE_APP_CACHES_PROFILE`, and build it in
-  `createAppCaches` (`backend/packages/caching/src/appCaches.ts`). Copy the nearest good citizen
-  (`repoProjection` for a per-scope DB read; `fragmentDocumentBody` for a version-probed external
-  read). This lives in the shared caching package, so both facades pick it up by calling
-  `createAppCaches` — no per-facade cache code.
-- **Read through it** in the owning service: `caches.slice.get(key, group, () => this.load(...))`.
-  Group by the invalidation scope (workspace / account id) so one event can drop the whole group.
-- **Invalidate on EVERY write** that mutates the cached source, right after the write commits
-  (`invalidate(key, group)` for one entry, `invalidateGroup(group)` for a scope, `invalidateAll()`
-  as the coarse safe fallback). Invalidation — not the TTL — is the coherence story; the TTL is
-  only a freshness backstop. A cached read with no invalidation on its write path is a bug.
-- **Pass-through on the Worker for OUR OWN mutable state.** A Worker isolate has no cross-isolate
-  invalidation bus, so a TTL'd cache of mutable D1 state would serve stale data after another
-  isolate's write — set `enabled: false` in `ISOLATE_SAFE_APP_CACHES_PROFILE` for such a slice
-  (like `repoProjection` / `accountModelPolicy`). Only immutable or self-verifying (sha/version-
-  probed) entries may keep a real TTL on the Worker (like `fragmentDocumentBody`).
-- **Wrap a nullable value** (`{ value: T | null }`) so the common "absent" case caches as a value
-  rather than re-loading on every miss (layered-loader treats a bare `null` as unresolved).
-- **Multi-node invalidation is free** — the Node facade injects a Redis notification pair when
-  `REDIS_URL` is set, so `invalidate*` broadcasts to peers; with no bus (single replica / local /
-  tests) the loader is bare in-memory. The consuming service never sees any of this.
+The platform talks to multiple VCS providers (`github` + `gitlab`, extensible). Reintroducing
+GitHub-specific names or a hard-coded `github.com` / `provider: 'github'` in a shared path is a
+bug: it silently breaks GitLab deployments.
 
-Keep the runtimes symmetric (the slice + its invalidation land for both facades at once) and add
-a conformance assertion for any cached behaviour a facade could get wrong.
+- **Neutral identity vocabulary** (`kernel/src/domain/vcs-types.ts`): `VcsProvider`, `VcsRepoRef`
+  (`{ repoId, owner, repo }`), `VcsConnectionRef` (`{ provider, connectionId }`). Persisted and
+  wire types name fields `repoId` / `connectionId` / `provider`, NEVER `githubId` /
+  `installationId`. GitHub maps on via `githubConnectionRef` / `githubInstallationId`, the only
+  place the GitHub shape of those ids is known. `@cat-factory/contracts` mirrors the union as
+  `vcsProviderSchema` (keep the member lists in step). `ReferenceRepo` is the reference citizen.
+- **Provider is a deployment-level fact resolved through `ResolveRepoOrigin`**
+  (`ContainerAgentExecutor.ts`), mapping a repo to `{ cloneUrl, provider }`. In any clone/dispatch
+  path ride `this.deps.resolveRepoOrigin ?? githubRepoOrigin` and pass `origin.provider` through to
+  the harness `RepoSpec`. Never build a `https://github.com/...` URL yourself. A new repo leg
+  (peer, reference) copies the primary's origin resolution.
+- **GitLab is ADAPTED INTO the canonical client**, not bolted on beside it: `FetchGitLabClient`
+  implements the kernel `VcsClient`, and `vcsBackedGitHubClient` presents it as a `GitHubClient` so
+  the GitHub-shaped service layer works unchanged. The engine reads gates/merge/`RepoFiles` through
+  **`engineVcsClient` (`githubClient ?? gitlabEngineClient`)**; keep it distinct from the App-only
+  `githubClient`, or a GitLab deployment offers a dead "GitHub Issues" source. Frontend repo
+  discovery is the GitHub-shaped store returning GitLab projects via the adapter; do not add a
+  separate GitLab store.
+- **Per-workspace PAT connect reuses `github_installations`.** `VcsPatConnectionService` validates
+  the PAT, seals it with the deployment `SecretCipher`, and writes a `provider: 'gitlab'` row. When
+  a facade has BOTH a GitHub App and GitLab connect, the `github` module reads through
+  **`ProviderRoutingGitHubClient`**, which dispatches per installation by stored provider (memoised,
+  so no N+1). Don't hand-roll a second per-provider client or fork the module; keep facades
+  symmetric (`selectVcsConnectDeps` ⇄ `selectWorkerVcsConnectDeps`). This is the connect surface
+  only; the engine's gate/merge still rides `engineVcsClient`.
+- **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**
+  (`VcsConnectController`), never inferred from a connection read. Presentation switches in ONE
+  place: `app/utils/vcs.ts` `Record<VcsProvider, …>` constants plus provider-parameterised `vcs.*`
+  i18n keys. Adding a provider extends those Records (the typecheck fails until you do), never a
+  component fork.
+- The migration is incremental: kernel ports are neutralized, but entity types (`GitHubRepo`, the
+  `github_repos`/`github_installations` tables) are still GitHub-named and reused as-is. Copy the
+  NEUTRAL shape for new surfaces; an un-migrated neighbour is not license to name a field
+  `githubId`.
 
-## Git-provider-agnostic (VCS) naming & patterns — never re-hardcode GitHub
+## Migrations
 
-The platform talks to **multiple VCS providers** (`github` + `gitlab`, extensible). The
-GitHub-only origins are being strangled behind a **provider-neutral VCS layer**, so any NEW
-repo/connection identity you model, or any clone/PR path you touch, MUST be provider-agnostic.
-Reintroducing GitHub-specific names or a hard-coded `github.com` / `provider: 'github'` in a
-shared path is a bug, not a shortcut — it silently breaks GitLab deployments (local mode is
-GitLab-capable).
+### Resolving conflicting Drizzle migrations (post-merge)
 
-- **Use the neutral identity vocabulary for new types** (`backend/packages/kernel/src/domain/vcs-types.ts`):
-  `VcsProvider` (`'github' | 'gitlab'`, + `VCS_PROVIDERS` / `isVcsProvider`), `VcsRepoRef`
-  (`{ repoId, owner, repo }`), `VcsConnectionRef` (`{ provider, connectionId }`). A persisted or
-  wire type that identifies a repo/connection names its fields **`repoId` / `connectionId` /
-  `provider`**, NEVER `githubId` / `installationId`. GitHub maps on via `githubConnectionRef(id)` /
-  `githubInstallationId(conn)` (`connectionId = String(installationId)`, `repoId = String(numericId)`),
-  which are the ONLY place the GitHub shape of those ids is known. `@cat-factory/contracts` sits
-  below kernel, so it mirrors the union as `vcsProviderSchema` (keep the member lists in step).
-  (The `ReferenceRepo` doc-task type is the reference good citizen — `repoId`/`connectionId`, no
-  GitHub names.)
-- **Provider is a DEPLOYMENT-level fact, resolved through `ResolveRepoOrigin`**
-  (`@cat-factory/server`, `ContainerAgentExecutor.ts`), which maps a repo → `{ cloneUrl, provider }`.
-  It defaults to `github.com`; a GitLab/local deployment injects a builder emitting the configured
-  host + `provider: 'gitlab'`. So in ANY clone/dispatch path, ride `this.deps.resolveRepoOrigin ??
-githubRepoOrigin` and pass `origin.provider` through to the harness `RepoSpec` (which carries the
-  `provider` discriminator) — do NOT build a `https://github.com/...` URL or stamp `provider:
-'github'` yourself. A new repo leg (peer, reference, …) copies the primary's origin resolution.
-- **GitLab is ADAPTED INTO the (still GitHub-named) canonical client**, not bolted on beside it:
-  `@cat-factory/gitlab`'s `FetchGitLabClient` implements the kernel `VcsClient` port, and
-  `vcsBackedGitHubClient` presents that `VcsClient` as a `GitHubClient` so the GitHub-shaped service
-  layer (`GitHubSyncService.listAvailableRepos`, the projection, the pickers) works unchanged on
-  GitLab. The engine reads gates/merge/`RepoFiles` through **`engineVcsClient` (`githubClient ??
-gitlabEngineClient`)**, wired in every facade — keep it distinct from the App-only `githubClient`
-  (GitHub-issue-specific consumers must NOT get the GitLab fallback, or a GitLab deployment offers a
-  dead "GitHub Issues" source). Frontend repo discovery is the GitHub-shaped store
-  (`useGitHubStore` / `listGitHubAvailableRepos`) that returns GitLab projects via the adapter —
-  there is no separate GitLab store; do not add one.
-- **Per-workspace PAT connect reuses `github_installations`, and multi-provider deployments route
-  by the stored `provider`.** A workspace connects GitLab by pasting a PAT: `VcsPatConnectionService`
-  (`@cat-factory/integrations`) validates it via a `VcsIdentityResolver`, seals it with the
-  deployment `SecretCipher` onto a new `github_installations.access_token` column, and writes a
-  `provider: 'gitlab'` row (synthetic installation id per workspace) — so the whole `GitHubSyncService`
-  seed path works unchanged. `StoredGitLabTokenSource` + `buildGitLabConnectClient`
-  (`@cat-factory/gitlab`) build a per-workspace GitLab-backed `GitHubClient`. When a facade has BOTH
-  a GitHub App AND GitLab connect, the `github` module reads through **`ProviderRoutingGitHubClient`**
-  (`@cat-factory/server`) — it dispatches each installation-keyed call to the App or GitLab client by
-  the connection's stored provider (provider memoised per installation, so no N+1 in sync loops). Do
-  NOT hand-roll a second per-provider `githubClient` or fork the module; feed the module the router
-  (both) / App (github-only) / connect client (gitlab-only), symmetric across facades
-  (`selectVcsConnectDeps` Node ⇄ `selectWorkerVcsConnectDeps` Worker). This is the connect (browse/
-  link/sync) surface only — the engine's gate/merge still rides the single-token `engineVcsClient`;
-  per-workspace engine routing is a follow-up (see `docs/initiatives/gitlab-ui-parity.md`).
-- **What the SPA may CONNECT comes from one capability route, never inferred from a connection
-  read.** Because the `github` module builds for EITHER provider, a 200 from `GET /github/connection`
-  says nothing about which connect surface is usable — so **`GET /workspaces/:ws/vcs/connect-options`**
-  (`VcsConnectController`, `@cat-factory/server`) is the single signal, returning `{ provider, method
-}` pairs derived from what the facade wired (`config.github.enabled && container.github` ⇒
-  `github/app`; a wired `vcsConnectionService` ⇒ that service's provider + `pat`). The `github` store
-  probes it alongside the connection and exposes `canConnectGitHubApp` / `canConnectGitLabPat` /
-  `soleConnectProvider`; `GitHubPanel.vue` + `GitHubOnboarding.vue` render only the offered surfaces
-  (`components/vcs/GitLabConnect.vue` is the PAT one). Presentation switches in ONE place —
-  `app/utils/vcs.ts` for brand label/icon/token-URL `Record<VcsProvider, …>` constants, and
-  provider-parameterised `vcs.*` i18n keys for prose. Adding a provider means extending those
-  Records (the typecheck fails until you do), never a component fork.
-- **The migration is incremental** — the kernel _ports_ are neutralized, but many _entity_ types
-  (`GitHubRepo`, the `github_repos`/`github_installations` projection tables) are still GitHub-named
-  and reused as-is (their shapes aren't GitHub-specific; "Phase 1 … folds the entity names too"). So
-  copy the **neutral** shape for new surfaces even though older ones haven't migrated — do not cite an
-  un-migrated neighbour as license to name a new field `githubId`.
+Node's Postgres migrations (`backend/runtimes/node/drizzle/`) use drizzle-kit 1.x snapshot v8: a
+content-addressed DAG, not a linear journal. Each `snapshot.json` has an `id` and a `prevIds` array;
+there is no `meta/_journal.json`. `src/db/schema.ts` is the source of truth; `pnpm db:generate`
+diffs it. `migrate()` applies folders in timestamp order, so `prevIds` affects only the consistency
+analysis.
 
-## Resolving conflicting Drizzle migrations (post-merge)
+A merge keeps both branches' folders with no textual conflict, but the later branch's `prevIds`
+still points at the pre-merge tip, so `db:check` fails with "Non-commutative migrations detected".
+(D1 has no such DAG; duplicate numeric prefixes are fine.)
 
-The Node facade's Postgres migrations (`backend/runtimes/node/drizzle/`) use **drizzle-kit
-1.x, snapshot format v8**, which is a **content-addressed DAG**, NOT a linear journal:
-each `drizzle/<ts>_<name>/snapshot.json` has an `id` plus a `prevIds` array naming the
-snapshot(s) it was generated on top of. There is **no `meta/_journal.json`** — lineage is
-derived entirely from `prevIds`. The single source of truth for the schema is
-`src/db/schema.ts`; `pnpm db:generate` diffs it and emits the next `migration.sql` +
-`snapshot.json`. `migrate()` applies the folder in **timestamp/filename order** at boot
-(so `prevIds` does NOT affect apply order — only the consistency analysis below).
+Do NOT hand-merge snapshot JSON or rerun `db:generate` (a table move triggers an interactive rename
+prompt that can't run in a non-TTY shell). Instead:
 
-**Why merges break them.** When two branches each add a migration and you merge, git keeps
-**both** folders with no textual conflict (different files). But the later branch's snapshot
-still points (`prevIds`) at the **pre-merge** lineage tip, so the two migrations look like
-divergent siblings off a common ancestor. CI's `pnpm --filter @cat-factory/node-server run
-db:check` (`drizzle-kit check`) then fails with **"Non-commutative migrations detected"** —
-both branches appear to "create" the same already-existing tables when diffed from that
-shared ancestor. (The D1 side in `backend/runtimes/cloudflare/migrations/` has no such DAG;
-duplicate numeric prefixes like two `0012_*.sql` are fine — they apply in lexical order.)
+1. Resolve conflicts in `src/db/schema.ts` first, keeping BOTH branches' columns.
+2. From `backend/runtimes/node`, run
+   `node scripts/rebase-migration-snapshot.mjs <later-migration-folder>`. It rewrites that
+   snapshot's `ddl` from the merged schema and re-points `prevIds` at every other migration's leaf,
+   non-interactively. It does not touch `migration.sql`.
+3. Check `migration.sql` still encodes the delta to the merged schema.
+4. Verify with `pnpm db:check`. Keep the symmetric D1 migration in step.
 
-**Do NOT** hand-merge snapshot JSON, and **do NOT** just rerun `pnpm db:generate`: a `SET
-SCHEMA`/table-move triggers an interactive rename prompt that **can't run in a non-TTY
-shell/CI** (`Interactive prompts require a TTY terminal`).
+### Boot drift-guard, recovery, self-healing FK migrations
 
-**The fix — re-root the later migration onto the merged lineage tip:**
+Node boots by running `migrate()` BEFORE `boss.start()` (sequential, so a migration failure is the
+clean top-level rejection).
 
-1. Resolve the textual conflicts in `src/db/schema.ts` first (keep BOTH branches' columns/
-   tables) — it must be the correct, merged schema before anything else.
-2. From `backend/runtimes/node`, run the helper:
-   `node scripts/rebase-migration-snapshot.mjs <later-migration-folder-name>`.
-   It rewrites that folder's `snapshot.json` so its `ddl` reflects the current merged
-   `schema.ts` and its `prevIds` point at the **leaf snapshot(s) of every other migration**
-   (collapsing all current branch tips into this one — the proper merge node). It uses
-   drizzle-kit's non-interactive `generateDrizzleJson`, so no TTY prompt. It does **not**
-   touch `migration.sql`.
-3. Eyeball that folder's `migration.sql`: it must still encode the delta from the prior
-   state to the merged schema (usually it already does — it was the human-authored intent;
-   note a `ALTER TABLE … SET SCHEMA …` carries the table's indexes with it, so they need no
-   re-creation).
-4. Verify with `pnpm db:check` (expect "Everything's fine 🐶🔥"). The CI suite then applies
-   the lineage against real Postgres in the Node/conformance tests.
+- **Ledger↔schema drift.** The drizzle ledger lives in its own `drizzle` schema, so a hand
+  `DROP SCHEMA public CASCADE` wipes the data while the ledger still claims everything is applied.
+  `assertSchemaConsistent` probes for this and throws `DbSchemaInconsistentError` naming the
+  recovery; any other failure becomes a `MigrationFailedError` mapping the pg code to a cause and
+  hint. Recovery is deliberate and destructive: `pnpm --filter @cat-factory/node-server db:reset`
+  drops ALL app-owned schemas together (`public`, `telemetry`, `sandbox`, `provisioning`, `drizzle`,
+  `pgboss`) so the ledger can never outlive the data. Never hand-drop `public` alone.
+- **Self-healing FK migrations (both runtimes).** A migration adding an `ON DELETE RESTRICT` FK
+  must first delete/NULL pre-existing orphans, or it hard-fails with `23503`. Heal then constrain,
+  mirrored in the Postgres `migration.sql` AND the D1 rebuild. Deleting orphaned experimental data
+  is acceptable; swallowing the error is not.
+- **Configurable schemas for a shared database (Node), all defaulting to prior behaviour:**
+  `DB_SCHEMA` relocates the app tables via `search_path`, `DB_MIGRATIONS_SCHEMA` moves the drizzle
+  ledger, `DB_PGBOSS_SCHEMA` moves pg-boss's schema. Each must be a plain lowercase identifier;
+  `db:reset` reads the same env. The named schemas (`telemetry`/`sandbox`/`provisioning`) are fixed.
 
-Keep the symmetric D1 migration (a fresh numbered `*.sql` under
-`backend/runtimes/cloudflare/migrations/`) in step, per "Keep the runtimes symmetric".
-
-## Migration safety: boot drift-guard, recovery, and self-healing FK migrations
-
-The Node facade boots by running `migrate()` (`backend/runtimes/node/src/db/migrate.ts`)
-BEFORE `boss.start()` (sequential, not a `Promise.all` — a migration failure is then the
-clean top-level rejection, not a race with pg-boss's own schema provisioning). `migrate()`
-is hardened against the two states that used to brick boot with an opaque Postgres error:
-
-- **Ledger↔schema drift (fail fast, then reset).** In drizzle-kit 1.0 the
-  `__drizzle_migrations` ledger lives in its OWN `drizzle` schema, so a hand
-  `DROP SCHEMA public CASCADE` (or a stray test run against a dev DB) wipes `public.*` while
-  the ledger keeps claiming every migration is applied — the next `ALTER TABLE` migration then
-  dies with a bare `42P01`. `migrate()` probes for this up front (`assertSchemaConsistent`:
-  ledger non-empty but anchor tables `public.accounts`/`public.workspaces` missing) and throws
-  a `DbSchemaInconsistentError` naming the condition + the recovery. Any other apply failure is
-  rethrown as a `MigrationFailedError` that maps the pg code (`42P01`/`23503`/`42P07`) to a
-  human cause + hint. Recovery is deliberate + destructive, never automatic:
-  `pnpm --filter @cat-factory/node-server db:reset` (`scripts/db-reset.mjs`) drops ALL
-  app-owned schemas TOGETHER — `public`, `telemetry`, `sandbox`, `provisioning`, the `drizzle`
-  ledger, and pg-boss's `pgboss` — so the ledger can never outlive the data. Never hand-drop
-  `public` alone; that is what creates the split. (Node-Postgres-specific — D1 has no boot-time
-  drizzle migrator.)
-- **Self-healing FK migrations (both runtimes).** A migration that adds an `ON DELETE RESTRICT`
-  foreign key MUST first delete/NULL any pre-existing orphans that would violate it, or it
-  hard-fails with `23503` on any DB old enough to predate the FK. Heal-then-constrain: `DELETE
-FROM <child> WHERE <fk> NOT IN (SELECT id FROM <parent>)` (or `UPDATE … SET <fk> = NULL` for a
-  nullable column) before `ADD CONSTRAINT`. Mirror it across BOTH runtimes (the Postgres
-  `migration.sql` AND the D1 rebuild in `backend/runtimes/cloudflare/migrations/`), per "Keep
-  the runtimes symmetric". Deleting orphaned experimental data is acceptable here (backwards
-  compatibility is a non-goal); do NOT hide the orphaning by swallowing the error instead.
-
-- **Configurable schemas for a SHARED database (Node).** All default to the prior behaviour, so
-  a stock deployment is unchanged; set them when cat-factory shares a Postgres with other
-  services. `DB_SCHEMA` relocates the default (`public`) app tables via the connection
-  `search_path` (`createDbClient` sets `options=-c search_path=…`; `migrate()` `CREATE SCHEMA
-IF NOT EXISTS`es it) — for databases with no usable `public`. `DB_MIGRATIONS_SCHEMA` moves the
-  drizzle ledger off the top-level `drizzle` schema so it can't collide with another
-  drizzle-using service's `drizzle.__drizzle_migrations` (passed as the migrator's
-  `migrationsSchema`). `DB_PGBOSS_SCHEMA` moves pg-boss's queue schema. Each must be a plain
-  lowercase identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
-  The named app schemas (`telemetry`/`sandbox`/`provisioning`) are fixed `pgSchema(...)` names,
-  not configurable (changing them would mean regenerating migrations). Node-Postgres-specific.
-
-Test harnesses NEVER touch the base `DATABASE_URL` DB: they require a per-vitest-worker
-database (`deriveWorkerDatabase` must resolve) and use the `postgres` maintenance DB for the
-admin `CREATE DATABASE` connection, so running the suite can't pollute or desync a dev DB.
+Test harnesses never touch the base `DATABASE_URL` DB: they require a per-vitest-worker database
+and use the `postgres` maintenance DB for the admin connection.
 
 ## Layout
 
-> Naming/vocabulary traps (block vs task vs card, `runtimes/cloudflare` = `@cat-factory/worker`,
-> runner/executor/transport, where gates / agent kinds / migration parity live) are resolved in
-> [`docs/glossary.md`](./docs/glossary.md). Each `backend/packages/*` and `backend/runtimes/*`
-> also carries an `AGENTS.md` with its public entry point + a "where things live" map.
+One pnpm workspace. Published libraries in `backend/packages/*` and `frontend/app`, runtime facades
+in `backend/runtimes/*`, private packages (harnesses + conformance) in `backend/internal/*`, example
+deployments in `deploy/*`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the publish table and each
+package's `AGENTS.md` for its internals.
 
-One pnpm workspace (single root lockfile). Packages are sorted by visibility:
-**published libraries** live in `backend/packages/*` + `frontend/app`, the
-**runtime facades** (one per deployment target) in `backend/runtimes/*`, **private
-packages** (the harnesses + the conformance suite) in `backend/internal/*`, and the
-example **deployments** (which carry the `wrangler.toml`s / `Dockerfile` and config
-and depend on the libraries) in `deploy/*`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-for the package/publish table.
+The backend is runtime-neutral by construction: the domain and HTTP layer know nothing about
+Cloudflare or Node, and each facade supplies only its differentiators (persistence, durable jobs,
+real-time transport, model provisioning).
 
-The backend is **runtime-neutral by construction**: the domain + the HTTP layer know
-nothing about Cloudflare or Node, and each facade in `backend/runtimes/*` supplies
-only its differentiators (persistence, durable jobs, real-time transport, model
-provisioning). A shared **conformance suite** runs the SAME assertions against every
-facade so the runtimes can't drift (see "Cross-runtime conformance" below).
-
-- `frontend/app` — `@cat-factory/app`, the reusable **Nuxt layer** (`ssr: false`):
-  the SPA source under `app/` (stores in `app/stores`, composables in
-  `app/composables`, components in `app/components`, wire types in `app/types`).
-  Published to npm; consumed by a deployment via `extends: ['@cat-factory/app']`.
+- `frontend/app` — `@cat-factory/app`, the reusable Nuxt layer (`ssr: false`) consumed via
+  `extends`. Stores/composables/components/types under `app/`.
 - `backend/packages/contracts` — Valibot wire contracts shared by SPA + backends.
-- `backend/packages/cli` — `@cat-factory/cli`, the **bootstrap CLI** (`cat-factory init`,
-  bin `cat-factory`). A scaffolder (no backend stack pulled in — its only runtime dep is
-  `@clack/prompts` for the interactive UI) that generates a local-mode deployment (a `local/`
-  backend + `frontend/` SPA, mirroring `deploy/local` + `deploy/frontend` but on the **published**
-  libraries): generates the crypto secrets in the server's required formats, mints a GitHub/GitLab
-  PAT by opening the browser at the right pre-scoped URL (the same scopes as `runtimes/local`'s
-  `githubPatCreationUrl`), and writes the populated + gitignored `.env` files. Pure functions
-  (`buildPlan`/`generateSecrets`/`buildLocalEnv`/`mergeGitignore`/the VCS URL helpers) under an
-  injectable IO+FS seam (clack is confined to the real IO impl), so the whole flow is tested.
-- `backend/packages/prompt-fragments` — versioned best-practice prompt fragments.
-- The framework-agnostic domain is split across several published packages (there
-  is **no** `backend/packages/core` any more):
-  - `backend/packages/kernel` — shared vocabulary: the domain **types**
-    (`src/domain/types.ts`, re-exporting the contracts), pure logic + constants
-    (`src/domain/*`, e.g. `seed.ts`, `catalog.ts`), and **all repository/port
-    interfaces** (`src/ports/*`). Everything else imports its ports from here.
-  - `backend/packages/orchestration` — the delivery-workflow engine + domain
-    **composition root**: module services under `src/modules/*` (`execution`,
-    `bootstrap`, `pipelines`, `board`, `boardScan`, `requirements`,
-    `notifications`, `merge`) and `createCore()` in `src/container.ts`.
-  - `backend/packages/integrations` — opt-in integration services (GitHub,
-    documents, tasks, environments, runner pools) behind kernel ports.
-  - `backend/packages/agents` — agent catalog + prompt composition
-    (`systemPromptFor`/`userPromptFor`, the per-kind `ROLES`) **and the AI
-    provisioning facade**: `CompositeModelProvider` + the runtime-neutral
-    single-provider resolvers (`openai`/`anthropic`/the OpenAI-compatible vendors —
-    Qwen/DeepSeek/Moonshot plus the **OpenRouter** + **LiteLLM** gateways — +
-    the Cloudflare-over-REST resolver) and `providerEndpoints` (the base-URL/key
-    source of truth, also used by the LLM proxy). Each facade composes the registry
-    from the resolvers it can serve. OpenRouter/LiteLLM are pure OpenAI-compatible
-    entries: keys live in the UI key pool like the other direct vendors, OpenRouter
-    defaults to the public gateway, and LiteLLM is operator-hosted (`LITELLM_BASE_URL`
-    required, no public default).
-  - `backend/packages/provider-bedrock` — `@cat-factory/provider-bedrock`, the
-    opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
-    allow-list** that throws `Unsupported Bedrock model` for anything outside it.
-    Mixed into a facade's registry only when configured.
-  - `backend/packages/provider-cloudflare` — `@cat-factory/provider-cloudflare`, the
-    opt-in **Cloudflare Workers AI** resolver added to a `CompositeModelProvider` (the
-    in-process binding on the Worker, OpenAI-compatible REST elsewhere). Like the other
-    `provider-*` packages, mixed into a facade's registry only when configured.
-  - `backend/packages/provider-s3` — `@cat-factory/provider-s3`, the opt-in **AWS S3**
-    blob backend implementing the kernel `BinaryBlobBackend` port over an S3 bucket
-    (the alternative to the runtime-default blob storage).
-  - `backend/packages/consensus` — `@cat-factory/consensus`, the opt-in
-    **consensus-orchestration** mechanism (specialist panel / debate / ranked voting via
-    `ConsensusAgentExecutor` + `src/strategies/*`) that fans an agent step across several
-    runs and reconciles them, gated by a task-estimate. Wired only when enabled.
-  - `backend/packages/gitlab` — `@cat-factory/gitlab`, the opt-in **GitLab VCS provider**:
-    implements the provider-neutral `VcsClient`/webhook/provisioning ports against the
-    GitLab REST v4 API (`FetchGitLabClient`) and registers via `registerGitLab(vcsRegistry, …)`
-    onto the facade's app-owned `VcsProviderRegistry`. Kernel + contracts only; the GitHub
-    analogue lives in `@cat-factory/server`/`integrations`.
-  - `backend/packages/observability-langfuse` — `@cat-factory/observability-langfuse`,
-    an opt-in **Langfuse trace sink**: a fetch-based `LlmTraceSink` that streams LLM
-    generations + container tool spans to Langfuse, running unchanged on both the Worker
-    (workerd) and Node facades.
-  - `backend/packages/observability-otel` — `@cat-factory/observability-otel`, the opt-in
-    **OpenTelemetry (OTLP) publisher**: the same kernel `LlmTraceSink` port as the Langfuse
-    sink, shipped through TWO transports behind ONE behaviour — a hand-rolled exporter
-    speaking OTLP/HTTP JSON over `fetch` (`createOtelSink`, the `.` entry, which never imports
-    `@opentelemetry/*` so the SDK stays out of the workerd bundle) and the official-SDK
-    exporter (`createNodeOtelSink`, the `/node` entry) — kept from drifting by a shared
-    `src/mapping.ts` plus a `conformity.test.ts` that feeds the same events through both.
-    Also exports `createPlatformMetricsOtelExporter`, the deployment-level gauge push. See
-    "Telemetry & agent-context observability" below.
-  - `backend/packages/caching` — `@cat-factory/caching`, the app-level **caching seam**
-    (`createAppCaches`, built on `layered-loader`) behind the kernel `AppCaches` port, with
-    optional Redis-notified cross-replica invalidation. See "Caching" above.
-  - `backend/packages/eks` — `@cat-factory/eks`, the opt-in **AWS EKS** runner +
-    environment backends: reuses the native Kubernetes transport/provider verbatim, adding
-    only EKS IAM (SigV4 STS `GetCallerIdentity`) apiserver-token minting.
-  - `backend/packages/sandbox` — `@cat-factory/sandbox`, the **parallel prompt/model
-    testing surface** (versioned prompt candidates, experiment matrices, judge + objective
-    grading), deliberately isolated from the core product so it can be extracted;
-    `backend/packages/sandbox-fixtures` — `@cat-factory/sandbox-fixtures`, the hand-authored
-    graded no-repo fixtures (inline requirements/clarity/code-review/architecture inputs +
-    expectations) the sandbox grades against.
-  - `backend/packages/gates` — `@cat-factory/gates`, the **built-in polling-gate suite**
-    (`ci`, `conflicts`, `post-release-health` + the `on-call` escalation), authored entirely
-    through the public `registerGate` seam (kernel + contracts only, never the engine). A
-    facade imports it for side effect and wires each gate's provider via the exported
-    `wireCiStatusProvider` / `wireMergeabilityProvider` / `wireReleaseHealthProvider` /
-    `wireIncidentEnrichment` handles. See "Gates vs agents".
-  - `backend/packages/spend` — the spend safeguard; `backend/packages/workspaces`
-    — workspace + account services.
-- `backend/packages/server` — `@cat-factory/server`, the **runtime-neutral HTTP
-  layer** shared by every facade (no `@cloudflare/*` dep): all the Hono controllers
-  (`src/modules/*/?*Controller.ts`), middleware (auth/authz/CORS/error), request
-  helpers (`src/http/*`), HMAC signing + the GitHub OAuth helper (`src/auth/*`), the
-  runtime **gateway** interfaces (`src/runtime/gateways.ts` — real-time, GitHub
-  ingest/backfill, LLM upstream, **web-search upstream**), the `AppConfig` contract
-  (`src/config/types.ts`),
-  the dialect-agnostic row↔domain **mappers** (`src/persistence/mappers.ts`, reused
-  by both stores), and `registerCoreControllers(app)` (`src/app.ts`). Controllers
-  resolve everything from `c.get('container')` (a `ServerContainer` = the domain
-  `Core` + `config` + `agentRunRepository` + `gateways`).
-- `backend/runtimes/cloudflare` — `@cat-factory/worker`, the **Cloudflare Worker
-  facade** (formerly `backend/packages/worker`): D1 repos + infra
-  (`src/infrastructure/*`), the DI composition root (`src/infrastructure/container.ts`),
-  Durable Objects, Workflows, Containers, the `scheduled`/`queue` handlers, and the CF
-  gateway impls (`src/infrastructure/gateways/*` — `DoRealtimeGateway`, the GitHub
-  gateways, `WorkersAiLlmUpstream`). `createApp`/`buildContainer` are thin wrappers
-  over `@cat-factory/server`. Exposes the default fetch/scheduled/queue handler + the
-  DO/Workflow classes. Ships its D1 `migrations/` — pre-1.0 history (0001–0041) is
-  squashed into a single `0001_init.sql`, and new tables get a fresh numbered migration
-  on top (so the old per-table migration numbers no longer exist). Carries **no**
-  production config; its own `wrangler.toml` is a stripped test/dev config (the vitest
-  workers pool reads it).
-- `backend/runtimes/node` — `@cat-factory/node-server`, the **Node.js service facade**:
-  serves the same `@cat-factory/server` Hono app via `@hono/node-server`, with
-  **Drizzle/Postgres** repositories (`src/db/*`, `src/repositories/drizzle.ts` — the
-  single persistence used in dev/test/prod), **pg-boss** durable execution
-  (`src/execution/{pgBossRunner,drive}.ts`, the analogue of the Worker's Workflows
-  driver), Node gateways + model provisioning (`loadNodeConfig`,
-  `createNodeModelProvider` = direct vendors + Cloudflare-over-REST + opt-in Bedrock),
-  and `createServer()` / `start()`. `DATABASE_URL` selects the database; `migrate()`
-  bootstraps the schema idempotently on boot. Exposes composition seams used by
-  the local facade (all default to the existing Node behaviour): `buildNodeContainer`
-  accepts an injected `resolveTransport`, `mintInstallationToken` and `githubClient`,
-  and `start()` an injected `buildContainer` + a `host` bind address (else `HOST` from
-  the env, else all interfaces). When the GitHub App is configured, Node now builds its
-  own `FetchGitHubClient` from the shared App registry to wire the **CI gate + merge /
-  mergeability** providers — so a stock Node-with-App deployment gates on real Actions
-  CI and merges for real, exactly like the Worker (previously only local mode did).
-- `backend/runtimes/local` — `@cat-factory/local-server`, the **local-mode facade**:
-  the Node facade with two differentiators so a developer can run the whole product on
-  their own machine. Agent jobs run as **per-run local containers** (the
-  `LocalContainerRunnerTransport` — the local analogue of `CloudflareContainerTransport`
-  and `RunnerPoolTransport`, driven through the same `RunnerTransport` port: start the
-  executor-harness image per run, re-attach the run's later steps to it (each step's
-  harness job is keyed by the per-step `RunnerJobRef.jobId`), eviction-maps a vanished
-  container). HOW it talks to the runtime is delegated to a `ContainerRuntimeAdapter`
-  (`src/runtimes/*`), selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack |
-  colima | apple): **Docker/Podman/OrbStack/Colima** share the Docker-CLI adapter
-  (`docker run`, publish `:8080` to an ephemeral host port read with `docker port`,
-  `cat-factory.runId` label), while **Apple `container`** has its own adapter
-  (VM-per-container: `container run` addressed by a deterministic name, connect to the
-  container's own IP, no Docker-in-Docker). An adapter's `endpoint()` must map an EXITED
-  container to `undefined` (`find()` returns running-or-exited containers by design, and
-  `resolve()` reads an endpoint-less one as absent so `dispatchPerRun` removes and re-creates
-  it) while still THROWING for a fault against a live one, which the spin-up path folds into
-  its fail-fast diagnostic — a docker adapter that let `docker port`'s "no public port
-  '8080/tcp' published" escape instead killed the fresh-container recovery and reported that
-  CLI line as the run's cause of death. (A runtime that CAN'T tell the two apart — Apple, whose
-  `inspect` faults identically either way — takes the `undefined` half: a lost spin-up
-  diagnostic beats a run wedged on its own corpse.) When a container dies MID-RUN the poll
-  captures a post-mortem (`exitState()` + a `logs()` tail, secret-scrubbed) onto the failed
-  view's `detail`, since `release()` removes the container as the run settles and its stdout is
-  the only record of why the harness process went away. A re-dispatch removes it too, so the
-  FIRST death's post-mortem is retained on `PipelineStep.firstEvictionDetail` and folded into
-  the failure beside the last one (`evictionFailureDetail`) — with a crash-eviction budget of 1,
-  the first death is usually the informative one. Each adapter exposes a `localDind` capability;
-  the local facade threads it into `ExecutionService` as `localTestInfraSupported` so a
-  runtime that can't nest containers (Apple) **refuses a local-infra Tester run at start**
-  ("limited mode" — steer to the ephemeral env or a no-infra service; see
-  `tester-infra.logic.ts`). GitHub is reached via a **PAT** (`GITHUB_PAT` →
-  `mintInstallationToken`) instead of a GitHub App. `buildLocalContainer` reuses ALL of Node's persistence/
-  pg-boss/gateways and only swaps the runner transport + the GitHub token/client seams;
-  `startLocal()` reuses Node's `start()`. The harness itself opens the PR via the PAT,
-  and the **CI gate + merge / mergeability providers are wired from a PAT-backed
-  `FetchGitHubClient`** (`createLocalGitHubClient`), so a local pipeline gates on real
-  GitHub Actions CI and **merges the PR for real**. Repo resolution is unchanged (the
-  `github_repos`/`github_installations` projection); the `linkRepo` helper (+ CLI) seeds
-  those rows from PAT-read repo metadata since there is no GitHub-App connect flow.
-  **Native execution (`LOCAL_NATIVE_AGENTS`) makes per-job state a correctness concern** —
-  see "Per-job state in the harness" below.
-- `backend/internal/executor-harness` — the payload that runs **inside** each
-  per-run Cloudflare Container (the Pi coding-agent harness). Published to **npm**
-  (its zero-dependency `dist/server.js` is the entry `@cat-factory/local-server`
-  spawns in local native mode), and its multi-arch Docker image is published
-  publicly to **GHCR + Docker Hub** by `docker-publish.yml` (or manually via the
-  package's `image:publish` script / `scripts/publish-image.sh`). Its version is
-  both the npm version and the Docker image tag.
-- `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
-  private, not published.
-- `backend/internal/smoketest-harness` — `@cat-factory/smoketest-harness`, a headless
-  **smoketest** for the Pi coding agent (`cat-smoke`): runs real coding tasks through the
-  actual Pi setup against Cloudflare AI, captures the full transcript, and flags breakage /
-  dead-ends / non-productive loops (no grading — that's the benchmark harness). Private.
-- `backend/internal/deploy-harness` — `@cat-factory/deploy-harness`, the container payload
-  that renders a service's **Kubernetes manifests** (kubectl/kustomize/helm) and applies
-  them to a per-PR namespace for ephemeral environments. Carries no secrets (the per-job
-  cluster + git tokens arrive in the job body). Private; its own Docker image.
-- `backend/internal/e2e` — `@cat-factory/e2e`, the **Playwright end-to-end suite** (see
-  "End-to-end (assembled-product) coverage" below): a real Chromium drives the real SPA
-  against a real Node backend, only the external deps faked. Private.
-- `backend/internal/conformance` — `@cat-factory/conformance`, the private
-  **cross-runtime conformance suite** + the single canonical deterministic
-  `FakeAgentExecutor`. `defineConformanceSuite(harness)` runs the key backend
-  behaviour against any facade; both runtimes' test suites invoke it (see below).
-- `backend/internal/example-custom-agent` — `@cat-factory/example-custom-agent`, a
-  private **worked example** of a company-authored agent package: an inline `org-reviewer`
-  - a container `security-auditor` (`container-explore` structured, a post-op rendering
-    `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
-    `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
-    app-owned registries (`registerExampleCustomAgents(agentKindRegistry, presets, gateRegistry,
-stepResolverRegistry, pipelineRegistry)` — by reference, no module-global side effect). Proves
-    a brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
-- `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
-  re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
-  (`[vars]`, the GHCR runner `image`, `migrations_dir` →
-  `node_modules/@cat-factory/worker/migrations`).
-- `deploy/node` — example **Node.js service** deployment: a one-line `src/main.ts`
-  calling `@cat-factory/node-server`'s `start()`, a `Dockerfile` (builds from the repo
-  root, then `pnpm install --prod` prunes to runtime deps — no `pnpm deploy`/`--legacy`),
-  and an `.env.example`. Env-driven (`DATABASE_URL` required); the scripts load `.env`
-  via Node's native `--env-file-if-exists`, and the entry runs via Node 24/26 **type
-  stripping** (no build step for this package).
-- `deploy/local` — example **local-mode** deployment: a one-line `src/main.ts` calling
-  `@cat-factory/local-server`'s `startLocal()`, a `docker-compose.yml` (local Postgres
-  only — the orchestrator runs on the host so it can drive the Docker daemon to spawn
-  agent containers), and an `.env.example` (`LOCAL_HARNESS_IMAGE`, `GITHUB_PAT`,
-  `DATABASE_URL`). Like `deploy/node`, the entry runs via Node type stripping.
-- `deploy/frontend` — example Pages deployment: a thin Nuxt app that `extends` the
-  `@cat-factory/app` layer + the Pages `wrangler.toml`. `NUXT_PUBLIC_API_BASE` is
-  baked in at `nuxt generate` time.
+- `backend/packages/kernel` — shared vocabulary: domain types, pure logic/constants, and ALL
+  repository/port interfaces (`src/ports/*`).
+- `backend/packages/orchestration` — the delivery-workflow engine and domain composition root
+  (`src/modules/*`, `createCore()` in `src/container.ts`).
+- `backend/packages/integrations` — opt-in integration services (GitHub, documents, tasks,
+  environments, runner pools) behind kernel ports.
+- `backend/packages/agents` — agent catalog + prompt composition, and the AI provisioning facade
+  (`CompositeModelProvider`, the single-provider resolvers, `providerEndpoints`). OpenRouter and
+  LiteLLM are plain OpenAI-compatible entries.
+- `backend/packages/server` — `@cat-factory/server`, the runtime-neutral HTTP layer: all Hono
+  controllers, middleware, request helpers, HMAC + OAuth helpers, the runtime `gateways` interfaces,
+  the `AppConfig` contract, the dialect-agnostic row↔domain mappers, and `registerCoreControllers`.
+  Controllers resolve everything from `c.get('container')`.
+- Opt-in packages, each mixed into a facade only when configured: `provider-bedrock`,
+  `provider-cloudflare`, `provider-s3`, `consensus`, `gitlab`, `observability-langfuse`,
+  `observability-otel`, `caching`, `eks`, `gates`, `sandbox` (+ `sandbox-fixtures`), `spend`,
+  `workspaces`, `prompt-fragments`, `cli`.
+- `backend/runtimes/cloudflare` — `@cat-factory/worker`: D1 repos, DI composition root, Durable
+  Objects, Workflows, Containers, `scheduled`/`queue` handlers, CF gateway impls. Ships its D1
+  `migrations/` (pre-1.0 history squashed into `0001_init.sql`). Its `wrangler.toml` is a
+  stripped test/dev config.
+- `backend/runtimes/node` — `@cat-factory/node-server`: the same Hono app over `@hono/node-server`,
+  Drizzle/Postgres repositories, pg-boss durable execution, Node gateways and model provisioning.
+  `DATABASE_URL` selects the database; `migrate()` bootstraps on boot. Exposes composition seams
+  (`resolveTransport`, `mintInstallationToken`, `githubClient`, an injected `buildContainer`, a
+  `host` bind address).
+- `backend/runtimes/local` — `@cat-factory/local-server`: the Node facade with two differentiators.
+  Agent jobs run as per-run local containers (`LocalContainerRunnerTransport` over a
+  `ContainerRuntimeAdapter` selected by `LOCAL_CONTAINER_RUNTIME`), and GitHub is reached via a PAT.
+  See "Local container adapters" below.
+- `backend/internal/executor-harness` — the payload running inside each per-run container (the Pi
+  coding-agent harness). Published to npm; its version doubles as the Docker image tag.
+- `backend/internal/{benchmark,smoketest,deploy}-harness` — headless benchmarking (`cat-bench`),
+  the Pi smoketest (`cat-smoke`), and the Kubernetes manifest renderer for ephemeral environments.
+- `backend/internal/e2e` — the Playwright end-to-end suite. `backend/internal/conformance` — the
+  cross-runtime conformance suite plus the canonical `FakeAgentExecutor`.
+- `backend/internal/example-custom-agent` — a worked example of a company-authored agent package,
+  registered purely through the public app-owned registries. See "Custom agents".
+- `deploy/{backend,node,local,frontend}` — example deployments carrying the production config
+  (`wrangler.toml` / `Dockerfile` / `.env.example`) on top of the libraries.
 
-## Updating dependencies (the `minimumReleaseAge` supply-chain gate)
+### Local container adapters
 
-Installs run behind a **`minimumReleaseAge` gate** (configured in the managed
-environment, ~24h): pnpm strictly verifies the lockfile and **rejects any registry
-package published more recently than the cutoff** (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`).
-The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The policy for it:
+`LocalContainerRunnerTransport` starts the executor-harness image per run and re-attaches later
+steps to it, keyed by the per-step `RunnerJobRef.jobId`. Docker/Podman/OrbStack/Colima share the
+Docker-CLI adapter; Apple `container` has its own (VM-per-container, addressed by deterministic
+name). Two contracts bite:
 
-- **Only ever list wildcard namespaces WE OWN** there — today `@cat-factory/*` and
-  `@toad-contracts/*`. Our own freshly-published packages are trusted and must never be
-  age-gated, so a wildcard (not per-version pins) keeps them installable the moment they
-  publish.
-- **Never add a per-version exception for a third-party package** (`some-pkg@1.2.3`), and
-  do not let a non-strict `pnpm install` auto-append them — if you see third-party entries
-  accrue in `minimumReleaseAgeExclude`, delete them. (pnpm's non-strict mode silently
-  appends a pin for every too-new version it resolves; that churn is exactly what this
-  policy forbids.)
-- **When upgrading, pick the latest version that already satisfies the release-age rule**,
-  not the absolute newest. Concretely: find the newest version published before the cutoff
-  (`npm view <pkg> time --json`), stay within the compatible major (see the AI-SDK pin
-  below), and set that as the range. If `pnpm install`/`update` resolves something too new,
-  pass the explicit compliant version (`pnpm update -r <pkg>@<compliant-version>`) rather
-  than excluding it. A dep whose only newer releases are all inside the cutoff window stays
-  where it is until they age out.
-- **Do not touch the executor-harness** (`backend/internal/executor-harness`) during a
-  dependency sweep — its deps feed the published runner image (see the image-tag rules
-  below), so bumping them is a separate, deliberate, image-bumping change.
-- **The Vercel AI SDK family (`ai`, `@ai-sdk/*`) is held to the major that pairs with
-  `workers-ai-provider`.** As of `workers-ai-provider@4` the family is on `ai@^7` +
-  `@ai-sdk/*@^4` (`provider`/`openai`/`anthropic`; `@ai-sdk/openai-compatible@^3`,
-  `@ai-sdk/amazon-bedrock@^5`), because `workers-ai-provider@4`'s peers require `ai@^7` +
-  `@ai-sdk/*@^4`. So do NOT bump `ai` past v7 (or the `@ai-sdk/*` packages past their
-  `ai@7`-compatible majors) until `workers-ai-provider` ships a release whose peers accept
-  it. Upgrade only within those majors.
+- **`endpoint()` must map an EXITED container to `undefined`** (so `resolve()` reads it as absent
+  and `dispatchPerRun` re-creates it) while still THROWING for a fault against a live one. A docker
+  adapter that let `docker port`'s "no public port published" escape killed the fresh-container
+  recovery and reported that CLI line as the run's cause of death. A runtime that can't tell the two
+  apart (Apple) takes the `undefined` half.
+- **A container dying mid-run needs a post-mortem** (`exitState()` + a scrubbed `logs()` tail) onto
+  the failed view's `detail`, since `release()` removes it as the run settles. A re-dispatch removes
+  it too, so the FIRST death's post-mortem is retained on `PipelineStep.firstEvictionDetail`.
 
-## Releases & changesets
+Each adapter exposes a `localDind` capability threaded into `ExecutionService` as
+`localTestInfraSupported`, so a runtime that can't nest containers refuses a local-infra Tester run
+at start (`tester-infra.logic.ts`).
 
-- Versioning/publishing is [changesets](https://github.com/changesets/changesets)
-  (`.changeset/config.json`, root `pnpm changeset` / `ci:publish`). Public packages
-  publish to npm; `deploy/*` + `benchmark-harness` are `ignore`d;
-  `executor-harness` publishes to npm too and its version doubles as the Docker
-  image tag.
-- **Always add a changeset for any change to a versioned package**, and bump
-  `@cat-factory/executor-harness` whenever you touch what goes into its image
-  (`src/**`, `Dockerfile`, `tsconfig.json`, the pinned `PI_*` args). Empty changeset
-  (`pnpm changeset --empty`) for docs/CI/test-only changes. Full rules + file format
-  in [`CONTRIBUTING.md`](./CONTRIBUTING.md). CI enforces this (`changeset status`).
-- `.github/workflows/release.yml` runs changesets on push to `main`;
-  `docker-publish.yml` republishes the runner image (multi-arch, GHCR + Docker Hub),
-  gated on image-affecting paths (incl. the harness `package.json`, so a version
-  bump re-tags the image). Docker Hub is gated on the `DOCKERHUB_USERNAME` /
-  `DOCKERHUB_TOKEN` repo secrets; absent them it publishes GHCR only.
-- **Any change that affects the runner image MUST bump the image tag** (the harness
-  `src/**`, `Dockerfile`, `tsconfig.json` or the pinned `PI_*` args). Bump
-  `@cat-factory/executor-harness`'s `version` AND the matching tag in BOTH
-  `deploy/backend/package.json` (`image:publish`) and `deploy/backend/wrangler.toml`
-  (`[[containers]] image`), AND `RECOMMENDED_HARNESS_IMAGE` in
-  `backend/runtimes/local/src/harnessImage.ts` (the tag local mode pins + pulls at boot,
-  so the image and the Node/local backend stay a matched set — a changeset-published
-  `@cat-factory/local-server` then carries the right image), then `pnpm image:publish` +
-  `pnpm deploy` from `deploy/backend`. The deployment serves the **Cloudflare managed-registry** image
-  (`registry.cloudflare.com/<acct>/cat-factory-executor:<tag>`), NOT the GHCR image,
-  so the GHCR auto-publish does not roll it out. Reusing the same tag does NOT
-  deploy: `wrangler deploy` diffs the image by tag string, reports
-  `no changes cat-factory-backend-executioncontainer`, and the container application
-  stays pinned to the OLD digest — so new per-run containers keep running stale code
-  (a missing harness route then 404s as `Container dispatch failed (HTTP 404)`). A
-  fresh, immutable tag is what forces the rollout.
-- **The release PR re-syncs the pins automatically — don't hand-fix a red release PR.**
-  A harness bump in a feature PR ships a changeset, so when the changesets action builds
-  the "Release Packages" PR it bumps the harness `version` a SECOND time (e.g. a manual
-  `1.27.5` becomes `1.27.6`) while leaving the three hand-maintained pins behind — which
-  used to be born as tag drift + red CI on the consistency guard. The root `version`
-  script now runs `scripts/sync-runner-image-tags.mjs` after `changeset version`, so the
-  release PR re-derives every pin from the freshly-bumped harness `version` and is
-  consistent by construction. Consequence: the RELEASED tag is whatever changesets
-  computed (`1.27.6`), which may differ from the tag the feature PR published (`1.27.5`);
-  the content is identical, and `docker-publish.yml` re-tags GHCR off the version bump,
-  but the Cloudflare managed-registry image for the released tag is only built when
-  someone next runs `pnpm image:publish` + `pnpm deploy`. Run `pnpm sync:image-tags`
-  locally if you ever need to reconcile the pins by hand;
-  `scripts/check-runner-image-tag.mjs` is the CI guard that verifies the same invariant.
+## Dependencies, releases, new packages
 
-## Adding a new published package
+### The `minimumReleaseAge` supply-chain gate
 
-A new library under `backend/packages/<name>` is **not** wired up just by creating the
-folder. Miss one of these registries and it builds locally but ships broken (the classic
-failure: `@cat-factory/gitlab` + `@cat-factory/provider-s3` once published as **empty
-shells** — a `package.json` with no `dist/` — because a bare `pnpm publish` skipped the
-build and `dist/` is gitignored). The checklist:
+Installs reject any registry package published inside the ~24h cutoff. The allow-list is
+`minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
 
-- **`package.json` must carry the full publish contract**, copied from an existing leaf
-  package (e.g. `packages/gates`): `"files": ["dist"]`, `"main"`/`"types"`/`"exports"`
-  pointing at `./dist`, `"publishConfig": { "access": "public" }`, a `"build": "tsc -b
-tsconfig.build.json"` script, AND a **`"prepublishOnly": "pnpm run build"`** hook. The
-  `prepublishOnly` hook is mandatory and non-negotiable: `dist/` is gitignored, so without
-  it any publish path that doesn't pre-build (a bare `pnpm publish`, a one-off
-  `changeset publish`) ships an empty shell. The canonical `pnpm ci:publish` builds first,
-  but the hook is the guardrail for every other path.
-- **Register it in `backend/tsconfig.build.json`** — add `{ "path":
-"packages/<name>/tsconfig.build.json" }` to the `references` array. This is the
-  solution-style build graph that `pnpm build:tsc` (and the incremental project-reference
-  build) walks. A package reachable only transitively (because some runtime happens to
-  reference it) builds today but silently drops out the moment that reference goes away;
-  list every publishable library here directly.
-- **No pnpm-workspace edit needed** — `pnpm-workspace.yaml` globs `backend/packages/*`, so
-  the package is picked up automatically. (`deploy/*` are listed individually, but library
-  packages are not.)
-- **Add a changeset** (`pnpm changeset`) — CI's `changeset status` gate fails the PR
-  otherwise. A brand-new package still needs an initial-release changeset.
-- **Add a row to README.md's repository-layout tables** — CI's
-  `node scripts/check-package-catalog.mjs` guard fails the `Build & typecheck` job for any
-  workspace package missing from the map. (This is what bit the `@cat-factory/caching`
-  pilot PR.)
-- **Check knip knows about any dynamically-loaded dependency** — a dep referenced only via
-  an opaque dynamic import (`import('pkg' as string)`) is invisible to knip's static
-  analysis and fails `pnpm lint:knip` as "unused"; add an `ignoreDependencies` entry with a
-  comment in `knip.jsonc` (the `ioredis`/`layered-loader` pattern).
-- **Keep the runtimes symmetric** if the package is a shared behaviour both facades must
-  wire (see "Keep the runtimes symmetric").
+- **Only wildcard namespaces WE OWN** belong there (`@cat-factory/*`, `@toad-contracts/*`).
+- **Never add a per-version third-party exception**, and delete any that accrue (non-strict pnpm
+  appends them silently).
+- **When upgrading, pick the latest version that already satisfies the rule** (`npm view <pkg> time
+--json`), staying within the compatible major. Pass the explicit compliant version rather than
+  excluding it.
+- **Do not touch the executor-harness** during a dependency sweep: its deps feed the published
+  image, so bumping them is a separate image-bumping change.
+- **The Vercel AI SDK family is held to the major that pairs with `workers-ai-provider`**: today
+  `ai@^7` + `@ai-sdk/*@^4` (`openai-compatible@^3`, `amazon-bedrock@^5`). Do not bump past those
+  until `workers-ai-provider` ships peers that accept it.
 
-After wiring, verify with a clean build + a publish dry-run from the package dir:
-`rm -rf dist && pnpm publish --dry-run --no-git-checks` — it must run `prepublishOnly`,
-rebuild `dist/`, and list the compiled files in the tarball.
+### Releases & changesets
 
-## Run the CI guard scripts locally before committing
+Versioning is changesets (root `pnpm changeset` / `ci:publish`). **Always add a changeset for a
+change to a versioned package**; empty changeset for docs/CI/test-only. CI enforces this.
 
-CI's `Build & typecheck` job runs a set of fast repo guards BEYOND build/typecheck/tests,
-and a locally-green branch fails CI when one of them is skipped. **Before committing —
-always after adding/renaming a package, touching dependencies, or bumping the harness —
-run the guards your change class can trip:**
+**Any change to what goes into the runner image** (harness `src/**`, `Dockerfile`, `tsconfig.json`,
+the pinned `PI_*` args) MUST bump `@cat-factory/executor-harness`'s version AND the matching tag in
+`deploy/backend/package.json`, `deploy/backend/wrangler.toml`, and `RECOMMENDED_HARNESS_IMAGE` in
+`backend/runtimes/local/src/harnessImage.ts`; then `pnpm image:publish` + `pnpm deploy` from
+`deploy/backend`. The deployment serves the Cloudflare managed-registry image, not GHCR, so the
+GHCR auto-publish does not roll it out. **Reusing a tag does NOT deploy** (`wrangler deploy` diffs
+by tag string), leaving new containers on stale code, which surfaces as
+`Container dispatch failed (HTTP 404)`. Only a fresh immutable tag forces the rollout.
 
-> **Do NOT run `pnpm lint:knip` or `node scripts/check-package-catalog.mjs` locally — CI runs
-> them for you.** They are slow (knip needs a full build first) and CI's `Build & typecheck`
-> job is the authoritative gate for both, so running them by hand just burns time. Skip them
-> locally and let CI report any unused-export / missing-catalog-row failure.
+The release PR re-syncs the pins automatically (the root `version` script runs
+`scripts/sync-runner-image-tags.mjs`), so don't hand-fix a red release PR. Consequence: the released
+tag may differ from the one the feature PR published; content is identical, but the managed-registry
+image for the released tag is only built at the next `image:publish` + `deploy`. `pnpm
+sync:image-tags` reconciles by hand; `scripts/check-runner-image-tag.mjs` is the CI guard.
 
-- `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
-  README.md's repository-layout tables. **(CI-only — do not run locally; see the note above.)**
-- `node scripts/check-file-size.mjs` — soft max-lines budget (default 1,500) for non-test
-  source files, with ratcheted allowances for the legacy oversized files (the engine
-  god-file re-accretion guard). Grew a file past its budget ⇒ **split it along a cohesive
-  seam — do NOT raise the ratchet.** See the file-size / function-size rule below; the same
-  applies to oxlint's `max-lines-per-function` (the test/conformance budget in `.oxlintrc.json`).
-- `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
-  a changeset (run after committing locally; it diffs git refs).
-- `pnpm lint:knip` — unused files/deps/exports; remember dynamically-imported deps need a
-  `knip.jsonc` ignore entry. **(CI-only — do not run locally; see the note above.)**
+### Adding a new published package
+
+A folder is not wired up by existing. (`@cat-factory/gitlab` and `provider-s3` once published as
+empty shells because a bare `pnpm publish` skipped the build and `dist/` is gitignored.)
+
+- **Full publish contract in `package.json`**, copied from `packages/gates`: `"files": ["dist"]`,
+  `main`/`types`/`exports` at `./dist`, `publishConfig.access: "public"`, a `build` script, and a
+  mandatory **`"prepublishOnly": "pnpm run build"`** hook (the guardrail for every publish path
+  that doesn't pre-build).
+- **Register it in `backend/tsconfig.build.json`** `references`. A package reachable only
+  transitively drops out the moment that reference goes away.
+- No `pnpm-workspace.yaml` edit needed (`backend/packages/*` is globbed).
+- **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
+- **Check knip knows about a dynamically-imported dependency** (`ignoreDependencies` in
+  `knip.jsonc`, the `ioredis`/`layered-loader` pattern).
+- Keep the runtimes symmetric if it's shared behaviour both facades wire.
+
+Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the package dir.
+
+### Run the CI guard scripts locally before committing
+
+> **Do NOT run `pnpm lint:knip` or `node scripts/check-package-catalog.mjs` locally.** They are slow
+> and CI's `Build & typecheck` job is authoritative for both.
+
+- `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
+- `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
-- `pnpm check:publish` (publint + attw, after `pnpm build`) — publish-artifact integrity
-  for every publishable package.
-- `node scripts/check-runner-image-tag.mjs --since origin/main` — harness image-tag
-  consistency, whenever anything image-affecting changed.
-- `pnpm lint:fix` (whole tree, per the formatting rule above) and
-  `pnpm exec turbo run typecheck --filter=<each touched package>` (typecheck covers tests,
-  which the build configs exclude).
-
-The full `pnpm test:run` matrix is CI's job; the guards above are cheap enough to run
-every time and catch the failures a plain build+test loop misses.
+- `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.
+- `node scripts/check-runner-image-tag.mjs --since origin/main` — whenever anything
+  image-affecting changed.
+- `pnpm lint:fix` (whole tree) and `pnpm exec turbo run typecheck --filter=<touched package>`
+  (typecheck covers tests, which the build configs exclude).
 
 ## Execution flow (the canonical async + observable pattern)
 
-This is the gold-standard pattern for long-running agent work. Anything new that
-runs an agent in a container should mirror it.
+The gold standard for long-running agent work; anything new that runs an agent in a container
+mirrors it.
 
-1. `ExecutionService.start()` (orchestration `src/modules/execution/ExecutionService.ts`)
-   creates an `ExecutionInstance` with steps and hands off to the durable driver.
-2. `ExecutionWorkflow` (worker `infrastructure/workflows/ExecutionWorkflow.ts`) —
-   one Cloudflare **Workflows** instance per run, addressed by execution id.
-   Loops calling `advanceInstance`, parking on `waitForEvent` for human
-   decisions. A cron sweeper re-drives runs whose Workflows instance died.
-3. `ContainerAgentExecutor` (worker `infrastructure/ai/ContainerAgentExecutor.ts`)
-   — `startJob()` dispatches the job **asynchronously** (`/run`, non-blocking,
-   returns a `jobId`); `pollJob()` polls and lifts `view.progress` → `subtasks`.
-4. Inside the container, `runPi()` (`executor-harness/src/pi.ts`) streams
-   Pi's JSON-line events; `parseTodoProgress()` turns the todo tool's output into
-   `{completed, inProgress, total}` via the `onProgress` callback →
-   `JobRegistry` (`src/runner.ts`) → exposed on the `/jobs/{id}` `JobView.progress`.
-5. `ExecutionService.pollAgentJob()` writes `step.subtasks`/`step.progress` — plus a
-   THROTTLED `step.lastActivityAt` folded from the harness liveness heartbeat
-   (`RunnerJobView.heartbeatAt` → `AgentJobUpdate.lastActivityAt`), which keeps the run's
-   `updated_at` fresh on a quiet-but-alive job so the stale-run sweeper doesn't orphan it and
-   the UI can show "active Ns ago" (see ADR 0026 D3.1) — then `executionRepository.upsert()`
-   and `emitInstance()`.
-6. Events reach the browser by **push, not polling**:
-   `DurableObjectEventPublisher.executionChanged()` →
-   `WorkspaceEventsHub` Durable Object (`/publish`, hibernatable WebSockets,
-   one per workspace) → broadcast → SPA `useWorkspaceStream.ts` →
-   `execution.upsert()` store → `TaskExecution.vue` / `PipelineProgress.vue`
-   render the `{completed}/{total}` subtask bars.
+1. `ExecutionService.start()` (orchestration `src/modules/execution/`) creates an
+   `ExecutionInstance` with steps and hands off to the durable driver.
+2. `ExecutionWorkflow` (worker `infrastructure/workflows/`) is one Cloudflare Workflows instance per
+   run, looping `advanceInstance` and parking on `waitForEvent` for human decisions. A cron sweeper
+   re-drives runs whose instance died.
+3. `ContainerAgentExecutor.startJob()` dispatches asynchronously (`/run`, non-blocking, returns a
+   `jobId`); `pollJob()` polls and lifts `view.progress` into `subtasks`.
+4. In the container, `runPi()` streams Pi's JSON-line events; `parseTodoProgress()` turns the todo
+   tool's output into `{completed, inProgress, total}` via `onProgress` → `JobRegistry` → the
+   `/jobs/{id}` `JobView.progress`.
+5. `ExecutionService.pollAgentJob()` writes `step.subtasks`/`step.progress` plus a THROTTLED
+   `step.lastActivityAt` folded from the harness heartbeat (which keeps `updated_at` fresh so the
+   stale-run sweeper doesn't orphan a quiet-but-alive job; ADR 0026 D3.1), then upserts and emits.
+6. Events reach the browser by PUSH: `DurableObjectEventPublisher` → the `WorkspaceEventsHub`
+   Durable Object (hibernatable WebSockets, one per workspace) → SPA `useWorkspaceStream.ts` →
+   store → `TaskExecution.vue` / `PipelineProgress.vue`.
 
-## Per-job state in the harness — NEVER a process- or HOME-global
+## Per-job state in the harness: NEVER a process- or HOME-global
 
-**Anything the executor-harness stages for ONE job must be scoped to that job: explicit child
-env, or a per-job directory. Never `process.env`, never a dotfile under `HOME`.** This is
-absolute, and it is a correctness rule, not hygiene.
+**Anything the executor-harness stages for ONE job must be scoped to that job: explicit child env,
+or a per-job directory. Never `process.env`, never a dotfile under `HOME`.** This is a correctness
+rule.
 
-The trap is that a global LOOKS per-job in the setting most code is written against. In a
-container, one job owns the process and `HOME` belongs to that container, so staging a value in
-`process.env` (restoring it afterwards) or writing `~/.npmrc` is safe. The **local native
-transport** (`LOCAL_NATIVE_AGENTS`, `LocalProcessRunnerTransport`) breaks both invariants at
-once: ONE long-lived host process serves EVERY concurrent `ambientAuth` job, and its `HOME` is
-the **developer's own**. The same code then leaks one job's state into a sibling and destroys
-files the developer owns — and the container tests keep passing.
+The trap is that a global LOOKS per-job in a container, where one job owns the process and `HOME`.
+The local native transport (`LOCAL_NATIVE_AGENTS`, `LocalProcessRunnerTransport`) breaks both
+invariants: ONE long-lived host process serves EVERY concurrent `ambientAuth` job, and its `HOME` is
+the developer's own. Container tests keep passing while one job leaks into a sibling and files the
+developer owns are destroyed.
 
-The two seams to use instead:
+- **`RunOptions.agentEnv`** → `SubscriptionRunOptions.extraEnv`, merged over the inherited env when
+  the agent CLI is spawned; layer onto it with `withAgentEnv`. **Anything the HARNESS spawns itself
+  must be passed `agentEnv` explicitly** (the frontend stand-up's install/build, the ralph
+  validation command), since a child of the harness inherits nothing.
+- **A per-job directory** created in `handleAgent` for an `ambientAuth` job and removed with it.
+  The private-registry npmrc goes there (via `npm_config_userconfig`, seeded from the developer's),
+  because writing or clearing the real `~/.npmrc` corrupted the developer's own config.
+- **State with no per-job form is NOT WRITTEN AT ALL** rather than written globally: a repo-sourced
+  Claude Skill installs natively only into an isolated `CLAUDE_CONFIG_DIR`, and an ambient run reads
+  it from the checkout's `.cat-context/skill/`. When you move state to the checkout, move the PROMPT
+  with it: `renderSkillForHarness` keys off `ambientAuth` as well as the harness.
 
-- **`RunOptions.agentEnv`** → `SubscriptionRunOptions.extraEnv`, merged over the inherited env
-  when the agent CLI is spawned. Layer onto it with `withAgentEnv(opts, env)`; the agent and
-  every shell tool it spawns read it as `$KEY`. This is how the tester's secrets travel (they
-  used to be a `process.env` set + restore closure, which two overlapping Tester runs raced on).
-  **Anything the HARNESS spawns itself must be passed `agentEnv` explicitly** — it is not in
-  `process.env`, so a child of the harness rather than of the agent inherits nothing. That is
-  the frontend stand-up's install/build (`standUpFrontend`) and the ralph validation command;
-  both take the run's `RunOptions` for exactly this reason.
-- **A per-job directory**, created in `handleAgent` for an `ambientAuth` job and removed with it.
-  This is where the private-registry npmrc goes (pointed at by `npm_config_userconfig`, seeded
-  from the developer's so their registries keep working), because writing — or, for a job with no
-  entries, CLEARING — the real `~/.npmrc` corrupted the developer's own npm config on every
-  native run.
+`~/.pi/*` and `~/.config/rpiv-web-tools` remain HOME-global only because the Pi harness never runs
+natively (`NativeRoutingRunnerTransport` routes `ambientAuth` jobs to the host process and
+everything else to a container). Do not extend that assumption to new state.
 
-Some state has no per-job form, and then the answer is to **not write it at all** rather than
-write it globally: a repo-sourced Claude Skill is installed natively only into an isolated
-`CLAUDE_CONFIG_DIR`, never the developer's `~/.claude`; an ambient run reads it from the
-checkout's `.cat-context/skill/` (the fallback codex always used). **When you move state to the
-checkout like that, move the PROMPT with it** — `renderSkillForHarness` (`@cat-factory/server`)
-therefore keys off `ambientAuth` as well as the harness, so an ambient run gets the instructions
-folded in rather than a pointer to an install that never happened.
-
-`~/.pi/*` and `~/.config/rpiv-web-tools` are still HOME-global. That is safe ONLY because the
-Pi harness never runs natively — `NativeRoutingRunnerTransport` routes per JOB, sending
-`ambientAuth` jobs (Claude/Codex, ambient login) to the host process and everything else to a
-container. Do not extend that assumption to new state.
-
-When you add per-job state, add a test that two concurrent jobs keep it separate. The container
-path alone will not catch the regression.
-
-## Repo bootstrap flow (ASYNC + observable + board-integrated)
-
-The "bootstrap repo" task adapts a reference architecture (or scaffolds from
-scratch) into a **pre-created, empty** GitHub repo and force-pushes the result.
-It mirrors the execution pattern above: dispatch → durable poll → push events.
-
-- Trigger: SPA `components/bootstrap/BootstrapModal.vue` → `stores/bootstrap.ts`
-  → `POST /workspaces/:ws/bootstrap/jobs`. The call returns **immediately** with a
-  `running` job (the container keeps working in the background).
-- `BootstrapService.bootstrap()` (orchestration `src/modules/bootstrap/BootstrapService.ts`):
-  pre-flight GitHub connection → insert a `bootstrap_jobs` row as `running` →
-  `repoBootstrapper.startBootstrap()` (dispatch, returns once accepted) →
-  materialise a **provisional service frame** (a real `Block`, `level:'frame'`,
-  `status:'in_progress'`, titled from the repo; its id is stored on the job's
-  `block_id`) → `bootstrapRunner.startRun()` to kick the durable driver → return
-  the running job. A pre-flight/dispatch failure returns a `failed` job with **no**
-  frame left behind.
-- `BootstrapWorkflow` (worker `infrastructure/workflows/BootstrapWorkflow.ts`) —
-  one Cloudflare Workflows instance per job (id = bootstrap job id; binding
-  `BOOTSTRAP_WORKFLOW`). Loops calling `BootstrapService.pollBootstrapJob()`
-  inside retriable `step.do`s, sleeping durably between polls.
-- `pollBootstrapJob()`: polls the container once via
-  `repoBootstrapper.pollBootstrap()`; while running, writes changed `subtasks` and
-  emits a `bootstrap` event; on **success** marks the job `succeeded`, calls
-  `repoBootstrapper.linkRepoToBlock()` (upserts the new repo into the
-  `github_repos` projection + sets `block_id`) and flips the frame to `ready`; on
-  **failure** marks the job `failed` and the frame `blocked`. It is idempotent
-  (terminal jobs return as-is) so the driver's retries/replays are safe.
-- `ContainerRepoBootstrapper` (worker `infrastructure/ai/ContainerRepoBootstrapper.ts`):
-  a **thin layer on the generic runner seam**, mirroring `ContainerAgentExecutor`.
-  `startBootstrap` pre-flights (target exists, reachable, empty — only
-  README/.gitignore/license/**AGENTS.md** tolerated, see `isBootstrapBoilerplate`),
-  mints GH + proxy tokens, builds the job body, then dispatches via the shared
-  `RunnerJobClient` → `resolveTransport(workspaceId).dispatch(jobId, body,
-'bootstrap')` (no direct `EXEC_CONTAINER`; backend-polymorphic — Cloudflare
-  always, a self-hosted pool throws a clean "unsupported" until it implements the
-  kind). `pollBootstrap` `RunnerJobClient.poll`s and maps the `RunnerJobView` to
-  running (with subtasks) / done (outcome, from `result.defaultBranch`) / failed
-  (`classifyBootstrapFailure`: `evicted` on a 404-mapped view, `timeout` on a
-  watchdog kill, else `agent`). `stopBootstrap` → `RunnerJobClient.release`.
-- Harness: `/bootstrap` starts a **background job** in a `JobRegistry` (the same
-  generic registry as `/run`), keyed by the job id; `handleBootstrap()`
-  (`executor-harness/src/bootstrap.ts`) threads `onProgress`/`signal` so Pi's
-  todo-tool counts surface as `subtasks`. Sequence: clone (or empty dir) →
-  `writeAgentsContext()` writes the prompt to Pi's **global** `~/.pi/agent/AGENTS.md`
-  (outside the checkout, so it never lands in the bootstrapped repo) → `runPi()`
-  adapts → `reinitAndPush()` resets history to one commit and **force-pushes** to
-  the default branch.
-- Events: `DurableObjectEventPublisher.bootstrapChanged()` → `WorkspaceEventsHub`
-  → SPA `useWorkspaceStream.ts` patches `stores/agentRuns.ts` (`upsertBootstrap`)
-  - the board block. `BlockNode.vue` reads `agentRuns.byBlock[frameId]` to render
-    the "bootstrapping…" badge + subtask progress bar, flipping to a ready service or
-    the shared `<AgentFailureCard>` (failure hint + retry). Tracing logs (pino) run
-    controller→service→workflow→bootstrapper→harness, queryable in the Cloudflare
-    dashboard.
-
-## Service blueprints flow (in-repo map + board population)
-
-A **Blueprinter** agent decomposes a repo into the canonical service → modules
-tree and persists it **in the repo** under `blueprints/`, then the board is
-reconciled from it. It is modelled as a normal pipeline step (`agentKind:
-'blueprints'`), so it reuses the whole execution engine — no separate durable
-runner. The map intentionally stops at modules: tasks are authored by people, not
-derived from the blueprint (there is no longer a "feature" granularity level).
-
-- In-repo artifact (`blueprints/`, rendered deterministically by the harness from
-  the coerced tree): `blueprint.json` (canonical `BlueprintService`), `overview.md`
-  (high-level, read first), `modules/<slug>.md` (deep-dive per module), and
-  `version.json` (a tiny manifest — monotonic version + content hash + counts — for
-  quick staleness checks). Strict shape enforced by `parseBlueprintService`
-  (Valibot) at ingest; the harness coerces leniently then the worker/core validate.
-- Harness: `handleBlueprint` (`executor-harness/src/blueprint.ts`) clones the
-  target branch, reads any existing blueprint (update mode), runs Pi to emit the
-  tree, renders the files, and **commits onto that branch** (no history reset /
-  force-push) via `commitAll`+`pushBranch`. Served at `POST /blueprint`, polled on
-  the shared `/jobs/{id}`. Every agent's global `~/.pi/agent/AGENTS.md` carries
-  `BLUEPRINT_GUIDANCE` (pi.ts): read `overview.md` first, open a module file only
-  when relevant.
-- Worker: `ContainerAgentExecutor` builds a blueprint job for the `blueprints` kind
-  — branch = the prior `coder` step's PR branch (`block.pullRequest.branch`) when
-  present (mode `update`), else the repo default branch (mode `create`) — and
-  dispatches it via `RunnerTransport.dispatch(id, body, 'blueprint')` (Cloudflare
-  container only; `CompositeAgentExecutor` routes the kind to the container
-  executor). The returned tree maps to `AgentRunResult.blueprintService`.
-- Core: `ExecutionService.recordStepResult` ingests that tree — strict-parse, then
-  `BoardScanService.reconcileBlueprint(frameId, service)` updates the run block's
-  **service frame** in place (match modules by name, add missing, refresh
-  descriptions, **never delete**, and never touch the authored tasks inside them),
-  and emits a `board` event so the SPA refreshes.
-- Triggers: `blueprints` is inserted after `coder` in the default pipelines (so the
-  map + board refresh on the same implementation PR branch), and
-  `BootstrapService.pollBootstrapJob` success starts the blueprint-only
-  `pl_blueprint` pipeline against the new frame (best-effort) to create the initial
-  map. A mapping-only run leaves a frame `ready` (not `done`).
-- Nothing is persisted to a blueprint table: the in-repo `blueprints/` files are the
-  source of truth and the board is the projection. There is **no** standalone "scan
-  repository" command — repository decomposition is always the `blueprints` pipeline
-  agent (which runs through the runner transport, so it works on every backend);
-  `BoardScanService` is purely the reconciler the engine drives with its result.
-
-## Requirements review flow (iterative gate step + dedicated window)
-
-`requirements-review` is the FIRST step of the default pipelines — a special engine
-gate (handled in `ExecutionService.evaluateRequirementsReview`, like `ci`/`conflicts`,
-NOT a container/prose agent). The reviewer inspects a block's "collected requirements"
-(description + linked PRD/RFC docs + tracker issues) and raises items, each with a
-**severity**. The run **parks** on a durable decision-wait and the dedicated structured
-window drives an iterative loop until the reviewer converges; only then does the run
-advance to the architect. Every reviewer/incorporation call runs an LLM inline (via the
-`ModelProvider` port) and returns the updated review, which the SPA patches directly.
-
-The loop (one reviewer pass = one **iteration**; the initial review is iteration 1):
-
-1. Reviewer raises findings → human **answers** the relevant, **dismisses** the irrelevant.
-2. An **incorporation companion** folds the answers into ONE standard-format document
-   (`incorporate`, status `merged`). The human inspects it and either re-reviews or
-   **redoes** the merge with a freeform "do it differently" comment.
-3. **Re-review** runs the reviewer against that document (`iteration++`). It converges
-   (`incorporated` → the run advances), continues (`ready` → answer the new findings) or
-   hits the cap (`exceeded`).
-4. At the cap the human picks: **extra-round** (one more pass), **proceed** (advance with
-   the last incorporated doc) or **stop-reset** (`cancel()` → block `planned`/editable;
-   the last incorporated doc survives on the inspector as a base to rework from).
-5. **Auto-pass**: if every outstanding finding is at or below the task's tolerated
-   severity (`maxRequirementConcernAllowed`), the findings are recorded but the run
-   advances with no human gate and no incorporation. All findings dismissed → **proceed**.
-
-The cap + tolerated severity are per-task on the **merge preset** (`maxRequirementIterations`
-default 6, `maxRequirementConcernAllowed` default `none`). There is NO quality-companion
-grade gate any more — convergence is reviewer-driven.
-
-- Wire contracts: `contracts/src/requirements.ts` (`RequirementReview` +
-  `RequirementReviewItem`; review `status` ∈ `ready`/`merged`/`exceeded`/`incorporated`,
-  plus `iteration`/`maxIterations`; `incorporateRequirementsSchema` carries the redo
-  `feedback`; `resolveRequirementsExceededSchema` carries the choice). One **live review
-  per block**. The document lives on `review.incorporatedRequirements`.
-- Core: `RequirementReviewService` (`modules/requirements/`) — `review()`/`reReview()`
-  generate items (reReview reviews the incorporated doc), `replyToItem()`/`setItemStatus()`
-  mutate items, `incorporate()` requires no `open` items then runs the rework LLM (folding
-  in the redo `feedback` + prior doc), `markIncorporated()`/`grantExtraRound()` settle the
-  loop. `ExecutionService.{reReviewRequirements,proceedRequirements,resolveRequirementsExceeded}`
-  call the service then drive the parked run (`resumeRequirementsRun` advances + signals;
-  stop-reset cancels). The pure `disposeReview(items, {iteration,maxIterations,
-concernThreshold})` (`requirements.logic.ts`) decides auto-pass / awaiting / exceeded.
-  `REWORK_SYSTEM_PROMPT` (`@cat-factory/agents`) enforces the standard doc structure.
-  Pass-through when the reviewer model isn't wired (tests/conformance) so pipelines run
-  unchanged. Assembled by `createRequirementsModule` whenever `requirementReviewRepository`
-  is wired (and passed into `ExecutionService` as `requirementReviewService`).
-- Downstream consumption: `ExecutionService.resolveReworkedRequirements` reads the
-  block's incorporated review (optional `requirementReviewRepository` dep). When
-  present, `buildAgentContext` uses it as the block description (only for `task`-level
-  blocks — reviews are task-scoped, so frame/module steps skip the lookup) and
-  **drops** `contextDocs`/`contextTasks` (already folded in). The spec-writer then
-  receives that same reworked description as its single-task input and applies it as an
-  increment onto the baseline spec already committed on the branch (it is NOT a
-  service-wide aggregate — an unmerged sibling task is invisible). Absent → original
-  behavior. The rework LLM call rejects a length-truncated document (it would become a
-  silently-incomplete spec for every downstream agent) rather than persisting it.
-- Persistence: `requirement_reviews`, mirrored on **both** runtimes (parity is
-  mandatory): the Cloudflare D1 table (`D1RequirementReviewRepository`) and the Node
-  Postgres table (Drizzle `requirementReviews` in `db/schema.ts` +
-  `DrizzleRequirementReviewRepository`, generated migration under `runtimes/node/drizzle/`).
-  Items as a JSON column; `iteration`/`max_iterations` columns track the loop; the old
-  `companion` column is gone. `getByBlock` returns the current one. Both facades wire the
-  repo + model provider; the cross-runtime conformance suite asserts the agent-context
-  substitution against both stores.
-- Controller (shared `@cat-factory/server`): `RequirementReviewController` mounts
-  `GET|POST /blocks/:blockId/requirement-review`, `POST /requirement-reviews/:id/items/:itemId/reply`,
-  `PATCH …/items/:itemId`, `POST /requirement-reviews/:id/incorporate` (reviewId-scoped,
-  no run drive), and the run-driving `POST /blocks/:blockId/requirement-review/{re-review,
-proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires the
-  review repo + a model provider + the routing default ref + `resolveBlockModel`, so the
-  reviewer resolves its model like an agent step (block pin > workspace default >
-  Cloudflare Workers AI).
-- Frontend: `stores/requirements.ts` (load/review/reply/setItemStatus/incorporate/
-  reReview/proceed/resolveExceeded) +
-  `components/requirements/RequirementsReviewWindow.vue` — the loop UI (answer/dismiss →
-  incorporate → inspect doc → re-review or redo-with-comment → proceed; the 3-choice
-  prompt on `exceeded`; "Iteration N / M"). It opens via the **universal result-view
-  seam** (see "Conventions"), not a hardcoded mount. `InspectorPanel.vue` freezes a
-  task's raw description once `incorporated` (the standardized doc takes focus), and after
-  a stop-reset surfaces the last incorporated doc read-only as a base.
-- **Headless callers drive the SAME loop over the public API** (`/api/v1/runs/:runId/decisions`,
-  `PublicDecisionController`): list a run's open findings, reply/dismiss, incorporate, re-review,
-  proceed, resolve-exceeded, choose a fork. Every route delegates to the SAME service methods the
-  SPA controllers call, so the park's CAS/approval-id arbitration and the task's preset knobs apply
-  identically whichever surface answers. Gated on the `decide` rung of the public-API scope ladder
-  (`read ⊂ write ⊂ decide ⊂ admin`) — which is ALSO what admits a parking pipeline through
-  `POST /api/v1/initiatives` at all. **Do not add a hard park timeout as a backstop: a parked run
-  waits for a human indefinitely by design** (`ExecutionWorkflow` re-arms its `waitForEvent` rather
-  than failing the run); the backstops are the workspace's in-flight cap plus
-  `POST /api/v1/jobs/:id/cancel`. A run records how it entered the system
-  (`ExecutionInstance.intakeOrigin`, `ui` | `public-api`, in the `detail` JSON, carried across
-  retry/restart) — a UI-started task's overseer is in the SPA and its behaviour is unchanged. See
-  [`docs/initiatives/headless-clarification-loop.md`](./docs/initiatives/headless-clarification-loop.md).
-- **A HEADLESS park also ECHOES its open findings onto the task's linked tracker issue(s)**, opt-in
-  per workspace (`TrackerSettings.writebackQuestionsOnPark`, per-task override
-  `Block.trackerQuestionsOnPark`, resolved through the shared `resolveWritebackFlag`). Every
-  requirements park funnels through the single `ReviewGateController.park()`, which consults the
-  pure `shouldPostReviewQuestions` (`reviewQuestionWriteback.logic.ts`) — `intakeOrigin ===
-'public-api'`, a parking status, at least one OPEN finding — then calls
-  `IssueWritebackProvider.postReviewQuestions`. The comment renders each finding's **stable id**,
-  which is exactly what the `/api/v1/runs/:runId/decisions/…/items/:itemId/reply` route above takes.
-  Two rules govern anything added here: the echo rides the **requirements** subject only
-  (`ReviewKind.questionsOnPark` — the clarity gate already echoes its questions as INTAKE semantics
-  from its own `review()` closure, for every run, so opting it in would double-post), and because
-  the post runs in the **durable driver**, whose steps replay, it is idempotent by an ATOMIC CLAIM
-  on `review_question_posts` (`(workspace, review, iteration, issue)`, D1 ⇄ Drizzle) taken BEFORE
-  the comment — never by a marker written after it. A `failed` marker is re-claimable so a tracker
-  outage retries; `posted` is terminal for that iteration; a `pending` one is re-claimable only
-  once older than `REVIEW_QUESTION_POST_CLAIM_TTL_MS`, so a poster killed mid-post self-heals
-  instead of muting that iteration forever (a claim-before-post design must ALWAYS answer "what if
-  the claimer dies", or it has merely traded a double-post for a silent never-post). For the same
-  reason the post carries **no wall-clock deadline**: a timeout cannot tell "never landed" from
-  "landed slowly", and settling on that guess re-posts onto an issue a human is reading — a hung
-  transport is cut off by the driver's own step limit and recovered by that window instead.
-  Best-effort throughout, and ordered accordingly: **the park is committed FIRST** and the echo
-  runs behind it (a run that failed to park answers nobody, so it must never queue behind a third
-  party's HTTP), and the in-app `requirement_review` card the reviewer pass raises is unaffected.
-  The comment body is UNTRUSTED, model-authored text going onto a host-parsed — often public —
-  surface, so every hole crosses kernel's shared `hostMarkdown` boundary and `redactSecrets`,
-  exactly like the PR verification report; a tracker comment is no less exposed than a PR body.
-
-## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
-
-An OPTIONAL phase on the Coder step (`agentKind: 'coder'`, the `build` phase) that surfaces
-the **materially different ways to implement a task** BEFORE any code is written, then parks for
-a human to pick one, enter their own approach, or **chat** about the forks. It rides the run's
-coder step (`step.forkDecision`) — no side table — so it is runtime-symmetric by construction,
-exactly like `followUps`. Gated on the task Estimator's estimate via the workspace risk policy
-(`riskPolicySchema.forkDecision`, reusing `stepGatingSchema`) plus a per-task tri-state
-(`coder.forkDecision` ∈ `auto`/`always`/`off`). Full design + rationale:
-[`backend/docs/adr/0022-coder-fork-decision.md`](./backend/docs/adr/0022-coder-fork-decision.md).
-
-A container job can't pause mid-run, so the human park sits BETWEEN two dispatches on the same
-coder step:
-
-- **Phase A (propose)** — `RunDispatcher.handleForkDecisionPhase` resolves the tri-state + the
-  risk-policy fork gate (`forkDecision.logic.ts`). Not proposing → `step.forkDecision.status =
-'skipped'`, fall through (the Coder runs). Proposing → dispatch the read-only **`fork-proposer`**
-  explore kind (`container-explore`, structured JSON → `result.custom`) as a HELPER off the coder
-  step (`status: 'proposing'`). Its completion is caught by the `fork-proposal` interceptor →
-  `ForkDecisionController.recordProposal`: `singlePath` or <2 usable forks ⇒ `single_path`
-  (re-arm the step, no park, the Coder runs against the one fork); else mint fork ids, raise a
-  `fork_decision_pending` notification, and `parkStepOnDecision`.
-- **Human interaction** (`awaiting_choice`) — pick a fork / type a custom approach / **chat**, via
-  the dedicated `fork-decision` result-view window. Chat rides the transient re-entry protocol
-  (the `pendingIncorporation` template): `ForkDecisionController.chat` CAS-appends the human turn,
-  sets `status: 'answering'` + `step.pendingForkChat = { messageId }`, flips `blocked → running`,
-  and signals the driver (reason `fork-chat`). The `reentrantForkDecision` guard in
-  `ExecutionService.stepInstance` falls through so `handleForkDecisionPhase` re-enters →
-  `ForkDecisionController.answerChat` computes the grounded reply INLINE in the durable driver
-  (`ForkChatService`, DocInterview-style model resolution + metering) off the fixed proposal
-  grounding + the thread, appends the assistant turn, and re-parks (a fresh approval id).
-  `maxChatTurns` (default 15, human messages) is a hard budget (409 past it). **No chat model
-  wired, or a responder failure ⇒ a canned "chat unavailable" assistant turn** and re-park —
-  pick / custom still work (the pass-through the conformance suite asserts).
-- **Phase B (implement)** — `ForkDecisionController.choose` CAS-records `forkDecision.chosen`
-  (`status: 'chosen'`), re-arms the step (`resetStepForRerun` + `startStep`), and signals. On
-  re-entry `forkPhasePending` is false, so `handleAgentStep` dispatches the Coder normally;
-  `AgentContextBuilder` folds `buildImplementationChoice(step.forkDecision)` into
-  `AgentRunContext.implementationChoice` (the chosen approach + the rejected alternatives), which
-  `implementationChoiceSection` renders into the `build` prompt as a binding directive.
-
-Pass-through everywhere it can't run (tri-state `off`, gate not met, proposer/chat unwired), so
-pipelines without the feature — and the engine tests — behave exactly as before. Scoped to the
-run's PRIMARY repo (single-repo tasks); per-repo fork sets are a follow-up.
-
-## Pre-PR validation flow (checks in the container BEFORE the PR opens)
-
-A service frame can declare **validation commands** (install / lint / test / build) that the
-executor-harness runs against the CHECKOUT after the coding agent settles and **before** it opens
-a pull request. A failure is fed back into the agent loop with the captured output; only a green
-checkout opens a PR. Full design + the decisions (config source, scope, budgets):
-[`docs/initiatives/pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
-
-- **Config** is per SERVICE FRAME, resolved up the frame chain — the `test_secrets` /
-  `release_health_configs` shape: `validation_configs` (D1 ⇄ Drizzle, mirrored) →
-  `ValidationConfigRepository` (kernel) → `ValidationConfigService` (integrations; frame-only CRUD
-  - `resolveForFrame`) → `ValidationConfigController` (`GET|PUT|DELETE
-/workspaces/:ws/services/:blockId/validation-checks`) → the `ServiceValidationConfig.vue`
-    inspector panel. `maxAttempts` (default 3) lives on the SAME row as the commands — deliberately
-    not on the merge preset, since the budget is coupled to what it bounds (see the tracker's D3).
-- **Threading**: the engine resolves the checks through the optional `resolveValidationChecks`
-  dep onto `AgentRunContext.validationChecks`. It is keyed by the SERVICE FRAME, not the run
-  block: `AgentContextBuilder` walks the frame→module→task ancestry exactly ONCE per dispatch and
-  threads that frame into every frame-scoped resolver, so this one reuses it rather than paying a
-  second walk (the `resolveTestSecretRefs` shape, minus the re-derivation). The coding
-  job body forwards them **only when that dispatch OPENS a PR** (`opensPr`, single-repo). So the
-  commands ride the JOB BODY — containers have no DB access — and it works identically on all
-  three transports with no transport-specific wiring.
-- **The loop lives in the harness** (`executor-harness/src/validation-checks.ts`), between the
-  agent run and the finalize/push/PR step in `runCodingAgent`: run the checks → if red and budget
-  remains, re-run the agent with `buildRepairPrompt` (the full 16k output tail, any UNCOMMITTED
-  new files — the checks see the working tree but only tracked edits are pushed, so an unadded
-  file would let the loop go green on work the PR never contains — + an explicit "do
-  not weaken the checks" rule) → re-check. Budget spent ⇒ `runSingleRepoCoding` returns an ERROR
-  result and opens **nothing**. It is generic machinery keyed off the body carrying
-  `validationChecks` — there is **no `switch(agentKind)`** in the harness.
-- **Per-job state, absolutely**: the runner takes the cwd + `RunOptions.agentEnv` as arguments and
-  never touches `process.env`/`HOME` (the local native transport serves concurrent jobs from ONE
-  host process — see "Per-job state in the harness"). `validation-checks.concurrency.test.ts` pins
-  two concurrent jobs staying isolated; the container path alone would not catch a regression.
-- **Any harness-spawned, activity-SILENT phase MUST feed the inactivity watchdog.** The check loop
-  keeps a 30s `onActivity` heartbeat running for the whole attempt, because `JOB_INACTIVITY_MS`
-  (default 10 min) is TIGHTER than one command's own watchdog (default 15 min): without it a
-  legitimately slow `install`/`test`/`build` aborts the entire run as "inactivity", mislabelling a
-  healthy build as a wedge and making the per-command timeout unreachable at stock settings. This
-  is the same reason the frontend stand-up heartbeats — apply it to any new phase the HARNESS runs
-  itself rather than through the agent (the agent's own stream emits activity; a raw `spawn` does not).
-- **Captured output** is bounded (16k to the agent, 4k per command on the wire) and scrubbed with
-  `redactSecrets` BEFORE truncation. It reaches the step both LIVE (`RunnerJobView.validationReport`,
-  a latest-value publish, not a drain buffer) and terminally (`RunnerJobResult.validationReport`) →
-  `AgentRunResult.validationReport` → `PipelineStep.validation`, rendered by the shared
-  `ResultWindowShell` trailing section (the second universal section, per the result-view seam rule).
-- **Unconfigured ⇒ byte-for-byte the old behaviour**: no row ⇒ no context field ⇒ no body field ⇒
-  the harness's pre-existing path. The conformance suite asserts both halves (resolution + the
-  absent field) on both runtimes. A run that produced NO work skips the loop entirely (its real
-  failure is "no file changes", not a red base), and a config-store read failure DEGRADES to "no
-  checks" rather than failing the dispatch — so a mothership node on an older image, or a
-  transient outage, can't stop every build.
-
-## Bugfix reproduction proof (the SECOND pre-PR harness phase — evidence, never a gate)
-
-A bugfix run's PR claims a change fixes a defect. Everything above proves the state of the work at
-the END; none of it shows the defect ever manifested. So the harness runs the run's **declared
-reproduction command against TWO trees** — the pre-fix tree and the tree the PR opens from — and
-publishes the two exit codes with their captured output. Only **red-then-green** is proof. Design +
-phase checklist: [`docs/initiatives/bugfix-reproduction-proof.md`](./docs/initiatives/bugfix-reproduction-proof.md).
-
-- **The declaration seam is singular: the prior `repro-test` step's structured outcome** (its
-  `command` / `setupCommand` / `testPaths` / `alternativeVerification`). The `coder` is deliberately
-  NOT made a structured-output kind — it is a side-effect kind that legitimately ends with no final
-  text. Gated on the per-task `coder.reproductionProof` tri-state (an `agentConfig` descriptor, the
-  `forkDecision` shape), resolved by the pure `reproductionProof.logic.ts` → `AgentRunContext.reproduction`
-  → the job body, on the `opensPr` dispatch only — the `validationChecks` path, step for step.
-- **SYMMETRY is the safety property, and the only defence against a false `reproduced`.** A non-zero
-  exit at base proves nothing on its own (a missing toolchain, an uninstalled dep, an unrelated
-  pre-existing breakage all produce one), so both phases run in freshly-created `git worktree`
-  checkouts with the SAME setup command and the byte-identical declared test files. An environmental
-  defect then fails BOTH, and red-then-red is `inconclusive`, never proof. Two mechanics are
-  load-bearing: target **`baseSha`** specifically (the coding clone is `--depth 1 --single-branch`,
-  so `HEAD~1`/`origin/<base>` are not in history), and apply the **declared PATHS only** onto the
-  base worktree — a whole-tree checkout would drag the fix across and green it. Red-for-the-wrong-
-  REASON is a stated limitation, not something the harness detects; both outputs ride the report so
-  a human can see why. Do not let a later iteration claim more.
-- **Declared test paths are refused for git PATHSPEC MAGIC, not just traversal** (both in the
-  engine's `isSafeTestPath` and the harness's own copy — keep them in step). They are handed to
-  `git checkout <finalSha> -- <path>`, where `--` stops a path being read as a REVISION but does
-  NOTHING about pathspec syntax: `:(glob)**`, `*`, `src/*.test.ts` are all valid pathspecs, so one
-  would apply far more of the final tree onto the base worktree than the reproduction — dragging
-  the fix across and greening the base. These strings are MODEL-AUTHORED, so that is a reachable
-  input. A refused path counts as an omission (`omittedTestPaths`), never a silent shortening.
-- **A GREEN pre-fix tree is only interpretable once you know what that tree IS.** In the designed
-  flow `baseSha` is the reproduction step's test commit, so green there means the test does not
-  demonstrate the defect. But a coder container evicted mid-run has already committed and
-  checkpoint-pushed its work, and the re-dispatch RESUMES that branch — `baseSha` then carries this
-  same step's own partial fix, the check legitimately passes, and stating "your test does not
-  demonstrate the defect" is false AND spends the whole repair budget inviting the agent to weaken
-  a perfectly good reproduction. So on a green base (and ONLY then — it costs a fetch) the harness
-  probes `changedFilesSinceBase`; non-test changes there mean the note says so and NO repair round
-  is spent. The probe is memoised per loop and degrades to the plain diagnosis when it cannot
-  answer (a shallow clone has no reachable merge base) — an unavailable answer must never suppress
-  a diagnosis on a guess.
-- **Repairable is an explicit OUTPUT of an attempt, not something re-derived from the report.**
-  Three shapes are NOT repairable, all for the same reason — the agent is not what is wrong, so a
-  round can only add cost or damage: a failed **setup** (it did not declare that command), a
-  **timed-out** tree (a watchdog kill is not a failing assertion), and the **prior-work base**
-  above.
-- **The phase is bounded twice: `maxAttempts` rounds AND `REPRODUCTION_TOTAL_BUDGET_MS`** (45m).
-  Attempts multiply two full tree runs each, and the phase's own heartbeat deliberately stops the
-  job-level inactivity watchdog from firing — which removes the accidental backstop it would
-  otherwise have had, so the wall-clock budget is what actually bounds it. Checked at phase
-  boundaries (real bound = budget + at most one command watchdog); exceeding it settles
-  `inconclusive` with a note, never a run failure.
-- **Both pre-PR phases spawn through ONE seam** — `captured-command.ts`'s `runCapturedCommand`
-  (watchdog, abort, exit-code conventions 124/127/130, scrub-then-bound capture). They were two
-  near-verbatim copies, which is how a fix to one silently misses the other.
-- **A failed verification is a REPAIR, not a run failure.** The captured output goes back to the
-  agent (with an explicit rule against weakening the reproduction) while budget remains, then
-  degrades to `inconclusive` with the PR still opening. Deliberately the OPPOSITE disposition from
-  `validationFailureMessage`: a red check means the WORK is broken so refusing the PR is right; an
-  unproven reproduction means the EVIDENCE is weak, which is a reviewer's call. A **setup** failure
-  spends no repair rounds — the agent cannot change a setup command it did not declare.
-- **The proof runs BEFORE the validation loop**, so validation stays the last thing to touch the
-  tree and "only a green checkout opens a PR" holds unconditionally. Order matters: reversing it
-  would let a reproduction repair round leave the checkout red behind the gate.
-- **Per-job state, absolutely** (a fresh `mkdtemp` worktree root; commands/cwd/env all arguments).
-  A shared root would let two concurrent bugfix runs check out over each other's base trees — which
-  surfaces as a FALSE VERDICT on a pull request, not a crash. `reproduction-proof.concurrency.test.ts`
-  is the required pin; the container path alone would never catch it. Both harness-spawned phases
-  feed the inactivity watchdog on the 30s heartbeat, for the reason the validation loop does.
-- **The verdict reaches the step LIVE and terminally** (`RunnerJobView`/`RunnerJobResult.reproductionReport`
-  → `AgentRunResult.reproductionReport` → `PipelineStep.reproduction`), on the success AND failure
-  paths, and through a runner pool via the `reproductionReportPath` manifest mapping. Each publish
-  stamps a FRESH `at` — the engine's `sameReproductionReport` compares on it.
-- **A CONCEDE is minted by the ENGINE, not here**: a run whose reproduction step declared the bug
-  infeasible dispatches no proof (there is nothing to run), so `concededReproductionReport` records
-  the declaration — reason + stated alternative verification — as `declared_infeasible`. That is why
-  "could not be reproduced" never reads the same as "nobody tried".
-- **Unconfigured ⇒ byte-for-byte the old behaviour**: tri-state `off`/`auto`-not-met, or no
-  declaration ⇒ no context field ⇒ no job-body field ⇒ the harness's pre-existing path.
-
-## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
-
-The tail of a build pipeline turns an open PR into a merged one — gated on **real**
-CI and a **real** GitHub merge, so a task is `done` only when its PR actually merged
-(the old bug: a task showed "merged" — `block.status === 'done'`, rendered by
-`TaskExecution.vue` — purely from a confidence score, while CI was red and the PR
-still open). Two new container agent kinds plus a special gate step implement it.
-
-- **`ci` step (a polling Gate — see "Gates vs agents" below)** — auto-inserted
-  second-to-last in the standard pipelines, after all code-producing steps. It is NOT
-  an LLM/container agent: its `GateDefinition` reads the PR head's GitHub check runs via
-  the `CiStatusProvider` port (worker `GitHubCiStatusProvider`), aggregates them
-  (`ci.logic.ts` → green / pending / failure / none), and the shared
-  `ExecutionService.evaluateGate` acts: green/none → finish + advance (polling
-  **stops**, the agent is never spun up); pending → `awaiting_gate` (the durable driver
-  sleeps `ciPollInterval` then calls `pollGate`); failure → dispatch a `ci-fixer`
-  container job (up to the task preset's `ciMaxAttempts`, default 10), else raise a
-  `ci_failed` notification + fail the run. A finished fixer job returns the gate to
-  `checking` (it never advances the step). Pass-through when no `CiStatusProvider` is
-  wired (tests / no GitHub).
-- **`ci-fixer` (container kind)** — `executor-harness/src/ci-fixer.ts` (POST
-  `/ci-fix`): clones the PR head branch, runs Pi to make CI pass, commits + pushes
-  back onto the **same** branch (no new PR). `ContainerAgentExecutor` builds the body
-  with `agentKind` overridden to `ci-fixer` and dispatch kind `ci-fix`.
-- **`merger` (container kind)** — the **last** standard-pipeline step.
-  `executor-harness/src/merger.ts` (POST `/merge`) clones the PR head branch, scores
-  the diff vs base (complexity / risk / impact, each 0..1) and returns ONLY a JSON
-  assessment — it makes **no** commits. `ExecutionService.resolveMergerStep` parses
-  the assessment, compares it to the task's resolved **merge threshold preset**, and
-  either merges for real (the `PullRequestMerger` port → worker
-  `GitHubPullRequestMerger` → `GitHubClient.mergePullRequest` → block `done`) or
-  raises a `merge_review` notification leaving the block `pr_ready`. A pipeline with
-  **no** merger raises a `pipeline_complete` notification (confirm + merge) instead of
-  auto-`done`. Before deciding it also **classifies the PR** and consults the preset's
-  per-class rule — see "Merge track record" below.
-- **Merge threshold presets** — a per-workspace library
-  (`merge_threshold_presets`; `MergePresetService` +
-  `D1MergePresetRepository`; `GET|POST|PATCH|DELETE /workspaces/:ws/merge-presets`).
-  A task selects one via `Block.mergePresetId` (the inspector dropdown in
-  `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
-  `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`
-  - the requirements-review knobs `maxRequirementIterations` (default 6) and
-    `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow" — plus
-    the per-class `classRules` map ("Merge track record" below).
-- **Merge track record** — every merge decision persists one row in `merge_track_records`
-  (D1 ⇄ Drizzle): the run's **deterministic change class**, the merger's scores, the outcome
-  (`pending_review` → `auto_merged` / `human_merged` / `external_merged` / `rejected`), and a
-  nullable **reviewer-effort tag** (`none` / `minor` / `major`). This is the human evidence the
-  auto-merge thresholds are meant to approximate, so a workspace can widen policy on numbers
-  instead of a hunch. The whole feature is a **best-effort side channel of the merge path** —
-  classification and record writes swallow their own failures, so a merge can never fail or block
-  because of it.
-  - **Classification** is pure backend TypeScript over ONE VCS call: `RepoFiles.listChangedFiles`
-    → the pure `classifyChangedFiles` (kernel `domain/change-class.ts`). Deliberately NOT in the
-    harness (no image bump) and provider-neutral, so it works identically on GitLab. Classes are
-    ranked by risk (`docs` < `test` < `dependency` < `config` < `source` < `schema`) and a **mixed
-    diff takes the HIGHEST-ranked class present** — which is what makes a per-class rule safe: a
-    single touched source file lifts a dependency bump to `source`. An unreadable diff yields
-    `unknown`, and **`unknown` never matches a rule**, so a VCS outage can't change policy.
-  - **Per-class rules** (`RiskPolicy.classRules`, a partial map to `thresholds` / `always` /
-    `never`) resolve in `MergeResolver` with a fixed precedence: `autoMergeEnabled: false` (the
-    master switch) > the class rule (`always` bypasses BOTH the score comparison and the
-    empty-rationale backstop; `never` forces review) > the existing credibility + threshold
-    comparison. Surfaced on the decision as `reason: 'class_auto_merge' | 'class_requires_review'`.
-  - **Effort capture** rides the existing merge decision points: `POST /notifications/:id/act`
-    takes an optional `reviewEffort` (the card's one-tap confirm-and-tag, preselected from whether
-    the run's `pr-reviewer` step recorded findings), and `POST /merge-track-records/:id/effort`
-    tags out of band. Dismissing a merge card records `rejected`. A PR merged **directly on the
-    provider** is detected from the `pull_request` webhook (`WebhookServiceDependencies.externalMergeObserver`
-    → `makeExternalMergeObserver`), attributed by `(repoId, prNumber)` off the record itself — no
-    block lookup — and nudged with a dismissible `merge_tag_request` card. Tagging is a nudge,
-    never a gate: an untagged merge records a null tag and nothing downstream breaks on nulls.
-  - **Rollups** are ONE SQL aggregate per workspace (`GROUP BY change_class` + conditional `SUM`s)
-    behind `MergeTrackRecordRepository.rollupByClass` — never rows reduced in JS, never a query per
-    class. `GET /merge-track-records/rollups` returns every class; the preset editor
-    (`MergeClassRulesEditor.vue`) shows each class's rule next to its record.
-  - Full design (the class union, the precedence rationale, the external-merge detection, the preset
-    reshape): [`docs/initiatives/merge-track-record.md`](./docs/initiatives/merge-track-record.md).
-- **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
-  gate). `notifications` table + `NotificationService`
-  (orchestration) behind a `NotificationChannel` port: the canonical row is persisted
-  - the in-app `notification` `WorkspaceEvent` is pushed (worker
-    `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
-    with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
-    `WebhookNotificationChannel` (`@cat-factory/integrations`) is the third: a per-workspace
-    outbound HTTPS endpoint (`notification_webhooks`, D1 ⇄ Drizzle) delivered HMAC-signed with a
-    sealed secret, through the shared SSRF-guarded `safeFetch` seam, best-effort under one total
-    deadline that gives up on a 4xx. It exists because a HEADLESS caller has no in-app inbox and
-    no browser WebSocket, so a parked run would otherwise reach it only by polling. An EMPTY type
-    filter means the parking + actionable-tail defaults, NOT everything.
-    In **mothership mode** the org's EXTERNAL channels are unreachable from the laptop (their
-    credentials are sealed with the mothership's key), so `RemoteNotificationChannel` composes in
-    and asks the mothership to deliver the row by id over `POST /internal/notifications/deliver`
-    — the in-app frame still rides the real-time upstream relay. See
-    [`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md).
-    **The webhook is an EXTERNAL channel**, so it composes into that same set on both facades
-    (`externalNotificationChannels` ⇄ `buildExternalNotificationChannel`) rather than only into the
-    local fan-out — its secret is sealed with the deployment key, so the deployment holding that
-    key is the only side that can deliver it.
-    `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
-    (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
-  - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
-    the preset library.
-
-## PR verification report (engine-maintained evidence on the run's PR)
-
-The engine — NOT the agent — keeps a **verification report** on every run's pull request:
-captured facts, not the agent's prose claims. Form + shape rationale (and the phase-2 backlog)
-live in [`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
-
-- **Form: a managed section of the PR BODY**, delimited by
-  `<!-- cat-factory:verification-report:start -->` / `:end` (kernel `domain/pr-report.ts`,
-  `spliceManagedSection`). The markers ARE the identity, so the write is idempotent with **no
-  persisted state**: a re-run, retry, or replayed durable step replaces the marked region instead
-  of appending a second copy, and the agent's own description above it is never touched. A
-  maintained COMMENT was rejected: it needs a comment id persisted (a lost id duplicates the
-  report) plus an `updateComment` write neither the `GitHubClient` nor `VcsClient` port has.
-- **Shape: an engine HOOK on step settlement, not a pipeline step.** One call in
-  `RunDispatcher.recordStepResult` → `PrVerificationReportController.publishForRun`. Its POSITION
-  is load-bearing: **after** `applyTerminalStepResolver` (so a `merger` step publishes with its
-  resolved `MergeDecision`) and **before** `finalizeBlock` (so the `pipeline_complete` card a
-  merger-less pipeline raises points at a PR already carrying the finished report). A passing
-  polling gate settles through the same `recordStepResult`, so the CI verdict needs no second
-  hook. A one-shot `pr-report` STEP was rejected: it would need inserting into all 15 built-in
-  pipelines, would never exist for deployment-authored ones, and a run that fails or parks
-  part-way — the runs most worth inspecting — would never reach it.
-- **Composed from state already in memory** (`prReport.logic.ts`, pure): the CI gate's recorded
-  verdict/failing checks/attempts (`step.gate` — never a re-probe of the `CiStatusProvider`,
-  which costs a round trip AND can disagree with what the gate acted on), the tester's
-  `step.test.lastReport`, the deployer's `step.deployEnvs` + the live `step.environment`
-  projections for teardown, the merger's `step.custom`, and the per-step agent kind + model. The
-  only reads are one `blockRepository.get` and one batched `taskRepository.listByBlock`. The repo
-  - provider it STATES come from the publisher's `resolveTarget` — the same resolution the write
-    uses — never from `diagnostics.lastDispatch`, which records the most recent dispatch and is a
-    PEER repo on a multi-repo task.
-- **A section whose producing step didn't run says so** (`status: 'absent'` + a `note`) — a
-  silently missing section reads exactly like a clean one, which is the false reassurance this
-  feature exists to remove. Same rule for a CAPPED list: every per-list cap records what it left
-  out in the report's own `truncations` log (rendered as an "Omitted for length" section), because
-  "50 failing checks" and "50 of 118" call for very different reviewer reactions.
-- **A PR body is NOT an inert string sink, and kernel's `hostMarkdown`
-  (`shared/host-markdown.logic.ts`) is the boundary that treats it as such.** The host parses what is written there, and almost everything the report
-  interpolates is agent- or human-authored, so every hazard is live: `#123`/`@name`/`!123` are
-  auto-linked (a mention notifies a real account), a **closing keyword in front of an issue
-  reference CLOSES that issue when the PR merges** ("This closes #42" is idiomatic prose for a
-  merge rationale), a raw newline ends a markdown table row, and an unbalanced code fence swallows
-  everything after it — including the JSON block that IS the machine-readable contract. So
-  untrusted text is NEVER interpolated bare: it goes through `cell` (table cells: newlines folded
-  to `<br>`, pipes escaped), `inline` (prose lines) or `prose` (multi-line: fences balanced), all
-  of which neutralise the auto-link triggers with numeric HTML entities in ONE pass (chained
-  `.replace()`s re-escape each other's output) while leaving inline code spans alone (the host
-  does not auto-link inside them). Adding a field to the report means picking one of the three.
-- **Free text is scrubbed with the same `redactSecrets` the telemetry store uses**, at COMPOSE
-  time so the prose and the JSON block stay consistent. A PR body is a strictly MORE exposed
-  surface than the private telemetry DB — it can be a public repo — so anything worth scrubbing
-  before it reaches our own database is worth scrubbing before it reaches the host.
-- **Per-workspace opt-out** (`publishPrVerificationReport`, default on, mirrored D1 ⇄ Drizzle):
-  checked BEFORE anything is read or composed, so a workspace that declined pays nothing for the
-  hook. Turning it off stops future writes; a region already on a PR is left alone (a report that
-  vanished would read as "the run had nothing to say").
-- **Rendered as markdown + a fenced JSON block** validated by `prVerificationReportSchema`
-  (`@cat-factory/contracts` `pr-report.ts`), so external tooling ingests it without scraping.
-- **Provider-neutral by construction.** The `PrVerificationReportPublisher` port
-  (`kernel/ports/pr-report.ts`) is served by `GitHubPrReportPublisher` (`@cat-factory/server`)
-  over whatever `GitHubClient` a facade wired as its **engine** VCS client — so a GitLab-only
-  deployment publishes onto the MR description through the same call. It needs the new REQUIRED
-  `getPullRequestBody` on both the `GitHubClient` and `VcsClient` ports (read-splice-write, always
-  against the CURRENT remote body, so a concurrent human edit is never clobbered).
-- **Best-effort, always.** Publishing is bookkeeping: the controller swallows + logs (wire the
-  facade logger — this is the one path DESIGNED to fail silently, so without it a revoked token
-  leaves no trace at all) and is a total no-op when no publisher is wired (tests, no-VCS
-  deployments). It hashes the rendered section so a settlement that changes nothing a reader
-  would see costs no PR edit; it does NOT collapse a run to one write, because the report carries
-  a per-step state table and is meant to track the run as it progresses — a run that fails or
-  parks part-way never reaches an end to publish at. The observability deep link comes from
-  `appBaseUrl`; absent ⇒ no link rather than a dead one. Its SPA consumer is the narrow
-  `useRunDeepLink` composable — a down-payment on slice 4 of
-  [`docs/initiatives/global-search-and-deep-links.md`](./docs/initiatives/global-search-and-deep-links.md),
-  to be DELETED when that general parser lands.
-
-## Post-release health flow (Datadog gate → Agent-On-Call → notify/enrich)
-
-After a release ships, the **`post-release-health`** gate (the LAST standard-pipeline
-step, after `merger`) watches the team's Datadog monitors/SLOs for a window and, on a
-regression, spawns an **`on-call`** agent to investigate — it never auto-reverts.
-
-- **Polling gate** (a `GateDefinition` in `buildGateRegistry`, not a copy of the
-  machinery): `wired()` = a `ReleaseHealthProvider` is configured; `probe()` reads the
-  block's monitors/SLOs since a **release marker** (`step.gate.watchSince`, set on first
-  entry) and combines the verdict with the watch window via `classifyReleaseHealth`
-  (`release.logic.ts`) → `pass` (healthy + window elapsed; or no monitors configured →
-  pass through immediately), `pending` (keep polling), `fail` (a monitor alerts / SLO
-  breached). `attemptBudget` = the merge preset's `releaseMaxAttempts` (default 1);
-  the window is `releaseWatchWindowMinutes` (default 30).
-- **Provider**: the kernel `ReleaseHealthProvider` port is vendor-neutral and served by the
-  pluggable `RegistryReleaseHealthProvider` (`integrations/modules/observability`) — a registry
-  of per-vendor adapters (today only `DatadogObservabilityAdapter`, `integrations/modules/datadog`,
-  which reads monitor state + SLO SLI-vs-target and recent error logs). The composite owns
-  connection loading + decryption, config resolution up the frame chain, and the verdict
-  reduction; an adapter is just the vendor reads, so a second provider is a new registry entry.
-  Observability creds live on the backend (`observability_connections`: a `provider` discriminator
-  - one sealed `credentials` JSON blob + a non-secret `summary`, sealed `cat-factory:observability`)
-    — never in containers. Per-block monitor/SLO mapping is `release_health_configs` (resolved up the
-    frame chain). Both tables mirror D1 ⇄ Drizzle; managed via `ReleaseHealthService` + the
-    `GET|PUT|DELETE /workspaces/:ws/observability/connection` + `…/release-health-configs/:blockId`
-    controller. The SPA splits this: the connection is an **Integrations** entry
-    (`ObservabilityConnectionPanel.vue`), while the per-service monitor/SLO mapping lives in the
-    **service inspector** (`ServiceReleaseHealthConfig.vue`, keyed by the selected frame's block id —
-    no manual entry, disabled with a hint until a connection exists). Both use `stores/releaseHealth.ts`.
-- **On-call agent** (`on-call` container kind, `executor-harness/src/on-call.ts`, `/on-call`):
-  the gate escalates via `gatherHelperPriorOutputs` (renders the evidence bundle into the
-  agent's prompt). The agent clones the released PR head, correlates the diff with the
-  evidence, and returns ONLY a JSON assessment (`onCallAssessment`: culprit confidence +
-  `revert`/`hold`/`monitor`). Its completion is resolved SPECIALLY (not the generic gate
-  re-probe): `ExecutionService.resolveOnCallStep` parses it, raises a `release_regression`
-  notification (Slack + in-app inbox), best-effort **enriches** any incident PagerDuty /
-  incident.io already opened (the `IncidentEnrichmentProvider` port — annotate, NOT
-  re-alert, since those systems page off the same signals), then finishes the gate step so
-  the run completes (the human decides revert/acknowledge out-of-band).
+**Add a test that two concurrent jobs keep new per-job state separate.** The container path alone
+will not catch the regression.
 
 ## Gates vs agents (the step taxonomy)
 
-A pipeline step's `agentKind` puts it in one of FOUR buckets. Most engine handling
-keys off which bucket, so know them before adding a step:
+A step's `agentKind` puts it in one of four buckets, and most engine handling keys off which:
 
-- **Agents** — a container or inline LLM does the work (`coder`, `architect`,
-  `spec-writer`, `tester`, `merger`, the companions, …). Dispatched via the shared
-  `CompositeAgentExecutor`; container kinds park on `awaiting_job`.
-- **Polling Gates** — `ci`, `conflicts`, `post-release-health`. A gate is NOT an agent: it
-  runs a **programmatic precheck** against a provider and only escalates to a helper
-  container agent (`ci-fixer` / `conflict-resolver` / `on-call`) on a negative verdict. The
-  skip-unless-needed contract is the whole point: a green CI / mergeable PR advances with
-  **nothing spun up**. One generic machine drives every gate —
-  `ExecutionService.evaluateGate` / `dispatchGateHelper` / `pollGate`, parking on the single
-  `awaiting_gate` result while the precheck is pending. A gate is a `GateDefinition` supplying
-  only its differentiators: `wired()`, the `probe()` (→ `pass` / `pending` / `fail`), the
-  `helperKind`, and `onExhausted`. The live loop state is `step.gate` (`GateStepState`:
-  `phase` `checking`/`working`, `attempts`, `maxAttempts`, `headSha`); the gate kind is
-  `step.agentKind`, not stored twice. **Adding a gate is a new registry entry, not a new copy
-  of the machinery** — do not hand-roll another `evaluateX`/`pollX`/`awaiting_x` triple.
-  - **The built-in gates are NOT inline in the engine** — they ship as the
-    **`@cat-factory/gates`** package and register through the SAME public seam a deployment
-    uses (the dogfood: the platform's own gates ARE an external package). The gate registry is
-    an **app-owned `GateRegistry` instance** (`kernel/domain/gate-registry.ts`,
-    `defaultGateRegistry()`), NOT a module-global `Map`: each facade builds one, installs the
-    built-ins via `registerBuiltinGates(gateRegistry)` (the module-load side-effect is gone),
-    and threads it through `CoreDependencies.gateRegistry` → the engine builds its per-kind gate
-    map from `this.gateRegistry.factories()`. `defaultGateRegistry()` is EMPTY (the built-ins
-    live in the gate package), so a container built with no injected registry — e.g. the Worker's
-    scheduled `buildContainer(env)` — installs them itself. A deployment adds a gate with
-    `gateRegistry.register(kind, factory)` on the injected instance. Each gate's provider is still
-    wired deployment-global via the package's `wireCiStatusProvider` /
-    `wireMergeabilityProvider` / `wireReleaseHealthProvider` / `wireIncidentEnrichment` handles
-    (the provider-token registry has not migrated to DI yet). A gate is a pass-through until its
-    provider is wired. The pure gate logic + the gate/helper agent-kind constants live in kernel
-    (`domain/gate-logic.ts`) so a gate package never depends on orchestration. **Step-completion
-    resolvers ride the analogous `StepResolverRegistry` on `CoreDependencies`.**
-  - **`resolveHelperCompletion`** is the gate seam for an INVESTIGATE-don't-fix helper: most
-    helpers FIX the gated condition so the engine re-probes after they finish, but `on-call`
-    only investigates (it never reverts), so the `post-release-health` gate supplies this hook
-    to settle the gate (raise `release_regression` + enrich the incident) WITHOUT re-probing.
-    Absent → the default re-probe loop.
-- **One-shot engine steps** — non-LLM steps with bespoke handling: `tracker` (files a
-  ticket), `deployer` (provisions an env), `requirements-review` (inline reviewer + park
-  loop). Not gates because they don't poll-or-escalate.
-- **Judges** — an inline LLM scores the run's work against a **rubric**, the engine compares the
-  verdict to a **per-task threshold** (the merge preset's `judgeMinScore`), and disposes:
-  advance / park for a human / **bounce** the producing step with the findings as `rework` /
-  fail the run. This is the promoted form of the "structured assessment vs per-task threshold"
-  family (requirements auto-pass, the merger, on-call) — see
+- **Agents** — a container or inline LLM does the work (`coder`, `architect`, `spec-writer`,
+  `tester`, `merger`, the companions). Dispatched via `CompositeAgentExecutor`; container kinds park
+  on `awaiting_job`.
+- **Polling gates** — `ci`, `conflicts`, `post-release-health`. A gate runs a **programmatic
+  precheck** against a provider and only escalates to a helper container agent (`ci-fixer` /
+  `conflict-resolver` / `on-call`) on a negative verdict. Skip-unless-needed is the whole point: a
+  green precheck advances with nothing spun up. ONE generic machine drives every gate
+  (`evaluateGate` / `dispatchGateHelper` / `pollGate`, parking on `awaiting_gate`); a
+  `GateDefinition` supplies only `wired()`, `probe()` (pass/pending/fail), `helperKind`, and
+  `onExhausted`. Live state is `step.gate`. **Adding a gate is a new registry entry, never another
+  `evaluateX`/`pollX`/`awaiting_x` triple.**
+  - The built-ins ship as **`@cat-factory/gates`**, registered through the same public seam a
+    deployment uses. The registry is an app-owned `GateRegistry` threaded through
+    `CoreDependencies.gateRegistry`; `defaultGateRegistry()` is EMPTY, so a container built with no
+    injected registry installs the built-ins itself. Providers are still wired deployment-global via
+    `wireCiStatusProvider` / `wireMergeabilityProvider` / `wireReleaseHealthProvider` /
+    `wireIncidentEnrichment`. A gate is a pass-through until its provider is wired. Pure gate logic
+    lives in kernel (`domain/gate-logic.ts`) so a gate package never depends on orchestration.
+  - **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
+    reverts), settling the gate without re-probing. Absent means the default re-probe loop.
+- **One-shot engine steps** — `tracker`, `deployer`, `requirements-review`. Bespoke handling; not
+  gates because they don't poll-or-escalate.
+- **Judges** — an inline LLM scores work against a rubric, the engine compares to a per-task
+  threshold (`judgeMinScore` on the merge preset) and disposes: advance / park / bounce the
+  producing step with findings as `rework` / fail. See
   [`docs/initiatives/judge-registry.md`](./docs/initiatives/judge-registry.md).
-  **Adding a judge is a new registry entry, not a new copy of the machinery** — the same promise
-  `registerGate` makes. One generic driver (`JudgeStepController.evaluate`, the `evaluateGate`
-  analogue) owns the state machine; a `JudgeDefinition` supplies only its rubric, `parseVerdict`,
-  `threshold`/`attemptBudget` (read off the preset), `onFail` and `bounceTargets`.
-  - **A judge is NOT a gate**: a gate's `probe()` is a cheap programmatic precheck whose whole
-    point is to spin nothing up when it passes, with a `pending` state to poll and a helper
-    CONTAINER to escalate to. A judge always costs a model call, has no pending state, and yields
-    a score. And it is **NOT a `StepCompletionResolver`**: a resolver returns a `StepResolution`
-    and cannot park or loop the run — the ceiling deployments hit before this existed.
-  - The registry is an **app-owned `JudgeRegistry`** (`kernel/domain/judge-registry.ts`,
-    `defaultJudgeRegistry()`), threaded through `CoreDependencies.judgeRegistry` beside
-    `gateRegistry`. It is EMPTY by default — the platform ships no built-in judges.
-  - The verdict producer is the injectable **`JudgeAssessor`** seam. `createCore` builds the
-    inline `JudgeService` from the model-provider deps every facade already wires, so **judges
-    need no per-facade wiring**; an absent/disabled assessor makes every judge step a
-    **pass-through** (`status: 'skipped'` + a note), which is what keeps existing pipelines and
-    the conformance/e2e suites byte-for-byte unchanged. A test harness injects a deterministic
-    fake through the same seam.
-  - All live state rides **`step.judge`** (`JudgeStepState`) — no side table, so it is
-    runtime-symmetric by construction (the `forkDecision` precedent). It deliberately survives
-    `resetStepForRerun`, or a bounce would erase the verdict it is looping on.
-  - A rubric's per-workspace override is a **prompt-library fragment** (`JudgeRubric.fragmentId`,
-    resolved through the engine's existing `fragmentResolver`) — which is why this feature adds no
-    rubric table.
-  - A failing verdict NEVER silently advances: a bounce with a spent budget, or with no producing
-    step to bounce to, degrades to a **park** and records why.
-- **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It is a
-  `StepCompletionResolver` (`buildStepResolverRegistry`) but a different archetype from the
-  light, externally-authorable resolvers (output reshaping / notification / repo follow-up,
-  e.g. the example auditor): it OWNS terminal block status (`ownsTerminalStatus`) and executes
-  a policy-gated real merge — the dual of a gate (agent verdict → engine policy-act, vs a
-  gate's provider precheck → escalate). So it keeps its engine-internal access (`MergeResolver`,
-  `resolveMergePreset`, the real merge) rather than the minimal public `ResolverContext`. The
-  public step-resolver seam is scoped to that light follow-up; `ownsTerminalStatus` is
-  built-in-only. That is also why the merger was NOT rewritten onto the judge machine when the
-  verdict-gate family was promoted: handing the public seam `ownsTerminalStatus` and a real,
-  credential-bearing merge is exactly what this reservation forbids. (`requirements-review`
-  auto-pass may be re-expressed on the judge machine later as strangler work — tracked in
-  `docs/initiatives/judge-registry.md`, deliberately not done in the promotion itself.)
+  **Adding a judge is a new registry entry.** One driver (`JudgeStepController.evaluate`) owns the
+  state machine; a `JudgeDefinition` supplies rubric, `parseVerdict`, `threshold`/`attemptBudget`,
+  `onFail`, `bounceTargets`.
+  - A judge is NOT a gate (no cheap precheck, no pending state, always costs a model call) and NOT a
+    `StepCompletionResolver` (which can't park or loop).
+  - The app-owned `JudgeRegistry` is EMPTY by default. The verdict producer is the injectable
+    `JudgeAssessor`; `createCore` builds the inline `JudgeService` from deps every facade already
+    wires, so judges need no per-facade wiring, and an absent assessor makes every judge step a
+    pass-through.
+  - State rides `step.judge`, no side table, so it is runtime-symmetric by construction. It survives
+    `resetStepForRerun`, or a bounce would erase the verdict it loops on.
+  - A rubric's per-workspace override is a prompt-library fragment (`JudgeRubric.fragmentId`), which
+    is why this adds no rubric table.
+  - A failing verdict never silently advances: a spent budget or no bounce target degrades to a park.
+- **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns
+  terminal block status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps
+  engine-internal access rather than the minimal public `ResolverContext`. The public step-resolver
+  seam is scoped to light follow-up (output reshaping, notification, repo follow-up);
+  `ownsTerminalStatus` is built-in-only. That is also why the merger wasn't rewritten onto the judge
+  machine.
 
-The same "precheck, then skip the expensive work if it's unnecessary" idea applies to
-the inline requirements-incorporation companion: `hasNotesToIncorporate`
-(`requirements.logic.ts`) short-circuits `runIncorporationCycle` so the rework +
-re-review LLM calls are skipped when the human left nothing to fold in (every finding
-dismissed, no answered replies, no redo feedback) — the review settles `incorporated`
-directly and downstream falls back to the original description.
+The same precheck-first idea applies inline: `hasNotesToIncorporate` short-circuits
+`runIncorporationCycle` so the rework + re-review LLM calls are skipped when the human left nothing
+to fold in.
 
-## Custom agents (manifest-driven extension — pre/post-ops over `RepoFiles`)
+## Pipeline flows
 
-A deployment can ship its own agent kinds **without forking and without rebuilding the
-executor-harness image**. Governing principle: _zero `switch(agentKind)` in the
-container_ — the harness is a generic LLM-over-a-checkout runner, and all
-mechanical/deterministic work is backend TypeScript. Full model + worked example:
+Each flow below is a cross-file runtime path. Where an ADR or initiative doc exists, it is the
+authority.
+
+### Repo bootstrap (async + observable + board-integrated)
+
+Adapts a reference architecture (or scaffolds) into a pre-created empty repo and force-pushes.
+Mirrors the execution pattern: `POST /workspaces/:ws/bootstrap/jobs` returns immediately with a
+`running` job. `BootstrapService.bootstrap()` pre-flights the connection, inserts a `bootstrap_jobs`
+row, dispatches, materialises a provisional service frame, and starts the durable driver.
+`BootstrapWorkflow` polls via `pollBootstrapJob()` (idempotent, so replays are safe), which on
+success links the repo to the block and flips the frame to `ready`, on failure marks it `blocked`.
+`ContainerRepoBootstrapper` is a thin layer on the shared `RunnerJobClient` seam (no direct
+container binding), pre-flighting that the target is empty (`isBootstrapBoilerplate`). The harness
+writes the prompt to Pi's global `~/.pi/agent/AGENTS.md` (outside the checkout, so it never lands in
+the bootstrapped repo) and `reinitAndPush()`es one commit. Success also starts the blueprint-only
+`pl_blueprint` pipeline against the new frame.
+
+### Service blueprints (in-repo map + board population)
+
+A Blueprinter agent (`agentKind: 'blueprints'`, a normal pipeline step) decomposes a repo into
+service → modules and persists it IN THE REPO under `blueprints/` (`blueprint.json`, `overview.md`,
+`modules/<slug>.md`, `version.json`). The map stops at modules; tasks are authored by people.
+`parseBlueprintService` (Valibot) enforces the shape at ingest. The harness commits onto the branch
+(no history reset). The branch is the prior `coder` step's PR branch when present (mode `update`),
+else the default branch (mode `create`). `ExecutionService.recordStepResult` ingests the tree and
+`BoardScanService.reconcileBlueprint` updates the frame in place: match modules by name, add
+missing, refresh descriptions, NEVER delete, never touch authored tasks. Nothing is persisted to a
+blueprint table; the in-repo files are the source of truth and the board is the projection.
+
+### Requirements review (iterative gate step + dedicated window)
+
+The FIRST step of the default pipelines, handled inline in the engine (not a container agent). The
+reviewer inspects a block's collected requirements and raises severity-tagged findings; the run
+parks and the dedicated window drives an iterative loop until convergence.
+
+1. Findings raised; the human answers or dismisses each.
+2. An incorporation companion folds answers into ONE standard-format document (status `merged`).
+3. Re-review runs against that document (`iteration++`): converges (`incorporated`, run advances),
+   continues (`ready`), or hits the cap (`exceeded`).
+4. At the cap: **extra-round**, **proceed**, or **stop-reset** (block returns to `planned`; the last
+   incorporated doc survives as a base).
+5. **Auto-pass**: findings at or below `maxRequirementConcernAllowed` record but don't gate.
+
+Cap and tolerated severity live on the merge preset (`maxRequirementIterations` default 6,
+`maxRequirementConcernAllowed` default `none`). There is no quality-companion grade gate.
+
+`RequirementReviewService` (orchestration `modules/requirements/`) owns review/reply/incorporate;
+the pure `disposeReview` decides auto-pass / awaiting / exceeded. Downstream,
+`resolveReworkedRequirements` substitutes the incorporated doc as the block description for
+`task`-level blocks and DROPS `contextDocs`/`contextTasks` (already folded in). The rework call
+rejects a length-truncated document rather than persisting a silently-incomplete spec. Persistence
+is `requirement_reviews`, mirrored D1 ⇄ Drizzle, asserted by conformance. Pass-through when the
+reviewer model isn't wired.
+
+**Headless callers drive the SAME loop** over `/api/v1/runs/:runId/decisions`
+(`PublicDecisionController`), delegating to the same service methods, gated on the `decide` rung of
+the scope ladder (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits
+for a human indefinitely by design**; the backstops are the workspace in-flight cap and
+`POST /api/v1/jobs/:id/cancel`. `ExecutionInstance.intakeOrigin` records how a run entered.
+
+**A HEADLESS park also ECHOES its open findings onto the linked tracker issue(s)**, opt-in per
+workspace (`writebackQuestionsOnPark`, per-task override, resolved via `resolveWritebackFlag`).
+Every park funnels through `ReviewGateController.park()`, which consults the pure
+`shouldPostReviewQuestions`. Two rules govern this: it rides the **requirements** subject only
+(the clarity gate already echoes its own questions, so opting it in would double-post), and because
+the post runs in the replaying durable driver it is idempotent by an ATOMIC CLAIM on
+`review_question_posts` taken BEFORE the comment, never a marker written after. A `failed` claim is
+re-claimable, `posted` is terminal, and a `pending` one is re-claimable after
+`REVIEW_QUESTION_POST_CLAIM_TTL_MS` so a poster killed mid-post self-heals (a claim-before-post
+design must always answer "what if the claimer dies"). No wall-clock deadline: a timeout can't
+distinguish "never landed" from "landed slowly". **The park commits FIRST**, the echo runs behind
+it. The comment body is untrusted model-authored text on a host-parsed surface, so every hole
+crosses `hostMarkdown` and `redactSecrets`.
+
+### Implementation-fork decision (two-phase Coder step)
+
+Optional phase on the `coder` step surfacing materially different implementations BEFORE code is
+written, then parking for a human to pick, enter their own, or chat. Rides `step.forkDecision` (no
+side table, so runtime-symmetric like `followUps`). Gated on the Estimator's estimate via
+`riskPolicySchema.forkDecision` plus a per-task tri-state. Design:
+[`backend/docs/adr/0022-coder-fork-decision.md`](./backend/docs/adr/0022-coder-fork-decision.md).
+
+A container job can't pause mid-run, so the park sits BETWEEN two dispatches on the same step:
+Phase A dispatches the read-only `fork-proposer` explore kind as a helper; its completion is caught
+by the `fork-proposal` interceptor, which either falls through (`single_path`, <2 usable forks) or
+mints fork ids and parks. Chat rides the transient re-entry protocol (`pendingForkChat` +
+`reentrantForkDecision`), computing the reply INLINE in the durable driver and re-parking with a
+fresh approval id; `maxChatTurns` (default 15) is a hard budget. Phase B CAS-records the choice,
+re-arms the step, and `AgentContextBuilder` folds `buildImplementationChoice` into the `build`
+prompt as a binding directive. Pass-through everywhere it can't run. Scoped to the primary repo.
+
+### Pre-PR validation (checks in the container BEFORE the PR opens)
+
+A service frame can declare install/lint/test/build commands the harness runs against the checkout
+after the agent settles and before the PR opens. A failure feeds back into the agent loop with the
+captured output; only a green checkout opens a PR. Design:
+[`docs/initiatives/pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
+
+- **Config is per SERVICE FRAME**, resolved up the frame chain (`validation_configs`, D1 ⇄ Drizzle →
+  `ValidationConfigRepository` → `ValidationConfigService` → controller → inspector panel).
+  `maxAttempts` (default 3) lives on the SAME row as the commands, not the merge preset.
+- **Threading**: `resolveValidationChecks` → `AgentRunContext.validationChecks` → the job body, only
+  when that dispatch OPENS a PR. `AgentContextBuilder` walks the frame ancestry ONCE per dispatch
+  and reuses that frame for every frame-scoped resolver. Riding the job body means it works on all
+  three transports with no transport-specific wiring.
+- **The loop lives in the harness** (`executor-harness/src/validation-checks.ts`): run → if red and
+  budget remains, re-run the agent with `buildRepairPrompt` (the 16k output tail, any UNCOMMITTED
+  new files, and an explicit "do not weaken the checks" rule) → re-check. Budget spent means an
+  ERROR result and NOTHING opened. Generic machinery keyed off the body; no `switch(agentKind)`.
+- **Per-job state, absolutely** (cwd + `agentEnv` as arguments), pinned by a concurrency test.
+- **Any harness-spawned, activity-SILENT phase MUST feed the inactivity watchdog** on a 30s
+  heartbeat: `JOB_INACTIVITY_MS` (10 min) is tighter than a command's own watchdog (15 min), so
+  without it a slow build aborts the run as "inactivity". Applies to any new harness-run phase (the
+  agent's own stream emits activity; a raw `spawn` does not).
+- **Captured output** is scrubbed with `redactSecrets` BEFORE truncation (16k to the agent, 4k on
+  the wire) and reaches the step both live (`RunnerJobView.validationReport`, latest-value publish)
+  and terminally, rendered by the shared `ResultWindowShell` trailing section.
+- **Unconfigured means byte-for-byte the old behaviour.** A run that produced no work skips the
+  loop; a config-store read failure degrades to "no checks" rather than failing the dispatch.
+
+### Bugfix reproduction proof (the SECOND pre-PR phase: evidence, never a gate)
+
+Runs the declared reproduction command against TWO trees (pre-fix and the PR tree) and publishes
+both exit codes. Only red-then-green is proof. Design:
+[`docs/initiatives/bugfix-reproduction-proof.md`](./docs/initiatives/bugfix-reproduction-proof.md).
+
+- **The declaration seam is the prior `repro-test` step's structured outcome.** The `coder` is
+  deliberately NOT a structured-output kind (it legitimately ends with no final text). Gated on the
+  per-task `coder.reproductionProof` tri-state, threaded exactly like `validationChecks`.
+- **SYMMETRY is the safety property and the only defence against a false `reproduced`.** Both
+  phases run in fresh `git worktree` checkouts with the same setup command and byte-identical
+  declared test files, so an environmental defect fails BOTH and red-then-red is `inconclusive`.
+  Two load-bearing mechanics: target **`baseSha`** specifically (the coding clone is `--depth 1`, so
+  `HEAD~1` isn't in history), and apply the **declared PATHS only** onto the base worktree (a
+  whole-tree checkout would drag the fix across and green it). Red-for-the-wrong-reason is a stated
+  limitation; both outputs ride the report so a human can see why.
+- **Declared test paths are refused for git PATHSPEC MAGIC, not just traversal** (in both the
+  engine's `isSafeTestPath` and the harness's copy: keep them in step). `--` stops a path being read
+  as a revision but does nothing about `:(glob)**` or `*`, and these strings are model-authored. A
+  refused path counts as an omission, never a silent shortening.
+- **A GREEN pre-fix tree is only interpretable once you know what that tree IS.** An evicted coder
+  container has already checkpoint-pushed, so `baseSha` may carry this step's own partial fix. On a
+  green base only, the harness probes `changedFilesSinceBase`; non-test changes there mean the note
+  says so and NO repair round is spent. The probe is memoised and degrades to the plain diagnosis
+  when it can't answer.
+- **Repairable is an explicit OUTPUT of an attempt**, not re-derived. Three shapes are not
+  repairable because the agent is not what is wrong: a failed setup, a timed-out tree, and the
+  prior-work base.
+- **Bounded twice**: `maxAttempts` rounds AND `REPRODUCTION_TOTAL_BUDGET_MS` (45m). The phase's own
+  heartbeat suppresses the inactivity watchdog, so the wall-clock budget is what actually bounds it.
+  Exceeding it settles `inconclusive`, never a run failure.
+- **Both pre-PR phases spawn through ONE seam**, `captured-command.ts`'s `runCapturedCommand`.
+- **A failed verification is a REPAIR, not a run failure**, then degrades to `inconclusive` with the
+  PR still opening: the opposite disposition from validation, because a red check means the WORK is
+  broken while an unproven reproduction means the EVIDENCE is weak.
+- **The proof runs BEFORE the validation loop**, so validation stays the last thing to touch the
+  tree.
+- **Per-job state, absolutely** (a fresh `mkdtemp` worktree root). A shared root would surface as a
+  FALSE VERDICT on a pull request, not a crash; `reproduction-proof.concurrency.test.ts` pins it.
+- **A CONCEDE is minted by the ENGINE**: a run whose reproduction step declared the bug infeasible
+  dispatches no proof, so `concededReproductionReport` records the declaration. That is why "could
+  not be reproduced" never reads the same as "nobody tried".
+
+### Merge lifecycle (CI gate → CI-fixer → merger → notifications)
+
+Turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is `done` only when
+its PR actually merged.
+
+- **`ci` (polling gate)**, auto-inserted second-to-last. Reads the PR head's check runs via the
+  `CiStatusProvider` port and aggregates with `ci.logic.ts`: green/none finishes and advances with
+  nothing spun up; pending sleeps `ciPollInterval`; failure dispatches a `ci-fixer` container job up
+  to `ciMaxAttempts` (default 10), else raises `ci_failed` and fails the run. Pass-through with no
+  provider wired.
+- **`ci-fixer`** clones the PR head, makes CI pass, and pushes back onto the SAME branch.
+- **`merger`** (last standard step) clones the PR head, scores the diff (complexity/risk/impact) and
+  returns ONLY a JSON assessment, making no commits. `resolveMergerStep` compares it to the task's
+  merge threshold preset and either merges for real (`PullRequestMerger` → block `done`) or raises
+  `merge_review` leaving the block `pr_ready`. A pipeline with no merger raises `pipeline_complete`
+  instead of auto-`done`.
+- **Merge threshold presets** — a per-workspace library (`merge_threshold_presets`); a task selects
+  one via `Block.mergePresetId`, else the workspace default. Carries the auto-merge ceilings,
+  `ciMaxAttempts`, the requirements-review knobs, and the per-class `classRules` map.
+- **Merge track record** — every decision persists a row in `merge_track_records`: the deterministic
+  change class, the merger's scores, the outcome, and a nullable reviewer-effort tag. This is the
+  human evidence the thresholds approximate. The whole feature is a **best-effort side channel**:
+  classification and record writes swallow their own failures. Design:
+  [`docs/initiatives/merge-track-record.md`](./docs/initiatives/merge-track-record.md).
+  - **Classification** is pure backend TS over ONE VCS call (`listChangedFiles` →
+    `classifyChangedFiles` in kernel), deliberately not in the harness (no image bump) and
+    provider-neutral. Classes rank `docs < test < dependency < config < source < schema` and a mixed
+    diff takes the HIGHEST present, which is what makes a per-class rule safe. An unreadable diff
+    yields `unknown`, and **`unknown` never matches a rule**, so a VCS outage can't change policy.
+  - **Per-class rules** resolve in `MergeResolver` with fixed precedence: `autoMergeEnabled: false`
+    > the class rule (`always` bypasses both the score comparison and the empty-rationale backstop;
+    > `never` forces review) > the credibility + threshold comparison.
+  - **Effort capture** rides existing decision points (`POST /notifications/:id/act` takes an
+    optional `reviewEffort`; `POST /merge-track-records/:id/effort` tags out of band). A PR merged
+    directly on the provider is detected from the webhook and attributed by `(repoId, prNumber)`.
+    Tagging is a nudge, never a gate.
+  - **Rollups** are ONE SQL aggregate per workspace behind `rollupByClass`, never rows reduced in JS.
+- **Notifications** are a first-class human-actionable surface, not a mid-pipeline gate. The
+  canonical row is persisted and pushed in-app behind a `NotificationChannel` port, with
+  `CompositeNotificationChannel` as the seam for other channels. `WebhookNotificationChannel` is a
+  per-workspace outbound HTTPS endpoint, HMAC-signed with a sealed secret through the SSRF-guarded
+  `safeFetch`, best-effort under one deadline; it exists because a headless caller has no in-app
+  inbox. An EMPTY type filter means the parking + actionable-tail defaults, not everything. It is an
+  EXTERNAL channel, so it composes into that set on both facades. In mothership mode
+  `RemoteNotificationChannel` asks the mothership to deliver the row by id
+  ([`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md)).
+
+### PR verification report (engine-maintained evidence on the run's PR)
+
+The engine, not the agent, keeps a verification report on every run's PR: captured facts, not the
+agent's prose claims. Form:
+[`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+
+- **A managed section of the PR BODY**, delimited by `<!-- cat-factory:verification-report:start -->`
+  / `:end` (`kernel/domain/pr-report.ts`, `spliceManagedSection`). The markers ARE the identity, so
+  the write is idempotent with NO persisted state. A maintained COMMENT was rejected: it needs a
+  persisted id plus an `updateComment` write neither port has.
+- **An engine HOOK on step settlement, not a pipeline step.** One call in
+  `RunDispatcher.recordStepResult` → `PrVerificationReportController.publishForRun`. Its POSITION is
+  load-bearing: AFTER `applyTerminalStepResolver` (so a merger publishes with its resolved decision)
+  and BEFORE `finalizeBlock`. A `pr-report` STEP was rejected: it would need inserting into all 15
+  built-in pipelines, would never exist for deployment-authored ones, and a run that fails or parks
+  part-way would never reach it.
+- **Composed from state already in memory** (`prReport.logic.ts`, pure): the CI gate's recorded
+  verdict (never a re-probe, which costs a round trip and can disagree with what the gate acted on),
+  the tester's last report, the deployer's env projections, the merger's `step.custom`, per-step kind
+  and model. Only reads: one `blockRepository.get` and one batched `taskRepository.listByBlock`. The
+  repo and provider come from the publisher's `resolveTarget`, never from `diagnostics.lastDispatch`
+  (a PEER repo on a multi-repo task).
+- **A section whose producing step didn't run says so** (`status: 'absent'` + a note); a silently
+  missing section reads exactly like a clean one. Same for a CAPPED list: every cap records what it
+  dropped in the report's `truncations` log.
+- **A PR body is NOT an inert string sink**; kernel's `hostMarkdown` is the boundary. The host
+  auto-links `#123`/`@name`/`!123`, a **closing keyword before an issue reference CLOSES that issue
+  on merge**, a raw newline ends a table row, and an unbalanced fence swallows the JSON block that
+  IS the machine-readable contract. Untrusted text goes through `cell`, `inline`, or `prose`, all of
+  which neutralise auto-link triggers with numeric entities in ONE pass (chained `.replace()`s
+  re-escape each other). Adding a field means picking one of the three.
+- **Free text is scrubbed with `redactSecrets`** at COMPOSE time so prose and JSON stay consistent.
+  A PR body is strictly more exposed than the telemetry DB.
+- **Per-workspace opt-out** (`publishPrVerificationReport`, default on), checked BEFORE anything is
+  read. Turning it off stops future writes; an existing region is left alone.
+- **Provider-neutral**: the `PrVerificationReportPublisher` port is served by `GitHubPrReportPublisher`
+  over whatever `GitHubClient` the facade wired as its ENGINE VCS client. It needs the required
+  `getPullRequestBody` on both ports (read-splice-write against the CURRENT remote body, so a
+  concurrent human edit is never clobbered).
+- **Best-effort, always**: the controller swallows and logs (wire the facade logger, or a revoked
+  token leaves no trace) and is a no-op with no publisher. It hashes the rendered section so a
+  no-visible-change settlement costs no edit, but does NOT collapse to one write: the report tracks
+  the run as it progresses.
+
+### Post-release health (Datadog gate → Agent-On-Call → notify/enrich)
+
+The `post-release-health` gate (LAST standard step, after `merger`) watches monitors/SLOs for a
+window and, on a regression, spawns an `on-call` agent to investigate. It never auto-reverts.
+
+`probe()` reads the block's monitors/SLOs since a release marker (`step.gate.watchSince`) and
+combines the verdict with the window via `classifyReleaseHealth`. `attemptBudget` is the preset's
+`releaseMaxAttempts` (default 1); the window is `releaseWatchWindowMinutes` (default 30).
+
+The kernel `ReleaseHealthProvider` port is vendor-neutral, served by `RegistryReleaseHealthProvider`
+(a registry of per-vendor adapters, today only `DatadogObservabilityAdapter`). The composite owns
+connection loading, decryption, frame-chain config resolution, and the verdict reduction; an adapter
+is just the vendor reads, so a second provider is a new registry entry. Credentials live in
+`observability_connections` (sealed), never in containers; per-block mapping in
+`release_health_configs`. The SPA splits this: the connection is an Integrations entry, the
+monitor/SLO mapping a service-inspector panel.
+
+The gate escalates via `gatherHelperPriorOutputs`. `on-call` returns only a JSON assessment
+(culprit confidence + revert/hold/monitor), resolved SPECIALLY (not the generic re-probe) by
+`resolveOnCallStep`: raise `release_regression`, best-effort enrich any open incident (the
+`IncidentEnrichmentProvider` port annotates, never re-alerts, since those systems page off the same
+signals), finish the gate. The human decides revert/acknowledge out of band.
+
+## Custom agents (manifest-driven extension over `RepoFiles`)
+
+A deployment ships its own agent kinds without forking and without rebuilding the harness image.
+Governing principle: **zero `switch(agentKind)` in the container**. The harness is a generic
+LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full model:
 [`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md).
 
-- **Three stages** (the container runs only the middle one): `preOps` (deterministic
-  backend TS, reads/commits a targeted subset of the repo with NO checkout, via the
-  `RepoFiles` kernel port) → `agent` (optional LLM step: `inline` / `container-explore`
-  [prose or structured JSON → `result.custom`] / `container-coding`) → `postOps`
-  (deterministic backend TS: parse `result.custom`, render artifact files, commit via
-  `RepoFiles`). `preOps`/`postOps` are plain `RepoOp` functions.
-- **Registration** (by reference on the facade's app-owned registries, NOT a module-global side
-  effect): `agentKindRegistry.register({ kind, systemPrompt, agent, preOps, postOps, presentation })`
-  (`@cat-factory/agents`) + `pipelineRegistry.register(...)` (`@cat-factory/kernel`). A
-  `container-*` surface implies the container requirement.
-- **Live execution wiring**: `ExecutionService` runs a registered kind's `preOps` before
-  dispatch and `postOps` after `recordStepResult`, over a per-run `RepoFiles` bound to the
-  run's repo. The binding is the facade-wired `resolveRunRepoContext`
-  (`ExecutionServiceDependencies` / `CoreDependencies`), composed from the GitHub client +
-  the executor's `resolveRepoTarget` via `makeResolveRunRepoContext` (`@cat-factory/server`)
-  — wired in ALL THREE facades (Worker `selectGitHubDeps`, Node `githubGateDeps`, local
-  inherits via `buildNodeContainer`). Unwired (tests / no GitHub) ⇒ hooks skip, engine
-  unchanged. `runRepoOps` lives in `@cat-factory/agents` (so orchestration drives it
-  without importing the server layer). The cross-runtime conformance suite asserts a
-  registered kind's pre-op read + post-op commit on both runtimes.
-- **`RepoFiles`** (`@cat-factory/kernel` `ports/repo-files.ts`): a per-run, checkout-free
-  facade over the GitHub Git Data + contents API (`getFile`/`listDirectory`/`headSha`/
-  `createBranch`/`commitFiles`/`openPullRequest`) — pure HTTP, so runtime-symmetric across
-  Worker/Node/local (the Worker's lack of a filesystem stops mattering).
-- **Frontend**: the workspace snapshot carries `customAgentKinds` (kind + presentation +
-  container flag; assembled in `WorkspaceController`), which the SPA merges into its palette
-  catalog (`useAgentsStore().registerCustomKinds`) so a registered kind is a first-class
-  palette block + result view. A structured kind's `result.custom` is recorded on the step
-  (`step.custom`) and rendered by the shared `generic-structured` result view
-  (`StepResultViewHost.vue` → `GenericStructuredResultView.vue`) — no bespoke UI.
-- **NOT yet done**: the built-in agents (blueprints/spec-writer/coder/merger/…) are not
-  yet migrated to this model — their rendering still lives in the harness. Converting them
-  one at a time (parity-gated, image-bumped per conversion) then deleting the bespoke
-  harness handlers is the remaining strangler work.
+- **Three stages**, of which the container runs only the middle: `preOps` (backend TS reading and
+  committing a targeted subset via the `RepoFiles` port, no checkout) → `agent` (optional:
+  `inline` / `container-explore` prose or structured JSON → `result.custom` / `container-coding`) →
+  `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing).
+- **Registration by reference** on the facade's app-owned registries:
+  `agentKindRegistry.register({ kind, systemPrompt, agent, preOps, postOps, presentation })` plus
+  `pipelineRegistry.register(...)`. A `container-*` surface implies the container requirement.
+- **Live wiring**: `ExecutionService` runs `preOps` before dispatch and `postOps` after
+  `recordStepResult`, over a per-run `RepoFiles` bound by the facade-wired `resolveRunRepoContext`
+  (composed via `makeResolveRunRepoContext`, wired in ALL THREE facades). Unwired means the hooks
+  skip. `runRepoOps` lives in `@cat-factory/agents` so orchestration doesn't import the server layer.
+- **`RepoFiles`** (`kernel/ports/repo-files.ts`) is a per-run, checkout-free facade over the Git
+  Data + contents API: pure HTTP, so runtime-symmetric.
+- **Frontend**: the workspace snapshot carries `customAgentKinds`, merged into the palette via
+  `useAgentsStore().registerCustomKinds`; a structured kind's `result.custom` renders through the
+  shared `generic-structured` view. No bespoke UI.
+- **NOT yet done**: the built-in agents aren't migrated to this model; their rendering still lives
+  in the harness. Converting them one at a time (parity-gated, image-bumped) is the remaining
+  strangler work.
 
 ## Unified agent runs (failure + retry surface)
 
-Both container-backed flows — task `execution` and repo `bootstrap` — persist to
-one `agent_runs` D1 table (kind-scoped), and the board surfaces their failure +
-retry uniformly:
+Both container-backed flows (task `execution`, repo `bootstrap`) persist to one `agent_runs` table
+(kind-scoped), and the board surfaces failure + retry uniformly. `D1AgentRunRepository` reads across
+kinds (`getRef` for retry dispatch, `listStale` for the sweeper); `sweepStuckRuns` re-drives stale
+`running` runs of BOTH kinds. `POST /workspaces/:ws/agent-runs/:id/retry` resolves the kind then
+calls the right service. The frontend merges executions + bootstrap jobs into a per-block summary
+rendered by the shared `AgentFailureCard.vue`. A failed execution leaves its block `blocked`.
 
-- Storage: `D1ExecutionRepository`/`D1BootstrapJobRepository` both target
-  `agent_runs WHERE kind=…`; `D1AgentRunRepository` reads across kinds
-  (`getRef` for retry dispatch, `listStale` for the sweeper).
-- Sweeper: `sweepStuckRuns` (worker `infrastructure/workflows/sweeper.ts`, driven
-  from `index.ts` `scheduled`) re-drives stale `running` runs of **both** kinds —
-  so an evicted bootstrap is now re-driven too (the old known limitation is gone).
-- Retry: `POST /workspaces/:ws/agent-runs/:id/retry` (`modules/agentRuns/
-AgentRunController.ts`) resolves the kind via `getRef`, then calls
-  `bootstrap.service.retry` / `executionService.retry`; returns `{ kind, run }`.
-- Frontend: `stores/agentRuns.ts` (`useAgentRunsStore`) merges `snapshot.executions`
-  - `snapshot.bootstrapJobs` into a per-block `byBlock` summary; the shared
-    `components/board/AgentFailureCard.vue` renders the rose banner + retry on the
-    board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
-    its block `blocked` (NOT the old success-looking `pr_ready`).
+## Telemetry & agent-context observability
 
-## Telemetry & agent-context observability (isolated store + external sinks)
+Three sinks live in a dedicated telemetry store, separate from the transactional domain
+(append-heavy, high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare
+and a `telemetry` Postgres schema on Node. All three are pruned to
+`LLM_CALL_METRICS_RETENTION_DAYS` (default 3).
 
-**Three** observability sinks capture what runs do, and all three live in a **dedicated
-telemetry store** (separate from the transactional domain —
-append-heavy/high-volume/short-retention): a separate **required** `TELEMETRY_DB` D1 database
-on Cloudflare and a `telemetry` Postgres **schema** (`pgSchema('telemetry')`, same connection)
-on Node. All three tables are pruned to the same window
-(`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention sweep.
+- **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing), recorded via
+  `LlmObservabilityService`. The subscription harnesses (Claude Code / Codex) bypass the proxy, so
+  the harness lifts metrics off each CLI's event stream and `pollJob` feeds them through the SAME
+  service via `makeHarnessCallRecorder`. Claude Code's `stream-json` carries full bodies; Codex's is
+  thinner; neither exposes per-HTTP timing.
 
-That store is the deployment's OWN, short-retention record. Streaming the same activity to an
-operator's **external** backend is a separate, purely additive seam that writes to none of
-these tables — see "External trace destinations" at the end of this section.
+  **These STREAM.** The harness hands over whatever accumulated since the previous poll
+  (`RunnerJobView.callMetrics`, drain-on-read), and the complete list still rides the terminal
+  result. Both carry the same objects stamped with a job-scoped `seq`, so both mint the same
+  `<jobId>-hc-<seq>` id and `record` ignores the second write (first write wins, NEVER an upsert,
+  which would recompute the delta against a moved chain tip). Both repos target the ID alone
+  (`onConflictDoNothing({ target: id })` ⇄ `ON CONFLICT(id) DO NOTHING`, NOT `INSERT OR IGNORE`,
+  which would also swallow a constraint violation on one runtime only). Terminal-only recording
+  meant a run whose container died reported ZERO calls, which is precisely the run worth inspecting.
 
-- **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing).
-  Recorded by the LLM proxy via `LlmObservabilityService` for the proxy-metered Pi harness.
-  The **subscription harnesses (Claude Code / Codex) bypass the proxy** (they talk direct to
-  the vendor), so the harness lifts per-call metrics off each CLI's event stream and
-  `ContainerAgentExecutor.pollJob` feeds them through the SAME `LlmObservabilityService` (via
-  `makeHarnessCallRecorder`, wired per-facade as `recordHarnessCalls`). Claude Code's
-  `stream-json` carries full request/response bodies; Codex's `exec --json` is thinner (flat
-  assistant text + per-turn tokens, no request transcript). Both have zero per-HTTP timing
-  (the CLIs don't expose it). This captures what the model _received_ per call.
-
-  **These stream — they are NOT batched to the end of the run.** The harness buffers each
-  call as its CLI yields it and hands over whatever accumulated since the previous poll
-  (`RunnerJobView.callMetrics`, drain-on-read exactly like `spans`/`followUps`); the same
-  complete list still rides the terminal `RunnerJobResult.callMetrics` for a transport that
-  forwards no drain. Both channels carry the SAME metric objects, each stamped with a
-  job-scoped `HarnessCallMetric.seq`, so both mint the same `<jobId>-hc-<seq>` row id and
-  `LlmCallMetricRepository.record` ignores the second write (first write wins, NEVER an upsert,
-  which would recompute the row's prompt delta against a chain tip that has since moved on).
-  Both repos target the ID alone (`onConflictDoNothing({ target: id })` ⇄ `ON CONFLICT(id) DO
-NOTHING`, NOT SQLite's `INSERT OR IGNORE`, which also swallows a NOT NULL/CHECK violation and
-  would silently drop a malformed metric on one runtime while the other throws). The executor
-  filters out the calls the live drain already stored, so the terminal write is one round-trip
-  per NEW call, not a re-walk of the whole list. Terminal-only recording meant a run whose
-  container died mid-flight — an eviction, an OOM-killed harness — reported ZERO calls no
-  matter how many tokens it had spent, which is precisely the run worth inspecting. A
-  self-hosted runner pool opts in by mapping `callMetricsPath` in its response manifest.
-
-  Two invariants the streaming introduces, both easy to break:
-  - **A published call must be FINAL.** It is recorded as the drain reaches it and the terminal
-    repeat is ignored, so a field mutated after publishing never lands. A producer whose numbers
-    arrive late — `attributeCumulativeUsage`, which costs the calls of a CLI that reports only a
-    cumulative total — publishes through `createCallMetricPublisher` (`executor-harness/src/pi.ts`),
-    which WITHHOLDS an un-costed call until the fallback can no longer fire and flushes at the end.
-    Otherwise the row lands as zero tokens and the correction is dropped.
+  Two invariants the streaming introduces:
+  - **A published call must be FINAL.** A producer whose numbers arrive late
+    (`attributeCumulativeUsage`) publishes through `createCallMetricPublisher`, which WITHHOLDS an
+    un-costed call until the fallback can no longer fire. Otherwise the row lands as zero tokens and
+    the correction is dropped.
   - **`latestChainTip` skips `message_count = 0` rows.** A subagent call carries no re-sendable
-    prompt chain, and subagent calls interleave with the parent's in record order now that
-    telemetry streams. A tip nothing can chain onto makes every following parent call store its
-    whole prompt, losing the delta compression on exactly the subagent-heavy runs it matters for.
+    chain, and those interleave with the parent's now that telemetry streams; a tip nothing can
+    chain onto loses delta compression on exactly the subagent-heavy runs where it matters.
 
-- **`agent_context_snapshots`** — the complete context an agent was _provided_ per container
-  dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
-  bodies folded in, and the **full content of the files injected into the container**
-  (`.cat-context/*` — which the agent reads via tools, so they never reach proxy telemetry).
-  Recorded best-effort by `ContainerAgentExecutor.startJob` (after dispatch) via
-  `AgentContextObservabilityService` (orchestration), built per-facade and injected into both
-  the executor (write) and `createCore` (read). The snapshot is a **redacted allow-list**
-  projection of the dispatched job — NEVER a token or credential-bearing URL. As a
-  defence-in-depth second layer, `AgentContextObservabilityService.record` also runs every
-  stored body (both prompts, each fragment body, each injected file's content) through
-  `redactSecrets` BEFORE the size budget, deep-scrubs the `extras` bag (`redactSecretsDeep`
-  — its decisions/revision-feedback values are free-text prose that can embed a token), and
-  drops the whole body of a context file whose name marks it as a raw credential store
-  (`isSecretShapedFilename` — `.env`/`*.pem`/SSH key/`.npmrc`/…), so a token embedded in a
-  task description, a decision note, or an injected secret-shaped file never lands verbatim
-  in the telemetry store. `redactSecrets` also catches PEM-armored private keys by their
-  header, so a pasted key is scrubbed regardless of the enclosing filename.
+- **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
+  system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
+  (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list
+  projection, never a token or credential-bearing URL. As defence in depth, `record` also runs every
+  stored body through `redactSecrets` before the size budget, deep-scrubs `extras` (free-text prose
+  can embed a token), and drops the body of a context file whose name marks it a credential store
+  (`isSecretShapedFilename`). `redactSecrets` catches PEM-armored keys by header regardless of
+  filename.
 
-- **`agent_search_queries`** — one row per web search a container agent actually PERFORMED:
-  the query text, the provider that served it, and the result count. The sibling of the
-  snapshot above — that keeps the context the agent was _provided_, this keeps what it went
-  and _looked up_ (which reaches no other sink: the search rides the container web-search
-  proxy, not the LLM proxy). Recorded best-effort by `WebSearchProxyController` through
-  `SearchQueryObservabilityService` (orchestration, the `AgentSearchQueryRecorder` port),
-  which clamps the stored query to `MAX_SEARCH_QUERY_CHARS` (8 KiB) so a pathological query
-  can't make the whole row fail to record.
+- **`agent_search_queries`** — one row per web search a container agent PERFORMED (query, provider,
+  result count). The sibling of the snapshot: that keeps what the agent was given, this what it went
+  and looked up (the search rides the web-search proxy, not the LLM proxy). The stored query is
+  clamped to `MAX_SEARCH_QUERY_CHARS` so a pathological query can't fail the row.
 
-- **Gating**: storing the snapshot AND the search queries requires BOTH the deployment
-  prompt-recording switch (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext`
-  setting (on by default; a toggle in `WorkspaceSettingsPanel.vue`) — the operator opt-out
-  wins over the per-workspace toggle. Each service is wired only when its repository is
-  present, so an unconfigured facade (and the tests) collects nothing.
-- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/{agent-context,search-queries}`
-  → `stores/observability.ts` → the "Provided context" and "Web search" views in
-  `ObservabilityPanel.vue` (alongside the existing "Model activity" call list). A run-scoped
-  endpoint returns an EMPTY list rather than erroring when its sink isn't wired.
-- **Parity**: the D1 repos (`D1AgentContextSnapshotRepository` /
-  `D1AgentSearchQueryRepository`) ⇄ the Drizzle repos, asserted by the cross-runtime
-  `defineAgentContextSuite`. The Cloudflare facade fails fast at container build if
-  `TELEMETRY_DB` is unbound.
+- **Gating**: the snapshot and the search queries require BOTH `LLM_RECORD_PROMPTS` AND the
+  per-workspace `storeAgentContext` (the operator opt-out wins). Each service wires only when its
+  repository is present.
+- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/{agent-context,search-queries}` →
+  `stores/observability.ts` → `ObservabilityPanel.vue`. A run-scoped endpoint returns an EMPTY list
+  rather than erroring when its sink isn't wired.
+- **Parity** asserted by `defineAgentContextSuite`. Cloudflare fails fast at build if `TELEMETRY_DB`
+  is unbound.
 
-### External trace destinations (the `LlmTraceSink` seam) — additive, opt-in, never load-bearing
+### External trace destinations (the `LlmTraceSink` seam)
 
-Everything above is the deployment's own store. **Exporting the same per-call activity to an
-operator's observability backend goes through ONE kernel port — `LlmTraceSink`
-(`ports/llm-trace-sink.ts`) — and never through a second recording path.** Two packages
-implement it (`@cat-factory/observability-langfuse`, `@cat-factory/observability-otel`), and
-`composeTraceSinks([…])` collapses them into the single `CoreDependencies.llmTraceSink` slot:
-none ⇒ `undefined`, one ⇒ that sink, both ⇒ a fan-out. So **adding a destination is a new
-`LlmTraceSink` implementation composed into that array, never a new call site** in the
-observability service.
+Exporting the same activity to an operator's backend goes through ONE kernel port and never a second
+recording path. Two packages implement it (`observability-langfuse`, `observability-otel`), and
+`composeTraceSinks([…])` collapses them into `CoreDependencies.llmTraceSink`. **Adding a destination
+is a new implementation composed into that array, never a new call site.**
 
-- **Each facade builds the slot in one place** — `buildTraceSink(config)` (Worker
-  `infrastructure/container-trace-sinks.ts` ⇄ Node `container-executor-deps.ts` /
-  `modelProvider.ts`) — and every sink is opt-in on a full config (`LANGFUSE_ENABLED` + both
-  keys; `OTEL_ENABLED` + `OTEL_EXPORTER_OTLP_ENDPOINT`). Half-configured ⇒ not built, like
-  the other opt-in integrations.
-- **The OTel package is the one place the runtimes deliberately differ in TRANSPORT, not in
-  behaviour**: workerd can't run the official `@opentelemetry/*` SDK, so the Worker gets the
-  `fetch` OTLP exporter (`createOtelSink`) and Node the SDK one (`createNodeOtelSink`). They
-  share `src/mapping.ts` and are pinned equal by `conformity.test.ts` — so a change to span
-  names, attributes, trace-id grouping or metric names goes in the MAPPING layer, or the
-  conformity test fails (which is exactly its job).
-- **A sink never throws into the caller** and honours the same `LLM_RECORD_PROMPTS` privacy
-  switch as the local store (usage/timing/attributes still export; prompt + response bodies
-  don't). Observability must never break agent work — so a wired sink can't fail a run.
-- **Deployment-level (platform-operator) metrics** are the dual of the per-run sink: a
-  runtime-neutral `sweepPlatformMetrics` driver (orchestration
-  `modules/observability/platformMetricsSweep.ts`) enumerates accounts from the workspace
-  projection and pushes each account's `PlatformObservabilityService.summarize` projection to
-  `createPlatformMetricsOtelExporter` as OTLP **gauges**. Runtime-symmetric per the usual rule
-  — the Worker `scheduled` cron ⇄ a Node interval sweeper (`runtimes/node/src/platformMetrics.ts`)
-  — and opt-in ON TOP of the base exporter (`OTEL_PLATFORM_METRICS`). Best-effort per account:
-  one account's failed summarize/export is logged and skipped, never aborting the sweep.
-  The in-app half of the same projection is `GET /accounts/:accountId/observability/platform`
-  (admin-gated, 503 when the rollup isn't wired) → `stores/platformObservability.ts` →
-  `OperatorDashboardPanel.vue`, plus the `platform_health` threshold alert
-  (`platform-health.logic.ts` → a `NotificationService` card, state-change deduplicated).
-  Deeper detail + the remaining slices live in
-  [`docs/initiatives/platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+Each facade builds the slot in one place (`buildTraceSink(config)`); every sink is opt-in on a FULL
+config, and half-configured means not built. The OTel package is the one place the runtimes
+deliberately differ in TRANSPORT, not behaviour: workerd can't run the official SDK, so the Worker
+gets the `fetch` OTLP exporter and Node the SDK one. They share `src/mapping.ts` and are pinned
+equal by `conformity.test.ts`, so a change to span names, attributes, trace-id grouping, or metric
+names goes in the mapping layer. **A sink never throws into the caller** and honours
+`LLM_RECORD_PROMPTS` (usage and timing still export; bodies don't): observability must never break
+agent work.
+
+**Deployment-level metrics** are the dual: `sweepPlatformMetrics` enumerates accounts and pushes
+each account's `PlatformObservabilityService.summarize` projection as OTLP gauges, runtime-symmetric
+(Worker cron ⇄ Node interval sweeper) and opt-in on top of the base exporter
+(`OTEL_PLATFORM_METRICS`). Best-effort per account. The in-app half is
+`GET /accounts/:accountId/observability/platform` → `OperatorDashboardPanel.vue`, plus the
+`platform_health` threshold alert (state-change deduplicated). Detail:
+[`docs/initiatives/platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model
 
-- A "service" on the board is just a `Block` with `level: 'frame'`,
-  `parentId: null`. Modules are sub-frames; tasks are leaves. See
-  `app/types/domain.ts`, `backend/packages/contracts/src/entities.ts`,
-  migration `0001_init.sql`.
-- **A Block carries no repo fields.** Repo↔block linkage lives in the
-  `github_repos` projection table via its `block_id` column
-  (`D1RepoProjectionRepository.linkBlock()`).
-- **Execution resolves the repo at runtime** via `resolveRepoTarget(workspaceId,
-blockId)` (worker `infrastructure/container.ts`): find the `github_repos` row
-  whose `block_id === blockId`, else fall back to `repos[0]`. So to make a
-  bootstrapped repo a board service that tasks target correctly, the repo
-  projection row must be linked to the new frame's block id.
-- A workspace has exactly **one** GitHub installation but may have **many** repos.
-- `BoardScanService.reconcileBlueprint()` (orchestration `src/modules/boardScan/BoardScanService.ts`)
-  is the engine's blueprint reconciler: it maps a `blueprints` step's decomposition
-  tree onto the run's existing service frame in place (match modules by name, add
-  missing, refresh descriptions, never delete), falling back to spawning a fresh
-  frame + modules only when the target frame can't be resolved.
-- Drag-drop: `useBlockDrag.ts` (`reparentAt()`) → `POST /blocks/:id/reparent` →
-  `BoardService.reparent()`. Tasks can move into frames or modules; modules into
-  frames; frames cannot nest (`canReparent` in `board.logic.ts`).
+- A "service" is a `Block` with `level: 'frame'`, `parentId: null`. Modules are sub-frames; tasks are
+  leaves.
+- **A Block carries no repo fields.** Repo↔block linkage lives in the `github_repos` projection via
+  its `block_id` column.
+- **Execution resolves the repo at runtime** via `resolveRepoTarget(workspaceId, blockId)`: the
+  `github_repos` row whose `block_id` matches, else `repos[0]`. So a bootstrapped repo becomes a
+  board service only once its projection row is linked to the frame's block id.
+- A workspace has exactly ONE VCS installation but may have MANY repos.
+- Drag-drop: `useBlockDrag.ts` → `POST /blocks/:id/reparent` → `BoardService.reparent()`. Tasks move
+  into frames or modules, modules into frames; frames cannot nest (`canReparent` in `board.logic.ts`).
 
 ## Individual-usage subscriptions (per-user, not pooled)
 
-Vendors flagged `individualOnly` in `SUBSCRIPTION_VENDORS` (today `claude`, `codex`, and
-`glm`) are licensed for individual use, so they are NEVER in the per-workspace pool:
-`ProviderSubscriptionService` refuses them (409). They live in a separate per-USER store
-with a distinct restricted mode. (At run time `claude`/`codex` always lease a personal
-credential, while `glm` is dual-mode: it leases one only when the user has their own GLM
-subscription, else it runs on the poolable Cloudflare base.) Full model + safeguards:
+Vendors flagged `individualOnly` in `SUBSCRIPTION_VENDORS` (`claude`, `codex`, `glm`) are licensed
+for individual use, so `ProviderSubscriptionService` refuses them from the workspace pool (409).
+Full model:
 [`backend/docs/individual-subscription-usage.md`](./backend/docs/individual-subscription-usage.md).
 
-- **Double-encrypted at rest** (`personal_subscriptions` ⇄ Drizzle):
-  `system.encrypt(personal.seal(token, password))`. The inner layer
-  (`WebCryptoPersonalSecretCipher`, PBKDF2→AES-GCM) is keyed by the user's personal
-  **password**, which is never stored — so the token needs BOTH the system key AND the
-  password to recover. `PersonalSubscriptionService` (integrations) owns it;
-  `GET|POST|DELETE /personal-subscriptions` (user-scoped) is the API.
-- **Per-run activation** (`subscription_activations`): at start/retry the user supplies
-  their password (cached client-side with a TTL) → `activateForRun` re-encrypts the raw
-  token with the SYSTEM key only, scoped to the run, so the async container steps lease it
-  without the user present. Cleared when the run reaches terminal (`emitInstance` →
-  `deleteByExecution`) and swept on TTL (Worker cron ⇄ Node retention timer).
-- **Gating**: `personalGateForBlock`/`personalGateForRun` (server) resolve the block's
-  individual vendor via `individualVendorForModelId`; a missing user/credential/password
-  → `428 credential_required {vendor,reason}`, which the SPA's
-  `personalSubscriptions` store turns into a password modal (then retries). The run
-  records `initiatedBy`; `ContainerAgentExecutor` leases the initiator's activation
-  (`leasePersonalSubscriptionToken`) for an individual vendor instead of the pool.
-- **No recurring**: `RecurringPipelineService.fire` refuses a block on an individual-usage
-  model (can't unlock unattended).
+- **Double-encrypted at rest** (`personal_subscriptions`): `system.encrypt(personal.seal(token,
+password))`. The inner layer is keyed by the user's password, which is never stored, so recovery
+  needs BOTH.
+- **Per-run activation** (`subscription_activations`): at start/retry the user supplies their
+  password, and `activateForRun` re-encrypts with the SYSTEM key scoped to the run so async steps
+  lease it without the user present. Cleared at terminal and swept on TTL (Worker cron ⇄ Node timer).
+- **Gating**: `personalGateForBlock`/`personalGateForRun` resolve the vendor via
+  `individualVendorForModelId`; a missing credential returns `428 credential_required`, which the SPA
+  turns into a password modal. `ContainerAgentExecutor` leases the initiator's activation.
+- **No recurring**: `RecurringPipelineService.fire` refuses a block on an individual-usage model.
 
 ## Multi-runtime facades & cross-runtime conformance
 
-The backend ships to two deployment targets, both serving the **same**
-`@cat-factory/server` Hono app; each facade in `backend/runtimes/*` supplies only its
-differentiators behind the shared kernel ports + the `container.gateways` seam.
+Both facades serve the same `@cat-factory/server` Hono app; each supplies only its differentiators
+behind the shared kernel ports and the `container.gateways` seam.
 
-- **Cloudflare Worker** (`runtimes/cloudflare`, `@cat-factory/worker`): D1 (SQLite),
-  Cloudflare **Workflows** for durable execution, Durable Objects for real-time +
-  per-run Containers, queues/cron, the `workers-ai` binding. The gold-standard flows
-  above (execution, bootstrap) run on this facade.
-- **Node service** (`runtimes/node`, `@cat-factory/node-server`): **Postgres via
-  Drizzle** (the single persistence — there is no in-memory store), **pg-boss** for
-  durable execution (`PgBossWorkRunner` enqueues an `execution.advance` job;
-  `driveExecution` runs the same advance/poll loop the `ExecutionWorkflow` does, with
-  plain async sleeps instead of durable steps; `signalDecision` re-enqueues a parked
-  run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
-  execution worker, attaches the **real-time WebSocket transport** to the HTTP listener,
-  and serves over `@hono/node-server`. **Async GitHub ingest is pg-boss-backed** (the
-  analogue of the Worker's `GITHUB_SYNC_QUEUE` consumer + `GitHubBackfillWorkflow`): the
-  `githubBackfill` / `githubWebhook` gateway seams enqueue webhook deliveries, single-repo
-  resyncs and full-installation backfills onto the `github.sync` queue so the request acks
-  fast, and `startGitHubSyncWorker` drains it and applies each job to the projections via
-  the same `GitHubSyncService` / `WebhookService` the inline path used (a container built
-  with no boss — a pure-logic test — keeps the inline fallback). **Real-time** is implemented: `start()` creates a
-  per-workspace `NodeRealtimeHub` (in-memory subscriber registry), wires a
-  `NodeEventPublisher` (decorated with `FanOutEventPublisher`) as the engine's
-  `executionEventPublisher` + an `InAppNotificationChannel`, and `attachRealtime`
-  (`runtimes/node/src/realtime.ts`) accepts the SAME raw-WebSocket + `?ticket=` protocol
-  the Worker serves via a `ws` server on the HTTP `upgrade` event (`@hono/node-server`
-  can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket — not socket.io —
-  so this keeps the client unchanged across runtimes). The ticket mint/verify is the
-  shared `@cat-factory/server` `auth/wsTicket.ts` used by both the Worker's
-  `EventsController` and this upgrade handler. **Multi-node is supported** via a layered
-  cross-node propagator (`runtimes/node/src/propagator.ts`): `NodeEventPublisher` writes
-  through a narrow `LocalEventSink` seam that both the bare `NodeRealtimeHub` and the
-  `LayeredEventPropagator` implement, so a horizontally-scaled deployment fans every event
-  to the local hub AND to peer nodes over a pluggable adapter — **Redis pub/sub today**
-  (`RedisWebSocketPropagator`, `runtimes/node/src/redisPropagator.ts`; the opt-in `ioredis`
-  dependency is dynamically imported only when `REDIS_URL` is set), a future Postgres
-  LISTEN/NOTIFY or NATS adapter implementing the same `WebSocketPropagator` port. With no
-  bus configured (single replica, and **local mode**, which is always single-node) the layer
-  is exactly the bare hub — zero overhead, no extra dependency. The Worker facade needs none
-  of this: its `WorkspaceEventsHub` Durable Object is globally addressed (one per workspace
-  across the deployment), so cross-node propagation is inherent — a genuine Node-only concern,
-  not a facade-parity gap.
-  **Container agent steps** (coder/mocker/tester/playwright/blueprints/ci-fixer/
-  conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
-  `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),
-  dispatching to a workspace's **self-hosted runner pool** — the Node facade has no
-  built-in per-run container runtime, so it resolves the manifest-driven
-  `RunnerPoolTransport` (in `@cat-factory/integrations`) instead of a Cloudflare
-  Container. A pool runs the same executor-harness image, so it serves **every** dispatch
-  kind: runtime parity is the default (see "Keep the runtimes symmetric"), so there is no
-  opt-in allow-list — a new harness kind reaches the pool automatically, exactly as it
-  does a Cloudflare container.
-  Wired in `runtimes/node/src/container.ts` when the prerequisites are set
-  (`GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY`, `PUBLIC_URL`, `AUTH_SESSION_SECRET`,
-  `ENCRYPTION_KEY`); persistence (`runner_pool_connections`,
-  `github_installations`, `github_repos`) mirrors the D1 tables in `db/schema.ts`. When
-  unconfigured the composite still serves inline kinds but fails container kinds loudly
-  (no silent useless one-shot LLM call). NOTE: populating `github_installations` /
-  `github_repos` still needs the GitHub connect/sync integration on Postgres (the
-  remaining follow-up); the executor reads those rows once present.
-- **Local mode** (`runtimes/local`, `@cat-factory/local-server`): the Node facade with
-  the runner backend swapped for a **per-run local container** (`LocalContainerRunnerTransport`
-  over a `ContainerRuntimeAdapter` for Docker/Podman/OrbStack/Colima/Apple `container`,
-  injected via `buildNodeContainer`'s `resolveTransport` seam) and GitHub reached via a
-  **PAT** — both the push token (`mintInstallationToken` seam) and a PAT-backed
-  `FetchGitHubClient` (`githubClient` seam) that wires the CI gate + merge / mergeability
-  providers, so a local pipeline gates on real Actions CI and **merges for real**.
-  Reuses Node's Postgres/pg-boss/gateways unchanged. So a developer runs the whole
-  product locally — agent containers clone/push/open real PRs on github.com via the PAT.
-  Container kinds need a target repo's `github_repos`/`github_installations` rows seeded
-  (the `linkRepo` helper does this from PAT-read metadata, since local mode has no App
-  connect flow).
-- **Model provisioning** is composed per facade from `@cat-factory/agents`'
-  `CompositeModelProvider` (+ opt-in `@cat-factory/provider-bedrock`): Worker =
-  workers-ai binding + direct vendors + Cloudflare-REST + Bedrock; Node = direct
-  vendors + Cloudflare-REST + Bedrock (no binding). Unconfigured providers aren't
-  registered, so `resolve` throws a clear error instead of failing deep in the SDK.
-- **Locally-run models (per-user)** — Ollama / LM Studio / llama.cpp / vLLM / a custom
-  OpenAI-compatible runner. Configured per USER in the UI ("My local runners"), stored in
-  the `local_model_endpoints` table (D1 ⇄ Drizzle parity), validated on the fly via
-  `LocalModelEndpointService.testConnection` (probes `/v1/models`). Enabled models are
-  appended to `GET /models` dynamically (id `"<provider>:<model>"`) as the `direct` flavour
-  gated by the `localModels` capability (the per-user set of enabled model ids — usability
-  is model-granular, not just per-runner) — NO API key. At run time the LLM proxy + the
-  inline model provider resolve the **run initiator's** endpoint and SKIP the DB key lease
-  (the keyless local branch; `isProxyableProvider` + `isLocalRunner`), exactly like the
-  personal-subscription initiator model. `parseLocalModelId` turns the dynamic id into a
-  `ModelRef`. The base URL is forwarded server-side, so it's constrained to a loopback/LAN
-  host allow-list (`localRunnerUrlError`) at the write boundary + the test probe (public
-  hosts and the link-local metadata endpoint are rejected — anti-SSRF). Runtime-neutral and
-  runs on the cross-runtime conformance suite; in practice only local/Node deployments reach
-  `localhost`.
+- **Cloudflare Worker**: D1, Workflows for durable execution, Durable Objects for real-time and
+  per-run Containers, queues/cron, the `workers-ai` binding.
+- **Node service**: Postgres via Drizzle, **pg-boss** for durable execution (`PgBossWorkRunner`
+  enqueues `execution.advance`; `driveExecution` runs the same advance/poll loop with plain sleeps;
+  `signalDecision` re-enqueues a parked run). Async GitHub ingest is pg-boss-backed (the analogue of
+  the Worker's sync queue + backfill workflow), draining onto the same `GitHubSyncService` /
+  `WebhookService`. **Real-time**: a per-workspace `NodeRealtimeHub` plus `attachRealtime`, which
+  serves the SAME raw-WebSocket + `?ticket=` protocol via a `ws` server on the HTTP `upgrade` event
+  (`@hono/node-server` can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket), with
+  the ticket mint/verify shared from `@cat-factory/server`. **Multi-node** rides a layered propagator
+  writing through a narrow `LocalEventSink` seam: Redis pub/sub today (`ioredis` dynamically imported
+  only when `REDIS_URL` is set), a future Postgres LISTEN/NOTIFY or NATS adapter on the same port.
+  With no bus the layer is exactly the bare hub. The Worker needs none of this: its
+  `WorkspaceEventsHub` DO is globally addressed, so propagation is inherent (a genuine Node-only
+  concern, not a parity gap). **Container agent steps** run via the SAME `CompositeAgentExecutor` +
+  `ContainerAgentExecutor`, dispatching to a workspace's self-hosted runner pool
+  (`RunnerPoolTransport`) instead of a Cloudflare Container. A pool runs the same harness image, so
+  it serves EVERY dispatch kind: no opt-in allow-list, and a new harness kind reaches it
+  automatically. When unconfigured the composite serves inline kinds but fails container kinds
+  loudly.
+- **Local mode**: the Node facade with the runner backend swapped for a per-run local container and
+  GitHub reached via a PAT, both the push token and a PAT-backed `FetchGitHubClient` wiring the CI
+  gate + merge providers, so a local pipeline gates on real Actions CI and merges for real. Container
+  kinds need the target repo's projection rows seeded (the `linkRepo` helper does this from PAT-read
+  metadata).
+- **Model provisioning** is composed per facade from `CompositeModelProvider`. Unconfigured
+  providers aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK.
+- **Locally-run models (per-user)** — Ollama / LM Studio / llama.cpp / vLLM / custom
+  OpenAI-compatible. Stored in `local_model_endpoints` (D1 ⇄ Drizzle), validated via
+  `testConnection`. Enabled models are appended to `GET /models` as `direct` gated by the
+  `localModels` capability (model-granular, not per-runner), with NO API key. At run time the proxy
+  and inline provider resolve the run INITIATOR's endpoint and skip the key lease. The base URL is
+  forwarded server-side, so it's constrained to a loopback/LAN allow-list (`localRunnerUrlError`) at
+  the write boundary and the test probe (public hosts and the link-local metadata endpoint rejected).
 
-**Cross-runtime conformance** keeps the facades behaviourally identical:
-`@cat-factory/conformance` exposes `defineConformanceSuite(harness)` — the key backend
-behaviour (workspaces, board, the execution engine driven via the shared
-`FakeAgentExecutor`) as runtime-neutral assertions parameterised by a
-`ConformanceHarness` (`makeApp(agentOptions) → { call, createWorkspace, drive }`). The
-Worker invokes it from `runtimes/cloudflare/test/integration/conformance.spec.ts`
-(real D1, inside workerd); the Node service from `runtimes/node/test/conformance.spec.ts`
-and the local facade from `runtimes/local/test/conformance.spec.ts` (both real Postgres
-via `DATABASE_URL`, the latter building through `buildLocalContainer` with a fake agent
-executor so the local wiring can't drift). All run the **same** assertions, so a
-repository that maps a column differently or an engine path only one facade wires fails
-a test instead of shipping. `runtimes/node/test/durable-execution.spec.ts` additionally
-drives a run to completion through the real pg-boss runner.
+**Cross-runtime conformance**: `@cat-factory/conformance` exposes `defineConformanceSuite(harness)`,
+the key backend behaviour as runtime-neutral assertions parameterised by a `ConformanceHarness`. The
+Worker runs it inside workerd against real D1; Node and local against real Postgres (local building
+through `buildLocalContainer` so its wiring can't drift). Same assertions, so a repository that maps
+a column differently, or an engine path only one facade wires, fails a test instead of shipping.
+`runtimes/node/test/durable-execution.spec.ts` additionally drives a run through real pg-boss.
 
 ## End-to-end (assembled-product) coverage
 
-Where the conformance suite asserts backend behaviour port-by-port, the **Playwright e2e
-suite** (`backend/internal/e2e`, `@cat-factory/e2e`, private) covers the **assembled
-product**: a real Chromium drives the real SPA (the `@cat-factory/app` layer via the
-`deploy/frontend` consumer), which talks to a **real Node backend** — real Postgres
-(Drizzle), real pg-boss durable execution, and the real WebSocket push transport. Only the
-**external** deps are faked, so it's deterministic and needs no secrets/Docker/network:
-LLMs + per-run containers → the canonical `FakeAgentExecutor`/`AsyncFakeAgentExecutor`
-(reused from `@cat-factory/conformance`), repo bootstrap → `FakeRepoBootstrapper`, and
-GitHub App / email / Slack / Datadog left **off** (all opt-in, so gates/providers pass
-through). The backend wiring lives in `src/testServer.ts` (the stock `buildContainer` seam
-with those fakes injected); the full picture is in [`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
+Where conformance asserts backend behaviour port-by-port, the Playwright suite
+(`backend/internal/e2e`) covers the assembled product: real Chromium → real SPA → real Node backend
+(real Postgres, real pg-boss, real WebSocket push). Only EXTERNAL deps are faked, so it needs no
+secrets/Docker/network: LLMs and containers → the canonical `FakeAgentExecutor`, bootstrap →
+`FakeRepoBootstrapper`, GitHub App / email / Slack / Datadog left off. Wiring is `src/testServer.ts`;
+full picture in [`backend/internal/e2e/README.md`](./backend/internal/e2e/README.md).
 
-- **What e2e is FOR vs conformance:** assert on what only the assembled product can show —
-  the **live, WebSocket-pushed UI round-trip** (start over REST → the board reacts with no
-  reload). A pure backend side-effect (a real PR merge, a column mapping) belongs in the
-  conformance/integration suites, NOT here. The e2e backend has GitHub off, so anything
-  needing a real outbound call (the `FetchGitHubClient`, an inline LLM) must be mocked at
-  the backend's **outbound boundary** (MSW / a `buildNodeContainer` port seam), never in
-  the browser — the SPA only ever talks to this one backend.
-- **Spec shape (mandatory):** **seed/trigger over REST, then assert only on LIVE pushed UI
-  updates** — no reloads, no fixed sleeps, no fragile canvas drag/zoom; only web-first
-  assertions (`toBeVisible`/`expect.poll`) on the named timeouts in `tests/helpers.ts`.
-  Shared setup is the `seededBoard` fixture (seed → pin → open) plus the **auto**
-  `pageErrors` fixture that fails any test on an uncaught SPA exception. Each spec **seeds
-  its own workspace** (`workers: 1`, serial), so concurrent workspaces never collide.
-- **Selectors are `data-testid`, always.** Every assertion targets a stable test id, never
-  text/CSS/DOM-shape. Covering a new flow whose affordance has no test id means **adding
-  the `data-testid`** to that component first (a one-line, behaviour-neutral frontend
-  change — e.g. `run-stop`/`run-reset` on the inspector's run controls) and a patch
-  changeset for `@cat-factory/app`, then writing the spec against it.
-- **Adding a spec:** drop a `*.spec.ts` under `tests/`, import `test`/`expect` from
-  `./fixtures` (NOT `@playwright/test`), reuse the `helpers.ts` REST helpers + timeouts,
-  and add a row to the README's Specs table. Deterministic variations are env knobs on
-  `testServer.ts` (`E2E_DECISION_ON_STEPS`, `E2E_CONFIDENCE`, `E2E_ASYNC_KINDS` /
-  `E2E_DISPATCH_THROW_KINDS`); a spec needing a different backend env (e.g. a merge-review
-  flow at low `E2E_CONFIDENCE`) wants its **own** `webServer` in `playwright.config.ts`.
-- **CI:** runs in its own non-blocking `Test e2e` job — NOT part of the unit `test:run`
-  lane and NOT wired into the aggregated `Test` gate, so a browser/boot flake can't block
-  an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
-  (see the README's promotion checklist).
+- **What e2e is FOR**: what only the assembled product shows, above all the live WebSocket-pushed UI
+  round-trip. A pure backend side-effect belongs in conformance. Anything needing a real outbound
+  call must be mocked at the backend's OUTBOUND boundary, never in the browser.
+- **Spec shape (mandatory)**: seed/trigger over REST, then assert only on LIVE pushed UI updates. No
+  reloads, no fixed sleeps, no canvas drag/zoom; only web-first assertions on the named timeouts in
+  `tests/helpers.ts`. Shared setup is the `seededBoard` fixture plus the auto `pageErrors` fixture.
+  Each spec seeds its own workspace (`workers: 1`, serial).
+- **Selectors are `data-testid`, always.** Covering a flow whose affordance has none means ADDING
+  the test id first (a behaviour-neutral frontend change) plus a patch changeset.
+- **Adding a spec**: `*.spec.ts` under `tests/`, importing `test`/`expect` from `./fixtures` (not
+  `@playwright/test`), reusing `helpers.ts`, plus a row in the README's Specs table. Deterministic
+  variations are env knobs on `testServer.ts`; a spec needing a different backend env wants its own
+  `webServer` in `playwright.config.ts`.
+- **CI** runs it in a non-blocking `Test e2e` job, outside the aggregated `Test` gate.
 
-### A flaky e2e test is a BLOCKING bug — investigate and deflake, NEVER retry
+### A flaky e2e test is a BLOCKING bug: investigate and deflake, NEVER retry
 
-**A flaky e2e spec is a blocking issue that must ALWAYS be investigated and deflaked at its
-root cause — it can NEVER be "just retried" until it goes green, and a green-on-retry run is
-NOT a pass.** This is an absolute rule. Playwright is configured to enforce it
-(`failOnFlakyTests: true` in `playwright.config.ts`): a spec that fails on the first attempt
-and passes on a retry reports the shard **RED**, on purpose. The retry exists ONLY to capture
-the trace/video for diagnosis — it does **not** rescue the run. So when you see a red e2e
-shard, or a "N flaky" line in the report, treat it exactly like a hard failure:
+**A flaky spec must always be root-caused. A green-on-retry run is NOT a pass.** Playwright enforces
+this (`failOnFlakyTests: true`): first-attempt-fail then retry-pass reports the shard RED on purpose.
+The retry exists ONLY to capture the trace.
 
-- **Do NOT re-run CI hoping for green, do NOT bump `retries`, do NOT `test.skip`/`test.fixme`
-  the spec, and do NOT dismiss it as "just a browser/boot flake."** "It passed the second
-  time" is a failed task, not a completed one. The non-blocking `Test e2e` job means a flake
-  can't _stop a merge_, but that is a safety net for infra hiccups, NOT permission to ignore a
-  flake — an intermittent RED is a signal to fix, every time.
-- **Reproduce, then root-cause.** A flake almost always exposes a REAL race in the product,
-  not "a slow test": a live event applied between a snapshot's fetch and its store-commit
-  (see the bootstrap-failure flake — a stale on-connect resync dropped a live-added terminal
-  run in `agentRuns.hydrate`), a subscribe-after-broadcast gap, a status that renders from a
-  clobbered store. Reproduce it (locally you can start Postgres + the built frontend/backend
-  and run the single spec with `--repeat-each` under load), find the ordering hazard, and
-  **fix the SOURCE** — usually a frontend store reconcile or a `helpers.ts` readiness gate,
-  occasionally the backend event path. Add a unit test that pins the race so it can't return.
-- **Never paper over it in the spec.** No fixed `sleep`, no bumped per-assertion timeout to
-  "give it more time," no reload to re-pull the snapshot (that hides exactly the live-push bug
-  the suite exists to catch). Web-first assertions on the named `helpers.ts` timeouts only.
-- **The bar for "fixed" is deterministic, not lucky:** the spec must pass a high-count
-  `--repeat-each` locally AND the root-cause fix (with its regression test) must be in the
-  same change. Only then is the flake closed.
+- **Do NOT re-run CI hoping for green, bump `retries`, skip the spec, or dismiss it as a boot flake.**
+  The non-blocking job is a safety net for infra hiccups, not permission to ignore a flake.
+- **Reproduce, then root-cause.** A flake almost always exposes a REAL race: a live event applied
+  between a snapshot's fetch and its store-commit, a subscribe-after-broadcast gap, a status
+  rendering from a clobbered store. Fix the SOURCE (usually a frontend store reconcile or a
+  `helpers.ts` readiness gate) and add a unit test pinning the race.
+- **Never paper over it in the spec**: no sleep, no bumped timeout, no reload (which hides exactly
+  the live-push bug the suite exists to catch).
+- **The bar for "fixed" is deterministic, not lucky**: a high-count `--repeat-each` pass locally AND
+  the root-cause fix with its regression test in the same change.
 
-### Real-time (live-push) store coherence — avoid the full-refresh CLOBBER
+### Real-time store coherence: avoid the full-refresh CLOBBER
 
-Most of the flakes above are one recurring product bug, not test noise: **a stale full-snapshot
-refresh clobbering newer live state**. The SPA's real-time layer has two delivery shapes
-(`useWorkspaceStream.ts`), and mixing them wrong drops live-added state with NO event left to
-restore it — so a card/badge simply never appears (an e2e timeout, not a slow test). Design new
-live surfaces to avoid it:
+Most of those flakes are one recurring product bug: a stale full-snapshot refresh clobbering newer
+live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
+event left to restore it.
 
-- **Know how your entity is delivered.** A `board`-type `WorkspaceEvent` is COARSE: it carries no
-  payload and only triggers a **debounced full `workspace.refresh()`** (`hydrate` REPLACES whole
-  lists — blocks, executions, …). A spawned task/module block reaches the browser ONLY this way
-  (there is no per-block push), so its appearance depends entirely on a full refresh landing and
-  STICKING. Targeted events (`execution`/`bootstrap`/`initiative`/…) instead carry the entity and
-  `upsert` it directly — those don't REPLACE, so they don't clobber. Prefer a targeted upsert for
-  anything that must appear reliably and fast; fall back to the coarse refresh only for genuinely
-  structural changes.
-- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight at once (board
-  events >300ms apart, or the on-connect resync racing a board event). Since each ends in a
-  REPLACE-style `hydrate`, a slower/staler fetch resolving AFTER a newer one overwrites it and
-  drops the just-added entity. `workspace.refresh()` guards this with a monotonic sequence (only
-  the latest-issued call commits its hydrate) — do NOT reintroduce an unguarded
-  `hydrate(await fetch())`, and apply the same guard to any new coalesced full-refresh path.
-- **Never gate readiness on a snapshot that a later resync can undo.** The on-connect resync flips
-  `connected` only AFTER it settles, so an action taken on a `connected` board can't be clobbered
-  by a lagging initial resync (this is why e2e specs gate on `data-connected`). A new (re)hydrate
-  trigger must preserve that ordering.
-- **A REPLACE-style `hydrate` must never silently drop live-only state.** If a store holds state
-  that arrives ONLY via a live event (never in the snapshot), a full refresh will wipe it — either
-  fold that state into the snapshot or reconcile (merge) rather than replace. The bootstrap-frame
-  and spawned-block flakes were both this: a full `hydrate` REPLACED a list the stale snapshot
-  hadn't caught up to.
-- **Pin it with a store-level unit test** (see `stores/workspace.spec.ts`): drive two
-  out-of-order-resolving refreshes and assert the fresher one wins. This is the cheap regression
-  guard the e2e flake rule above asks for — write it alongside the fix.
+- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced full
+  `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block reaches the
+  browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry the entity and
+  `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that must appear reliably.
+- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
+  resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
+  reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
+  refresh path.
+- **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips
+  `connected` only after it settles (which is why e2e gates on `data-connected`).
+- **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state into
+  the snapshot or reconcile rather than replace.
+- **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order
+  refreshes and assert the fresher one wins.
 
 ## Internationalization (i18n)
 
-All user-facing copy in the SPA is translatable via **`@nuxtjs/i18n`** (vue-i18n under
-the hood) and **MUST** go through it — never hard-code a display string in a component.
-The `@cat-factory/app` layer ships the base `en` locale; a downstream deployment
-overrides or adds locales by dropping its own files, so the layer's per-layer
-**deep-merge** is the override seam (consumer wins, key by key).
+All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. The
+`@cat-factory/app` layer ships the base `en` locale, and a downstream deployment overrides by
+dropping its own files (the per-layer deep-merge is the override seam, consumer wins key by key).
 
-**Where things live:**
+- `frontend/app/i18n/locales/<locale>.json` — the catalogs (the v9+ `i18n/` convention, NOT
+  `app/locales/`).
+- `frontend/app/i18n/i18n.config.ts` — runtime vue-i18n behaviour only (fallback locale, the named
+  `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here so the module can deep-merge
+  across the `extends` chain. Referenced as the BARE filename `vueI18n: 'i18n.config.ts'`, never
+  `layerDir`-anchored.
+- `package.json` `files` MUST include `"i18n"`. Release-blocking.
 
-- `frontend/app/i18n/locales/<locale>.json` — the message catalog (the v9+ `i18n/`
-  `restructureDir` convention; **NOT** `app/locales/`). Today only `en.json` exists.
-- `frontend/app/i18n/i18n.config.ts` — runtime vue-i18n behaviour only (fallback locale +
-  the `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here, so the module
-  can deep-merge catalogs across the `extends` chain. Referenced from `nuxt.config.ts` as
-  the **bare** filename `vueI18n: 'i18n.config.ts'` — the module resolves it per-layer, so
-  do NOT `layerDir`-anchor it the way the css block is anchored.
-- `nuxt.config.ts` `i18n` block — registers locales + `defaultLocale: 'en'`. Pure SPA
-  (`ssr: false`), so a single in-app locale and no URL-prefix routing.
-- `package.json` `files` MUST include `"i18n"` — **release-blocking**: omit it and the
-  locales don't ship in the published layer.
+**Adding a string**: add the key to `en.json` under the feature namespace, resolve with
+`t('feature.area.key')`, and format numbers/dates through `$n`/`$d` (the named formats), never raw
+`Intl`. `currency` needs a per-call `currency` override.
 
-**Adding / changing a translatable string (the day-to-day flow):**
+**Key conventions**: one namespace per feature; **leaf keys mirror the enum/code value verbatim** so
+a dynamic lookup is total; **no cross-key concatenation** (a full sentence is ONE key with `{named}`
+placeholders, plurals use the pipe form).
 
-1. Add the key to `i18n/locales/en.json` under the feature namespace, then resolve it at
-   the call site with `t('feature.area.key')` (template) / `useI18n().t(...)` (script).
-2. Format **numbers, currency, percentages, and dates through vue-i18n**, not raw `Intl`:
-   `$n(value, 'decimal'|'currency'|'percent')` and `$d(value, 'short'|'long')` (the named
-   formats defined in `i18n.config.ts`). `currency` needs a per-call `currency` override
-   (`$n(n, 'currency', { currency: s.currency })`) — the backend supplies the code.
-3. For a brand-new locale, add `i18n/locales/<locale>.json` + register it in the
-   `nuxt.config.ts` `locales` array (and, downstream, just drop the JSON to override).
+**Component mechanics that bite:**
 
-**Key conventions:**
+- `useI18n` is auto-imported; destructure in `<script setup>` and use those fns in the template so
+  the typed-key check sees literal keys. Never `import` it.
+- Plural + interpolation: `t(key, { vendor, count }, count)`, where the THIRD arg is the choice.
+- **Code/format-example placeholders stay INLINE**, not in the catalog. Required when they contain
+  `{`/`}` (vue-i18n metacharacters). Only prose placeholders get a key. Same for brand names.
+- **No HTML in message bodies**: drop mid-sentence `<strong>`, or use `<i18n-t>` with slots.
+- For a vendor/enum-keyed set, build an array of STATIC literal `t()` keys, one per member. Reserve
+  the runtime-assembled key + exhaustive `Record` guard for lookups genuinely unknown until runtime.
+- Straight quotes, no em-dashes in new entries.
 
-- One namespace per feature; resolve with `t('feature.area.key')`.
-- **Leaf keys mirror the enum/code value verbatim** so a dynamic lookup is total — e.g.
-  `errors.conflict.title.<reason>`, `catalog.status.<status>`.
-- **No cross-key concatenation.** A full sentence is ONE key with `{named}` placeholders;
-  plurals use the vue-i18n pipe form (`'no cats | one cat | {count} cats'`).
+**Translator descriptions (`@<key>` siblings): default to NONE.** They live only in `en.json` and are
+notes to a translator, never runtime data. Most keys are unambiguous from their value plus their
+path, and a description on them is noise. Add one ONLY when a competent translator seeing the English
+and the key path could plausibly get it wrong: homograph / part-of-speech ambiguity (`@close`),
+proper nouns that must NOT be translated (`@kaizen`, contrasted with `@sandbox` whose note says the
+opposite), umbrella strings hiding cases the text doesn't show, placeholder/format constraints, or
+plural-form requirements beyond English's two.
 
-**Component migration mechanics (the vue-i18n specifics that bite):**
+**Backend strings**: the backend does not localize prose. A localizable condition emits a
+machine-readable `error.details.reason`/`code` that the SPA maps to a frontend key (the
+`usePipelineErrorToast.ts` pattern); the raw `message` is an untranslated last resort. The wire
+vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of truth.
 
-- **`useI18n` is auto-imported** — never add an `import`. In `<script setup>` destructure what
-  you need (`const { t, d, n } = useI18n()`); the template can then use the same `t`/`d`/`n`. Do
-  NOT reach for `$t`/`$d` in templates of migrated components — use the destructured fns so the
-  typed-message-keys check (tier 1) sees the literal keys.
-- **Plural + interpolation in one call:** `t(key, { vendor, count }, count)` — the THIRD arg is
-  the plural choice (a number); the named object still feeds `{…}` placeholders. `{count}` is the
-  conventional name for the count. Pass the count both as a named param and as the 3rd arg.
-- **Dates/numbers always go through `d()`/`n()`** (or `$d`/`$n`), NEVER `toLocaleDateString()` /
-  `Intl` / `new Date().toLocaleString()`. `t('…expires', { date: d(new Date(ts), 'short') })`.
-- **Code/format-example placeholders stay INLINE, not in the catalog.** A placeholder that is a
-  literal example (`sk-ant-oat01-…`, a JSON blob, a token shape) is not prose: leave it as a
-  component constant. This is REQUIRED when it contains `{`/`}` — those are vue-i18n interpolation
-  metacharacters and would need ugly `{'{'}` escaping. Only prose placeholders (`your GLM … key`)
-  get a key. Same for proper nouns / brand names rendered as labels (keep verbatim across locales).
-- **No HTML in message bodies** (the catalog has none): drop mid-sentence `<strong>` when
-  migrating (it also matches the writing rules), or use the `<i18n-t>` component with slots if the
-  emphasis is structural. Don't embed tags and `v-html` a message.
-- **A vendor/enum-keyed set of strings:** build it as an array/computed of STATIC literal `t()`
-  keys (`t('…vendors.claude.label')`), one per enum member — that keeps the tier-1 typed-key check
-  live. Reserve the runtime-assembled key + exhaustive `Record` guard (tier 2) for lookups whose
-  key genuinely isn't known until runtime.
-- **In new catalog entries use straight quotes/apostrophes and NO em-dashes** (rephrase; the
-  existing catalog is mixed, straight is the going-forward standard). Translated catalogs
-  (`es/fr/pl/uk`) carry NO `@<key>` description siblings — those live only in `en.json`.
+**Drift guards** (oxlint has no `no-raw-text` rule, so these replace it):
 
-**Translator descriptions (`@<key>` siblings) — annotate ONLY truly ambiguous keys:**
+1. **Typed message keys** make a statically written unknown `t('literal.key')` a typecheck failure.
+   This does NOT cover a runtime-assembled key.
+2. For enum→key lookups, guard with an **exhaustive `Record<TheEnum, string>`** keyed off the
+   contracts union (e.g. `CONFLICT_TITLE_KEYS`), plus a runtime `te()` fallback. Never rely on tier 1
+   alone for a reason/status-keyed lookup.
+3. `pnpm --filter @cat-factory/app run i18n:check` hard-fails on MISSING keys and reports unused ones
+   as non-blocking warnings (the catalog legitimately seeds keys ahead of use).
+4. **Locale parity**: `i18n-locale-parity.mjs --since origin/<base>` requires a PR that adds, changes,
+   or removes an `en.json` key to make the SAME change in every other locale. It is change-coupling
+   against the merge-base, NOT full key parity, so pre-existing lag on untouched keys is left alone.
 
-vue-i18n supports a per-message metadata sibling: alongside a leaf `foo` you may add an
-`@foo` object with a `description` string (e.g. `"close": "Close"` paired with `"@close":
-{ "description": "Verb meaning dismiss/shut, NOT the adjective 'near'…" }`). It is a note
-**to whoever translates the locale**, not runtime data — it never renders and lives ONLY in
-the source `en.json` (the translated catalogs `es/fr/pl/uk.json` carry no `@` siblings).
+**Translate for real: NEVER ship an English string as a non-`en` value.** The parity gate checks only
+that the key exists, so it will pass a verbatim English copy. That copy is a bug. The only values
+that may legitimately match `en` are proper nouns identical across languages (`DeepSeek`, `AWS
+Bedrock`). If you genuinely cannot produce a translation, say so in the PR rather than committing a
+placeholder that reads as done.
 
-**Default to NO description.** The overwhelming majority of keys are unambiguous from their
-English value plus their namespace path (`board.toolbar.addService`, `common.save`) and a
-description on them is pure noise — it bloats the catalog, dilutes the signal of the few
-notes that matter, and is one more thing to keep in sync. **Do not** add a description that
-merely restates the string, names the component it appears in, or explains an obviously
-self-evident word. When you add a key, the bar is: _would a competent translator, seeing
-only the English text and the key path, plausibly get it wrong?_ If no, add nothing.
+Migration is incremental: when you touch a component, lift its visible copy into the catalog.
 
-Add a `@<key>.description` ONLY when the English is genuinely ambiguous or carries a
-translation constraint the string alone can't convey — the legitimate cases (all present
-in `en.json` today) are:
+## Workspace RBAC enforcement
 
-- **Homograph / part-of-speech ambiguity** — the word translates differently by sense:
-  `@close` (verb "dismiss", not adjective "near"), `@run_not_retryable` ("run" is the
-  execution NOUN, not the verb).
-- **Proper nouns that must NOT be translated** — `@kaizen` (a product feature name, keep
-  verbatim in every locale). Contrast `@sandbox`, whose note exists precisely to say the
-  opposite — _do_ localize it descriptively — because the reader would otherwise assume it
-  is also a verbatim brand term.
-- **Umbrella strings hiding cases not visible in the text** — `@tester_infra_unsupported`
-  (one title spanning two distinct failure causes; keep it broad).
-- **Placeholder / format constraints** — keep a `{named}` placeholder intact, or note that
-  a runtime value is injected (`@body` for the model-list interpolation).
-- **Plural-form requirements** — a count-driven key that needs more forms than English's
-  two (`@decisionWord`: Polish/Ukrainian need one/few/many via the custom `pluralRules`).
+Per-workspace authorization (ADR
+[`0025-workspace-rbac`](./backend/docs/adr/0025-workspace-rbac.md)) is enforced in exactly three
+shared places, never re-derived per controller:
 
-Keep each description to the constraint a translator acts on; don't turn it into prose. When
-in doubt, leave it off — an unannotated key is the norm, an annotated one is the exception.
+1. **Resolution + the 404 hide** — `mountAuthGate` calls the single `loadWorkspaceAccess` (through
+   the `workspaceAccess` cache slice) on every `/workspaces/:ws/*` request, publishes
+   `{ role, permissions }` on the context, and returns the SAME 404 for a denied or absent board.
+   Roles (`admin | member | viewer`) map onto seven permissions via a fixed kernel table.
+2. **The viewer write floor** — also in the gate: any non-GET/HEAD requires `≥ member`, covering the
+   whole member tier with zero per-controller code. Its sole exemption is the read-only WS ticket
+   mint.
+3. **The admin-tier permission gate** — `requireWorkspacePermission(perm)`, a Hono middleware mounted
+   ONCE at the top of each admin controller. It gates every write the controller serves (now and
+   future) while letting reads through, and runs BEFORE the handler's 503/lookup so an unauthorized
+   member gets a clean 403 without learning whether the integration is wired. Co-located with the
+   mount, not a central path→permission table, so new routes inherit the right gate. Each admin
+   controller maps to exactly ONE permission. `WorkspaceController` and `WorkspaceMemberController`
+   mix gated and ungated writes, so they use the imperative `requirePermission(c, perm)` per handler.
 
-**Backend / server strings:** the backend does not localize prose. A localizable server
-condition emits a machine-readable `error.details.reason`/`code`, and the SPA maps that
-code to a frontend key (the `usePipelineErrorToast.ts` pattern); the raw backend `message`
-is shown only as an untranslated last-resort fallback. The wire vocabulary that drives such
-a mapping lives in `@cat-factory/contracts` (e.g. `ConflictReason`), so the SPA imports the
-SAME source of truth the backend throws against.
-
-**Drift guards (the repo lints with oxlint only, so the ESLint `@intlify/.../no-raw-text`
-rule is unavailable — these tiers replace it):**
-
-1. **Typed message keys** (`i18n.experimental.typedOptionsAndMessages`) make a _statically
-   written_ unknown `t('literal.key')` a `nuxt typecheck` failure (a CI gate). This does
-   NOT cover a key assembled at runtime — a `t(\`errors.conflict.title.${reason}\`)`template
-or a variable key is typed as`string`, so the compiler can't check it.
-2. For those **dynamic enum→key lookups**, guard with an **exhaustive `Record<TheEnum,
-string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
-   `usePipelineErrorToast.ts`, keyed off the contracts `ConflictReason`): adding an enum
-   value without a key fails the typecheck on the map, and a runtime `te()`-guard falls back
-   rather than leaking a raw key if a locale omits one. **Never rely on tier 1 alone for a
-   reason/status-keyed lookup.**
-
-3. A `vue-i18n-extract` CI check is the secondary guard for keys the typecheck can't see
-   (runtime-built lookups) and for catalog staleness. It runs in CI's `build-typecheck`
-   job via `pnpm --filter @cat-factory/app run i18n:check` (the wrapper
-   `frontend/app/scripts/i18n-check.mjs`, which drives the `createI18NReport` programmatic
-   API). It **hard-fails on MISSING keys** (a `t('…')` whose key is absent from the
-   catalog — a raw-key leak) and **reports UNUSED keys as non-blocking warnings**: the
-   catalog seeds keys ahead of use (`common.save|cancel|retry`) and references many
-   indirectly (the `CONFLICT_TITLE_KEYS` Record, keys passed as string literals to
-   `usePipelineErrorToast().present(...)`), which the scanner can't see as used — so an
-   unused-key hard gate would fail spuriously and fight the incremental migration.
-
-4. A **locale-parity** CI check couples translations to `en.json` edits: a PR that adds,
-   changes, or removes an `en.json` message key MUST make the SAME change in every other locale
-   (`de/es/fr/he/it/ja/pl/tr/uk`), else it fails. It runs in the `build-typecheck` job via
-   `node frontend/app/scripts/i18n-locale-parity.mjs --since origin/<base>` (also
-   `pnpm --filter @cat-factory/app run i18n:parity`). This is **change-coupling against the PR
-   merge-base**, NOT full key-parity: it enforces ONLY the keys THIS PR touched in `en`, so the
-   pre-existing translation lag on untouched keys is left alone (it does not force a mass
-   back-translation). `@<key>` description siblings are en-only and ignored. Off a PR (no base
-   ref) it passes. **Consequence for the incremental rule below:** you may still add `en` keys
-   ahead of the components that use them, but when you do, add the translated value to all
-   locales in the SAME PR — an `en`-only string edit now fails CI.
-
-**Translate for real — NEVER ship an English string as a non-`en` locale value.** The parity
-gate checks only that the KEY exists in every locale, not that its VALUE differs from English, so
-it will happily pass a locale whose value is a verbatim copy of the `en` text. That copy is a bug,
-not a translation: it ships English to a Spanish / Japanese / … reader and silently rots (a later
-maintainer can't tell a forgotten placeholder from a deliberate choice). When you add or change an
-`en` key, write the ACTUAL translation for each locale in the SAME edit. The ONLY values that may
-legitimately match `en` are proper nouns / brand names that are identical across languages
-(model-family labels like `Claude (Anthropic)`, `DeepSeek`, `AWS Bedrock`, `OpenAI / ChatGPT`);
-everything else — prose, hints, region/country names, verbs — must be localized. If you genuinely
-cannot produce a translation for some language, say so explicitly in the PR rather than committing
-an English placeholder that reads as done.
-
-Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
-inline strings, so **when you touch a component, lift its visible copy into the catalog**
-rather than adding more raw text.
-
-## Workspace RBAC enforcement (one gate, one floor, one middleware per admin group)
-
-Per-workspace authorization (the `workspace-rbac` initiative — ADR
-[`backend/docs/adr/0025-workspace-rbac.md`](./backend/docs/adr/0025-workspace-rbac.md)) is enforced
-in exactly three shared places, never re-derived per controller:
-
-1. **Resolution + the 404 hide** — `mountAuthGate` (`server/src/http/authGate.ts`) calls the
-   single `loadWorkspaceAccess` (through the `workspaceAccess` AppCaches slice) on every
-   `/workspaces/:ws/*` request, publishes the effective `{ role, permissions }` on the context
-   (`c.get('workspaceAccess')`), and returns the SAME 404 shape for a denied/absent board (existence
-   is never leaked). Roles (`admin | member | viewer`) map onto seven `WorkspacePermission`s via a
-   fixed kernel table (`domain/workspace-access.ts`).
-2. **The viewer write floor** — also in the gate: any non-GET/HEAD method requires `≥ member`,
-   covering the whole member tier (`board.write` + `runs.execute`) with ZERO per-controller code.
-   Its SOLE exemption is the read-only WS ticket mint.
-3. **The admin-tier permission gate** — `requireWorkspacePermission(perm)`
-   (`server/src/http/workspaceAccess.ts`), a **method-shaped Hono middleware** mounted ONCE at the
-   top of each admin controller (`app.use('*', requireWorkspacePermission('integrations.manage'))`).
-   It gates every WRITE the controller serves (now and future) with that permission while letting
-   reads through; it runs BEFORE the handler's 503/lookup so an unauthorized member gets a clean 403
-   without learning whether the integration is wired. It is co-located with the mount (NOT a central
-   path→permission table), so new routes inherit the correct gate and can't drift. Each admin
-   controller maps to exactly ONE permission (whole-controller). Two spots that mix gated + ungated
-   writes under one mount — `WorkspaceController` (ungated `POST /workspaces` create + `workspace.read`
-   snapshot GET, so `update`/`delete` gate per-handler) and `WorkspaceMemberController` — use the
-   imperative `requirePermission(c, perm)` helper per-handler instead.
-
-**Adding a route to an admin controller needs no authz code** — the mounted middleware already
-covers it. **Adding a NEW admin controller**: mount `requireWorkspacePermission(perm)` at its top
-(settings/integrations/secrets/members) and add a `member 403` case to `defineWorkspaceRbacSuite`
-(`backend/internal/conformance/src/workspace-rbac-suite.ts`). A member-tier controller
-(board/runs) needs nothing — the floor covers it. Dev-open (auth disabled) resolves no access
-object and both the floor and `requirePermission` allow everything, so conformance MUST run
+Adding a route to an admin controller needs no authz code. Adding a NEW admin controller: mount the
+middleware and add a `member 403` case to `defineWorkspaceRbacSuite`. A member-tier controller needs
+nothing. Dev-open resolves no access object and allows everything, so conformance MUST run
 auth-enabled or it passes vacuously.
 
 ## Conventions
 
-- Hexagonal layering: controllers (`@cat-factory/server`) → services
-  (orchestration/integrations) → ports (kernel); infra adapters live in each runtime
-  facade and implement the ports + the `gateways` seam, wired in that facade's
-  `container.ts` via constructor injection of a single `dependencies` object. Opt-in
-  integrations (GitHub / environments / bootstrap) wire only when configured.
-- **Frontend i18n (`@cat-factory/app`):** all user-facing copy is translatable via
-  `@nuxtjs/i18n` — never hard-code a display string. See the dedicated
-  **[Internationalization (i18n)](#internationalization-i18n)** section above for where
-  catalogs live, the add-a-string workflow, key conventions, backend-code mapping, and the
-  typecheck drift guards.
-- **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
-  (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
-  The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and
-  `openApprovalDetail`) routes such a step to `ui.resultView`; `StepResultViewHost.vue` reads the
-  modular `resultViews` slot (`app/modular/result-views.ts`, slice 2 of the modular-vue adoption)
-  via `useReactiveSlots` + `resolveComponentRegistry` and mounts the component registered for that
-  id. Give a new BUILT-IN window a bespoke view by declaring `resultView` + contributing a
-  `{ id, component }` entry to the first-party `resultViews` slot — no caller changes. A CONSUMER
-  deployment ships its own window by contributing to the SAME slot via `registerAppModule` and
-  naming a namespaced `resultView` id (`<ns>:<name>`) on its agent kind. Custom agent kinds
-  themselves flow through the modular `agentKinds` slot (consumer, code) + a per-workspace
-  `RemoteModuleManifest` (backend, `useAgentsStore().hydrateCustomKinds`); the built-in
-  `AGENT_BY_KIND` const is frozen (never mutated), and `agentKindMeta` resolves custom kinds
-  through a slot-sourced reactive projection.
-  `requirements-review` is the first consumer (the review window).
-  **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the windows.**
-  The shell already owns the chrome + modal behaviour; it also renders the shared trailing
-  section (today: the agent's effort self-assessment, `step.effortReport`, as a collapsible
-  footer), resolving the step from `ui.resultView` itself rather than a per-window prop — so a
-  window can't opt out, forget to pass it, or place it differently. Adding a second such
-  universal section is one edit there, not eighteen.
-- **Inspector panel seam (frontend):** the block inspector's body is a **subject-keyed panel
-  group** (slice 4 of the modular-vue adoption), not a `v-if` monolith. Each body sub-panel is a
-  `PanelEntry<Block>` (`{ id, component, when(block), order }`) contributed to the `inspectorPanels`
-  slot (`app/modular/panels/inspector.{logic.,}ts`, the group handle is `definePanelGroup<Block>`);
-  `InspectorPanel.vue` renders them via `<PanelsOutlet :group="inspectorPanels" :subject="block">`,
-  which shows every panel whose `when(block)` matches, ordered, with the selected block injected as
-  the subject (each panel's wrapper reads it via `usePanelSubject`). Add a BUILT-IN inspector panel
-  by adding a spec (id/order/`when`) + its component; a CONSUMER contributes its own inspector panels
-  (e.g. for a custom block type) to the SAME slot via `registerAppModule` — no `InspectorPanel.vue`
-  edits. The shell (identity/title/description, run banners, actions row, the frame "view
-  requirements" button) is NOT part of the group.
-- **Consumer overlay seam (frontend):** a consumer deployment contributes its own top-level
-  overlays through the `appOverlays` slot (`{ id: '<ns>:<name>', component }`, an `OverlayContribution`
-  in `app/modular/slots.ts`) and opens one via the auto-imported `useAppOverlays().open(id, subject?)`
-  (or `ui.openOverlay`, `stores/ui/modals.ts`). A single `<AppOverlayHost>` (`app/components/panels/`,
-  mounted once in `pages/index.vue`) resolves the merged slot with `resolveComponentRegistry` — the
-  same slice-2 pick-one primitive as `StepResultViewHost` — and mounts the entry matching the active
-  `ui.activeOverlay` pointer, handing it the optional `subject` prop + a `close` emit. This is the
-  frontend-extension-mechanism initiative's slice D (`docs/initiatives/frontend-extension-mechanism.md`):
-  the one host surface a consumer could not extend before (a nav `run` closure had nothing to open).
-  First-party modals stay hand-mounted in `index.vue` (strangler — the seam is scoped to consumer
-  overlays); duplicate slot ids fail fast at boot, a dangling open degrades to nothing.
-- **Frontend module registry seam (`registerAppModule`, `@cat-factory/app`):** the frontend
-  analogue of the backend registries (`registerAgentKind`/`registerGate`). The layer owns a
-  [modular-vue](https://github.com/kibertoad/modular-react) registry (`app/modular/registry.ts`,
-  resolved by `app/plugins/modular.client.ts`) into which first-party feature modules AND a
-  consumer deployment's own modules register through one seam, so a deployment extends the layer
-  without forking. A consumer calls the auto-imported `registerAppModule(...)` from its own
-  plugin; the layer's install plugin is `enforce: 'post'` so consumer registration runs first.
-  Adoption is a phased strangler migration tracked in
-  [`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md) (slice
-  0 = the registry plumbing, behaviour-neutral; later slices convert navigation, result views,
-  wizards, and inspector panels into registered modules).
-- **Final answer must land in the reply, not the reasoning channel.** Any agent whose
-  deliverable IS its final reply (a document, report, or JSON object the platform reads
-  or parses — spec-writer, blueprinter, merger, on-call, task-estimator, the tester
-  report, the reviewers/companions, the requirements reviewer + rework, the design /
-  review / test phases) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment
-  (`@cat-factory/agents`, `prompts/shared.ts`). Some reasoning models (seen on
-  `@cf/moonshotai/kimi-k2.7-code`) emit the whole answer into their private
-  reasoning/thinking channel and return an empty visible reply; the harness reads only
-  the visible content, so that empty reply fails the run via `unusableFinalAnswerCause`
-  (executor-harness `pi-workspace.ts`) even though the model "answered". The fragment
-  names the channel. It is applied centrally for `systemPromptFor` kinds (via the track
-  prompts / `roleSystemPrompt`) and inline on the four container constants in
-  `ContainerAgentExecutor.ts`. Do NOT append it to side-effect agents whose product is a
-  pushed commit (coder/build, ci-fixer, conflict-resolver, mocker, playwright,
-  business-documenter): they legitimately end with no final text. Editing a versioned
-  prompt (`agents/kinds/versions.ts`) means bumping its number.
-- The Worker's integration tests use the real `workerd` + real local D1
-  (`@cloudflare/vitest-pool-workers`); the Node tests use real Postgres
-  (`DATABASE_URL`, a Postgres 18 service in CI); only the LLM is faked in both. Run
-  the full backend suite with `pnpm test:run` from the repo root (builds, then runs
-  every package's `test:run`); CI provides the Postgres service for the Node suite.
-- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**
-  (`pnpm typecheck`, `pnpm test:run`, etc. — each is `turbo run <task>`), NOT a package's
-  raw script from inside its directory. Turbo's `^build` edge (`turbo.json`) — "build every
-  workspace dependency first" — only fires when the task runs THROUGH Turbo. Running a
-  package-local script directly (e.g. `cd frontend/app && pnpm run typecheck`, which is just
-  `nuxt typecheck`) bypasses the task graph, so an unbuilt workspace dependency surfaces as
-  spurious `TS2307 Cannot find module '@cat-factory/contracts'` errors that don't exist in
-  CI. To scope to one package, filter instead of `cd`: `pnpm exec turbo run typecheck
---filter=@cat-factory/app` still builds its deps first. (The exception is a task with no
-  build deps, e.g. the i18n check, which CI itself runs package-local as `pnpm --filter
-@cat-factory/app run i18n:check`.)
+- **Hexagonal layering**: controllers (`@cat-factory/server`) → services
+  (orchestration/integrations) → ports (kernel). Infra adapters live in each facade and implement
+  the ports + the `gateways` seam, wired via constructor injection of one `dependencies` object.
+  Opt-in integrations wire only when configured.
+- **Final answer must land in the reply, not the reasoning channel.** Any agent whose deliverable IS
+  its final reply (spec-writer, blueprinter, merger, on-call, task-estimator, the tester report, the
+  reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY`
+  fragment (`@cat-factory/agents`). Some reasoning models emit the whole answer into their private
+  channel and return an empty visible reply, which the harness reads as unusable and fails the run.
+  Applied centrally for `systemPromptFor` kinds and inline on the container constants in
+  `ContainerAgentExecutor.ts`. Do NOT append it to side-effect agents whose product is a pushed
+  commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter): they
+  legitimately end with no final text. Editing a versioned prompt means bumping its number.
+- **Dedicated result-view seam (frontend)**: an agent step opens the generic prose panel UNLESS its
+  archetype declares a `resultView` id (`app/utils/catalog.ts`). The `ui` store's `dispatchStepView`
+  routes such a step to `ui.resultView`, and `StepResultViewHost.vue` mounts the component
+  registered for that id in the modular `resultViews` slot. A built-in window declares `resultView`
+  and contributes an entry; a CONSUMER contributes to the SAME slot via `registerAppModule` with a
+  namespaced `<ns>:<name>` id. Custom agent kinds flow through the modular `agentKinds` slot plus a
+  per-workspace `RemoteModuleManifest`; the built-in `AGENT_BY_KIND` const is frozen.
+  **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the windows.** The
+  shell owns the chrome and the shared trailing section (today `step.effortReport`), resolving the
+  step itself rather than via a per-window prop, so a window can't opt out or forget it.
+- **Inspector panel seam (frontend)**: the inspector body is a subject-keyed panel group, not a
+  `v-if` monolith. Each sub-panel is a `PanelEntry<Block>` (`{ id, component, when(block), order }`)
+  contributed to the `inspectorPanels` slot and rendered by `<PanelsOutlet>`. A consumer contributes
+  its own with no `InspectorPanel.vue` edits. The shell (identity, run banners, actions row) is not
+  part of the group.
+- **Consumer overlay seam (frontend)**: a deployment contributes top-level overlays through the
+  `appOverlays` slot and opens one via `useAppOverlays().open(id, subject?)`. A single
+  `<AppOverlayHost>` resolves the merged slot and mounts the entry matching `ui.activeOverlay`.
+  First-party modals stay hand-mounted (strangler); duplicate ids fail fast at boot, a dangling open
+  degrades to nothing.
+- **Frontend module registry seam** (`registerAppModule`): the frontend analogue of the backend
+  registries. First-party feature modules and a consumer's own modules register through one seam
+  (`app/modular/registry.ts`), so a deployment extends the layer without forking. The layer's install
+  plugin is `enforce: 'post'` so consumer registration runs first. Adoption is phased:
+  [`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
+- **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real
+  Postgres (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the
+  root.
+- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's
+  raw script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it
+  surfaces as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter
+  instead of `cd`: `pnpm exec turbo run typecheck --filter=@cat-factory/app`. (The exception is a
+  task with no build deps, e.g. the i18n check.)
