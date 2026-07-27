@@ -3,7 +3,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { readServiceSpec } from './readServiceSpec.js'
+import { readServiceSpec } from '@cat-factory/agents'
 
 const EMPTY = EMPTY_SERVICE_SPEC_VIEW
 

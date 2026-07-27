@@ -15,6 +15,7 @@ import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
+import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
 // change management: every prompt the product ships is identified as
@@ -60,7 +61,14 @@ export const PROMPT_VERSIONS = {
     version: 1,
     text: ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
   },
-  build: { id: 'build', version: 4, text: standardSystemPrompt('build') },
+  // v5: the build phase now distinguishes `established` (standing) from `aspirational`
+  // (agreed-but-not-built) requirements in the committed `spec/`.
+  build: { id: 'build', version: 5, text: standardSystemPrompt('build') },
+  // Brought under version control alongside the implementation-state axis: the spec-writer now
+  // emits `requirementItem.state`, and its output is the durable behaviour contract every later
+  // step reads, so a change to it needs to be attributable like the standard phases. Numbering
+  // starts at 1 — there is no earlier RECORDED version to succeed.
+  'spec-writer': { id: 'spec-writer', version: 1, text: SPEC_WRITER_SYSTEM_PROMPT },
   review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
@@ -91,6 +99,7 @@ const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
   'requirements-review': 'requirement-review',
   clarity: 'clarity-review',
   'fork-proposer': 'fork-proposer',
+  'spec-writer': 'spec-writer',
 }
 
 /**

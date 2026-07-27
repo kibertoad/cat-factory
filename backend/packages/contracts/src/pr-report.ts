@@ -1,6 +1,8 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema } from './judge.js'
+import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
+import { requirementVerdictStatusSchema } from './testing.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
@@ -26,7 +28,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
  * a bump means "re-read the schema", not "a compatibility shim exists".
  */
-export const PR_VERIFICATION_REPORT_VERSION = 1
+export const PR_VERIFICATION_REPORT_VERSION = 2
 
 /**
  * Whether a section has evidence to show.
@@ -247,6 +249,71 @@ export const prReportJudgesSchema = v.object({
 })
 export type PrReportJudges = v.InferOutput<typeof prReportJudgesSchema>
 
+/**
+ * One spec requirement joined to what the Tester observed about it — the report's
+ * REQUIREMENT → EVIDENCE row.
+ *
+ * The join key is the spec's own requirement id (`spec/modules/<m>/<g>.json` →
+ * `requirements[].id`), which the Gherkin render carries as a `# requirement: <id>` comment and
+ * the Tester echoes in `requirementVerdicts`. One id space end to end: inventing a second one
+ * is what made the withdrawn per-service store unable to reconcile with `spec/` at all.
+ *
+ * The acceptance criteria themselves are deliberately NOT copied here. They live in `spec/`,
+ * versioned beside the code and reachable from the repo; duplicating their prose into every PR
+ * body would multiply an unbounded artifact by every publish and leave a copy to rot. The row
+ * carries how many there are so a reader can see the requirement was not criterion-less.
+ */
+export const prReportRequirementSchema = v.object({
+  /** The spec requirement's stable id — the join key, and what a reader greps `spec/` for. */
+  id: v.string(),
+  title: v.string(),
+  /** Where it lives in the spec taxonomy (module → feature group). */
+  module: v.string(),
+  group: v.string(),
+  priority: requirementPrioritySchema,
+  /**
+   * Implementation state as the spec recorded it AT COMPOSE TIME. An `aspirational`
+   * requirement is agreed but not yet built, so `not_covered` against it is the EXPECTED
+   * reading and not a gap — which is exactly why the state has to travel with the verdict.
+   */
+  state: requirementStateSchema,
+  /** What the Tester observed. See {@link requirementVerdictStatusSchema}. */
+  verdict: requirementVerdictStatusSchema,
+  /** The Tester's evidence for the verdict, when it gave any. */
+  detail: v.nullable(v.string()),
+  /** How many acceptance criteria the requirement carries in `spec/`. */
+  criteriaCount: v.number(),
+})
+export type PrReportRequirement = v.InferOutput<typeof prReportRequirementSchema>
+
+/**
+ * The requirement → evidence section: every requirement in the service's in-repo `spec/`,
+ * paired with the Tester's verdict on it.
+ *
+ * This is the capability the report was missing — it could say CI passed and the tester
+ * greenlit, but not WHICH required behaviours were checked and what was observed, so a reviewer
+ * could not tell a verified requirement from one nobody looked at.
+ *
+ * `absent` carries a `note` that distinguishes the reasons apart, because they call for
+ * different reactions: no tester step at all, a tester that has not reported yet, a spec that
+ * could not be read, and a spec with NO criteria recorded are four different states, and
+ * collapsing them into one blank section is the false reassurance this report exists to remove.
+ */
+export const prReportRequirementsSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says WHY the section is empty when `status` is `absent` — never a bare blank. */
+  note: v.optional(v.nullable(v.string())),
+  /** Per-requirement rows (capped like every other list; see `truncations`). */
+  entries: v.array(prReportRequirementSchema),
+  /** Headline counts over the WHOLE spec, before any cap — so the table can be capped safely. */
+  met: v.number(),
+  notMet: v.number(),
+  notCovered: v.number(),
+  /** Total requirements in the spec (`met + notMet + notCovered`). */
+  total: v.number(),
+})
+export type PrReportRequirements = v.InferOutput<typeof prReportRequirementsSchema>
+
 export const prVerificationReportSchema = v.object({
   /** See {@link PR_VERIFICATION_REPORT_VERSION}. */
   version: v.number(),
@@ -255,6 +322,7 @@ export const prVerificationReportSchema = v.object({
   run: prReportRunSchema,
   ci: prReportCiSchema,
   tests: prReportTestsSchema,
+  requirements: prReportRequirementsSchema,
   environments: prReportEnvironmentsSchema,
   merge: prReportMergeSchema,
   judges: prReportJudgesSchema,

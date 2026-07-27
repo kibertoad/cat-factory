@@ -1,7 +1,16 @@
 # Initiative: service acceptance criteria — verification & lifecycle
 
-Status: **planning** (the first implementation was withdrawn; Phase 0 is the next action) ·
-Owner: platform · Started: 2026-07-27
+Status: **Phases 0–2 delivered; Phase 3 deliberately not pursued** (the first implementation was
+withdrawn — see below) · Owner: platform · Started: 2026-07-27
+
+> **Next action for an operator:** run the three Phase 0 queries below against a real deployment
+> and fill in the results table. Nothing in Phases 1–2 depends on the answer; it only decides
+> whether Phase 3 is ever worth revisiting.
+
+> **Conversion note:** the committed scope is complete, so per `CLAUDE.md` this tracker is due to
+> be converted into a numbered ADR under `backend/docs/adr/` and deleted. It is deliberately kept
+> for now because Phase 0's results table is still blank — the tracker is still doing work no ADR
+> would. Convert it once the numbers land (or once Phase 3 is formally closed out).
 
 ## Goal & rationale
 
@@ -80,21 +89,137 @@ layer or a new engine seam.
 
 ## Per-item status checklist
 
-| #   | Slice                                                        | Status       | PR    |
-| --- | ------------------------------------------------------------ | ------------ | ----- |
-| 0   | Measure: restart rate, review-loss rate, `spec-writer` reach | todo         | —     |
-| 1   | Implementation-state axis on `requirementItemSchema`         | todo         | —     |
-| 2   | Criterion → evidence section on the PR verification report   | blocked on 0 | —     |
-| 3   | Off-run promotion of a settled review into `spec/`           | blocked on 0 | —     |
-| —   | Withdrawn: per-service acceptance-criteria store             | closed       | #1387 |
-| —   | Salvaged: `BoardService` removal-cascade extraction          | done         | #1394 |
+| #   | Slice                                                        | Status                  | PR    |
+| --- | ------------------------------------------------------------ | ----------------------- | ----- |
+| 0   | Measure: restart rate, review-loss rate, `spec-writer` reach | done (numbers pending)  | —     |
+| 1   | Implementation-state axis on `requirementItemSchema`         | done                    | —     |
+| 2   | Criterion → evidence section on the PR verification report   | done                    | —     |
+| 3   | Off-run promotion of a settled review into `spec/`           | not pursued (see below) | —     |
+| —   | Withdrawn: per-service acceptance-criteria store             | closed                  | #1387 |
+| —   | Salvaged: `BoardService` removal-cascade extraction          | done                    | #1394 |
+
+**Slice 0** produced validated queries + a structural bound rather than numbers — no deployment
+data was reachable. See the Phase 0 section for the SQL and what an operator still needs to run.
+
+**Slice 1** landed as: `state: 'aspirational' | 'established'` on `requirementItemSchema`
+(defaulting to `aspirational`, and coerced to it from any absent/garbled value so a model can
+never self-promote); a group-markdown render split under headings that state what each half
+MEANS; `@aspirational` + `# requirement: <id>` on the Gherkin scenarios; the matching rules in the
+build and tester prompts; and `specPromotionPostOp`, which promotes off the tester's verdicts.
+
+**Slice 2** landed as: `requirementVerdicts` on the test report (keyed by the spec's OWN
+requirement ids — no second id space), a `requirements` section on `prVerificationReportSchema`
+(`PR_VERIFICATION_REPORT_VERSION` → 2), and the join in `prReport.logic.ts`, reading `spec/`
+through the existing `resolveRunRepoContext` seam — gated on a tester having reported and
+memoised per execution, so the settlements before the tester cost zero repo reads.
+
+**Slice 3 was not pursued**, on the tracker's own stated condition: `spec-writer` sits 0–1 steps
+behind the human gate in every built-in pipeline that pairs them, so Q3 is structurally
+near-100% and the initiative ends at Phases 1–2. Reconsider only if an operator runs Q3 and it
+comes back materially below ~90%.
 
 ## How to proceed
 
-### Phase 0 — Measure before building (half a day)
+### Phase 0 — Measure before building (half a day) — **RUN; numbers pending an operator**
 
-Three queries against either facade's schema. They decide how much of the rest is worth doing, so
-run them first and write the numbers into this document.
+**Outcome: no deployment data was reachable, so the empirical numbers are still blank. What the
+phase produced instead is (a) the three queries, written and VALIDATED against the real Node
+(Postgres) schema, and (b) a structural bound on Q3 read off the pipeline definitions.** Both are
+recorded below so an operator with database access can finish the measurement in minutes rather
+than re-deriving the SQL.
+
+Why blank: the initiative ran in a source checkout with no `DATABASE_URL`, no Cloudflare
+credentials and no D1 binding. The queries were therefore validated by applying the full
+`backend/runtimes/node/drizzle/` migration lineage to a throwaway Postgres, running them against
+the real schema, and seeding synthetic rows to confirm each one DISCRIMINATES (Q1 reported the
+per-block run distribution; Q2 isolated exactly the one settled review whose block was gone; Q3
+counted only `spec-writer` steps in state `done`, excluding a `running` one and a `coder`-only
+run). They return correct, non-vacuous results — they simply have nothing to count here.
+
+#### The queries (Postgres / Node facade; validated)
+
+Run against the app schema (`DB_SCHEMA`, default `public`). On the Cloudflare/D1 facade the shape
+is identical but the JSON accessors differ: `json_extract(detail, '$.steps')` with `json_each(...)`
+in place of `detail::jsonb` / `jsonb_array_elements`.
+
+```sql
+-- Q1 — restart rate: distribution of execution runs per block.
+WITH runs AS (
+  SELECT workspace_id, block_id, COUNT(*) AS run_count
+  FROM agent_runs
+  WHERE kind = 'execution' AND block_id IS NOT NULL
+  GROUP BY workspace_id, block_id
+)
+SELECT run_count, COUNT(*) AS blocks,
+       ROUND(100.0 * COUNT(*) / NULLIF(SUM(COUNT(*)) OVER (), 0), 1) AS pct_of_blocks
+FROM runs GROUP BY run_count ORDER BY run_count;
+
+-- Q2 — review-loss rate: settled reviews whose block no longer exists.
+SELECT COUNT(*)                             AS settled_reviews,
+       COUNT(*) FILTER (WHERE b.id IS NULL) AS orphaned_by_block_delete,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE b.id IS NULL)
+             / NULLIF(COUNT(*), 0), 2)      AS pct_orphaned
+FROM requirement_reviews r
+LEFT JOIN blocks b ON b.workspace_id = r.workspace_id AND b.id = r.block_id
+WHERE r.status = 'incorporated';
+
+-- Q3 — spec-writer reach, per BLOCK carrying a settled review (the true gap size).
+WITH settled AS (
+  SELECT DISTINCT workspace_id, block_id
+  FROM requirement_reviews WHERE status = 'incorporated'
+),
+per_block AS (
+  SELECT s.workspace_id, s.block_id,
+         BOOL_OR(EXISTS (
+           SELECT 1 FROM jsonb_array_elements(
+             COALESCE(r.detail::jsonb -> 'steps', '[]'::jsonb)) AS st
+           WHERE st ->> 'agentKind' = 'spec-writer' AND st ->> 'state' = 'done'
+         )) AS reached
+  FROM settled s
+  LEFT JOIN agent_runs r
+         ON r.workspace_id = s.workspace_id AND r.block_id = s.block_id
+        AND r.kind = 'execution'
+  GROUP BY s.workspace_id, s.block_id
+)
+SELECT COUNT(*)                        AS blocks_with_settled_review,
+       COUNT(*) FILTER (WHERE reached) AS reached_spec_writer,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE reached) / NULLIF(COUNT(*), 0), 1) AS pct
+FROM per_block;
+```
+
+#### Results
+
+| Question               | Result    | Recorded |
+| ---------------------- | --------- | -------- |
+| Q1 restart rate        | _not run_ | —        |
+| Q2 review-loss rate    | _not run_ | —        |
+| Q3 `spec-writer` reach | _not run_ | —        |
+
+#### The structural bound on Q3 (what DID get established)
+
+Q3 is the query that gates the rest, and its upper bound is readable from the pipeline
+definitions in `kernel/src/domain/seed.ts` without any data. In **every** built-in pipeline that
+pairs a human requirements/clarity gate with a `spec-writer`, the writer is 0–1 steps behind the
+gate:
+
+| Pipeline       | Gate                         | Steps between gate and `spec-writer` |
+| -------------- | ---------------------------- | ------------------------------------ |
+| `pl_full`      | `requirements-review` (gate) | 0 — `spec-writer` is the next step   |
+| `pl_fullstack` | `requirements-review` (gate) | 1 (`researcher`)                     |
+| `pl_bugfix`    | `clarity-review` (gate)      | 0 — `spec-writer` is the next step   |
+
+So the only way a settled review fails to reach `spec-writer` is a run abandoned or failed inside
+a 0–1 step window. **That makes Q3 structurally near-100%, which is the tracker's own stated
+condition for "Phase 3 is unnecessary and the initiative ends at Phase 1–2".** Phases 1 and 2 were
+therefore built; Phase 3 was not.
+
+This is a bound, not a measurement — it caps how much ground Phase 3 could ever recover, but the
+actual abandonment rate in that window still needs Q3 run against real data. If an operator runs
+it and the number comes back materially below ~90%, Phase 3 becomes worth reconsidering; nothing
+in Phases 1–2 has to change either way, since both extend `spec/` rather than depend on how it
+got populated.
+
+The original three queries and what they decide:
 
 | Question                                                                         | Query sketch                                                                       | What it decides                                                                     |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |

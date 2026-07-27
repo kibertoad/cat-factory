@@ -42,6 +42,34 @@ export const requirementKindSchema = v.picklist(['functional', 'nonfunctional', 
 export type RequirementKind = v.InferOutput<typeof requirementKindSchema>
 
 /**
+ * IMPLEMENTATION STATE — whether the service is already known to honour a requirement, as
+ * distinct from whether it has been agreed. This is the axis a prescriptive spec is missing
+ * by construction: `spec/` says what must be TRUE, and until this field existed it could not
+ * say what is true YET.
+ *
+ *  - `aspirational` — agreed (a human accepted it through the spec diff's PR review) but NOT
+ *    yet observed to hold. The default for a newly written requirement.
+ *  - `established`  — observed to hold: a tester actually exercised its acceptance criteria
+ *    and they passed. This is the only thing that makes a requirement STANDING behaviour.
+ *
+ * Why it matters: without it, an agreed-but-unbuilt requirement enters every build prompt as
+ * standing behaviour (so an agent implements it by accident, on an unrelated task) and draws a
+ * spurious `not_met` from the tester on every subsequent run until it ships. The field is what
+ * makes a behaviour contract safe to write down BEFORE it is honoured.
+ *
+ * Deliberately a FIELD, not a `spec/` sub-folder: a folder encodes the state in the path, so
+ * every promotion becomes a file move and the state cannot be read without walking the tree.
+ * The markdown / Gherkin renders group by the field and read identically.
+ *
+ * PROMOTION is mechanical, never a human action — see the tester-driven promotion post-op in
+ * `@cat-factory/agents` (`repo-ops/builtin.ts`). A first observed pass flips `aspirational` →
+ * `established`, which self-maintains across every path, including a later task that
+ * deliberately changes the behaviour.
+ */
+export const requirementStateSchema = v.picklist(['aspirational', 'established'])
+export type RequirementState = v.InferOutput<typeof requirementStateSchema>
+
+/**
  * A single acceptance criterion in structured Given/When/Then form — the seed for
  * one Gherkin `Scenario`. Kept structured (not prose) so the harness can render it
  * mechanically and deterministically into a `.feature` file.
@@ -66,6 +94,13 @@ export const requirementItemSchema = v.object({
   statement: reqStatementField,
   kind: requirementKindSchema,
   priority: requirementPrioritySchema,
+  /**
+   * Whether the service is already known to honour this requirement. Defaults to
+   * `aspirational` — a requirement nobody has observed to hold is not standing behaviour, and
+   * a spec written before the code is the normal case rather than the exceptional one. See
+   * {@link requirementStateSchema}.
+   */
+  state: v.optional(requirementStateSchema, 'aspirational'),
   /** Ids of the board task/block(s) this requirement was aggregated from (provenance). */
   sourceBlockIds: v.optional(v.array(blockIdField), []),
   /** Structured acceptance criteria → the seed for this requirement's Gherkin scenarios. */
@@ -259,6 +294,9 @@ export function renderSpecForReview(spec: SpecDoc): string {
       for (const req of group.requirements ?? []) {
         lines.push('', `#### ${req.title} (${req.id})`, '', `- Kind: ${req.kind}`)
         lines.push(`- Priority: ${req.priority}`)
+        // The implementation state is the difference between "the service does this" and "we
+        // agreed the service should do this", so a human reviewing the spec diff has to see it.
+        lines.push(`- State: ${req.state ?? 'aspirational'}`)
         lines.push(`- Statement: ${req.statement}`)
         for (const ac of req.acceptance ?? []) {
           lines.push(

@@ -7,7 +7,10 @@ import type {
   PrReportCheck,
   PrReportEnvironment,
   PrReportIssue,
+  PrReportRequirement,
   PrVerificationReport,
+  RequirementVerdict,
+  SpecDoc,
   TestReport,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
@@ -63,6 +66,20 @@ function cap<T>(items: readonly T[], label: string, truncations: string[]): T[] 
   return kept
 }
 
+/**
+ * Scrub a requirement verdict's evidence and clamp it to what the table can actually show.
+ * The rendered cell is truncated at {@link hostMarkdown.MAX_CELL_CHARS} regardless, so
+ * carrying more than that into the report only inflates the machine-readable JSON block —
+ * which the body-size backstop then drops WHOLESALE. One pathological tester `detail` should
+ * not cost the reader the entire JSON block.
+ */
+function verdictDetail(value: string | null | undefined): string | null {
+  const text = scrub(value)
+  if (!text) return null
+  if (text.length <= hostMarkdown.MAX_CELL_CHARS) return text
+  return `${text.slice(0, hostMarkdown.MAX_CELL_CHARS - 1)}…`
+}
+
 /** The non-run inputs the composer needs beyond the instance itself. */
 export interface PrReportInputs {
   block: Block
@@ -74,6 +91,13 @@ export interface PrReportInputs {
   provider?: 'github' | 'gitlab' | null
   /** Deep link into the run's observability panel; null when no public app URL is configured. */
   runUrl: string | null
+  /**
+   * The service's in-repo `spec/` tree, reassembled from the run's branch, for the
+   * requirement → evidence join. `null`/absent when it could not be read at all (no VCS
+   * wired, no repo resolved, a transport failure) — which the section reports distinctly from
+   * a spec that IS readable but records no requirements.
+   */
+  spec?: SpecDoc | null
   /** Epoch ms stamped as the report's `generatedAt`. */
   now: number
 }
@@ -304,6 +328,117 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
 }
 
 /**
+ * Compose the REQUIREMENT → EVIDENCE section: every requirement in the service's in-repo
+ * `spec/`, paired with the Tester's verdict on it.
+ *
+ * The join is by the spec's OWN requirement id — the id the Gherkin render stamps above each
+ * scenario and the Tester echoes back — so there is exactly one id space between the spec, the
+ * tester and this report.
+ *
+ * A requirement the Tester said nothing about is `not_covered`, NOT `not_met`: silence means
+ * nobody looked, and rendering that as a failure would make every unrelated PR look like it
+ * broke the service. `not_covered` against an `aspirational` requirement is the expected
+ * reading (it is not built yet), which is why the state travels with the verdict rather than
+ * being left for the reader to guess.
+ *
+ * `spec` is null when it could not be read at all (no VCS wired, no repo resolved, a transport
+ * failure) — distinct from a spec that IS readable but records no requirements. Both produce an
+ * `absent` section, with notes that say which.
+ *
+ * Unlike the single-step `tests` section this reads EVERY tester step, because promotion does:
+ * a pipeline carrying both `tester-api` and `tester-ui` promotes off both kinds' verdicts, so a
+ * report joining only the last of them would show `not checked` against requirements the spec
+ * already records as `established`. The contract's two consumers have to agree.
+ */
+function composeRequirements(
+  instance: ExecutionInstance,
+  spec: SpecDoc | null | undefined,
+  truncations: string[],
+): PrVerificationReport['requirements'] {
+  const empty = { entries: [], met: 0, notMet: 0, notCovered: 0, total: 0 }
+  const testerSteps = instance.steps.filter((s) => isTesterKind(s.agentKind))
+  if (testerSteps.length === 0) {
+    return {
+      status: 'absent',
+      note:
+        'No tester step in this pipeline — the acceptance criteria recorded in `spec/` were ' +
+        'not verified by the platform on this run.',
+      ...empty,
+    }
+  }
+  const reports = testerSteps.map((s) => s.test?.lastReport).filter((r) => r != null)
+  if (reports.length === 0) {
+    return {
+      status: 'absent',
+      note: 'The tester step produced no report, so no requirement was ruled on.',
+      ...empty,
+    }
+  }
+  if (!spec) {
+    return {
+      status: 'absent',
+      note:
+        'The service specification under `spec/` could not be read for this run, so the ' +
+        'tester’s verdicts could not be matched to requirements.',
+      ...empty,
+    }
+  }
+
+  // Index the verdicts by requirement id, across every tester step in pipeline order. A
+  // duplicate id keeps the FIRST verdict — whether it repeats within one report or across two
+  // testers — because last-wins would let a trailing `not_covered` quietly erase a real
+  // observation, which is the one thing this section exists to prevent.
+  const verdicts = new Map<string, RequirementVerdict>()
+  for (const report of reports) {
+    for (const verdict of report.requirementVerdicts ?? []) {
+      if (!verdicts.has(verdict.requirementId)) verdicts.set(verdict.requirementId, verdict)
+    }
+  }
+
+  const rows: PrReportRequirement[] = []
+  for (const module of spec.modules ?? []) {
+    for (const group of module.groups ?? []) {
+      for (const req of group.requirements ?? []) {
+        const verdict = verdicts.get(req.id)
+        rows.push({
+          id: req.id,
+          title: scrubbed(req.title),
+          module: scrubbed(module.name),
+          group: scrubbed(group.name),
+          priority: req.priority,
+          state: req.state ?? 'aspirational',
+          verdict: verdict?.status ?? 'not_covered',
+          detail: verdictDetail(verdict?.detail),
+          criteriaCount: (req.acceptance ?? []).length,
+        })
+      }
+    }
+  }
+  if (rows.length === 0) {
+    return {
+      status: 'absent',
+      note:
+        'No acceptance criteria are recorded in `spec/` for this service, so there was ' +
+        'nothing for the tester to rule on.',
+      ...empty,
+    }
+  }
+
+  // Counts are computed over EVERY row, before the cap — so a capped table still reports the
+  // true totals and the `truncations` note says how much of the table was shown.
+  const count = (status: PrReportRequirement['verdict']) =>
+    rows.filter((r) => r.verdict === status).length
+  return {
+    status: 'reported',
+    entries: cap(rows, 'requirements.entries', truncations),
+    met: count('met'),
+    notMet: count('not_met'),
+    notCovered: count('not_covered'),
+    total: rows.length,
+  }
+}
+
+/**
  * Compose the JUDGE section: every step carrying judge state, in pipeline order. Unlike the
  * single-step sections this reports ALL of them — a pipeline may place several rubrics, and
  * "which rubric said what" is the whole content of the section.
@@ -383,6 +518,7 @@ export function composePrVerificationReport(
     },
     ci: composeCi(instance, truncations),
     tests: composeTests(instance, truncations),
+    requirements: composeRequirements(instance, inputs.spec, truncations),
     environments: composeEnvironments(instance, truncations),
     merge: composeMerge(instance),
     judges: composeJudges(instance, truncations),
@@ -461,6 +597,50 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
     )
   }
   return [...out, '']
+}
+
+/**
+ * Render the requirement → evidence table. Every hole goes through `hostMarkdown.cell` —
+ * requirement titles, module/group names and the tester's `detail` are all model-authored text
+ * landing in a host-parsed, often public PR body.
+ *
+ * The three verdicts are given visibly DIFFERENT markers on purpose: "we didn't check" and
+ * "it's broken" reading the same is the exact failure this section exists to remove.
+ */
+function renderRequirements(reqs: PrVerificationReport['requirements']): string[] {
+  const out = ['### Requirement verification', '']
+  if (reqs.status === 'absent') return [...out, `_${reqs.note}_`, '']
+  out.push(
+    `**${reqs.met} met** · **${reqs.notMet} not met** · **${reqs.notCovered} not checked** ` +
+      `(of ${reqs.total} requirement${reqs.total === 1 ? '' : 's'} in \`spec/\`)`,
+    '',
+    '| Requirement | Feature | State | Verdict | Observed |',
+    '| --- | --- | --- | --- | --- |',
+  )
+  for (const entry of reqs.entries) {
+    const verdict =
+      entry.verdict === 'met'
+        ? '✅ met'
+        : entry.verdict === 'not_met'
+          ? '❌ not met'
+          : '➖ not checked'
+    // An `aspirational` requirement is agreed-but-not-built, so say so inline rather than
+    // leaving a reader to read `not checked` against it as a coverage gap.
+    const state = entry.state === 'established' ? 'established' : 'aspirational'
+    const title = `${hostMarkdown.cell(entry.title)} \`${hostMarkdown.cell(entry.id)}\``
+    const feature = hostMarkdown.cell(`${entry.module} › ${entry.group}`)
+    out.push(
+      `| ${title} | ${feature} | ${state} | ${verdict} | ${hostMarkdown.cell(entry.detail ?? '')} |`,
+    )
+  }
+  out.push(
+    '',
+    '_`established` = observed to hold on some run; `aspirational` = agreed but not yet built,',
+    'so `not checked` against one is expected. The acceptance criteria themselves live in',
+    '`spec/` in this repository._',
+    '',
+  )
+  return out
 }
 
 function renderEnvironments(envs: PrVerificationReport['environments']): string[] {
@@ -586,6 +766,7 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     ...renderRun(report.run, report.observability.runUrl),
     ...renderCi(report.ci),
     ...renderTests(report.tests),
+    ...renderRequirements(report.requirements),
     ...renderEnvironments(report.environments),
     ...renderJudges(report.judges),
     ...renderMerge(report.merge),

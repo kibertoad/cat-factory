@@ -795,6 +795,145 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('built-in tester promotion post-op', () => {
+      // A requirement in `spec/` is `aspirational` (agreed, not yet observed) until a tester
+      // actually exercises it. The promotion from `aspirational` → `established` is deterministic
+      // backend TS over the checkout-free RepoFiles — NOT a model decision and NOT a side table —
+      // so it must fire and commit identically on D1 and Postgres.
+      it('promotes a tester-verified requirement to established, committing via RepoFiles', async () => {
+        const committed = new Map<string, string>([
+          [
+            'spec/service.json',
+            JSON.stringify({ service: 'Widgets', summary: '' }, null, 2) + '\n',
+          ],
+          [
+            'spec/modules/auth/_module.json',
+            JSON.stringify({ name: 'Auth', summary: '' }, null, 2) + '\n',
+          ],
+          [
+            'spec/modules/auth/login.json',
+            JSON.stringify(
+              {
+                name: 'Login',
+                summary: '',
+                requirements: [
+                  {
+                    id: 'req-password-login',
+                    title: 'Password login',
+                    statement: 'The system SHALL authenticate by password.',
+                    kind: 'functional',
+                    priority: 'must',
+                    state: 'aspirational',
+                    sourceBlockIds: [],
+                    acceptance: [
+                      {
+                        id: 'req-password-login-ac-1',
+                        given: 'a user',
+                        when: 'they sign in',
+                        outcome: 'a session opens',
+                      },
+                    ],
+                  },
+                ],
+                rules: [],
+              },
+              null,
+              2,
+            ) + '\n',
+          ],
+        ])
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async (path) => {
+            const content = committed.get(path)
+            return content === undefined ? null : { content, sha: 'sha' }
+          },
+          listDirectory: async (path) => {
+            const prefix = `${path.replace(/\/+$/, '')}/`
+            const files = new Set<string>()
+            const dirs = new Set<string>()
+            for (const p of committed.keys()) {
+              if (!p.startsWith(prefix)) continue
+              const rest = p.slice(prefix.length)
+              const slash = rest.indexOf('/')
+              if (slash === -1) files.add(p)
+              else dirs.add(`${prefix}${rest.slice(0, slash)}`)
+            }
+            return [
+              ...[...files].map((p) => ({
+                path: p,
+                name: p.split('/').pop()!,
+                type: 'file' as const,
+                sha: 'sha',
+              })),
+              ...[...dirs].map((p) => ({
+                path: p,
+                name: p.split('/').pop()!,
+                type: 'dir' as const,
+                sha: 'sha',
+              })),
+            ]
+          },
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          deleteBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            for (const f of input.files) committed.set(f.path, f.content)
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+
+        const app = harness.makeApp(
+          {
+            testReports: [
+              {
+                greenlight: true,
+                summary: 'exercised the login flow',
+                tested: ['password login'],
+                outcomes: [
+                  { name: 'password login', status: 'passed', detail: 'a session opened' },
+                ],
+                concerns: [],
+                requirementVerdicts: [
+                  { requirementId: 'req-password-login', status: 'met', detail: 'observed' },
+                ],
+              },
+            ],
+          },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Test only',
+          agentKinds: ['tester-api'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        // The verified requirement is now standing behaviour, on both runtimes.
+        expect(commits).toHaveLength(1)
+        const shard = commits[0]!.files.find((f) => f.path === 'spec/modules/auth/login.json')
+        expect(shard).toBeDefined()
+        expect(JSON.parse(shard!.content).requirements[0].state).toBe('established')
+        // BRANCH, pinned deliberately: this pipeline opens no PR, so the promotion lands on the
+        // base branch. That is the intended reading of a tester-only regression sweep — the
+        // tester exercised THAT tree, and there is no PR to defer the bookkeeping to. A run
+        // that does open a PR promotes on the PR branch instead, so it is reviewed in the same
+        // spec diff as the requirement it promotes (see `RunRepoOpsController`).
+        expect(commits[0]!.branch).toBe('main')
+      })
+    })
+
     describe('task estimator + consensus', () => {
       it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
         const app = harness.makeApp({

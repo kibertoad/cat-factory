@@ -54,8 +54,12 @@ const BLUEPRINT_SYSTEM_PROMPT =
   'Respond with ONLY a JSON object of shape {"type","name","summary","references":[],' +
   '"modules":[{"name","summary","references":[]}]} — no prose, no code fences.'
 
-/** Role prompt the spec-writer step runs under (returns the spec doc as JSON). */
-const SPEC_WRITER_SYSTEM_PROMPT =
+/**
+ * Role prompt the spec-writer step runs under (returns the spec doc as JSON). Exported so it
+ * can be registered in `PROMPT_VERSIONS` — it is a shipped, materially-tuned prompt, so it
+ * falls under the repo's "edit a prompt ⇒ bump its number" rule like the standard phases.
+ */
+export const SPEC_WRITER_SYSTEM_PROMPT =
   'You maintain the PRESCRIPTIVE specification for a service. READ the specification ' +
   'already committed to the repository under `spec/` (the baseline): start with ' +
   '`spec/overview.md` for the module → feature index, then open the relevant ' +
@@ -87,7 +91,16 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'never a near-duplicate of an existing one (no "Authentication" beside "Auth", no ' +
   '"User Login" beside "Login"). Each requirement is phrased as "The system SHALL …" ' +
   'with a MoSCoW priority (must/should/could) and structured Given/When/Then acceptance ' +
-  'criteria. Acceptance-scenario coverage is a FIRST-CLASS deliverable: every ' +
+  'criteria. ' +
+  'Every requirement also carries an IMPLEMENTATION STATE — `state`, either "aspirational" ' +
+  '(agreed but NOT yet observed to hold) or "established" (observed to hold). Set `state` to ' +
+  '"aspirational" on every requirement you ADD, and on any existing requirement whose ' +
+  'expected behaviour this task CHANGES (the previously-verified behaviour no longer ' +
+  'describes what must now be true). Otherwise PRESERVE the state already on the baseline ' +
+  'requirement exactly as you found it. NEVER set "established" yourself: promotion is ' +
+  'earned by a tester actually observing the behaviour pass, and the platform performs it ' +
+  'mechanically — claiming it here would assert a fact you have not verified. ' +
+  'Acceptance-scenario coverage is a FIRST-CLASS deliverable: every ' +
   'requirement the task adds or changes MUST carry complete acceptance criteria — the ' +
   'happy path AND the invalid-input / error / edge / boundary cases the requirements ' +
   'imply — since the Gherkin `.feature` files and the runnable tests are derived ' +
@@ -97,7 +110,7 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'persists the specification you return, so returning it IS the whole job. Respond ' +
   'with ONLY a JSON object of ' +
   'shape {"service","summary","modules":[{"name","summary","groups":[{"name","summary",' +
-  '"requirements":[{"id","title","statement","kind","priority","sourceBlockIds":[],' +
+  '"requirements":[{"id","title","statement","kind","priority","state","sourceBlockIds":[],' +
   '"acceptance":[{"id","given","when","outcome"}]}],"rules":[{"id","rule","rationale",' +
   '"sourceBlockIds":[]}]}]}]} ' +
   '(each acceptance criterion is a Given/When/Then, with the Then clause in `outcome`) — ' +
@@ -116,7 +129,8 @@ const SPEC_SHAPE_HINT =
   'rules scoped to it: {"service": string, "summary": string, "modules": [{"name": ' +
   'string, "summary": string, "groups": [{"name": string, "summary": string, ' +
   '"requirements": [{"id": string, "title": string, "statement": string, "kind": ' +
-  'string, "priority": string, "sourceBlockIds": string[], "acceptance": [{"given": ' +
+  'string, "priority": string, "state": "aspirational" | "established", ' +
+  '"sourceBlockIds": string[], "acceptance": [{"given": ' +
   'string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": ' +
   'string, "rationale": string, "sourceBlockIds": string[]}]}]}]}. For a purely ' +
   'technical task with no business requirements, the document is instead just ' +
