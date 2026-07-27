@@ -1721,6 +1721,7 @@
         "initiative": "סמן כנקרא",
         "markRead": "סמן כנקרא",
         "fork_decision_pending": "סמן כנקרא",
+        "judge_review": "סמן כנקרא",
         "pr_review_ready": "סמן כנקרא",
         "budget_paused": "סמן כנקרא",
         "key_drift": "מחק אישורים מיושנים",
@@ -3749,6 +3750,43 @@
       "suffixNotNeeded": "· עדיין לא נדרש",
       "gatedCommit": "קומיט מגודר",
       "footer": "שער מריץ בדיקה מקדימה תכנותית ומפעיל את {helper} רק כשהיא נכשלת; בדיקה ירוקה מתקדמת בלי להפעיל דבר."
+    }
+  },
+  "judge": {
+    "subtitle": "מעריך את עבודת ההרצה מול מחוון, ואז ממשיך, שואל או מחזיר אותה",
+    "empty": "שלב זה עדיין לא הפיק פסיקה.",
+    "notScored": "לא נוקד",
+    "threshold": "סף {threshold}",
+    "rubricOverridden": "מחוון סביבת העבודה",
+    "reworkRounds": "עיבוד מחדש {spent}/{budget}",
+    "findingsHeading": "מה שהמחוון סימן",
+    "roundsHeading": "סבבי בדיקה",
+    "round": "סבב {round}",
+    "decisionHeading": "ההחלטה שלך",
+    "decisionDescription": "להמשיך בכל זאת, להחזיר את העבודה לעיבוד מחדש או לעצור את ההרצה.",
+    "feedbackPlaceholder": "הנחיות רשות שיצורפו בעת ההחזרה…",
+    "proceed": "להמשיך בכל זאת",
+    "bounce": "להחזיר לעיבוד מחדש",
+    "stop": "לעצור את ההרצה",
+    "status": {
+      "evaluating": "בבדיקה",
+      "awaitingDecision": "נדרשת החלטה",
+      "bouncing": "בעיבוד מחדש",
+      "passed": "עבר",
+      "failed": "נכשל",
+      "skipped": "דולג"
+    },
+    "severity": {
+      "low": "נמוכה",
+      "medium": "בינונית",
+      "high": "גבוהה",
+      "critical": "קריטית"
+    },
+    "disposition": {
+      "pass": "עבר",
+      "park": "פנה לאדם",
+      "bounce": "הוחזר לעיבוד מחדש",
+      "fail": "ההרצה נכשלה"
     }
   },
   "requirements": {

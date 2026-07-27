@@ -1721,6 +1721,7 @@
         "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu",
         "fork_decision_pending": "Marquer comme lu",
+        "judge_review": "Marquer comme lu",
         "pr_review_ready": "Marquer comme lu",
         "budget_paused": "Marquer comme lu",
         "key_drift": "Supprimer les identifiants obsolètes",
@@ -3738,6 +3739,43 @@
       "suffixNotNeeded": "· pas encore nécessaire",
       "gatedCommit": "Commit sous condition",
       "footer": "Une condition exécute une vérification préalable programmatique et ne lance le {helper} qu'en cas d'échec ; une vérification verte avance sans rien lancer."
+    }
+  },
+  "judge": {
+    "subtitle": "Note le travail de cette exécution selon une grille, puis poursuit, demande ou le renvoie",
+    "empty": "Cette étape n'a pas encore produit de verdict.",
+    "notScored": "Non noté",
+    "threshold": "seuil {threshold}",
+    "rubricOverridden": "grille de l'espace de travail",
+    "reworkRounds": "reprise {spent}/{budget}",
+    "findingsHeading": "Ce que la grille a signalé",
+    "roundsHeading": "Tours de revue",
+    "round": "Tour {round}",
+    "decisionHeading": "Votre décision",
+    "decisionDescription": "Poursuivre malgré tout, renvoyer le travail pour reprise ou arrêter l'exécution.",
+    "feedbackPlaceholder": "Consignes facultatives à joindre au renvoi…",
+    "proceed": "Poursuivre malgré tout",
+    "bounce": "Renvoyer pour reprise",
+    "stop": "Arrêter l'exécution",
+    "status": {
+      "evaluating": "Revue en cours",
+      "awaitingDecision": "Décision requise",
+      "bouncing": "Reprise en cours",
+      "passed": "Réussi",
+      "failed": "Échoué",
+      "skipped": "Ignoré"
+    },
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyenne",
+      "high": "Élevée",
+      "critical": "Critique"
+    },
+    "disposition": {
+      "pass": "Réussi",
+      "park": "A demandé à une personne",
+      "bounce": "Renvoyé pour reprise",
+      "fail": "Exécution échouée"
     }
   },
   "requirements": {

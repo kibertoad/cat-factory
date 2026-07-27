@@ -1721,6 +1721,7 @@
         "initiative": "Marcar como leída",
         "markRead": "Marcar como leída",
         "fork_decision_pending": "Marcar como leído",
+        "judge_review": "Marcar como leído",
         "pr_review_ready": "Marcar como leída",
         "budget_paused": "Marcar como leída",
         "key_drift": "Descartar credenciales obsoletas",
@@ -3738,6 +3739,43 @@
       "suffixNotNeeded": "· aún no necesario",
       "gatedCommit": "Commit con compuerta",
       "footer": "Una compuerta ejecuta una comprobación previa programática y solo pone en marcha el {helper} cuando falla; una comprobación en verde avanza sin poner nada en marcha."
+    }
+  },
+  "judge": {
+    "subtitle": "Puntúa el trabajo de esta ejecución según una rúbrica y luego avanza, pregunta o lo devuelve",
+    "empty": "Este paso todavía no ha producido un veredicto.",
+    "notScored": "Sin puntuar",
+    "threshold": "umbral {threshold}",
+    "rubricOverridden": "rúbrica del espacio de trabajo",
+    "reworkRounds": "revisión {spent}/{budget}",
+    "findingsHeading": "Lo que señaló la rúbrica",
+    "roundsHeading": "Rondas de revisión",
+    "round": "Ronda {round}",
+    "decisionHeading": "Tu decisión",
+    "decisionDescription": "Continuar igualmente, devolver el trabajo para revisarlo o detener la ejecución.",
+    "feedbackPlaceholder": "Indicaciones opcionales para incluir al devolver el trabajo…",
+    "proceed": "Continuar igualmente",
+    "bounce": "Devolver para revisión",
+    "stop": "Detener la ejecución",
+    "status": {
+      "evaluating": "Revisando",
+      "awaitingDecision": "Necesita una decisión",
+      "bouncing": "En revisión",
+      "passed": "Aprobado",
+      "failed": "Fallido",
+      "skipped": "Omitido"
+    },
+    "severity": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "critical": "Crítica"
+    },
+    "disposition": {
+      "pass": "Aprobado",
+      "park": "Consultó a una persona",
+      "bounce": "Devuelto para revisión",
+      "fail": "Ejecución fallida"
     }
   },
   "requirements": {

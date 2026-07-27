@@ -1831,6 +1831,7 @@
         "initiative": "Als gelesen markieren",
         "markRead": "Als gelesen markieren",
         "fork_decision_pending": "Als gelesen markieren",
+        "judge_review": "Als gelesen markieren",
         "pr_review_ready": "Als gelesen markieren",
         "budget_paused": "Als gelesen markieren",
         "key_drift": "Veraltete Zugangsdaten entfernen",
@@ -4371,6 +4372,43 @@
       "suffixNotNeeded": "· noch nicht nötig",
       "gatedCommit": "Gesperrter Commit",
       "footer": "Ein Gate führt eine programmatische Vorprüfung aus und startet den {helper} nur, wenn sie fehlschlägt; eine grüne Prüfung fährt fort, ohne dass etwas gestartet wird."
+    }
+  },
+  "judge": {
+    "subtitle": "Bewertet die Arbeit dieses Laufs anhand eines Bewertungsrasters und fährt fort, fragt nach oder schickt sie zurück",
+    "empty": "Dieser Schritt hat noch kein Urteil erzeugt.",
+    "notScored": "Nicht bewertet",
+    "threshold": "Schwellenwert {threshold}",
+    "rubricOverridden": "Raster des Arbeitsbereichs",
+    "reworkRounds": "Überarbeitung {spent}/{budget}",
+    "findingsHeading": "Was das Bewertungsraster beanstandet hat",
+    "roundsHeading": "Prüfrunden",
+    "round": "Runde {round}",
+    "decisionHeading": "Ihre Entscheidung",
+    "decisionDescription": "Trotzdem fortfahren, die Arbeit zur Überarbeitung zurückschicken oder den Lauf stoppen.",
+    "feedbackPlaceholder": "Optionale Hinweise, die beim Zurückschicken mitgegeben werden…",
+    "proceed": "Trotzdem fortfahren",
+    "bounce": "Zur Überarbeitung zurückschicken",
+    "stop": "Lauf stoppen",
+    "status": {
+      "evaluating": "Wird geprüft",
+      "awaitingDecision": "Entscheidung nötig",
+      "bouncing": "Wird überarbeitet",
+      "passed": "Bestanden",
+      "failed": "Fehlgeschlagen",
+      "skipped": "Übersprungen"
+    },
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "critical": "Kritisch"
+    },
+    "disposition": {
+      "pass": "Bestanden",
+      "park": "Nachfrage an einen Menschen",
+      "bounce": "Zur Überarbeitung zurückgeschickt",
+      "fail": "Lauf fehlgeschlagen"
     }
   },
   "consensus": {

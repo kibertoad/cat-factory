@@ -1790,6 +1790,7 @@
         "initiative": "Mark read",
         "markRead": "Mark read",
         "fork_decision_pending": "Mark read",
+        "judge_review": "Mark read",
         "pr_review_ready": "Mark read",
         "budget_paused": "Mark read",
         "key_drift": "Drop stale credentials",
@@ -3881,6 +3882,43 @@
       "suffixNotNeeded": "· not needed yet",
       "gatedCommit": "Gated commit",
       "footer": "A gate runs a programmatic precheck and only spins up the {helper} when it fails; a green check advances with nothing spun up."
+    }
+  },
+  "judge": {
+    "subtitle": "Scores this run's work against a rubric, then advances, asks, or sends it back",
+    "empty": "This step has not produced a verdict yet.",
+    "notScored": "Not scored",
+    "threshold": "threshold {threshold}",
+    "rubricOverridden": "workspace rubric",
+    "reworkRounds": "rework {spent}/{budget}",
+    "findingsHeading": "What the rubric flagged",
+    "roundsHeading": "Review rounds",
+    "round": "Round {round}",
+    "decisionHeading": "Your decision",
+    "decisionDescription": "Proceed anyway, send the work back for rework, or stop the run.",
+    "feedbackPlaceholder": "Optional guidance to include when sending the work back…",
+    "proceed": "Proceed anyway",
+    "bounce": "Send back for rework",
+    "stop": "Stop the run",
+    "status": {
+      "evaluating": "Reviewing",
+      "awaitingDecision": "Needs a decision",
+      "bouncing": "Reworking",
+      "passed": "Passed",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "disposition": {
+      "pass": "Passed",
+      "park": "Asked a human",
+      "bounce": "Sent back for rework",
+      "fail": "Failed the run"
     }
   },
   "requirements": {

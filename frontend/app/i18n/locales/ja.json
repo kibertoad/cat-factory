@@ -1721,6 +1721,7 @@
         "initiative": "既読にする",
         "markRead": "既読にする",
         "fork_decision_pending": "既読にする",
+        "judge_review": "既読にする",
         "pr_review_ready": "既読にする",
         "budget_paused": "既読にする",
         "key_drift": "古い認証情報を削除",
@@ -3750,6 +3751,43 @@
       "suffixNotNeeded": "· まだ不要",
       "gatedCommit": "ゲート済みコミット",
       "footer": "ゲートはプログラムによるプリチェックを実行し、失敗した場合のみ {helper} を起動します。グリーンのチェックは何も起動せずに進行します。"
+    }
+  },
+  "judge": {
+    "subtitle": "この実行の成果をルーブリックで採点し、先に進めるか、確認を求めるか、差し戻します",
+    "empty": "このステップはまだ判定を出していません。",
+    "notScored": "未採点",
+    "threshold": "しきい値 {threshold}",
+    "rubricOverridden": "ワークスペースのルーブリック",
+    "reworkRounds": "手戻り {spent}/{budget}",
+    "findingsHeading": "ルーブリックが指摘した点",
+    "roundsHeading": "レビューの回数",
+    "round": "第 {round} 回",
+    "decisionHeading": "あなたの判断",
+    "decisionDescription": "このまま進める、作業を差し戻す、または実行を停止します。",
+    "feedbackPlaceholder": "差し戻す際に添える任意の指示…",
+    "proceed": "このまま進める",
+    "bounce": "差し戻して修正させる",
+    "stop": "実行を停止する",
+    "status": {
+      "evaluating": "レビュー中",
+      "awaitingDecision": "判断が必要",
+      "bouncing": "修正中",
+      "passed": "合格",
+      "failed": "失敗",
+      "skipped": "スキップ"
+    },
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "critical": "重大"
+    },
+    "disposition": {
+      "pass": "合格",
+      "park": "人に確認を求めた",
+      "bounce": "差し戻した",
+      "fail": "実行を失敗させた"
     }
   },
   "requirements": {
