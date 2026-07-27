@@ -1,5 +1,93 @@
 # @cat-factory/server
 
+## 0.153.1
+
+### Patch Changes
+
+- 829a905: Refresh dependencies (direct + transitive) and bump the coding-agent CLIs baked into the
+  runner image.
+
+  - **Runner image (`@cat-factory/executor-harness`, image tag `1.57.0`)**: Pi
+    `0.80.6 → 0.82.1`, Claude Code `2.1.207 → 2.1.220`, Codex `0.144.1 → 0.145.0`, and the
+    two Pi extensions `@juicesharp/rpiv-todo` / `@juicesharp/rpiv-web-tools`
+    `1.20.0 → 2.1.0`. The todo extension's v2 tool result keeps the `details.tasks[]` shape
+    (`subject` + `pending`/`in_progress`/`completed`/`deleted` status) that
+    `parseTodoProgress` reads, so live subtask progress is unaffected. The image pins in
+    `deploy/backend` (`package.json` + `wrangler.toml`) and
+    `RECOMMENDED_HARNESS_IMAGE` are synced to the new tag.
+  - **Workspace dependencies**: refreshed the whole lockfile within the declared ranges, so
+    transitive dependencies move up too. Direct bumps include `ai` 7.0.37, `@ai-sdk/*`
+    (anthropic 4.0.21, openai 4.0.20, amazon-bedrock 5.0.32), `hono` 4.12.32,
+    `@hono/node-server` 2.0.12, `pg-boss` 12.26.3, `undici` 8.9.0, `wrangler` 4.114.0,
+    `@cloudflare/workers-types`, `@cloudflare/vitest-pool-workers` 0.18.8,
+    `@aws-sdk/client-s3` 3.1095.0, `@playwright/test` 1.62.0 and `turbo` 2.10.7. Every
+    version picked is the newest that already satisfies the `minimumReleaseAge` supply-chain
+    gate, and the AI-SDK family stays inside the majors that pair with `workers-ai-provider`
+    (`ai@^7`, `@ai-sdk/*@^4`). No third-party entries were added to
+    `minimumReleaseAgeExclude`. The frontend's `typescript@^6` pin is left alone (Nuxt /
+    `vue-tsc` toolchain).
+
+- Updated dependencies [143e6bb]
+- Updated dependencies [829a905]
+- Updated dependencies [829a905]
+  - @cat-factory/orchestration@0.143.1
+  - @cat-factory/agents@0.70.1
+  - @cat-factory/integrations@0.100.2
+  - @cat-factory/kernel@0.163.0
+  - @cat-factory/spend@0.12.89
+
+## 0.153.0
+
+### Minor Changes
+
+- c95600b: Bugfix reproduction proof — foundation (Phase A)
+
+  Threads a machine-verifiable reproduction declaration from a run's `repro-test` step onto the
+  PR-opening coder dispatch, so a later slice's harness phase can prove the defect was real: run
+  the declared check against the pre-fix tree (expect red) and the final tree (expect green).
+
+  - **Contracts**: new `reproduction.ts` (the resolved spec, the harness report + its
+    `reproduced` / `inconclusive` / `declared_infeasible` verdict, `parseReproductionReport`) and
+    `PipelineStep.reproduction`, which rides the run's `detail` blob — no migration.
+  - **Agents**: `reproTestOutcome` gains `command`, `setupCommand` and `alternativeVerification`
+    (with the prompt updated to ask for them), and the `coder.reproductionProof` tri-state config id
+    (`auto` / `always` / `off`). The task-facing descriptor is deliberately NOT contributed yet —
+    the verification phase and the PR section are later slices, and `always` resolves identically to
+    `auto` until the tracker-issue gating lands, so a control rendered now would offer two
+    indistinguishable options and promise behaviour that does not exist. A value set by hand or by a
+    deployment is already honoured.
+  - **Engine**: pure `reproductionProof.logic.ts` resolves the tri-state + declaration into the
+    spec `AgentContextBuilder` folds onto `AgentRunContext.reproduction`; the job body forwards it
+    only on a dispatch that opens a PR; the harness verdict is recorded on the step from all three
+    poll paths.
+  - **Model-authored input is bounded at the resolution boundary**: the declared command and setup
+    command are length-capped (over-length declines the whole spec), and each declared test path
+    must be repo-relative with no `..` segment, since the harness applies them onto a base worktree.
+    Every dropped path is counted onto the spec's `omittedTestPaths` and carried to the report, so a
+    proof run against an incompletely rebuilt tree says so instead of implying a clean verdict.
+  - **Infeasibility is structural**: a run whose reproduction step conceded dispatches no proof and
+    instead records the declaration itself — the reason plus the agent's stated alternative
+    verification — so "could not be reproduced" no longer reads the same as "nobody tried". A reply
+    that never named an outcome is NOT treated as a concession (the schema's lenient fallback would
+    otherwise publish an infeasibility claim the agent never made), and a concession with neither a
+    reason nor an alternative records an explicit note rather than a blank card.
+
+  Behaviour is unchanged for every run that is not opted in or carries no declaration: no context
+  field, no job-body field, the existing harness path. Asserted on both runtimes.
+
+  Design + phase checklist: `docs/initiatives/bugfix-reproduction-proof.md`.
+
+### Patch Changes
+
+- Updated dependencies [c95600b]
+  - @cat-factory/orchestration@0.143.0
+  - @cat-factory/contracts@0.168.0
+  - @cat-factory/agents@0.70.0
+  - @cat-factory/kernel@0.162.0
+  - @cat-factory/integrations@0.100.1
+  - @cat-factory/prompt-fragments@0.14.16
+  - @cat-factory/spend@0.12.88
+
 ## 0.152.0
 
 ### Minor Changes

@@ -81,6 +81,17 @@ export interface EnvironmentTestServiceDependencies {
   runner?: EnvironmentTestRunner
   /** Pushes live stage transitions to subscribed clients. */
   eventPublisher?: ExecutionEventPublisher
+  /**
+   * Structured logger for terminal-failure diagnostics. A self-test failure is otherwise only
+   * persisted on the run record (and surfaced in the SPA) — never logged server-side — so a
+   * provider/dispatch throw (e.g. a Kargo 422) leaves no trace in the logs. `fail()` emits one
+   * `warn` per failure with the stage + message (+ stack when the cause is an `Error`). Absent ⇒
+   * no logging (the run record is still written).
+   */
+  logger?: {
+    info(obj: Record<string, unknown>, msg?: string): void
+    warn(obj: Record<string, unknown>, msg?: string): void
+  }
 }
 
 function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
@@ -248,20 +259,29 @@ export class EnvironmentTestService {
         throw new Error('The environment test was stopped while starting.')
       }
 
+      // The throwaway branch now exists, so the NEXT phase is provisioning. Advance the stage
+      // BEFORE dispatching, for two reasons: (1) `startProvision` can throw (a provider rejects
+      // the create, e.g. a Kargo 422) — with the stage still at `creating_branch`, `fail()` would
+      // mislabel a provisioning-dispatch failure as a branch-creation failure (`failedStage`
+      // reads the live stage); (2) a slow dispatch otherwise leaves the SPA showing a stalled
+      // "creating branch" until it returns. A rejected write means a concurrent stop finalized
+      // the run — don't dispatch onto it.
+      if (!(await this.patch(record, { stage: 'provisioning' }))) {
+        throw new Error('The environment test was stopped while starting.')
+      }
+
       // Dispatch provisioning for the temp branch under the synthetic block id.
       const dispatch = await this.deps.provisioning.startProvision(
         this.provisionArgs(record, branch),
         this.ref(record.id),
       )
-      const patch =
-        dispatch.kind === 'completed'
-          ? {
-              stage: 'provisioning' as const,
-              environmentId: dispatch.handle.id,
-              envUrl: dispatch.handle.url,
-            }
-          : { stage: 'provisioning' as const }
-      if (!(await this.patch(record, patch))) {
+      if (
+        dispatch.kind === 'completed' &&
+        !(await this.patch(record, {
+          environmentId: dispatch.handle.id,
+          envUrl: dispatch.handle.url,
+        }))
+      ) {
         // The run was stopped while we were dispatching; the stop already ran cleanup,
         // but the branch/dispatch may postdate its snapshot — fail() re-runs cleanup
         // idempotently and leaves the stop's terminal state in place.
@@ -272,7 +292,7 @@ export class EnvironmentTestService {
       await this.deps.runner?.startRun(workspaceId, record.id)
       return toRun(record)
     } catch (error) {
-      return this.fail(record, getErrorMessage(error))
+      return this.fail(record, getErrorMessage(error), error)
     }
   }
 
@@ -310,7 +330,7 @@ export class EnvironmentTestService {
           return { state: 'running' }
       }
     } catch (error) {
-      const run = await this.fail(record, getErrorMessage(error))
+      const run = await this.fail(record, getErrorMessage(error), error)
       return { state: 'failed', error: run.error ?? undefined }
     }
   }
@@ -491,8 +511,23 @@ export class EnvironmentTestService {
   private async fail(
     record: EnvironmentTestRunRecord,
     message: string,
+    cause?: unknown,
   ): Promise<EnvironmentTestRun> {
     const failedStage = record.stage
+    // Log the failure server-side — the ONLY server-side trace of a self-test failure (the run
+    // record + SPA aside). Carries the stage + message (which now includes any provider
+    // field-level detail) and the stack when the cause is an `Error`, so an unexpected throw is
+    // debuggable from the logs rather than just the terminal run row.
+    this.deps.logger?.warn(
+      {
+        workspaceId: record.workspaceId,
+        runId: record.id,
+        failedStage,
+        err: message,
+        ...(cause instanceof Error && cause.stack ? { stack: cause.stack } : {}),
+      },
+      'environment self-test failed',
+    )
     // Release any in-flight deploy job when provisioning never settled (a stop
     // mid-provision, a dispatch that threw or crashed before the stage patch landed):
     // best-effort abort of the deploy runner so a stopped test doesn't keep a container

@@ -102,7 +102,7 @@ describe('buildLocalEnv', () => {
     expect(out).toMatch(/^LOCAL_NATIVE_AGENTS=claude-code$/m)
     expect(out).toMatch(/^LOCAL_HARNESS_ENTRY=\/opt\/harness\/server\.js$/m)
     // Only claude-code models are named as running natively.
-    expect(out).toContain('Claude Opus 4.8 (claude-opus)')
+    expect(out).toContain('Claude Opus 5 (claude-opus)')
     expect(out).not.toContain('GPT-5.5')
   })
 

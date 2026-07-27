@@ -54,7 +54,7 @@ in `wrangler.toml`).
 ## Choosing the default model preset
 
 Every workspace's model-preset library is seeded on first use with three built-ins
-(Kimi K2.7, GLM-5.2, Claude Opus 4.8); the Worker marks **Kimi K2.7** the default (it runs
+(Kimi K2.7, GLM-5.2, Claude Opus 5); the Worker marks **Kimi K2.7** the default (it runs
 on the bare Cloudflare AI binding). The library API already accepts an override — the app
 builder reads `defaultModelPresetId` off `createApp`'s `overrides`
 (a `Partial<CoreDependencies>`):

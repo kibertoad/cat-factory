@@ -37,7 +37,7 @@ export interface ModelPresetServiceDependencies {
  * mapping from). A preset is one `baseModelId` applied to every agent kind plus
  * per-kind `overrides`. Maintains the invariant that a workspace always has at least
  * one preset, exactly one of which is the default: {@link list} lazily seeds the
- * built-in catalog ({@link seedModelPresets}: Kimi K2.7, GLM-5.2, Claude Opus 4.8) on
+ * built-in catalog ({@link seedModelPresets}: Kimi K2.7, GLM-5.2, Claude Opus 5) on
  * first use, with the deployment's {@link ModelPresetServiceDependencies.defaultPresetId}
  * flagged default, and the default cannot be deleted. The single-default promotion is
  * enforced in the repository. {@link reseed} restores a built-in to the current catalog

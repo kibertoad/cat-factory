@@ -86,6 +86,6 @@ when it is scrubbed.
 Unconfigured means unchanged: no `reproduction` on the job body ⇒ the harness's existing path,
 byte for byte.
 
-Runner image bumped to `1.57.1`. The PR-report section that renders this is Phase C.
+Runner image bumped to `1.59.0`. The PR-report section that renders this is Phase C.
 
 Design + phase checklist: `docs/initiatives/bugfix-reproduction-proof.md`.

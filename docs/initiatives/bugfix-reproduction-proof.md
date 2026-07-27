@@ -297,7 +297,7 @@ Notes for Phase B (which consumes all of this):
 
 ### Phase B — the harness phase + image bump
 
-Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image `1.57.1`.
+Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image `1.59.0`.
 
 | Item                                                                                      | Status | PR  |
 | ----------------------------------------------------------------------------------------- | ------ | --- |
