@@ -61,6 +61,13 @@ export interface AcceptanceCriterionRepository {
   /** Insert-or-replace a batch of criteria in one round trip (the accretion pass's write). */
   upsertMany(records: readonly AcceptanceCriterionRecord[]): Promise<void>
   delete(workspaceId: string, id: string): Promise<void>
-  /** Drop every criterion on a frame (used when the frame itself goes away). */
-  deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /**
+   * Drop every criterion belonging to any of `blockIds`, in ONE chunked `IN` statement — the
+   * write-side twin of {@link AcceptanceCriterionRepository.listByFrameBlocks}.
+   *
+   * Batched rather than per-block because its real caller is the board's delete cascade, which
+   * removes a whole subtree at once: a `deleteByBlock` per doomed frame would be exactly the
+   * N+1 the batch read exists to avoid. An empty `blockIds` is a no-op that touches no database.
+   */
+  deleteByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void>
 }

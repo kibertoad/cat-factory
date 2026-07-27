@@ -209,6 +209,13 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     reviewId: string,
     drafts: readonly AcceptanceCriterionDraft[],
   ) => acceptanceCriteriaService.recordDerived(workspaceId, frameId, reviewId, drafts)
+  // The replay guard the engine consults BEFORE spending a model call on extraction: the durable
+  // driver's steps replay, so without it a settled review re-extracts every time.
+  const acceptanceCriteriaAlreadyDerived = (
+    workspaceId: string,
+    frameId: string,
+    reviewId: string,
+  ) => acceptanceCriteriaService.hasDerivedFrom(workspaceId, frameId, reviewId)
 
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real reads land in B2). The
@@ -236,6 +243,7 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     acceptanceCriteriaService,
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     subscriptionQuotaProvider,
   }
 }

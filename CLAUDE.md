@@ -1445,6 +1445,17 @@ produced it. Full design + the deferrals:
   departure from `validation_configs` / `release_health_configs` is **one ROW per criterion, not one
   JSON blob per frame**: each carries its own lifecycle and a stable id the tester verdicts and the PR
   report join on, so `listByFrameBlocks` (a chunked `IN`) is the primary read.
+- **The row key is the id ALONE, so `upsertMany` MUST scope its conflict clause.** Both repos carry
+  a `WHERE acceptance_criteria.workspace_id = excluded.workspace_id` on the `DO UPDATE` (D1) /
+  `setWhere` (Drizzle). Without it an upsert carrying ANOTHER workspace's criterion id rewrites that
+  row's text and status while leaving it in the victim's workspace — `workspace_id` is deliberately
+  not in the SET list — and the mothership RPC's `workspaceFieldList` rule cannot catch it, because
+  all it can vouch for is the record's OWN `workspaceId` field. Any future single-PK, workspace-owned
+  table reachable over the RPC needs the same guard.
+- **A deleted frame's criteria are reclaimed by the board cascade.** `BoardService.removeBlock` calls
+  `deleteByBlocks` over the doomed frames (ONE batched statement, never a delete per frame) beside the
+  service/initiative reclaims. Rows keyed by a dead block id are unreachable from the inspector yet
+  keep coming back from the workspace hydrate; the conformance suite pins the cascade on both runtimes.
 - **The controller is deliberately NOT admin-gated.** Every neighbouring frame-scoped controller
   mounts `requireWorkspacePermission(...)` because it edits operator CONFIGURATION. Criteria are
   product knowledge — the class of thing a member writes — so the RBAC gate's viewer WRITE FLOOR is
@@ -1464,7 +1475,17 @@ produced it. Full design + the deferrals:
   resolution) → `recordDerived`, which files the drafts as `proposed`. It rides the **requirements**
   subject only (`ReviewKind.accretesCriteria`) — a clarity review settles a bug report, whose
   "behaviours" are symptoms of a defect. Best-effort and behind the settlement throughout: no model
-  wired, a prose answer, a truncated response or a store outage all leave the run untouched.
+  wired, a prose answer, a truncated response or a store outage all leave the run untouched — but
+  never SILENTLY: the extraction's swallow logs through the facade logger, because a path whose whole
+  failure mode is "nothing happens" is indistinguishable from a document with nothing durable in it.
+- **The accretion hook is REPLAY-GUARDED, and takes the settled document in hand.** Settlement runs
+  inside the durable driver (whose steps replay) and off HTTP routes a client may retry, so
+  `settled()` hands the extraction the document it already holds (`ReviewKind.incorporatedDoc` — no
+  re-read of the row just written) and the closure first asks `hasDerivedFrom(frame, reviewId)`,
+  skipping the model call entirely when this review already accreted here. The marker is the derived
+  rows' own `sourceReviewId`, not a claim table: the question has an exact answer in the store. An
+  extraction that legitimately yielded NOTHING leaves no marker and so re-runs on a replay — accepted,
+  since a duplicate WRITE is separately impossible (`recordDerived` dedupes by normalised title).
 - **Consumption threads the ONE frame walk.** `AgentContextBuilder.buildContext` resolves the
   service frame in its first wave; `acceptanceCriteriaFor` joins that wave beside
   `validationChecksFor` rather than walking again. The result lands on
@@ -1472,6 +1493,10 @@ produced it. Full design + the deferrals:
   (`@cat-factory/agents`) into every standard phase AND the generic prompt path (so spec-writer and
   the testers get it). The section says explicitly that these are STANDING behaviours, not this
   task's work — an agent handed a list of behaviours otherwise assumes it was asked to build them.
+  The section is bounded on BOTH axes (`ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES` /
+  `..._MAX_CHARS`) and STATES what it left out: it rides every standard phase, so a service at the
+  store ceiling with long clauses would otherwise put megabytes into each dispatch, and a silently
+  truncated behavioural contract reads exactly like a complete one.
 - **The tester rules on them**: `criteriaVerdictsSection` (tester kinds only, via
   `isTesterReportingKind` — NOT the fixer, which returns no report) asks for a `criteriaVerdicts`
   array keyed by criterion id, contracted as `TestReport.criteriaVerdicts`. `not_covered` is a

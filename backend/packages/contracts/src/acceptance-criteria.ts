@@ -81,6 +81,20 @@ export const ACCEPTANCE_CRITERIA_MAX_PER_FRAME = 200
  */
 export const ACCEPTANCE_CRITERIA_MAX_PER_EXTRACTION = 12
 
+/**
+ * The most criteria — and the most characters of them — that may be RENDERED into one agent
+ * prompt. Separate from {@link ACCEPTANCE_CRITERIA_MAX_PER_FRAME} because the two bound different
+ * things: the store ceiling is about what a human can curate, this is about what a dispatch can
+ * carry. At the store ceiling, with clauses at their own 2,000-character limit, an uncapped
+ * section would be over a megabyte of prompt on EVERY standard phase.
+ *
+ * Whichever bound is hit first stops the list, and the renderer then states how many it left out
+ * — a silently truncated behavioural contract reads exactly like a complete one, which is the
+ * failure this feature exists to remove.
+ */
+export const ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES = 50
+export const ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS = 12_000
+
 /** One persisted acceptance criterion, as the wire sees it. */
 export const serviceAcceptanceCriterionSchema = v.object({
   id: v.string(),

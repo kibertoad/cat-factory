@@ -330,6 +330,19 @@ export interface ExecutionServiceDependencies {
     drafts: readonly AcceptanceCriterionDraft[],
   ) => Promise<unknown>
   /**
+   * Optional: whether the accretion pass has ALREADY written criteria for `(frameId,
+   * sourceReviewId)`. The replay guard for the accretion hook: settlement runs inside the durable
+   * driver (whose steps replay) and off HTTP routes a client may retry, so without it the same
+   * settled document is re-extracted — a model call, and a user-visible wait — every time. Wired
+   * from the same `AcceptanceCriteriaService`; absent ⇒ unguarded (the store stays correct, since
+   * `recordDerived` dedupes by normalised title; only the spend is unbounded).
+   */
+  acceptanceCriteriaAlreadyDerived?: (
+    workspaceId: string,
+    frameId: string,
+    sourceReviewId: string,
+  ) => Promise<boolean>
+  /**
    * Optional: resolves the binary-artifact store (UI screenshots + reference design images)
    * for a workspace's account; the `visual-confirmation` gate reads it. Absent (or resolving
    * to null — storage not configured) → the gate passes through (auto-advances), since there

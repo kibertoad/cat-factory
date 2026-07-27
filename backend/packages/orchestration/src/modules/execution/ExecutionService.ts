@@ -261,6 +261,7 @@ export class ExecutionService {
     resolveValidationChecks,
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
@@ -417,6 +418,7 @@ export class ExecutionService {
       logger,
       requirementReviewService,
       recordDerivedAcceptanceCriteria,
+      acceptanceCriteriaAlreadyDerived,
     })
     this.testerController = gateWindows.testerController
     this.ralphController = gateWindows.ralphController

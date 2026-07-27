@@ -72,6 +72,16 @@ function buildAcceptanceCriteriaPrompt(blockTitle: string, doc: string): string 
 
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
   requirementReviewRepository: RequirementReviewRepository
+  /**
+   * The facade's structured logger. Wire it: {@link RequirementReviewService.extractAcceptanceCriteria}
+   * is DESIGNED to swallow every failure (it runs behind an already-settled review), so without a
+   * log an unwired model, an exhausted quota or a revoked key leaves the accretion pass silently
+   * dead — the operator sees a criteria store that simply never fills, with nothing to explain it.
+   */
+  logger?: {
+    info(obj: Record<string, unknown>, msg?: string): void
+    warn(obj: Record<string, unknown>, msg?: string): void
+  }
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
@@ -126,9 +136,12 @@ export class RequirementReviewService extends IterativeReviewService<
     workspaceId: string,
     blockId: string,
   ) => Promise<string | undefined>
+  /** Held on the subclass: the base's `deps` is typed as the shared `IterativeReviewDeps`. */
+  private readonly logger?: RequirementReviewServiceDependencies['logger']
 
   constructor(deps: RequirementReviewServiceDependencies) {
     super(deps)
+    this.logger = deps.logger
     this.repository = deps.requirementReviewRepository
     this.documentRepository = deps.documentRepository
     this.taskRepository = deps.taskRepository
@@ -209,16 +222,17 @@ export class RequirementReviewService extends IterativeReviewService<
   async extractAcceptanceCriteria(
     workspaceId: string,
     blockId: string,
+    doc: string,
   ): Promise<AcceptanceCriterionDraft[]> {
     if (!this.enabled) return []
     try {
-      const review = await this.repository.getByBlock(workspaceId, blockId)
-      const doc = review ? this.readDoc(review) : null
-      // No incorporated document means the loop settled with nothing folded in (every finding
-      // dismissed, or an auto-pass). There is no artifact to extract from — and the raw block
-      // description is deliberately NOT a fallback: it is task-shaped prose, exactly the input
-      // this feature exists to stop treating as a service-level specification.
-      if (!doc?.trim()) return []
+      // The settled document is handed IN, off the review the caller already holds — this method
+      // never re-reads the row the settlement path just wrote. An empty one means the loop settled
+      // with nothing folded in (every finding dismissed, or an auto-pass); there is no artifact to
+      // extract from, and the raw block description is deliberately NOT a fallback: it is
+      // task-shaped prose, exactly the input this feature exists to stop treating as a
+      // service-level specification.
+      if (!doc.trim()) return []
       const block = await this.deps.blockRepository.get(workspaceId, blockId)
       if (!block) return []
       const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
@@ -241,7 +255,13 @@ export class RequirementReviewService extends IterativeReviewService<
       const criteria =
         parsed && typeof parsed === 'object' ? (parsed as { criteria?: unknown }).criteria : null
       return parseAcceptanceCriterionDrafts(criteria)
-    } catch {
+    } catch (e) {
+      // Swallowed on purpose (see the doc above) — but never silently: this is the one path whose
+      // whole failure mode is "nothing happens", so the log is the only evidence it ran at all.
+      this.logger?.warn(
+        { workspaceId, blockId, err: String(e) },
+        'acceptance-criteria extraction failed',
+      )
       return []
     }
   }

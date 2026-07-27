@@ -73,6 +73,12 @@ export interface GateWindowControllerDeps {
   requirementReviewService: ExecutionServiceDependencies['requirementReviewService']
   /** Persists the extracted criteria; absent ⇒ no criterion store wired, so no accretion. */
   recordDerivedAcceptanceCriteria: ExecutionServiceDependencies['recordDerivedAcceptanceCriteria']
+  /**
+   * Whether this review already accreted against this frame — the replay guard that stops the
+   * durable driver paying for the same extraction twice. Absent ⇒ unguarded (the extraction is
+   * still idempotent in the STORE, just not in spend).
+   */
+  acceptanceCriteriaAlreadyDerived: ExecutionServiceDependencies['acceptanceCriteriaAlreadyDerived']
 }
 
 /**
@@ -103,6 +109,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     logger,
     requirementReviewService,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
   } = deps
   const testerController = new TesterController({
     blockRepository,
@@ -191,15 +198,28 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
   // to `undefined` — no closure, no reads, no model call — when either end is unwired.
   const accrueAcceptanceCriteria =
     requirementReviewService && recordDerivedAcceptanceCriteria
-      ? async (ws: string, blockId: string): Promise<void> => {
+      ? async (ws: string, blockId: string, reviewId: string, doc: string): Promise<void> => {
           const frame = await contextBuilder.resolveServiceFrame(ws, blockId)
           // A task with no owning service frame has nowhere service-scoped to accrete to.
           if (!frame) return
-          const review = await requirementReviewService.getForBlock(ws, blockId)
-          if (!review) return
-          const drafts = await requirementReviewService.extractAcceptanceCriteria(ws, blockId)
+          // REPLAY GUARD. This runs inside the durable driver, whose steps replay, and off HTTP
+          // settlement routes a client may retry — so without it the same settled document is
+          // re-extracted (a model call, and a user-visible wait) every single time. The marker is
+          // the criteria the pass already wrote against this review, which is an indexed read the
+          // write path needs anyway. It is deliberately NOT a wall-clock or attempt counter: the
+          // question "did this review already accrete" has an exact answer in the store.
+          //
+          // Residual case, accepted: an extraction that legitimately yielded NOTHING leaves no
+          // marker, so a replay re-runs it. That costs one small call on a document already known
+          // to hold no durable behaviour, and the alternative — a claim row — is the machinery
+          // this feature exists below the weight of. (A duplicate WRITE is separately impossible:
+          // `recordDerived` dedupes by normalised title.)
+          if (acceptanceCriteriaAlreadyDerived) {
+            if (await acceptanceCriteriaAlreadyDerived(ws, frame.id, reviewId)) return
+          }
+          const drafts = await requirementReviewService.extractAcceptanceCriteria(ws, blockId, doc)
           if (drafts.length === 0) return
-          await recordDerivedAcceptanceCriteria(ws, frame.id, review.id, drafts)
+          await recordDerivedAcceptanceCriteria(ws, frame.id, reviewId, drafts)
         }
       : undefined
   const reviewGate = new ReviewGateController({

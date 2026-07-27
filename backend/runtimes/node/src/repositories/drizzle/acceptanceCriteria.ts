@@ -149,6 +149,15 @@ export class DrizzleAcceptanceCriterionRepository implements AcceptanceCriterion
       .values(records.map(recordToRow))
       .onConflictDoUpdate({
         target: acceptanceCriteria.id,
+        // The conflict target is the id ALONE (it is the primary key), so without this guard an
+        // upsert carrying another workspace's criterion id would rewrite THAT row's contents —
+        // and since `workspace_id` is not in the `set` below, the rewritten row would stay in the
+        // victim's workspace. The raw repository is reachable over the mothership persistence RPC,
+        // whose `workspaceFieldList` rule can only vouch for the record's OWN `workspaceId` field,
+        // so the cross-tenant check has to live HERE, in the statement. A mismatched row is left
+        // untouched (the update matches nothing) rather than erroring: the caller was never
+        // entitled to it, and a raised error would confirm the id exists.
+        setWhere: sql`${acceptanceCriteria.workspace_id} = excluded.workspace_id`,
         set: {
           block_id: sqlExcluded('block_id'),
           title: sqlExcluded('title'),
@@ -170,15 +179,20 @@ export class DrizzleAcceptanceCriterionRepository implements AcceptanceCriterion
       .where(and(eq(acceptanceCriteria.workspace_id, workspaceId), eq(acceptanceCriteria.id, id)))
   }
 
-  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
-    await this.db
-      .delete(acceptanceCriteria)
-      .where(
-        and(
-          eq(acceptanceCriteria.workspace_id, workspaceId),
-          eq(acceptanceCriteria.block_id, blockId),
-        ),
-      )
+  async deleteByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    // ONE chunked `IN` per batch, mirroring the batch read — the board's delete cascade hands
+    // over a whole doomed subtree, and a statement per block would be an N+1 write.
+    for (const ids of chunk(blockIds, MAX_IN_PARAMS)) {
+      await this.db
+        .delete(acceptanceCriteria)
+        .where(
+          and(
+            eq(acceptanceCriteria.workspace_id, workspaceId),
+            inArray(acceptanceCriteria.block_id, ids),
+          ),
+        )
+    }
   }
 }
 

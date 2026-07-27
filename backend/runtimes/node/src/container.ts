@@ -960,6 +960,7 @@ interface NodeContainerFinalizeBundle {
   resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
   resolveAcceptanceCriteria: NodeRunServicesResult['resolveAcceptanceCriteria']
   recordDerivedAcceptanceCriteria: NodeRunServicesResult['recordDerivedAcceptanceCriteria']
+  acceptanceCriteriaAlreadyDerived: NodeRunServicesResult['acceptanceCriteriaAlreadyDerived']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -1022,6 +1023,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     resolveValidationChecks,
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1147,6 +1149,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     resolveValidationChecks,
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     githubClient,
     tasks,
     fileGitHubIssue,

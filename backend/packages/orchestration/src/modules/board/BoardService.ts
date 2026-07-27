@@ -17,6 +17,7 @@ import type {
 import { assertFound, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
+  AcceptanceCriterionRepository,
   BlockRepository,
   Clock,
   ExecutionEventPublisher,
@@ -34,6 +35,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
   canReparent,
@@ -103,6 +105,15 @@ export interface BoardServiceDependencies {
    */
   initiativeRepository?: InitiativeRepository
   /**
+   * Per-service-frame acceptance criteria, present only when the facade wired the criterion
+   * store. Backs the cascade cleanup in {@link BoardService.removeBlock} for the same reason as
+   * {@link BoardServiceDependencies.initiativeRepository}: the rows are keyed by a frame's block
+   * id, so deleting the frame without them leaves criteria that no inspector can ever reach and
+   * that `listByWorkspace` — the store's hydrate read — keeps returning forever. Absent → no
+   * criteria exist, so nothing to clean up.
+   */
+  acceptanceCriterionRepository?: AcceptanceCriterionRepository
+  /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
    * (and every board mounting a shared service) see the create/rename/move/reparent/delete
@@ -164,6 +175,7 @@ export class BoardService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   private readonly initiativeRepository?: InitiativeRepository
+  private readonly acceptanceCriterionRepository?: AcceptanceCriterionRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
   private readonly reviewFrictionGuard: ReviewFrictionGuard
@@ -180,6 +192,7 @@ export class BoardService {
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
     initiativeRepository,
+    acceptanceCriterionRepository,
     executionEventPublisher,
     taskTypeRegistry,
     reviewFrictionSettings,
@@ -196,6 +209,7 @@ export class BoardService {
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
     this.initiativeRepository = initiativeRepository
+    this.acceptanceCriterionRepository = acceptanceCriterionRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
     this.reviewFrictionGuard = new ReviewFrictionGuard({
@@ -1321,53 +1335,23 @@ export class BoardService {
     }
 
     await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Drop the account-owned service (and every workspace's mount of it) for any doomed
-    // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
-    // org catalog (mountable, badged, yet rendering nothing) on other boards.
-    if (this.serviceRepository && this.workspaceMountRepository) {
-      const doomedServiceIds = new Set<string>()
-      // One batched read for every doomed top-level frame's service, not a getByFrameBlock
-      // per frame (N+1).
-      const doomedFrameIds = blocks
-        .filter((b) => doomed.has(b.id) && b.level === 'frame' && b.parentId === null)
-        .map((b) => b.id)
-      for (const service of await this.serviceRepository.listByFrameBlocks(doomedFrameIds)) {
-        doomedServiceIds.add(service.id)
-      }
-      // The frame block may already be gone (the dangling case), so it isn't in `blocks` above —
-      // look the service up directly by the deleted id too, so the orphaned service + its mounts
-      // are still reclaimed rather than lingering in the org catalog forever.
-      const danglingService = await this.serviceRepository.getByFrameBlock(id)
-      if (danglingService) doomedServiceIds.add(danglingService.id)
-      if (doomedServiceIds.size > 0) {
-        // Batched: clear every board's mount of the doomed services, then delete the services
-        // (two queries, not a listByService + per-mount remove + per-service delete loop).
-        const ids = [...doomedServiceIds]
-        await this.workspaceMountRepository.removeByServices(ids)
-        await this.serviceRepository.deleteMany(ids)
-      }
-    }
-    // Delete the `initiatives` entity anchored to any doomed initiative-level block, the same
-    // way the doomed service frames' account-owned services are reclaimed above. Without this
-    // the 1:1 row survives with a `block_id` pointing at a deleted block: the snapshot's
-    // `initiatives` list keeps returning a phantom, its `(workspace_id, slug)` stays reserved
-    // (re-creating a same-title initiative silently gets `<slug>-2`), and slice 3's
-    // `listExecuting` sweeper would re-drive a dead initiative. One `list` read + bounded
-    // deletes (the doomed set holds at most the subtree's few initiative blocks), never a
-    // per-block `getByBlock` loop.
-    if (this.initiativeRepository) {
-      const doomedInitiativeBlockIds = new Set(
-        blocks.filter((b) => doomed.has(b.id) && b.level === 'initiative').map((b) => b.id),
-      )
-      if (doomedInitiativeBlockIds.size > 0) {
-        const initiatives = await this.initiativeRepository.list(homeWorkspaceId)
-        for (const initiative of initiatives) {
-          if (doomedInitiativeBlockIds.has(initiative.blockId)) {
-            await this.initiativeRepository.delete(homeWorkspaceId, initiative.id)
-          }
-        }
-      }
-    }
+    // Every SIDE-TABLE row keyed by a doomed block id — the account-owned service + its mounts,
+    // the initiative entity, the frame's acceptance criteria. Extracted to its own module (see
+    // `removal-cascade.ts`): each is an optional, batched reclaim, and a new block-keyed table
+    // gets a section there rather than another branch in this method.
+    await reclaimDoomedEntities(
+      {
+        ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
+        ...(this.workspaceMountRepository
+          ? { workspaceMountRepository: this.workspaceMountRepository }
+          : {}),
+        ...(this.initiativeRepository ? { initiativeRepository: this.initiativeRepository } : {}),
+        ...(this.acceptanceCriterionRepository
+          ? { acceptanceCriterionRepository: this.acceptanceCriterionRepository }
+          : {}),
+      },
+      { homeWorkspaceId, deletedId: id, blocks, doomed },
+    )
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
     await this.pruneDanglingEdges(homeWorkspaceId, blocks, doomed)

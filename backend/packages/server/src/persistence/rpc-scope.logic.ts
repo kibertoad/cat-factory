@@ -83,12 +83,19 @@ export async function checkWorkspaceFieldListScope(
   denied: DispatchResult,
 ): Promise<DispatchResult | undefined> {
   if (!Array.isArray(records)) return denied
+  // Collect the DISTINCT workspaces first: a batch write is normally many rows for ONE workspace,
+  // and `resolveAccountId` is a repository read — resolving it per record would make the scope
+  // check itself an N+1 on the size of the batch.
+  const workspaceIds = new Set<string>()
   for (const record of records) {
     const workspaceId =
       record && typeof record === 'object'
         ? (record as { workspaceId?: unknown }).workspaceId
         : undefined
     if (typeof workspaceId !== 'string') return denied
+    workspaceIds.add(workspaceId)
+  }
+  for (const workspaceId of workspaceIds) {
     if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
   }
   return undefined

@@ -376,6 +376,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // settled requirements review, as `proposed` candidates a human triages.
     recordDerivedAcceptanceCriteria: (workspaceId, frameId, reviewId, drafts) =>
       acceptanceCriteriaService.recordDerived(workspaceId, frameId, reviewId, drafts),
+    // The replay guard the engine consults BEFORE spending a model call on extraction: the
+    // durable driver's steps replay, so without it a settled review re-extracts every time.
+    acceptanceCriteriaAlreadyDerived: (workspaceId, frameId, reviewId) =>
+      acceptanceCriteriaService.hasDerivedFrom(workspaceId, frameId, reviewId),
     ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),

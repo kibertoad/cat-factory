@@ -131,6 +131,7 @@ export interface NodeCoreDepsBundle {
   resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
   resolveAcceptanceCriteria: NodeRunServicesResult['resolveAcceptanceCriteria']
   recordDerivedAcceptanceCriteria: NodeRunServicesResult['recordDerivedAcceptanceCriteria']
+  acceptanceCriteriaAlreadyDerived: NodeRunServicesResult['acceptanceCriteriaAlreadyDerived']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -187,6 +188,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     resolveValidationChecks,
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     tasks,
     fileGitHubIssue,
     releaseHealthDeps,
@@ -209,6 +211,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // `null`, which is byte-for-byte the pre-feature prompt.
     resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -318,6 +321,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
     // planning pipeline's ingest/committer steps work identically on both runtimes.
     initiativeRepository: repos.initiativeRepository,
+    // The raw criterion store, wired ONLY so the board's delete cascade can reclaim a doomed
+    // service frame's acceptance criteria. Dispatch + accretion ride the two closures built in
+    // `container-run-services-deps.ts`, never this. Mirrors the Worker's wiring.
+    acceptanceCriterionRepository: repos.acceptanceCriterionRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the

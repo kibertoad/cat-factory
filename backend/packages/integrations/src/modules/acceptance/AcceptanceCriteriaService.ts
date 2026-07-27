@@ -154,9 +154,14 @@ export class AcceptanceCriteriaService {
     await this.repo.delete(workspaceId, criterionId)
   }
 
-  /** Drop every criterion on a frame (used when the frame itself is removed). */
-  async deleteForFrame(workspaceId: string, blockId: string): Promise<void> {
-    await this.repo.deleteByBlock(workspaceId, blockId)
+  /**
+   * Drop every criterion on the given frames. Called by the board's delete cascade
+   * (`BoardService.removeBlock`) so removing a service doesn't leave its criteria behind: the
+   * rows are keyed by a block id that no longer exists, and `listByWorkspace` — the inspector's
+   * hydrate read — would keep returning them forever.
+   */
+  async deleteForFrames(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    await this.repo.deleteByBlocks(workspaceId, blockIds)
   }
 
   /**
@@ -194,6 +199,23 @@ export class AcceptanceCriteriaService {
   }
 
   /**
+   * Whether the accretion pass has ALREADY written criteria for this `(frame, review)` pair —
+   * the guard the engine consults BEFORE spending a model call on extraction.
+   *
+   * The marker is the rows themselves (`provenance: 'derived'` carries `sourceReviewId`), not a
+   * separate claim table: the question "did this review already accrete here" has an exact answer
+   * in the store, and the read is the same indexed frame read the write path performs anyway.
+   */
+  async hasDerivedFrom(
+    workspaceId: string,
+    frameId: string,
+    sourceReviewId: string,
+  ): Promise<boolean> {
+    const rows = await this.repo.listByFrameBlocks(workspaceId, [frameId])
+    return rows.some((row) => row.sourceReviewId === sourceReviewId)
+  }
+
+  /**
    * Persist criteria the ACCRETION pass extracted from a settled requirements review, as
    * `proposed` candidates awaiting a human.
    *
@@ -215,6 +237,10 @@ export class AcceptanceCriteriaService {
     const usable = drafts.filter(isUsableDraft).slice(0, ACCEPTANCE_CRITERIA_MAX_PER_EXTRACTION)
     if (usable.length === 0) return []
     const existing = await this.repo.listByFrameBlocks(workspaceId, [frameId])
+    // Second line of the replay guard the engine already applies before extracting: if this
+    // review has written here before, a re-entry (a replayed durable step, a retried request) must
+    // add nothing, whatever the model returned the second time.
+    if (existing.some((row) => row.sourceReviewId === sourceReviewId)) return []
     const seen = new Set(existing.map((row) => normalizeCriterionTitle(row.title)))
     const room = ACCEPTANCE_CRITERIA_MAX_PER_FRAME - existing.length
     if (room <= 0) return []

@@ -120,6 +120,14 @@ export interface ReviewKind<TReview extends ReviewCommon> {
    * currently broken.
    */
   readonly accretesCriteria?: boolean
+  /**
+   * The settled incorporated document to accrete acceptance criteria FROM, read off the review
+   * this controller already holds. Supplied only by a kind with {@link accretesCriteria}, so the
+   * hook never has to re-read a row the settlement path just wrote — the whole reason it takes a
+   * document rather than a block id. `null` ⇒ the loop settled with nothing folded in (an
+   * auto-pass, or every finding dismissed), which is a correct outcome with nothing to extract.
+   */
+  readonly incorporatedDoc?: (review: TReview) => string | null
 }
 
 /**
@@ -157,7 +165,12 @@ export interface ReviewGateControllerDeps {
    * requirements were hardest-won. Absent (no criterion store wired, tests, conformance) ⇒ no
    * accretion at all and not a single extra call.
    */
-  accrueAcceptanceCriteria?: (workspaceId: string, blockId: string) => Promise<void>
+  accrueAcceptanceCriteria?: (
+    workspaceId: string,
+    blockId: string,
+    reviewId: string,
+    doc: string,
+  ) => Promise<void>
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
@@ -250,9 +263,9 @@ export class ReviewGateController {
     const review = await this.review(kind, workspaceId, block.id)
     if (review.status === 'incorporated') {
       // Auto-pass: no findings needed a human, so the run advances with no incorporation. The
-      // hook still fires — `extractAcceptanceCriteria` finds no incorporated document and
-      // returns nothing, which is the correct outcome, and routing it through the same funnel
-      // keeps "settled ⇒ accrete" true of every path rather than most of them.
+      // hook is still routed through the same funnel so "settled ⇒ accrete" is true of every
+      // path rather than most of them; `settled` then finds no incorporated document and returns
+      // immediately, which is both the correct outcome and free.
       await this.settled(kind, workspaceId, block.id, review)
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
@@ -287,8 +300,13 @@ export class ReviewGateController {
   ): Promise<TReview> {
     const accrue = this.deps.accrueAcceptanceCriteria
     if (!accrue || !kind.accretesCriteria || review.status !== 'incorporated') return review
+    // The document comes off the review IN HAND. An auto-pass settles with nothing folded in, so
+    // there is no artifact to extract from — and short-circuiting here means that (very common)
+    // path costs not one read, let alone a model call.
+    const doc = kind.incorporatedDoc?.(review)?.trim()
+    if (!doc) return review
     try {
-      await accrue(workspaceId, blockId)
+      await accrue(workspaceId, blockId, review.id, doc)
     } catch (e) {
       this.deps.logger?.warn(
         { workspaceId, blockId, reviewId: review.id, err: String(e) },

@@ -31,6 +31,7 @@ import type {
   VcsPatConnectionService,
 } from '@cat-factory/integrations'
 import type {
+  AcceptanceCriterionRepository,
   AccountInvitationRepository,
   AccountRepository,
   AccountSkillRepository,
@@ -899,6 +900,27 @@ export interface CoreDependencies {
     sourceReviewId: string,
     drafts: readonly AcceptanceCriterionDraft[],
   ) => Promise<unknown>
+  /**
+   * Optional: whether the accretion pass has ALREADY written criteria for `(frameId,
+   * sourceReviewId)`. The replay guard for the accretion hook: settlement runs inside the durable
+   * driver (whose steps replay) and off HTTP routes a client may retry, so without it the same
+   * settled document is re-extracted — a model call, and a user-visible wait — every time. Wired
+   * from the same `AcceptanceCriteriaService`; absent ⇒ unguarded (the store stays correct, since
+   * `recordDerived` dedupes by normalised title; only the spend is unbounded).
+   */
+  acceptanceCriteriaAlreadyDerived?: (
+    workspaceId: string,
+    frameId: string,
+    sourceReviewId: string,
+  ) => Promise<boolean>
+  /**
+   * Optional: the raw acceptance-criteria persistence, wired ONLY so the board's delete cascade
+   * can reclaim a doomed service frame's criteria (`BoardService.removeBlock`). Dispatch and
+   * accretion go through the two closures above, never this — the repository is here for the same
+   * reason {@link CoreDependencies.initiativeRepository} is: a 1:many row set keyed by a block id
+   * has to be dropped when that block is.
+   */
+  acceptanceCriterionRepository?: AcceptanceCriterionRepository
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher
   /** Stores a workspace's incident-enrichment connection (sealed PagerDuty + incident.io). */

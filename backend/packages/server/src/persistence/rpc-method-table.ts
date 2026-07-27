@@ -792,7 +792,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     upsertMany: { scope: { kind: 'workspaceFieldList', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByBlocks: { scope: { kind: 'workspace', arg: 0 } },
   },
   incidentEnrichmentConnectionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },

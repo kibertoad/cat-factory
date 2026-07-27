@@ -260,7 +260,12 @@ function composeAcceptanceCriteria(
   )
   const met = entries.filter((e) => e.verdict === 'met').length
   const notMet = entries.filter((e) => e.verdict === 'not_met').length
-  if (verdicts.size === 0) {
+  // Counted off the ENTRIES, not the raw verdict map: the entries are capped, so a run whose
+  // every verdict landed on a criterion past the cap has a non-empty map and yet nothing to show
+  // — which would report as `reported` with an all-zero tally, the most misleading of the three
+  // possible answers.
+  const judged = entries.filter((e) => e.verdict !== null).length
+  if (judged === 0) {
     return {
       status: 'absent',
       note: `This service has ${criteria.length} confirmed acceptance criteria, but no tester in this run returned a verdict on any of them.`,

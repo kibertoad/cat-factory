@@ -131,6 +131,45 @@ export function defineAcceptanceCriteriaConformance(harness: ConformanceHarness)
       expect(afterDelete.body.criteria).toEqual([])
     })
 
+    it('reclaims a deleted service frame’s criteria', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      // A fresh, task-less frame: deleting a service that still holds unfinished tasks is
+      // refused outright, and this test is about the cascade, not that guard.
+      const frame = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 600, y: 600 },
+      })
+      await addCriterion(app, wsId, frame.body.id, {
+        title: 'Expired sessions are rejected',
+        when: 'an expired token is presented',
+        outcome: 'the request is rejected with 401',
+      })
+      expect(
+        (
+          await app.call<ServiceAcceptanceCriteria[]>(
+            'GET',
+            `/workspaces/${wsId}/acceptance-criteria`,
+          )
+        ).body,
+      ).toHaveLength(1)
+
+      const removed = await app.call('DELETE', `/workspaces/${wsId}/blocks/${frame.body.id}`)
+      expect(removed.status).toBe(204)
+
+      // Criteria are keyed by the frame's BLOCK id, so without the delete cascade they survive as
+      // rows no inspector can ever reach (the panel renders only for a live frame) that the
+      // workspace hydrate nonetheless keeps returning forever. Asserted on both runtimes because
+      // the cascade rides a repository each facade implements separately.
+      const after = await app.call<ServiceAcceptanceCriteria[]>(
+        'GET',
+        `/workspaces/${wsId}/acceptance-criteria`,
+      )
+      expect(after.body).toEqual([])
+    })
+
     it('refuses criteria on a non-frame block (they would never be resolved)', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createWorkspace()

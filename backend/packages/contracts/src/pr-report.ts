@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { criterionVerdictStatusSchema } from './testing.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
@@ -217,8 +218,12 @@ export const prReportCriterionSchema = v.object({
   given: v.string(),
   when: v.string(),
   outcome: v.string(),
-  /** The tester's verdict (`met` / `not_met` / `not_covered`), or null if none was returned. */
-  verdict: v.optional(v.nullable(v.string())),
+  /**
+   * The tester's verdict, or null if none was returned. Shares the tester report's own
+   * {@link criterionVerdictStatusSchema} rather than a loose string, so an external consumer of
+   * the JSON block reads exactly the three values the renderer switches on.
+   */
+  verdict: v.optional(v.nullable(criterionVerdictStatusSchema)),
   /** What the tester observed that supports the verdict. */
   evidence: v.optional(v.nullable(v.string())),
 })

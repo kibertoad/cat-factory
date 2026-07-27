@@ -680,6 +680,9 @@ export function createRequirementsModule(
     blockRepository: deps.blockRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    // For the acceptance-criteria extraction's designed-to-swallow failure path — without it a
+    // dead accretion pass is indistinguishable from a document with nothing durable in it.
+    logger: deps.logger,
     // Tell product people + the task creator to react to a review's findings (when
     // the notifications subsystem is wired). Best-effort; absent → no notification.
     notificationService,

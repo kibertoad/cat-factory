@@ -631,6 +631,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     resolveValidationChecks: dependencies.resolveValidationChecks,
     resolveAcceptanceCriteria: dependencies.resolveAcceptanceCriteria,
     recordDerivedAcceptanceCriteria: dependencies.recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived: dependencies.acceptanceCriteriaAlreadyDerived,
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,

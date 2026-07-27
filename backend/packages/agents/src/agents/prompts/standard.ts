@@ -6,6 +6,10 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens, renderTaskContext } from '@cat-factory/kernel'
+import {
+  ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS,
+  ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES,
+} from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
@@ -475,12 +479,31 @@ export function acceptanceCriteriaSection(context: AgentRunContext): string {
     'of them; if your change makes one impossible, say so explicitly rather than breaking it',
     'silently:',
   ]
+  // Bounded on BOTH axes (see the constants' doc): a service at the store ceiling with long
+  // clauses would otherwise put over a megabyte into every standard-phase prompt. Whichever bound
+  // trips first ends the list, and the omission is STATED — a silently truncated contract reads
+  // exactly like a complete one.
+  let budget = ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS
+  let rendered = 0
   for (const criterion of criteria) {
-    lines.push(`- [${criterion.id}] ${criterion.title}`)
-    if (criterion.given.trim()) lines.push(`  - Given: ${criterion.given}`)
-    lines.push(`  - When: ${criterion.when}`)
-    lines.push(`  - Then: ${criterion.outcome}`)
-    if (criterion.tags.length) lines.push(`  - Tags: ${criterion.tags.join(', ')}`)
+    if (rendered >= ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES || budget <= 0) break
+    const entry = [
+      `- [${criterion.id}] ${criterion.title}`,
+      ...(criterion.given.trim() ? [`  - Given: ${criterion.given}`] : []),
+      `  - When: ${criterion.when}`,
+      `  - Then: ${criterion.outcome}`,
+      ...(criterion.tags.length ? [`  - Tags: ${criterion.tags.join(', ')}`] : []),
+    ]
+    lines.push(...entry)
+    budget -= entry.join('\n').length
+    rendered += 1
+  }
+  const omitted = criteria.length - rendered
+  if (omitted > 0) {
+    lines.push(
+      `- (${omitted} further confirmed criteria omitted for length — this list is NOT complete;` +
+        ' the service inspector holds all of them.)',
+    )
   }
   return lines.join('\n')
 }

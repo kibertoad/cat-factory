@@ -98,6 +98,9 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
     // clarity review settles a bug report (symptoms of a defect) and a brainstorm a direction,
     // neither of which is a durable behavioural contract.
     accretesCriteria: true,
+    // The settled artifact the extraction reads, handed straight off the review the gate already
+    // holds — so accretion re-reads nothing the settlement path just wrote.
+    incorporatedDoc: (review) => review.incorporatedRequirements,
   }
 }
 

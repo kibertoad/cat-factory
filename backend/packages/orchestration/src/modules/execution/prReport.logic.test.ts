@@ -203,6 +203,54 @@ describe('composePrVerificationReport', () => {
     expect(() => parsePrVerificationReport(unchecked)).not.toThrow()
   })
 
+  it('caps the criteria table, records the omission, and still reads as unchecked when every verdict fell past the cap', () => {
+    // A service near the store ceiling overflows the report's 50-row list cap. Two things must
+    // hold: the omission is STATED (a silently truncated contract reads like a complete one), and
+    // the "did anybody check?" verdict is decided from what the table actually SHOWS — a run whose
+    // every verdict landed on a criterion past the cap has a non-empty verdict map and yet nothing
+    // to display, which must not report as `reported` with an all-zero tally.
+    const many: ResolvedAcceptanceCriterion[] = Array.from({ length: 60 }, (_, i) => ({
+      id: `ac_${i}`,
+      title: `Criterion ${i}`,
+      given: '',
+      when: 'something happens',
+      outcome: 'something observable follows',
+      tags: [],
+    }))
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'tester-api',
+          test: {
+            phase: 'testing',
+            attempts: 1,
+            maxAttempts: 3,
+            lastReport: {
+              greenlight: true,
+              summary: 'ran',
+              tested: [],
+              outcomes: [],
+              concerns: [],
+              // Only criteria BEYOND the 50-row cap were judged.
+              criteriaVerdicts: [
+                { criterionId: 'ac_55', status: 'met', evidence: 'suite.spec.ts' },
+              ],
+            } as TestReport,
+          },
+        }),
+      ]),
+      { ...INPUTS, acceptanceCriteria: many },
+    )
+
+    expect(report.acceptanceCriteria.entries).toHaveLength(50)
+    expect(report.truncations.some((t) => t.startsWith('acceptanceCriteria.entries'))).toBe(true)
+    expect(report.acceptanceCriteria.status).toBe('absent')
+    expect(report.acceptanceCriteria.note).toContain('no tester in this run returned a verdict')
+    expect(report.acceptanceCriteria.met).toBe(0)
+    expect(report.acceptanceCriteria.unverified).toBe(50)
+    expect(() => parsePrVerificationReport(report)).not.toThrow()
+  })
+
   it('reports the deployer fan-out and whether the environments were torn down', () => {
     const deployed = step({
       agentKind: 'deployer',

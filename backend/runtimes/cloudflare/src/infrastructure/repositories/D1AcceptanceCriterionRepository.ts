@@ -134,6 +134,15 @@ export class D1AcceptanceCriterionRepository implements AcceptanceCriterionRepos
 
   async upsertMany(records: readonly AcceptanceCriterionRecord[]): Promise<void> {
     if (records.length === 0) return
+    // The conflict target is the id ALONE (the primary key), so the trailing `WHERE` on the
+    // `DO UPDATE` is what stops an upsert carrying ANOTHER workspace's criterion id from
+    // rewriting that row's contents: `workspace_id` is deliberately absent from the SET list, so
+    // such a row would otherwise stay in the victim's workspace with the caller's text — and
+    // status — in it. This repository is reachable over the mothership persistence RPC, whose
+    // `workspaceFieldList` rule can only vouch for the record's OWN `workspaceId` field, so the
+    // cross-tenant check has to live in the statement. A mismatch updates nothing rather than
+    // erroring: the caller was never entitled to the row, and an error would confirm the id
+    // exists. Mirrored by the Drizzle repo's `setWhere`.
     const statements = records.map((record) =>
       this.db
         .prepare(
@@ -151,7 +160,8 @@ export class D1AcceptanceCriterionRepository implements AcceptanceCriterionRepos
              status = excluded.status,
              provenance = excluded.provenance,
              source_review_id = excluded.source_review_id,
-             updated_at = excluded.updated_at`,
+             updated_at = excluded.updated_at
+           WHERE acceptance_criteria.workspace_id = excluded.workspace_id`,
         )
         .bind(
           record.id,
@@ -181,10 +191,19 @@ export class D1AcceptanceCriterionRepository implements AcceptanceCriterionRepos
       .run()
   }
 
-  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
-    await this.db
-      .prepare(`DELETE FROM acceptance_criteria WHERE workspace_id = ? AND block_id = ?`)
-      .bind(workspaceId, blockId)
-      .run()
+  async deleteByBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    // ONE chunked `IN` per batch, mirroring the batch read — the board's delete cascade hands
+    // over a whole doomed subtree, and a statement per block would be an N+1 write.
+    for (const chunk of chunkForIn(blockIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `DELETE FROM acceptance_criteria
+             WHERE workspace_id = ? AND block_id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .run()
+    }
   }
 }

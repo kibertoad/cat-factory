@@ -26,8 +26,15 @@ const toast = useToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
-const busy = ref(false)
-const adding = ref(false)
+/**
+ * Which criteria have a write in flight, BY ID — not one panel-wide flag. Triage is a rapid
+ * sequence of per-row clicks, and a shared flag spins every other row's buttons on each one,
+ * which reads as the whole list having become unresponsive.
+ */
+const busyIds = ref(new Set<string>())
+/** The hand-authoring form: `'new'` while adding, a criterion id while editing that one. */
+const editing = ref<string | null>(null)
+const showRetired = ref(false)
 const draft = ref({ title: '', given: '', when: '', outcome: '', tags: '' })
 
 const criteria = computed(() => store.forBlock(props.block.id))
@@ -44,8 +51,38 @@ const draftValid = computed(
     draft.value.outcome.trim() !== '',
 )
 
+function isBusy(id: string): boolean {
+  return busyIds.value.has(id)
+}
+
+/** Run a per-criterion write with that row — and only that row — marked busy. */
+async function withRow(id: string, failureKey: string, run: () => Promise<unknown>) {
+  busyIds.value = new Set(busyIds.value).add(id)
+  try {
+    await run()
+  } catch (e) {
+    notifyError(t(failureKey), e)
+  } finally {
+    const next = new Set(busyIds.value)
+    next.delete(id)
+    busyIds.value = next
+  }
+}
+
+/** The one-line rendering of a criterion. ONE key per whole sentence — clause order and
+ * punctuation differ by language, so the three clauses can never be concatenated key by key. */
+function statementOf(criterion: ServiceAcceptanceCriterion): string {
+  const parts = { given: criterion.given, when: criterion.when, outcome: criterion.outcome }
+  return criterion.given.trim()
+    ? t('inspector.acceptanceCriteria.statement', parts)
+    : t('inspector.acceptanceCriteria.statementNoGiven', parts)
+}
+
+// REFRESH, not load-once: the `proposed` queue this panel exists to triage is written by the
+// post-review accretion pass mid-run, with no live event to announce it — a store that latched
+// after its first success would show the queue empty until a full page reload.
 onMounted(() => {
-  store.ensureLoaded().catch(() => {})
+  store.refresh().catch(() => {})
 })
 
 function notifyError(title: string, e: unknown) {
@@ -59,62 +96,82 @@ function notifyError(title: string, e: unknown) {
 
 function resetDraft() {
   draft.value = { title: '', given: '', when: '', outcome: '', tags: '' }
-  adding.value = false
+  editing.value = null
 }
 
-async function add() {
-  if (!draftValid.value) return
-  busy.value = true
-  try {
-    await store.create(props.block.id, {
-      title: draft.value.title.trim(),
-      given: draft.value.given.trim(),
-      when: draft.value.when.trim(),
-      outcome: draft.value.outcome.trim(),
-      tags: draft.value.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    })
-    resetDraft()
-    toast.add({
-      title: t('inspector.acceptanceCriteria.addedToast'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
-  } catch (e) {
-    notifyError(t('inspector.acceptanceCriteria.addFailed'), e)
-  } finally {
-    busy.value = false
+function startAdd() {
+  resetDraft()
+  editing.value = 'new'
+}
+
+/** Open the same form over an existing criterion. Wording drifts as a service learns what it
+ * actually promises, and retire-then-retype loses the id every verdict and report joins on. */
+function startEdit(criterion: ServiceAcceptanceCriterion) {
+  draft.value = {
+    title: criterion.title,
+    given: criterion.given,
+    when: criterion.when,
+    outcome: criterion.outcome,
+    tags: criterion.tags.join(', '),
   }
+  editing.value = criterion.id
+}
+
+function draftPayload() {
+  return {
+    title: draft.value.title.trim(),
+    given: draft.value.given.trim(),
+    when: draft.value.when.trim(),
+    outcome: draft.value.outcome.trim(),
+    tags: draft.value.tags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean),
+  }
+}
+
+async function save() {
+  if (!draftValid.value || !editing.value) return
+  const target = editing.value
+  const creating = target === 'new'
+  await withRow(
+    target,
+    creating
+      ? 'inspector.acceptanceCriteria.addFailed'
+      : 'inspector.acceptanceCriteria.updateFailed',
+    async () => {
+      if (creating) await store.create(props.block.id, draftPayload())
+      else await store.update(props.block.id, target, draftPayload())
+      resetDraft()
+      toast.add({
+        title: t(
+          creating
+            ? 'inspector.acceptanceCriteria.addedToast'
+            : 'inspector.acceptanceCriteria.updatedToast',
+        ),
+        icon: 'i-lucide-check',
+        color: 'success',
+      })
+    },
+  )
 }
 
 async function setStatus(
   criterion: ServiceAcceptanceCriterion,
   status: 'confirmed' | 'retired',
 ): Promise<void> {
-  busy.value = true
-  try {
-    await store.update(props.block.id, criterion.id, { status })
-  } catch (e) {
-    notifyError(t('inspector.acceptanceCriteria.updateFailed'), e)
-  } finally {
-    busy.value = false
-  }
+  await withRow(criterion.id, 'inspector.acceptanceCriteria.updateFailed', () =>
+    store.update(props.block.id, criterion.id, { status }),
+  )
 }
 
 async function remove(criterion: ServiceAcceptanceCriterion) {
   const noun = t('inspector.acceptanceCriteria.criterionNoun')
   if (!(await confirmAction('remove', noun))) return
-  busy.value = true
-  try {
+  await withRow(criterion.id, 'inspector.acceptanceCriteria.deleteFailed', async () => {
     await store.remove(props.block.id, criterion.id)
     toastDone('remove', noun)
-  } catch (e) {
-    notifyError(t('inspector.acceptanceCriteria.deleteFailed'), e)
-  } finally {
-    busy.value = false
-  }
+  })
 }
 </script>
 
@@ -131,9 +188,9 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
         variant="soft"
         size="xs"
         icon="i-lucide-plus"
-        :disabled="adding || atCapacity"
+        :disabled="editing !== null || atCapacity"
         data-testid="acceptance-criteria-add"
-        @click="adding = true"
+        @click="startAdd"
       >
         {{ t('inspector.acceptanceCriteria.add') }}
       </UButton>
@@ -142,6 +199,16 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
     <div class="space-y-3">
       <p class="text-[11px] text-slate-500">
         {{ t('inspector.acceptanceCriteria.hint') }}
+      </p>
+
+      <!-- A swallowed load failure would render as an empty list, which reads exactly like a
+           service that has no criteria — say which it is. -->
+      <p
+        v-if="store.failed"
+        class="text-[11px] text-rose-600 dark:text-rose-400"
+        data-testid="acceptance-criteria-load-failed"
+      >
+        {{ t('inspector.acceptanceCriteria.loadFailed') }}
       </p>
 
       <!-- Proposed: the triage queue the accretion pass fills. -->
@@ -156,20 +223,14 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
           data-testid="acceptance-criterion-row"
         >
           <p class="text-xs font-medium">{{ criterion.title }}</p>
-          <p class="mt-1 text-[11px] text-slate-500">
-            <span v-if="criterion.given">{{
-              t('inspector.acceptanceCriteria.given', { text: criterion.given })
-            }}</span>
-            {{ t('inspector.acceptanceCriteria.when', { text: criterion.when }) }}
-            {{ t('inspector.acceptanceCriteria.outcome', { text: criterion.outcome }) }}
-          </p>
+          <p class="mt-1 text-[11px] text-slate-500">{{ statementOf(criterion) }}</p>
           <div class="mt-2 flex gap-2">
             <UButton
               color="primary"
               variant="soft"
               size="xs"
               icon="i-lucide-check"
-              :loading="busy"
+              :loading="isBusy(criterion.id)"
               data-testid="acceptance-criterion-confirm"
               @click="setStatus(criterion, 'confirmed')"
             >
@@ -180,7 +241,7 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
               variant="ghost"
               size="xs"
               icon="i-lucide-archive"
-              :loading="busy"
+              :loading="isBusy(criterion.id)"
               data-testid="acceptance-criterion-retire"
               @click="setStatus(criterion, 'retired')"
             >
@@ -204,9 +265,19 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
               color="neutral"
               variant="ghost"
               size="xs"
+              icon="i-lucide-pencil"
+              :aria-label="t('inspector.acceptanceCriteria.edit')"
+              :disabled="editing !== null"
+              data-testid="acceptance-criterion-edit"
+              @click="startEdit(criterion)"
+            />
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
               icon="i-lucide-archive"
               :aria-label="t('inspector.acceptanceCriteria.retire')"
-              :loading="busy"
+              :loading="isBusy(criterion.id)"
               data-testid="acceptance-criterion-retire"
               @click="setStatus(criterion, 'retired')"
             />
@@ -216,19 +287,13 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
               size="xs"
               icon="i-lucide-trash-2"
               :aria-label="t('inspector.acceptanceCriteria.remove')"
-              :loading="busy"
+              :loading="isBusy(criterion.id)"
               data-testid="acceptance-criterion-delete"
               @click="remove(criterion)"
             />
           </div>
         </div>
-        <p class="mt-1 text-[11px] text-slate-500">
-          <span v-if="criterion.given">{{
-            t('inspector.acceptanceCriteria.given', { text: criterion.given })
-          }}</span>
-          {{ t('inspector.acceptanceCriteria.when', { text: criterion.when }) }}
-          {{ t('inspector.acceptanceCriteria.outcome', { text: criterion.outcome }) }}
-        </p>
+        <p class="mt-1 text-[11px] text-slate-500">{{ statementOf(criterion) }}</p>
         <div v-if="criterion.tags.length" class="mt-1 flex flex-wrap gap-1">
           <UBadge v-for="tag in criterion.tags" :key="tag" color="neutral" variant="soft" size="xs">
             {{ tag }}
@@ -236,25 +301,60 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
         </div>
       </div>
 
-      <p
-        v-if="retired.length"
-        class="text-[11px] text-slate-400"
-        data-testid="acceptance-criteria-retired"
-      >
-        {{ t('inspector.acceptanceCriteria.retiredCount', { count: retired.length }) }}
-      </p>
+      <!-- Retired criteria stay reachable: retiring is the RECOMMENDED alternative to deleting,
+           and the accretion pass will never re-propose a title it already holds — so a criterion
+           retired by mistake would otherwise be gone for good with no way back. -->
+      <div v-if="retired.length" class="space-y-1" data-testid="acceptance-criteria-retired">
+        <UButton
+          color="neutral"
+          variant="link"
+          size="xs"
+          class="px-0 text-[11px] text-slate-400"
+          data-testid="acceptance-criteria-retired-toggle"
+          @click="showRetired = !showRetired"
+        >
+          {{ t('inspector.acceptanceCriteria.retiredCount', { count: retired.length }) }} ·
+          {{
+            showRetired
+              ? t('inspector.acceptanceCriteria.hideRetired')
+              : t('inspector.acceptanceCriteria.showRetired')
+          }}
+        </UButton>
+        <div
+          v-for="criterion in showRetired ? retired : []"
+          :key="criterion.id"
+          class="flex items-start justify-between gap-2 rounded border border-dashed border-slate-200 p-2 dark:border-slate-700"
+          data-testid="acceptance-criterion-row"
+        >
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-slate-400 line-through">{{ criterion.title }}</p>
+            <p class="mt-1 text-[11px] text-slate-400">{{ statementOf(criterion) }}</p>
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            icon="i-lucide-undo-2"
+            :aria-label="t('inspector.acceptanceCriteria.restore')"
+            :loading="isBusy(criterion.id)"
+            data-testid="acceptance-criterion-restore"
+            @click="setStatus(criterion, 'confirmed')"
+          />
+        </div>
+      </div>
 
       <p
-        v-if="criteria.length === 0 && !adding"
+        v-if="criteria.length === 0 && editing === null"
         class="text-[11px] text-slate-500"
         data-testid="acceptance-criteria-empty"
       >
         {{ t('inspector.acceptanceCriteria.empty') }}
       </p>
 
-      <!-- The hand-authoring form. A criterion typed here arrives already confirmed. -->
+      <!-- The hand-authoring form, shared by add and edit (`editing` holds `'new'` or the id). A
+           criterion typed here arrives already confirmed. -->
       <div
-        v-if="adding"
+        v-if="editing !== null"
         class="space-y-2 rounded border border-slate-200 p-2 dark:border-slate-700"
       >
         <UFormField :label="t('inspector.acceptanceCriteria.titleLabel')">
@@ -310,11 +410,15 @@ async function remove(criterion: ServiceAcceptanceCriterion) {
             size="xs"
             icon="i-lucide-save"
             :disabled="!draftValid"
-            :loading="busy"
+            :loading="editing !== null && isBusy(editing)"
             data-testid="acceptance-criterion-save"
-            @click="add"
+            @click="save"
           >
-            {{ t('inspector.acceptanceCriteria.save') }}
+            {{
+              editing === 'new'
+                ? t('inspector.acceptanceCriteria.save')
+                : t('inspector.acceptanceCriteria.saveEdit')
+            }}
           </UButton>
         </div>
       </div>

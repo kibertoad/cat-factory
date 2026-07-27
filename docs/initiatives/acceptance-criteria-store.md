@@ -69,8 +69,9 @@ Two departures from that template, both deliberate:
 | 10  | Tester per-criterion verdicts (`TestReport.criteriaVerdicts`)       | done   | —   |
 | 11  | PR report criterion/evidence section                                | done   | —   |
 | 12  | Frontend: store, API composable, inspector panel, i18n (10 locales) | done   | —   |
-| 13  | Conformance assertions (resolution / gating / unconfigured no-op)   | done   | —   |
+| 13  | Conformance assertions (resolution / gating / no-op / frame-delete) | done   | —   |
 | 14  | Docs sweep + changesets                                             | done   | —   |
+| 15  | Review round: tenant-scoped upsert, delete cascade, replay guard    | done   | —   |
 
 Deferred (NOT in the committed scope — see Consequences):
 
@@ -82,6 +83,11 @@ Deferred (NOT in the committed scope — see Consequences):
   reach the tester and the prompts; turning a criterion into a runnable check is a separate
   design question (it needs an executable form, not prose).
 - Criterion → PR-review-finding linkage.
+- Moving the extraction OFF the settlement request path. It is now guarded so it runs at most
+  once per review, but the one call it does make is still awaited before the `incorporate` /
+  `re-review` / `proceed` response returns. Deferring it needs a durable background seam that
+  works on both facades (`waitUntil` on the Worker has no Node twin) — a bigger change than the
+  latency currently justifies.
 
 ## Conventions & gotchas carried between iterations
 
@@ -101,7 +107,27 @@ Deferred (NOT in the committed scope — see Consequences):
 - **Accretion is best-effort and must never touch the run.** The extraction pass runs behind the
   review settlement, wrapped so that a model failure, an unwired provider, or a store outage
   leaves the run exactly as it was. Pass-through when no model is wired — the conformance
-  harness has none, so every existing suite must keep passing untouched.
+  harness has none, so every existing suite must keep passing untouched. Best-effort is NOT
+  silent, though: the swallow logs through the facade logger, or a permanently dead accretion
+  pass is indistinguishable from documents that genuinely hold no durable behaviour.
+- **Settlement replays — guard the extraction, and hand it the document.** The hook runs inside
+  the durable driver and off retryable HTTP routes, so it takes the settled document off the
+  review already in hand (`ReviewKind.incorporatedDoc`) and checks `hasDerivedFrom(frame,
+reviewId)` before spending a model call. The marker is the derived rows' own `sourceReviewId` —
+  the store already answers the question exactly, so no claim table is warranted. (Contrast the
+  review-question writeback, which DOES need one: its side effect is a third-party comment, not a
+  row it can look up.)
+- **The row PK is the id alone, so every upsert scopes its conflict clause by workspace.** See
+  CLAUDE.md's flow notes: without the `DO UPDATE … WHERE workspace_id = excluded.workspace_id` /
+  `setWhere`, a mothership RPC caller who knows a criterion id can rewrite another tenant's
+  behavioural contract, and the `workspaceFieldList` scope rule cannot see it.
+- **Criteria are keyed by a BLOCK id, so the board delete cascade must reclaim them.**
+  `BoardService.removeBlock` batches `deleteByBlocks` over the doomed frames, alongside the
+  service + initiative reclaims. Any future frame-keyed 1:many table needs the same line.
+- **The prompt section is bounded on count AND characters, and says what it dropped.** It rides
+  every standard phase; a service at the per-frame ceiling with clauses at their own 2,000-char
+  limit would otherwise be megabytes per dispatch. A silently truncated contract is worse than a
+  visibly partial one.
 - **Dedupe by normalised title within a frame.** A re-run of the same task re-extracts near
   identical criteria; upserting by `(frame, normalised title)` keeps the store from growing a
   duplicate per run. A title that matches an existing `confirmed` or `retired` row is left

@@ -185,6 +185,7 @@ import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewReposit
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
+import { D1AcceptanceCriterionRepository } from './repositories/D1AcceptanceCriterionRepository'
 import { D1MergeTrackRecordRepository } from './repositories/D1MergeTrackRecordRepository'
 import { D1RiskPolicyRepository } from './repositories/D1RiskPolicyRepository'
 import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
@@ -709,6 +710,10 @@ export function selectMergeLifecycleDeps(
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
+    // The raw criterion store, wired ONLY so the board's delete cascade can reclaim a doomed
+    // service frame's acceptance criteria. Dispatch + accretion ride the resolver/accretion
+    // closures assembled in `container-assembly.ts`, never this. Mirrors the Node wiring.
+    acceptanceCriterionRepository: new D1AcceptanceCriterionRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
   // the integration is enabled) and the outbound webhook (when a workspace registered one) all
