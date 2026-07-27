@@ -28,6 +28,7 @@ import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.v
 import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
+import ServiceValidationConfig from '~/components/panels/inspector/ServiceValidationConfig.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
 import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
 
@@ -80,6 +81,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
   'service-test-secrets': ServiceTestSecrets,
   'service-fragments': ServiceFragments,
   'service-release-health': ServiceReleaseHealthConfig,
+  'service-validation-checks': ServiceValidationConfig,
   'epic-children': EpicChildren,
   'initiative-inspector': InitiativeInspector,
 }

@@ -391,6 +391,7 @@ export type {
   RunnerJobResult,
   RunnerJobView,
   RunnerTransport,
+  RunnerValidationReport,
 } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
@@ -498,6 +499,10 @@ export type {
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'
 export type { TestSecretRecord, TestSecretsRepository } from './test-secrets-repositories.js'
+export type {
+  ValidationConfigRecord,
+  ValidationConfigRepository,
+} from './validation-repositories.js'
 export type {
   PackageRegistryConnectionRecord,
   PackageRegistryConnectionRepository,

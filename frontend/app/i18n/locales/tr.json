@@ -1060,6 +1060,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "PR öncesi doğrulama",
+      "sectionHint": "Kodlayıcı işini bitirdikten sonra ve bir çekme isteği açılmadan önce çalışma kopyası üzerinde çalıştırılan komutlar. Bir hata düzeltilmesi için aracıya geri verilir; yalnızca sorunsuz bir çalışma kopyası çekme isteği açar.",
+      "hint": "Her komut bu hizmetin çalışma kopyasında sırayla `sh -c` ile çalıştırılır. Denetimi değil kodu düzeltin — aracıya denetimleri zayıflatmaması söylenir.",
+      "clear": "Temizle",
+      "configNoun": "doğrulama denetimleri",
+      "label": "Ad",
+      "labelPlaceholder": "lint",
+      "command": "Komut",
+      "addCheck": "Denetim ekle",
+      "removeCheck": "Bu denetimi kaldır",
+      "empty": "Yapılandırılmış denetim yok. Bu hizmetin çalıştırmaları yerel doğrulama olmadan çekme isteği açar.",
+      "maxAttempts": "Deneme",
+      "maxAttemptsHint": "Düzeltme turu",
+      "save": "Denetimleri kaydet",
+      "savedToast": "Denetimler kaydedildi",
+      "saveFailed": "Denetimler kaydedilemedi",
+      "clearFailed": "Denetimler temizlenemedi"
     }
   },
   "panels": {
@@ -1228,6 +1247,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "İlgili bulgular",
         "unnamed": "Standart"
+      },
+      "validation": {
+        "heading": "PR öncesi doğrulama",
+        "passed": "Geçti",
+        "failed": "Başarısız",
+        "attempts": "Deneme {attempts}/{maxAttempts}",
+        "passedSummary": "{total} denetimin tamamı {attempts}. denemede geçti. Çekme isteği sorunsuz bir çalışma kopyasından açıldı.",
+        "failedSummary": "{maxAttempts} denemenin {attempts} tanesinden sonra {total} denetimden {failed} tanesi hâlâ başarısızdı, bu yüzden çekme isteği açılmadı.",
+        "exitCode": "çıkış kodu {code}",
+        "timedOut": "zaman aşımı"
       }
     },
     "inspector": {

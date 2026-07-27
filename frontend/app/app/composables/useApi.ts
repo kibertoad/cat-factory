@@ -35,6 +35,7 @@ import { recurringApi } from './api/recurring'
 import { previewApi } from './api/preview'
 import { environmentsApi } from './api/environments'
 import { releaseHealthApi } from './api/releaseHealth'
+import { validationChecksApi } from './api/validationChecks'
 import { sandboxApi } from './api/sandbox'
 import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
@@ -135,6 +136,7 @@ export function useApi() {
     ...docInterviewApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
+    ...validationChecksApi(ctx),
     ...testSecretsApi(ctx),
     ...packageRegistriesApi(ctx),
     ...previewApi(ctx),

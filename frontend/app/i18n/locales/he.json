@@ -1060,6 +1060,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "בדיקות לפני בקשת משיכה",
+      "sectionHint": "פקודות שרצות על העותק המקומי אחרי שהמפתח מסיים ולפני פתיחת בקשת משיכה. כישלון מוחזר לסוכן לתיקון; רק עותק תקין פותח בקשת משיכה.",
+      "hint": "כל פקודה רצה עם ‎`sh -c`‎ בעותק המקומי של שירות זה, לפי הסדר. יש לתקן את הקוד ולא את הבדיקה — הסוכן מונחה לא להחליש אותן.",
+      "clear": "ניקוי",
+      "configNoun": "בדיקות אימות",
+      "label": "שם",
+      "labelPlaceholder": "lint",
+      "command": "פקודה",
+      "addCheck": "הוספת בדיקה",
+      "removeCheck": "הסרת בדיקה זו",
+      "empty": "לא הוגדרו בדיקות. הרצות של שירות זה פותחות בקשת משיכה ללא אימות מקומי.",
+      "maxAttempts": "ניסיונות",
+      "maxAttemptsHint": "סבבי תיקון",
+      "save": "שמירת בדיקות",
+      "savedToast": "הבדיקות נשמרו",
+      "saveFailed": "לא ניתן היה לשמור את הבדיקות",
+      "clearFailed": "לא ניתן היה לנקות את הבדיקות"
     }
   },
   "panels": {
@@ -1228,6 +1247,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "ממצאים קשורים",
         "unnamed": "תקן"
+      },
+      "validation": {
+        "heading": "בדיקות לפני בקשת משיכה",
+        "passed": "עברו",
+        "failed": "נכשלו",
+        "attempts": "ניסיון {attempts} מתוך {maxAttempts}",
+        "passedSummary": "כל {total} הבדיקות עברו בניסיון {attempts}. בקשת המשיכה נפתחה מעותק תקין.",
+        "failedSummary": "{failed} מתוך {total} בדיקות עדיין נכשלו אחרי {attempts} מתוך {maxAttempts} ניסיונות, ולכן לא נפתחה בקשת משיכה.",
+        "exitCode": "קוד יציאה {code}",
+        "timedOut": "חריגת זמן"
       }
     },
     "inspector": {

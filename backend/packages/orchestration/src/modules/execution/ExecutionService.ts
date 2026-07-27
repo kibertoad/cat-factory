@@ -66,6 +66,7 @@ import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { buildGateWindowControllers, buildReviewSubjects } from './gate-window-controllers.js'
+import { buildRunContextAndAdmission } from './run-context-admission.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
 import {
@@ -257,6 +258,7 @@ export class ExecutionService {
     skillResolver,
     environmentProvisioning,
     resolveTestSecretRefs,
+    resolveValidationChecks,
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
@@ -332,35 +334,30 @@ export class ExecutionService {
     this.events = executionEventPublisher
     this.board = boardService
     this.spend = spendService
-    this.contextBuilder = new AgentContextBuilder({
-      workspaceRepository,
-      blockRepository,
-      accountRepository,
-      agentKindRegistry,
-      initiativePresetRegistry,
-      documents: documentRepository,
-      documentUrlResolver,
-      tasks: taskRepository,
-      requirementReviews: requirementReviewRepository,
-      docInterviews: docInterviewRepository,
-      clarityReviews: clarityReviewRepository,
-      brainstormSessions: brainstormSessionRepository,
-      initiatives: initiativeRepository,
-      environmentProvisioning,
-      resolveTestSecretRefs,
-      fragmentResolver,
-      skillResolver,
-    })
-    // The run-admission preflights (the shared start/retry/restart `assert*` gate family).
-    // The admission-only seams are forwarded here rather than stored on the engine.
-    this.admission = new RunAdmission({
+    // The prompt-composition builder + the run-admission preflight family it backs, built as one
+    // pair by the sibling factory (see run-context-admission.ts) — admission is constructed ON the
+    // context builder, so they are one seam.
+    const runContext = buildRunContextAndAdmission({
       workspaceRepository,
       blockRepository,
       executionRepository,
-      contextBuilder: this.contextBuilder,
+      accountRepository,
       agentKindRegistry,
-      spend: spendService,
+      initiativePresetRegistry,
+      documentRepository,
+      documentUrlResolver,
+      taskRepository,
+      requirementReviewRepository,
+      docInterviewRepository,
+      clarityReviewRepository,
+      brainstormSessionRepository,
+      initiativeRepository,
       environmentProvisioning,
+      resolveTestSecretRefs,
+      resolveValidationChecks,
+      fragmentResolver,
+      skillResolver,
+      spendService,
       workspaceSettingsService,
       resolveBinaryArtifactStore,
       resolveProviderCapabilities,
@@ -368,6 +365,8 @@ export class ExecutionService {
       resolveWorkspaceModelDefault,
       assertAgentBackendConfigured,
     })
+    this.contextBuilder = runContext.contextBuilder
+    this.admission = runContext.admission
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,

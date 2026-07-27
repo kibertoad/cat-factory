@@ -818,6 +818,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The per-service PRE-PR VALIDATION CHECKS, keyed by service-frame block like
+  // `releaseHealthConfigRepository` above. Nothing sealed — the commands are operator-authored
+  // shell strings that run inside the run's own container — so the plain record crosses the
+  // machine API. The inspector CRUD (`getByBlock`/`listByWorkspace`/`delete`) and the dispatch's
+  // frame read (`getByBlock`) are workspace-scoped on arg0; the record-based `upsert` binds on
+  // its `workspaceId` FIELD.
+  validationConfigRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   incidentEnrichmentConnectionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },

@@ -48,9 +48,14 @@ import {
   parseLocalModelId,
   recordGateAttempt,
   RunContendedError,
-  sameSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
+import {
+  applyContainerRunning,
+  applyLastActivity,
+  applySubtaskProgress,
+} from './step-fold.logic.js'
+import { applyValidationReport } from './validation.logic.js'
 import {
   commitInitiativeTracker,
   FORK_PROPOSER_KIND,
@@ -72,7 +77,6 @@ import {
   evictionFailureDetail,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
-  shouldPersistActivity,
 } from './job.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
@@ -355,8 +359,8 @@ export class RunDispatcher {
       environmentProvisioning: deps.environmentProvisioning,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
-      applyContainerRunning: (step, update) => this.applyContainerRunning(step, update),
-      applySubtaskProgress: (step, counts) => this.applySubtaskProgress(step, counts),
+      applyContainerRunning: (step, update) => applyContainerRunning(step, update),
+      applySubtaskProgress: (step, counts) => applySubtaskProgress(step, counts),
       recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
         this.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
     })
@@ -980,12 +984,15 @@ export class RunDispatcher {
     // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
     if (!s || s.jobId !== jobId) return false
     let changed = false
-    if (this.applyContainerRunning(s, update)) changed = true
-    if (this.applySubtaskProgress(s, update.subtasks)) changed = true
+    if (applyContainerRunning(s, update)) changed = true
+    if (applySubtaskProgress(s, update.subtasks)) changed = true
     // Persist the harness liveness heartbeat (throttled) so a quiet-but-alive container keeps the
     // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
     // would otherwise never emit, leaving it indistinguishable from a wedged run to the sweeper + UI.
-    if (this.applyLastActivity(s, update.lastActivityAt)) changed = true
+    if (applyLastActivity(s, update.lastActivityAt)) changed = true
+    // Republish the latest pre-PR validation attempt so the repair loop is visible WHILE it
+    // runs ("lint failed, repairing — attempt 2 of 3") instead of only at the end.
+    if (applyValidationReport(s, update.validationReport)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.recordBackendDiagnostics(target, update.backend)) changed = true
@@ -1076,56 +1083,6 @@ export class RunDispatcher {
     await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-  }
-
-  private applyContainerRunning(
-    step: PipelineStep,
-    update: { phase?: string; container?: { id?: string; url?: string } },
-  ): boolean {
-    const prev = step.container ?? undefined
-    const next = {
-      status: 'up' as const,
-      phase: update.phase ?? prev?.phase ?? null,
-      id: update.container?.id ?? prev?.id ?? null,
-      url: update.container?.url ?? prev?.url ?? null,
-    }
-    if (
-      prev?.status === next.status &&
-      (prev?.phase ?? null) === next.phase &&
-      (prev?.id ?? null) === next.id &&
-      (prev?.url ?? null) === next.url
-    ) {
-      return false
-    }
-    step.container = next
-    return true
-  }
-
-  /**
-   * Apply an async step's live subtask counts to the step (and the derived 0..1 progress
-   * fraction), returning whether anything changed. Shared by {@link pollAgentJob} (the agent
-   * executor's `update.subtasks`) and the {@link DeployerStepController} poll (the deploy job's
-   * `view.progress`)
-   * so the progress-fraction math lives in one place.
-   */
-  private applySubtaskProgress(step: PipelineStep, counts: PipelineStep['subtasks']): boolean {
-    if (!counts || sameSubtasks(step.subtasks, counts)) return false
-    step.subtasks = counts
-    step.progress = counts.total > 0 ? counts.completed / counts.total : 0
-    return true
-  }
-
-  /**
-   * Fold a running poll's forwarded liveness heartbeat onto `step.lastActivityAt`, THROTTLED via
-   * {@link shouldPersistActivity}: re-stamped only once the heartbeat has advanced by a bounded
-   * window (not on every ~15s poll), and never when a wedged job's heartbeat is frozen — so its
-   * `updated_at` correctly stops advancing. Returns whether it changed, so the caller persists +
-   * emits (refreshing the run's `updated_at` and the UI's "active Ns ago") only on a real advance.
-   */
-  private applyLastActivity(step: PipelineStep, incoming: number | undefined): boolean {
-    if (!shouldPersistActivity(step.lastActivityAt, incoming)) return false
-    step.lastActivityAt = incoming
-    return true
   }
 
   /**
@@ -1371,6 +1328,13 @@ export class RunDispatcher {
     // step raising a human decision. Those are the runs whose self-assessment is most worth
     // reading, and none of them ever reaches the normal completion with the result in hand.
     if (result.effortReport) step.effortReport = result.effortReport
+
+    // The pre-PR validation report of a coding step whose service configured checks — recorded
+    // here for the same reason as the effort report above: it describes the JOB THAT JUST RAN,
+    // so it must land before any early-returning path below. On this (successful) path it is
+    // the captured proof the checkout was green BEFORE the PR opened; the failed path records
+    // it in `PollCompletionController.handleFailedPoll`.
+    applyValidationReport(step, result.validationReport)
 
     // Meter the LLM call into the usage ledger. Recorded whether the step completed or
     // raised a decision — both consumed tokens. A subscription-harness result is tagged

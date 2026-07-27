@@ -43,6 +43,7 @@ import type {
   SharedStackRepository,
   SubscriptionQuotaCycleRepository,
   TestSecretsRepository,
+  ValidationConfigRepository,
   TokenUsageRepository,
   TrackerSettingsRepository,
   UserRepository,
@@ -124,6 +125,7 @@ import {
   DrizzleObservabilityConnectionRepository,
   DrizzlePackageRegistryConnectionRepository,
   DrizzleReleaseHealthConfigRepository,
+  DrizzleValidationConfigRepository,
   DrizzleSubscriptionQuotaCycleRepository,
   DrizzleTestSecretsRepository,
 } from './drizzle/connections.js'
@@ -173,6 +175,7 @@ export interface CoreRepositories {
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
+  validationConfigRepository: ValidationConfigRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
 
@@ -221,6 +224,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
+    validationConfigRepository: new DrizzleValidationConfigRepository(db),
     subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
@@ -244,3 +248,4 @@ export {
 } from './drizzle/reviews.js'
 export { createDrizzleSandboxDeps } from './drizzle/sandbox.js'
 export { DrizzleTestSecretsRepository } from './drizzle/connections.js'
+export { DrizzleValidationConfigRepository } from './drizzle/connections.js'

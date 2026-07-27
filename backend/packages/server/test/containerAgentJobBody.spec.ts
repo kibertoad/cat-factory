@@ -665,6 +665,37 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   })
 })
 
+describe('ContainerAgentExecutor pre-PR validation checks (job-body gating)', () => {
+  // The commands ride the JOB BODY (containers have no DB access), and only for a dispatch that
+  // actually OPENS a pull request — that is what "pre-PR" means. An in-place fixer pushing onto
+  // an EXISTING PR head is deliberately excluded: the `ci` gate is already the loop there, so
+  // forwarding checks would run a second, redundant repair loop inside the fixer.
+  const validationChecks = {
+    checks: [{ label: 'lint', command: 'pnpm lint' }],
+    maxAttempts: 2,
+  }
+
+  it('forwards the service’s checks on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { validationChecks }))
+    expect(captured[0]!.spec.validationChecks).toEqual(validationChecks)
+  })
+
+  it('omits them for an in-place fixer, which pushes onto an existing PR head', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { validationChecks }),
+    )
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits them when the service configured none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+})
+
 describe('ContainerAgentExecutor private package registries', () => {
   const REGISTRIES = [
     {

@@ -134,6 +134,16 @@ export interface RunnerJobResult {
     iteration?: number
   }
   /**
+   * A coding job's PRE-PR validation report: the outcome of running the service's configured
+   * check commands against the checkout after the agent settled and BEFORE opening a PR, plus
+   * how many repair rounds the harness spent. Computed by the harness (it runs the commands and
+   * reads the exit codes), so the gate is a real programmatic check rather than a model
+   * self-report. A failed report means NO PR was opened and the job failed. The executor's
+   * `toRunResult` forwards it onto {@link AgentRunResult.validationReport}. Absent when the
+   * service configured no checks. See `docs/initiatives/pre-pr-validation.md`.
+   */
+  validationReport?: RunnerValidationReport
+  /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
    * LLM proxy — so this is the only usage signal for them. The dispatch path folds
@@ -331,6 +341,44 @@ export interface RunnerJobView {
    * on a transport that doesn't declare one.
    */
   backend?: string
+  /**
+   * The LATEST pre-PR validation attempt's report, republished on every poll once the harness
+   * has run the configured checks at least once (see `docs/initiatives/pre-pr-validation.md`).
+   * Lets the run surface "lint failed, repairing (attempt 2 of 3)" WHILE the loop is still
+   * running, instead of only at the end. The same report rides
+   * {@link RunnerJobResult.validationReport} terminally. A published attempt is FINAL — the
+   * harness republishes a NEW attempt rather than mutating the last one. Absent for a job whose
+   * service configured no checks (and on an older harness image).
+   */
+  validationReport?: RunnerValidationReport
+}
+
+/**
+ * The harness-computed report of a coding job's pre-PR validation loop: whether the latest
+ * attempt's commands all passed, how many agent+check rounds ran, and each command's outcome.
+ * Mirrors the contracts `validationReportSchema` structurally (the kernel stays free of the
+ * contracts dependency). See {@link RunnerJobResult.validationReport}.
+ */
+export interface RunnerValidationReport {
+  /** Whether every command in the latest attempt exited 0 (⇒ the PR was allowed to open). */
+  passed: boolean
+  /** How many agent+check rounds ran (1 = the checks settled on the first pass). */
+  attempts: number
+  /** The budget the loop ran under. */
+  maxAttempts: number
+  /** Per-command outcomes of the LATEST attempt, in configured order. */
+  outcomes: {
+    label: string
+    command: string
+    exitCode: number
+    passed: boolean
+    /** Bounded, secret-scrubbed tail of the command's combined stdout+stderr. */
+    outputTail?: string
+    durationMs?: number
+    timedOut?: boolean
+  }[]
+  /** Epoch ms the latest attempt finished. */
+  at?: number
 }
 
 /**

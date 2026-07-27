@@ -47,11 +47,13 @@ const LEGACY_ALLOWANCES = new Map([
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN). The
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
+  // The poll paths' "fold one update onto the step" helpers now live in `step-fold.logic.ts`,
+  // so `RunDispatcher.ts` ratchets down accordingly.
+  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2430],
   // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
   // its own module (re-exported, so no call site changed) when the PR-verification-report hook
   // needed headroom — ratcheted DOWN to lock the win in.
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2350],
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2320],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -61,18 +63,30 @@ const LEGACY_ALLOWANCES = new Map([
   // the Worker root's external LLM-trace destinations in `container-trace-sinks.ts` — both ratchet
   // down accordingly.
   ['backend/runtimes/node/src/container.ts', 1550],
-  ['backend/packages/orchestration/src/container.ts', 1700],
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2325],
+  // `CoreDependencies` (the ~815-line `createCore` contract) now lives in `container/dependencies.ts`,
+  // re-exported — the same split the engine's own dependency block got — so, on top of the
+  // module-shapes extraction above, the domain composition root drops back under the DEFAULT
+  // budget and needs no allowance at all.
+  // The per-service store factories (`buildTestSecretsService` / `buildValidationConfigService`)
+  // now live with the rest of that family in `wireCredentialServices.ts`, so the Worker
+  // composition root ratchets down accordingly.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2300],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
-  ['backend/runtimes/node/src/db/schema.ts', 2200],
+  // The opt-in integration tables (sealed connections + per-service-frame integration config)
+  // now live in `schema-integrations.ts`, re-exported from `schema.ts`. Combined with main's own
+  // trimming the file is down to ~2130, so the allowance ratchets to the tighter of the two
+  // in-flight values and then some.
+  ['backend/runtimes/node/src/db/schema.ts', 2150],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],
   // The repo-targeting declaration block (RepoTarget/ResolveRepoTarget/RepoOrigin/…) moved to
-  // `agents/repoTargeting.ts`, so this ratchets down.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1550],
+  // `agents/repoTargeting.ts`, and the poll site's pure runner-view → engine-update shaping
+  // (`buildRunningUpdate` / `buildFailureMeta`) now lives with the rest of the output-boundary
+  // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1520],
   ['backend/packages/server/src/github/FetchGitHubClient.ts', 1550],
 ])
 

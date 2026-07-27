@@ -68,8 +68,6 @@ import {
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
-  TestSecretsService,
-  TEST_SECRETS_CIPHER_INFO,
   createEmailSender,
 } from '@cat-factory/integrations'
 // Opt-in AWS EKS backends (runner + environment), registered by reference on BOTH facades so
@@ -205,7 +203,7 @@ import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepositor
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
-import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
@@ -261,7 +259,9 @@ import {
   buildPublicApiKeyService,
   buildResolveUserGitHubToken,
   buildSubscriptionService,
+  buildTestSecretsService,
   buildUserSecretService,
+  buildValidationConfigService,
 } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -863,31 +863,6 @@ function buildResolvePackageRegistries(
     info: PACKAGE_REGISTRY_CIPHER_INFO,
   })
   return (workspaceId) => resolvePackageRegistriesForDispatch(repository, cipher, workspaceId)
-}
-
-/**
- * Build the SENSITIVE per-service test-credential store (sealed), or undefined when the shared
- * encryption key is absent (the cipher must exist to seal/unseal). Backs the test-secrets CRUD
- * controller, the engine's prompt refs (non-secret key + description), and the executor's
- * out-of-band value injection into the Tester container. Stateless, so building a fresh instance
- * per call site is safe (mirrors `buildResolvePackageRegistries`).
- */
-function buildTestSecretsService(
-  env: Env,
-  db: D1Database,
-  clock: Clock,
-): TestSecretsService | undefined {
-  const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  if (!encryptionKey) return undefined
-  return new TestSecretsService({
-    testSecretsRepository: new D1TestSecretsRepository({ db }),
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: encryptionKey,
-      info: TEST_SECRETS_CIPHER_INFO,
-    }),
-    blockRepository: new D1BlockRepository({ db }),
-    clock,
-  })
 }
 
 /**
@@ -2150,6 +2125,8 @@ export function buildContainer(
   // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
   const testSecretsService = buildTestSecretsService(env, db, clock)
 
+  const validationConfigService = buildValidationConfigService(db, clock)
+
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
   const personalSubscriptions = buildPersonalSubscriptionService(env, db, clock)
@@ -2293,6 +2270,7 @@ export function buildContainer(
     resolveTransport,
     subscriptions,
     testSecretsService,
+    validationConfigService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,

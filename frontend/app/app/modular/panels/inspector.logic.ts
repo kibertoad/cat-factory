@@ -53,6 +53,7 @@ export const INSPECTOR_PANEL_IDS = [
   'service-test-secrets',
   'service-fragments',
   'service-release-health',
+  'service-validation-checks',
   // epic / initiative body
   'epic-children',
   'initiative-inspector',
@@ -118,6 +119,10 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   { id: 'service-test-secrets', order: 150, when: isDeployableFrame },
   { id: 'service-fragments', order: 160, when: isFrame },
   { id: 'service-release-health', order: 170, when: isDeployableFrame },
+  // Pre-PR validation checks: the commands the harness runs before opening this service's PRs.
+  // Deployable frames only — a doc repo ships no build to install/lint/test, exactly like the
+  // test-infra and release-health panels above it.
+  { id: 'service-validation-checks', order: 180, when: isDeployableFrame },
   { id: 'epic-children', order: 200, when: (b) => b.level === 'epic' },
   { id: 'initiative-inspector', order: 210, when: (b) => b.level === 'initiative' },
 ]
