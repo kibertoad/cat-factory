@@ -2,7 +2,7 @@ import { type Clock, NotFoundError } from '@cat-factory/kernel'
 import type { MessageBatch } from '@cloudflare/workers-types'
 import { reconcileStaleRepos as reconcileStaleReposCore } from '@cat-factory/server'
 import type { Container } from '../container'
-import type { Env, GitHubSyncMessage } from '../env'
+import type { Env, GitHubSyncMessage, TrackerSyncMessage } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { D1RepoProjectionRepository } from '../repositories/D1RepoProjectionRepository'
@@ -98,4 +98,45 @@ export async function reconcileStaleRepos(
     staleMs,
     logger,
   )
+}
+
+/**
+ * Queue consumer for `cat-factory-tracker-sync`: apply one verified, parsed tracker delivery
+ * (push-driven intake / a ticket reply to a parked review); ack on success, retry on error.
+ *
+ * A retry is safe because the apply is idempotent by the ingest CLAIM — a comment already applied
+ * is skipped, an abandoned claim is retaken — which is exactly why that claim had to exist before
+ * this queue did. With the tracker-webhook module unwired the message is ACKED (dropped) rather
+ * than retried forever, mirroring the GitHub consumer's stance for an unwired module.
+ *
+ * It lives beside `handleGitHubSyncBatch` because it is the same shape at the same layer; the
+ * queues, message types and modules are entirely separate.
+ */
+export async function handleTrackerSyncBatch(
+  batch: MessageBatch<TrackerSyncMessage>,
+  env: Env,
+): Promise<void> {
+  const container = buildContainer(env)
+  const service = container.trackerWebhook?.service
+  for (const message of batch.messages) {
+    if (!service) {
+      message.ack()
+      continue
+    }
+    try {
+      await service.handle(message.body.workspaceId, message.body.event)
+      message.ack()
+    } catch (error) {
+      logger.warn(
+        {
+          workspaceId: message.body.workspaceId,
+          source: message.body.event.source,
+          kind: message.body.event.kind,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        'tracker webhook message failed; retrying',
+      )
+      message.retry()
+    }
+  }
 }

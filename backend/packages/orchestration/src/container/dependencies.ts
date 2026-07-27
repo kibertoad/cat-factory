@@ -141,6 +141,7 @@ import type {
   TestSecretRef,
   TicketTrackerProvider,
   TokenUsageRepository,
+  TrackerCommentIngestRepository,
   TrackerSettingsRepository,
   UrlSafetyPolicy,
   UserRepoAccessRepository,
@@ -543,6 +544,13 @@ export interface CoreDependencies {
   /** Per-workspace on/off toggle for each task source (absent row ⇒ enabled). */
   taskSourceSettingsRepository?: TaskSourceSettingsRepository
   taskRepository?: TaskRepository
+  /**
+   * Idempotency markers for INBOUND tracker comments (the ticket-reply half of the clarification
+   * loop). Absent ⇒ ticket replies are ignored entirely, because applying a comment's commands
+   * without a claim would re-answer the same finding on every vendor redelivery. See
+   * `docs/initiatives/tracker-webhook-intake.md`.
+   */
+  trackerCommentIngestRepository?: TrackerCommentIngestRepository
 
   // ---- Ephemeral environment integration (optional; wired when configured) -
   // Mirrors the GitHub/Confluence default-off convention. The module assembles

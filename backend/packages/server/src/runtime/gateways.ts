@@ -1,4 +1,5 @@
 import type { WebSearchProvider } from '@cat-factory/contracts'
+import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Logger } from '../observability/logger.js'
 
 // Runtime "gateway" seams: the differentiator capabilities a controller needs but
@@ -50,6 +51,22 @@ export interface GitHubWebhookIngest {
    * head-commit probe rather than proactively here.
    */
   queueSkillResync(accountId: string, sourceId: string): Promise<boolean>
+}
+
+/**
+ * Hands a VERIFIED inbound tracker delivery to an async consumer so the receiver can ack fast —
+ * the task-source analogue of {@link GitHubWebhookIngest}, and wired the same way: a Cloudflare
+ * Queue on the Worker, a pg-boss queue on Node, and `false` when neither is bound so the caller
+ * applies it inline (local/dev/tests).
+ *
+ * The delivery is passed as the already-PARSED neutral event rather than the raw payload, because
+ * verification and parsing both need the provider — which the receiver has resolved and the
+ * consumer would otherwise have to resolve again. A queued job therefore carries no secret and no
+ * vendor shape, only `(workspace, event)`.
+ */
+export interface TrackerWebhookIngest {
+  /** Enqueue a verified tracker event for async handling. `false` ⇒ handle it inline. */
+  enqueueEvent(workspaceId: string, event: TrackerWebhookEvent): Promise<boolean>
 }
 
 /** OpenAI-style token usage scraped from an upstream completion, for spend metering. */
@@ -175,5 +192,11 @@ export interface RuntimeGateways {
   realtime: RealtimeGateway
   githubBackfill: GitHubBackfillScheduler
   githubWebhook: GitHubWebhookIngest
+  /**
+   * Async hand-off for inbound TRACKER deliveries. Required (not optional) so a facade cannot
+   * quietly omit it and leave the receiver blocking the tracker on the whole handle — a facade
+   * with no queue supplies the INLINE seam, which is an explicit choice rather than an absence.
+   */
+  trackerWebhook: TrackerWebhookIngest
   llmUpstream: LlmUpstream
 }

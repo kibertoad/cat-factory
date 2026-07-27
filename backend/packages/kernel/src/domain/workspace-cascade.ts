@@ -92,6 +92,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'task_source_settings',
   'tasks',
   'test_secrets',
+  'tracker_comment_ingests',
   'token_usage',
   'tracker_settings',
   'validation_configs',

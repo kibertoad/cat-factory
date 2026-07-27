@@ -1232,6 +1232,80 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   The comment body is UNTRUSTED, model-authored text going onto a host-parsed — often public —
   surface, so every hole crosses kernel's shared `hostMarkdown` boundary and `redactSecrets`,
   exactly like the PR verification report; a tracker comment is no less exposed than a PR body.
+- **…and the reporter can ANSWER in the ticket.** The finding ids that echo out are the ids a reply
+  names, closing the loop from the surface the work was requested on. See the section below.
+
+## Inbound tracker webhooks (push intake + ticket replies)
+
+Trackers PUSH as well as poll. `POST /webhooks/tasks/:source/:workspaceId` (`TaskWebhookController`,
+`@cat-factory/server`, mounted beside the GitHub + neutral-VCS receivers) is the receiver, and it
+copies the GitHub VCS path step for step: verify HMAC over the RAW body BEFORE any parse, ack 202
+fast, hand the parsed event to the facade's queue, fall back to inline when none is bound. Full
+design + slice checklist: [`docs/initiatives/tracker-webhook-intake.md`](./docs/initiatives/tracker-webhook-intake.md).
+
+- **The provider owns verification + parsing** (`TaskSourceProvider.webhook`, kernel
+  `ports/tracker-webhook.ts`), exactly as VCS providers own theirs. A source without the capability
+  never receives deliveries — the receiver 404s it, so an operator who pasted the wrong URL learns
+  at once rather than into a void. All three vendors sign HMAC-SHA256 over the raw body and differ
+  only in header + prefix, so the crypto is ONE shared helper.
+- **The workspace rides the PATH; the per-connection secret authenticates.** A tracker delivery
+  carries no installation id, and scanning every workspace's connections for one whose secret
+  verifies would be a deployment-wide N+1 on every unauthenticated POST. The secret lives in the
+  connection's existing sealed credential bag under `webhookSecret` (**no new table**), minted /
+  rotated / cleared through `GET|POST|DELETE /workspaces/:ws/task-sources/:source/webhook` and
+  returned exactly once. **An unconfigured secret FAILS CLOSED** (503) — an empty HMAC key is one an
+  attacker also has.
+- **Async hand-off is the `gateways.trackerWebhook` seam** (`TrackerWebhookIngest`): a
+  `TRACKER_SYNC_QUEUE` consumer on the Worker ⇄ the pg-boss `tracker.sync` worker on Node ⇄ the
+  shared `InlineTrackerWebhookIngest` when neither is bound. The queued message carries the
+  already-verified, already-PARSED neutral event, so it holds no secret and no vendor shape.
+- **Push is the fast path, NEVER the only path.** The recurring `bug-intake` schedule is unchanged
+  and remains the reconciliation sweep for missed deliveries — the same webhook + sweeper duality
+  as GitHub sync + `sweepStuckRuns`.
+- **A qualifying issue event FIRES THE SCHEDULE; it never re-implements intake.**
+  `issueEventMatchesIntake` (pure) decides whether an event qualifies for a schedule's `issueIntake`
+  config, then `RecurringPipelineService.triggerForIssueEvent` calls the same `fire` the cron
+  sweeper calls, and the unchanged `BugIntakeService` does the searching / dedup / import /
+  replace-link / pickup mark. So there is exactly ONE intake implementation. Consequences, all
+  deliberate: the fired run may pick a DIFFERENT, older issue (intake is oldest-first fair queueing
+  — the webhook drains the queue promptly, it does not reorder it); overlap protection is inherited
+  (`fire` refuses over a `running`/`paused`/`blocked` run); and the trigger is **non-forced**, so an
+  on-demand schedule is never webhook-fired and an individual-usage model still refuses — `force` is
+  the human run-now lever and a webhook has no human present. The predicate deliberately **fails
+  open** on a field the payload omits: a false positive costs one no-op run, a false negative costs
+  silent intake latency.
+- **A ticket comment can ANSWER a parked requirements review**, closing the loop the question echo
+  above opens. Grammar (explicit commands only, never natural-language guessing):
+  `@cat-factory answer <itemId> …` / `dismiss <itemId>` / `proceed` / `stop` / `extra-round`, each on
+  its own line with the trigger as its FIRST token; an `answer` continues onto following lines until
+  the next trigger. A comment with no trigger line is ignored ENTIRELY — most comments on a linked
+  issue are ordinary discussion, and acking them would turn every thread into a bot conversation.
+  Every mutation routes through the SAME service methods the SPA and `PublicDecisionController` call
+  (`RequirementReviewService.replyToItem` / `setItemStatus`, then
+  `executionService.requirementsReview.{incorporate,proceed,resolveExceeded}`), so the park's
+  CAS/approval-id arbitration and the task's preset knobs apply identically — **never a parallel
+  mutation path into the engine**. A reply that leaves nothing open auto-incorporates (the D6
+  default that makes the ticket a complete surface).
+- **Three safety layers on reply text, because on a public repo anyone can write one.** (1) IDENTITY:
+  bots are refused FIRST — the platform's own acknowledgement comes back as a delivery, so without
+  that check the ack feeds itself — then the connection's optional `webhookReplyAllow` list; an
+  unauthorized reply is dropped SILENTLY, with no follow-up comment, because replying would confirm
+  the hook exists and hand an attacker an oracle. (2) DATA, NOT INSTRUCTIONS: reply text becomes
+  `item.reply` (the same field the SPA writes), capped and `redactSecrets`-scrubbed before it
+  persists, and the grammar has no verb reaching outside the review — no model, no pipeline, no repo
+  write, no scope change. (3) BUDGET: the per-review iteration cap bounds the LLM cycles a chatty
+  thread can drive.
+- **Idempotency is an ATOMIC CLAIM on `tracker_comment_ingests`** (`(workspace, source, externalId,
+commentId)`, D1 ⇄ Drizzle) taken BEFORE anything is applied — every tracker redelivers and every
+  queue retries, so without it one reporter comment answers the same finding twice. Copied verbatim
+  from `review_question_posts`, INCLUDING its answer to "what if the claimer dies": a `failed` row is
+  re-claimable, `applied` is terminal, and a `pending` one is re-claimable once older than
+  `TRACKER_COMMENT_INGEST_CLAIM_TTL_MS`.
+- **Commit the state, THEN talk to the tracker.** The reply is applied and its marker settled before
+  the `postReviewReplyAck` follow-up is attempted, so a tracker outage costs the acknowledgement and
+  never the answer. The ack renders through kernel's `hostMarkdown` + `redactSecrets` and re-renders
+  the SAME finding ids (it imports the renderer rather than re-deriving them), because a tracker
+  comment is as exposed as a PR body.
 
 ## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
 

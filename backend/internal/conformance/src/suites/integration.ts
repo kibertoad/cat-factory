@@ -6,9 +6,10 @@ import { defineProvisioningConformance } from './integration-provisioning.js'
 import { definePublicDecisionsConformance } from './integration-public-decisions.js'
 import { defineSecretsConformance } from './integration-secrets.js'
 import { defineSourcesConformance } from './integration-sources.js'
+import { defineTrackerWebhookConformance } from './integration-tracker-webhooks.js'
 
 // The shared integration-slice conformance (credentials / provisioning / secrets / source
-// integrations / environments / the public-API decision surface), split into cohesive sibling files so no single suite file
+// integrations / inbound tracker webhooks / environments / the public-API decision surface), split into cohesive sibling files so no single suite file
 // grows unbounded. Each `defineX` emits its nested `describe` blocks inside the one
 // per-facade `[name] conformance` group, so the reported test tree is unchanged.
 export function defineIntegrationConformance(harness: ConformanceHarness): void {
@@ -17,6 +18,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     defineProvisioningConformance(harness)
     defineSecretsConformance(harness)
     defineSourcesConformance(harness)
+    defineTrackerWebhookConformance(harness)
     defineEnvironmentsConformance(harness)
     definePublicDecisionsConformance(harness)
   })

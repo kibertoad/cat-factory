@@ -27,6 +27,7 @@ export { FakePrReportPublisher } from './FakePrReportPublisher.js'
 export { FakeEnvConfigRepairer } from './FakeEnvConfigRepairer.js'
 export { FakePreviewTransport, fakeBuildPreviewJob } from './FakePreviewTransport.js'
 export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
+export { signFakeTrackerDelivery } from './fakeTrackerWebhook.js'
 export {
   makeOnboardingProbe,
   type OnboardingContainer,
@@ -68,6 +69,7 @@ export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { defineNotificationSuite } from './notification-suite.js'
 export { defineNotificationWebhookSuite } from './notification-webhook-suite.js'
 export { defineReviewQuestionPostSuite } from './review-question-post-suite.js'
+export { defineTrackerCommentIngestSuite } from './tracker-comment-ingest-suite.js'
 export {
   definePlatformMetricsSuite,
   type PlatformMetricsSeed,

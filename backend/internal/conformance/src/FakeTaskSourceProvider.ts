@@ -14,6 +14,7 @@ import {
   JIRA_DESCRIPTOR,
   LINEAR_TASK_DESCRIPTOR,
 } from '@cat-factory/integrations'
+import { fakeTrackerWebhookAdapter } from './fakeTrackerWebhook.js'
 
 const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,
@@ -31,6 +32,12 @@ const DESCRIPTORS: Record<TaskSourceKind, TaskSourceDescriptor> = {
  */
 export class FakeTaskSourceProvider implements TaskSourceProvider {
   readonly descriptor: TaskSourceDescriptor
+  /**
+   * Inbound-webhook capability, so the shared suite can drive the REAL receiver → gateway →
+   * `TrackerWebhookService` path on every facade (see `fakeTrackerWebhook.ts` for why the
+   * signature is real but the payload is the neutral event).
+   */
+  readonly webhook = fakeTrackerWebhookAdapter
   readonly issues = new Map<string, TaskContent>()
   readonly calls: { credentials: TaskCredentials; externalId: string }[] = []
   /** Canned search hits + recorded queries, for the search endpoint tests. */

@@ -19,6 +19,12 @@ import type {
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
   ReviewQuestionPostStatus,
+  TaskSourceKind,
+  TrackerCommentIngestClaimWindow,
+  TrackerCommentIngestKey,
+  TrackerCommentIngestRecord,
+  TrackerCommentIngestRepository,
+  TrackerCommentIngestStatus,
   TrackerSettings,
   TrackerSettingsRepository,
   UserSettings,
@@ -36,6 +42,7 @@ import {
   modelPresets,
   notificationWebhooks,
   reviewQuestionPosts,
+  trackerCommentIngests,
   trackerSettings,
   userSettings,
   workspaceSettings,
@@ -607,6 +614,102 @@ export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRe
       iteration: row.iteration,
       issueRef: row.issue_ref,
       status: row.status as ReviewQuestionPostStatus,
+      attempts: row.attempts,
+      error: row.error,
+      updatedAt: row.updated_at,
+    }
+  }
+}
+
+/**
+ * Idempotency markers for INBOUND tracker comments — one row per
+ * `(workspace, source, externalId, commentId)` in `tracker_comment_ingests` (mirror of the D1
+ * `D1TrackerCommentIngestRepository`).
+ *
+ * Same atomic-claim shape as {@link DrizzleReviewQuestionPostRepository} above, for the same
+ * reason: a read-then-write would let two concurrent deliveries of one comment both decide to
+ * apply it, and each apply answers a finding a human is reading.
+ */
+export class DrizzleTrackerCommentIngestRepository implements TrackerCommentIngestRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  private where(key: TrackerCommentIngestKey) {
+    return and(
+      eq(trackerCommentIngests.workspace_id, key.workspaceId),
+      eq(trackerCommentIngests.source, key.source),
+      eq(trackerCommentIngests.external_id, key.externalId),
+      eq(trackerCommentIngests.comment_id, key.commentId),
+    )
+  }
+
+  async claim(
+    key: TrackerCommentIngestKey,
+    window: TrackerCommentIngestClaimWindow,
+  ): Promise<boolean> {
+    const claimed = await this.db
+      .insert(trackerCommentIngests)
+      .values({
+        workspace_id: key.workspaceId,
+        source: key.source,
+        external_id: key.externalId,
+        comment_id: key.commentId,
+        status: 'pending',
+        attempts: 1,
+        error: null,
+        updated_at: window.now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          trackerCommentIngests.workspace_id,
+          trackerCommentIngests.source,
+          trackerCommentIngests.external_id,
+          trackerCommentIngests.comment_id,
+        ],
+        set: {
+          status: 'pending',
+          attempts: sql`${trackerCommentIngests.attempts} + 1`,
+          error: null,
+          updated_at: window.now,
+        },
+        // `failed` retries a transient failure; an old `pending` takes over from an ingester that
+        // died mid-apply (see TRACKER_COMMENT_INGEST_CLAIM_TTL_MS). A fresh `pending` is an apply
+        // still in flight and must NOT be stolen.
+        setWhere: or(
+          eq(trackerCommentIngests.status, 'failed'),
+          and(
+            eq(trackerCommentIngests.status, 'pending'),
+            lte(trackerCommentIngests.updated_at, window.reclaimPendingBefore),
+          ),
+        ),
+      })
+      .returning({ commentId: trackerCommentIngests.comment_id })
+    return claimed.length > 0
+  }
+
+  async settle(
+    key: TrackerCommentIngestKey,
+    outcome: { status: 'applied' } | { status: 'failed'; error: string },
+    now: number,
+  ): Promise<void> {
+    await this.db
+      .update(trackerCommentIngests)
+      .set({
+        status: outcome.status,
+        error: outcome.status === 'failed' ? outcome.error : null,
+        updated_at: now,
+      })
+      .where(this.where(key))
+  }
+
+  async get(key: TrackerCommentIngestKey): Promise<TrackerCommentIngestRecord | null> {
+    const [row] = await this.db.select().from(trackerCommentIngests).where(this.where(key)).limit(1)
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      source: row.source as TaskSourceKind,
+      externalId: row.external_id,
+      commentId: row.comment_id,
+      status: row.status as TrackerCommentIngestStatus,
       attempts: row.attempts,
       error: row.error,
       updatedAt: row.updated_at,

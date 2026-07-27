@@ -248,8 +248,9 @@ extensions:
   linked tracker issue via a new `IssueWritebackProvider.postQuestions(workspaceId,
 blockId, questions)` — so the reporter sees the ask where they filed the bug. Answers
   still arrive **in-app** (the existing clarity window; the incorporated brief substitutes
-  the block description downstream). Tracker-side reply polling is explicitly out of
-  scope.
+  the block description downstream) — the CLARITY gate's questions carry no stable ids, so a
+  ticket comment cannot address one. (The REQUIREMENTS review's findings do, and are answerable
+  from the ticket — see `docs/initiatives/tracker-webhook-intake.md`.)
 
 The park is a normal `awaiting_decision` + the existing `clarity_review` notification.
 Because the schedule skips fires while the block has a live run, a parked clarification
@@ -342,8 +343,11 @@ scheduled fire picks the next matching bug.
 
 ## 11. Out of scope / non-goals
 
-- **Tracker-side reply polling** for clarification answers — answers come in-app; the
-  tracker comment is an echo, not a channel.
+- **Tracker-side replies to the CLARITY gate** — its questions carry no stable ids, so a comment
+  could not name one and the echo stays an echo; answers come in-app. (Inbound tracker webhooks
+  DO now carry replies for the **requirements** review, whose findings are id-addressed, and they
+  drive intake as well — see `docs/initiatives/tracker-webhook-intake.md`. Nothing in this
+  pipeline changed: the recurring schedule still fires it, the webhook only removes the latency.)
 - **Per-frame tracker overrides** — the workspace-level `task_connections` + the
   per-schedule `issueIntake.board` cover the "specified tracker, specified board"
   requirement without a frame-chain config table.

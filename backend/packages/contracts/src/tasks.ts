@@ -20,6 +20,53 @@ import { credentialFieldSchema } from './documents.js'
 export const taskSourceKindSchema = v.picklist(['jira', 'github', 'linear'])
 export type TaskSourceKind = v.InferOutput<typeof taskSourceKindSchema>
 
+// ---- Inbound tracker webhooks (push-driven intake + ticket replies) --------
+// The per-connection delivery endpoint an operator pastes into the tracker's webhook form, plus
+// the secret that authenticates it. The secret rides the connection's sealed credential bag (no
+// new table), so this surface is purely mint/read/clear. See
+// `docs/initiatives/tracker-webhook-intake.md`.
+
+/** The webhook state of one task-source connection, safe to read back at any time. */
+export const taskSourceWebhookSchema = v.object({
+  source: taskSourceKindSchema,
+  /**
+   * Whether this source can receive webhooks at all on this deployment (its provider ships a
+   * webhook adapter). `false` ⇒ the delivery path 404s and minting is refused.
+   */
+  supported: v.boolean(),
+  /** Whether a secret is currently stored — i.e. whether deliveries will be accepted. */
+  configured: v.boolean(),
+  /**
+   * The path to paste into the tracker, relative to the deployment's public base URL. Returned
+   * even when unconfigured so an operator can see where deliveries will go before minting.
+   */
+  deliveryPath: v.string(),
+  /**
+   * Comma-separated author handles / emails / vendor ids allowed to drive a parked review from a
+   * ticket comment. Empty ⇒ any NON-BOT author, which is the right default for a private tracker
+   * and the wrong one for a public repo.
+   */
+  replyAllow: v.string(),
+})
+export type TaskSourceWebhook = v.InferOutput<typeof taskSourceWebhookSchema>
+
+/**
+ * The freshly-minted secret, returned EXACTLY ONCE. It is sealed into the connection's credential
+ * bag immediately and never read back — the same one-shot contract as an API key, for the same
+ * reason: a secret a surface will hand out again is a secret an operator never has to rotate.
+ */
+export const taskSourceWebhookSecretSchema = v.object({
+  ...taskSourceWebhookSchema.entries,
+  secret: v.string(),
+})
+export type TaskSourceWebhookSecret = v.InferOutput<typeof taskSourceWebhookSecretSchema>
+
+/** Mint (or rotate) the connection's webhook secret, optionally setting the reply allow-list. */
+export const configureTaskSourceWebhookSchema = v.object({
+  replyAllow: v.optional(v.pipe(v.string(), v.maxLength(2_000))),
+})
+export type ConfigureTaskSourceWebhookInput = v.InferOutput<typeof configureTaskSourceWebhookSchema>
+
 // ---- Provider self-description (drives the generic connect UI) ------------
 // `credentialFieldSchema` is shared with the document-source contracts: a
 // credential form field is identical regardless of what it connects to.

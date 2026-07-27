@@ -16,6 +16,7 @@ import {
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
 import * as githubIssuesLogic from './github-issues.logic.js'
 import { httpStatusOf } from './tasks.logic.js'
+import { githubIssuesWebhookAdapter } from './webhook/adapters.js'
 
 // GitHubIssuesProvider: the task-source provider for GitHub issues. Unlike Jira,
 // it stores NO per-workspace credentials — it reuses the workspace's installed
@@ -42,6 +43,12 @@ const INTAKE_MAX_PAGES = 5
 
 export class GitHubIssuesProvider implements TaskSourceProvider {
   readonly kind = 'github' as const
+  /**
+   * Inbound webhook capability (verify + parse), so a github delivery can drive intake and
+   * ticket replies without waiting for the next polling sweep. See
+   * `docs/initiatives/tracker-webhook-intake.md`.
+   */
+  readonly webhook = githubIssuesWebhookAdapter
   readonly descriptor = GITHUB_ISSUES_DESCRIPTOR
 
   constructor(private readonly deps: GitHubIssuesProviderDependencies) {}

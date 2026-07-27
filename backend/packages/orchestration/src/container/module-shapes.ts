@@ -6,6 +6,7 @@ import type {
   SlackConnectionService,
   SlackMemberMappingService,
   SlackSettingsService,
+  TrackerWebhookService,
 } from '@cat-factory/integrations'
 import type { PackageRegistryService } from '../modules/packageRegistries/PackageRegistryService.js'
 import type { BrainstormService } from '../modules/brainstorm/BrainstormService.js'
@@ -156,6 +157,15 @@ export interface ServiceFragmentDefaultsModule {
 /** The recurring-pipeline feature's service, present only when its repository is wired. */
 export interface RecurringModule {
   service: RecurringPipelineService
+}
+
+/**
+ * Inbound tracker webhooks: what a verified, parsed delivery does (fire a qualifying intake
+ * schedule / apply a ticket reply to a parked requirements review). Present only when the task
+ * projection + connections are wired; the shared receiver 503s without it.
+ */
+export interface TrackerWebhookModule {
+  service: TrackerWebhookService
 }
 
 /** The initiatives feature's service + execution loop, present only when its repository is wired. */

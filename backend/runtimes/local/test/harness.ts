@@ -424,10 +424,10 @@ export function makeConformanceApp(
     )
   }
 
-  function seedReadyReview(workspaceId: string, blockId: string) {
+  function seedReadyReview(workspaceId: string, blockId: string, openItems?: number) {
     return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
       workspaceId,
-      makeReadyReviewWithOpenItem(blockId),
+      makeReadyReviewWithOpenItem(blockId, openItems),
     )
   }
 

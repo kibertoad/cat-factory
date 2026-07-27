@@ -23,6 +23,10 @@ import { loadWorkspaceAccess } from './workspaceAccess.js'
 //               signature/token over the raw body inside the controller, exactly like /github.
 //               Without this the session gate 401s the provider's delivery before that check
 //               (fails closed, but the receiver is then dead on any auth-enabled deployment).
+//   /webhooks — tracker webhooks (Jira / Linear / GitHub Issues), verified by a per-CONNECTION
+//               HMAC secret over the raw body inside the controller. The workspace rides the path
+//               (a tracker delivery has no installation id to resolve one from) but is NOT what
+//               authorises it — the secret is; see `TaskWebhookController`.
 //   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
 //   /internal — mothership-mode machine API; authenticated by an audience-pinned machine
 //               token verified inside the controller, not by the session gate.
@@ -34,6 +38,7 @@ const PUBLIC_PREFIXES = [
   '/v1',
   '/github',
   '/vcs',
+  '/webhooks',
   '/slack',
   '/internal',
   '/api',
