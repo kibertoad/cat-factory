@@ -1,5 +1,12 @@
 # @cat-factory/consensus
 
+## 0.11.50
+
+### Patch Changes
+
+- Updated dependencies [fb71506]
+  - @cat-factory/agents@0.74.0
+
 ## 0.11.49
 
 ### Patch Changes

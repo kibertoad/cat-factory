@@ -1,5 +1,16 @@
 # @cat-factory/local-server
 
+## 0.80.4
+
+### Patch Changes
+
+- Updated dependencies [fb71506]
+  - @cat-factory/executor-harness@1.62.0
+  - @cat-factory/agents@0.74.0
+  - @cat-factory/server@0.158.0
+  - @cat-factory/orchestration@0.149.2
+  - @cat-factory/node-server@0.122.4
+
 ## 0.80.3
 
 ### Patch Changes
