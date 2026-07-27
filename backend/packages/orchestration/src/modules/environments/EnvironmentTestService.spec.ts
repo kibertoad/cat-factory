@@ -200,6 +200,13 @@ function makeService(opts: {
     opts.repoContext === undefined
       ? { repo: fakeRepo().repo, baseBranch: 'main', repoId: 'repo_1' }
       : opts.repoContext
+  const logs: Array<{ obj: Record<string, unknown>; msg?: string }> = []
+  const logger = {
+    info: () => {},
+    warn: (obj: Record<string, unknown>, msg?: string) => {
+      logs.push({ obj, msg })
+    },
+  }
   const service = new EnvironmentTestService({
     environmentTestRunRepository: runRepo,
     workspaceRepository,
@@ -217,8 +224,9 @@ function makeService(opts: {
     resolveRunRepoContext: async () => repoCtx,
     idGenerator,
     clock,
+    logger,
   })
-  return { service, runRepo, registry, teardowns, released }
+  return { service, runRepo, registry, teardowns, released, logs }
 }
 
 describe('EnvironmentTestService', () => {
@@ -349,15 +357,17 @@ describe('EnvironmentTestService', () => {
     expect(teardowns).toEqual(['env-pin'])
   })
 
-  it('fails at dispatch and still deletes the just-created branch + reclaims the registry row', async () => {
+  it('fails at dispatch, attributing it to `provisioning` (not the mislabeled `creating_branch`), and cleans up', async () => {
     const { repo, calls } = fakeRepo()
-    const { service, registry, released } = makeService({
+    const { service, registry, released, logs } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatchThrows: new Error('no deploy runner wired'),
     })
     const run = await service.startTest('ws', 'frame-1')
     expect(run.status).toBe('failed')
-    expect(run.failedStage).toBe('creating_branch')
+    // The branch already exists when startProvision throws, so the failure is a PROVISIONING
+    // failure — the stage is advanced before dispatch precisely so it isn't mislabeled here.
+    expect(run.failedStage).toBe('provisioning')
     expect(run.error).toContain('no deploy runner wired')
     // The branch was created before the dispatch threw — it must be reclaimed.
     expect(calls.created).toHaveLength(1)
@@ -367,6 +377,13 @@ describe('EnvironmentTestService', () => {
     expect(registry.rows).toEqual([])
     expect(registry.softDeleted).toEqual(['reg-failed'])
     expect(released).toHaveLength(1)
+    // The failure is logged server-side (the only server-side trace besides the run record),
+    // carrying the corrected stage, the message, and the cause's stack.
+    expect(logs).toHaveLength(1)
+    expect(logs[0]!.msg).toBe('environment self-test failed')
+    expect(logs[0]!.obj).toMatchObject({ runId: run.id, failedStage: 'provisioning' })
+    expect(logs[0]!.obj.err).toContain('no deploy runner wired')
+    expect(typeof logs[0]!.obj.stack).toBe('string')
   })
 
   it('fails at provisioning: releases the runner, finalizes the failed view, tears down + deletes', async () => {
