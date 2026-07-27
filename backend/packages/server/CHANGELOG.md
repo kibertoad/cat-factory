@@ -1,5 +1,17 @@
 # @cat-factory/server
 
+## 0.156.2
+
+### Patch Changes
+
+- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a Kargo project, whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
+- Updated dependencies [200fb4d]
+  - @cat-factory/kernel@0.165.1
+  - @cat-factory/agents@0.72.2
+  - @cat-factory/integrations@0.101.4
+  - @cat-factory/orchestration@0.146.2
+  - @cat-factory/spend@0.12.93
+
 ## 0.156.1
 
 ### Patch Changes
