@@ -1,20 +1,29 @@
 // ---------------------------------------------------------------------------
-// The PR verification report's TEXT BOUNDARY.
+// The TEXT BOUNDARY for anything this platform writes onto a VCS/tracker host.
 //
-// A pull-request description is NOT an inert string sink. The host parses it: `#123` becomes
-// an issue link, `@name` notifies a real person, a closing keyword in front of an issue
-// reference CLOSES that issue when the PR merges, a newline ends a markdown table row, and an
-// unbalanced code fence swallows everything after it — including the machine-readable JSON
-// block external tooling ingests.
+// A pull-request description — or an issue comment — is NOT an inert string sink. The host
+// parses it: `#123` becomes an issue link, `@name` notifies a real person, a closing keyword
+// in front of an issue reference CLOSES that issue when the PR merges, a newline ends a
+// markdown table row, and an unbalanced code fence swallows everything after it — including
+// the machine-readable JSON block external tooling ingests.
 //
-// Almost everything the report interpolates is written by an agent or a human (a task title,
-// a tester summary, a merge rationale, a provisioner's stderr), so all of those are live
-// hazards rather than theoretical ones: "This closes #42" is idiomatic prose for a merge
-// rationale to emit, and it must not close issue 42.
+// Almost everything we splice into such a body is written by an agent or a human (a task
+// title, a tester summary, a merge rationale, a provisioner's stderr, a requirements
+// reviewer's question), so all of those are live hazards rather than theoretical ones: "This
+// closes #42" is idiomatic prose for a merge rationale to emit, and it must not close issue
+// 42; "@alice should decide the rounding rule" is idiomatic for a reviewer finding, and it
+// must not page whoever owns that handle.
 //
-// This module is the single place that turns untrusted text into something safe to splice
-// into a PR body. It is deliberately separate from the composer (which decides WHAT to say)
-// and from the marker splice in kernel (which decides WHERE it goes).
+// This module is the single place that turns untrusted text into something safe to send to a
+// host. It lives in kernel because it has TWO consumers on opposite sides of the architecture
+// — the PR verification report (orchestration) and the tracker-issue writebacks
+// (integrations) — and a second copy of these escapes is exactly how one of them would drift
+// into notifying real accounts. It is deliberately separate from the composers (which decide
+// WHAT to say) and from the marker splice in `domain/pr-report.ts` (which decides WHERE it
+// goes).
+//
+// Adding a field to any host-bound body means picking one of {@link inline}, {@link cell} or
+// {@link prose} for it — never a bare template hole.
 // ---------------------------------------------------------------------------
 
 /** Free-text prose (a tester summary, a merge rationale) is capped at this many characters. */
@@ -165,9 +174,13 @@ function truncate(value: string, max: number): string {
 /**
  * Render untrusted multi-line prose as a safe markdown block: auto-link triggers defused,
  * length capped, and any code fence the value leaves open closed again.
+ *
+ * `max` lets a caller with a tighter budget than a PR body (a tracker comment renders many of
+ * these into one payload, and Jira rejects an oversized comment outright) cut to ITS limit —
+ * the cut happens BEFORE the escapes, so an entity can never be sliced in half.
  */
-export function prose(value: string): string {
-  const capped = truncate(value.replace(/\r\n?/g, '\n'), MAX_PROSE_CHARS)
+export function prose(value: string, max: number = MAX_PROSE_CHARS): string {
+  const capped = truncate(value.replace(/\r\n?/g, '\n'), max)
   const rewritten: string[] = []
   const open = walkFences(capped.split('\n'), (line, insideFence) => {
     rewritten.push(insideFence ? line : inertLine(line))
@@ -191,10 +204,11 @@ export function cell(value: string): string {
 
 /**
  * Render untrusted text INLINE (a title, a label — not a table cell, so pipes are harmless).
- * Newlines are folded to spaces because the surrounding line has its own meaning.
+ * Newlines are folded to spaces because the surrounding line has its own meaning. `max` caps
+ * to a caller's own budget, before the escapes, exactly as in {@link prose}.
  */
-export function inline(value: string): string {
-  return inertLine(truncate(value.replace(/\s+/g, ' '), MAX_CELL_CHARS))
+export function inline(value: string, max: number = MAX_CELL_CHARS): string {
+  return inertLine(truncate(value.replace(/\s+/g, ' '), max))
 }
 
 /** Cap a list at {@link MAX_LIST_ITEMS}, returning the kept rows plus how many were dropped. */

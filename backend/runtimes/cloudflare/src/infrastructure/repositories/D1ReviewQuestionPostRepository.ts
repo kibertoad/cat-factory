@@ -1,4 +1,5 @@
 import type {
+  ReviewQuestionPostClaimWindow,
   ReviewQuestionPostKey,
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
@@ -22,8 +23,9 @@ interface ReviewQuestionPostRow {
  * `(workspace, review, iteration, linked issue)` (migration 0062).
  *
  * {@link claim} is a single atomic statement on purpose: an insert that, on conflict, only
- * updates a row already marked `failed`, with `RETURNING` reporting whether either half fired.
- * A read-then-write would let two concurrent driver replays both decide to post.
+ * updates a row already marked `failed` (or a `pending` one abandoned by a poster that died
+ * mid-post), with `RETURNING` reporting whether either half fired. A read-then-write would let
+ * two concurrent driver replays both decide to post.
  */
 export class D1ReviewQuestionPostRepository implements ReviewQuestionPostRepository {
   private readonly db: D1Database
@@ -32,7 +34,7 @@ export class D1ReviewQuestionPostRepository implements ReviewQuestionPostReposit
     this.db = db
   }
 
-  async claim(key: ReviewQuestionPostKey, now: number): Promise<boolean> {
+  async claim(key: ReviewQuestionPostKey, window: ReviewQuestionPostClaimWindow): Promise<boolean> {
     const row = await this.db
       .prepare(
         `INSERT INTO review_question_posts
@@ -44,9 +46,18 @@ export class D1ReviewQuestionPostRepository implements ReviewQuestionPostReposit
            error = NULL,
            updated_at = excluded.updated_at
          WHERE review_question_posts.status = 'failed'
+            OR (review_question_posts.status = 'pending'
+                AND review_question_posts.updated_at <= ?)
          RETURNING issue_ref`,
       )
-      .bind(key.workspaceId, key.reviewId, key.iteration, key.issueRef, now)
+      .bind(
+        key.workspaceId,
+        key.reviewId,
+        key.iteration,
+        key.issueRef,
+        window.now,
+        window.reclaimPendingBefore,
+      )
       .first<{ issue_ref: string }>()
     return row != null
   }

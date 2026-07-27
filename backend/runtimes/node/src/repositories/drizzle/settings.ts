@@ -14,6 +14,7 @@ import type {
   ModelPresetRepository,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
+  ReviewQuestionPostClaimWindow,
   ReviewQuestionPostKey,
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
@@ -26,7 +27,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { parseNotificationWebhookTypes } from '@cat-factory/server'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountSettings,
@@ -525,8 +526,9 @@ export class DrizzleLocalSettingsRepository implements LocalSettingsRepository {
  * `D1ReviewQuestionPostRepository`).
  *
  * {@link claim} is a single atomic statement on purpose: an insert that, on conflict, only
- * updates a row already marked `failed`, with `RETURNING` reporting whether either half fired.
- * A read-then-write would let two concurrent driver replays both decide to post.
+ * updates a row already marked `failed` (or a `pending` one abandoned by a poster that died
+ * mid-post), with `RETURNING` reporting whether either half fired. A read-then-write would let
+ * two concurrent driver replays both decide to post.
  */
 export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -540,7 +542,7 @@ export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRe
     )
   }
 
-  async claim(key: ReviewQuestionPostKey, now: number): Promise<boolean> {
+  async claim(key: ReviewQuestionPostKey, window: ReviewQuestionPostClaimWindow): Promise<boolean> {
     const claimed = await this.db
       .insert(reviewQuestionPosts)
       .values({
@@ -551,7 +553,7 @@ export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRe
         status: 'pending',
         attempts: 1,
         error: null,
-        updated_at: now,
+        updated_at: window.now,
       })
       .onConflictDoUpdate({
         target: [
@@ -564,9 +566,18 @@ export class DrizzleReviewQuestionPostRepository implements ReviewQuestionPostRe
           status: 'pending',
           attempts: sql`${reviewQuestionPosts.attempts} + 1`,
           error: null,
-          updated_at: now,
+          updated_at: window.now,
         },
-        setWhere: eq(reviewQuestionPosts.status, 'failed'),
+        // `failed` retries a tracker outage; an old `pending` takes over from a poster that
+        // died mid-post (see REVIEW_QUESTION_POST_CLAIM_TTL_MS). A fresh `pending` is a post
+        // still in flight and must NOT be stolen.
+        setWhere: or(
+          eq(reviewQuestionPosts.status, 'failed'),
+          and(
+            eq(reviewQuestionPosts.status, 'pending'),
+            lte(reviewQuestionPosts.updated_at, window.reclaimPendingBefore),
+          ),
+        ),
       })
       .returning({ issueRef: reviewQuestionPosts.issue_ref })
     return claimed.length > 0

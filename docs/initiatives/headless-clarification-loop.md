@@ -342,6 +342,27 @@ registry the `headlessStartable` flag is computed against.
   parity suite exists specifically because the two dialects express it very differently
   (`ON CONFLICT … DO UPDATE … WHERE … RETURNING` vs Drizzle's `setWhere`). Slice 2b's cursor
   dedup is the same shape — copy the marker repo, don't invent a read-then-write.
+- **…and a claim-before-post MUST answer "what if the claimer dies".** The first cut of 2a made a
+  `pending` row terminal, which silently converted every mid-post death (an evicted isolate, a
+  killed durable step) into questions that were never posted and never retried — a never-post
+  traded for the double-post, and the harder failure to notice of the two. A `pending` claim is
+  therefore stealable once older than `REVIEW_QUESTION_POST_CLAIM_TTL_MS`, pinned in the parity
+  suite from BOTH sides (fresh claim held, abandoned claim taken over, `posted` never stolen).
+  Carry this into 2b's cursor: any "I own this now" row needs an abandonment window.
+- **Do NOT bound such a post with a wall-clock deadline.** It looks like the obvious hardening,
+  but a timeout cannot distinguish "the comment never landed" from "it landed, slowly" — settling
+  `failed` on that guess makes the next replay post a second copy onto a customer's issue. Cut a
+  hung transport off with the driver's own step limit and let the abandonment window recover it.
+- **Order the park BEFORE the outbound call.** A run that failed to park answers nobody, so the
+  durable state change must never queue behind a third party's HTTP. Same rule for 2b's ingest:
+  commit the state, then talk to the tracker.
+- **A tracker comment is as exposed as a PR body — render through the same boundary.** The
+  findings are model-authored prose derived from a customer's task description, landing on a
+  frequently PUBLIC issue that the host parses: `@name` pages a real account, `#123` cross-links
+  an unrelated issue, an unbalanced fence swallows the answer instructions the comment exists to
+  deliver, and a pasted token is republished. Everything interpolated crosses kernel's
+  `hostMarkdown` (`inline`/`cell`/`prose`) plus `redactSecrets` — the boundary was lifted out of
+  the PR report into kernel for exactly this second consumer. 2b renders replies/acks the same way.
 - **`TrackerSettingsService.put` REPLACES the row.** Any new setting must be added to the SPA's
   save payload in the same change, or an operator saving the tracker panel silently resets it.
 - **Adding a workspace-scoped table means one line in `WORKSPACE_SCOPED_TABLES`** (kernel

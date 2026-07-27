@@ -552,3 +552,108 @@ describe('ReviewGateController public surface', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// The headless question echo (slice 2a of docs/initiatives/headless-clarification-loop.md).
+//
+// The decision itself is pinned by `reviewQuestionWriteback.logic.test.ts`; what is asserted
+// here is the WIRING, which no pure test can reach: that a headless park actually reaches the
+// provider, that a UI-started park provably does not, and that the park is committed BEFORE the
+// outbound call — so a tracker that is slow, rate-limiting or down can never delay or undo the
+// park that makes the run answerable in the first place.
+// ---------------------------------------------------------------------------
+
+describe('ReviewGateController — headless question writeback', () => {
+  const OPEN_ITEM = { id: 'itm_1', status: 'open', title: 'Which currencies?', detail: 'Unstated.' }
+
+  function headlessSetup(over: { intakeOrigin?: string } = {}) {
+    const calls: { order: string[] } = { order: [] }
+    const postReviewQuestions = vi.fn(async () => {
+      calls.order.push('post')
+      return { posted: 1, skipped: 0, failed: 0 }
+    })
+    const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const deps = fakeDeps({
+      issueWriteback: { postReviewQuestions } as never,
+      logger: logger as never,
+    })
+    deps.stateMachine.parkStepOnDecision = vi.fn(async (_ws, _i, s: PipelineStep) => {
+      calls.order.push('park')
+      s.state = 'waiting_decision'
+      return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
+    })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    ;(k.kind as { questionsOnPark?: boolean }).questionsOnPark = true
+    k.set(review({ items: [OPEN_ITEM] as never }))
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })], {
+      intakeOrigin: (over.intakeOrigin ?? 'public-api') as never,
+    })
+    return { ctrl, k, s, inst, deps, postReviewQuestions, logger, calls }
+  }
+
+  it('echoes a headless park to the tracker, carrying the run + the open findings', async () => {
+    const t = headlessSetup()
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+    const [ws, block, post] = t.postReviewQuestions.mock.calls[0]! as unknown as [
+      string,
+      Block,
+      { runId: string; reviewId: string; findings: { id: string }[] },
+    ]
+    expect(ws).toBe('ws')
+    expect(block.id).toBe('blk_1')
+    expect(post.runId).toBe('exec_1')
+    expect(post.reviewId).toBe('rrv_1')
+    expect(post.findings.map((f) => f.id)).toEqual(['itm_1'])
+  })
+
+  it('commits the park BEFORE the outbound post — a wedged tracker must not hold it up', async () => {
+    const t = headlessSetup()
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.calls.order).toEqual(['park', 'post'])
+  })
+
+  it('still parks — with the SAME result — when the tracker post throws', async () => {
+    const t = headlessSetup()
+    t.postReviewQuestions.mockRejectedValueOnce(new Error('tracker down'))
+    const result = await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(t.s.state).toBe('waiting_decision')
+    // Best-effort is not the same as silent: an operator can see the tracker failed.
+    expect(t.logger.warn).toHaveBeenCalled()
+  })
+
+  it('logs when only SOME linked issues took the comment', async () => {
+    const t = headlessSetup()
+    t.postReviewQuestions.mockResolvedValueOnce({ posted: 1, skipped: 0, failed: 1 })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.logger.warn).toHaveBeenCalled()
+  })
+
+  it('posts NOTHING for a UI-started run — the SPA path is untouched', async () => {
+    const t = headlessSetup({ intakeOrigin: 'ui' })
+    const result = await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+
+  it('posts nothing for a kind that has not opted in (the clarity gate echoes its own)', async () => {
+    const t = headlessSetup()
+    ;(t.k.kind as { questionsOnPark?: boolean }).questionsOnPark = false
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+
+  it('asks only what is still open after the auto-recommendation pass answered findings', async () => {
+    // `review` is taken before `autoRecommend` runs, so the echo re-reads. Without that it would
+    // ask a question the automation has already answered.
+    const t = headlessSetup()
+    ;(t.k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      t.k.set(review({ items: [{ ...OPEN_ITEM, status: 'answered' }] as never }))
+    })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+})

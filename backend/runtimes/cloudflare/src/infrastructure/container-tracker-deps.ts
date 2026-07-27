@@ -54,6 +54,7 @@ export function selectRecurringDeps(
     // Idempotency markers for the headless clarification loop's question echo — without them
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: new D1ReviewQuestionPostRepository({ db }),
+    clock,
   }
   // GitHub issues: file through the App-authenticated client against the service's
   // linked repo (resolved from the github_repos projection). Only when the App is configured.
@@ -87,9 +88,17 @@ export function selectRecurringDeps(
       if (!installation) return null
       return { installationId: installation.installationId, parsed }
     }
-    writebackDeps.commentOnGitHubIssue = async (workspaceId, externalId, body) => {
+    /** As {@link resolveIssue}, for the writeback that must not mistake "unresolved" for "done". */
+    const requireIssue = async (workspaceId: string, externalId: string) => {
       const target = await resolveIssue(workspaceId, externalId)
-      if (!target) return
+      if (!target) throw new Error(`Cannot resolve GitHub issue ${externalId} for this workspace`)
+      return target
+    }
+    writebackDeps.commentOnGitHubIssue = async (workspaceId, externalId, body) => {
+      // An unresolvable target THROWS rather than returning quietly: returning is this seam's
+      // promise that the comment landed, and the parked-review writeback would otherwise mark
+      // the questions `posted` for an issue that never received them (see the seam docs).
+      const target = await requireIssue(workspaceId, externalId)
       await githubClient.comment(
         target.installationId,
         { owner: target.parsed.owner, repo: target.parsed.repo },

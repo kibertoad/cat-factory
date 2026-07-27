@@ -257,6 +257,7 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
     githubInstallationRepository,
     trackerSettingsRepository,
     sourced,
+    clock,
     taskConnectionRepository: tasks.taskConnectionRepository,
   })
 
@@ -533,6 +534,7 @@ function buildNodeIssueWriteback(args: {
   githubInstallationRepository: GitHubInstallationRepository
   trackerSettingsRepository: TrackerSettingsRepository
   sourced: NodeGitHubDepsInput['sourced']
+  clock: Clock
   taskConnectionRepository: TaskConnectionRepository | undefined
 }): IssueWritebackService {
   const {
@@ -540,6 +542,7 @@ function buildNodeIssueWriteback(args: {
     githubInstallationRepository,
     trackerSettingsRepository,
     sourced,
+    clock,
     taskConnectionRepository,
   } = args
   // Wired whenever the tracker-settings repo exists (always on Node) so the engine can write
@@ -563,11 +566,17 @@ function buildNodeIssueWriteback(args: {
       'reviewQuestionPostRepository',
       (d) => new DrizzleReviewQuestionPostRepository(d),
     ),
+    clock,
     ...(githubClient && resolveWritebackIssue
       ? {
           commentOnGitHubIssue: async (workspaceId, externalId, body) => {
+            // An unresolvable target THROWS rather than returning quietly: returning is this
+            // seam's promise that the comment landed, and the parked-review writeback would
+            // otherwise mark the questions `posted` for an issue that never received them.
             const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
+            if (!target) {
+              throw new Error(`Cannot resolve GitHub issue ${externalId} for this workspace`)
+            }
             await githubClient.comment(
               target.installationId,
               { owner: target.parsed.owner, repo: target.parsed.repo },

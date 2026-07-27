@@ -34,8 +34,32 @@
 // See CLAUDE.md → "Resolving conflicting Drizzle migrations" for the full playbook.
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+
+// `src/db/schema.ts` is a barrel over sibling modules (`./schema/sandbox.js`,
+// `./schema/tracker.js`, `./schema-integrations.js`, …) written with the TypeScript
+// convention of naming the EMITTED `.js`. Node's built-in type stripping — which is how this
+// script loads the schema, deliberately, so it needs no bundler — resolves those specifiers
+// literally and fails with ERR_MODULE_NOT_FOUND, because only the `.ts` source exists. Map a
+// relative `.js` specifier onto its `.ts` source when (and only when) the `.js` is absent, so
+// the barrel loads exactly as `tsc`/drizzle-kit see it. Without this the script dies on any
+// schema that isn't a single self-contained file.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith('.') && specifier.endsWith('.js')) {
+      const resolved = new URL(specifier, context.parentURL)
+      if (!existsSync(fileURLToPath(resolved))) {
+        const asTs = `${specifier.slice(0, -'.js'.length)}.ts`
+        if (existsSync(fileURLToPath(new URL(asTs, context.parentURL)))) {
+          return nextResolve(asTs, context)
+        }
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+})
 
 const here = dirname(fileURLToPath(import.meta.url))
 const drizzleDir = join(here, '..', 'drizzle')

@@ -243,17 +243,20 @@ export class ReviewGateController {
   }
 
   /**
-   * Park a review gate on its human decision — after best-effort echoing the still-open
-   * findings onto the block's linked tracker issue(s) when the run entered HEADLESSLY.
+   * Park a review gate on its human decision, then best-effort echo the still-open findings
+   * onto the block's linked tracker issue(s) when the run entered HEADLESSLY.
    *
    * Every park in {@link evaluate} funnels through here so the echo cannot be forgotten by a
    * future branch, and so the SPA path is provably untouched: {@link shouldPostReviewQuestions}
    * refuses anything whose `intakeOrigin` is not `public-api`.
    *
-   * The echo is best-effort in the strongest sense — the park itself must happen regardless,
-   * because a run that failed to park is a run that answers nobody. A failure is logged
-   * rather than swallowed silently; the park stays discoverable in-app either way via the
-   * review's own `requirement_review` card, which the reviewer pass already raised.
+   * **The park is committed FIRST, and that ordering is load-bearing.** A run that failed to
+   * park is a run that answers nobody, so it must never queue behind an outbound HTTP call to
+   * a third party that may be slow, rate-limiting, or down. With the park already durable, the
+   * worst a wedged tracker can do is stall this driver step — the run is answerable over the
+   * API the moment the park lands, and the questions arrive when the post does. The echo's own
+   * failure is logged rather than swallowed; either way the park stays discoverable in-app via
+   * the `requirement_review` card the reviewer pass already raised.
    */
   private async park<TReview extends ReviewCommon>(
     kind: ReviewKind<TReview>,
@@ -263,35 +266,52 @@ export class ReviewGateController {
     block: Block,
     review: TReview,
   ): Promise<AdvanceResult> {
+    const parked = await this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+    await this.echoQuestionsToTracker(kind, workspaceId, instance, block, review)
+    return parked
+  }
+
+  /**
+   * The headless question echo. Split from {@link park} so the park's own control flow stays a
+   * single line and this stays entirely best-effort: nothing it does can change the parked
+   * result it runs behind.
+   */
+  private async echoQuestionsToTracker<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    review: TReview,
+  ): Promise<void> {
     const writeback = this.deps.issueWriteback
     // `intakeOrigin` first: it is a free in-memory check and the scope boundary of the whole
     // feature, so a UI-started run pays nothing at all for the re-read below.
-    if (writeback && kind.questionsOnPark && instance.intakeOrigin === 'public-api') {
-      // Re-read the review: the auto-recommendation pass above may have answered findings
-      // since `review` was taken, and the echo must ask only what is still genuinely open.
-      const fresh = (await kind.getForBlock(workspaceId, block.id).catch(() => null)) ?? review
-      if (shouldPostReviewQuestions(instance, fresh)) {
-        try {
-          const outcome = await writeback.postReviewQuestions(
-            workspaceId,
-            block,
-            buildReviewQuestionPost(instance, fresh),
-          )
-          if (outcome.failed > 0) {
-            this.deps.logger?.warn(
-              { workspaceId, runId: instance.id, reviewId: fresh.id, ...outcome },
-              'review question writeback failed for some linked issues',
-            )
-          }
-        } catch (e) {
-          this.deps.logger?.warn(
-            { workspaceId, runId: instance.id, reviewId: fresh.id, err: String(e) },
-            'review question writeback threw',
-          )
-        }
+    if (!writeback || !kind.questionsOnPark || instance.intakeOrigin !== 'public-api') return
+    // Re-read the review: an auto-recommendation pass may have answered findings since `review`
+    // was taken, and the echo must ask only what is still genuinely open. Deliberately
+    // UNCONDITIONAL rather than flagged from the one call site that mutates today — a future
+    // branch that adds another mutation would silently start asking already-answered questions,
+    // and the cost is one indexed read on a path that is about to wait on a human for hours.
+    const fresh = (await kind.getForBlock(workspaceId, block.id).catch(() => null)) ?? review
+    if (!shouldPostReviewQuestions(instance, fresh)) return
+    try {
+      const outcome = await writeback.postReviewQuestions(
+        workspaceId,
+        block,
+        buildReviewQuestionPost(instance, fresh),
+      )
+      if (outcome.failed > 0) {
+        this.deps.logger?.warn(
+          { workspaceId, runId: instance.id, reviewId: fresh.id, ...outcome },
+          'review question writeback failed for some linked issues',
+        )
       }
+    } catch (e) {
+      this.deps.logger?.warn(
+        { workspaceId, runId: instance.id, reviewId: fresh.id, err: String(e) },
+        'review question writeback threw',
+      )
     }
-    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
   }
 
   /**
