@@ -14,7 +14,7 @@ There are two tracks, because the orchestrator's own runtime decides what it can
 | Track                         | Use it when cat-factory runs…                                         | Provision type   | What comes up                                                            |
 | ----------------------------- | --------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------ |
 | [`compose/`](./compose)       | **locally** (`@cat-factory/local-server`, or Node with a Docker host) | `docker-compose` | Postgres + the Node facade + the SPA, one origin, built from the PR head |
-| [`cloudflare/`](./cloudflare) | **on Cloudflare** (`@cat-factory/worker`)                             | `custom`         | A per-PR Worker + its own D1 databases + a Pages preview of the SPA      |
+| [`cloudflare/`](./cloudflare) | **on Cloudflare** (`@cat-factory/worker`)                             | `cloudflare`     | A per-PR Worker + its own D1 databases + a Pages preview of the SPA      |
 
 Wiring either one into a board (frames, handler, provisioning config, pipeline) is
 [`docs/dogfooding.md`](../../docs/dogfooding.md). This README is about the stacks themselves.
@@ -87,18 +87,24 @@ runnable in image mode and by hand, where they resolve against a directory that 
 - optionally the SPA to a Pages preview branch, pointed at that Worker.
 
 The control plane is the **GitHub Deployments API**: cat-factory POSTs a deployment, GitHub
-fires the `deployment` event, the workflow builds; cat-factory posts an `inactive` status,
-the workflow's teardown job deletes the Worker and the databases. cat-factory therefore needs
-nothing but outbound HTTPS to `api.github.com` — no management service to host, nothing that
-assumes a filesystem. The manifest that describes it is
-[`cloudflare/environment-manifest.json`](./cloudflare/environment-manifest.json); its header
-comment explains the two non-obvious choices (the URL comes from the request payload, and there
-is deliberately no `status` request).
+fires the `deployment` event, the workflow builds; cat-factory reads that deployment's statuses
+to know when it is live; cat-factory posts an `inactive` status and the workflow's teardown job
+deletes the Worker and the databases. cat-factory therefore needs nothing but outbound HTTPS to
+`api.github.com` — no management service to host, nothing that assumes a filesystem, which is
+what lets the Cloudflare facade provision one at all.
 
-The workflow also runs on `pull_request`, which is what keeps the environment ahead of the
-pipeline: it is built when the branch is **pushed**, so by the time a run reaches its deployer
-step the environment is usually already live, and a `deployment` event for a commit that is
-already deployed short-circuits instead of rebuilding.
+This is a **built-in backend** (`Cloudflare Workers`, provision type `cloudflare`), not a
+manifest you paste. That matters beyond convenience: a manifest had to pin one `owner/repo` and
+one subdomain into hand-substituted JSON, could not read a real readiness signal (the statuses
+endpoint returns an array the generic response mapping cannot extract a URL from, so it had to
+assert `ready` the moment the deployment record existed), and rendered a run with no open pull
+request as an environment literally named `pr-`. The built-in backend resolves the repository
+per run from the service frame, reports `provisioning` until the workflow actually succeeds, and
+refuses a run with no pull request with a message that says so.
+
+The `pull_request` trigger is scoped to the preview setup's own files, so an ordinary PR does
+not build one; a `deployment` event for a commit that has already been built short-circuits
+instead of rebuilding, so the two paths compose without waste.
 
 ### One-time setup
 
@@ -122,8 +128,8 @@ config error would be useless. It is **not** used to reach GitHub in a preview, 
 App (or a self-signed key) is the right thing to put there. Never the production App's key: a
 preview runs unreviewed branch code.
 
-Then, on cat-factory: register the manifest as a `remote-custom` handler, and set the backend
-service frame's provisioning to `custom` / `cat-factory-cloudflare-preview` — see
+Then, on cat-factory: fill in the built-in **Cloudflare Workers** handler (subdomain + token)
+and set the backend service frame's provisioning type to `cloudflare` — see
 [`docs/dogfooding.md`](../../docs/dogfooding.md).
 
 ### Cost and limits

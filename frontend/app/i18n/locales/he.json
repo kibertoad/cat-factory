@@ -800,6 +800,7 @@
         "infraless": "ללא תשתית",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "תצוגה מקדימה של Cloudflare Workers",
         "custom": "מותאם אישית"
       },
       "composePath": "נתיב docker-compose",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw מחיל את המניפסטים כפי שהם. Kustomize בונה תחילה overlay (דורש את מתאם הפריסה בקונטיינר).",
       "customManifestId": "סוג מניפסט מותאם",
       "customManifestIdPlaceholder": "בחר סוג מניפסט",
+      "cloudflareHint": "אין כאן מה להגדיר: המתכון לכל בקשת משיכה נמצא בתהליך העבודה לתצוגה מקדימה של מאגר זה. חבר מטפל של Cloudflare Workers תחת תשתית כדי לבחור את החשבון ואת מוסכמות השמות.",
       "customNoTypes": "עדיין לא הוגדרו סוגי מניפסט מותאמים. הוסף אחד בחלון התשתית.",
       "customManifestIdHint": "הסוג המותאם שהשירות הזה מייצר, המותאם למטפל remote-custom שהמרחב מגדיר.",
       "customManifestPath": "נתיב המניפסט (אופציונלי)",
@@ -2189,7 +2191,26 @@
         "loading": "טוען הגדרות תשתית…",
         "kubeNoun": "מטפל ה-Kubernetes",
         "kubeOverrideNoun": "עקיפת ה-Kubernetes",
-        "customNoun": "מטפל זה"
+        "customNoun": "מטפל זה",
+        "cloudflareNoun": "את מטפל Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "מקים Worker של Cloudflare לכל בקשת משיכה על ידי הפעלת תהליך העבודה לתצוגה מקדימה של המאגר היעד. cat-factory אף פעם לא פונה ישירות ל-Cloudflare: הוא יוצר פריסה, קורא את מצבה, ומפרסם מצב inactive כדי לפרק אותה.",
+        "label": "שם לתצוגה",
+        "subdomain": "תת-דומיין של workers.dev",
+        "subdomainHint": "כתובת התצוגה המקדימה היא https://<worker>.<תת-דומיין>.workers.dev. רק התווית, בלי \".workers.dev\".",
+        "token": "אסימון API של מערכת ניהול הגרסאות",
+        "tokenPlaceholder": "הדבק אסימון בעל הרשאות מדויקות",
+        "tokenKeep": "השאר ריק כדי לשמור על האסימון הקיים",
+        "tokenHint": "נדרשת הרשאת \"Deployments: read & write\" על המאגר בלבד.",
+        "repo": "המאגר שמכיל את תהליך העבודה (אופציונלי)",
+        "repoHint": "השאר ריק כדי להשתמש במאגר של כל מסגרת שירות. קבע ערך רק כאשר מאגר אחד מחזיק את תהליך התצוגה המקדימה עבור כמה שירותים.",
+        "advanced": "מתקדם",
+        "workerTemplate": "תבנית לשם ה-Worker",
+        "environmentTemplate": "תבנית לשם סביבת הפריסה",
+        "templateHint": "אלה ההסכם מול תהליך התצוגה המקדימה: cat-factory גוזר מהם את הכתובת, ותהליך העבודה מעניק לאותם משאבים את אותם שמות. השאר ריק כדי להשתמש בשמות של תהליך העבודה הייחוס. מצייני מקום זמינים: pullNumber, branch, blockId.",
+        "apiBaseUrl": "כתובת הבסיס של ה-API של מערכת ניהול הגרסאות",
+        "connectedAs": "תצוגות מקדימות נפרסות אל {subdomain}.workers.dev."
       }
     },
     "providerConnection": {
@@ -4425,6 +4446,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "מותאם",
       "infraless": "ללא תשתית"
     },
@@ -4432,6 +4454,7 @@
       "local-docker": "Docker מקומי",
       "local-k3s": "k3s מקומי",
       "remote-kubernetes": "Kubernetes מרוחק",
+      "cloudflare": "תצוגה מקדימה של Cloudflare",
       "remote-custom": "מותאם מרוחק (HTTP)",
       "none": "ללא"
     }

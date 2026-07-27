@@ -110,6 +110,8 @@ function engineToProvisionType(engine: InfraEngine): ProvisionType {
     case 'local-k3s':
     case 'remote-kubernetes':
       return 'kubernetes'
+    case 'cloudflare':
+      return 'cloudflare'
     case 'remote-custom':
       return 'custom'
     case 'none':

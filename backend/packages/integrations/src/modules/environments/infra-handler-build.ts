@@ -127,6 +127,12 @@ export function handlerConfigToBackendConfig(
     }
     case 'remote-custom':
       return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
+    // The Cloudflare preview needs NOTHING from the service: the per-PR recipe lives in the
+    // target repository's own preview workflow, so unlike compose (a recipe) or kubernetes (a
+    // manifest source) there is no service-owned half to fold in here. The handler config is
+    // the whole configuration.
+    case 'cloudflare':
+      return { kind: 'cloudflare', cloudflare: config.cloudflare }
     case 'local-k3s':
     case 'remote-kubernetes': {
       const kube = config.kubernetes as typeof config.kubernetes & {

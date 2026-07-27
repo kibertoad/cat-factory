@@ -211,6 +211,50 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
       expect(checkouts).toHaveLength(0)
     })
 
+    it('ships the built-in Cloudflare Workers preview backend on every facade', async () => {
+      // The Cloudflare preview backend is BUILT IN, not a deployment-registered custom one, so
+      // it must be reachable on every facade with no per-facade wiring: it rides
+      // `createBackendRegistries()`, which each composition root already builds. This asserts
+      // that end to end — advertised in the snapshot, connectable, and round-tripping its typed
+      // config through the manifest JSON column (D1 ⇄ Drizzle), which is the only part of it
+      // that is storage-shaped and therefore able to diverge between runtimes.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/environments`
+
+      const snap = await call<{ environmentBackendKinds?: { kind: string; engines: string[] }[] }>(
+        'GET',
+        `/workspaces/${workspace.id}`,
+      )
+      expect(snap.body.environmentBackendKinds).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'cloudflare', engines: ['cloudflare'] }),
+        ]),
+      )
+
+      const cloudflare = {
+        label: 'Cloudflare Workers preview',
+        workersSubdomain: 'my-account',
+        repo: 'acme/widgets',
+      }
+      const registered = await call<{ kind: string; secretKeys: string[] }>(
+        'POST',
+        `${base}/connection`,
+        { config: { kind: 'cloudflare', cloudflare }, secrets: { githubToken: 'ghp_test' } },
+      )
+      expect(registered.status).toBe(201)
+      expect(registered.body.kind).toBe('cloudflare')
+      // The token is the one secret the backend declares; a facade that dropped it would leave
+      // every provision unauthenticated.
+      expect(registered.body.secretKeys).toEqual(['githubToken'])
+
+      const got = await call<{
+        connection: { kind: string; config?: { cloudflare?: Record<string, unknown> } } | null
+      }>('GET', `${base}/connection`)
+      expect(got.body.connection?.kind).toBe('cloudflare')
+      expect(got.body.connection?.config?.cloudflare).toMatchObject(cloudflare)
+    })
+
     it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
       // Parity for the deployer spin-up surfacing (PR #446): when a `deployer` step's
       // EnvironmentProvider fails to provision, the engine must record an `environment`

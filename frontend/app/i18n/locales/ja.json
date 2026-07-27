@@ -800,6 +800,7 @@
         "infraless": "インフラなし",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Cloudflare Workers プレビュー",
         "custom": "カスタム"
       },
       "composePath": "docker-compose のパス",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw はマニフェストをそのまま適用します。Kustomize はまずオーバーレイをビルドします（コンテナのデプロイアダプターが必要）。",
       "customManifestId": "カスタムマニフェストタイプ",
       "customManifestIdPlaceholder": "マニフェストタイプを選択",
+      "cloudflareHint": "ここで設定する項目はありません。プルリクエストごとの手順はこのリポジトリのプレビュー用ワークフローにあります。アカウントと命名を選ぶには、インフラストラクチャで Cloudflare Workers ハンドラーを接続してください。",
       "customNoTypes": "カスタムマニフェストタイプはまだ定義されていません。インフラウィンドウで追加してください。",
       "customManifestIdHint": "このサービスが生成するカスタムタイプ。ワークスペースが構成する remote-custom ハンドラーと照合されます。",
       "customManifestPath": "マニフェストのパス（任意）",
@@ -2190,7 +2192,26 @@
         "loading": "インフラ設定を読み込んでいます…",
         "kubeNoun": "Kubernetes ハンドラー",
         "kubeOverrideNoun": "Kubernetes のオーバーライド",
-        "customNoun": "このハンドラー"
+        "customNoun": "このハンドラー",
+        "cloudflareNoun": "Cloudflare ハンドラー"
+      },
+      "cloudflare": {
+        "intro": "対象リポジトリのプレビュー用ワークフローを起動して、プルリクエストごとに Cloudflare Worker を立ち上げます。cat-factory が Cloudflare と直接やり取りすることはありません。デプロイメントを作成し、その状態を読み取り、破棄時には inactive 状態を書き込みます。",
+        "label": "表示名",
+        "subdomain": "workers.dev サブドメイン",
+        "subdomainHint": "プレビュー URL は https://<worker>.<サブドメイン>.workers.dev です。「.workers.dev」を除いたラベルのみを入力してください。",
+        "token": "VCS API トークン",
+        "tokenPlaceholder": "細かい権限のトークンを貼り付けてください",
+        "tokenKeep": "空欄のままにすると保存済みのトークンを保持します",
+        "tokenHint": "リポジトリに対する Deployments の読み取り・書き込み権限のみが必要です。",
+        "repo": "ワークフローのリポジトリ（任意）",
+        "repoHint": "空欄にすると各サービスフレーム自身のリポジトリを使用します。1 つのリポジトリが複数サービスのプレビュー用ワークフローを持つ場合のみ指定してください。",
+        "advanced": "詳細設定",
+        "workerTemplate": "Worker 名のテンプレート",
+        "environmentTemplate": "デプロイメント環境名のテンプレート",
+        "templateHint": "これらはプレビュー用ワークフローとの取り決めです。cat-factory はここから URL を導出し、ワークフローも同じ名前でリソースを作成します。空欄にすると参照ワークフローの命名を使用します。使用できるプレースホルダー: pullNumber、branch、blockId。",
+        "apiBaseUrl": "VCS API のベース URL",
+        "connectedAs": "プレビューは {subdomain}.workers.dev にデプロイされます。"
       }
     },
     "providerConnection": {
@@ -4426,6 +4447,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "カスタム",
       "infraless": "インフラなし"
     },
@@ -4433,6 +4455,7 @@
       "local-docker": "ローカル Docker",
       "local-k3s": "ローカル k3s",
       "remote-kubernetes": "リモート Kubernetes",
+      "cloudflare": "Cloudflare プレビュー",
       "remote-custom": "リモートカスタム (HTTP)",
       "none": "なし"
     }

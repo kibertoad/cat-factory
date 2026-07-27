@@ -800,6 +800,7 @@
         "infraless": "Aucune infrastructure",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Aperçu Cloudflare Workers",
         "custom": "Personnalisé"
       },
       "composePath": "Chemin docker-compose",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw applique les manifestes tels quels. Kustomize construit d'abord un overlay (nécessite l'adaptateur de déploiement en conteneur).",
       "customManifestId": "Type de manifeste personnalisé",
       "customManifestIdPlaceholder": "Choisir un type de manifeste",
+      "cloudflareHint": "Rien à configurer ici : la recette par pull request se trouve dans le workflow d’aperçu de ce dépôt. Connectez un gestionnaire Cloudflare Workers dans Infrastructure pour choisir le compte et le nommage.",
       "customNoTypes": "Aucun type de manifeste personnalisé n'est encore défini. Ajoutez-en un dans la fenêtre Infrastructure.",
       "customManifestIdHint": "Le type personnalisé que ce service produit, associé à un gestionnaire remote-custom configuré par l'espace de travail.",
       "customManifestPath": "Chemin du manifeste (facultatif)",
@@ -2854,7 +2856,26 @@
         "loading": "Chargement de la configuration de l'infrastructure…",
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
-        "customNoun": "ce gestionnaire"
+        "customNoun": "ce gestionnaire",
+        "cloudflareNoun": "le gestionnaire Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "Déploie un Worker Cloudflare par pull request en déclenchant le workflow d’aperçu du dépôt cible. cat-factory ne parle jamais directement à Cloudflare : il crée un déploiement, lit son statut et publie un statut inactive pour le démonter.",
+        "label": "Nom affiché",
+        "subdomain": "Sous-domaine workers.dev",
+        "subdomainHint": "L’URL d’aperçu est https://<worker>.<sous-domaine>.workers.dev. Uniquement le libellé, sans « .workers.dev ».",
+        "token": "Jeton d’API du VCS",
+        "tokenPlaceholder": "Collez un jeton à portée fine",
+        "tokenKeep": "Laissez vide pour conserver le jeton enregistré",
+        "tokenHint": "Nécessite « Deployments : read & write » sur le dépôt, et rien d’autre.",
+        "repo": "Dépôt du workflow (facultatif)",
+        "repoHint": "Laissez vide pour utiliser le dépôt propre à chaque frame de service. Ne le fixez que si un seul dépôt porte le workflow d’aperçu de plusieurs services.",
+        "advanced": "Avancé",
+        "workerTemplate": "Modèle de nom du Worker",
+        "environmentTemplate": "Modèle de nom d’environnement de déploiement",
+        "templateHint": "Ce sont le contrat avec le workflow d’aperçu : cat-factory en dérive l’URL et le workflow nomme ses ressources de la même façon. Laissez vide pour reprendre la nomenclature du workflow de référence. Espaces réservés disponibles : pullNumber, branch, blockId.",
+        "apiBaseUrl": "URL de base de l’API du VCS",
+        "connectedAs": "Les aperçus sont déployés sur {subdomain}.workers.dev."
       }
     },
     "modelPolicy": {
@@ -4414,6 +4435,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Personnalisé",
       "infraless": "Sans infrastructure"
     },
@@ -4421,6 +4443,7 @@
       "local-docker": "Docker local",
       "local-k3s": "k3s local",
       "remote-kubernetes": "Kubernetes distant",
+      "cloudflare": "Aperçu Cloudflare",
       "remote-custom": "Personnalisé distant (HTTP)",
       "none": "Aucun"
     }

@@ -25,10 +25,10 @@ Steps 1, 3 and 4 needed no new configuration. Step 2 is what `deploy/preview/` a
 
 The orchestrator's own runtime decides what it can stand up, so this is not really a preference:
 
-| cat-factory runs on…                                               | Track                                      | Provision type                              |
-| ------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------- |
-| `@cat-factory/local-server` (or Node with a reachable Docker host) | [compose](../deploy/preview/compose)       | `docker-compose`                            |
-| `@cat-factory/worker` (Cloudflare)                                 | [cloudflare](../deploy/preview/cloudflare) | `custom` (`cat-factory-cloudflare-preview`) |
+| cat-factory runs on…                                               | Track                                      | Provision type          |
+| ------------------------------------------------------------------ | ------------------------------------------ | ----------------------- |
+| `@cat-factory/local-server` (or Node with a reachable Docker host) | [compose](../deploy/preview/compose)       | `docker-compose`        |
+| `@cat-factory/worker` (Cloudflare)                                 | [cloudflare](../deploy/preview/cloudflare) | `cloudflare` (built in) |
 
 `local-docker` needs a Docker daemon, which the Worker facade does not have; the Cloudflare
 track is driven entirely over HTTPS, so it works from either. If you run cat-factory locally but
@@ -75,13 +75,27 @@ deployment set those explicitly — see
 
 ### Cloudflare track
 
-Add a **`remote-custom`** handler, paste
-[`deploy/preview/cloudflare/environment-manifest.json`](../deploy/preview/cloudflare/environment-manifest.json)
-(replacing `OWNER/REPO` and `SUBDOMAIN`), set `acceptsManifestId` to
-`cat-factory-cloudflare-preview`, and register one secret, `githubToken` — a fine-grained token
-on this repo with **Deployments: read & write** and nothing else. Complete the one-time GitHub
-`preview` environment setup in [`deploy/preview/README.md`](../deploy/preview/README.md) first,
-or the deployments will fire a workflow that has no credentials to build with.
+**Cloudflare Workers preview** is a built-in handler, so there is no manifest to paste. In
+Infrastructure → Test environments, fill in its section:
+
+| Field                 | Value                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| workers.dev subdomain | your account's subdomain label — the preview URL derives from it                       |
+| VCS API token         | a fine-grained token on this repo with **Deployments: read & write**, and nothing else |
+| Workflow repository   | leave blank — each service frame's own repo is used                                    |
+| Advanced              | leave blank unless you renamed things in the workflow                                  |
+
+The two name templates under **Advanced** are the contract with
+[`.github/workflows/preview-env.yml`](../.github/workflows/preview-env.yml): cat-factory derives
+the environment name and the Worker URL from them, and the workflow names its resources the same
+way. Blank means the reference workflow's naming (`pr-<n>` / `cat-factory-pr-<n>`), so leave them
+alone unless you have changed the workflow too.
+
+Complete the one-time GitHub `preview` environment setup in
+[`deploy/preview/README.md`](../deploy/preview/README.md) first, or the deployments will fire a
+workflow that has no credentials to build with. **Test connection** verifies the token can reach
+the repository, and the handler pre-flights that the repo actually carries a preview workflow
+before a run waits on a build that was never going to happen.
 
 ## 3. Declare the frame's provisioning (the "what + where")
 
@@ -91,8 +105,9 @@ On the cat-factory service frame, inspector → provisioning:
 // compose track
 { "type": "docker-compose", "composePath": "deploy/preview/compose/docker-compose.yml", "composeBuild": true }
 
-// cloudflare track
-{ "type": "custom", "manifestId": "cat-factory-cloudflare-preview" }
+// cloudflare track — the type is the whole declaration; the per-PR recipe lives in the repo's
+// own preview workflow, so there is no path or manifest id for the service to name.
+{ "type": "cloudflare" }
 ```
 
 The frame declares the intent; the handler above supplies the engine. Both are needed — a frame

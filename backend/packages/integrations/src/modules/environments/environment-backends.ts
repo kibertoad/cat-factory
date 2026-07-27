@@ -10,6 +10,8 @@ import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 // colocated). Imported here so `defaultEnvironmentBackendRegistry()` can register it
 // alongside the manifest built-in.
 import { kubernetesEnvironmentBackend } from '../kubernetes/kubernetes-environment-backend.js'
+// Same arrangement for the Cloudflare Workers preview backend.
+import { cloudflareEnvironmentBackend } from '../cloudflare/cloudflare-environment-backend.js'
 import { assertManifestUrlsSafe, referencedSecretKeys } from './environments.logic.js'
 import { HttpEnvironmentProvider } from './HttpEnvironmentProvider.js'
 
@@ -160,11 +162,12 @@ export class EnvironmentBackendRegistry {
   }
 }
 
-/** A registry pre-loaded with the built-in `manifest` + `kubernetes` backends. */
+/** A registry pre-loaded with the built-in `manifest` + `kubernetes` + `cloudflare` backends. */
 export function defaultEnvironmentBackendRegistry(): EnvironmentBackendRegistry {
   return new EnvironmentBackendRegistry()
     .register(manifestEnvironmentBackend)
     .register(kubernetesEnvironmentBackend)
+    .register(cloudflareEnvironmentBackend)
 }
 
 // --- Built-in: manifest (the generic BYO HTTP management API) -----------------
@@ -205,3 +208,7 @@ export const manifestEnvironmentBackend: EnvironmentBackendProvider = {
 // are registered into the default registry by `defaultEnvironmentBackendRegistry()` above
 // (no module-load side effect).
 export { kubernetesEnvironmentBackend }
+
+// --- Built-in: cloudflare (per-PR Workers preview over the VCS deployments API) ------
+// Defined in the cloudflare module, same arrangement as kubernetes above.
+export { cloudflareEnvironmentBackend }

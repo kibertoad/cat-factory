@@ -104,6 +104,7 @@ const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() =
   { value: 'infraless', label: t('inspector.testConfig.provisionTypes.infraless') },
   { value: 'docker-compose', label: t('inspector.testConfig.provisionTypes.docker-compose') },
   { value: 'kubernetes', label: t('inspector.testConfig.provisionTypes.kubernetes') },
+  { value: 'cloudflare', label: t('inspector.testConfig.provisionTypes.cloudflare') },
   { value: 'custom', label: t('inspector.testConfig.provisionTypes.custom') },
 ])
 
@@ -868,6 +869,14 @@ function setSize(value: InstanceSize) {
         </p>
       </div>
     </div>
+
+    <!-- cloudflare: nothing to collect. Unlike compose (a path) or kubernetes (a manifest
+         source), the per-PR recipe lives in the target repository's own preview workflow, so
+         declaring the type IS the whole service-side configuration. Say so explicitly rather
+         than rendering an empty panel that reads like something failed to load. -->
+    <p v-if="provisionType === 'cloudflare'" class="text-[11px] text-slate-500">
+      {{ t('inspector.testConfig.cloudflareHint') }}
+    </p>
 
     <!-- custom: pin the custom manifest type this service produces (matched to a remote-custom
          handler the workspace configures). -->

@@ -173,7 +173,26 @@
         "loading": "Caricamento delle impostazioni dell'infrastruttura…",
         "kubeNoun": "l'handler Kubernetes",
         "kubeOverrideNoun": "l'override Kubernetes",
-        "customNoun": "questo handler"
+        "customNoun": "questo handler",
+        "cloudflareNoun": "l’handler Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "Avvia un Worker Cloudflare per ogni pull request attivando il workflow di anteprima del repository di destinazione. cat-factory non parla mai direttamente con Cloudflare: crea un deployment, ne legge lo stato e pubblica uno stato inactive per smantellarlo.",
+        "label": "Nome visualizzato",
+        "subdomain": "Sottodominio workers.dev",
+        "subdomainHint": "L’URL di anteprima è https://<worker>.<sottodominio>.workers.dev. Solo l’etichetta, senza \".workers.dev\".",
+        "token": "Token API del VCS",
+        "tokenPlaceholder": "Incolla un token a granularità fine",
+        "tokenKeep": "Lascia vuoto per mantenere il token salvato",
+        "tokenHint": "Richiede \"Deployments: read & write\" sul repository e nient’altro.",
+        "repo": "Repository del workflow (facoltativo)",
+        "repoHint": "Lascia vuoto per usare il repository di ciascun frame di servizio. Fissalo solo quando un repository contiene il workflow di anteprima per più servizi.",
+        "advanced": "Avanzate",
+        "workerTemplate": "Modello del nome del Worker",
+        "environmentTemplate": "Modello del nome dell’ambiente di deployment",
+        "templateHint": "Sono il contratto con il workflow di anteprima: cat-factory ne ricava l’URL e il workflow nomina le sue risorse allo stesso modo. Lascia vuoto per usare la denominazione del workflow di riferimento. Segnaposto disponibili: pullNumber, branch, blockId.",
+        "apiBaseUrl": "URL base dell’API del VCS",
+        "connectedAs": "Le anteprime vengono distribuite su {subdomain}.workers.dev."
       }
     },
     "providerConnection": {
@@ -1100,6 +1119,7 @@
         "infraless": "Nessuna infrastruttura",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Anteprima Cloudflare Workers",
         "custom": "Personalizzato"
       },
       "composePath": "Percorso docker-compose",
@@ -1142,6 +1162,7 @@
       "rendererHint": "Raw applica i manifest cosi' come sono. Kustomize compila prima un overlay (richiede l'adattatore di deploy in container).",
       "customManifestId": "Tipo di manifest personalizzato",
       "customManifestIdPlaceholder": "Scegli un tipo di manifest",
+      "cloudflareHint": "Qui non c’è nulla da configurare: la ricetta per ogni pull request si trova nel workflow di anteprima di questo repository. Collega un handler Cloudflare Workers in Infrastruttura per scegliere account e denominazione.",
       "customNoTypes": "Nessun tipo di manifest personalizzato ancora definito. Aggiungine uno nella finestra Infrastruttura.",
       "customManifestIdHint": "Il tipo personalizzato che questo servizio produce, abbinato a un handler remote-custom configurato dal workspace.",
       "customManifestPath": "Percorso del manifest (facoltativo)",
@@ -4756,6 +4777,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Personalizzato",
       "infraless": "Nessuna infrastruttura"
     },
@@ -4763,6 +4785,7 @@
       "local-docker": "Docker locale",
       "local-k3s": "k3s locale",
       "remote-kubernetes": "Kubernetes remoto",
+      "cloudflare": "Anteprima Cloudflare",
       "remote-custom": "Personalizzato remoto (HTTP)",
       "none": "Nessuno"
     }

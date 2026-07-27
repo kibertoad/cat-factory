@@ -800,6 +800,7 @@
         "infraless": "Без інфраструктури",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Попередній перегляд Cloudflare Workers",
         "custom": "Власний"
       },
       "composePath": "Шлях docker-compose",
@@ -842,6 +843,7 @@
       "rendererHint": "Raw застосовує маніфести як є. Kustomize спершу будує overlay (потрібен контейнерний адаптер розгортання).",
       "customManifestId": "Власний тип маніфесту",
       "customManifestIdPlaceholder": "Виберіть тип маніфесту",
+      "cloudflareHint": "Тут нема чого налаштовувати: рецепт для кожного пул-реквесту міститься у власному робочому процесі попереднього перегляду цього репозиторію. Підключіть обробник Cloudflare Workers у розділі «Інфраструктура», щоб обрати обліковий запис і найменування.",
       "customNoTypes": "Власні типи маніфестів ще не визначені. Додайте один у вікні Інфраструктура.",
       "customManifestIdHint": "Власний тип, який створює ця служба, зіставлений з обробником remote-custom, який налаштовує робочий простір.",
       "customManifestPath": "Шлях до маніфесту (необов'язково)",
@@ -2854,7 +2856,26 @@
         "loading": "Завантаження налаштувань інфраструктури…",
         "kubeNoun": "обробник Kubernetes",
         "kubeOverrideNoun": "перевизначення Kubernetes",
-        "customNoun": "цей обробник"
+        "customNoun": "цей обробник",
+        "cloudflareNoun": "обробник Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "Піднімає окремий Cloudflare Worker для кожного пул-реквесту, запускаючи власний робочий процес попереднього перегляду цільового репозиторію. cat-factory ніколи не звертається до Cloudflare напряму: він створює розгортання, читає його статус і публікує статус inactive, щоб його прибрати.",
+        "label": "Відображувана назва",
+        "subdomain": "Субдомен workers.dev",
+        "subdomainHint": "Адреса перегляду — https://<worker>.<субдомен>.workers.dev. Лише мітка, без «.workers.dev».",
+        "token": "Токен API системи контролю версій",
+        "tokenPlaceholder": "Вставте токен із точними дозволами",
+        "tokenKeep": "Залиште порожнім, щоб зберегти наявний токен",
+        "tokenHint": "Потрібен лише дозвіл «Deployments: read & write» для репозиторію.",
+        "repo": "Репозиторій з робочим процесом (необовʼязково)",
+        "repoHint": "Залиште порожнім, щоб використовувати власний репозиторій кожного фрейму сервісу. Задавайте лише тоді, коли один репозиторій містить робочий процес перегляду для кількох сервісів.",
+        "advanced": "Додатково",
+        "workerTemplate": "Шаблон назви Worker",
+        "environmentTemplate": "Шаблон назви середовища розгортання",
+        "templateHint": "Це домовленість із робочим процесом перегляду: cat-factory виводить із них адресу, а робочий процес так само називає свої ресурси. Залиште порожнім, щоб узяти найменування з еталонного робочого процесу. Доступні підстановки: pullNumber, branch, blockId.",
+        "apiBaseUrl": "Базова адреса API системи контролю версій",
+        "connectedAs": "Перегляди розгортаються на {subdomain}.workers.dev."
       }
     },
     "modelPolicy": {
@@ -4414,6 +4435,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Власний",
       "infraless": "Без інфраструктури"
     },
@@ -4421,6 +4443,7 @@
       "local-docker": "Локальний Docker",
       "local-k3s": "Локальний k3s",
       "remote-kubernetes": "Віддалений Kubernetes",
+      "cloudflare": "Попередній перегляд Cloudflare",
       "remote-custom": "Віддалений власний (HTTP)",
       "none": "Немає"
     }

@@ -309,12 +309,15 @@ real-time transport, model provisioning).
 - `deploy/{backend,node,local,frontend}` — example deployments carrying the production config
   (`wrangler.toml` / `Dockerfile` / `.env.example`) on top of the libraries.
 - `deploy/preview` — the per-PR TEST environments for THIS repo (not a package): the
-  single-origin compose stack a local deployment provisions, and the per-PR Cloudflare Worker a
-  Worker deployment provisions over the GitHub Deployments API. Board wiring lives in
-  [`docs/dogfooding.md`](./docs/dogfooding.md). Two constraints bite when editing them: the
-  compose file must stay free of bind mounts / `env_file` / `include:` (the compose backend
-  refuses all three), and the SPA there is built with an EMPTY `apiBase` because a preview's
-  host port is only assigned at `up` time — same-origin is the only topology that can work.
+  single-origin compose stack a local deployment provisions, and the reference preview WORKFLOW
+  the built-in `cloudflare` environment backend drives over the VCS Deployments API. Board
+  wiring lives in [`docs/dogfooding.md`](./docs/dogfooding.md). Three constraints bite when
+  editing them: the compose file must stay free of `include:` / cross-file `extends` /
+  `privileged` (refused outright) and of bind mounts / `env_file` (so it stays runnable by
+  hand); the SPA there is built with an EMPTY `apiBase` because a preview's host port is only
+  assigned at `up` time, so same-origin is the only topology that can work; and the workflow's
+  per-PR resource NAMES are a contract with `cloudflareEnvironmentConfigSchema`'s two name
+  templates — rename in one place and you must rename in the other.
 
 ### Local container adapters
 

@@ -173,7 +173,26 @@
         "loading": "Infrastruktureinstellungen werden geladen…",
         "kubeNoun": "der Kubernetes-Handler",
         "kubeOverrideNoun": "der Kubernetes-Override",
-        "customNoun": "dieser Handler"
+        "customNoun": "dieser Handler",
+        "cloudflareNoun": "den Cloudflare-Handler"
+      },
+      "cloudflare": {
+        "intro": "Startet pro Pull Request einen Cloudflare Worker, indem der Preview-Workflow des Ziel-Repositorys angestoßen wird. cat-factory spricht nie direkt mit Cloudflare: Es legt ein Deployment an, liest dessen Status und setzt zum Abbau einen inactive-Status.",
+        "label": "Anzeigename",
+        "subdomain": "workers.dev-Subdomain",
+        "subdomainHint": "Die Preview-URL lautet https://<worker>.<subdomain>.workers.dev. Nur das Label, ohne \".workers.dev\".",
+        "token": "VCS-API-Token",
+        "tokenPlaceholder": "Fein granuliertes Token einfügen",
+        "tokenKeep": "Leer lassen, um das gespeicherte Token zu behalten",
+        "tokenHint": "Benötigt \"Deployments: read & write\" für das Repository und sonst nichts.",
+        "repo": "Workflow-Repository (optional)",
+        "repoHint": "Leer lassen, um das jeweilige Repository des Service-Frames zu verwenden. Nur festlegen, wenn ein Repository den Preview-Workflow für mehrere Services enthält.",
+        "advanced": "Erweitert",
+        "workerTemplate": "Vorlage für den Worker-Namen",
+        "environmentTemplate": "Vorlage für den Deployment-Umgebungsnamen",
+        "templateHint": "Diese Werte sind der Vertrag mit dem Preview-Workflow: cat-factory leitet daraus die URL ab, und der Workflow benennt seine Ressourcen genauso. Leer lassen, um die Benennung des Referenz-Workflows zu verwenden. Verfügbare Platzhalter: pullNumber, branch, blockId.",
+        "apiBaseUrl": "Basis-URL der VCS-API",
+        "connectedAs": "Previews werden auf {subdomain}.workers.dev bereitgestellt."
       }
     },
     "providerConnection": {
@@ -1100,6 +1119,7 @@
         "infraless": "Keine Infrastruktur",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Cloudflare Workers-Preview",
         "custom": "Benutzerdefiniert"
       },
       "composePath": "docker-compose-Pfad",
@@ -1142,6 +1162,7 @@
       "rendererHint": "Raw wendet die Manifeste unverändert an. Kustomize baut zuerst ein Overlay (benötigt den Container-Deploy-Adapter).",
       "customManifestId": "Benutzerdefinierter Manifesttyp",
       "customManifestIdPlaceholder": "Wähle einen Manifesttyp",
+      "cloudflareHint": "Hier gibt es nichts zu konfigurieren: Das Rezept pro Pull Request liegt im Preview-Workflow dieses Repositorys. Verbinde unter Infrastruktur einen Cloudflare Workers-Handler, um Konto und Benennung festzulegen.",
       "customNoTypes": "Es sind noch keine benutzerdefinierten Manifesttypen definiert. Füge einen im Infrastruktur-Fenster hinzu.",
       "customManifestIdHint": "Der benutzerdefinierte Typ, den dieser Service erzeugt, zugeordnet zu einem Remote-Custom-Handler, den der Workspace konfiguriert.",
       "customManifestPath": "Manifest-Pfad (optional)",
@@ -4756,6 +4777,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Benutzerdefiniert",
       "infraless": "Keine Infrastruktur"
     },
@@ -4763,6 +4785,7 @@
       "local-docker": "Lokales Docker",
       "local-k3s": "Lokales k3s",
       "remote-kubernetes": "Remote-Kubernetes",
+      "cloudflare": "Cloudflare-Preview",
       "remote-custom": "Remote benutzerdefiniert (HTTP)",
       "none": "Keine"
     }
