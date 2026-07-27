@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { platformObservabilityController } from './modules/observability/PlatformObservabilityController.js'
+import { reportsController } from './modules/reports/ReportsController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
 import { artifactController } from './modules/artifacts/ArtifactController.js'
 import { harnessArtifactController } from './modules/artifacts/HarnessArtifactController.js'
@@ -161,6 +162,9 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Platform-operator observability (`/accounts/:id/observability/platform`); admin-gated,
   // 503 when the platform-metrics rollup isn't wired.
   app.route('/', platformObservabilityController())
+  // Cross-cutting usage analytics (`/accounts/:id/reports`); admin-gated, 503 when the
+  // reports rollup isn't wired.
+  app.route('/', reportsController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
   app.route('/', userSettingsController())

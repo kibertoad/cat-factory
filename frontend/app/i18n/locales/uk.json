@@ -111,6 +111,7 @@
     "modelConfiguration": "Конфігурація моделі",
     "accountSettings": "Налаштування облікового запису",
     "operatorDashboard": "Спостережуваність платформи",
+    "reports": "Звіти",
     "infrastructure": "Інфраструктура",
     "environmentSetup": "Налаштування середовища"
   },
@@ -1459,6 +1460,70 @@
     },
     "live": {
       "title": "Активні зараз"
+    }
+  },
+  "reports": {
+    "title": "Звіти",
+    "refresh": "Оновити",
+    "loading": "Завантаження звітів…",
+    "retry": "Спробувати ще раз",
+    "error": "Не вдалося завантажити звіти.",
+    "period": "З {from} по {to}",
+    "unattributed": "Без прив’язки",
+    "window": {
+      "oneDay": "Останні 24 години",
+      "sevenDays": "Останні 7 днів",
+      "thirtyDays": "Останні 30 днів",
+      "ninetyDays": "Останні 90 днів"
+    },
+    "filter": {
+      "board": "Дошка",
+      "allBoards": "Усі дошки"
+    },
+    "dimension": {
+      "workspace": "Дошка",
+      "service": "Сервіс",
+      "taskType": "Тип завдання"
+    },
+    "breakdown": {
+      "title": "Розбивка за"
+    },
+    "totals": {
+      "title": "За цей період",
+      "metered": "Оплачені витрати",
+      "subscription": "Підписка",
+      "calls": "Виклики LLM",
+      "tokens": "Токени",
+      "illustrative": "Вартість підписки наводиться для орієнтиру — ці тарифи фіксовані, не тарифікуються за токен і ніколи не враховуються як витрати."
+    },
+    "trend": {
+      "title": "Витрати в часі",
+      "empty": "За цей період використання не зафіксовано."
+    },
+    "legend": {
+      "metered": "Оплачені",
+      "subscription": "Підписка"
+    },
+    "spend": {
+      "byModel": "Витрати за моделлю",
+      "byAgentKind": "Витрати за типом агента",
+      "heading": "Витрати",
+      "empty": "За цей період використання не зафіксовано.",
+      "calls": "{count} виклик | {count} виклики | {count} викликів",
+      "tokens": "{input} вхід / {output} вихід",
+      "subscriptionAside": "+{value} підписка"
+    },
+    "activity": {
+      "heading": "Запуски",
+      "empty": "За цей період запусків не було.",
+      "runs": "{count} запуск | {count} запуски | {count} запусків",
+      "avg": "сер. {value}"
+    },
+    "status": {
+      "done": "Завершені",
+      "failed": "Невдалі",
+      "running": "Виконуються",
+      "other": "Інші"
     }
   },
   "auth": {

@@ -55,6 +55,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   (deterministic change classification + the persisted record of every merge decision, the
   reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
   PR merged directly on the provider). See CLAUDE.md → "Merge track record".
+- `observability/` — the read side of telemetry: `LlmObservabilityService` (per-call metrics),
+  `PlatformObservabilityService` (deployment health) and `ReportsService` + `reports.logic.ts`
+  (**Reports** — cross-cutting usage analytics: spend by model/agent kind and spend + run activity
+  by workspace/service/task type, over the `ReportsRepository` port; see CLAUDE.md → "Reports" and
+  `backend/docs/reports.md`). `ReportsService` lives in its own `reports/` dir beside them.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, … — the other module services.

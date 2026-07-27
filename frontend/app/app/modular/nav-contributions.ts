@@ -96,6 +96,7 @@ export const NAV_ACTIONS = [
   'localModels',
   'accountSettings',
   'operatorDashboard',
+  'reports',
   'shortcuts',
 ] as const
 
@@ -353,6 +354,16 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'operatorDashboard',
     testId: 'nav-operator-dashboard',
     sidebar: { group: 'configuration', order: 40 },
+  },
+  {
+    id: 'reports',
+    labelKey: 'nav.reports',
+    icon: 'i-lucide-chart-column',
+    surfaces: S('sidebar'),
+    gate: (g) => g.accountsEnabled && g.isAccountAdmin,
+    action: 'reports',
+    testId: 'nav-reports',
+    sidebar: { group: 'configuration', order: 45 },
   },
   {
     id: 'keyboard-shortcuts',

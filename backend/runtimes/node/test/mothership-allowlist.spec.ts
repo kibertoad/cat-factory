@@ -187,6 +187,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     activeAndParkedCounts: 'admin',
     durationStatsSince: 'admin',
   },
+  // The Reports rollups are admin-gated reads (`GET /accounts/:id/reports` guards on
+  // `requireAdmin`) exactly like the operator-dashboard ones above, so they stay
+  // mothership-internal for the same reason. The three `*Where`/`accountWorkspaceIds` entries are
+  // private query-scope helpers (the account sub-select and the two window predicates), not port
+  // methods.
+  reportsRepository: {
+    accountWorkspaceIds: 'helper',
+    ledgerWhere: 'helper',
+    runWhere: 'helper',
+    spendByDimension: 'admin',
+    activityByDimension: 'admin',
+    spendTrend: 'admin',
+  },
   tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
   llmCallMetricRepository: {
     record: 'telemetry',

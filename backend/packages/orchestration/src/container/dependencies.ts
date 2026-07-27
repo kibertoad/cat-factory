@@ -107,6 +107,7 @@ import type {
   PullRequestProjectionRepository,
   ReferenceArchitectureRepository,
   ReleaseHealthConfigRepository,
+  ReportsRepository,
   RepoBootstrapper,
   RepoProjectionRepository,
   RequirementReviewRepository,
@@ -405,6 +406,13 @@ export interface CoreDependencies {
    * endpoint; absent (tests / unconfigured facades) → no platform view, engine unaffected.
    */
   platformMetricsRepository?: PlatformMetricsRepository
+  /**
+   * Cross-cutting usage-analytics rollup port (spend per model/agent kind, spend + run
+   * activity per workspace/service/task type, spend trend) backing the Reports view.
+   * Optional: when wired, `createCore` builds {@link ReportsService} and re-exposes it for
+   * the admin read endpoint; absent (tests / unconfigured facades) → no reports view.
+   */
+  reportsRepository?: ReportsRepository
   /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric

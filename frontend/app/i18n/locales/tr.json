@@ -112,6 +112,7 @@
     "modelConfiguration": "Model yapılandırması",
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
+    "reports": "Raporlar",
     "environmentSetup": "Ortam kurulumu"
   },
   "board": {
@@ -1459,6 +1460,70 @@
     },
     "live": {
       "title": "Şu anda etkin"
+    }
+  },
+  "reports": {
+    "title": "Raporlar",
+    "refresh": "Yenile",
+    "loading": "Raporlar yükleniyor…",
+    "retry": "Yeniden dene",
+    "error": "Raporlar yüklenemedi.",
+    "period": "{from} – {to}",
+    "unattributed": "Atanmamış",
+    "window": {
+      "oneDay": "Son 24 saat",
+      "sevenDays": "Son 7 gün",
+      "thirtyDays": "Son 30 gün",
+      "ninetyDays": "Son 90 gün"
+    },
+    "filter": {
+      "board": "Pano",
+      "allBoards": "Tüm panolar"
+    },
+    "dimension": {
+      "workspace": "Pano",
+      "service": "Servis",
+      "taskType": "Görev türü"
+    },
+    "breakdown": {
+      "title": "Şuna göre dağılım"
+    },
+    "totals": {
+      "title": "Bu dönemde",
+      "metered": "Ölçümlü harcama",
+      "subscription": "Abonelik",
+      "calls": "LLM çağrısı",
+      "tokens": "Token",
+      "illustrative": "Abonelik maliyetleri yalnızca tahminidir — bu planlar sabit ücretlidir, token başına faturalandırılmaz ve hiçbir zaman harcama olarak sayılmaz."
+    },
+    "trend": {
+      "title": "Zaman içinde harcama",
+      "empty": "Bu dönemde kayıtlı kullanım yok."
+    },
+    "legend": {
+      "metered": "Ölçümlü",
+      "subscription": "Abonelik"
+    },
+    "spend": {
+      "byModel": "Modele göre harcama",
+      "byAgentKind": "Ajan türüne göre harcama",
+      "heading": "Harcama",
+      "empty": "Bu dönemde kayıtlı kullanım yok.",
+      "calls": "{count} çağrı | {count} çağrı",
+      "tokens": "{input} giriş / {output} çıkış",
+      "subscriptionAside": "+{value} abonelik"
+    },
+    "activity": {
+      "heading": "Çalıştırmalar",
+      "empty": "Bu dönemde çalıştırma yok.",
+      "runs": "{count} çalıştırma | {count} çalıştırma",
+      "avg": "ort. {value}"
+    },
+    "status": {
+      "done": "Tamamlanan",
+      "failed": "Başarısız",
+      "running": "Çalışıyor",
+      "other": "Diğer"
     }
   },
   "auth": {

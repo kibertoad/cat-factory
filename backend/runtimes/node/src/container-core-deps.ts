@@ -267,6 +267,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     llmCallMetricRepository: repos.llmCallMetricRepository,
     // Deployment-level rollups over `agent_runs` for the operator dashboard.
     platformMetricsRepository: repos.platformMetricsRepository,
+    // Cross-cutting usage analytics over `token_usage` + `agent_runs` for the Reports view.
+    reportsRepository: repos.reportsRepository,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,

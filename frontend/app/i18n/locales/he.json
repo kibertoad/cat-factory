@@ -112,6 +112,7 @@
     "modelConfiguration": "תצורת מודל",
     "accountSettings": "הגדרות חשבון",
     "operatorDashboard": "תצפית על הפלטפורמה",
+    "reports": "דוחות",
     "environmentSetup": "הגדרת סביבה"
   },
   "board": {
@@ -1459,6 +1460,70 @@
     },
     "live": {
       "title": "פעילות כעת"
+    }
+  },
+  "reports": {
+    "title": "דוחות",
+    "refresh": "רענון",
+    "loading": "טוען דוחות…",
+    "retry": "נסה שוב",
+    "error": "לא ניתן היה לטעון את הדוחות.",
+    "period": "מ־{from} עד {to}",
+    "unattributed": "ללא שיוך",
+    "window": {
+      "oneDay": "24 השעות האחרונות",
+      "sevenDays": "7 הימים האחרונים",
+      "thirtyDays": "30 הימים האחרונים",
+      "ninetyDays": "90 הימים האחרונים"
+    },
+    "filter": {
+      "board": "לוח",
+      "allBoards": "כל הלוחות"
+    },
+    "dimension": {
+      "workspace": "לוח",
+      "service": "שירות",
+      "taskType": "סוג משימה"
+    },
+    "breakdown": {
+      "title": "פילוח לפי"
+    },
+    "totals": {
+      "title": "בטווח הזה",
+      "metered": "עלות בפועל",
+      "subscription": "מנוי",
+      "calls": "קריאות למודל",
+      "tokens": "טוקנים",
+      "illustrative": "עלויות המנוי הן להמחשה בלבד — התוכניות האלו בתעריף קבוע, אינן מחויבות לפי טוקן ולעולם אינן נספרות כהוצאה."
+    },
+    "trend": {
+      "title": "עלות לאורך זמן",
+      "empty": "לא נרשם שימוש בטווח הזה."
+    },
+    "legend": {
+      "metered": "בפועל",
+      "subscription": "מנוי"
+    },
+    "spend": {
+      "byModel": "עלות לפי מודל",
+      "byAgentKind": "עלות לפי סוג סוכן",
+      "heading": "עלות",
+      "empty": "לא נרשם שימוש בטווח הזה.",
+      "calls": "קריאה {count} | {count} קריאות",
+      "tokens": "{input} נכנס / {output} יוצא",
+      "subscriptionAside": "+{value} מנוי"
+    },
+    "activity": {
+      "heading": "ריצות",
+      "empty": "לא היו ריצות בטווח הזה.",
+      "runs": "ריצה {count} | {count} ריצות",
+      "avg": "ממוצע {value}"
+    },
+    "status": {
+      "done": "הושלמו",
+      "failed": "נכשלו",
+      "running": "רצות",
+      "other": "אחר"
     }
   },
   "auth": {

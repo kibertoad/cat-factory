@@ -111,6 +111,7 @@
     "modelConfiguration": "Configuration du modèle",
     "accountSettings": "Paramètres du compte",
     "operatorDashboard": "Observabilité de la plateforme",
+    "reports": "Rapports",
     "infrastructure": "Infrastructure",
     "environmentSetup": "Configuration d'environnement"
   },
@@ -1459,6 +1460,70 @@
     },
     "live": {
       "title": "En direct"
+    }
+  },
+  "reports": {
+    "title": "Rapports",
+    "refresh": "Actualiser",
+    "loading": "Chargement des rapports…",
+    "retry": "Réessayer",
+    "error": "Impossible de charger les rapports.",
+    "period": "Du {from} au {to}",
+    "unattributed": "Non attribué",
+    "window": {
+      "oneDay": "Dernières 24 heures",
+      "sevenDays": "7 derniers jours",
+      "thirtyDays": "30 derniers jours",
+      "ninetyDays": "90 derniers jours"
+    },
+    "filter": {
+      "board": "Tableau",
+      "allBoards": "Tous les tableaux"
+    },
+    "dimension": {
+      "workspace": "Tableau",
+      "service": "Service",
+      "taskType": "Type de tâche"
+    },
+    "breakdown": {
+      "title": "Répartition par"
+    },
+    "totals": {
+      "title": "Sur cette période",
+      "metered": "Dépense facturée",
+      "subscription": "Abonnement",
+      "calls": "Appels LLM",
+      "tokens": "Jetons",
+      "illustrative": "Les coûts d’abonnement sont indicatifs : ces forfaits sont à tarif fixe, ne sont pas facturés au jeton et ne comptent jamais comme dépense."
+    },
+    "trend": {
+      "title": "Dépense dans le temps",
+      "empty": "Aucune utilisation enregistrée sur cette période."
+    },
+    "legend": {
+      "metered": "Facturé",
+      "subscription": "Abonnement"
+    },
+    "spend": {
+      "byModel": "Dépense par modèle",
+      "byAgentKind": "Dépense par type d’agent",
+      "heading": "Dépense",
+      "empty": "Aucune utilisation enregistrée sur cette période.",
+      "calls": "{count} appel | {count} appels",
+      "tokens": "{input} en entrée / {output} en sortie",
+      "subscriptionAside": "+{value} abonnement"
+    },
+    "activity": {
+      "heading": "Exécutions",
+      "empty": "Aucune exécution sur cette période.",
+      "runs": "{count} exécution | {count} exécutions",
+      "avg": "moy. {value}"
+    },
+    "status": {
+      "done": "Terminées",
+      "failed": "Échouées",
+      "running": "En cours",
+      "other": "Autres"
     }
   },
   "auth": {

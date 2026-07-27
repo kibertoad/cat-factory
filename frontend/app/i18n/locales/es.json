@@ -111,6 +111,7 @@
     "modelConfiguration": "Configuración del modelo",
     "accountSettings": "Ajustes de la cuenta",
     "operatorDashboard": "Observabilidad de la plataforma",
+    "reports": "Informes",
     "infrastructure": "Infraestructura",
     "environmentSetup": "Configuración de entorno"
   },
@@ -1459,6 +1460,70 @@
     },
     "live": {
       "title": "Activas ahora"
+    }
+  },
+  "reports": {
+    "title": "Informes",
+    "refresh": "Actualizar",
+    "loading": "Cargando informes…",
+    "retry": "Reintentar",
+    "error": "No se pudieron cargar los informes.",
+    "period": "Del {from} al {to}",
+    "unattributed": "Sin atribuir",
+    "window": {
+      "oneDay": "Últimas 24 horas",
+      "sevenDays": "Últimos 7 días",
+      "thirtyDays": "Últimos 30 días",
+      "ninetyDays": "Últimos 90 días"
+    },
+    "filter": {
+      "board": "Tablero",
+      "allBoards": "Todos los tableros"
+    },
+    "dimension": {
+      "workspace": "Tablero",
+      "service": "Servicio",
+      "taskType": "Tipo de tarea"
+    },
+    "breakdown": {
+      "title": "Desglose por"
+    },
+    "totals": {
+      "title": "En este periodo",
+      "metered": "Gasto medido",
+      "subscription": "Suscripción",
+      "calls": "Llamadas al LLM",
+      "tokens": "Tokens",
+      "illustrative": "Los costes de suscripción son orientativos: esos planes son de tarifa plana, no se facturan por token y nunca cuentan como gasto."
+    },
+    "trend": {
+      "title": "Gasto a lo largo del tiempo",
+      "empty": "No se registró uso en este periodo."
+    },
+    "legend": {
+      "metered": "Medido",
+      "subscription": "Suscripción"
+    },
+    "spend": {
+      "byModel": "Gasto por modelo",
+      "byAgentKind": "Gasto por tipo de agente",
+      "heading": "Gasto",
+      "empty": "No se registró uso en este periodo.",
+      "calls": "{count} llamada | {count} llamadas",
+      "tokens": "{input} de entrada / {output} de salida",
+      "subscriptionAside": "+{value} suscripción"
+    },
+    "activity": {
+      "heading": "Ejecuciones",
+      "empty": "No hubo ejecuciones en este periodo.",
+      "runs": "{count} ejecución | {count} ejecuciones",
+      "avg": "media {value}"
+    },
+    "status": {
+      "done": "Completadas",
+      "failed": "Fallidas",
+      "running": "En curso",
+      "other": "Otras"
     }
   },
   "auth": {
