@@ -59,3 +59,9 @@ Two adjacent fixes the lists depend on:
   task may only be created under a service frame or a module. A task parented to an `epic` /
   `initiative` grouping node was structurally orphaned — invisible to any reader that resolves a
   service subtree, including this task list.
+
+The `human-test` / `visual-confirmation` gate step-state schemas moved out of
+`contracts/src/execution.ts` into their own `human-verdict-gates.ts` module (re-exported from the
+package root, so no import path changes): merging `main` pushed `execution.ts` past the file-size
+budget, and the two human-verdict gates are the cohesive seam — they share a `rounds` history and a
+transient `pendingAction` that the polling gates' `GateStepState` does not have.
