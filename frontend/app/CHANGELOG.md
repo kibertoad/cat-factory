@@ -1,5 +1,52 @@
 # @cat-factory/app
 
+## 0.160.0
+
+### Minor Changes
+
+- b1db3cf: Surface the in-repo spec's implementation-state axis to humans (service-acceptance-criteria,
+  slice 4).
+
+  `requirementItem.state` (`aspirational` = agreed, `established` = a tester observed it hold)
+  already reached every agent-facing consumer — the rendered group markdown, the `@aspirational`
+  Gherkin tags, the build/test prompt rules, the promotion post-op — and a PR reviewer through the
+  verification report's requirement → evidence section. The platform's own reader saw none of it:
+  the Requirements window listed each requirement's priority and kind and could not say which of
+  them the service is actually known to honour.
+
+  - `ServiceSpecWindow.vue` badges every requirement with its implementation state, adds a
+    per-group rollup plus a three-way state filter (all / established / aspirational), and shows a
+    service-wide rollup on the overview pane. The counting and filtering live in the pure
+    `ServiceSpecWindow.logic.ts`; anything that is not literally `established` reads as
+    `aspirational`, so an unrecognised value never claims the service honours a behaviour. The
+    filter is sticky across groups, so a group it empties says so and offers a reset.
+  - `StepTestReport.vue` renders the tester's per-requirement verdicts (`met` / `not met` /
+    `not checked`) — the in-app twin of the PR report's section, readable during the run rather
+    than only once the report publishes. An unrecognised status renders the raw code in its own
+    colour rather than borrowing `not_covered`'s, so version skew can never read as "not checked".
+
+  Frontend-only: `ServiceSpecView` already carries `state` and the verdicts already ride
+  `step.testReport`, so no endpoint, wire shape or backend behaviour changes.
+
+### Patch Changes
+
+- d17e745: Make personal (individual-usage) subscription management discoverable during setup. The most
+  common setup, using a Claude / ChatGPT (Codex) / GLM coding plan the developer already pays for,
+  was reachable only as the last tab of the LLM-vendors modal, and none of the onboarding surfaces
+  routed there.
+
+  - The "Set up an AI model provider" onboarding dialog now leads with a "Your coding-plan
+    subscription" route (tagged "Most popular") that deep-links straight onto the vendor modal's
+    Personal subscriptions tab.
+  - The 428 credential-required modal's "Connect subscription" CTA now opens the Personal
+    subscriptions tab instead of landing on the unrelated workspace-pool tab (bug).
+  - The workspace-pool tab (the modal's default) gains a callout pointing individual-plan users at
+    the Personal subscriptions tab, replacing the cross-reference sentence buried in the intro
+    paragraph.
+  - The Integrations hub's "Models and providers" group gains a footer link to personal
+    subscriptions, since that hub is where people look first even though the connection is
+    per-user.
+
 ## 0.159.3
 
 ### Patch Changes
