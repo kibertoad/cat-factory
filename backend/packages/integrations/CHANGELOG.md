@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.102.1
+
+### Patch Changes
+
+- Updated dependencies [cab85c5]
+  - @cat-factory/contracts@0.173.0
+  - @cat-factory/kernel@0.167.0
+
 ## 0.102.0
 
 ### Minor Changes

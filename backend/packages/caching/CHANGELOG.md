@@ -1,5 +1,12 @@
 # @cat-factory/caching
 
+## 0.10.51
+
+### Patch Changes
+
+- Updated dependencies [cab85c5]
+  - @cat-factory/kernel@0.167.0
+
 ## 0.10.50
 
 ### Patch Changes
