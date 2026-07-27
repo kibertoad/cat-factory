@@ -120,9 +120,17 @@ jobs:
           SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
         run: |
           set -euo pipefail
+          # A `deployment` event ALREADY has a record to report against, and the failure branch
+          # below is a real outcome cat-factory must be able to observe: it polls this
+          # deployment's statuses for readiness, so a job that dies before publishing a status
+          # leaves the environment reading `provisioning` until its TTL expires. Emit the
+          # statuses URL FIRST, so `Report failure` can reach it no matter where we exit.
+          if [ -n "${DEPLOYMENT_ID}" ]; then
+            echo "statuses_url=/repos/${REPO}/deployments/${DEPLOYMENT_ID}/statuses" >> "$GITHUB_OUTPUT"
+          fi
           # Previews are OPT-IN infrastructure: until the one-time `preview` environment setup
-          # exists there is nothing to build. The warm path must then be a clean no-op — failing
-          # it would paint a red check on every PR in a repository that never asked for previews.
+          # exists there is nothing to build. The setup-change path must then be a clean no-op —
+          # failing it would paint a red check on a repository that never asked for previews.
           # A `deployment` event is an explicit request, so THAT still fails loudly.
           if [ -z "${SUBDOMAIN}" ]; then
             if [ "$EVENT" = "pull_request" ]; then
@@ -177,8 +185,13 @@ jobs:
             echo "url=${url}"
             echo "worker=cat-factory-pr-${pr}"
             echo "deployment=${deployment}"
-            echo "statuses_url=/repos/${REPO}/deployments/${deployment}/statuses"
           } >> "$GITHUB_OUTPUT"
+          # Only the setup-change path still owes a statuses URL — the deployment path emitted
+          # it up top, before anything that can fail. Writing it twice would work (last one
+          # wins) but would rest on an implicit rule for the one output a failure must reach.
+          if [ -z "${DEPLOYMENT_ID}" ]; then
+            echo "statuses_url=/repos/${REPO}/deployments/${deployment}/statuses" >> "$GITHUB_OUTPUT"
+          fi
 
       # A deployment names an arbitrary sha, and a FORK PR's head commit lives in this
       # repository as `refs/pull/<n>/head` — so "the sha is in this repo" is NOT the boundary.
@@ -421,7 +434,12 @@ jobs:
       # `environment_url` is the API, not the SPA: the environment belongs to the backend
       # SERVICE frame, and a frontend frame binds to it (the harness builds and serves the SPA
       # itself for a UI test). The browsable SPA preview rides `log_url` for humans.
+      #
+      # Gated on `configured`, NOT on `build`: an already-deployed commit skips the build and
+      # must still be reported live, but an unconfigured repository has no deployment record to
+      # report against and would fail this step on an empty statuses URL.
       - name: Publish the environment URL
+        if: steps.id.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           STATUSES_URL: ${{ steps.id.outputs.statuses_url }}
