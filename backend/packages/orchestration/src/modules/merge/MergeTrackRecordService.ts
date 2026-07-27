@@ -34,10 +34,29 @@ export interface RecordMergeDecisionInput {
   /**
    * The pre-computed classification, when the caller already ran it (the merge resolver needs
    * the class BEFORE it decides, so it classifies first and passes the result down rather than
-   * paying for a second VCS call).
+   * paying for a second VCS call). It carries the run's repo identity too, so the record is
+   * attributable without a second resolution — see {@link RunClassification}.
    */
-  classification?: { changeClass: ChangeClass; fileCount: number }
+  classification?: RunClassification
+  /** Explicit override for the repo identity; normally it rides `classification`. */
   repo?: MergeTrackRepoRef
+}
+
+/**
+ * What classifying a run's pull request yields: the change class, how many files it covered,
+ * and WHICH REPO the PR belongs to.
+ *
+ * The repo identity is not incidental — it is the key external-merge attribution looks a record
+ * up by (`getByPullRequest(repoId, prNumber)`), because a webhook delivery knows only
+ * `(repoId, prNumber)`. It is captured here because `classify` already resolves the run's repo
+ * context to read the changed files, so recording it costs nothing extra; resolving it later
+ * would be a second walk of the same linkage.
+ */
+export interface RunClassification {
+  changeClass: ChangeClass
+  fileCount: number
+  repoId?: string | null
+  provider?: VcsProvider | null
 }
 
 export interface MergeTrackRecordServiceDependencies {
@@ -76,18 +95,20 @@ export class MergeTrackRecordService {
    * design: `resolveMergeClassRule` never matches it, so a transient VCS outage can neither
    * widen nor tighten the merge policy.
    */
-  async classify(
-    workspaceId: string,
-    block: Block,
-  ): Promise<{ changeClass: ChangeClass; fileCount: number }> {
-    const absent = { changeClass: 'unknown' as ChangeClass, fileCount: 0 }
+  async classify(workspaceId: string, block: Block): Promise<RunClassification> {
+    const absent: RunClassification = { changeClass: 'unknown', fileCount: 0 }
     const prNumber = block.pullRequest?.number
     if (prNumber == null) return absent
     try {
       const ctx = await this.deps.resolveRunRepoContext?.(workspaceId, block.id)
-      const files = await ctx?.repo.listChangedFiles?.(prNumber)
-      if (!files) return absent
-      return classifyChangedFiles(files.map((f) => f.path))
+      if (!ctx) return absent
+      // Capture the repo identity even when the changed-file list is unreadable: the class then
+      // degrades to `unknown` (inert by design), but the record stays ATTRIBUTABLE, so a PR later
+      // merged on the provider is still matched by `(repoId, prNumber)`.
+      const repo = { repoId: ctx.repoId, provider: ctx.provider ?? null }
+      const files = await ctx.repo.listChangedFiles?.(prNumber)
+      if (!files) return { ...absent, ...repo }
+      return { ...classifyChangedFiles(files.map((f) => f.path)), ...repo }
     } catch {
       return absent
     }
@@ -125,8 +146,8 @@ export class MergeTrackRecordService {
         reviewEffort: null,
         prNumber: input.block.pullRequest?.number ?? null,
         prUrl: input.block.pullRequest?.url ?? null,
-        repoId: input.repo?.repoId ?? null,
-        provider: input.repo?.provider ?? null,
+        repoId: input.repo?.repoId ?? classification.repoId ?? null,
+        provider: input.repo?.provider ?? classification.provider ?? null,
         createdAt: now,
         resolvedAt: terminal ? now : null,
         taggedAt: null,
@@ -145,6 +166,13 @@ export class MergeTrackRecordService {
    * Best-effort and silent: a run with no record (classification never ran, or the merge came
    * from a pipeline with no `merger` step) is simply skipped. Returns the record's id when one
    * was updated, so a caller can put it on a notification payload.
+   *
+   * Only a still-`pending_review` record is SETTLED here, mirroring {@link recordExternalMerge}:
+   * a landed PR must never be re-decided by a late action on a stale card. The concrete case is
+   * a PR merged on the provider (recorded `external_merged`) whose merge-review card is then
+   * dismissed — without this guard that dismissal would rewrite a merged PR as `rejected` and
+   * corrupt the very rollup the record exists to produce. A later EFFORT TAG is still applied,
+   * because tagging is orthogonal to the decision and is welcome whenever it arrives.
    */
   async resolveDecision(
     workspaceId: string,
@@ -159,12 +187,14 @@ export class MergeTrackRecordService {
       )
       if (!existing) return null
       const now = this.deps.clock.now()
+      const settled = existing.decision !== 'pending_review'
+      const tag =
+        reviewEffort !== undefined ? { reviewEffort, taggedAt: reviewEffort ? now : null } : {}
+      if (settled && Object.keys(tag).length === 0) return existing.id
       await this.deps.mergeTrackRecordRepository.patch(workspaceId, existing.id, {
-        decision,
-        resolvedAt: now,
-        ...(reviewEffort !== undefined
-          ? { reviewEffort, taggedAt: reviewEffort ? now : null }
-          : {}),
+        // An already-terminal decision stands; only the tag is folded in.
+        ...(settled ? {} : { decision, resolvedAt: now }),
+        ...tag,
       })
       return existing.id
     } catch {

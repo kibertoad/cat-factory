@@ -157,6 +157,64 @@ const SCHEMA_SEGMENTS: readonly string[] = ['migrations', 'migration', 'drizzle'
 const DOC_SEGMENTS: readonly string[] = ['docs', 'doc', 'documentation']
 
 /**
+ * Extensions that are EXECUTABLE PROGRAM SOURCE wherever they live.
+ *
+ * This is a safety floor for the directory-segment heuristics below, and it is the reason the
+ * per-class rules can be trusted. `docs/`, `deploy/`, `k8s/`, `terraform/` and `.github/` are
+ * matched by whole path SEGMENT, which is right for the prose and manifests that dominate them
+ * — but a repo that keeps a build script at `docs/scripts/build.ts`, or (like this one) service
+ * entry points under `deploy/node/src/main.ts`, would otherwise have real code classified `docs`
+ * or `config`. A workspace that set `docs: always` on the reasonable belief that docs are prose
+ * would then auto-merge executable code with the scores never consulted.
+ *
+ * So a source extension wins over a directory-segment match. It does NOT win over the checks
+ * that come first — a migration is still `schema` and a `*.test.ts` is still `test`, however it
+ * is filed — because those are classifications of what the code IS, not of the folder it is in.
+ */
+const SOURCE_EXTENSIONS: readonly string[] = [
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.vue',
+  '.svelte',
+  '.py',
+  '.rb',
+  '.go',
+  '.rs',
+  '.java',
+  '.kt',
+  '.kts',
+  '.scala',
+  '.cs',
+  '.c',
+  '.h',
+  '.cc',
+  '.cpp',
+  '.hpp',
+  '.m',
+  '.mm',
+  '.swift',
+  '.php',
+  '.ex',
+  '.exs',
+  '.erl',
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.ps1',
+]
+
+/** Whether a path names executable program source by extension (see {@link SOURCE_EXTENSIONS}). */
+function isSourceExtension(lowerPath: string): boolean {
+  return SOURCE_EXTENSIONS.some((ext) => lowerPath.endsWith(ext))
+}
+
+/**
  * Classify ONE changed path. Order matters and encodes intent, most specific first:
  *
  *  1. `schema` — a migration/schema definition, however it is otherwise named. A `.sql` file or
@@ -168,6 +226,12 @@ const DOC_SEGMENTS: readonly string[] = ['docs', 'doc', 'documentation']
  *     locale file is prose, not code, which is exactly the "docs/copy" bucket a policy wants).
  *  5. `config` — CI/tooling/container/IaC.
  *  6. `source` — everything else.
+ *
+ * Steps 4 and 5 match partly by DIRECTORY, so both are floored by {@link isSourceExtension}: a
+ * `.ts`/`.py`/`.sh` file under `docs/` or `deploy/` is code that happens to live there, and
+ * classifying it as prose or config would let a per-class `always` rule auto-merge executable
+ * code. Steps 1–3 are deliberately NOT floored — a migration and a test are what they are
+ * regardless of extension.
  *
  * Never returns `unknown`: that is reserved for "there was no changed-file list at all".
  */
@@ -190,16 +254,20 @@ export function classifyChangedPath(path: string): Exclude<ChangeClass, 'unknown
   // 3. Dependency manifests + lockfiles.
   if (DEPENDENCY_BASENAMES.includes(base)) return 'dependency'
 
+  // Executable source outranks the directory-segment heuristics in steps 4 and 5 (see
+  // `SOURCE_EXTENSIONS`): code filed under `docs/` or `deploy/` is still code.
+  const isSource = isSourceExtension(lower)
+
   // 4. Documentation + user-facing copy.
   if (DOC_EXTENSIONS.some((ext) => base.endsWith(ext))) return 'docs'
   if (DOC_BASENAMES.includes(base.replace(/\.[^.]+$/, ''))) return 'docs'
-  if (hasSegment(lower, DOC_SEGMENTS)) return 'docs'
+  if (!isSource && hasSegment(lower, DOC_SEGMENTS)) return 'docs'
   // i18n message catalogs are prose the product SHOWS a user — the "copy" half of docs/copy.
   if (/(^|\/)(i18n|locales|lang|translations)\/.*\.(json|ya?ml)$/.test(lower)) return 'docs'
 
   // 5. CI / tooling / container / IaC config.
   if (CONFIG_BASENAMES.includes(base)) return 'config'
-  if (hasSegment(lower, CONFIG_SEGMENTS)) return 'config'
+  if (!isSource && hasSegment(lower, CONFIG_SEGMENTS)) return 'config'
   if (/(^|\/)(tsconfig|jsconfig)[^/]*\.json$/.test(lower)) return 'config'
   if (/(^|\/)\.?(oxlintrc|eslintrc|prettierrc|babelrc|swcrc)[^/]*$/.test(lower)) return 'config'
   if (/\.config\.[cm]?[jt]s$/.test(lower)) return 'config'

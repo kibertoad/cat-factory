@@ -75,64 +75,25 @@ import {
 // Re-exported for the composition root + tests that wire this executor by name.
 export type { ResolveRunnerTransport }
 
-// The GitHub repo a run should be implemented against, resolved from the
-// workspace's installation + connected repos (see each facade's container.ts).
-export interface RepoTarget {
-  installationId: number
-  owner: string
-  name: string
-  baseBranch: string
-  /**
-   * For a service in a monorepo, the subdirectory (relative to the repo root) the
-   * service lives in, e.g. `packages/api`. Present only when the resolved repo is
-   * flagged a monorepo AND the service pins a directory; the harness then runs the
-   * agent within that subtree and tells it so. Absent ⇒ whole-repo behaviour.
-   */
-  serviceDirectory?: string
-}
-
-export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
-
-/**
- * Mint a GitHub token for repo work. The optional run context lets a facade prefer
- * the run initiator's personal access token over the App/env default (see
- * `ResolveUserGitHubToken`). Optional ⇒ callers that don't know the run (the
- * bootstrapper, tests) call `mint(installationId)` unchanged.
- */
-export type MintInstallationToken = (
-  installationId: number,
-  ctx?: { executionId: string; initiatedBy?: string },
-) => Promise<string>
-
-/**
- * One private package-registry entry as it rides the harness job body: the decrypted
- * token plus the registry host (derived backend-side from the fixed vendor set — the
- * harness hard-allowlists the hosts it will send a token to). Ecosystem-discriminated
- * so later ecosystems (pip/maven/cargo) are additive. Deliberately a dedicated
- * top-level body field, NEVER a context file: the agent-context snapshot copies
- * `contextFiles` content verbatim, while unknown top-level fields are omitted by its
- * allow-list projection.
- */
-export interface JobPackageRegistrySpec {
-  ecosystem: 'npm'
-  host: string
-  scopes: string[]
-  token: string
-}
-
-/**
- * Ensure the per-task work branch exists on the remote, so every agent in the pipeline
- * operates on the SAME branch. Returns whether the branch is present afterwards; a
- * `false`/absent result makes read-only agents fall back to the base branch (writers
- * create-or-resume the branch in their harness regardless). `options.create` is `true`
- * for writers (create from base when absent) and `false` for read-only agents (probe
- * only — never create, since a missing branch means there is nothing yet to read).
- */
-export type EnsureWorkBranch = (
-  repo: RepoTarget,
-  branch: string,
-  options: { create: boolean },
-) => Promise<boolean>
+// The repo-targeting vocabulary lives next door (a pure declaration block that was crowding
+// this file against its size budget); re-exported here so every existing importer is unchanged.
+import type {
+  EnsureWorkBranch,
+  JobPackageRegistrySpec,
+  MintInstallationToken,
+  RepoTarget,
+  ResolveRepoOrigin,
+  ResolveRepoTarget,
+} from './repoTargeting.js'
+export type {
+  EnsureWorkBranch,
+  JobPackageRegistrySpec,
+  MintInstallationToken,
+  RepoOrigin,
+  RepoTarget,
+  ResolveRepoOrigin,
+  ResolveRepoTarget,
+} from './repoTargeting.js'
 
 /** A subscription token leased from the workspace's pool for a vendor. */
 interface LeasedSubscriptionToken {
@@ -327,22 +288,6 @@ function buildAgentContextRecord(
 function refForHandle(handle: AgentJobHandle): RunnerJobRef {
   return { runId: handle.runId ?? handle.jobId, jobId: handle.jobId }
 }
-
-/** The git origin a run's repo is reached at: the clone URL plus the VCS provider. */
-export interface RepoOrigin {
-  cloneUrl: string
-  provider: 'github' | 'gitlab'
-}
-
-/**
- * Resolve the clone URL + VCS provider for a run's repo. The repo projection carries NO host
- * (it stores only `owner`/`name`), so the origin is a deployment-level fact supplied here.
- * Defaults to GitHub (`https://github.com/<owner>/<name>.git`); a GitLab deployment (local
- * mode) injects a builder that emits the configured GitLab host + `gitlab`, so the harness
- * clones the right host AND opens a merge request instead of a pull request. Without this the
- * clone URL would always point at github.com, so a GitLab repo could never be cloned.
- */
-export type ResolveRepoOrigin = (repo: RepoTarget) => RepoOrigin
 
 /**
  * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
@@ -1429,6 +1374,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       seen.add(key)
       targets.push({
         installationId: r.connectionId ?? repo.installationId,
+        // A reference repo already carries the id it was attached by; the neutral
+        // `VcsRepoRef.repoId` vocabulary is the stringified form.
+        repoId: String(r.repoId),
         owner: r.owner,
         name: r.name,
         baseBranch: r.defaultBranch,

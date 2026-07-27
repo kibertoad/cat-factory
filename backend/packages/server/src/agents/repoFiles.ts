@@ -245,6 +245,8 @@ export function makeResolveRunRepoContext(
         cache,
       ),
       baseBranch: target.baseBranch,
+      repoId: target.repoId,
+      ...(target.provider ? { provider: target.provider } : {}),
     }
   }
 }
@@ -324,6 +326,8 @@ export function makeResolveRepoFilesForCoords(
     return {
       repo: makeRepoFiles(client, installation.installationId, { owner, repo }),
       baseBranch: match.defaultBranch ?? 'main',
+      repoId: String(match.githubId),
+      ...(match.provider ? { provider: match.provider } : {}),
     }
   }
 }

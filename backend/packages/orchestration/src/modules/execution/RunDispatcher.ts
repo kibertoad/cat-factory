@@ -84,6 +84,7 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
+import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import { PollCompletionController } from './PollCompletionController.js'
@@ -175,6 +176,8 @@ export interface RunDispatcherDeps {
    * its controller here, with no new dispatch branch. Absent/unwired kinds pass through.
    */
   interviewControllers?: InterviewGateController<unknown>[]
+  /** Keeps the run's verification report current on its PR; a no-op with no publisher wired. */
+  prVerificationReport: PrVerificationReportController
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -242,6 +245,7 @@ export class RunDispatcher {
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
   /** Interview-gate controllers keyed by their `agentKind` — the trait-driven dispatch table. */
   private readonly interviewControllers: Map<string, InterviewGateController<unknown>>
+  private readonly prVerificationReport: PrVerificationReportController
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -331,6 +335,7 @@ export class RunDispatcher {
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
     )
+    this.prVerificationReport = deps.prVerificationReport
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -1510,6 +1515,18 @@ export class RunDispatcher {
     // the harness). Position-independent like the resolver above; a no-op for built-ins
     // and when GitHub isn't wired. A throwing op propagates to fail the step/run.
     await this.repoOps.runRegisteredPostOps(workspaceId, instance, step, isFinalStep, result)
+
+    // Refresh the engine-maintained VERIFICATION REPORT on the run's PR from the evidence the
+    // instance now carries (CI verdict, tester report, environment lifecycle, merge assessment).
+    // Its POSITION is load-bearing: AFTER the terminal resolver, so a `merger` step publishes
+    // with its resolved `MergeDecision` recorded; BEFORE `finalizeBlock`, so the
+    // `pipeline_complete` card a merger-less pipeline raises points at a PR that already carries
+    // the finished report. A passing polling gate settles through here too, so the CI verdict
+    // needs no hook of its own. Best-effort inside the controller: no publisher wired, no PR
+    // yet, or a settlement whose evidence is unchanged ⇒ nothing happens. A settlement that DOES
+    // change the evidence writes, so the report tracks the run rather than landing once at the
+    // end — which is the point, since a run that fails or parks part-way never reaches an end.
+    await this.prVerificationReport.publishForRun(workspaceId, instance)
 
     if (isFinalStep) {
       instance.status = 'done'

@@ -788,6 +788,21 @@ export class FetchGitLabClient implements VcsClient {
     )
   }
 
+  /**
+   * The MR's current description — GitLab's analogue of a PR body — for the verification
+   * report's read-splice-write upsert.
+   */
+  async getPullRequestBody(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests/${number}`, {
+      connection,
+    })
+    return ((json ?? {}) as { description?: string | null }).description ?? null
+  }
+
   async getPullRequestMergeability(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

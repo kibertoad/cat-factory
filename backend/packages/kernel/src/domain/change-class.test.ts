@@ -49,8 +49,40 @@ describe('classifyChangedPath', () => {
     ['vitest.config.ts', 'config'],
     ['infra/main.tf', 'config'],
     ['.oxlintrc.json', 'config'],
-    ['deploy/node/src/main.ts', 'config'],
+    ['deploy/backend/wrangler.toml', 'config'],
+    ['k8s/api/deployment.yaml', 'config'],
+    ['.github/workflows/release.yml', 'config'],
   ])('classifies %s as config', (path, expected) => {
+    expect(classifyChangedPath(path)).toBe(expected)
+  })
+
+  // The safety floor under the directory-segment heuristics: a per-class `always` rule keys off
+  // this classification, so executable code filed under a docs/deploy/CI directory must NOT be
+  // demoted to the prose or config bucket — otherwise "always auto-merge docs" silently
+  // auto-merges a TypeScript change with the merger's scores never consulted.
+  it.each([
+    ['deploy/node/src/main.ts', 'source'],
+    ['docs/scripts/build-diagrams.ts', 'source'],
+    ['docs/tooling/generate.py', 'source'],
+    ['.github/scripts/release.mjs', 'source'],
+    ['k8s/operator/main.go', 'source'],
+    ['terraform/lambda/handler.js', 'source'],
+    ['deploy/local/bin/start.sh', 'source'],
+  ])(
+    'classifies executable source under a docs/config directory as source: %s',
+    (path, expected) => {
+      expect(classifyChangedPath(path)).toBe(expected)
+    },
+  )
+
+  // ...but the floor does NOT reach past the checks that come before it: what a file IS still
+  // beats where it lives.
+  it.each([
+    ['backend/runtimes/node/drizzle/0001_init/migration.ts', 'schema'],
+    ['alembic/versions/abc.py', 'schema'],
+    ['docs/examples/widget.test.ts', 'test'],
+    ['deploy/node/src/main.spec.ts', 'test'],
+  ])('keeps the schema/test classification for %s', (path, expected) => {
     expect(classifyChangedPath(path)).toBe(expected)
   })
 

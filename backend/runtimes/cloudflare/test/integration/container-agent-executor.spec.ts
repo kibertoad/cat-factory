@@ -55,7 +55,13 @@ const routing = (provider: string, model: string): AgentRouting => ({
   byKind: {},
 })
 
-const repo: RepoTarget = { installationId: 7, owner: 'octo', name: 'app', baseBranch: 'main' }
+const repo: RepoTarget = {
+  installationId: 7,
+  repoId: '7001',
+  owner: 'octo',
+  name: 'app',
+  baseBranch: 'main',
+}
 
 function context(): AgentRunContext {
   return {

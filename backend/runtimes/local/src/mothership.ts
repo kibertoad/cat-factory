@@ -5,10 +5,13 @@ import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-fa
 import {
   DelegatedAppTokenSource,
   HttpMachineEventClient,
+  HttpMachineNotificationClient,
   HttpPersistenceRpcClient,
   type Logger,
   type MothershipConnector,
+  RemoteNotificationChannel,
   createRemoteRepositoryRegistry,
+  logger,
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
@@ -99,6 +102,15 @@ export interface MothershipComposition {
    * both directions"; the inbound subscribe leg is a later slice (see the tracker).
    */
   realtimeAdapter: MothershipWebSocketPropagator
+  /**
+   * The mothership-delegated notification channel: asks the mothership to deliver a notification
+   * this node raised (by id) through the ORG's external transports — Slack today. The bot token is
+   * sealed with the mothership's key, which never reaches this machine (product decision 3), so
+   * external delivery cannot happen locally; `buildLocalContainer` composes this channel alongside
+   * the local in-app push, whose frame already reaches the mothership over the real-time upstream
+   * relay. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  notificationChannel: RemoteNotificationChannel
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
   /**
@@ -147,6 +159,17 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const realtimeAdapter = new MothershipWebSocketPropagator(
     new HttpMachineEventClient({ baseUrl, token: machineToken }),
   )
+  // Notification delivery delegation: same base URL + per-request token again, so the org's Slack
+  // reaches the team for a run this laptop drove. A token-less node simply doesn't delegate (the
+  // row is still persisted and the in-app card still renders).
+  const notificationChannel = new RemoteNotificationChannel({
+    client: new HttpMachineNotificationClient({ baseUrl, token: machineToken }),
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'mothership notification delivery failed',
+      ),
+  })
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
@@ -158,6 +181,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     repos,
     githubTokenSource,
     realtimeAdapter,
+    notificationChannel,
     credentialStore,
     localSettingsStore,
     workQueue,

@@ -22,6 +22,7 @@ import {
 
 const resolveRepoTarget: ResolveRepoTarget = async () => ({
   installationId: 1,
+  repoId: '1001',
   owner: 'o',
   name: 'r',
   baseBranch: 'main',

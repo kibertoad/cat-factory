@@ -93,6 +93,10 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
     resolved.repo.isMonorepo && resolved.directory ? resolved.directory : undefined
   return {
     installationId,
+    // The projection row's id IS the provider's repo id, stringified into the neutral
+    // `VcsRepoRef.repoId` vocabulary — the same shape a webhook delivery names.
+    repoId: String(resolved.repo.githubId),
+    ...(resolved.repo.provider ? { provider: resolved.repo.provider } : {}),
     owner: resolved.repo.owner,
     name: resolved.repo.name,
     baseBranch: resolved.repo.defaultBranch ?? 'main',

@@ -104,6 +104,10 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       stepResolverRegistry: o.stepResolverRegistry,
       initiativePresetRegistry: o.initiativePresetRegistry,
       taskTypeRegistry: o.taskTypeRegistry,
+      // - prVerificationReportPublisher + appBaseUrl: the engine's PR-report hook, so the
+      //   composed report (and its in-place idempotency) is asserted against real D1.
+      prVerificationReportPublisher: o.prVerificationReportPublisher,
+      appBaseUrl: o.appBaseUrl,
     }),
     ...backendRegistries,
     ...fragmentLibraryDeps(),

@@ -473,7 +473,7 @@ function fakeRepoFiles(seed: Record<string, string> = {}): RepoFiles & {
 }
 
 function repoCtx(repo: RepoFiles, baseBranch = 'main'): RunRepoContext {
-  return { repo, baseBranch }
+  return { repo, baseBranch, repoId: 'repo_1' }
 }
 
 describe('EnvironmentConnectionService — validateRepo', () => {

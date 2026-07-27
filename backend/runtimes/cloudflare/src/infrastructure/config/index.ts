@@ -21,6 +21,10 @@ import { type TasksConfig, loadTasksConfig } from './tasks'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type SlackConfig, loadSlackConfig } from './slack'
+import {
+  type NotificationWebhookConfig,
+  loadNotificationWebhookConfig,
+} from './notificationWebhooks'
 import { type ReleaseHealthConfig, loadReleaseHealthConfig } from './releaseHealth'
 import { type EmailConfig, loadEmailConfig } from './email'
 import { type RetentionConfig, loadRetentionConfig } from './retention'
@@ -48,6 +52,7 @@ export type {
   EnvironmentsConfig,
   RunnerPoolConfig,
   SlackConfig,
+  NotificationWebhookConfig,
   ReleaseHealthConfig,
   EmailConfig,
   RetentionConfig,
@@ -88,6 +93,7 @@ export function loadConfig(env: Env): AppConfig {
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),
+    notificationWebhooks: loadNotificationWebhookConfig(env),
     releaseHealth: loadReleaseHealthConfig(env),
     email: loadEmailConfig(env),
     retention: loadRetentionConfig(env),

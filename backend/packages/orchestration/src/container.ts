@@ -118,6 +118,7 @@ import type {
   InitiativeRepository,
   PipelineScheduleRepository,
   PullRequestMerger,
+  PrVerificationReportPublisher,
   BranchUpdater,
   ResolveBinaryArtifactStore,
   ObservabilityConnectionRepository,
@@ -264,10 +265,22 @@ export interface CoreDependencies {
    * emailed.
    */
   resolveSystemEmailSender?: () => Promise<EmailSender | null>
-  /** Base URL the invite-accept link points at (SPA origin). */
+  /**
+   * Base URL of the SPA (its origin) — the invite-accept / password-reset links point at it,
+   * and the PR verification report builds its observability deep link from it. Absent ⇒ those
+   * surfaces omit the link rather than emitting a dead one.
+   */
   appBaseUrl?: string
-  /** Optional structural logger (the facade's pino logger) for best-effort diagnostics. */
-  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  /**
+   * Optional structural logger (the facade's pino logger) for best-effort diagnostics.
+   * `warn` is required alongside `info` because the paths that need it most are the ones
+   * designed to swallow their failures (the PR verification report) — a logger that can only
+   * report success is no use to them.
+   */
+  logger?: {
+    info(obj: Record<string, unknown>, msg?: string): void
+    warn(obj: Record<string, unknown>, msg?: string): void
+  }
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -886,6 +899,14 @@ export interface CoreDependencies {
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** Performs the real GitHub merge so a task's `done` means "PR merged". */
   pullRequestMerger?: PullRequestMerger
+  /**
+   * Publishes the engine's verification report (CI verdict, tester report, ephemeral
+   * environment lifecycle, merge assessment, run metadata + observability deep link) onto the
+   * run's pull request, as a marker-delimited section updated idempotently in place. Composed
+   * per facade from its ENGINE VCS client, so a GitLab deployment publishes through the same
+   * port. Absent → the engine behaves exactly as it did before the feature.
+   */
+  prVerificationReportPublisher?: PrVerificationReportPublisher
   /** Stores a workspace's observability connection (provider + sealed credentials). */
   observabilityConnectionRepository?: ObservabilityConnectionRepository
   /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */

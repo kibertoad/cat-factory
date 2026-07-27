@@ -11,6 +11,7 @@ import { GitHubPullRequestMerger } from '../src/github/GitHubPullRequestMerger.j
 
 const OWN_TARGET = {
   installationId: 42,
+  repoId: '1001',
   owner: 'o',
   name: 'own',
   baseBranch: 'main',

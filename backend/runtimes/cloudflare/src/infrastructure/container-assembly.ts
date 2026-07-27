@@ -16,6 +16,7 @@ import type {
   AccountSettingsService,
   ApiKeyService,
   LocalModelEndpointService,
+  NotificationWebhookService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
@@ -38,6 +39,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
+import type { NotificationChannel } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -79,6 +81,7 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
   buildAppRegistry,
+  buildExternalNotificationChannel,
   buildResolveRepoTarget,
   buildWorkerVcsIdentityRegistry,
   maybeWrapConsensus,
@@ -134,6 +137,15 @@ export interface WorkerContainerAssemblyInput {
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
   publicApiKeys: PublicApiKeyService | undefined
+  /**
+   * The outbound notification-webhook feature (management service + delivery channel), or null
+   * when the deployment has no encryption key to seal the signing secret with. Both halves arrive
+   * together from one builder so they can't drift apart.
+   */
+  notificationWebhookSupport: {
+    service: NotificationWebhookService
+    channel: NotificationChannel
+  } | null
   localModelEndpoints: LocalModelEndpointService | undefined
   userSecrets: UserSecretService | undefined
   openRouterCatalog: OpenRouterCatalogService | undefined
@@ -181,6 +193,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     testSecretsService,
     personalSubscriptions,
     apiKeys,
+    notificationWebhookSupport,
     localModelEndpoints,
     openRouterCatalog,
     eventPublisher,
@@ -312,7 +325,15 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
-    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator, providerRegistry),
+    ...selectMergeLifecycleDeps({
+      env,
+      config,
+      db,
+      clock,
+      idGenerator,
+      providerRegistry,
+      webhookChannel: notificationWebhookSupport?.channel,
+    }),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
     // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
     // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s
@@ -390,6 +411,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
+    notificationWebhookSupport,
     localModelEndpoints,
     userSecrets,
     openRouterCatalog,
@@ -435,6 +457,13 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   // `AgentRunController` AND folded into the mothership `repositories` registry below (it is the
   // one repo not carried by `CoreDependencies`). One instance shared by both.
   const agentRunRepository = new D1AgentRunRepository({ db })
+  // The EXTERNAL (non-in-app) delivery channels, for the mothership delivery seam below. Built
+  // from the same source of truth `selectMergeLifecycleDeps` composes into the engine's fan-out.
+  const externalNotificationChannel = buildExternalNotificationChannel(
+    config,
+    db,
+    notificationWebhookSupport?.channel,
+  )
 
   return {
     ...createCore(dependencies),
@@ -477,6 +506,16 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // endpoint 503s.
     ...(env.WORKSPACE_EVENTS
       ? { machineEventRelay: new DurableObjectMachineEventRelay(env.WORKSPACE_EVENTS) }
+      : {}),
+    // Mothership-side notification DELIVERY (`POST /internal/notifications/deliver`): a
+    // mothership-mode node persists its notification rows here but holds none of the org's
+    // external delivery credentials (the Slack bot token is sealed with THIS Worker's key), so it
+    // asks the mothership to deliver a row by id. Wired with the EXTERNAL channels only — the
+    // in-app frame for a laptop-raised notification already arrives over the real-time upstream
+    // relay, so delivering it here too would double-push it. Wired symmetrically on the Node
+    // facade. Slack off ⇒ no external channel ⇒ the endpoint 503s.
+    ...(externalNotificationChannel
+      ? { machineNotificationDelivery: externalNotificationChannel }
       : {}),
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
@@ -544,6 +583,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     apiKeys,
     // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
     publicApiKeys,
+    // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
+    notificationWebhooks: notificationWebhookSupport?.service,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a

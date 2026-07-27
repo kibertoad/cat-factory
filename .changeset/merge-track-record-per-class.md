@@ -37,6 +37,23 @@ tag** (`none` / `minor` / `major`). Per-class rollups are single SQL aggregates 
 - Classification and record writes are **best-effort side channels** — a failure in any part of this
   feature can never fail or block a merge.
 
+A merge decision's record carries the run's **provider-neutral repo identity** (`repoId` +
+`provider`), captured from the run-repo resolution the classification already performs. That is what
+makes a record attributable: external-merge detection can only look a record up by
+`(repoId, prNumber)`, since a webhook delivery knows nothing else about the run.
+
+**BREAKING (backend API):** `RepoTarget` (`@cat-factory/server`) and `RunRepoContext`
+(`@cat-factory/kernel`) gain a required `repoId` plus an optional `provider`, in the neutral
+`VcsRepoRef` vocabulary. Both are produced in exactly one place each, so a deployment that builds
+its own `ResolveRepoTarget` / `ResolveRunRepoContext` must supply the id; the compiler points at
+every site.
+
+A contract route whose request body is ALL-optional now mounts the new `optionalJsonBody`
+middleware (`@cat-factory/server`). A declared `requestBodySchema` otherwise makes the transport
+REQUIRE a body — the validator reads `c.req.json()` before the schema is consulted — so a route that
+merely gained an optional field would start rejecting the body-less calls it had always accepted.
+`POST /blocks/:blockId/merge` and `POST /notifications/:id/act` keep working with no body at all.
+
 **BREAKING (wire shape):** `RiskPolicy` gains a required `classRules` field (a partial map from
 change class to `thresholds` / `always` / `never`). Per the pre-1.0 policy there is no dual-read
 shim: persisted rows take the `'{}'` column default, which resolves to "use the score ceilings" for

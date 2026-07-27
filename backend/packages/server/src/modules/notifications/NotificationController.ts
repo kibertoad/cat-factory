@@ -8,6 +8,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
 import { notificationActEffect } from './notificationActions.js'
 
@@ -42,6 +43,9 @@ export function notificationController(): Hono<AppEnv> {
   // exactly once. `service.act` performs the claim BEFORE the side-effect so two concurrent
   // acts (double-click, two inboxes, HTTP retry) can't both merge/retry; a failed side-effect
   // reopens the card so the human can retry.
+  // Same as the merge route: the effort tag is optional, so `act` with no body at all stays
+  // the historical call (a headless caller never sends one).
+  app.use('/notifications/:notificationId/act', optionalJsonBody)
   buildHonoRoute(app, actNotificationContract, async (c) => {
     const notifications = requireNotifications(c)
     if (!notifications) return unavailable(c)

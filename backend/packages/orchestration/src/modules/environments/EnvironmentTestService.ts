@@ -191,7 +191,12 @@ export class EnvironmentTestService {
       throw new ConflictError(
         'This service’s provisioning cannot run yet — configure its environment handler first.',
         'env_test_not_provisionable',
-        gate.reason ? { reason: gate.reason } : undefined,
+        // The sub-reason rides on its OWN key, NOT `reason`: `ConflictError` merges details as
+        // `{ reason: code, ...details }`, so a `reason` key here would clobber the
+        // `env_test_not_provisionable` code the SPA keys its localized copy + "Configure
+        // environment handler" jump off (`details.reason`). `handlerIssue` lets the SPA still
+        // word the specific case — nothing configured vs. an ambiguous match.
+        gate.reason ? { handlerIssue: gate.reason } : undefined,
       )
     }
     // Resolve the git provider up front so a missing VCS is a real 409 (the SPA keys its

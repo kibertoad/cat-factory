@@ -58,6 +58,7 @@ function makeExecutor(views: RunnerJobView[]): {
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',
@@ -164,6 +165,7 @@ describe('ContainerAgentExecutor per-call telemetry', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',

@@ -23,7 +23,13 @@ function makeBuilder(block: Block | null, repo?: { installationId: number } | nu
     resolveRepoTarget: async () =>
       repo === null
         ? null
-        : ({ installationId: 7, owner: 'acme', name: 'web', baseBranch: 'main' } as never),
+        : ({
+            installationId: 7,
+            repoId: '1001',
+            owner: 'acme',
+            name: 'web',
+            baseBranch: 'main',
+          } as never),
     mintInstallationToken: async () => 'gh-token',
     sessionService: new ContainerSessionService({ secret: 'x'.repeat(32) }),
     proxyBaseUrl: 'https://app.test/v1',

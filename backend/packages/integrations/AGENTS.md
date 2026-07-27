@@ -12,7 +12,8 @@ prerequisites are configured.
   `runners/` (the self-hosted runner-pool transports).
 - `datadog/` + `observability/` — release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/` — incident enrichment.
-- `slack/`, `email/` — notification channels; `writeback/`, `providers/`, `corpus/`,
+- `slack/`, `email/`, `notificationWebhook/` — notification channels (the last one is the outbound
+  HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/` — supporting services.
 - `backend-registries.ts` — a loose registration file sitting among the module dirs.
 

@@ -19,16 +19,33 @@ import * as v from 'valibot'
  * The permission a key carries on the `/api/v1` surface. An ordered ladder — each level
  * INCLUDES the ones below it (`admin` ⊃ `write` ⊃ `read`), so an endpoint gates on a MINIMUM:
  *
- *  - `read`  — read-only reads/streams (list services/tasks/pipelines, poll a run, SSE).
- *  - `write` — everything `read` can do, PLUS non-destructive mutations (create/start/stop/
+ *  - `read`   — read-only reads/streams (list services/tasks/pipelines, poll a run, SSE).
+ *  - `write`  — everything `read` can do, PLUS non-destructive mutations (create/start/stop/
  *    retry/edit a task, start an initiative run).
- *  - `admin` — everything `write` can do, PLUS destructive / merge-adjacent operations
- *    (delete a task; future: resolve a merge-review notification, which performs a real merge).
+ *  - `decide` — everything `write` can do, PLUS answering a run's PARKED human decisions
+ *    (requirement-review findings, implementation-fork choices) — and, because of that,
+ *    starting a headless run on a pipeline that can park at all. Answering a decision injects
+ *    caller-supplied prose into the requirements every downstream agent then implements and
+ *    un-parks the run, so it is deliberately a rung above ordinary task authoring: a plain
+ *    `write` integration sees exactly the pre-existing behaviour, including the refusal of
+ *    parking pipelines. Minting a `decide` key is the operator asserting "this integration is
+ *    the headless overseer for these runs".
+ *
+ *    **The grant is WORKSPACE-WIDE, not limited to runs the key started.** The decision surface
+ *    is keyed by run id and resolves any run in the key's workspace — including a board task a
+ *    human started in the SPA — because a headless overseer that could only answer its own runs
+ *    would be useless for the case it exists for (an integration watching a team's board). That
+ *    is the same reach a `write` key already has over board runs (start/stop/retry), one rung
+ *    up. Scope a key to a workspace accordingly, and prefer `write` for an integration that
+ *    only needs to author and launch.
+ *  - `admin`  — everything `decide` can do, PLUS destructive / merge-adjacent operations
+ *    (delete a task, act on a notification — which can perform a real merge).
  *
  * The canonical rank order lives beside this schema (`PUBLIC_API_SCOPES`) so both the wire
- * validation and the server-side `scope ≥ required` check read from one source of truth.
+ * validation and the server-side `scope ≥ required` check read from one source of truth —
+ * the ARRAY ORDER *is* the ladder, and `scopeSatisfies` derives its ranks from it.
  */
-export const PUBLIC_API_SCOPES = ['read', 'write', 'admin'] as const
+export const PUBLIC_API_SCOPES = ['read', 'write', 'decide', 'admin'] as const
 export const publicApiScopeSchema = v.picklist(PUBLIC_API_SCOPES)
 export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
 
@@ -56,8 +73,9 @@ export type PublicApiKeyListResult = v.InferOutput<typeof publicApiKeyListResult
 /**
  * Mint a new key. A label plus an optional `scope` (the account/workspace scope comes from the
  * mounting route). `scope` defaults to `write` — the safe middle of the ladder: a fresh key can
- * create/start/manage tasks but NOT delete or perform a merge-adjacent action until it is minted
- * `admin` explicitly. Pass `read` for a monitor-only integration.
+ * create/start/manage tasks but NOT answer a parked run's decisions, delete, or perform a
+ * merge-adjacent action until it is minted `decide` / `admin` explicitly. Pass `read` for a
+ * monitor-only integration.
  */
 export const createPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),

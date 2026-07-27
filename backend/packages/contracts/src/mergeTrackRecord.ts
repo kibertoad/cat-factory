@@ -141,11 +141,21 @@ const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
  * `VcsRepoRef`/`VcsProvider` vocabulary), never a GitHub-shaped `githubId`/`installationId`.
  */
 export const mergeTrackRecordSchema = v.object({
-  /** Deterministic id — `mtr_<executionId>`, or `mtr_ext_<repoId>_<prNumber>` when run-less. */
+  /**
+   * Deterministic id, derived from the run: `mtr_<executionId>`. Deterministic so a durable-driver
+   * replay of a settled merger step collides with the row it already wrote (first write wins)
+   * instead of duplicating it.
+   */
   id: v.string(),
   /** The task/block whose pull request this covers. */
   blockId: v.string(),
-  /** The run that produced the PR; null for a record born from an externally-merged PR. */
+  /**
+   * The run that produced the PR. Nullable at the wire/storage level because the column is, but
+   * every record written today is born at a merge DECISION POINT inside a run, so it is set. An
+   * external merge does not MINT a record — it settles the one the run already wrote (which is
+   * also why attribution keys on `(repoId, prNumber)`); a PR cat-factory never opened has no
+   * record and is correctly invisible to the track record.
+   */
   executionId: v.nullable(v.string()),
   /** The deterministic, path-derived change class (see {@link changeClassSchema}). */
   changeClass: changeClassSchema,

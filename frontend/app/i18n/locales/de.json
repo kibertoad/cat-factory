@@ -563,6 +563,7 @@
       "scopes": {
         "read": "Nur Lesen",
         "write": "Lesen und Schreiben",
+        "decide": "Antworten auf Entscheidungen",
         "admin": "Vollzugriff"
       },
       "toast": {
@@ -772,6 +773,11 @@
         "heading": "Agenten-Observability",
         "body": "Speichere den vollständigen Kontext, der jedem Agenten bereitgestellt wird: die zusammengesetzten Prompts, die eingefügten Best-Practice-Fragmente und den vollständigen Inhalt der in seinen Container injizierten Dateien, sodass er später in der Observability-Ansicht inspiziert werden kann. Die Inhalte werden für denselben Zeitraum wie die LLM-Telemetrie pro Aufruf aufbewahrt. Deaktivieren, um die Speicherung zu stoppen (bestehende Snapshots werden durch die Aufbewahrung bereinigt).",
         "toggle": "Vollständigen Agentenkontext speichern"
+      },
+      "prReport": {
+        "heading": "Verifizierungsbericht im Pull Request",
+        "body": "Pflegt einen Verifizierungsbericht im Pull Request jedes Laufs: das CI-Ergebnis, den Bericht des Testers, den Lebenszyklus der kurzlebigen Umgebung und die Merge-Bewertung – als erfasste Fakten statt als Behauptungen des Agenten. Zugangsdaten werden vor dem Schreiben entfernt. Zum Beenden ausschalten; ein bereits vorhandener Bericht bleibt unverändert.",
+        "toggle": "Verifizierungsbericht in Pull Requests veröffentlichen"
       },
       "retention": {
         "heading": "Screenshot-Aufbewahrung",
@@ -4148,6 +4154,8 @@
         "env_test_not_a_frame": "Der Umgebungs-Selbsttest läuft pro Service und kann daher nur für einen Service gestartet werden, nicht für ein Modul oder eine Aufgabe.",
         "env_test_infraless": "Für diesen Service ist keine Bereitstellung einer kurzlebigen Umgebung konfiguriert, es gibt also nichts, was der Selbsttest prüfen könnte.",
         "env_test_not_provisionable": "Dieser Service hat einen Bereitstellungstyp, aber es ist noch kein Workspace-Handler dafür verfügbar, sodass die Bereitstellung nicht laufen kann. Konfiguriere einen Umgebungs-Handler.",
+        "env_test_not_provisionable_no_handler": "Für den Bereitstellungstyp dieses Service ist kein Workspace-Umgebungs-Handler konfiguriert. Registriere in Infrastruktur → Testumgebungen einen — für einen benutzerdefinierten Anbieter einen Custom (remote-custom)-Handler, dessen akzeptierte manifest id mit der übereinstimmt, die dieser Service festlegt.",
+        "env_test_not_provisionable_type_mismatch": "Mehr als ein Umgebungs-Handler könnte auf den Bereitstellungstyp dieses Service passen. Lege für diesen Service eine manifest id fest, sodass genau einer aufgelöst wird, oder entferne den überlappenden Handler in Infrastruktur → Testumgebungen.",
         "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden."
       },
       "action": {

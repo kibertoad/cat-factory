@@ -152,6 +152,8 @@ type ConformanceAppOpts = {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
+  appBaseUrl?: string
   taskSourceProviders?: CoreDependencies['taskSourceProviders']
   detectionConventions?: CoreDependencies['detectionConventions']
 }
@@ -223,6 +225,8 @@ function buildConformanceOverrides(
       testerQualityReviewer: o.testerQualityReviewer,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
+      prVerificationReportPublisher: o.prVerificationReportPublisher,
+      appBaseUrl: o.appBaseUrl,
     }),
   }
 }

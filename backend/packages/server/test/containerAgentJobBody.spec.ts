@@ -60,6 +60,7 @@ function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> 
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',
@@ -517,8 +518,20 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
   // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural
   // repo resolver wired so the executor can resolve a connected service's repo target.
-  const OWN_TARGET = { installationId: 7, owner: 'acme', name: 'widgets', baseBranch: 'main' }
-  const PEER_TARGET = { installationId: 7, owner: 'acme', name: 'billing', baseBranch: 'develop' }
+  const OWN_TARGET = {
+    installationId: 7,
+    repoId: '1001',
+    owner: 'acme',
+    name: 'widgets',
+    baseBranch: 'main',
+  }
+  const PEER_TARGET = {
+    installationId: 7,
+    repoId: '1001',
+    owner: 'acme',
+    name: 'billing',
+    baseBranch: 'develop',
+  }
 
   // A plural resolver that returns the own service (primary) plus one peer resolved from
   // `frm_peer`. It only returns the peer when that frame is among the requested involved ids,
@@ -681,6 +694,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -735,6 +749,7 @@ describe('ContainerAgentExecutor private package registries', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -791,6 +806,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -847,6 +863,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
       resolveBlockModel: () => undefined,
       resolveRepoTarget: async () => ({
         installationId: 7,
+        repoId: '1001',
         owner: 'acme',
         name: 'widgets',
         baseBranch: 'main',
@@ -900,6 +917,7 @@ function makeExecutorReturning(result: RunnerJobResult): ContainerAgentExecutor 
     resolveBlockModel: () => undefined,
     resolveRepoTarget: async () => ({
       installationId: 7,
+      repoId: '1001',
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'main',

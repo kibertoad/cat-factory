@@ -24,8 +24,15 @@ optional module is `build(key, factory)`-declared once and emitted via `...modul
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
   human merges or declines), plus `RunStateMachine`, `StepGraph`, the gate/companion/review
-  controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …).
-  The run/step lifecycle reference is `docs/execution-state-machine.md`.
+  controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
+  `PrVerificationReportController` + `prReport.logic.ts` + `prReportText.logic.ts` (the **PR
+  verification report**: composed from the settled run's own state and published onto its PR
+  through the `PrVerificationReportPublisher` port; `prReportText` is the text boundary every
+  untrusted value crosses — auto-link triggers, table cells, code fences — and the composer
+  scrubs free text with `redactSecrets` before either the prose or the JSON block sees it).
+  `ExecutionServiceDependencies.ts` holds the engine's injected-collaborator contract,
+  re-exported from `ExecutionService.ts`. The run/step lifecycle reference is
+  `docs/execution-state-machine.md`.
 - `merge/` — the merge policy + its evidence: `RiskPolicyService` (the per-workspace
   merge-threshold preset library, including the per-class `classRules`), `MergeTrackRecordService`
   (deterministic change classification + the persisted record of every merge decision, the

@@ -512,6 +512,8 @@
         "env_test_not_a_frame": "Autotest środowiska działa dla poszczególnych usług, więc można go uruchomić tylko dla usługi, a nie dla modułu czy zadania.",
         "env_test_infraless": "Ta usługa nie ma skonfigurowanego udostępniania środowisk tymczasowych, więc autotest nie ma czego sprawdzić.",
         "env_test_not_provisionable": "Ta usługa ma typ udostępniania, ale nie ma jeszcze dla niego żadnego mechanizmu obsługi w przestrzeni roboczej, więc udostępnianie nie może zostać uruchomione. Skonfiguruj mechanizm obsługi środowiska.",
+        "env_test_not_provisionable_no_handler": "Dla typu udostępniania tej usługi nie skonfigurowano żadnego mechanizmu obsługi środowiska w przestrzeni roboczej. W sekcji Infrastruktura → Środowiska testowe zarejestruj jeden — dla dostawcy niestandardowego mechanizm obsługi Custom (remote-custom), którego akceptowany manifest id odpowiada temu, który przypina ta usługa.",
+        "env_test_not_provisionable_type_mismatch": "Do typu udostępniania tej usługi może pasować więcej niż jeden mechanizm obsługi środowiska. Przypnij manifest id do tej usługi, aby rozwiązywany był dokładnie jeden, albo usuń nakładający się mechanizm obsługi w sekcji Infrastruktura → Środowiska testowe.",
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym."
       },
       "action": {
@@ -2413,6 +2415,7 @@
       "scopes": {
         "read": "Tylko odczyt",
         "write": "Odczyt i zapis",
+        "decide": "Odpowiadanie na decyzje",
         "admin": "Pełny dostęp"
       },
       "toast": {
@@ -2622,6 +2625,11 @@
         "heading": "Obserwowalność agenta",
         "body": "Przechowuj pełny kontekst przekazany każdemu agentowi: złożone prompty, włączone fragmenty dobrych praktyk oraz pełną treść plików wstrzykniętych do jego kontenera, aby można było je później sprawdzić w widoku obserwowalności. Treści są przechowywane przez to samo okno co telemetria LLM dla poszczególnych wywołań. Wyłącz, aby przestać je przechowywać (istniejące migawki są usuwane przez retencję).",
         "toggle": "Przechowuj pełny kontekst agenta"
+      },
+      "prReport": {
+        "heading": "Raport weryfikacyjny w pull requeście",
+        "body": "Utrzymuje raport weryfikacyjny w pull requeście każdego przebiegu: werdykt CI, raport testera, cykl życia środowiska tymczasowego i ocenę scalenia — jako zarejestrowane fakty, a nie deklaracje agenta. Poświadczenia są usuwane przed zapisem. Wyłącz, aby przestać publikować; raport już obecny pozostaje bez zmian.",
+        "toggle": "Publikuj raport weryfikacyjny w pull requestach"
       },
       "retention": {
         "heading": "Retencja zrzutów ekranu",

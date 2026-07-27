@@ -7,13 +7,9 @@ import type {
   ProviderConfigField,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
-import {
-  getErrorMessage,
-  isBlockedPrivateHost,
-  STRICT_URL_SAFETY_POLICY,
-  ValidationError,
-} from '@cat-factory/kernel'
+import { getErrorMessage, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { safeFetch } from '../shared/safe-fetch.js'
+import { assertSafePublicUrl } from '../shared/url-guard.js'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -67,55 +63,23 @@ export function shouldTeardownSuperseded(
 }
 
 /**
- * Whether `host` is exempt from the private/internal-host block under `policy`.
- * An allow-list entry matches the hostname case-insensitively, either exactly or as a
- * dot suffix when it begins with `.` (`.internal` matches `a.b.internal`).
- */
-function hostExempt(host: string, policy: UrlSafetyPolicy): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
-  return policy.allowHosts.some((entry) => {
-    const e = entry.toLowerCase()
-    return e.startsWith('.') ? h === e.slice(1) || h.endsWith(e) : h === e
-  })
-}
-
-/**
  * Validate a URL before it is stored, fetched, or exposed. The default policy
  * (STRICT_URL_SAFETY_POLICY) requires `https` and rejects internal/private hosts; a
  * trusted operator-installed adapter can pass a widened policy to permit specific
  * schemes/hosts (e.g. an internal env platform on a private/VPN host). Embedded
- * credentials are forbidden regardless of policy. Parsed by hand (no `URL` global) so
- * this stays in the platform-agnostic core.
+ * credentials are forbidden regardless of policy.
+ *
+ * The environment-labelled face of the SHARED {@link assertSafePublicUrl} guard, which the
+ * runner-pool and notification-webhook integrations also front with their own wording. Only the
+ * message differs — the host/scheme rules are one implementation, so an SSRF bypass is fixed once
+ * rather than per integration.
  */
 export function assertSafeEnvironmentUrl(
   url: string,
   label = 'URL',
   policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
 ): void {
-  const invalid = () => new ValidationError(`Environment ${label} is not a valid URL: '${url}'`)
-  const match = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/)
-  if (!match) throw invalid()
-
-  if (!policy.schemes.includes(match[1]!.toLowerCase())) {
-    const allowed = policy.schemes.join('/') || '(none)'
-    throw new ValidationError(`Environment ${label} must use ${allowed}`)
-  }
-  const authority = match[2]!
-  if (authority.includes('@')) {
-    throw new ValidationError(`Environment ${label} must not contain credentials`)
-  }
-  let host: string
-  if (authority.startsWith('[')) {
-    const end = authority.indexOf(']')
-    if (end === -1) throw invalid()
-    host = authority.slice(1, end)
-  } else {
-    host = authority.split(':')[0]!
-  }
-  if (host === '') throw invalid()
-  if (!hostExempt(host, policy) && isBlockedPrivateHost(host)) {
-    throw new ValidationError(`Environment ${label} must be a public host`)
-  }
+  assertSafePublicUrl(url, { subject: 'Environment', label, policy })
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */

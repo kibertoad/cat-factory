@@ -234,6 +234,27 @@ export interface RunnerPoolConfig {
   allowHttpUrls?: boolean
 }
 
+/**
+ * The outbound notification-webhook transport. There is no `enabled` flag: like documents/tasks,
+ * the feature assembles wherever the shared `ENCRYPTION_KEY` is set (the signing secret must be
+ * sealable), and whether anything is delivered is governed by whether a workspace registered an
+ * endpoint. Only the URL guard is configurable.
+ */
+export interface NotificationWebhookConfig {
+  /**
+   * Hostnames exempt from the strict public-https endpoint guard, for a receiver on an internal /
+   * VPN host — or a developer's `localhost` listener. Matches the URL hostname exactly, or as a
+   * dot suffix when it starts with `.` (`.internal`). Absent/empty ⇒ strict (no exemptions).
+   *
+   * Scoped to webhooks ALONE, deliberately: this is the one integration whose target URL is chosen
+   * per workspace rather than by the operator, so folding it into another integration's allow-list
+   * would let a workspace admin reach hosts that list was widened for.
+   */
+  allowUrlHosts?: string[]
+  /** Permit `http` (not just `https`) — a plaintext receiver on a trusted internal network. */
+  allowHttpUrls?: boolean
+}
+
 export interface ReleaseHealthConfig {
   /**
    * Opt-in flag (`OBSERVABILITY_ENABLED=true`). Requires an encryption key (the
@@ -431,6 +452,8 @@ export interface AppConfig {
   runners: RunnerPoolConfig
   /** Slack notification-transport config; `enabled` is false unless opted in. */
   slack: SlackConfig
+  /** Outbound notification-webhook transport; only its URL guard is configurable. */
+  notificationWebhooks: NotificationWebhookConfig
   /** Observability post-release-health config; `enabled` is false unless opted in. */
   releaseHealth: ReleaseHealthConfig
   /** Transactional email config (invitations); `enabled` is false unless opted in. */

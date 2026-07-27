@@ -14,7 +14,8 @@ CREATE TABLE merge_track_records (
   workspace_id        TEXT    NOT NULL,
   id                  TEXT    NOT NULL,
   block_id            TEXT    NOT NULL,
-  -- Null for a record born from an externally-merged PR with no cat-factory run.
+  -- The run whose merger step wrote the record. Nullable at the column level; every record
+  -- written today is born inside a run (an external merge SETTLES one, it never mints one).
   execution_id        TEXT,
   -- docs | test | dependency | config | source | schema | unknown (highest-rank class present).
   change_class        TEXT    NOT NULL,

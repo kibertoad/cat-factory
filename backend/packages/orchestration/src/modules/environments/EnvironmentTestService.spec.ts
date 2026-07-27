@@ -198,7 +198,7 @@ function makeService(opts: {
   }
   const repoCtx =
     opts.repoContext === undefined
-      ? { repo: fakeRepo().repo, baseBranch: 'main' }
+      ? { repo: fakeRepo().repo, baseBranch: 'main', repoId: 'repo_1' }
       : opts.repoContext
   const service = new EnvironmentTestService({
     environmentTestRunRepository: runRepo,
@@ -232,6 +232,30 @@ describe('EnvironmentTestService', () => {
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
   })
 
+  it('rejects an un-provisionable service, keeping the conflict CODE and the handler sub-reason distinct', async () => {
+    // Regression: the sub-reason used to be passed as `{ reason }`, which `ConflictError` merges as
+    // `{ reason: code, ...details }` — so it CLOBBERED the `env_test_not_provisionable` code the SPA
+    // keys its localized copy + jump off, leaving only the raw message. The code must survive on
+    // `details.reason`; the handler sub-reason rides alongside on `details.handlerIssue`.
+    const { service, runRepo } = makeService({ canProvision: { ok: false, reason: 'no-handler' } })
+    const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const conflict = err as ConflictError
+    expect(conflict.details?.reason).toBe('env_test_not_provisionable')
+    expect(conflict.details?.handlerIssue).toBe('no-handler')
+    // A pre-dispatch gate 409: it throws before any run record is inserted.
+    expect(runRepo.rows.size).toBe(0)
+  })
+
+  it('carries the type-mismatch handler sub-reason on the un-provisionable conflict', async () => {
+    const { service } = makeService({ canProvision: { ok: false, reason: 'type-mismatch' } })
+    const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const conflict = err as ConflictError
+    expect(conflict.details?.reason).toBe('env_test_not_provisionable')
+    expect(conflict.details?.handlerIssue).toBe('type-mismatch')
+  })
+
   it('rejects a workspace with no git provider as a 409 (no run record is created)', async () => {
     const { service, runRepo } = makeService({ repoContext: null })
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
@@ -241,7 +265,7 @@ describe('EnvironmentTestService', () => {
   it('runs the full happy path on the synchronous (completed) provision path', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-9', url: 'https://live' } as EnvironmentHandle,
@@ -282,7 +306,7 @@ describe('EnvironmentTestService', () => {
   it('polls a dispatched deploy job to done, then finalizes + tears down + deletes', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns, released, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'running' }, { state: 'done' }],
       finalize: { id: 'env-k8s', status: 'ready', url: 'https://k8s' } as EnvironmentHandle,
@@ -308,7 +332,7 @@ describe('EnvironmentTestService', () => {
     const { repo } = fakeRepo()
     const blockRef = { current: frameBlock() as Block | null }
     const { service, teardowns } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       blockRef,
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'done' }],
@@ -328,7 +352,7 @@ describe('EnvironmentTestService', () => {
   it('fails at dispatch and still deletes the just-created branch + reclaims the registry row', async () => {
     const { repo, calls } = fakeRepo()
     const { service, registry, released } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatchThrows: new Error('no deploy runner wired'),
     })
     const run = await service.startTest('ws', 'frame-1')
@@ -348,7 +372,7 @@ describe('EnvironmentTestService', () => {
   it('fails at provisioning: releases the runner, finalizes the failed view, tears down + deletes', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns, released, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'failed', error: 'deploy blew up' }],
       finalize: {
@@ -376,7 +400,7 @@ describe('EnvironmentTestService', () => {
   it('reclaims the provisioning placeholder row even when the failed view cannot be finalized', async () => {
     const { repo, calls } = fakeRepo()
     const { service, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'failed', error: 'deploy blew up' }],
       finalizeThrows: new Error('provider gone'),
@@ -395,7 +419,7 @@ describe('EnvironmentTestService', () => {
     // run must still advance to done, NOT flip to failed.
     const { repo, calls } = fakeRepo()
     const { service } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-gone', url: 'https://live' } as EnvironmentHandle,
@@ -421,7 +445,7 @@ describe('EnvironmentTestService', () => {
   it('still fails when the teardown provider genuinely errors (not a not-found)', async () => {
     const { repo } = fakeRepo()
     const { service } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-stuck', url: 'https://live' } as EnvironmentHandle,
@@ -445,7 +469,7 @@ describe('EnvironmentTestService', () => {
   it('expire() cleans up and fails a run stuck past its poll budget', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'completed', handle: { id: 'env-budget', url: null } as EnvironmentHandle },
     })
     const started = await service.startTest('ws', 'frame-1')
@@ -466,7 +490,7 @@ describe('EnvironmentTestService', () => {
   it('stop() cleans up a running test and marks it failed', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'completed', handle: { id: 'env-2', url: null } as EnvironmentHandle },
     })
     const started = await service.startTest('ws', 'frame-1')
@@ -480,7 +504,7 @@ describe('EnvironmentTestService', () => {
   it('stop() mid-async-provision releases the deploy job and reclaims the placeholder', async () => {
     const { repo, calls } = fakeRepo()
     const { service, released, registry, teardowns } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'running' }],
     })
@@ -500,7 +524,7 @@ describe('EnvironmentTestService', () => {
   it('a driver poll after a stop cannot resurrect the run (guarded terminal write)', async () => {
     const { repo } = fakeRepo()
     const { service, runRepo } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'done' }],
     })
@@ -542,7 +566,7 @@ describe('EnvironmentTestService', () => {
   it('expire() finalizes a wedged run with cleanup and is idempotent on terminal runs', async () => {
     const { repo, calls } = fakeRepo()
     const { service, released, registry } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'running' }],
     })

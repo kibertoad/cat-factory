@@ -649,3 +649,104 @@ describe('composeMothership realtime upstream adapter', () => {
     await container.onShutdown?.()
   })
 })
+
+describe('composeMothership notification delivery delegation', () => {
+  const notification = { id: 'ntf_1', workspaceId: 'ws_1', title: 'Merge review' } as never
+
+  it('asks the mothership to deliver the row by id, with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await composed.notificationChannel.deliver('ws_1', notification)
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/notifications/deliver')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // Identifiers ONLY — the mothership re-reads its own row, so this node can never inject
+      // forged notification text into the org's Slack.
+      expect(seen[0]!.body).toEqual({ workspaceId: 'ws_1', notificationId: 'ntf_1' })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('never throws when the mothership is unreachable (a raise is never broken by delivery)', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('network down')
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.notificationChannel.deliver('ws_1', notification),
+      ).resolves.toBeUndefined()
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('skips the round-trip entirely on a node that has not logged in yet', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    // No LOCAL_MOTHERSHIP_TOKEN and an empty token cache ⇒ nothing to authenticate with. The row
+    // is still persisted remotely and the in-app card still renders; only delegation is skipped.
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await composed.notificationChannel.deliver('ws_1', notification)
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('threads the delegating channel into the container built with no Postgres', async () => {
+    // The wiring guard for `buildLocalContainer` → `buildNodeContainer`'s `notificationChannels`
+    // seam. The composed channel isn't observable on the container, but the EXTERNAL subset is:
+    // the Node facade surfaces it as `machineNotificationDelivery`, and with Slack off and no
+    // realtime sink the only external channel is the mothership one. So a delivery through that
+    // seam must reach the mothership's endpoint — which is exactly the channel having been
+    // threaded into the engine's fan-out.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      posted.push(String(url))
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      expect(container.machineNotificationDelivery).toBeDefined()
+      await container.machineNotificationDelivery!.deliver('ws_1', notification)
+      // Containment, not equality: booting the container also fires background persistence RPCs.
+      expect(posted).toContain('https://m.test/internal/notifications/deliver')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+})

@@ -1,3 +1,4 @@
+import type { IntakeOrigin } from '@cat-factory/kernel'
 import type { RunOrigin } from '../pipelines/pipelineShape.js'
 
 /**
@@ -29,6 +30,17 @@ export interface RunStartOptions {
    * so it never re-checks this.
    */
   origin?: RunOrigin
+  /**
+   * How this run is ENTERING the system: `ui` (the default — every in-app surface) or
+   * `public-api` (started headlessly through `/api/v1`). Persisted on the run
+   * ({@link ExecutionInstance.intakeOrigin}) because clarification behaviour diverges by
+   * intake: a headless run may push its parked questions out to the task's linked tracker
+   * issue, whereas a UI-started task's overseer is in the SPA. Distinct from {@link origin},
+   * which gates pipeline availability and is not persisted, and from `initiatedBy`, which is
+   * `null` for a public-API run, a schedule fire and auth-disabled dev alike. Set by the
+   * public-API start paths and nowhere else; a retry/restart carries the stored value forward.
+   */
+  intakeOrigin?: IntakeOrigin
   /**
    * Per-run approval-gate override (the initiative-preset gate-override seam). When supplied it
    * REPLACES the pipeline's declared `gates` for THIS run only — one boolean per pipeline step,

@@ -425,6 +425,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
           resolveRunRepoContext: async () => ({
             repo: makeReviewRepo(recorder),
             baseBranch: 'main',
+            repoId: 'repo_1',
           }),
         },
       )
@@ -460,6 +461,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
           resolveRunRepoContext: async () => ({
             repo: makeReviewRepo(recorder),
             baseBranch: 'main',
+            repoId: 'repo_1',
           }),
         },
       )
@@ -509,6 +511,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
           resolveRunRepoContext: async () => ({
             repo: makeReviewRepo(recorder),
             baseBranch: 'main',
+            repoId: 'repo_1',
           }),
         },
       )
@@ -570,6 +573,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
           resolveRunRepoContext: async () => ({
             repo: makeReviewRepo(recorder),
             baseBranch: 'main',
+            repoId: 'repo_1',
           }),
         },
       )

@@ -554,6 +554,8 @@
         "env_test_not_a_frame": "The environment self-test runs per service, so it can only be started on a service, not on a module or task.",
         "env_test_infraless": "This service has no ephemeral-environment provisioning configured, so there is nothing for the self-test to exercise.",
         "env_test_not_provisionable": "This service has a provision type, but no workspace handler resolves for it yet, so provisioning can't run. Configure an environment handler.",
+        "env_test_not_provisionable_no_handler": "No workspace environment handler is configured for this service's provision type. In Infrastructure → Test environments, register one — for a custom provider, a Custom (remote-custom) handler whose accepted manifest id matches the one this service pins.",
+        "env_test_not_provisionable_type_mismatch": "More than one environment handler could match this service's provision type. Pin a manifest id for this service so exactly one resolves, or remove the overlapping handler in Infrastructure → Test environments.",
         "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one."
       },
       "action": {
@@ -2497,11 +2499,11 @@
         "noData": "No history yet",
         "record": "{merged} merged, {autoShare} automatically",
         "@record": {
-          "description": "'{autoShare}' is already a formatted percentage — do not add a % sign."
+          "description": "'{autoShare}' is already a formatted percentage; do not add a % sign."
         },
         "frictionless": "{share} needed no comments",
         "@frictionless": {
-          "description": "'{share}' is already a formatted percentage — do not add a % sign."
+          "description": "'{share}' is already a formatted percentage; do not add a % sign."
         },
         "rule": {
           "thresholds": "Use score ceilings",
@@ -2607,6 +2609,7 @@
       "scopes": {
         "read": "Read only",
         "write": "Read and write",
+        "decide": "Answer decisions",
         "admin": "Full access"
       },
       "toast": {
@@ -2816,6 +2819,11 @@
         "heading": "Agent observability",
         "body": "Store the complete context provided to each agent: the composed prompts, the best-practice fragments folded in, and the full content of the files injected into its container, so it can be inspected later in the observability view. The bodies are kept for the same window as the per-call LLM telemetry. Turn off to stop storing it (existing snapshots are pruned by retention).",
         "toggle": "Store full agent context"
+      },
+      "prReport": {
+        "heading": "Pull request verification report",
+        "body": "Maintain a verification report on each run's pull request: the CI verdict, the tester's report, ephemeral-environment lifecycle and the merge assessment, as captured facts rather than the agent's own claims. Credentials are scrubbed before anything is written. Turn off to stop publishing; a report already on a pull request is left as it is.",
+        "toggle": "Publish the verification report on pull requests"
       },
       "retention": {
         "heading": "Screenshot retention",
@@ -5324,13 +5332,13 @@
       "prompt": "Review effort",
       "none": "No comments",
       "@none": {
-        "description": "Answer to 'how much review effort did this PR need?' — means the reviewer had NOTHING to say, not that no review happened."
+        "description": "Answer to 'how much review effort did this PR need?': means the reviewer had NOTHING to say, not that no review happened."
       },
       "minor": "Minor notes",
       "major": "Real rework",
       "classHistory": "{merged} merged in this class, {autoShare} auto-merged",
       "@classHistory": {
-        "description": "'{autoShare}' is already a formatted percentage — do not add a % sign."
+        "description": "'{autoShare}' is already a formatted percentage; do not add a % sign."
       }
     }
   }

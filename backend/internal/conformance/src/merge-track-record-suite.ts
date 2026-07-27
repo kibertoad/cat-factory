@@ -52,6 +52,13 @@ function repoWithChangedFiles(paths: string[]): RepoFiles {
 /** The PR the fake coder reports, so the block carries a number classification can read. */
 const FAKE_PR = { url: 'https://github.test/acme/repo/pull/42', number: 42, branch: 'work' }
 
+/**
+ * The provider-neutral repo id the run's repo context resolves to. It is what a record must be
+ * ATTRIBUTABLE by: external-merge detection looks a record up by `(repoId, prNumber)`, since a
+ * webhook delivery knows nothing else about the run.
+ */
+const FAKE_REPO_ID = '987654'
+
 export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
   const { name } = harness
 
@@ -83,6 +90,8 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
           resolveRunRepoContext: async () => ({
             repo: repoWithChangedFiles(options.changedFiles),
             baseBranch: 'main',
+            repoId: FAKE_REPO_ID,
+            provider: 'github' as const,
           }),
         },
       )
@@ -302,6 +311,14 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
 
       const after = await rollupFor(run.app, run.wsId, 'test')
       expect(after.effort).toEqual({ none: 0, minor: 0, major: 1, untagged: 0 })
+
+      // The record must carry the repo identity it was classified against. This is what makes it
+      // ATTRIBUTABLE: external-merge detection can only find a record by `(repoId, prNumber)`,
+      // so a record persisted with a null `repoId` is invisible to it on BOTH runtimes — the PR
+      // would sit `pending_review` forever and no tag-request nudge would ever be raised.
+      expect(tagged.body.repoId).toBe(FAKE_REPO_ID)
+      expect(tagged.body.prNumber).toBe(FAKE_PR.number)
+      expect(tagged.body.provider).toBe('github')
     })
 
     it('records the effort tag when a human merges through the BLOCK route (the inspector control)', async () => {
@@ -427,6 +444,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
               blockId === 'task_login' ? ['docs/a.md'] : ['src/a.test.ts'],
             ),
             baseBranch: 'main',
+            repoId: 'repo_1',
           }),
         },
       )

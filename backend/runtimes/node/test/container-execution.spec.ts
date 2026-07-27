@@ -175,6 +175,10 @@ describe('container-execution persistence (Postgres)', () => {
       const target = await resolve(workspaceId, 'task1')
       expect(target).toEqual({
         installationId: 77,
+        // The provider-neutral identity, carried off the projection row so a run's repo can be
+        // correlated with an inbound webhook (which names a repository by exactly this id).
+        repoId: '999',
+        provider: 'github',
         owner: 'octo',
         name: 'widget',
         baseBranch: 'main',

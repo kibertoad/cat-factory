@@ -85,7 +85,7 @@ function runRepo(files: Record<string, string>): RunRepoContext {
       return { number: 1 } as never
     },
   }
-  return { repo, baseBranch: 'main' }
+  return { repo, baseBranch: 'main', repoId: 'repo_1' }
 }
 
 afterEach(() => vi.unstubAllGlobals())

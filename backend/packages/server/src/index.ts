@@ -129,6 +129,18 @@ export {
   type RelayedRealtimeEvent,
   HttpMachineEventClient,
 } from './events/machineEvents.js'
+// Mothership-mode notification DELIVERY delegation: the mothership re-reads a laptop-raised
+// notification row and delivers it through the org's external channels (its Slack token never
+// reaches the laptop); a mothership-mode local node plugs `RemoteNotificationChannel` into the
+// engine's existing fan-out to ask for it.
+export {
+  type DelegatedNotificationRequest,
+  type MachineNotificationClient,
+  type HttpMachineNotificationClientOptions,
+  type RemoteNotificationChannelOptions,
+  HttpMachineNotificationClient,
+  RemoteNotificationChannel,
+} from './notifications/machineNotifications.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
 export { handleError } from './http/errorHandler.js'
@@ -235,6 +247,10 @@ export {
   type GitHubPullRequestMergerDependencies,
 } from './github/GitHubPullRequestMerger.js'
 export {
+  GitHubPrReportPublisher,
+  type GitHubPrReportPublisherDependencies,
+} from './github/GitHubPrReportPublisher.js'
+export {
   HmacSigner,
   TOKEN_AUDIENCE,
   type MachinePayload,
@@ -269,6 +285,7 @@ export type {
   GoogleOAuthConfig,
   LangfuseConfig,
   ObservabilityConfig,
+  NotificationWebhookConfig,
   OtelConfig,
   PlatformAlertConfig,
   PrivilegedAppConfig,

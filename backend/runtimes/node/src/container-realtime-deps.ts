@@ -1,8 +1,14 @@
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
-import { SLACK_CIPHER_INFO, SlackNotificationChannel } from '@cat-factory/integrations'
+import {
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
+  SLACK_CIPHER_INFO,
+  SlackNotificationChannel,
+  buildNotificationWebhookSupport,
+} from '@cat-factory/integrations'
 import {
   type AgentExecutor,
+  type Clock,
   CompositeNotificationChannel,
   type ModelProviderResolver,
   type NotificationChannel,
@@ -15,10 +21,12 @@ import {
   InAppNotificationChannel,
   WebCryptoSecretCipher,
   logger,
+  resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import type { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleNotificationWebhookRepository } from './repositories/drizzle/settings.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -110,6 +118,57 @@ export interface NodeRealtimeDepsInput {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   agentKindRegistry: AgentKindRegistry
+  clock: Clock
+  /**
+   * Extra delivery channels contributed by a downstream facade, composed alongside the ones built
+   * here. Local mode in mothership mode contributes its `RemoteNotificationChannel` (the org's
+   * external transports live on the mothership), so a laptop-raised notification still reaches
+   * the team's Slack. Empty/absent on a stock Node deployment.
+   */
+  extraNotificationChannels?: NotificationChannel[]
+}
+
+/**
+ * Build the outbound notification-webhook feature (management service + delivery channel) when the
+ * shared encryption key is present — the signing secret must be sealable. Both halves come from
+ * ONE builder so they can't drift onto different repositories/ciphers. The repository rides the
+ * `sourced` seam like the Slack repos, so mothership mode reads the same remote-backed rows.
+ * Null when no key is set; then the management surface 503s and no deliveries are attempted.
+ */
+function selectNodeNotificationWebhookSupport(
+  env: NodeJS.ProcessEnv,
+  config: AppConfig,
+  clock: Clock,
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
+): ReturnType<typeof buildNotificationWebhookSupport> | null {
+  // Read the shared key straight off the env, exactly as the Worker's builder does — the Node
+  // config splits ENCRYPTION_KEY into per-feature sub-configs, and inventing another one here
+  // would make the two facades gate this feature on different conditions.
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return null
+  // The endpoint guard, resolved from the webhook's OWN config slice (undefined ⇒ the strict
+  // public-https default). Handed to the builder, which gives it to both the write boundary and
+  // the delivery path so they can't admit/reject different endpoints. Symmetric with the Worker.
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
+  return buildNotificationWebhookSupport({
+    ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
+    notificationWebhookRepository: sourced(
+      'notificationWebhookRepository',
+      (d) => new DrizzleNotificationWebhookRepository(d),
+    ),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
+    }),
+    clock,
+    // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
+    // through the structured logger so a broken receiver is diagnosable.
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'notification webhook delivery failed',
+      ),
+  })
 }
 
 /**
@@ -129,6 +188,8 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     modelProviderResolver,
     resolveWorkspaceModelDefault,
     agentKindRegistry,
+    clock,
+    extraNotificationChannels,
   } = input
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -138,6 +199,12 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, repos, sourced)
+  const notificationWebhookSupport = selectNodeNotificationWebhookSupport(
+    env,
+    config,
+    clock,
+    sourced,
+  )
   const executionEventPublisher = realtimeSink
     ? new FanOutEventPublisher(new NodeEventPublisher(realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
@@ -165,16 +232,42 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
       }))
     : standardAgentExecutor
 
+  // EXTERNAL channels = everything that is not the in-app push. They are what a mothership
+  // delivers on behalf of a mothership-mode node (`machineNotificationDelivery`), because they are
+  // the ones whose credentials never leave the mothership; the in-app frame for a laptop-raised
+  // notification already rides the real-time upstream relay, so it must NOT be delivered twice.
+  const externalNotificationChannels: NotificationChannel[] = [
+    ...(slackDeps.notificationChannel ? [slackDeps.notificationChannel] : []),
+    // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
+    // browser WebSocket, so a parked run would otherwise reach it only by polling (see
+    // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
+    //
+    // It belongs in the EXTERNAL set by the definition above — it is not the in-app push, and its
+    // signing secret is sealed with the deployment key. That placement is what makes it work under
+    // mothership mode: the row and its sealed secret live on the mothership, so the mothership is
+    // the only side that can decrypt and deliver it. Composing it only into the local fan-out
+    // would leave a laptop failing every delivery on a decrypt it cannot perform while the
+    // mothership never attempted one.
+    ...(notificationWebhookSupport ? [notificationWebhookSupport.channel] : []),
+    ...(extraNotificationChannels ?? []),
+  ]
   const notificationChannels: NotificationChannel[] = []
   if (executionEventPublisher)
     notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
-  if (slackDeps.notificationChannel) notificationChannels.push(slackDeps.notificationChannel)
-  const notificationChannel =
-    notificationChannels.length === 0
-      ? undefined
-      : notificationChannels.length === 1
-        ? notificationChannels[0]
-        : new CompositeNotificationChannel(notificationChannels)
+  notificationChannels.push(...externalNotificationChannels)
 
-  return { slackDeps, executionEventPublisher, agentExecutor, notificationChannel }
+  return {
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel: composeChannels(notificationChannels),
+    externalNotificationChannel: composeChannels(externalNotificationChannels),
+    notificationWebhookSupport,
+  }
+}
+
+/** One channel as-is, several fanned out, none ⇒ undefined (the port is simply not wired). */
+function composeChannels(channels: NotificationChannel[]): NotificationChannel | undefined {
+  if (channels.length === 0) return undefined
+  return channels.length === 1 ? channels[0] : new CompositeNotificationChannel(channels)
 }

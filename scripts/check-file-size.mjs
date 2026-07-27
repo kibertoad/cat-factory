@@ -48,24 +48,31 @@ const LEGACY_ALLOWANCES = new Map([
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2650],
+  // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
+  // its own module (re-exported, so no call site changed) when the PR-verification-report hook
+  // needed headroom — ratcheted DOWN to lock the win in.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2350],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
   // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The small
   // optional-module SHAPES then moved to `container/module-shapes.ts`, so it ratchets down again.
-  // The Node root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
+  // The Node root's container-agent-executor wiring now lives in `container-executor-deps.ts`, and
+  // the Worker root's external LLM-trace destinations in `container-trace-sinks.ts` — both ratchet
+  // down accordingly.
   ['backend/runtimes/node/src/container.ts', 1550],
   ['backend/packages/orchestration/src/container.ts', 1700],
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2350],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2325],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
-  ['backend/runtimes/node/src/db/schema.ts', 2300],
+  ['backend/runtimes/node/src/db/schema.ts', 2200],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1600],
+  // The repo-targeting declaration block (RepoTarget/ResolveRepoTarget/RepoOrigin/…) moved to
+  // `agents/repoTargeting.ts`, so this ratchets down.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1550],
   ['backend/packages/server/src/github/FetchGitHubClient.ts', 1550],
 ])
 

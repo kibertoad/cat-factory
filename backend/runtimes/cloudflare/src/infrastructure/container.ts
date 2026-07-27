@@ -10,7 +10,6 @@ import {
   type GitHubClient,
   type GroupCacheHandle,
   type IdGenerator,
-  type LlmTraceSink,
   type ModelProviderResolver,
   type NotificationChannel,
   composeTraceSinks,
@@ -54,7 +53,9 @@ import {
   ProvisioningLogRecorder,
   LoggingRunnerTransport,
   SLACK_CIPHER_INFO,
+  NOTIFICATION_WEBHOOK_CIPHER_INFO,
   SlackNotificationChannel,
+  buildNotificationWebhookSupport,
   TicketTrackerService,
   IssueWritebackService,
   githubIssuesLogic,
@@ -79,6 +80,13 @@ import {
 // custom CA (Node/local) — exactly like a private-CA `kubernetes` connection — so on the Worker
 // the kind is offered but a connection to such a cluster fails TLS at run time, not silently.
 import { resolveWorkerRegistries } from './container-registries.js'
+import {
+  buildLangfuseSink,
+  buildOtelSink,
+  buildTraceSink,
+  selectTraceSink,
+} from './container-trace-sinks.js'
+export { selectTraceSink }
 import { assembleWorkerContainer } from './container-assembly.js'
 import {
   AgentContextObservabilityService,
@@ -91,8 +99,6 @@ import {
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
-import { createLangfuseSink } from '@cat-factory/observability-langfuse'
-import { createOtelSink } from '@cat-factory/observability-otel'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
@@ -121,7 +127,7 @@ import {
   type ServerContainer,
   type WebSearchUpstream,
 } from '@cat-factory/server'
-import { type AppConfig, type LangfuseConfig, type OtelConfig, loadConfig } from './config'
+import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import { loadOtelConfig } from './config/otel'
@@ -225,12 +231,17 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import { GitHubDocQualityProvider, GitHubPullRequestReviewProvider } from '@cat-factory/server'
+import {
+  GitHubDocQualityProvider,
+  GitHubPrReportPublisher,
+  GitHubPullRequestReviewProvider,
+} from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
+import { D1NotificationWebhookRepository } from './repositories/D1NotificationWebhookRepository'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
@@ -667,14 +678,29 @@ function selectEngineVcsClient(
   return undefined
 }
 
+/** What {@link selectMergeLifecycleDeps} needs. An options object rather than a positional tail:
+ *  it already carried six parameters, and the notification channels it composes will keep
+ *  growing (in-app, Slack, the outbound webhook, …) — a named bag stays readable and keeps the
+ *  call site honest about which of the several same-typed handles is which. */
+export interface MergeLifecycleDepsInput {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  idGenerator: IdGenerator
+  providerRegistry: ProviderRegistry
+  /**
+   * The outbound notification-webhook delivery channel, when the deployment configured one. Built
+   * by the caller (alongside its management service, from ONE builder) so both halves are
+   * guaranteed to read the same rows through the same cipher.
+   */
+  webhookChannel?: NotificationChannel
+}
+
 export function selectMergeLifecycleDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-  providerRegistry: ProviderRegistry,
+  input: MergeLifecycleDepsInput,
 ): Partial<CoreDependencies> {
+  const { env, config, db, clock, idGenerator, providerRegistry, webhookChannel } = input
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
@@ -689,15 +715,18 @@ export function selectMergeLifecycleDeps(
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
-  // Compose the delivery channels: in-app push (when the events binding is present)
-  // and Slack (when the integration is enabled) implement the same NotificationChannel
-  // port and fan out via CompositeNotificationChannel — realizing the seam the kernel
-  // port documents, with no change to the engine call sites that raise notifications.
+  // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
+  // the integration is enabled) and the outbound webhook (when a workspace registered one) all
+  // implement the same NotificationChannel port and fan out via CompositeNotificationChannel —
+  // realizing the seam the kernel port documents, with no change to the engine call sites that
+  // raise notifications. The webhook channel is what a HEADLESS caller relies on: it has no
+  // in-app inbox and no browser WebSocket, so a parked run would otherwise reach it only by
+  // polling (see docs/initiatives/headless-clarification-loop.md).
   const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
   if (publisher) channels.push(new InAppNotificationChannel(publisher))
-  const slackChannel = buildSlackChannel(config, db)
-  if (slackChannel) channels.push(slackChannel)
+  const externalChannel = buildExternalNotificationChannel(config, db, webhookChannel)
+  if (externalChannel) channels.push(externalChannel)
   if (channels.length === 1) deps.notificationChannel = channels[0]
   else if (channels.length > 1)
     deps.notificationChannel = new CompositeNotificationChannel(channels)
@@ -741,6 +770,14 @@ export function selectMergeLifecycleDeps(
       blockRepository,
     })
     deps.pullRequestMerger = new GitHubPullRequestMerger({
+      githubClient,
+      resolveRepoTarget,
+      blockRepository,
+    })
+    // Keeps the engine-maintained verification report current on each run's PR. Reads through
+    // the same engine VCS client, so a GitLab-only deployment gets it too (runtime symmetry
+    // with the Node facade's `githubGateDeps`).
+    deps.prVerificationReportPublisher = new GitHubPrReportPublisher({
       githubClient,
       resolveRepoTarget,
       blockRepository,
@@ -1008,6 +1045,73 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
 }
 
 /**
+ * Build the outbound notification-webhook feature (management service + delivery channel) when the
+ * shared encryption key is present — the signing secret must be sealable. Both halves come from
+ * one builder so they can't drift onto different repositories/ciphers. Null when no key is set;
+ * then the management surface 503s and no deliveries are attempted.
+ */
+function buildNotificationWebhookSupportForWorker(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+  clock: Clock,
+): ReturnType<typeof buildNotificationWebhookSupport> | null {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return null
+  // The endpoint guard, resolved from the webhook's OWN config slice (undefined ⇒ the strict
+  // public-https default). Handed to the builder, which gives it to both the write boundary and
+  // the delivery path so they can't admit/reject different endpoints.
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
+  return buildNotificationWebhookSupport({
+    notificationWebhookRepository: new D1NotificationWebhookRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
+    }),
+    clock,
+    ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
+    // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
+    // through the structured logger so a broken receiver is diagnosable.
+    onError: (error, ctx) =>
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error), ...ctx },
+        'notification webhook delivery failed',
+      ),
+  })
+}
+
+/**
+ * This deployment's EXTERNAL notification channels — everything that is NOT the in-app push
+ * (Slack, plus a workspace's outbound notification webhook). Two consumers:
+ * {@link selectMergeLifecycleDeps} composes it into the engine's own fan-out, and the
+ * ServerContainer attaches it as `machineNotificationDelivery`, the seam the mothership-mode
+ * `POST /internal/notifications/deliver` endpoint delivers a laptop-raised notification through
+ * (its credentials never leave this deployment). In-app is excluded there on purpose: a laptop's
+ * in-app frame already arrives over the real-time upstream relay.
+ *
+ * The webhook belongs in this set for the same reason Slack does — its signing secret is sealed
+ * with THIS deployment's key, so this is the only side that can decrypt and deliver it. Keeping it
+ * out would leave a mothership-mode laptop failing every delivery on a decrypt it cannot perform
+ * while the mothership never attempted one. Symmetric with the Node facade.
+ *
+ * Called once per consumer (so the seam gets its own instance), exactly like `buildAppRegistry`,
+ * which the `githubTokenDelegation` seam also re-builds — the channel is a stateless adapter over
+ * D1 reads plus a cipher, so a second instance costs nothing.
+ */
+export function buildExternalNotificationChannel(
+  config: AppConfig,
+  db: D1Database,
+  webhookChannel?: NotificationChannel,
+): NotificationChannel | null {
+  const channels: NotificationChannel[] = []
+  const slackChannel = buildSlackChannel(config, db)
+  if (slackChannel) channels.push(slackChannel)
+  if (webhookChannel) channels.push(webhookChannel)
+  if (channels.length === 0) return null
+  return channels.length === 1 ? channels[0]! : new CompositeNotificationChannel(channels)
+}
+
+/**
  * Wire the Slack management module (per-account connect + per-workspace routing +
  * member map). Wired only when the integration is enabled; the actual delivery is
  * the channel composed in by {@link selectMergeLifecycleDeps}. OAuth credentials
@@ -1071,49 +1175,6 @@ function buildSystemEmailSender(
   })
   if (!sender) return undefined
   return async () => sender
-}
-
-/**
- * The opt-in Langfuse trace sink. Built only when `LANGFUSE_ENABLED=true` and both keys are
- * set. A fetch-based sink, so it runs unchanged on the Worker runtime.
- */
-function buildLangfuseSink(langfuse: LangfuseConfig): LlmTraceSink | undefined {
-  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return undefined
-  return createLangfuseSink({
-    publicKey: langfuse.publicKey,
-    secretKey: langfuse.secretKey,
-    baseUrl: langfuse.baseUrl,
-    logger,
-  })
-}
-
-/**
- * The opt-in OpenTelemetry OTLP exporter. Built only when `OTEL_ENABLED=true` and an
- * endpoint is set. The Worker uses the FETCH-based exporter (`createOtelSink`) so it runs
- * on workerd; the Node facade uses the official-SDK exporter instead (both conformant).
- */
-function buildOtelSink(otel: OtelConfig): LlmTraceSink | undefined {
-  if (!otel.enabled || !otel.endpoint) return undefined
-  return createOtelSink({
-    endpoint: otel.endpoint,
-    headers: otel.headers,
-    serviceName: otel.serviceName,
-    logger,
-  })
-}
-
-/**
- * Compose every enabled external trace destination into the single sink slot: none ⇒
- * undefined, one ⇒ that sink, both ⇒ a fan-out. The observability service then fans every
- * recorded LLM call (+ tool spans) out to whichever are wired.
- */
-function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
-  return composeTraceSinks([buildLangfuseSink(config.langfuse), buildOtelSink(config.otel)])
-}
-
-export function selectTraceSink(config: AppConfig): Partial<CoreDependencies> {
-  const sink = buildTraceSink(config)
-  return sink ? { llmTraceSink: sink } : {}
 }
 
 /**
@@ -2195,6 +2256,16 @@ export function buildContainer(
   // gateway exposes, rather than reaching for the queue binding a second time.
   const githubWebhookIngest = new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE)
 
+  // The outbound notification webhook: management service + delivery channel from ONE builder, so
+  // the surface that reports an endpoint as configured and the channel that delivers to it can
+  // never end up on different repositories/ciphers.
+  const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(
+    env,
+    config,
+    db,
+    clock,
+  )
+
   return assembleWorkerContainer({
     env,
     config,
@@ -2235,5 +2306,6 @@ export function buildContainer(
     defaultWebSearchUpstream,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
+    notificationWebhookSupport,
   })
 }

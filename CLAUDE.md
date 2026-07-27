@@ -1159,6 +1159,19 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   seam** (see "Conventions"), not a hardcoded mount. `InspectorPanel.vue` freezes a
   task's raw description once `incorporated` (the standardized doc takes focus), and after
   a stop-reset surfaces the last incorporated doc read-only as a base.
+- **Headless callers drive the SAME loop over the public API** (`/api/v1/runs/:runId/decisions`,
+  `PublicDecisionController`): list a run's open findings, reply/dismiss, incorporate, re-review,
+  proceed, resolve-exceeded, choose a fork. Every route delegates to the SAME service methods the
+  SPA controllers call, so the park's CAS/approval-id arbitration and the task's preset knobs apply
+  identically whichever surface answers. Gated on the `decide` rung of the public-API scope ladder
+  (`read ⊂ write ⊂ decide ⊂ admin`) — which is ALSO what admits a parking pipeline through
+  `POST /api/v1/initiatives` at all. **Do not add a hard park timeout as a backstop: a parked run
+  waits for a human indefinitely by design** (`ExecutionWorkflow` re-arms its `waitForEvent` rather
+  than failing the run); the backstops are the workspace's in-flight cap plus
+  `POST /api/v1/jobs/:id/cancel`. A run records how it entered the system
+  (`ExecutionInstance.intakeOrigin`, `ui` | `public-api`, in the `detail` JSON, carried across
+  retry/restart) — a UI-started task's overseer is in the SPA and its behaviour is unchanged. See
+  [`docs/initiatives/headless-clarification-loop.md`](./docs/initiatives/headless-clarification-loop.md).
 
 ## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
 
@@ -1289,10 +1302,101 @@ still open). Two new container agent kinds plus a special gate step implement it
   - the in-app `notification` `WorkspaceEvent` is pushed (worker
     `InAppNotificationChannel` over `DurableObjectEventPublisher.notificationChanged`),
     with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
+    `WebhookNotificationChannel` (`@cat-factory/integrations`) is the third: a per-workspace
+    outbound HTTPS endpoint (`notification_webhooks`, D1 ⇄ Drizzle) delivered HMAC-signed with a
+    sealed secret, through the shared SSRF-guarded `safeFetch` seam, best-effort under one total
+    deadline that gives up on a 4xx. It exists because a HEADLESS caller has no in-app inbox and
+    no browser WebSocket, so a parked run would otherwise reach it only by polling. An EMPTY type
+    filter means the parking + actionable-tail defaults, NOT everything.
+    In **mothership mode** the org's EXTERNAL channels are unreachable from the laptop (their
+    credentials are sealed with the mothership's key), so `RemoteNotificationChannel` composes in
+    and asks the mothership to deliver the row by id over `POST /internal/notifications/deliver`
+    — the in-app frame still rides the real-time upstream relay. See
+    [`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md).
+    **The webhook is an EXTERNAL channel**, so it composes into that same set on both facades
+    (`externalNotificationChannels` ⇄ `buildExternalNotificationChannel`) rather than only into the
+    local fan-out — its secret is sealed with the deployment key, so the deployment holding that
+    key is the only side that can deliver it.
     `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
     (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +
     the preset library.
+
+## PR verification report (engine-maintained evidence on the run's PR)
+
+The engine — NOT the agent — keeps a **verification report** on every run's pull request:
+captured facts, not the agent's prose claims. Form + shape rationale (and the phase-2 backlog)
+live in [`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+
+- **Form: a managed section of the PR BODY**, delimited by
+  `<!-- cat-factory:verification-report:start -->` / `:end` (kernel `domain/pr-report.ts`,
+  `spliceManagedSection`). The markers ARE the identity, so the write is idempotent with **no
+  persisted state**: a re-run, retry, or replayed durable step replaces the marked region instead
+  of appending a second copy, and the agent's own description above it is never touched. A
+  maintained COMMENT was rejected: it needs a comment id persisted (a lost id duplicates the
+  report) plus an `updateComment` write neither the `GitHubClient` nor `VcsClient` port has.
+- **Shape: an engine HOOK on step settlement, not a pipeline step.** One call in
+  `RunDispatcher.recordStepResult` → `PrVerificationReportController.publishForRun`. Its POSITION
+  is load-bearing: **after** `applyTerminalStepResolver` (so a `merger` step publishes with its
+  resolved `MergeDecision`) and **before** `finalizeBlock` (so the `pipeline_complete` card a
+  merger-less pipeline raises points at a PR already carrying the finished report). A passing
+  polling gate settles through the same `recordStepResult`, so the CI verdict needs no second
+  hook. A one-shot `pr-report` STEP was rejected: it would need inserting into all 15 built-in
+  pipelines, would never exist for deployment-authored ones, and a run that fails or parks
+  part-way — the runs most worth inspecting — would never reach it.
+- **Composed from state already in memory** (`prReport.logic.ts`, pure): the CI gate's recorded
+  verdict/failing checks/attempts (`step.gate` — never a re-probe of the `CiStatusProvider`,
+  which costs a round trip AND can disagree with what the gate acted on), the tester's
+  `step.test.lastReport`, the deployer's `step.deployEnvs` + the live `step.environment`
+  projections for teardown, the merger's `step.custom`, and the per-step agent kind + model. The
+  only reads are one `blockRepository.get` and one batched `taskRepository.listByBlock`. The repo
+  - provider it STATES come from the publisher's `resolveTarget` — the same resolution the write
+    uses — never from `diagnostics.lastDispatch`, which records the most recent dispatch and is a
+    PEER repo on a multi-repo task.
+- **A section whose producing step didn't run says so** (`status: 'absent'` + a `note`) — a
+  silently missing section reads exactly like a clean one, which is the false reassurance this
+  feature exists to remove. Same rule for a CAPPED list: every per-list cap records what it left
+  out in the report's own `truncations` log (rendered as an "Omitted for length" section), because
+  "50 failing checks" and "50 of 118" call for very different reviewer reactions.
+- **A PR body is NOT an inert string sink, and `prReportText.logic.ts` is the boundary that
+  treats it as such.** The host parses what is written there, and almost everything the report
+  interpolates is agent- or human-authored, so every hazard is live: `#123`/`@name`/`!123` are
+  auto-linked (a mention notifies a real account), a **closing keyword in front of an issue
+  reference CLOSES that issue when the PR merges** ("This closes #42" is idiomatic prose for a
+  merge rationale), a raw newline ends a markdown table row, and an unbalanced code fence swallows
+  everything after it — including the JSON block that IS the machine-readable contract. So
+  untrusted text is NEVER interpolated bare: it goes through `cell` (table cells: newlines folded
+  to `<br>`, pipes escaped), `inline` (prose lines) or `prose` (multi-line: fences balanced), all
+  of which neutralise the auto-link triggers with numeric HTML entities in ONE pass (chained
+  `.replace()`s re-escape each other's output) while leaving inline code spans alone (the host
+  does not auto-link inside them). Adding a field to the report means picking one of the three.
+- **Free text is scrubbed with the same `redactSecrets` the telemetry store uses**, at COMPOSE
+  time so the prose and the JSON block stay consistent. A PR body is a strictly MORE exposed
+  surface than the private telemetry DB — it can be a public repo — so anything worth scrubbing
+  before it reaches our own database is worth scrubbing before it reaches the host.
+- **Per-workspace opt-out** (`publishPrVerificationReport`, default on, mirrored D1 ⇄ Drizzle):
+  checked BEFORE anything is read or composed, so a workspace that declined pays nothing for the
+  hook. Turning it off stops future writes; a region already on a PR is left alone (a report that
+  vanished would read as "the run had nothing to say").
+- **Rendered as markdown + a fenced JSON block** validated by `prVerificationReportSchema`
+  (`@cat-factory/contracts` `pr-report.ts`), so external tooling ingests it without scraping.
+- **Provider-neutral by construction.** The `PrVerificationReportPublisher` port
+  (`kernel/ports/pr-report.ts`) is served by `GitHubPrReportPublisher` (`@cat-factory/server`)
+  over whatever `GitHubClient` a facade wired as its **engine** VCS client — so a GitLab-only
+  deployment publishes onto the MR description through the same call. It needs the new REQUIRED
+  `getPullRequestBody` on both the `GitHubClient` and `VcsClient` ports (read-splice-write, always
+  against the CURRENT remote body, so a concurrent human edit is never clobbered).
+- **Best-effort, always.** Publishing is bookkeeping: the controller swallows + logs (wire the
+  facade logger — this is the one path DESIGNED to fail silently, so without it a revoked token
+  leaves no trace at all) and is a total no-op when no publisher is wired (tests, no-VCS
+  deployments). It hashes the rendered section so a settlement that changes nothing a reader
+  would see costs no PR edit; it does NOT collapse a run to one write, because the report carries
+  a per-step state table and is meant to track the run as it progresses — a run that fails or
+  parks part-way never reaches an end to publish at. The observability deep link comes from
+  `appBaseUrl`; absent ⇒ no link rather than a dead one. Its SPA consumer is the narrow
+  `useRunDeepLink` composable — a down-payment on slice 4 of
+  [`docs/initiatives/global-search-and-deep-links.md`](./docs/initiatives/global-search-and-deep-links.md),
+  to be DELETED when that general parser lands.
 
 ## Post-release health flow (Datadog gate → Agent-On-Call → notify/enrich)
 
