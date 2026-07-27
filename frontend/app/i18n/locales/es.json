@@ -512,6 +512,8 @@
         "env_test_not_a_frame": "La autoprueba de entorno se ejecuta por servicio, así que solo puede iniciarse en un servicio, no en un módulo o una tarea.",
         "env_test_infraless": "Este servicio no tiene configurado el aprovisionamiento de entornos efímeros, así que no hay nada que la autoprueba pueda comprobar.",
         "env_test_not_provisionable": "Este servicio tiene un tipo de aprovisionamiento, pero aún no hay ningún gestor del espacio de trabajo para él, así que el aprovisionamiento no puede ejecutarse. Configura un gestor de entornos.",
+        "env_test_not_provisionable_no_handler": "No hay ningún gestor de entorno del espacio de trabajo configurado para el tipo de aprovisionamiento de este servicio. En Infraestructura → Entornos de prueba, registra uno; para un proveedor personalizado, un gestor Custom (remote-custom) cuyo manifest id aceptado coincida con el que fija este servicio.",
+        "env_test_not_provisionable_type_mismatch": "Más de un gestor de entorno podría coincidir con el tipo de aprovisionamiento de este servicio. Fija un manifest id para este servicio de modo que se resuelva exactamente uno, o elimina el gestor superpuesto en Infraestructura → Entornos de prueba.",
         "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno."
       },
       "action": {
@@ -2397,6 +2399,7 @@
       "scopes": {
         "read": "Solo lectura",
         "write": "Lectura y escritura",
+        "decide": "Responder decisiones",
         "admin": "Acceso completo"
       },
       "toast": {
@@ -2606,6 +2609,11 @@
         "heading": "Observabilidad del agente",
         "body": "Almacena el contexto completo proporcionado a cada agente: los prompts compuestos, los fragmentos de buenas prácticas incorporados y el contenido íntegro de los archivos inyectados en su contenedor, para poder inspeccionarlo después en la vista de observabilidad. Los cuerpos se conservan durante la misma ventana que la telemetría de LLM por llamada. Desactívalo para dejar de almacenarlo (las instantáneas existentes se eliminan por retención).",
         "toggle": "Almacenar el contexto completo del agente"
+      },
+      "prReport": {
+        "heading": "Informe de verificación en la pull request",
+        "body": "Mantiene un informe de verificación en la pull request de cada ejecución: el veredicto de CI, el informe del probador, el ciclo de vida del entorno efímero y la evaluación de fusión, como hechos registrados y no como afirmaciones del agente. Las credenciales se depuran antes de escribir nada. Desactívalo para dejar de publicarlo; un informe ya presente se deja tal cual.",
+        "toggle": "Publicar el informe de verificación en las pull requests"
       },
       "retention": {
         "heading": "Retención de capturas de pantalla",

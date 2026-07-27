@@ -15,6 +15,7 @@ interface WorkspaceSettingsRow {
   task_limit_shared: number | null
   task_limit_per_type: string | null
   store_agent_context: number
+  publish_pr_verification_report: number
   artifact_retention_days: number
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
@@ -42,6 +43,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     taskLimitShared: row.task_limit_shared,
     taskLimitPerType: parseJson<TaskLimitPerType>(row.task_limit_per_type),
     storeAgentContext: row.store_agent_context === 1,
+    publishPrVerificationReport: row.publish_pr_verification_report === 1,
     artifactRetentionDays: row.artifact_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
@@ -94,17 +96,19 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
       .prepare(
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
-            task_limit_per_type, store_agent_context, artifact_retention_days, kaizen_enabled,
+            task_limit_per_type, store_agent_context, publish_pr_verification_report,
+            artifact_retention_days, kaizen_enabled,
             delegate_agents_to_runner_pool, review_friction_mode, review_friction_warn_count,
             review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
             spend_monthly_limit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
            task_limit_shared = excluded.task_limit_shared,
            task_limit_per_type = excluded.task_limit_per_type,
            store_agent_context = excluded.store_agent_context,
+           publish_pr_verification_report = excluded.publish_pr_verification_report,
            artifact_retention_days = excluded.artifact_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
@@ -122,6 +126,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.taskLimitShared,
         settings.taskLimitPerType ? JSON.stringify(settings.taskLimitPerType) : null,
         settings.storeAgentContext ? 1 : 0,
+        settings.publishPrVerificationReport ? 1 : 0,
         settings.artifactRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,

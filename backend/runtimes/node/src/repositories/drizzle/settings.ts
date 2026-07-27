@@ -12,6 +12,8 @@ import type {
   LocalSettingsRepository,
   ModelPreset,
   ModelPresetRepository,
+  NotificationWebhookRecord,
+  NotificationWebhookRepository,
   TrackerSettings,
   TrackerSettingsRepository,
   UserSettings,
@@ -19,6 +21,7 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import { parseNotificationWebhookTypes } from '@cat-factory/server'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
@@ -26,6 +29,7 @@ import {
   keyFingerprint,
   localSettings,
   modelPresets,
+  notificationWebhooks,
   trackerSettings,
   userSettings,
   workspaceSettings,
@@ -249,6 +253,51 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
   }
 }
 
+/**
+ * A workspace's outbound notification webhook — one row per workspace in `notification_webhooks`
+ * (mirror of the D1 `D1NotificationWebhookRepository`). The `types` filter is a JSON array decoded
+ * through the SHARED `parseNotificationWebhookTypes` both runtimes use, so the column can't drift.
+ */
+export class DrizzleNotificationWebhookRepository implements NotificationWebhookRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<NotificationWebhookRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(notificationWebhooks)
+      .where(eq(notificationWebhooks.workspace_id, workspaceId))
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      url: row.url,
+      types: parseNotificationWebhookTypes(row.types),
+      enabled: row.enabled === 1,
+      secretSealed: row.secret_sealed,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async put(record: NotificationWebhookRecord): Promise<void> {
+    const values = {
+      url: record.url,
+      types: JSON.stringify(record.types),
+      enabled: record.enabled ? 1 : 0,
+      secret_sealed: record.secretSealed,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(notificationWebhooks)
+      .values({ workspace_id: record.workspaceId, ...values })
+      .onConflictDoUpdate({ target: notificationWebhooks.workspace_id, set: values })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db
+      .delete(notificationWebhooks)
+      .where(eq(notificationWebhooks.workspace_id, workspaceId))
+  }
+}
+
 function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): WorkspaceSettings {
   let perType: WorkspaceSettings['taskLimitPerType'] = null
   if (row.task_limit_per_type) {
@@ -264,6 +313,7 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
     taskLimitShared: row.task_limit_shared,
     taskLimitPerType: perType,
     storeAgentContext: row.store_agent_context === 1,
+    publishPrVerificationReport: row.publish_pr_verification_report === 1,
     artifactRetentionDays: row.artifact_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
@@ -319,6 +369,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
         ? JSON.stringify(settings.taskLimitPerType)
         : null,
       store_agent_context: settings.storeAgentContext ? 1 : 0,
+      publish_pr_verification_report: settings.publishPrVerificationReport ? 1 : 0,
       artifact_retention_days: settings.artifactRetentionDays,
       kaizen_enabled: settings.kaizenEnabled ? 1 : 0,
       delegate_agents_to_runner_pool: settings.delegateAgentsToRunnerPool ? 1 : 0,
@@ -340,6 +391,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           task_limit_shared: values.task_limit_shared,
           task_limit_per_type: values.task_limit_per_type,
           store_agent_context: values.store_agent_context,
+          publish_pr_verification_report: values.publish_pr_verification_report,
           artifact_retention_days: values.artifact_retention_days,
           kaizen_enabled: values.kaizen_enabled,
           delegate_agents_to_runner_pool: values.delegate_agents_to_runner_pool,

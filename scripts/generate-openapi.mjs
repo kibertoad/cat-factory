@@ -52,6 +52,19 @@ const COMPONENT_SCHEMAS = {
   PublicPipelineList: 'publicPipelineListSchema',
   Notification: 'notificationSchema',
   PublicNotificationList: 'publicNotificationListSchema',
+  // Parked decisions. `PublicDecisionList` is the response of ALL eight decision routes, and it
+  // transitively carries the full finding + fork-option shapes — hoisting it (and the members of
+  // its variant) keeps the spec from inlining ~21KB per operation.
+  PublicReviewFinding: 'publicReviewFindingSchema',
+  PublicRequirementsDecision: 'publicRequirementsDecisionSchema',
+  PublicForkDecision: 'publicForkDecisionSchema',
+  PublicDecision: 'publicDecisionSchema',
+  PublicDecisionList: 'publicDecisionListSchema',
+  PublicReplyFinding: 'publicReplyFindingSchema',
+  PublicSetFindingStatus: 'publicSetFindingStatusSchema',
+  PublicIncorporate: 'publicIncorporateSchema',
+  PublicResolveExceeded: 'publicResolveExceededSchema',
+  PublicChooseFork: 'publicChooseForkSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -145,6 +158,60 @@ const OPERATION_DOCS = {
     summary: 'Dismiss a notification',
     description: 'Dismiss a notification without acting on it.',
   },
+  cancelPublicJob: {
+    tag: 'Initiatives',
+    summary: 'Cancel an initiative job',
+    description:
+      'Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.',
+  },
+  listPublicRunDecisions: {
+    tag: 'Decisions',
+    summary: "List a run's parked decisions",
+    description:
+      'Read what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.',
+  },
+  replyPublicRunFinding: {
+    tag: 'Decisions',
+    summary: 'Answer a review finding',
+    description:
+      "Record an answer to one reviewer finding. Returns the run's updated decision list. Requires a `decide`-scope key.",
+  },
+  setPublicRunFindingStatus: {
+    tag: 'Decisions',
+    summary: 'Dismiss or reopen a finding',
+    description:
+      'Dismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a `decide`-scope key.',
+  },
+  incorporatePublicRunRequirements: {
+    tag: 'Decisions',
+    summary: 'Incorporate the answers',
+    description:
+      'Fold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.',
+  },
+  reReviewPublicRunRequirements: {
+    tag: 'Decisions',
+    summary: 'Re-review the incorporated document',
+    description:
+      'Run one more reviewer pass over the incorporated document. On convergence the parked run advances. Requires a `decide`-scope key.',
+  },
+  proceedPublicRunRequirements: {
+    tag: 'Decisions',
+    summary: 'Proceed with the current requirements',
+    description:
+      'Settle the requirements phase and advance the parked run (used when nothing is outstanding). Requires a `decide`-scope key.',
+  },
+  resolvePublicRunRequirementsExceeded: {
+    tag: 'Decisions',
+    summary: 'Resolve a review at its iteration cap',
+    description:
+      'Pick how a review that exhausted its reviewer-pass budget proceeds: one more round, proceed with the last incorporated document, or stop and reset the task. Requires a `decide`-scope key.',
+  },
+  choosePublicRunFork: {
+    tag: 'Decisions',
+    summary: 'Choose an implementation approach',
+    description:
+      'Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.',
+  },
 }
 
 /** Descriptions for the operation tags (groups). */
@@ -155,6 +222,8 @@ const TAG_DESCRIPTIONS = {
   Pipelines: 'The workspace’s pipelines (discover a pipelineId to start a task with).',
   Notifications:
     'The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).',
+  Decisions:
+    'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */

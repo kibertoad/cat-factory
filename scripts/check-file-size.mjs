@@ -48,7 +48,10 @@ const LEGACY_ALLOWANCES = new Map([
   // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
   // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2650],
+  // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
+  // its own module (re-exported, so no call site changed) when the PR-verification-report hook
+  // needed headroom — ratcheted DOWN to lock the win in.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2350],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -60,7 +63,7 @@ const LEGACY_ALLOWANCES = new Map([
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
-  ['backend/runtimes/node/src/db/schema.ts', 2300],
+  ['backend/runtimes/node/src/db/schema.ts', 2200],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],

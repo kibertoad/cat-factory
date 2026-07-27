@@ -246,6 +246,14 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// The marker-delimited splice that makes the engine's PR verification report idempotent.
+export {
+  PR_REPORT_MARKER_START,
+  PR_REPORT_MARKER_END,
+  spliceManagedSection,
+  readManagedSection,
+} from './domain/pr-report.js'
+
 // Pure structural analysis of a drafted Markdown document — the `doc-quality` gate's check.
 export {
   type DocStructureInput,

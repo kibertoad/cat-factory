@@ -550,6 +550,7 @@
       "scopes": {
         "read": "Sola lettura",
         "write": "Lettura e scrittura",
+        "decide": "Rispondere alle decisioni",
         "admin": "Accesso completo"
       },
       "toast": {
@@ -759,6 +760,11 @@
         "heading": "Osservabilita degli agenti",
         "body": "Memorizza il contesto completo fornito a ogni agente: i prompt composti, i frammenti di best practice inclusi e il contenuto completo dei file iniettati nel suo container, cosicche possa essere ispezionato in seguito nella vista di osservabilita. I corpi vengono conservati per la stessa finestra della telemetria LLM per chiamata. Disattiva per interrompere la memorizzazione (gli snapshot esistenti vengono eliminati dalla retention).",
         "toggle": "Memorizza il contesto completo dell'agente"
+      },
+      "prReport": {
+        "heading": "Rapporto di verifica sulla pull request",
+        "body": "Mantiene un rapporto di verifica sulla pull request di ogni esecuzione: il verdetto della CI, il rapporto del tester, il ciclo di vita dell'ambiente effimero e la valutazione di merge, come fatti rilevati e non come affermazioni dell'agente. Le credenziali vengono ripulite prima di ogni scrittura. Disattiva per smettere di pubblicarlo; un rapporto già presente resta invariato.",
+        "toggle": "Pubblica il rapporto di verifica sulle pull request"
       },
       "retention": {
         "heading": "Retention degli screenshot",
@@ -4132,6 +4138,8 @@
         "env_test_not_a_frame": "L'autotest dell'ambiente viene eseguito per servizio, quindi può essere avviato solo su un servizio, non su un modulo o un'attività.",
         "env_test_infraless": "Questo servizio non ha alcun provisioning di ambiente effimero configurato, quindi non c'è nulla che l'autotest possa verificare.",
         "env_test_not_provisionable": "Questo servizio ha un tipo di provisioning, ma non è ancora disponibile alcun handler del workspace, quindi il provisioning non può essere eseguito. Configura un handler dell'ambiente.",
+        "env_test_not_provisionable_no_handler": "Nessun handler dell'ambiente del workspace è configurato per il tipo di provisioning di questo servizio. In Infrastruttura → Ambienti di test, registrane uno — per un provider personalizzato, un handler Custom (remote-custom) il cui manifest id accettato corrisponde a quello che questo servizio fissa.",
+        "env_test_not_provisionable_type_mismatch": "Più di un handler dell'ambiente potrebbe corrispondere al tipo di provisioning di questo servizio. Fissa un manifest id per questo servizio in modo che se ne risolva esattamente uno, oppure rimuovi l'handler sovrapposto in Infrastruttura → Ambienti di test.",
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno."
       },
       "action": {

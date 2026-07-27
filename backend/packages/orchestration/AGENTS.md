@@ -6,7 +6,15 @@ optional-module factory functions live in `src/container/modules.ts`, and their 
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`
 — see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
-`OptionalCoreModules` (registry-assembled).
+`OptionalCoreModules` (registry-assembled). `createCore` itself is kept under its per-function
+line budget by four verbatim slice extractions, each registering in the SAME order (which IS
+dependency order for the registry) and returning only what the rest of `createCore` consumes:
+`container/foundation.ts` (notifications/settings, board/workspace/account/user + account
+onboarding), `container/platform-modules.ts` (observability, the provisioning event log, the
+preflight → shared-stacks → environments → handler-seeder chain, and the documents → fragment
+library → skill library chain), `container/engine-collaborators.ts` (the services the engine needs
+BEFORE it is constructed) and `container/engine-dependent-modules.ts` (the modules that drive the
+assembled engine). Grow one of these rather than `container.ts` itself.
 
 **Where things live** (`src/modules/*`, one dir per concern):
 
@@ -23,7 +31,13 @@ optional module is `build(key, factory)`-declared once and emitted via `...modul
   `DeployerStepController` (the deployer provision fan-out + env projection),
   `FollowUpGateController` (the follow-up companion gate + its human-action API), plus
   `RunStateMachine`, `StepGraph`, the gate/companion/review controllers, and `*.logic.ts`
-  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …). The run/step lifecycle
+  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
+  `PrVerificationReportController` + `prReport.logic.ts` + `prReportText.logic.ts` (the **PR
+  verification report**: composed from the settled run's own state and published onto its PR
+  through the `PrVerificationReportPublisher` port; `prReportText` is the text boundary every
+  untrusted value crosses — auto-link triggers, table cells, code fences — and the composer
+  scrubs free text with `redactSecrets` before either the prose or the JSON block sees it). `ExecutionServiceDependencies.ts` holds the engine's
+  injected-collaborator contract, re-exported from `ExecutionService.ts`. The run/step lifecycle
   reference is `docs/execution-state-machine.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`, `merge/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,

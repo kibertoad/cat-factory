@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "publish_pr_verification_report" integer DEFAULT 1 NOT NULL;

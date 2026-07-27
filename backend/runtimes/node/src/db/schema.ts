@@ -1152,6 +1152,21 @@ export const initiatives = pgTable(
   ],
 )
 
+// A workspace's outbound notification webhook (mirror of D1 migration 0061): ONE endpoint per
+// workspace that receives the workspace's notifications as they are raised — the delivery channel
+// a HEADLESS integration needs, chiefly so a public-API run that PARKS on a human decision reaches
+// its caller by push. `secret_sealed` is the signing secret encrypted with the deployment
+// SecretCipher (never read back over the API); `types` is a JSON array of notification types where
+// EMPTY means "the defaults", not "everything".
+export const notificationWebhooks = pgTable('notification_webhooks', {
+  workspace_id: text('workspace_id').primaryKey(),
+  url: text('url').notNull(),
+  types: text('types').notNull().default('[]'),
+  enabled: integer('enabled').notNull().default(1),
+  secret_sealed: text('secret_sealed'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // A workspace's issue-tracker selection (mirror of D1 migration 0029).
 export const trackerSettings = pgTable('tracker_settings', {
   workspace_id: text('workspace_id').primaryKey(),
@@ -1302,6 +1317,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Whether to store the full provided-context snapshot for each container agent
   // (the observability feature). On by default; integer 0/1 to match the SQLite store.
   store_agent_context: integer('store_agent_context').notNull().default(1),
+  publish_pr_verification_report: integer('publish_pr_verification_report').notNull().default(1),
   // Retention window (days) for binary artifacts (UI screenshots + reference designs)
   // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
   artifact_retention_days: integer('artifact_retention_days').notNull().default(14),
@@ -1394,120 +1410,11 @@ export const sharedStacks = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
 
-// Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres
-// `sandbox` schema (the analogue of the Worker's separate `SANDBOX_DB` D1 database), so
-// the tables are unprefixed (`sandbox.prompt_versions`, …) — the schema is the namespace.
-// Same connection/migrator as the main schema; the boot migrator creates the schema.
-// Shipped baselines are NOT stored (read live from `@cat-factory/agents`); only candidate
-// prompt versions are. JSON-shaped fields are text JSON. See backend/CLAUDE.md
-// "Keep the runtimes symmetric".
-export const sandboxSchema = pgSchema('sandbox')
-
-export const sandboxPromptVersions = sandboxSchema.table(
-  'prompt_versions',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    lineage_id: text('lineage_id').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    name: text('name').notNull(),
-    origin: text('origin').notNull(),
-    system_text: text('system_text').notNull(),
-    base_prompt_id: text('base_prompt_id'),
-    version: integer('version').notNull(),
-    parent_id: text('parent_id'),
-    labels: text('labels').notNull().default('[]'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    created_by: text('created_by'),
-    archived_at: bigint('archived_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_prompts_kind').on(t.workspace_id, t.agent_kind),
-  ],
-)
-
-export const sandboxFixtures = sandboxSchema.table(
-  'fixtures',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    kind: text('kind').notNull(),
-    name: text('name').notNull(),
-    payload: text('payload'),
-    repo_ref: text('repo_ref'),
-    objective: text('objective'),
-    origin: text('origin').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
-)
-
-export const sandboxExperiments = sandboxSchema.table(
-  'experiments',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    name: text('name').notNull(),
-    agent_kind: text('agent_kind').notNull(),
-    judge_model: text('judge_model').notNull(),
-    repeats: integer('repeats').notNull(),
-    status: text('status').notNull(),
-    matrix: text('matrix').notNull(),
-    budget_tokens: bigint('budget_tokens', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    created_by: text('created_by'),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
-)
-
-export const sandboxRuns = sandboxSchema.table(
-  'runs',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    experiment_id: text('experiment_id').notNull(),
-    prompt_version_id: text('prompt_version_id').notNull(),
-    model: text('model').notNull(),
-    fixture_id: text('fixture_id').notNull(),
-    repeat_index: integer('repeat_index').notNull(),
-    status: text('status').notNull(),
-    output_text: text('output_text'),
-    usage: text('usage'),
-    latency_ms: integer('latency_ms'),
-    branch: text('branch'),
-    pr_url: text('pr_url'),
-    diff: text('diff'),
-    error: text('error'),
-    seed_sha: text('seed_sha'),
-    prompt_label: text('prompt_label').notNull(),
-    started_at: bigint('started_at', { mode: 'number' }),
-    finished_at: bigint('finished_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_runs_experiment').on(t.workspace_id, t.experiment_id),
-    index('idx_sandbox_runs_queued').on(t.workspace_id, t.experiment_id, t.status),
-  ],
-)
-
-export const sandboxGrades = sandboxSchema.table(
-  'grades',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    run_id: text('run_id').notNull(),
-    judge_model: text('judge_model').notNull(),
-    scores: text('scores').notNull().default('[]'),
-    weighted_total: doublePrecision('weighted_total').notNull(),
-    objective: text('objective'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_sandbox_grades_run').on(t.workspace_id, t.run_id),
-  ],
-)
+// The sandbox surface's tables live in their own Postgres schema and their own module (see
+// `schema/sandbox.ts`) — the architecture's existing "extractable sandbox" boundary. Re-exported
+// here so `db/schema.ts` remains the ONE import surface for the Drizzle schema: every repository,
+// the boot migrator and drizzle-kit's snapshot generation all read it from this module.
+export * from './schema/sandbox.js'
 
 // Post-release-health gate (pluggable observability — Datadog today). One connection per
 // workspace (mirror of D1 migration 0007's `observability_connections`). `credentials` is a

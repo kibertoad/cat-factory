@@ -1,10 +1,10 @@
 ---
-"@cat-factory/kernel": minor
-"@cat-factory/integrations": minor
-"@cat-factory/workspaces": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/node-server": minor
-"@cat-factory/local-server": minor
+'@cat-factory/kernel': minor
+'@cat-factory/integrations': minor
+'@cat-factory/workspaces': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/node-server': minor
+'@cat-factory/local-server': minor
 ---
 
 Let a deployment declare environment-handler seeds so infra handlers are registered programmatically instead of via the SPA.
