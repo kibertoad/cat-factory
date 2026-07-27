@@ -18,6 +18,7 @@ export const useTrackerStore = defineStore('tracker', () => {
     linearTeamId: null,
     writebackCommentOnPrOpen: false,
     writebackResolveOnMerge: false,
+    writebackQuestionsOnPark: false,
     updatedAt: 0,
   })
 
@@ -31,6 +32,7 @@ export const useTrackerStore = defineStore('tracker', () => {
       linearTeamId: null,
       writebackCommentOnPrOpen: false,
       writebackResolveOnMerge: false,
+      writebackQuestionsOnPark: false,
       updatedAt: 0,
     }
   }

@@ -29,6 +29,7 @@ const jiraProjectKey = ref('')
 const linearTeamId = ref('')
 const commentOnPrOpen = ref(false)
 const resolveOnMerge = ref(false)
+const questionsOnPark = ref(false)
 const saving = ref(false)
 
 function hydrate() {
@@ -37,6 +38,7 @@ function hydrate() {
   linearTeamId.value = tracker.settings.linearTeamId ?? ''
   commentOnPrOpen.value = tracker.settings.writebackCommentOnPrOpen
   resolveOnMerge.value = tracker.settings.writebackResolveOnMerge
+  questionsOnPark.value = tracker.settings.writebackQuestionsOnPark
 }
 onMounted(() => {
   hydrate()
@@ -111,6 +113,7 @@ async function save() {
       linearTeamId: trackerKind.value === 'linear' ? linearTeamId.value.trim() : null,
       writebackCommentOnPrOpen: commentOnPrOpen.value,
       writebackResolveOnMerge: resolveOnMerge.value,
+      writebackQuestionsOnPark: questionsOnPark.value,
     })
     toast.add({
       title: t('settings.issueTracker.toast.saved'),
@@ -588,6 +591,18 @@ const STATUS_UI: Record<
           </span>
           <span class="block text-xs text-slate-500">
             {{ t('settings.issueTracker.writeback.resolveOnMerge.help') }}
+          </span>
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+        <USwitch v-model="questionsOnPark" />
+        <span class="text-sm">
+          <span class="block text-slate-200">
+            {{ t('settings.issueTracker.writeback.questionsOnPark.label') }}
+          </span>
+          <span class="block text-xs text-slate-500">
+            {{ t('settings.issueTracker.writeback.questionsOnPark.help') }}
           </span>
         </span>
       </label>

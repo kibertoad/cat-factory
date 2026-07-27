@@ -89,6 +89,10 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
       })
     },
     emit: (ws, review) => deps.events.requirementReviewChanged?.(ws, review) ?? Promise.resolve(),
+    // The headless clarification loop's question writeback rides the requirements subject
+    // ONLY — the clarity gate has its own intake-semantics echo (see `echoClarityQuestions`)
+    // and a brainstorm dialogue has no linked-issue surface at all.
+    questionsOnPark: true,
   }
 }
 

@@ -183,6 +183,11 @@ function setCommentOnPrOpen(value: WritebackOverride | null) {
 function setResolveOnMerge(value: WritebackOverride | null) {
   board.updateBlock(props.block.id, { trackerResolveOnMerge: value })
 }
+// Only consulted for runs started through the public API — a task started here keeps its in-app
+// clarification window regardless (docs/initiatives/headless-clarification-loop.md).
+function setQuestionsOnPark(value: WritebackOverride | null) {
+  board.updateBlock(props.block.id, { trackerQuestionsOnPark: value })
+}
 function writebackMenu(set: (value: WritebackOverride | null) => void) {
   return [
     [
@@ -211,6 +216,9 @@ const commentOnPrOpenLabel = computed(() =>
 )
 const resolveOnMergeLabel = computed(() =>
   writebackLabel(props.block.trackerResolveOnMerge, tracker.settings.writebackResolveOnMerge),
+)
+const questionsOnParkLabel = computed(() =>
+  writebackLabel(props.block.trackerQuestionsOnPark, tracker.settings.writebackQuestionsOnPark),
 )
 
 // ---- technical label (tri-state) -------------------------------------------
@@ -517,6 +525,21 @@ const technicalLabel = computed(() => {
               trailing-icon="i-lucide-chevron-down"
             >
               {{ resolveOnMergeLabel }}
+            </UButton>
+          </UDropdownMenu>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.runSettings.questionsOnPark')
+          }}</span>
+          <UDropdownMenu :items="writebackMenu(setQuestionsOnPark)">
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              {{ questionsOnParkLabel }}
             </UButton>
           </UDropdownMenu>
         </div>

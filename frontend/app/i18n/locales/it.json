@@ -350,6 +350,10 @@
         "resolveOnMerge": {
           "label": "Chiudi come risolto quando una PR viene mergiata",
           "help": "Commenta che la PR e stata mergiata, poi chiudi / risolvi l'issue collegato."
+        },
+        "questionsOnPark": {
+          "label": "Pubblica le domande aperte di un'esecuzione headless in pausa",
+          "help": "Quando un'esecuzione avviata tramite API si mette in pausa per chiarire i requisiti, pubblica le sue domande aperte — ciascuna con l'id che una risposta deve indicare — sull'issue collegato. Le attivita avviate nell'app non sono interessate."
         }
       },
       "probeFailure": {
@@ -1317,6 +1321,7 @@
       "issueWriteback": "Writeback della issue",
       "commentOnPrOpen": "Commenta all'apertura della PR",
       "closeOnMerge": "Chiudi al merge",
+      "questionsOnPark": "Chiedi in pausa",
       "writebackHint": "Scrive di ritorno sulla issue del tracker collegata a questa attivita'. Sovrascrive il predefinito del workspace.",
       "responsibleProduct": "Prodotto responsabile",
       "responsibleEmpty": "Non assegnato. Imposta un product owner per notificarlo quando la revisione dei requisiti segnala questa attivita'.",

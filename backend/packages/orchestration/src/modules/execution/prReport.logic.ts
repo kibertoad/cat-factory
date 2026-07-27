@@ -10,11 +10,10 @@ import type {
   PrVerificationReport,
   TestReport,
 } from '@cat-factory/kernel'
-import { redactSecrets } from '@cat-factory/kernel'
+import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { PR_VERIFICATION_REPORT_VERSION } from '@cat-factory/contracts'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
-import { capList, cell, inline, MAX_SECTION_CHARS, prose } from './prReportText.logic.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -39,7 +38,7 @@ import { capList, cell, inline, MAX_SECTION_CHARS, prose } from './prReportText.
 // the human prose and the machine-readable JSON block consistent: both are produced from this
 // one already-scrubbed object. Rendering-level hazards (auto-linked mentions and issue
 // references, table-breaking newlines, unbalanced code fences) are handled at the interpolation
-// boundary — see `prReportText.logic.ts`.
+// boundary — see kernel's `hostMarkdown` boundary.
 // ---------------------------------------------------------------------------
 
 /** Scrub credentials out of an optional free-text value, preserving `null`/`undefined`. */
@@ -59,7 +58,7 @@ function scrubbed(value: string): string {
  * failing checks reads exactly like "112 checks, 50 failed". The report SAYS what it left out.
  */
 function cap<T>(items: readonly T[], label: string, truncations: string[]): T[] {
-  const { items: kept, dropped } = capList(items)
+  const { items: kept, dropped } = hostMarkdown.capList(items)
   if (dropped > 0) truncations.push(`${label}: showing ${kept.length} of ${items.length}`)
   return kept
 }
@@ -353,7 +352,7 @@ function pct(score: number): string {
 }
 
 // Interpolation of untrusted text goes through `cell` / `inline` / `prose`
-// (`prReportText.logic.ts`) — never a bare template hole. See that module's header for what a
+// (kernel's `hostMarkdown` boundary) — never a bare template hole. See that module's header for what a
 // PR body does to raw text.
 
 function renderCi(ci: PrVerificationReport['ci']): string[] {
@@ -375,8 +374,10 @@ function renderCi(ci: PrVerificationReport['ci']): string[] {
   if (ci.failingChecks.length) {
     out.push('', '| Check | Conclusion |', '| --- | --- |')
     for (const check of ci.failingChecks) {
-      const name = check.url ? `[${cell(check.name)}](${check.url})` : cell(check.name)
-      out.push(`| ${name} | ${cell(check.conclusion ?? 'unknown')} |`)
+      const name = check.url
+        ? `[${hostMarkdown.cell(check.name)}](${check.url})`
+        : hostMarkdown.cell(check.name)
+      out.push(`| ${name} | ${hostMarkdown.cell(check.conclusion ?? 'unknown')} |`)
     }
   }
   return [...out, '']
@@ -391,7 +392,7 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
     `**Fixer attempts:** ${tests.fixerAttempts}` +
       (tests.maxFixerAttempts != null ? ` of ${tests.maxFixerAttempts}` : ''),
   )
-  if (tests.summary) out.push('', prose(tests.summary))
+  if (tests.summary) out.push('', hostMarkdown.prose(tests.summary))
   if (tests.tested.length) {
     out.push('', '**Exercised:**', ...tests.tested.map((t) => `- ${t}`))
   }
@@ -399,7 +400,7 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
     out.push('', '| Area | Result | Detail |', '| --- | --- | --- |')
     for (const outcome of tests.outcomes) {
       out.push(
-        `| ${cell(outcome.name)} | ${cell(outcome.status)} | ${cell(outcome.detail ?? '')} |`,
+        `| ${hostMarkdown.cell(outcome.name)} | ${hostMarkdown.cell(outcome.status)} | ${hostMarkdown.cell(outcome.detail ?? '')} |`,
       )
     }
   }
@@ -419,7 +420,7 @@ function renderEnvironments(envs: PrVerificationReport['environments']): string[
   out.push('| Service frame | State | URL | Error |', '| --- | --- | --- | --- |')
   for (const entry of envs.entries) {
     out.push(
-      `| \`${cell(entry.frameId)}\` | ${entry.status} | ${cell(entry.url ?? '')} | ${cell(entry.error ?? '')} |`,
+      `| \`${hostMarkdown.cell(entry.frameId)}\` | ${entry.status} | ${hostMarkdown.cell(entry.url ?? '')} | ${hostMarkdown.cell(entry.error ?? '')} |`,
     )
   }
   const teardown =
@@ -441,7 +442,7 @@ function renderMerge(merge: PrVerificationReport['merge']): string[] {
         `**Impact** ${pct(merge.assessment.impact)}` +
         (merge.presetName ? ` (preset: ${merge.presetName})` : ''),
     )
-    if (merge.assessment.rationale) out.push('', prose(merge.assessment.rationale))
+    if (merge.assessment.rationale) out.push('', hostMarkdown.prose(merge.assessment.rationale))
   }
   if (merge.outcome) {
     out.push(
@@ -456,21 +457,21 @@ function renderRun(run: PrVerificationReport['run'], runUrl: string | null): str
   const out = [
     '### Run',
     '',
-    `**Task:** ${inline(run.blockTitle)} (\`${run.blockId}\`)`,
-    `**Pipeline:** ${inline(run.pipelineName)} (\`${run.pipelineId}\`)`,
+    `**Task:** ${hostMarkdown.inline(run.blockTitle)} (\`${run.blockId}\`)`,
+    `**Pipeline:** ${hostMarkdown.inline(run.pipelineName)} (\`${run.pipelineId}\`)`,
     `**Execution:** \`${run.executionId}\``,
   ]
   if (run.repo) out.push(`**Repository:** ${run.repo}${run.provider ? ` (${run.provider})` : ''}`)
   if (run.issues.length) {
     out.push(
-      `**Tracker issues:** ${run.issues.map((i) => `[${inline(i.title)}](${i.url})`).join(', ')}`,
+      `**Tracker issues:** ${run.issues.map((i) => `[${hostMarkdown.inline(i.title)}](${i.url})`).join(', ')}`,
     )
   }
   if (runUrl) out.push(`**Observability:** [Model activity / Provided context](${runUrl})`)
   out.push('', '| # | Step | State | Model |', '| --- | --- | --- | --- |')
   for (const step of run.steps) {
     out.push(
-      `| ${step.index + 1} | ${cell(step.agentKind)} | ${cell(step.state)} | ${step.model ? cell(step.model) : '—'} |`,
+      `| ${step.index + 1} | ${hostMarkdown.cell(step.agentKind)} | ${hostMarkdown.cell(step.state)} | ${step.model ? hostMarkdown.cell(step.model) : '—'} |`,
     )
   }
   return [...out, '']
@@ -482,7 +483,7 @@ function renderTruncations(truncations: readonly string[]): string[] {
   return [
     '### Omitted for length',
     '',
-    ...truncations.map((note) => `- ${cell(note)}`),
+    ...truncations.map((note) => `- ${hostMarkdown.cell(note)}`),
     '',
     '_The full values are in the run’s observability panel._',
     '',
@@ -527,13 +528,13 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
   // would leave the PR with no report at all, and silently forever (publishing is best-effort
   // by design), which is the outcome this budget exists to avoid.
   const full = `${body}\n${json}`
-  if (full.length <= MAX_SECTION_CHARS) return full
-  const dropped = `${body}\n_The machine-readable JSON block was omitted: this report exceeds the ${MAX_SECTION_CHARS}-character budget for a pull-request description._`
-  if (dropped.length <= MAX_SECTION_CHARS) return dropped
+  if (full.length <= hostMarkdown.MAX_SECTION_CHARS) return full
+  const dropped = `${body}\n_The machine-readable JSON block was omitted: this report exceeds the ${hostMarkdown.MAX_SECTION_CHARS}-character budget for a pull-request description._`
+  if (dropped.length <= hostMarkdown.MAX_SECTION_CHARS) return dropped
   // Absolute backstop: the prose alone is over budget. Cut it rather than let the host reject
   // the whole write.
-  return `${dropped.slice(0, MAX_SECTION_CHARS - TRUNCATED_SECTION_NOTE.length)}${TRUNCATED_SECTION_NOTE}`
+  return `${dropped.slice(0, hostMarkdown.MAX_SECTION_CHARS - TRUNCATED_SECTION_NOTE.length)}${TRUNCATED_SECTION_NOTE}`
 }
 
-/** Closes a section that had to be cut at {@link MAX_SECTION_CHARS}. */
+/** Closes a section that had to be cut at {@link hostMarkdown.MAX_SECTION_CHARS}. */
 const TRUNCATED_SECTION_NOTE = '\n\n_… report truncated to fit the pull-request body limit._'

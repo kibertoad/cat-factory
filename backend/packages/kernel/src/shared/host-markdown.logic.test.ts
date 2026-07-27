@@ -8,7 +8,7 @@ import {
   MAX_LIST_ITEMS,
   MAX_PROSE_CHARS,
   prose,
-} from './prReportText.logic.js'
+} from './host-markdown.logic.js'
 
 // The hazards below are not theoretical: a task title, a tester summary and a provisioner's
 // stderr all reach the PR body verbatim, and the host acts on what it finds there.

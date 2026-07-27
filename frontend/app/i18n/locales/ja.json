@@ -1031,6 +1031,7 @@
       "issueWriteback": "Issue への書き戻し",
       "commentOnPrOpen": "PR オープン時にコメント",
       "closeOnMerge": "マージ時にクローズ",
+      "questionsOnPark": "一時停止時に質問",
       "writebackHint": "このタスクにリンクされたトラッカーの Issue に書き戻します。ワークスペースの既定を上書きします。",
       "responsibleProduct": "担当プロダクト",
       "responsibleEmpty": "未割り当て。要件レビューがこのタスクをフラグしたときに通知するため、プロダクトオーナーを設定してください。",
@@ -2350,6 +2351,10 @@
         "resolveOnMerge": {
           "label": "PR がマージされたら解決済みとしてクローズ",
           "help": "PR がマージされた旨をコメントし、リンクされた課題をクローズ / 解決します。"
+        },
+        "questionsOnPark": {
+          "label": "ヘッドレス実行が一時停止したら未解決の質問を投稿",
+          "help": "API 経由で開始した実行が要件確認のため一時停止したとき、その未解決の質問を — 回答が指定する ID を添えて — リンクされた課題に投稿します。アプリで開始したタスクには影響しません。"
         }
       },
       "probeFailure": {

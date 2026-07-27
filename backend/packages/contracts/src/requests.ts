@@ -209,6 +209,7 @@ export const updateBlockSchema = v.partial(
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
     trackerResolveOnMerge: v.nullable(writebackOverrideSchema),
+    trackerQuestionsOnPark: v.nullable(writebackOverrideSchema),
     // Task-level TECHNICAL label (tri-state): true ⇒ technical, false ⇒ business, null ⇒
     // "unset" (let the engine infer it). A human-set value is never overridden.
     technical: v.nullable(v.boolean()),

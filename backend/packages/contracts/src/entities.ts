@@ -433,6 +433,13 @@ export const blockSchema = v.object({
    */
   trackerResolveOnMerge: v.optional(v.nullable(writebackOverrideSchema)),
   /**
+   * Per-task override for the "post a parked headless requirements review's open findings on
+   * the linked tracker issue" writeback action. Absent/null ⇒ inherit the workspace's
+   * `writebackQuestionsOnPark`. Only meaningful on `task`-level blocks that have a linked
+   * tracker issue, and only consulted for runs with `intakeOrigin: 'public-api'`.
+   */
+  trackerQuestionsOnPark: v.optional(v.nullable(writebackOverrideSchema)),
+  /**
    * Headless marker: when `true` this block was created by the public API (an external
    * "initiative breakdown" run) purely to anchor an execution, and is EXCLUDED from every
    * board projection — the board-listing read and the workspace snapshot filter it out, so

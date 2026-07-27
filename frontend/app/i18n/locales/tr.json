@@ -1031,6 +1031,7 @@
       "issueWriteback": "Issue geri yazma",
       "commentOnPrOpen": "PR açılışında yorum yap",
       "closeOnMerge": "Birleştirmede kapat",
+      "questionsOnPark": "Duraklamada soru sor",
       "writebackHint": "Bu görevin bağlı izleyici issue'suna geri yazar. Çalışma alanı varsayılanını geçersiz kılar.",
       "responsibleProduct": "Sorumlu ürün",
       "responsibleEmpty": "Atanmamış. Gereksinim incelemesi bu görevi işaretlediğinde bildirim almak için bir ürün sahibi belirleyin.",
@@ -2350,6 +2351,10 @@
         "resolveOnMerge": {
           "label": "Bir PR birleştiğinde çözüldü olarak kapat",
           "help": "PR'ın birleştiğini belirten bir yorum yap, ardından bağlı sorunu kapat / çöz."
+        },
+        "questionsOnPark": {
+          "label": "Duraklatılan başsız çalıştırmanın açık sorularını gönder",
+          "help": "API üzerinden başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında, açık sorularını — her biri bir yanıtın belirteceği kimlikle — bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
         }
       },
       "probeFailure": {
