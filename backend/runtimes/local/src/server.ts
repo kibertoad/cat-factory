@@ -7,6 +7,7 @@ import {
   type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
+  backfillEnvironmentHandlerSeeds,
   createApp,
   serveAppWithRealtime,
   serveMisconfigured,
@@ -15,7 +16,7 @@ import {
 } from '@cat-factory/node-server'
 import { DOCS, ENV_VARS_ANCHORS, isConfigValidationError, logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
-import type { BackendRegistries } from '@cat-factory/integrations'
+import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl, warnOnGitHubPatProblemInBackground } from './github.js'
@@ -99,6 +100,15 @@ export async function startLocal(
      * Omitted ⇒ the local facade default (Claude Opus 4.8).
      */
     defaultModelPresetId?: string
+    /**
+     * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
+     * local deploy-app wrapper (e.g. a Kargo adapter) passes this so the server auto-registers its
+     * infra handler per workspace with no manual SPA step. Threaded into `buildLocalContainer` on
+     * BOTH the Postgres path (through `start()` → `o`) and the mothership path, and used to
+     * boot-backfill every existing workspace; new workspaces are seeded by `WorkspaceService.create`.
+     * Omitted ⇒ no seeding.
+     */
+    seedEnvironmentHandlers?: RegisterHandlerInput[]
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -216,6 +226,10 @@ async function bootLocal(
     // `buildContainer` override below, so `buildLocalContainer` picks it up (undefined ⇒ local's
     // Claude default). Kept off the `buildLocalContainer` call directly so there is one path.
     defaultModelPresetId: options.defaultModelPresetId,
+    // Forward the deployment's environment-handler seeds the same way: `start()` puts them on `o`,
+    // so `buildLocalContainer` (via `...options`) hands them to `buildNodeContainer` → `createCore`,
+    // and `start()`'s post-listen backfill seeds every existing workspace. Undefined ⇒ no seeding.
+    seedEnvironmentHandlers: options.seedEnvironmentHandlers,
     // Inject the deployment's backend registries (if any) by reference — `start()` never puts a
     // `backendRegistries` on `o`, so this can't clobber one, and when absent `buildLocalContainer`
     // falls back to `createBackendRegistries()` (the built-in-only default). Unchanged from the
@@ -259,6 +273,7 @@ async function startLocalMothership(
     backendRegistries?: BackendRegistries
     defaultModelPresetId?: string
     taskTypeRegistry?: TaskTypeRegistry
+    seedEnvironmentHandlers?: RegisterHandlerInput[]
   },
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   const {
@@ -267,6 +282,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    seedEnvironmentHandlers,
   } = extensions
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
@@ -285,6 +301,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    seedEnvironmentHandlers,
   })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
@@ -293,6 +310,12 @@ async function startLocalMothership(
     gateRegistry: container.gateRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
+
+  // Backfill the deployment's declared environment-handler seeds onto every existing workspace —
+  // the mothership path builds `buildLocalContainer` directly and never runs `bootServer`, so it
+  // must run the same best-effort backfill itself (new workspaces are seeded by
+  // WorkspaceService.create). Fire-and-forget so it doesn't delay serving; a no-op when unwired.
+  void backfillEnvironmentHandlerSeeds(container, logger)
 
   const app = createApp(container, env)
   // Shared serve + WebSocket-upgrade helper (one implementation with `start()`, so port/host

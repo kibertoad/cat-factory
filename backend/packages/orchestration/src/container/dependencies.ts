@@ -20,6 +20,7 @@ import type {
   DeployJobClient,
   DetectionConventions,
   EnvironmentBackendRegistry,
+  RegisterHandlerInput,
   RunnerBackendRegistry,
   UserSecretKindRegistry,
   VcsPatConnectionService,
@@ -533,6 +534,16 @@ export interface CoreDependencies {
   // feature is off. Per-tenant secrets are encrypted via `secretCipher`.
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
+  /**
+   * A deployment's pre-declared environment-handler SEEDS (each a `RegisterHandlerInput`). When
+   * supplied (and the environments module is wired), `createCore` builds an
+   * `EnvironmentHandlerSeeder` over them and exposes it on the container: the runtime
+   * boot-backfills every existing workspace and `WorkspaceService.create` seeds each new one, so a
+   * deployment (e.g. a Kargo adapter) supplies the infra handler from its config instead of a human
+   * filling the Infrastructure → Test environments form. Seeding is idempotent + per-seed
+   * fault-tolerant. Absent / empty ⇒ no seeding.
+   */
+  seedEnvironmentHandlers?: RegisterHandlerInput[]
   /**
    * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
    * publishes a served app's port to a host port and keeps the container alive. Wired ONLY on a

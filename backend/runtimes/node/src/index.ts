@@ -4,6 +4,7 @@
 // in dev, test and prod). `start()` boots an HTTP server; `createServer()` returns the
 // app (for embedding/tests); `buildNodeContainer()` is the composition root.
 export {
+  backfillEnvironmentHandlerSeeds,
   createApp,
   createServer,
   serveAppWithRealtime,
