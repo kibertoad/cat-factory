@@ -339,8 +339,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // them. Nothing sealed here (the commands run in the run's own container), so — unlike the
     // test secrets above — this needs no ENCRYPTION_KEY and is always wired. Resolves to `null`
     // for a service with no checks, which is the exact pre-feature behaviour.
-    resolveValidationChecks: (workspaceId: string, blockId: string) =>
-      validationConfigService.resolveForBlock(workspaceId, blockId),
+    resolveValidationChecks: (workspaceId: string, frameId: string) =>
+      validationConfigService.resolveForFrame(workspaceId, frameId),
     ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),

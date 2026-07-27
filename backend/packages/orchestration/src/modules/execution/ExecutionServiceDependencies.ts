@@ -292,7 +292,7 @@ export interface ExecutionServiceDependencies {
    */
   resolveValidationChecks?: (
     workspaceId: string,
-    blockId: string,
+    frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
   /**
    * Optional: resolves the binary-artifact store (UI screenshots + reference design images)

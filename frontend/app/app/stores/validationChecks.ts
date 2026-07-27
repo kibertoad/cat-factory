@@ -13,6 +13,19 @@ import { useWorkspaceStore } from '~/stores/workspace'
  * Loaded on demand by the service inspector rather than from the workspace snapshot — it's
  * operator configuration read on one panel, not something every board load needs.
  */
+/**
+ * Whether a failed load is a SETTLED "you can't have this" — the facade wired no store (503) or
+ * this user lacks `settings.manage` (403) — rather than a transient fault. Only the settled cases
+ * latch `available` to false; everything else stays unresolved so a later visit retries.
+ */
+function isSettledUnavailable(error: unknown): boolean {
+  const status =
+    error && typeof error === 'object' && 'statusCode' in error
+      ? (error as { statusCode?: number }).statusCode
+      : undefined
+  return status === 503 || status === 403
+}
+
 export const useValidationChecksStore = defineStore('validationChecks', () => {
   const api = useApi()
 
@@ -36,9 +49,13 @@ export const useValidationChecksStore = defineStore('validationChecks', () => {
     try {
       configs.value = await api.listServiceValidationConfigs(ws.requireId())
       available.value = true
-    } catch {
-      // 503 (store not wired) or any error → hide the UI entry point.
-      available.value = false
+    } catch (error) {
+      // A 503 means the facade wired no store and a 403 means this user may not manage settings:
+      // both are STABLE answers, so latch them and hide the entry point rather than showing a
+      // dead control. Anything else (a network blip, a 5xx) is TRANSIENT — leaving `available`
+      // unresolved so the next `ensureLoaded` retries, instead of hiding the panel for the rest
+      // of the session over one dropped request.
+      available.value = isSettledUnavailable(error) ? false : null
     } finally {
       loading.value = false
     }

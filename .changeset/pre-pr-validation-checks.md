@@ -32,3 +32,15 @@ lint/tests never become public PR churn.
 BREAKING for self-hosted runner pools only: a pool that wants the LIVE repair-loop view should
 map the new `validationReportPath` in its response manifest (the terminal result envelope is
 forwarded without any manifest change).
+
+Review follow-ups in this PR:
+
+- The check loop now feeds the run's inactivity watchdog. `JOB_INACTIVITY_MS` (default 10 min) is
+  tighter than a single command's own watchdog (default 15 min), so a legitimately slow
+  `install`/`test`/`build` previously aborted the whole run as "inactivity" instead of reporting a
+  validation failure.
+- Repair prompts now name any NEW files left un-`git add`ed. The checks run against the working
+  tree but only tracked edits are pushed, so an unadded file could take the loop green on work the
+  pull request would never contain.
+- Checks resolve from the service frame the engine already walked to, instead of re-deriving it —
+  removing two block reads from every agent dispatch.

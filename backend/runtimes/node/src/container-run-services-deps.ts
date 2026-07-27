@@ -179,8 +179,8 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     blockRepository: repos.blockRepository,
     clock,
   })
-  const resolveValidationChecks = (workspaceId: string, blockId: string) =>
-    validationConfigService.resolveForBlock(workspaceId, blockId)
+  const resolveValidationChecks = (workspaceId: string, frameId: string) =>
+    validationConfigService.resolveForFrame(workspaceId, frameId)
 
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real reads land in B2). The

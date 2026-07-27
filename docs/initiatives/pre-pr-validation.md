@@ -39,7 +39,7 @@ Evaluated and rejected for now:
   UX with one config home rather than two half-explained ones.
 
 The resolution is deliberately funnelled through **one** seam
-(`ValidationConfigService.resolveForBlock`), so adding a manifest source later is a change
+(`ValidationConfigService.resolveForFrame`), so adding a manifest source later is a change
 inside that method plus a precedence rule — not a new path through the executor.
 
 ### D2 — Scope: the PR-opening coding flow, keyed off job data (not the kind)
@@ -98,7 +98,7 @@ timeout is a FAILURE (exit 124), fed back like any other.
 ## Target pattern
 
 - **Config**: `validation_configs` table (workspace_id, block_id) ⇒ `ValidationConfigRepository`
-  (kernel port) ⇒ `ValidationConfigService` (integrations; CRUD frame-only + `resolveForBlock`
+  (kernel port) ⇒ `ValidationConfigService` (integrations; CRUD frame-only + `resolveForFrame`
   frame-chain walk) ⇒ `ValidationConfigController` (server) ⇒ `ServiceValidationConfig.vue`
   inspector panel.
 - **Threading**: `resolveValidationChecks` (optional `AgentContextBuilder` dep, the

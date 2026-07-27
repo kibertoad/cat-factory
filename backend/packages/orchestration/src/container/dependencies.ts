@@ -839,14 +839,18 @@ export interface CoreDependencies {
    */
   resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
   /**
-   * Resolve the PRE-PR VALIDATION CHECKS configured for a run block's service frame — the
-   * commands the harness runs against the checkout before opening a PR. Wired from the facade's
+   * Resolve the PRE-PR VALIDATION CHECKS configured for a SERVICE FRAME — the commands the
+   * harness runs against the checkout before opening a PR. Wired from the facade's
    * `ValidationConfigService`; absent (or resolving to `null`) ⇒ no checks travel on the job
    * body and the harness runs its existing path unchanged.
+   *
+   * Keyed by the frame, not the run block: `AgentContextBuilder` walks the frame→module→task
+   * ancestry exactly ONCE per dispatch and threads that frame into every frame-scoped resolver,
+   * so this one reuses it rather than paying a second walk.
    */
   resolveValidationChecks?: (
     workspaceId: string,
-    blockId: string,
+    frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher

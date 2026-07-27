@@ -80,12 +80,31 @@ export function validationCommandTimeoutMs(): number {
 }
 
 /**
+ * How often the check loop feeds the run's inactivity watchdog. Well under the harness's own
+ * `JOB_INACTIVITY_MS` (default 10 min) so a single slow command can never look wedged; matches
+ * the frontend stand-up's heartbeat, which exists for exactly the same reason. Overridable via
+ * env for tests, like {@link validationCommandTimeoutMs}.
+ */
+export function validationHeartbeatMs(): number {
+  const n = Number(process.env.VALIDATION_HEARTBEAT_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 30_000
+}
+
+/**
  * Run every configured check IN ORDER against `cwd` and build the attempt's report.
  *
  * Runs all of them even after one fails, rather than short-circuiting: the agent repairing the
  * checkout should see every problem at once instead of rediscovering the next one on the next
  * round, which is the difference between one repair round and four. (A check whose failure makes
  * the rest meaningless — e.g. a failed install — still costs only the cheap downstream failures.)
+ *
+ * Keeps the run's inactivity watchdog fed for the whole attempt. These commands are exactly the
+ * activity-SILENT kind — a cold `install`, a full `test` run, a `build` — and the harness spawns
+ * them itself rather than through the agent, so they emit no activity events of their own. The
+ * job-level watchdog (`JOB_INACTIVITY_MS`, default 10 min) is TIGHTER than one command's own
+ * watchdog ({@link validationCommandTimeoutMs}, default 15 min), so without this a legitimately
+ * slow check would abort the entire run as "inactivity" — mislabelling a healthy build as a
+ * wedge, and making the per-command timeout unreachable at stock settings.
  */
 export async function runValidationChecks(
   cwd: string,
@@ -96,10 +115,16 @@ export async function runValidationChecks(
 ): Promise<ValidationAttempt> {
   const outcomes: ValidationCheckOutcome[] = []
   const fullTails = new Map<string, string>()
-  for (const check of spec.checks) {
-    const { outcome, fullTail } = await runOneCheck(cwd, check, logger, opts)
-    outcomes.push(outcome)
-    if (fullTail) fullTails.set(check.label, fullTail)
+  const heartbeat = setInterval(() => opts.onActivity?.(), validationHeartbeatMs())
+  heartbeat.unref?.()
+  try {
+    for (const check of spec.checks) {
+      const { outcome, fullTail } = await runOneCheck(cwd, check, logger, opts)
+      outcomes.push(outcome)
+      if (fullTail) fullTails.set(check.label, fullTail)
+    }
+  } finally {
+    clearInterval(heartbeat)
   }
   const report: ValidationReport = {
     passed: outcomes.every((o) => o.passed),
@@ -219,6 +244,13 @@ function tailFor(scrubbed: string): string {
 export function buildRepairPrompt(
   report: ValidationReport,
   fullTails: Map<string, string>,
+  /**
+   * New files the agent created but never `git add`ed, if the caller can tell. The harness only
+   * auto-stages TRACKED edits (`git add -u`), so an uncommitted new file is invisible to the push
+   * — yet fully visible to the checks, which run against the working tree. Naming them here is
+   * what stops the loop going green on work the pull request would not contain.
+   */
+  untrackedFiles: string[] = [],
 ): string {
   const failed = report.outcomes.filter((o) => !o.passed)
   const blocks = failed
@@ -231,11 +263,24 @@ export function buildRepairPrompt(
     })
     .join('\n\n')
   const remaining = report.maxAttempts - report.attempts
+  const untracked = untrackedFiles.length
+    ? [
+        '',
+        '## Uncommitted new files',
+        '',
+        'These files exist in your checkout but were never added to git, so they are NOT part of',
+        'the branch even though the checks above ran against them. `git add` each one you meant to',
+        'keep (or delete it), or the checks will pass on work the pull request will not contain:',
+        '',
+        ...untrackedFiles.map((f) => `- ${f}`),
+      ]
+    : []
   return [
     'The work you just finished does NOT pass this service’s required validation checks, so',
     'no pull request has been opened. Fix the failures below, then stop.',
     '',
     blocks,
+    ...untracked,
     '',
     '## How this is judged',
     '',
@@ -249,7 +294,9 @@ export function buildRepairPrompt(
     '  themselves (their scripts, configs, thresholds, ignore files, or test assertions) to make',
     '  them pass — a green check obtained that way is a failed task.',
     '- Do not revert your earlier work; build on it.',
-    '- Commit your fixes, as you did before.',
+    '- Commit your fixes, as you did before. `git add` any NEW file you create — only changes to',
+    '  files already tracked by git are staged for you, so an unadded file is silently dropped',
+    '  from the branch even though the checks can see it.',
   ].join('\n')
 }
 
@@ -276,8 +323,15 @@ export async function runValidationLoop<TRun>(args: {
   opts: RunOptions
   runAgentPass: (userPrompt: string) => Promise<TRun>
   onAgentPass?: (run: TRun) => void
+  /**
+   * Optional: the new files left uncommitted in the checkout, folded into each repair prompt.
+   * Injected rather than read here so this module stays git-agnostic (it knows only how to run
+   * commands in a directory and how to ask for another pass); the coding agent, which owns the
+   * checkout, supplies it. A throw is swallowed — a missing warning must never fail the loop.
+   */
+  listUncommittedNewFiles?: () => Promise<string[]>
 }): Promise<ValidationReport> {
-  const { workDir, spec, logger, opts, runAgentPass, onAgentPass } = args
+  const { workDir, spec, logger, opts, runAgentPass, onAgentPass, listUncommittedNewFiles } = args
   let attempt = 1
   for (;;) {
     const { report, fullTails } = await runValidationChecks(workDir, spec, attempt, logger, opts)
@@ -296,9 +350,30 @@ export async function runValidationLoop<TRun>(args: {
     attempt += 1
     logger.info('validation: repairing', { nextAttempt: attempt })
     opts.onPhase?.('validation-repair')
-    const run = await runAgentPass(buildRepairPrompt(report, fullTails))
+    const untracked = await safeListUncommitted(listUncommittedNewFiles, logger)
+    const run = await runAgentPass(buildRepairPrompt(report, fullTails, untracked))
     onAgentPass?.(run)
     opts.onPhase?.('agent')
+  }
+}
+
+/**
+ * The uncommitted-new-file list for a repair prompt, never throwing: this is an ADVISORY
+ * addition to the instruction, so a `git` hiccup must degrade to "no warning" rather than
+ * failing a loop that is otherwise working.
+ */
+async function safeListUncommitted(
+  list: (() => Promise<string[]>) | undefined,
+  logger: Logger,
+): Promise<string[]> {
+  if (!list) return []
+  try {
+    return await list()
+  } catch (error) {
+    logger.warn('validation: could not list uncommitted new files', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return []
   }
 }
 

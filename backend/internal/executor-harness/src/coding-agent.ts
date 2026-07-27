@@ -341,6 +341,10 @@ export async function runCodingAgent(
             onAgentPass: (run) => {
               agentRun = mergeAgentPasses(agentRun, run)
             },
+            // The checks run against the WORKING TREE, but only tracked edits are staged for the
+            // push — so a repair round can go green on a new file the PR would never contain.
+            // Name those files in the next repair prompt so the agent adds them.
+            listUncommittedNewFiles: () => listUntrackedFiles(workDir, opts.signal),
           })
         }
         outcome = await finalizeCodingRun({

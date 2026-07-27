@@ -4,7 +4,7 @@ import type {
   ValidationConfigRecord,
   ValidationConfigRepository,
 } from '@cat-factory/kernel'
-import { NotFoundError, resolveServiceFrameBlock, ValidationError } from '@cat-factory/kernel'
+import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import type {
   ResolvedValidationChecks,
   ServiceValidationConfig,
@@ -14,7 +14,7 @@ import { VALIDATION_DEFAULT_MAX_ATTEMPTS } from '@cat-factory/contracts'
 
 export interface ValidationConfigServiceDependencies {
   validationConfigRepository: ValidationConfigRepository
-  /** Walks a run's block up to its service frame (the checks are keyed by the frame). */
+  /** Reads the target block so a write can reject a non-frame (the checks are keyed by frame). */
   blockRepository: BlockRepository
   clock: Clock
 }
@@ -25,12 +25,10 @@ export interface ValidationConfigServiceDependencies {
  * `docs/initiatives/pre-pr-validation.md`).
  *
  * The CRUD surface ({@link getView}/{@link set}/{@link deleteFor}) operates on the exact SERVICE
- * FRAME block the inspector edits. The resolution surface ({@link resolveForBlock}) walks a run's
- * task block UP to its service frame — the same `resolveServiceFrameBlock` walk the engine's
- * `AgentContextBuilder` and the sealed test-secret store use — and is the SINGLE seam a dispatch
- * resolves checks through, so adding a second source later (a checked-in repo manifest, see the
- * tracker's D1) is a change inside this method plus a precedence rule, not a new path through the
- * executor.
+ * FRAME block the inspector edits. The resolution surface ({@link resolveForFrame}) reads the
+ * checks for the frame a dispatch resolved, and is the SINGLE seam a dispatch resolves checks
+ * through — so adding a second source later (a checked-in repo manifest, see the tracker's D1) is
+ * a change inside that method plus a precedence rule, not a new path through the executor.
  *
  * Nothing here is a secret: the commands are operator-authored strings that run inside the run's
  * own sandboxed container, the same trust boundary as the coding agent.
@@ -101,18 +99,22 @@ export class ValidationConfigService {
   }
 
   /**
-   * The checks that apply to a RUN's block — walked up to its service frame. This is what the
-   * engine folds onto the agent run context and the container executor forwards on the coding
-   * job body. `null` when the block has no service frame or the frame configured no checks,
-   * which is what keeps an unconfigured deployment byte-for-byte on the old code path.
+   * The checks that apply to a run dispatched against SERVICE FRAME `frameId`. This is what the
+   * engine folds onto the agent run context and the container executor forwards on the coding job
+   * body. `null` when the frame configured no checks, which is what keeps an unconfigured
+   * deployment byte-for-byte on the old code path.
+   *
+   * Takes the frame the CALLER already resolved rather than a run block, deliberately: the
+   * engine's `AgentContextBuilder` walks the frame→module→task ancestry exactly ONCE per dispatch
+   * and threads the result into every frame-scoped resolver (environment, service config,
+   * frontend, fragments). Re-deriving it here would put two extra block point-reads on every
+   * dispatch to reach a frame the caller is already holding.
    */
-  async resolveForBlock(
+  async resolveForFrame(
     workspaceId: string,
-    blockId: string,
+    frameId: string,
   ): Promise<ResolvedValidationChecks | null> {
-    const frame = await resolveServiceFrameBlock((id) => this.blocks.get(workspaceId, id), blockId)
-    if (!frame) return null
-    const record = await this.repo.getByBlock(workspaceId, frame.id)
+    const record = await this.repo.getByBlock(workspaceId, frameId)
     if (!record || record.checks.length === 0) return null
     return {
       checks: record.checks.map((c) => ({ label: c.label, command: c.command })),

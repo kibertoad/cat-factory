@@ -148,6 +148,30 @@ describe('runValidationChecks', () => {
     )
     expect(report.passed).toBe(true)
   })
+
+  // A regression guard, not a nicety. These commands are activity-SILENT (a cold install, a full
+  // test run) and the harness spawns them itself, so nothing else emits activity while they run.
+  // The job-level inactivity watchdog (JOB_INACTIVITY_MS, default 10 min) is TIGHTER than one
+  // command's own watchdog (default 15 min), so a loop that stopped feeding it would abort
+  // healthy long builds as "inactivity" — a failure the container path would report as a wedge.
+  it('feeds the run’s inactivity watchdog while an output-silent command runs', async () => {
+    process.env.VALIDATION_HEARTBEAT_MS = '50'
+    try {
+      const beats: number[] = []
+      const { report } = await runValidationChecks(
+        dir,
+        // Emits nothing at all, and outlasts several heartbeat intervals.
+        spec([{ label: 'slow', command: 'sleep 0.4' }]),
+        1,
+        log,
+        { ...opts, onActivity: () => beats.push(Date.now()) },
+      )
+      expect(report.passed).toBe(true)
+      expect(beats.length).toBeGreaterThan(1)
+    } finally {
+      delete process.env.VALIDATION_HEARTBEAT_MS
+    }
+  })
 })
 
 describe('runValidationLoop', () => {
@@ -265,5 +289,28 @@ describe('buildRepairPrompt', () => {
     expect(prompt).toContain('2 attempt(s) left')
     // The gate must not be gameable by weakening the check.
     expect(prompt).toMatch(/do not edit, disable, skip, or relax the checks/i)
+    // Always tell the agent to stage new files: only tracked edits are auto-staged, so an
+    // unadded file is dropped from the branch even though the checks (run against the working
+    // tree) can see it — the one way a "green" report can describe work the PR won't contain.
+    expect(prompt).toMatch(/`git add` any NEW file/i)
+  })
+
+  it('names the uncommitted new files the push would silently drop', () => {
+    const report = {
+      passed: false,
+      attempts: 1,
+      maxAttempts: 3,
+      at: 0,
+      outcomes: [
+        { label: 'test', command: 'pnpm test', exitCode: 1, passed: false, outputTail: 'boom' },
+      ],
+    }
+    const withNone = buildRepairPrompt(report, new Map())
+    expect(withNone).not.toContain('Uncommitted new files')
+
+    const withSome = buildRepairPrompt(report, new Map(), ['src/new-thing.ts', 'src/other.ts'])
+    expect(withSome).toContain('Uncommitted new files')
+    expect(withSome).toContain('src/new-thing.ts')
+    expect(withSome).toContain('src/other.ts')
   })
 })

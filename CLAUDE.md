@@ -1216,18 +1216,23 @@ checkout opens a PR. Full design + the decisions (config source, scope, budgets)
 - **Config** is per SERVICE FRAME, resolved up the frame chain — the `test_secrets` /
   `release_health_configs` shape: `validation_configs` (D1 ⇄ Drizzle, mirrored) →
   `ValidationConfigRepository` (kernel) → `ValidationConfigService` (integrations; frame-only CRUD
-  - `resolveForBlock`) → `ValidationConfigController` (`GET|PUT|DELETE
+  - `resolveForFrame`) → `ValidationConfigController` (`GET|PUT|DELETE
 /workspaces/:ws/services/:blockId/validation-checks`) → the `ServiceValidationConfig.vue`
     inspector panel. `maxAttempts` (default 3) lives on the SAME row as the commands — deliberately
     not on the merge preset, since the budget is coupled to what it bounds (see the tracker's D3).
 - **Threading**: the engine resolves the checks through the optional `resolveValidationChecks`
-  dep (the `resolveTestSecretRefs` shape) onto `AgentRunContext.validationChecks`, and the coding
+  dep onto `AgentRunContext.validationChecks`. It is keyed by the SERVICE FRAME, not the run
+  block: `AgentContextBuilder` walks the frame→module→task ancestry exactly ONCE per dispatch and
+  threads that frame into every frame-scoped resolver, so this one reuses it rather than paying a
+  second walk (the `resolveTestSecretRefs` shape, minus the re-derivation). The coding
   job body forwards them **only when that dispatch OPENS a PR** (`opensPr`, single-repo). So the
   commands ride the JOB BODY — containers have no DB access — and it works identically on all
   three transports with no transport-specific wiring.
 - **The loop lives in the harness** (`executor-harness/src/validation-checks.ts`), between the
   agent run and the finalize/push/PR step in `runCodingAgent`: run the checks → if red and budget
-  remains, re-run the agent with `buildRepairPrompt` (the full 16k output tail + an explicit "do
+  remains, re-run the agent with `buildRepairPrompt` (the full 16k output tail, any UNCOMMITTED
+  new files — the checks see the working tree but only tracked edits are pushed, so an unadded
+  file would let the loop go green on work the PR never contains — + an explicit "do
   not weaken the checks" rule) → re-check. Budget spent ⇒ `runSingleRepoCoding` returns an ERROR
   result and opens **nothing**. It is generic machinery keyed off the body carrying
   `validationChecks` — there is **no `switch(agentKind)`** in the harness.
@@ -1235,6 +1240,13 @@ checkout opens a PR. Full design + the decisions (config source, scope, budgets)
   never touches `process.env`/`HOME` (the local native transport serves concurrent jobs from ONE
   host process — see "Per-job state in the harness"). `validation-checks.concurrency.test.ts` pins
   two concurrent jobs staying isolated; the container path alone would not catch a regression.
+- **Any harness-spawned, activity-SILENT phase MUST feed the inactivity watchdog.** The check loop
+  keeps a 30s `onActivity` heartbeat running for the whole attempt, because `JOB_INACTIVITY_MS`
+  (default 10 min) is TIGHTER than one command's own watchdog (default 15 min): without it a
+  legitimately slow `install`/`test`/`build` aborts the entire run as "inactivity", mislabelling a
+  healthy build as a wedge and making the per-command timeout unreachable at stock settings. This
+  is the same reason the frontend stand-up heartbeats — apply it to any new phase the HARNESS runs
+  itself rather than through the agent (the agent's own stream emits activity; a raw `spawn` does not).
 - **Captured output** is bounded (16k to the agent, 4k per command on the wire) and scrubbed with
   `redactSecrets` BEFORE truncation. It reaches the step both LIVE (`RunnerJobView.validationReport`,
   a latest-value publish, not a drain buffer) and terminally (`RunnerJobResult.validationReport`) →

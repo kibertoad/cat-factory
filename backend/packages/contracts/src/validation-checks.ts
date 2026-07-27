@@ -38,6 +38,10 @@ export type ValidationCheck = v.InferOutput<typeof validationCheckSchema>
  * How many times the harness may re-run the agent against failing checks before giving up.
  * Bounded so a wedged service can't burn a container indefinitely. `1` = run the checks once
  * and fail on the first red (no repair round).
+ *
+ * MIRRORED in the executor-harness (`executor-harness/src/job.ts`), which clamps the same field
+ * off the job body but takes no dependency on this package. Change both together: the harness
+ * silently capping a budget this schema accepts would be invisible from either side.
  */
 export const VALIDATION_DEFAULT_MAX_ATTEMPTS = 3
 export const VALIDATION_MAX_ATTEMPTS_CEILING = 10

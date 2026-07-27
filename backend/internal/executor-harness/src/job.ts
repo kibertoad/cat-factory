@@ -198,7 +198,13 @@ function parseValidationChecksSpec(value: unknown): ValidationChecksSpec | undef
   }
   if (checks.length === 0) return undefined
   const parsed = posInt(o.maxAttempts)
-  return { checks, maxAttempts: Math.min(parsed ?? 3, VALIDATION_MAX_ATTEMPTS_CEILING) }
+  return {
+    checks,
+    maxAttempts: Math.min(
+      parsed ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
+      VALIDATION_MAX_ATTEMPTS_CEILING,
+    ),
+  }
 }
 
 /**
@@ -868,8 +874,18 @@ export interface AgentJob extends HarnessAuthFields {
   validationChecks?: ValidationChecksSpec
 }
 
-/** The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to. */
+/**
+ * The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to, and the
+ * default it applies when the body omits one.
+ *
+ * DELIBERATE DUPLICATES of `VALIDATION_MAX_ATTEMPTS_CEILING` / `VALIDATION_DEFAULT_MAX_ATTEMPTS`
+ * in `@cat-factory/contracts` — the published image takes no schema dependency, so the harness
+ * cannot import them. Keep the two in step: the API validates writes against the contracts
+ * values, so a harness clamping to a DIFFERENT ceiling would silently cap a budget an operator
+ * was allowed to save, with nothing to flag the mismatch.
+ */
 export const VALIDATION_MAX_ATTEMPTS_CEILING = 10
+export const VALIDATION_DEFAULT_MAX_ATTEMPTS = 3
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
 export interface GuardLimitsSpec {

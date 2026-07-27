@@ -217,7 +217,7 @@ export interface AgentContextBuilderDeps {
    */
   resolveValidationChecks?: (
     workspaceId: string,
-    blockId: string,
+    frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
@@ -330,7 +330,7 @@ export class AgentContextBuilder {
       isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
-      this.validationChecksFor(workspaceId, block.id),
+      this.validationChecksFor(workspaceId, serviceFrame),
       this.resolveInitiativeContext(workspaceId, block, agentKind),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
@@ -606,17 +606,22 @@ export class AgentContextBuilder {
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   /**
-   * The service frame's PRE-PR VALIDATION CHECKS for a run block, already shaped as a spread-ready
-   * fragment (`{}` when the resolver is unwired, the service configured none, or the read failed).
-   * Returning the fragment rather than a nullable keeps both the resolution and the fold
-   * branch-free at the `buildContext` call site, which is at its complexity ceiling.
+   * The service frame's PRE-PR VALIDATION CHECKS, already shaped as a spread-ready fragment (`{}`
+   * when the resolver is unwired, the block has no service frame, the service configured none, or
+   * the read failed). Returning the fragment rather than a nullable keeps both the resolution and
+   * the fold branch-free at the `buildContext` call site, which is at its complexity ceiling.
+   *
+   * Takes the frame {@link buildContext} ALREADY resolved (see {@link serviceFrameFor}) — like
+   * every other frame-scoped resolver in that wave — so the ancestry walk still runs exactly once
+   * per dispatch rather than a second time just for this read.
    */
   private async validationChecksFor(
     workspaceId: string,
-    blockId: string,
+    frame: Block | null,
   ): Promise<{ validationChecks?: ResolvedValidationChecks }> {
+    if (!frame) return {}
     try {
-      const resolved = await this.deps.resolveValidationChecks?.(workspaceId, blockId)
+      const resolved = await this.deps.resolveValidationChecks?.(workspaceId, frame.id)
       return resolved ? { validationChecks: resolved } : {}
     } catch {
       // A config-store read failure must never wedge a run — a mothership node whose server

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import {
+  VALIDATION_DEFAULT_MAX_ATTEMPTS,
   VALIDATION_MAX_ATTEMPTS_CEILING,
   VALIDATION_MAX_CHECKS,
   type ValidationCheck,
@@ -22,7 +23,7 @@ const { confirmAction, toastDone } = useConfirmAction()
 
 const busy = ref(false)
 const rows = ref<ValidationCheck[]>([])
-const maxAttempts = ref(3)
+const maxAttempts = ref(VALIDATION_DEFAULT_MAX_ATTEMPTS)
 
 const saved = computed(() => store.forBlock(props.block.id))
 const configured = computed(() => saved.value.checks.length > 0)
