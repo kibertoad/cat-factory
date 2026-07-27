@@ -152,11 +152,16 @@ jobs:
           url="https://cat-factory-pr-${pr}.${SUBDOMAIN}.workers.dev"
           deployment="$DEPLOYMENT_ID"
           if [ "$EVENT" = "pull_request" ]; then
-            # The warm path owns no deployment yet; create one so this build is recorded and
-            # teardown has something to act on. The payload carries the URL, which is exactly
-            # what cat-factory's provision call reads back.
+            # The setup-change path owns no deployment yet; create one so this build is recorded
+            # and teardown has something to act on.
+            #
+            # `ref` is the BRANCH, deliberately matching what cat-factory's own provision call
+            # records — it looks for a live deployment of `(environment, ref)` before creating
+            # another, and a deployment recorded against a raw sha would never match, so every
+            # run would stack a duplicate. The build below still checks out the explicit sha, so
+            # naming the branch here changes what is RECORDED, not what is built.
             deployment="$(gh api "/repos/${REPO}/deployments" \
-              -f ref="$sha" \
+              -f ref="$ref" \
               -f environment="pr-${pr}" \
               -F auto_merge=false \
               -F transient_environment=true \
