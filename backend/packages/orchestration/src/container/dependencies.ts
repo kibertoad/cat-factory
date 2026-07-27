@@ -64,6 +64,8 @@ import type {
   FragmentSelector,
   FragmentSourceRepository,
   GateRegistry,
+  JudgeAssessor,
+  JudgeRegistry,
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
@@ -240,6 +242,21 @@ export interface CoreDependencies {
    * harnesses) that omit it get a bare registry, so gate steps pass through.
    */
   gateRegistry?: GateRegistry
+  /**
+   * The app-owned JUDGE registry — the fourth step-taxonomy bucket (an LLM assessment against a
+   * rubric, compared to a per-task threshold, disposed as advance/park/bounce/fail). Optional +
+   * defaulted to `defaultJudgeRegistry()` (EMPTY — the platform ships no built-in judges; the
+   * `merger` stays a privileged built-in). Each facade injects the SAME instance a deployment
+   * registers its judges on. See `docs/initiatives/judge-registry.md`.
+   */
+  judgeRegistry?: JudgeRegistry
+  /**
+   * The verdict producer behind every judge step. Optional: `createCore` builds the inline
+   * `JudgeService` from the model-provider dependencies the facade already wires, so judges need
+   * NO per-facade wiring. Injected explicitly only by a test/conformance harness that wants a
+   * deterministic verdict. Absent/disabled ⇒ every judge step is a pass-through.
+   */
+  judgeAssessor?: JudgeAssessor
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers).
    * Optional + defaulted to `defaultStepResolverRegistry()` (EMPTY — the built-in `merger`

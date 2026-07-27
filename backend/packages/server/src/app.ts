@@ -49,6 +49,7 @@ import { requirementReviewController } from './modules/requirements/RequirementR
 import { docInterviewController } from './modules/docInterview/DocInterviewController.js'
 import { followUpController } from './modules/followUp/FollowUpController.js'
 import { forkDecisionController } from './modules/forkDecision/ForkDecisionController.js'
+import { judgeController } from './modules/judge/JudgeController.js'
 import { prReviewController } from './modules/prReview/PrReviewController.js'
 import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
@@ -228,6 +229,7 @@ function registerWorkspaceRunControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', docInterviewController())
   app.route('/workspaces/:workspaceId', followUpController())
   app.route('/workspaces/:workspaceId', forkDecisionController())
+  app.route('/workspaces/:workspaceId', judgeController())
   app.route('/workspaces/:workspaceId', prReviewController())
   app.route('/workspaces/:workspaceId', kaizenController())
   app.route('/workspaces/:workspaceId', humanTestController())

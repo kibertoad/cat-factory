@@ -71,6 +71,7 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // the title opens the fork-decision window (see `reveal`); "act" just marks it read (the
   // choice is made in that window — pick a fork / enter a custom approach — not here).
   fork_decision_pending: { icon: 'i-lucide-git-fork', color: 'warning' },
+  judge_review: { icon: 'i-lucide-scale', color: 'warning' },
   // The PR reviewer surfaced findings to triage. Clicking the title opens the PR-review window
   // (see `reveal`); "act" just marks it read (findings are selected in that window, not here).
   pr_review_ready: { icon: 'i-lucide-clipboard-check', color: 'primary' },
@@ -107,6 +108,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   human_review: 'layout.notifications.action.human_review',
   followup_pending: 'layout.notifications.action.followup_pending',
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
+  judge_review: 'layout.notifications.action.judge_review',
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
   initiative: 'layout.notifications.action.initiative',
   platform_health: 'layout.notifications.action.platform_health',
@@ -232,6 +234,7 @@ function reveal(n: Notification) {
   else if (n.type === 'human_review') revealHumanReview(n)
   else if (n.type === 'followup_pending') revealFollowUps(n)
   else if (n.type === 'fork_decision_pending') revealForkDecision(n)
+  else if (n.type === 'judge_review') revealJudge(n)
   else if (n.type === 'pr_review_ready') revealPrReview(n)
   else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
   else ui.select(n.blockId)
@@ -264,6 +267,18 @@ function revealFollowUps(n: Notification) {
  */
 function revealForkDecision(n: Notification) {
   if (n.executionId && execution.getInstance(n.executionId)) ui.openForkDecision(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the judge window for a run parked on a rubric verdict: find the step carrying the parked
+ * verdict and open it through the universal step dispatch (a registered judge declares the
+ * `judge` result view). Falls back to focusing the block when the run isn't loaded.
+ */
+function revealJudge(n: Notification) {
+  const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
+  const idx = instance?.steps.findIndex((s) => s.judge?.status === 'awaiting_decision') ?? -1
+  if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
   else if (n.blockId) ui.select(n.blockId)
 }
 

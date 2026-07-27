@@ -19,6 +19,7 @@ import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWi
 import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
 import DocInterviewWindow from '~/components/docs/DocInterviewWindow.vue'
 import RalphLoopResultView from '~/components/ralph/RalphLoopResultView.vue'
+import JudgeResultView from '~/components/judge/JudgeResultView.vue'
 import type { ResultViewContribution } from './slots'
 
 /**
@@ -83,6 +84,9 @@ const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
   'doc-interview': DocInterviewWindow,
   // The Ralph loop: the retry-until-done iteration history + the validation command + its output.
   'ralph-loop': RalphLoopResultView,
+  // Shared by EVERY registered judge (the fourth step-taxonomy bucket): the rubric verdict's
+  // score vs the task threshold, its findings, the round history, and the park's decision.
+  judge: JudgeResultView,
 }
 
 /**

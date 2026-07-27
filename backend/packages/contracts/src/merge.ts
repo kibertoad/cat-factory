@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
 import { changeClassSchema, RULEABLE_CHANGE_CLASSES } from './mergeTrackRecord.js'
+import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -147,6 +148,19 @@ export const riskPolicySchema = v.object({
    */
   humanReviewGraceMinutes: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /**
+   * The minimum score (0..1) a JUDGE step's verdict must reach for the run to advance
+   * without a human. Below it, the judge applies its registration's `onFail` disposition
+   * (park / bounce / fail). The per-task counterpart of `maxRequirementConcernAllowed`:
+   * how much rubric deviation THIS task tolerates. See `docs/initiatives/judge-registry.md`.
+   */
+  judgeMinScore: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /**
+   * How many BOUNCE rounds a judge may spend — re-arming the preceding producing step with
+   * the verdict's findings as rework feedback — before it must stop and ask a human. `0`
+   * means never bounce (a failing verdict goes straight to the registration's park/fail).
+   */
+  judgeMaxBounces: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
    * When false the `merger` step never auto-merges: every PR is routed to a human
    * `merge_review` notification regardless of the assessment scores. The built-in
    * "Manual review only" preset sets this; a custom preset may too. Defaults to true
@@ -192,6 +206,7 @@ const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxVal
 const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(720))
 const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
+const bouncesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createRiskPolicySchema = v.object({
@@ -206,6 +221,8 @@ export const createRiskPolicySchema = v.object({
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
+  judgeMinScore: v.optional(scoreSchema, DEFAULT_JUDGE_MIN_SCORE),
+  judgeMaxBounces: v.optional(bouncesSchema, DEFAULT_JUDGE_MAX_BOUNCES),
   /** Allow auto-merge of a within-threshold, explained assessment (default true). */
   autoMergeEnabled: v.optional(v.boolean(), true),
   /** Estimate gating for the implementation-fork decision phase; absent ⇒ off in `auto` mode. */
@@ -230,6 +247,8 @@ export const updateRiskPolicySchema = v.object({
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
+  judgeMinScore: v.optional(scoreSchema),
+  judgeMaxBounces: v.optional(bouncesSchema),
   autoMergeEnabled: v.optional(v.boolean()),
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
   /** Replaces the whole rule map (not merged), so clearing a class is a plain omission. */

@@ -1859,17 +1859,18 @@ export function buildWorkerVcsIdentityRegistry(config: AppConfig): VcsIdentityRe
   return registry
 }
 
-export function buildContainer(
-  env: Env,
-  overrides: Partial<CoreDependencies> = {},
-  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
-): Container {
-  const config = loadConfig(env)
-  // The Worker runs repo-operating agents on per-run Cloudflare Containers (always available),
-  // and can additionally delegate to a self-hosted runner pool when one is configured. Tester
-  // environments run via the environment provider. Surface this so the SPA's infrastructure
-  // selector reads accurately for a Worker deployment.
-  config.infrastructure = buildInfrastructureCapabilities({
+/**
+ * The Worker facade's infrastructure capabilities, as the SPA's infrastructure selector reads
+ * them: repo-operating agents run on per-run Cloudflare Containers (always available) and can
+ * additionally delegate to a self-hosted runner pool when one is configured; tester environments
+ * run via the environment provider. Extracted from {@link buildContainer} to keep that (budgeted)
+ * function inside its per-function line ceiling — the budget is a split trigger, never a number
+ * to raise.
+ */
+function workerInfrastructureCapabilities(
+  config: AppConfig,
+): ReturnType<typeof buildInfrastructureCapabilities> {
+  return buildInfrastructureCapabilities({
     execution: {
       available: config.runners.enabled
         ? ['cloudflare-containers', 'runner-pool']
@@ -1883,6 +1884,15 @@ export function buildContainer(
     // The hosted Worker facade has account admins to govern the account-wide model policy.
     modelPolicy: { supported: true },
   })
+}
+
+export function buildContainer(
+  env: Env,
+  overrides: Partial<CoreDependencies> = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+): Container {
+  const config = loadConfig(env)
+  config.infrastructure = workerInfrastructureCapabilities(config)
   // The primary transactional store. Required: fail fast here with a fixable message rather than
   // NPE deep in the first repository call when the `DB` binding is unbound/misnamed.
   const db = requireDb(env)
@@ -1921,6 +1931,7 @@ export function buildContainer(
     userSecretKindRegistry,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     vcsRegistry,
@@ -2132,6 +2143,7 @@ export function buildContainer(
       userSecretKindRegistry,
       agentKindRegistry,
       gateRegistry,
+      judgeRegistry,
       stepResolverRegistry,
       initiativePresetRegistry,
       vcsRegistry,

@@ -5,6 +5,7 @@ import type {
   GateRegistry,
   InitiativePresetRegistration,
   InitiativePresetRegistry,
+  JudgeRegistry,
   PipelineRegistry,
   ProviderRegistry,
   RepoOp,
@@ -40,6 +41,17 @@ import * as v from 'valibot'
 // See `backend/docs/custom-agents.md` for the full model.
 // ---------------------------------------------------------------------------
 
+// The custom JUDGE example (the fourth step-taxonomy bucket): a rubric-scored gate that can
+// BOUNCE a run back to the Coder or stop it for a human — the thing a step resolver cannot do.
+import { registerExampleScopeJudge, SCOPE_JUDGE_KIND } from './scope-judge.js'
+export {
+  SCOPE_JUDGE_KIND,
+  SCOPE_RUBRIC_FRAGMENT_ID,
+  type ScopeVerdict,
+  scopeAdherenceJudge,
+  registerExampleScopeJudge,
+} from './scope-judge.js'
+
 // The custom test-infrastructure PROVIDER example (autodetection over a multi-file signature).
 export {
   STACK_DEPLOY_MANIFEST_ID,
@@ -50,6 +62,8 @@ export {
 export const ORG_REVIEWER_KIND = 'org-reviewer'
 export const SECURITY_AUDITOR_KIND = 'security-auditor'
 export const ORG_AUDIT_PIPELINE_ID = 'pl_org_audit'
+/** A build pipeline that runs the org's scope-adherence JUDGE over the Coder's work. */
+export const ORG_SCOPE_PIPELINE_ID = 'pl_org_scope'
 
 /** The custom polling-gate step kind + the helper agent it escalates to on a red verdict. */
 export const LICENSE_CHECK_KIND = 'license-check'
@@ -773,6 +787,7 @@ export function registerExampleCustomAgents(
   gateRegistry: GateRegistry,
   stepResolverRegistry: StepResolverRegistry,
   pipelineRegistry: PipelineRegistry,
+  judgeRegistry: JudgeRegistry,
 ): void {
   registry.registerAll(EXAMPLE_AGENT_KINDS)
   pipelineRegistry.register({
@@ -837,6 +852,16 @@ export function registerExampleCustomAgents(
       }
     },
   }))
+  // The custom JUDGE — a rubric-scored verdict gate that bounces the Coder on a scope miss and
+  // parks a human once the rework budget is spent. Registered BY REFERENCE on the app-owned
+  // registry, exactly like the gate above; no module-global side effect.
+  registerExampleScopeJudge(judgeRegistry)
+  // A pipeline that places it after the Coder, so the judge has a producing step to bounce to.
+  pipelineRegistry.register({
+    id: ORG_SCOPE_PIPELINE_ID,
+    name: 'Org build + scope review',
+    agentKinds: ['coder', SCOPE_JUDGE_KIND, 'conflicts', 'ci', 'merger'],
+  })
   stepResolverRegistry.register(auditorSummaryResolver.kind, () => auditorSummaryResolver)
   stepResolverRegistry.register(researchVerdictResolver.kind, () => researchVerdictResolver)
 }

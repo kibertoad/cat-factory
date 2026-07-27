@@ -1724,6 +1724,7 @@
         "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle",
         "fork_decision_pending": "Okundu olarak işaretle",
+        "judge_review": "Okundu olarak işaretle",
         "pr_review_ready": "Okundu işaretle",
         "budget_paused": "Okundu işaretle",
         "key_drift": "Eski kimlik bilgilerini kaldır",
@@ -3753,6 +3754,43 @@
       "suffixNotNeeded": "· henüz gerekli değil",
       "gatedCommit": "Kapı altındaki commit",
       "footer": "Bir kapı, programatik bir ön kontrol çalıştırır ve yalnızca başarısız olduğunda {helper} öğesini devreye sokar; yeşil bir kontrol, hiçbir şey devreye girmeden ilerler."
+    }
+  },
+  "judge": {
+    "subtitle": "Bu çalışmanın işini bir değerlendirme ölçütüne göre puanlar; sonra devam eder, sorar ya da geri gönderir",
+    "empty": "Bu adım henüz bir karar üretmedi.",
+    "notScored": "Puanlanmadı",
+    "threshold": "eşik {threshold}",
+    "rubricOverridden": "çalışma alanı ölçütü",
+    "reworkRounds": "yeniden çalışma {spent}/{budget}",
+    "findingsHeading": "Ölçütün işaretledikleri",
+    "roundsHeading": "İnceleme turları",
+    "round": "{round}. tur",
+    "decisionHeading": "Kararınız",
+    "decisionDescription": "Yine de devam edin, işi düzeltilmek üzere geri gönderin ya da çalışmayı durdurun.",
+    "feedbackPlaceholder": "Geri gönderirken eklenecek isteğe bağlı yönlendirme…",
+    "proceed": "Yine de devam et",
+    "bounce": "Düzeltme için geri gönder",
+    "stop": "Çalışmayı durdur",
+    "status": {
+      "evaluating": "İnceleniyor",
+      "awaitingDecision": "Karar gerekiyor",
+      "bouncing": "Düzeltiliyor",
+      "passed": "Geçti",
+      "failed": "Başarısız",
+      "skipped": "Atlandı"
+    },
+    "severity": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "critical": "Kritik"
+    },
+    "disposition": {
+      "pass": "Geçti",
+      "park": "Bir kişiye sordu",
+      "bounce": "Düzeltme için geri gönderildi",
+      "fail": "Çalışma başarısız oldu"
     }
   },
   "requirements": {

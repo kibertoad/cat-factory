@@ -218,6 +218,8 @@ interface MothershipAppOptions {
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+  judgeRegistry?: CoreDependencies['judgeRegistry']
+  judgeAssessor?: CoreDependencies['judgeAssessor']
   detectionConventions?: CoreDependencies['detectionConventions']
 }
 
@@ -301,6 +303,10 @@ function buildMothershipOverrides(
     // full QC loop is driven through the mothership composition root without a model, identically
     // to the Worker/Node/local-standalone harnesses.
     ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
+    // Inject the judge's verdict producer (a deterministic fake in the suite) so the rubric
+    // pass / park / bounce / fail loop — and the unwired pass-through — are driven through the
+    // mothership composition root too, not only the Worker/Node/local-standalone ones.
+    ...(opts?.judgeAssessor ? { judgeAssessor: opts.judgeAssessor } : {}),
     // The engine's PR verification-report publisher (+ the public app URL its observability
     // deep link is built from), so the report hook is driven through the mothership
     // composition root exactly as through the Worker/Node/local-standalone harnesses.
@@ -360,6 +366,9 @@ export function makeMothershipConformanceApp(
     // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so the
     // SUT container resolves it by reference on this runtime.
     ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
+    // Inject the app-owned JUDGE registry (pre-loaded in the judge suite) so the SUT container
+    // resolves it by reference on this runtime.
+    ...(opts?.judgeRegistry ? { judgeRegistry: opts.judgeRegistry } : {}),
   })
   const app = createApp(container, SUT_ENV)
 

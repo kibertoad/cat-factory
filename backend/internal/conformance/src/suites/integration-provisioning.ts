@@ -23,9 +23,14 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
       expect(balanced.isDefault).toBe(true)
       expect(balanced.autoMergeEnabled).toBe(true)
-      // Bumped to 4 when the built-ins gained `classRules` (the per-class auto-merge rules), so
-      // existing workspaces are advised to reseed and pick the new field up.
-      expect(balanced.version).toBe(4)
+      // Bumped to 5 when the built-ins gained the JUDGE knobs (`judgeMinScore` /
+      // `judgeMaxBounces`), so existing workspaces are advised to reseed and pick them up.
+      expect(balanced.version).toBe(5)
+      // The judge knobs round-trip with their defaults through both stores; "Manual review only"
+      // spends no rework rounds on its own (it routes everything to the human it already asks).
+      expect(balanced.judgeMinScore).toBe(0.7)
+      expect(balanced.judgeMaxBounces).toBe(1)
+      expect(manual.judgeMaxBounces).toBe(0)
       // The built-ins ship NO per-class rules: every class falls back to the score ceilings, which
       // is byte-for-byte the historical policy.
       expect(balanced.classRules).toEqual({})
@@ -116,8 +121,8 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         `/workspaces/${wsId}`,
       )
       expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-        mp_balanced: 4,
-        mp_manual_review: 4,
+        mp_balanced: 5,
+        mp_manual_review: 5,
       })
 
       // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -131,7 +136,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(reseeded.status).toBe(200)
       expect(reseeded.body.name).toBe('Balanced')
       expect(reseeded.body.autoMergeEnabled).toBe(true)
-      expect(reseeded.body.version).toBe(4)
+      expect(reseeded.body.version).toBe(5)
       // A reseed also restores the canonical (empty) per-class rule map.
       expect(reseeded.body.classRules).toEqual({})
       // The default is preserved across a reseed.

@@ -13,6 +13,8 @@ import type {
   ExecutionEventPublisher,
   ExecutionRepository,
   GateRegistry,
+  JudgeAssessor,
+  JudgeRegistry,
   GroupCacheHandle,
   IdGenerator,
   InitiativePresetRegistry,
@@ -109,6 +111,15 @@ export interface ExecutionServiceDependencies {
    * `createCore` defaults it to `defaultGateRegistry()` (empty) when a facade doesn't inject one.
    */
   gateRegistry: GateRegistry
+  /**
+   * The app-owned JUDGE registry (the fourth step-taxonomy bucket) + the verdict producer.
+   * `createCore` defaults the registry to an empty `defaultJudgeRegistry()` and the assessor to
+   * the inline `JudgeService` built from the model-provider deps, so a facade needs no
+   * judge-specific wiring; an absent/disabled assessor makes judge steps pass-throughs. See
+   * `docs/initiatives/judge-registry.md`.
+   */
+  judgeRegistry: JudgeRegistry
+  judgeAssessor?: JudgeAssessor
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers),
    * threaded to the dispatcher. `createCore` defaults it to `defaultStepResolverRegistry()`.

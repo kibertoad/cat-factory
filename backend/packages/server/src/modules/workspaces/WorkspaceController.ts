@@ -99,7 +99,10 @@ function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot, registry: Agent
  * (process-global registry), so identical for every workspace and every facade. Returns
  * undefined when none are registered, so the field is simply absent on the stock product.
  */
-function snapshotCustomAgentKinds(registry: AgentKindRegistry): CustomAgentKind[] | undefined {
+function snapshotCustomAgentKinds(
+  registry: AgentKindRegistry,
+  container: ServerContainer,
+): CustomAgentKind[] | undefined {
   const kinds = registry
     .all()
     .filter((def) => def.presentation)
@@ -108,7 +111,24 @@ function snapshotCustomAgentKinds(registry: AgentKindRegistry): CustomAgentKind[
       presentation: def.presentation!,
       container: registry.requiresContainer(def.kind),
     }))
-  return kinds.length > 0 ? kinds : undefined
+  // Registered JUDGES (the fourth step-taxonomy bucket) reach the palette through the SAME
+  // projection: a judge is a step kind the SPA must be able to place and open a result window
+  // for, and it is never a container kind (its assessment is an inline LLM call). They ride the
+  // agent-kind list rather than a parallel snapshot field so the SPA's existing palette merge +
+  // result-view dispatch pick them up with no frontend branching.
+  const judges = container.executionService.registeredJudges().flatMap((judge) =>
+    judge.presentation
+      ? [
+          {
+            kind: judge.kind,
+            presentation: { resultView: 'judge' as const, ...judge.presentation },
+            container: false,
+          },
+        ]
+      : [],
+  )
+  const all = [...kinds, ...judges]
+  return all.length > 0 ? all : undefined
 }
 
 /**
@@ -450,7 +470,7 @@ export function workspaceController(): Hono<AppEnv> {
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
       snapshotSkills(container, accountId),
     ])
-    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
     const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —
@@ -567,7 +587,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.github ? container.github.service.listRepos(workspaceId) : undefined,
       snapshotSkills(container, budgetAccountId),
     ])
-    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
     const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —

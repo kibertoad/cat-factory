@@ -1,0 +1,2 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "judge_min_score" double precision DEFAULT 0.7 NOT NULL;--> statement-breakpoint
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "judge_max_bounces" integer DEFAULT 1 NOT NULL;

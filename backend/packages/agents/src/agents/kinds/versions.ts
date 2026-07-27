@@ -14,6 +14,7 @@ import {
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
+import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
 // change management: every prompt the product ships is identified as
@@ -64,6 +65,7 @@ export const PROMPT_VERSIONS = {
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },
+  judge: { id: 'judge', version: 1, text: JUDGE_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */

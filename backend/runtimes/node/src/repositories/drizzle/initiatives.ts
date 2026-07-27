@@ -135,6 +135,8 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
+    judgeMinScore: row.judge_min_score,
+    judgeMaxBounces: row.judge_max_bounces,
     autoMergeEnabled: row.auto_merge_enabled === 1,
     forkDecision: row.fork_decision
       ? (JSON.parse(row.fork_decision) as RiskPolicy['forkDecision'])
@@ -203,6 +205,8 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
+      judge_min_score: preset.judgeMinScore,
+      judge_max_bounces: preset.judgeMaxBounces,
       auto_merge_enabled: preset.autoMergeEnabled ? 1 : 0,
       fork_decision: preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
       class_rules: JSON.stringify(preset.classRules ?? {}),

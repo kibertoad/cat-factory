@@ -34,7 +34,12 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `DeployerStepController` (the deployer provision fan-out + env projection),
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
-  human merges or declines), plus `RunStateMachine`, `StepGraph`, the gate/companion/review
+  human merges or declines), `GateStepController` + `GateHelperDispatcher` (the polling-gate
+  state machine and its escalation half) and `extension-contexts.ts` (the shared `GateContext` /
+  `JudgeContext` the two extension families are handed — built beside each other so neither can
+  drift), `JudgeStepController` + `JudgeService` (the **judge** driver — rubric assessment vs the
+  task's threshold, disposed as advance / park / bounce / fail — and its inline LLM assessor),
+  plus `RunStateMachine`, `StepGraph`, the companion/review
   controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
   composed from the settled run's own state and published onto its PR through the
@@ -56,5 +61,5 @@ assembled engine). Grow one of these rather than `container.ts` itself.
 - `validation/` — request validation.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
-"Requirements review flow", "Gates vs agents"; `docs/execution-state-machine.md`; `docs/modularisation.md` +
+"Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/modularisation.md` +
 `docs/refactoring-candidates.md` for the god-file backlog.

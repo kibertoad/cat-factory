@@ -303,6 +303,54 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
   }
 }
 
+/**
+ * Compose the JUDGE section: every step carrying judge state, in pipeline order. Unlike the
+ * single-step sections this reports ALL of them — a pipeline may place several rubrics, and
+ * "which rubric said what" is the whole content of the section.
+ *
+ * A pipeline with no judge step reports `absent` with a note, exactly like every other section:
+ * a silently missing section reads like a clean one, which is the false reassurance the whole
+ * report exists to remove. A judge that PASSED is still reported — a reviewer wants to see that
+ * the rubric ran and what it still noted, not just the ones that stopped the run.
+ */
+function composeJudges(
+  instance: ExecutionInstance,
+  truncations: string[],
+): PrVerificationReport['judges'] {
+  const steps = instance.steps.filter((s) => s.judge != null)
+  if (steps.length === 0) {
+    return { status: 'absent', note: 'No rubric review step in this pipeline.', verdicts: [] }
+  }
+  const verdicts = cap(steps, 'judges.verdicts', truncations).map((step) => {
+    const judge = step.judge!
+    return {
+      stepKind: step.agentKind,
+      rubricName: judge.rubricName ?? null,
+      rubricOverridden: judge.rubricOverridden ?? false,
+      score: judge.verdict?.score ?? null,
+      threshold: judge.threshold ?? null,
+      disposition: judge.disposition ?? null,
+      // `note` explains a SKIPPED or degraded judge ("no assessment model configured", "no
+      // preceding step to bounce to"); without it a pass-through judge would render as a blank
+      // row that reads like a clean verdict.
+      summary: scrubbed(judge.verdict?.summary ?? judge.note ?? ''),
+      findings: cap(
+        judge.verdict?.findings ?? [],
+        `judges.${step.agentKind}.findings`,
+        truncations,
+      ).map((f) => ({
+        ...f,
+        title: scrubbed(f.title),
+        ...(f.detail ? { detail: scrubbed(f.detail) } : {}),
+      })),
+      bounces: judge.bounces ?? 0,
+      maxBounces: judge.maxBounces ?? 0,
+      model: judge.model ?? null,
+    }
+  })
+  return { status: 'reported', verdicts }
+}
+
 /** Compose the report from a run's in-memory state plus the few resolved inputs. */
 export function composePrVerificationReport(
   instance: ExecutionInstance,
@@ -337,6 +385,7 @@ export function composePrVerificationReport(
     tests: composeTests(instance, truncations),
     environments: composeEnvironments(instance, truncations),
     merge: composeMerge(instance),
+    judges: composeJudges(instance, truncations),
     observability: { runUrl: inputs.runUrl },
     truncations,
   }
@@ -453,6 +502,37 @@ function renderMerge(merge: PrVerificationReport['merge']): string[] {
   return [...out, '']
 }
 
+function renderJudges(judges: PrVerificationReport['judges']): string[] {
+  const out = ['### Rubric reviews', '']
+  if (judges.status === 'absent') return [...out, `_${judges.note}_`, '']
+  for (const verdict of judges.verdicts) {
+    const name = hostMarkdown.inline(verdict.rubricName ?? verdict.stepKind)
+    const score =
+      verdict.score != null
+        ? `${pct(verdict.score)}${verdict.threshold != null ? ` (threshold ${pct(verdict.threshold)})` : ''}`
+        : 'not scored'
+    out.push(
+      `**${name}** — ${score}` +
+        (verdict.disposition ? ` · **${verdict.disposition}**` : '') +
+        (verdict.rubricOverridden ? ' · workspace rubric' : '') +
+        (verdict.maxBounces > 0 ? ` · rework ${verdict.bounces}/${verdict.maxBounces}` : '') +
+        (verdict.model ? ` · \`${hostMarkdown.cell(verdict.model)}\`` : ''),
+    )
+    if (verdict.summary) out.push('', hostMarkdown.prose(verdict.summary))
+    if (verdict.findings.length) {
+      out.push('', '| Severity | Finding | Where |', '| --- | --- | --- |')
+      for (const f of verdict.findings) {
+        const detail = f.detail ? ` — ${f.detail}` : ''
+        out.push(
+          `| ${hostMarkdown.cell(f.severity)} | ${hostMarkdown.cell(`${f.title}${detail}`)} | ${f.where ? hostMarkdown.cell(f.where) : '—'} |`,
+        )
+      }
+    }
+    out.push('')
+  }
+  return out
+}
+
 function renderRun(run: PrVerificationReport['run'], runUrl: string | null): string[] {
   const out = [
     '### Run',
@@ -507,6 +587,7 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     ...renderCi(report.ci),
     ...renderTests(report.tests),
     ...renderEnvironments(report.environments),
+    ...renderJudges(report.judges),
     ...renderMerge(report.merge),
     ...renderTruncations(report.truncations),
   ].join('\n')

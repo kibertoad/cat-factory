@@ -12,7 +12,7 @@
  * back here type-only), so the value dependency is one-way `container.ts` → this file.
  */
 
-import type { AppCaches, Block, ExecutionEventPublisher } from '@cat-factory/kernel'
+import type { AppCaches, Block, ExecutionEventPublisher, JudgeAssessor } from '@cat-factory/kernel'
 import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { type AgentKindRegistry } from '@cat-factory/agents'
@@ -58,6 +58,7 @@ import {
 } from './environmentsModule.factory.js'
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
+import { JudgeService } from '../modules/execution/JudgeService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
@@ -626,6 +627,36 @@ export function createDocInterviewService(deps: CoreDependencies): DocInterviewS
  * so the fork chat degrades to a canned "chat unavailable" reply in unconfigured facades / tests
  * while pick / custom keep working. Stateless — the chat rides the coder step, no session store.
  */
+/**
+ * The default {@link JudgeAssessor}: the inline LLM verdict producer behind every judge step.
+ * Built from the SAME model-provider dependencies the inline reviewers use, which is why judges
+ * need no per-facade wiring at all — a facade that can run a requirements review can run a
+ * judge. Returns undefined when no provider is wired, and a facade/harness may inject its own
+ * `judgeAssessor` (conformance does, for a deterministic verdict); either way an
+ * absent/disabled assessor makes every judge step a pass-through.
+ */
+export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | undefined {
+  if (deps.judgeAssessor) return deps.judgeAssessor
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new JudgeService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+    resolveRunContext: resolveBlockRunContext(deps),
+  })
+}
+
 export function createForkChatService(deps: CoreDependencies): ForkChatService | undefined {
   if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
   return new ForkChatService({

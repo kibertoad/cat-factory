@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
+import { judgeStatusSchema, judgeVerdictSchema, resolveJudgeSchema } from './judge.js'
 import { publicRunStatusSchema } from './public-api.js'
 import {
   requirementReviewStatusSchema,
@@ -30,7 +31,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Which parked decision a `publicDecision` entry describes. */
-export const publicDecisionKindSchema = v.picklist(['requirements-review', 'fork'])
+export const publicDecisionKindSchema = v.picklist(['requirements-review', 'fork', 'judge'])
 export type PublicDecisionKind = v.InferOutput<typeof publicDecisionKindSchema>
 
 /**
@@ -103,9 +104,37 @@ export const publicForkDecisionSchema = v.object({
 })
 export type PublicForkDecision = v.InferOutput<typeof publicForkDecisionSchema>
 
+/**
+ * A parked JUDGE verdict as exposed externally (the fourth step-taxonomy bucket): a rubric
+ * scored the run's work below the task's threshold and the run stopped for a human. A caller
+ * reads the score, the threshold it missed, and the findings behind it, then resolves it with
+ * `proceed` / `bounce` / `stop` — the SAME service method the SPA's judge window calls.
+ *
+ * The rubric BODY is deliberately not exposed: it is deployment (or workspace) policy text, often
+ * long, and a caller answering a verdict acts on the findings, not on the rubric that produced them.
+ */
+export const publicJudgeDecisionSchema = v.object({
+  kind: v.literal('judge'),
+  /** The judge step's kind (`agentKind`), which names WHICH judge is asking. */
+  stepKind: v.string(),
+  status: judgeStatusSchema,
+  /** The rubric's stable id + human name, so a caller can tell two judges apart. */
+  rubricId: v.nullable(v.string()),
+  rubricName: v.nullable(v.string()),
+  /** The score the verdict had to reach (from the task's merge preset). */
+  threshold: v.nullable(v.number()),
+  /** The latest verdict: score, summary and the findings behind it. */
+  verdict: v.nullable(judgeVerdictSchema),
+  /** Rework rounds spent and the ceiling, so a caller knows whether `bounce` is the last word. */
+  bounces: v.number(),
+  maxBounces: v.number(),
+})
+export type PublicJudgeDecision = v.InferOutput<typeof publicJudgeDecisionSchema>
+
 export const publicDecisionSchema = v.variant('kind', [
   publicRequirementsDecisionSchema,
   publicForkDecisionSchema,
+  publicJudgeDecisionSchema,
 ])
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
@@ -182,3 +211,11 @@ export const publicChooseForkSchema = v.pipe(
   ),
 )
 export type PublicChooseForkInput = v.InferOutput<typeof publicChooseForkSchema>
+
+/**
+ * Resolve a parked judge verdict from a headless caller. Identical to the SPA's
+ * {@link resolveJudgeSchema} — the two surfaces drive the SAME service method, so there is
+ * nothing to narrow: `proceed` / `bounce` / `stop` mean exactly the same thing either way.
+ */
+export const publicResolveJudgeSchema = resolveJudgeSchema
+export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSchema>

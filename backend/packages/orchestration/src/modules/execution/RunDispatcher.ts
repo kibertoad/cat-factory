@@ -1,4 +1,9 @@
 import type {
+  JudgeAssessor,
+  JudgeDefinition,
+  JudgeRegistry,
+  JudgeStepState,
+  ResolveJudgeInput,
   AgentExecutor,
   AgentJobHandle,
   AgentJobUpdate,
@@ -20,7 +25,6 @@ import type {
   PrReviewStepState,
   ResolvePrReviewInput,
   ChallengePrReviewFindingInput,
-  GateContext,
   GateDefinition,
   GateRegistry,
   StepResolverRegistry,
@@ -41,7 +45,6 @@ import type {
 } from '@cat-factory/kernel'
 import {
   ConflictError,
-  DEFAULT_RISK_POLICY,
   getErrorMessage,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -79,7 +82,7 @@ import {
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
-import { AgentContextBuilder } from './AgentContextBuilder.js'
+import { AgentContextBuilder, type FragmentBodyResolver } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
 import { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
@@ -88,6 +91,15 @@ import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
+import { JudgeStepController } from './JudgeStepController.js'
+import { GateHelperDispatcher } from './GateHelperDispatcher.js'
+import { GateStepController } from './GateStepController.js'
+import {
+  buildGateMap,
+  type ExtensionContextDeps,
+  makeGateContext,
+  makeJudgeContext,
+} from './extension-contexts.js'
 import { PrReviewController } from './PrReviewController.js'
 import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import { initialPrReviewState } from './prReview.logic.js'
@@ -134,6 +146,8 @@ type ResolvedRiskPolicy = {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  judgeMinScore: number
+  judgeMaxBounces: number
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -149,6 +163,20 @@ export interface RunDispatcherDeps {
   agentKindRegistry: AgentKindRegistry
   /** App-owned polling-gate registry (built-ins installed by the facade via `registerBuiltinGates`). */
   gateRegistry: GateRegistry
+  /**
+   * The app-owned JUDGE registry (the fourth step-taxonomy bucket) the composition root
+   * injected, plus the verdict producer. An absent / disabled assessor makes every judge step
+   * a pass-through, which is exactly what a deployment with no model wired (and the
+   * conformance/e2e suites) gets. See `docs/initiatives/judge-registry.md`.
+   */
+  judgeRegistry: JudgeRegistry
+  judgeAssessor?: JudgeAssessor
+  /**
+   * The prompt-fragment library, used by the judge driver for ONE thing: resolving a rubric's
+   * per-workspace override body (see `JudgeRubric.fragmentId`). Absent ⇒ the registration's
+   * default rubric.
+   */
+  fragmentResolver?: FragmentBodyResolver
   /** App-owned step-completion-resolver registry (deployment-registered resolvers). */
   stepResolverRegistry: StepResolverRegistry
   /** App-owned provider registry the gate machine's {@link GateContext} reads (gate data sources). */
@@ -291,6 +319,16 @@ export class RunDispatcher {
    */
   private readonly followUpGate: FollowUpGateController
 
+  /**
+   * The JUDGE driver (the fourth step-taxonomy bucket): rubric assessment → per-task threshold
+   * → advance / park / bounce / fail. Owns its own lazily-built registry, mirroring
+   * {@link gateFor}. See {@link JudgeStepController}.
+   */
+  private readonly judgeController: JudgeStepController
+
+  /** The polling-gate state machine (precheck → advance / poll / escalate / give up). */
+  private readonly gateStepController: GateStepController
+
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /** Lazily-built post-completion resolver registry, keyed by `agentKind`. */
@@ -407,6 +445,40 @@ export class RunDispatcher {
         this.recoverContainerEviction(ws, instance, step, failure),
       markContainerErrored: (ws, instance, step) => this.markContainerErrored(ws, instance, step),
     })
+    this.gateStepController = new GateStepController(
+      {
+        agentExecutor: deps.agentExecutor,
+        clock: deps.clock,
+        runStateMachine: deps.runStateMachine,
+        runInitiatorScope: this.runInitiatorScope,
+        resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        recordStepResult: (ws, instance, step, isFinalStep, result) =>
+          this.recordStepResult(ws, instance, step, isFinalStep, result),
+      },
+      new GateHelperDispatcher({
+        agentExecutor: deps.agentExecutor,
+        contextBuilder: deps.contextBuilder,
+        runStateMachine: deps.runStateMachine,
+      }),
+    )
+    this.judgeController = new JudgeStepController({
+      judgeRegistry: deps.judgeRegistry,
+      judgeAssessor: deps.judgeAssessor,
+      executionRepository: deps.executionRepository,
+      stateMachine: deps.runStateMachine,
+      stepGraph: deps.stepGraph,
+      workRunner: deps.workRunner,
+      clock: deps.clock,
+      runInitiatorScope: this.runInitiatorScope,
+      raiseNotification: async (ws, input) => {
+        await this.notificationService?.raise(ws, input)
+      },
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      fragmentResolver: deps.fragmentResolver,
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+      makeJudgeContext: () => makeJudgeContext(this.extensionContextDeps()),
+    })
     // Assemble the seam the extracted dispatch-registry builders close over: the collaborators
     // above + bound call-backs into this dispatcher's completion / gate / phase methods, so the
     // built-ins resolve everything at call time exactly as the former inline closures did.
@@ -442,6 +514,9 @@ export class RunDispatcher {
       evaluateGate: (ws, instance, step, block, isFinalStep, gate) =>
         this.evaluateGate(ws, instance, step, block, isFinalStep, gate),
       gateFor: (kind) => this.gateFor(kind),
+      evaluateJudge: (ws, instance, step, block, isFinalStep, judge) =>
+        this.judgeController.evaluate(ws, instance, step, block, isFinalStep, judge),
+      judgeFor: (kind) => this.judgeController.judgeFor(kind),
       handleForkDecisionPhase: (ctx) => this.handleForkDecisionPhase(ctx),
       handlePrReviewResolution: (ctx) => this.handlePrReviewResolution(ctx),
       handleAgentStep: (ctx) => this.handleAgentStep(ctx),
@@ -1879,7 +1954,12 @@ export class RunDispatcher {
    * undefined for a non-gate kind. See {@link GateDefinition} and {@link evaluateGate}.
    */
   gateFor(agentKind: string): GateDefinition | undefined {
-    if (!this.gateRegistryCache) this.gateRegistryCache = this.buildGateRegistry()
+    if (!this.gateRegistryCache) {
+      this.gateRegistryCache = buildGateMap(
+        this.gateRegistry,
+        makeGateContext(this.extensionContextDeps()),
+      )
+    }
     return this.gateRegistryCache.get(agentKind)
   }
 
@@ -1955,21 +2035,12 @@ export class RunDispatcher {
     return buildStepResolverRegistryImpl(this.registryDeps)
   }
 
-  private buildGateRegistry(): Map<string, GateDefinition> {
-    // The built-in gate suite (ci / conflicts / post-release-health) is no longer inline:
-    // it ships as `@cat-factory/gates`, installed into the app-owned `GateRegistry` the
-    // facade threads through `CoreDependencies` (the dogfood — the platform's own gates
-    // register through the SAME public seam as anyone's). The engine merely builds whatever
-    // gates the facade registered. A facade that forgot to call `registerBuiltinGates(...)`
-    // then has no gates and those steps fail — which the cross-runtime conformance suite catches.
-    const map = new Map<string, GateDefinition>()
-    const ctx = this.makeGateContext()
-    for (const { kind, factory } of this.gateRegistry.factories()) map.set(kind, factory(ctx))
-    return map
-  }
-
-  /** The shared engine seams handed to a deployment-registered gate's factory. */
-  private makeGateContext(): GateContext {
+  /**
+   * The collaborators the extension contexts (gate + judge) close over. Assembled here and
+   * handed to the shared factories in `extension-contexts.ts`, so both extension families see
+   * exactly the same seams and neither can drift.
+   */
+  private extensionContextDeps(): ExtensionContextDeps {
     return {
       clock: this.clock,
       getBlock: (workspaceId, blockId) => this.blockRepository.get(workspaceId, blockId),
@@ -1977,24 +2048,35 @@ export class RunDispatcher {
       raiseNotification: async (workspaceId, input) => {
         await this.notificationService?.raise(workspaceId, input)
       },
-      // A gate reaches its deployment-wired provider through the app-owned provider registry the
-      // facade injected — not a module global; the engine just forwards to that instance.
-      getProvider: (token) => this.providerRegistry.get(token),
-      requireProvider: (token) => this.providerRegistry.require(token),
-      isProviderWired: (token) => this.providerRegistry.isWired(token),
+      providerRegistry: this.providerRegistry,
     }
   }
 
+  /** @see JudgeStepController.getActive */
+  getJudgeState(workspaceId: string, executionId: string): Promise<JudgeStepState | null> {
+    return this.judgeController.getActive(workspaceId, executionId)
+  }
+
+  /** @see JudgeStepController.resolveDecision */
+  resolveJudgeDecision(
+    workspaceId: string,
+    executionId: string,
+    input: ResolveJudgeInput,
+  ): Promise<JudgeStepState> {
+    return this.judgeController.resolveDecision(workspaceId, executionId, input)
+  }
+
+  /** Every registered judge, for the workspace-snapshot palette projection. */
+  registeredJudges(): JudgeDefinition[] {
+    return this.judgeController.all()
+  }
+
   /**
-   * Evaluate a polling gate step once and decide (shared by the initial advance and the
-   * durable `awaiting_gate` re-poll):
-   *   - no provider wired → pass-through (advance; nothing to gate);
-   *   - precheck passes   → advance to the next step (the helper agent is NEVER spun up);
-   *   - still computing   → `awaiting_gate` (the driver sleeps then calls {@link pollGate});
-   *   - fails, budget left → dispatch the helper container agent (`awaiting_job`);
-   *   - fails, budget spent → the gate's exhaustion handler, then fail the run.
+   * Evaluate a polling gate step once and decide (shared by the initial advance and the durable
+   * `awaiting_gate` re-poll). Thin delegate — the state machine lives in
+   * {@link GateStepController}.
    */
-  private async evaluateGate(
+  private evaluateGate(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
@@ -2002,190 +2084,7 @@ export class RunDispatcher {
     isFinalStep: boolean,
     gate: GateDefinition,
   ): Promise<AdvanceResult> {
-    // Re-attach after a replay: a helper is already in flight for this gate.
-    if (step.gate?.phase === 'working' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    }
-
-    // Provider not wired: the gate is a pass-through so the engine works without it.
-    if (!gate.wired()) {
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: gate.unwiredOutput,
-      })
-    }
-
-    // Initialise the gate's state on first entry, resolving the attempt budget from the
-    // task's merge preset (stable across polls once set).
-    if (!step.gate) {
-      const preset = await this.resolveRiskPolicy(workspaceId, block)
-      step.gate = {
-        phase: 'checking',
-        attempts: 0,
-        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset) : preset.ciMaxAttempts,
-        headSha: null,
-        // Stash the watch window once (read on every poll by a time-windowed gate's
-        // probe; harmless/unused for the CI/conflicts gates).
-        watchWindowMinutes: preset.releaseWatchWindowMinutes,
-        // Stash the human-review grace window once (read by the human-review gate's probe;
-        // harmless/unused for the other gates).
-        humanReviewGraceMinutes: preset.humanReviewGraceMinutes,
-      }
-    }
-
-    // A human-initiated fix request (an in-app freeform prompt, or a GitHub-comment
-    // instruction) parked on the gate is dispatched immediately — bypassing the precheck +
-    // grace window. Consume it at-most-once: clear + persist BEFORE the (side-effecting)
-    // dispatch so a retried driver step can't re-dispatch a second fixer. Falls through to
-    // the normal probe when there is no async executor to escalate to.
-    if (step.gate.pendingFix && isAsyncAgentExecutor(this.agentExecutor)) {
-      const fix = step.gate.pendingFix
-      step.gate.pendingFix = null
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      return this.dispatchGateHelper(workspaceId, instance, step, block, isFinalStep, {
-        gate,
-        failureSummary: fix.instructions,
-      })
-    }
-    // A time-windowed gate (post-release-health) marks when it began watching, on first
-    // entry, so its probe knows whether the monitoring window has elapsed. Harmless for
-    // the CI/conflicts gates, which ignore it.
-    if (step.gate.watchSince == null) step.gate.watchSince = this.clock.now()
-
-    // Resolve the gate's GitHub reads (CI checks / mergeability) under the run
-    // initiator's ambient context, so a per-user PAT (when set) is preferred over the
-    // deployment's App/env token — see PatPreferringAppRegistry.
-    const gateState = step.gate
-    const probe = await this.runInitiatorScope(instance.initiatedBy, () =>
-      gate.probe(workspaceId, block.id, gateState),
-    )
-    step.gate.headSha = probe.headSha
-    // Multi-repo (service-connections phase 4): the CI / conflicts gates aggregate across every
-    // PR the task opened; persist the per-repo head shas (and, for the conflicts gate, which repo
-    // conflicted) so the run-detail UI can group checks by service and the conflict-resolver can
-    // target the conflicted repo.
-    step.gate.headShas = probe.headShas ?? null
-    step.gate.conflictTarget = probe.conflictTarget ?? null
-    // Persist the precheck outcome so the run-detail UI can surface why the gate is
-    // looping (the failing checks / conflict reason) — detail that was previously fed
-    // only to the helper agent and then discarded.
-    step.gate.lastVerdict = probe.status
-    step.gate.lastFailureSummary = probe.failureSummary ?? null
-    step.gate.failingChecks = probe.failingChecks ?? null
-
-    if (probe.status === 'pass') {
-      // Stop the moment the precheck passes — finish the step and advance.
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: probe.passOutput ?? `${gate.kind} gate passed.`,
-      })
-    }
-
-    if (probe.status === 'pending') {
-      // Keep polling. Persist the head sha + phase so the board can reflect it.
-      step.gate.phase = 'checking'
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-    }
-
-    // probe.status === 'fail'.
-    // A gate can decline escalation for a failure its helper can't fix (e.g. the conflicts
-    // gate on a PEER-repo conflict it has no resolver for) — go straight to give-up instead
-    // of burning the attempt budget on a helper that can't touch the problem.
-    const canEscalate = isAsyncAgentExecutor(this.agentExecutor) && probe.escalatable !== false
-    if (canEscalate && step.gate.attempts < step.gate.maxAttempts) {
-      return this.dispatchGateHelper(workspaceId, instance, step, block, isFinalStep, {
-        gate,
-        failureSummary: probe.failureSummary,
-      })
-    }
-
-    // Budget spent (or no async executor to escalate to): give up.
-    const { error } = await gate.onExhausted({
-      workspaceId,
-      instance,
-      block,
-      step,
-      summary: probe.failureSummary,
-    })
-    return { kind: 'job_failed', error }
-  }
-
-  /**
-   * Dispatch a gate's helper container agent on a failed precheck: build the agent
-   * context with the kind overridden to the helper (it clones the PR head branch and
-   * pushes — no new PR), park on the job, and flip the gate to `working`. Idempotent
-   * under replay via the step's `jobId` (re-attach handled in {@link evaluateGate}).
-   */
-  private async dispatchGateHelper(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    helper: { gate: GateDefinition; failureSummary?: string },
-  ): Promise<AdvanceResult> {
-    const { gate, failureSummary } = helper
-    const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor)) {
-      // Defensive: evaluateGate only calls this when async-capable.
-      return { kind: 'job_failed', error: `No async executor available for the ${gate.kind} gate.` }
-    }
-    // Build the context AS the helper kind: the hosting step's kind is the gate
-    // (`ci` / `post-release-health`), so trait-driven context — the `code-aware`
-    // service-fragment fold for `ci-fixer` / `on-call` — must key off the helper.
-    const base = await this.contextBuilder.buildContext(
-      workspaceId,
-      instance,
-      step,
-      isFinalStep,
-      block,
-      { agentKind: gate.helperKind },
-    )
-    // A gate may build richer helper context asynchronously (the on-call agent gets the
-    // full Datadog evidence bundle); otherwise fall back to the simple summary prior.
-    const extras = gate.gatherHelperPriorOutputs
-      ? await gate.gatherHelperPriorOutputs(
-          workspaceId,
-          block.id,
-          step.gate ?? { phase: 'checking', attempts: 0, maxAttempts: 0 },
-        )
-      : [gate.helperPriorOutput?.(failureSummary ?? '')].filter(
-          (o): o is { agentKind: string; output: string } => o != null,
-        )
-    // When the conflicts gate detected the conflict on a PEER repo (multi-repo task), hand the
-    // conflict-resolver the target repo so the executor points it at THAT repo (own-service or
-    // a connected service) instead of always the own service. Own-repo conflicts leave it absent
-    // (`conflictTarget` carries no `frameId`), so the resolver targets the own repo as before.
-    const conflictTarget = step.gate?.conflictTarget
-    const context: AgentRunContext = {
-      ...base,
-      agentKind: gate.helperKind,
-      priorOutputs: [...base.priorOutputs, ...extras],
-      ...(conflictTarget?.frameId
-        ? { conflictTarget: { repo: conflictTarget.repo, frameId: conflictTarget.frameId } }
-        : {}),
-    }
-    const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
-    step.gate = {
-      // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
-      // keeps showing what the helper is fixing while it works.
-      ...step.gate,
-      phase: 'working',
-      attempts: (step.gate?.attempts ?? 0) + 1,
-      maxAttempts: step.gate?.maxAttempts ?? DEFAULT_RISK_POLICY.ciMaxAttempts,
-      headSha: step.gate?.headSha ?? null,
-      // Stash the instructions this helper was handed (the failing-check summary / conflict
-      // reason / human fix prompt) so the attempt recorded at its completion can show WHAT
-      // this round set out to fix — the gate analogue of the Tester attempt's `concerns`.
-      // Covers every dispatch path (the failed-precheck `probe.failureSummary` and the human
-      // `pendingFix.instructions`), which both arrive here as `failureSummary`.
-      lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
-    }
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    return this.gateStepController.evaluate(workspaceId, instance, step, block, isFinalStep, gate)
   }
 
   // ---- Implementation-fork decision phase (Phase A dispatch) --------------

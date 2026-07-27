@@ -1,4 +1,5 @@
 import {
+  defaultJudgeRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
   defaultVcsRegistry,
@@ -19,6 +20,7 @@ export type WorkerRegistries = Required<
     | 'userSecretKindRegistry'
     | 'agentKindRegistry'
     | 'gateRegistry'
+    | 'judgeRegistry'
     | 'stepResolverRegistry'
     | 'initiativePresetRegistry'
     | 'vcsRegistry'
@@ -53,6 +55,9 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // The app-owned step-resolver registry: the injected instance else an empty default (the built-in
   // `merger` resolver is a privileged engine built-in, not a registry entry).
   const stepResolverRegistry = overrides.stepResolverRegistry ?? defaultStepResolverRegistry()
+  // The app-owned JUDGE registry (the fourth step-taxonomy bucket): the injected instance, else an
+  // empty default — the platform ships no built-in judges, so every entry is a deployment's own.
+  const judgeRegistry = overrides.judgeRegistry ?? defaultJudgeRegistry()
   // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
   // any a deployment registered by reference).
   const initiativePresetRegistry =
@@ -77,6 +82,7 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     userSecretKindRegistry,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     vcsRegistry,

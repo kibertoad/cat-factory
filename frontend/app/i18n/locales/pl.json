@@ -1724,6 +1724,7 @@
         "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane",
         "fork_decision_pending": "Oznacz jako przeczytane",
+        "judge_review": "Oznacz jako przeczytane",
         "pr_review_ready": "Oznacz jako przeczytane",
         "budget_paused": "Oznacz jako przeczytane",
         "key_drift": "Usuń nieaktualne poświadczenia",
@@ -3741,6 +3742,43 @@
       "suffixNotNeeded": "· jeszcze niepotrzebne",
       "gatedCommit": "Commit z bramką",
       "footer": "Bramka wykonuje programowe wstępne sprawdzenie i uruchamia {helper} tylko, gdy się nie powiedzie; zielone sprawdzenie przechodzi dalej bez uruchamiania czegokolwiek."
+    }
+  },
+  "judge": {
+    "subtitle": "Ocenia pracę tego przebiegu według rubryki, a potem kontynuuje, pyta lub odsyła ją z powrotem",
+    "empty": "Ten krok nie wydał jeszcze werdyktu.",
+    "notScored": "Bez oceny",
+    "threshold": "próg {threshold}",
+    "rubricOverridden": "rubryka przestrzeni roboczej",
+    "reworkRounds": "poprawki {spent}/{budget}",
+    "findingsHeading": "Co zgłosiła rubryka",
+    "roundsHeading": "Rundy przeglądu",
+    "round": "Runda {round}",
+    "decisionHeading": "Twoja decyzja",
+    "decisionDescription": "Kontynuuj mimo wszystko, odeślij pracę do poprawki albo zatrzymaj przebieg.",
+    "feedbackPlaceholder": "Opcjonalne wskazówki dołączane przy odsyłaniu pracy…",
+    "proceed": "Kontynuuj mimo wszystko",
+    "bounce": "Odeślij do poprawki",
+    "stop": "Zatrzymaj przebieg",
+    "status": {
+      "evaluating": "Przegląd",
+      "awaitingDecision": "Wymaga decyzji",
+      "bouncing": "W poprawkach",
+      "passed": "Zaliczone",
+      "failed": "Niezaliczone",
+      "skipped": "Pominięte"
+    },
+    "severity": {
+      "low": "Niska",
+      "medium": "Średnia",
+      "high": "Wysoka",
+      "critical": "Krytyczna"
+    },
+    "disposition": {
+      "pass": "Zaliczone",
+      "park": "Zapytano człowieka",
+      "bounce": "Odesłane do poprawki",
+      "fail": "Przebieg nieudany"
     }
   },
   "requirements": {

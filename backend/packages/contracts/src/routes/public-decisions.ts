@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import {
   publicChooseForkSchema,
+  publicResolveJudgeSchema,
   publicDecisionListSchema,
   publicIncorporateSchema,
   publicReplyFindingSchema,
@@ -106,5 +107,16 @@ export const choosePublicRunForkContract = defineApiContract({
   requestPathParamsSchema: runIdParams,
   pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/fork/choose`,
   requestBodySchema: publicChooseForkSchema,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+// ---- judge ------------------------------------------------------------------
+
+/** Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run. */
+export const resolvePublicRunJudgeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/judge/resolve`,
+  requestBodySchema: publicResolveJudgeSchema,
   responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
 })

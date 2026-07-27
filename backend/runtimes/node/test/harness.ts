@@ -148,6 +148,8 @@ type ConformanceAppOpts = {
   backendRegistries?: BackendRegistries
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
+  judgeRegistry?: CoreDependencies['judgeRegistry']
+  judgeAssessor?: CoreDependencies['judgeAssessor']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -223,6 +225,9 @@ function buildConformanceOverrides(
       resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
       detectionConventions: o.detectionConventions,
       testerQualityReviewer: o.testerQualityReviewer,
+      // The judge's verdict producer: a deterministic fake, so the pass / park / bounce / fail
+      // loop drives with no model — and a DISABLED one proves the unwired pass-through.
+      judgeAssessor: o.judgeAssessor,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,
@@ -242,6 +247,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     backendRegistries: o.backendRegistries,
     agentKindRegistry: o.agentKindRegistry,
     gateRegistry: o.gateRegistry,
+    judgeRegistry: o.judgeRegistry,
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
