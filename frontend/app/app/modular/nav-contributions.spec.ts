@@ -166,6 +166,7 @@ describe('nav grouping helpers', () => {
       'model-config',
       'account-settings',
       'operator-dashboard',
+      'reports',
     ])
   })
 

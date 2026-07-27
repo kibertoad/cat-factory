@@ -130,6 +130,7 @@
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
     "operatorDashboard": "Platform observability",
+    "reports": "Reports",
     "environmentSetup": "Environment setup"
   },
   "board": {
@@ -860,6 +861,7 @@
         "infraless": "No infrastructure",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Cloudflare Workers preview",
         "custom": "Custom"
       },
       "composePath": "docker-compose path",
@@ -902,6 +904,7 @@
       "rendererHint": "Raw applies the manifests as-is. Kustomize builds an overlay first (needs the container deploy adapter).",
       "customManifestId": "Custom manifest type",
       "customManifestIdPlaceholder": "Pick a manifest type",
+      "cloudflareHint": "Nothing to configure here: the per-pull-request recipe lives in this repository’s own preview workflow. Connect a Cloudflare Workers handler under Infrastructure to choose the account and the naming.",
       "customNoTypes": "No custom manifest types are defined yet. Add one in the Infrastructure window.",
       "customManifestIdHint": "The custom type this service produces, matched to a remote-custom handler the workspace configures.",
       "customManifestPath": "Manifest path (optional)",
@@ -1520,6 +1523,70 @@
     },
     "live": {
       "title": "Live now"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "refresh": "Refresh",
+    "loading": "Loading reports…",
+    "retry": "Retry",
+    "error": "Reports could not be loaded.",
+    "period": "{from} to {to}",
+    "unattributed": "Unattributed",
+    "window": {
+      "oneDay": "Last 24 hours",
+      "sevenDays": "Last 7 days",
+      "thirtyDays": "Last 30 days",
+      "ninetyDays": "Last 90 days"
+    },
+    "filter": {
+      "board": "Board",
+      "allBoards": "All boards"
+    },
+    "dimension": {
+      "workspace": "Board",
+      "service": "Service",
+      "taskType": "Task type"
+    },
+    "breakdown": {
+      "title": "Breakdown by"
+    },
+    "totals": {
+      "title": "This window",
+      "metered": "Metered spend",
+      "subscription": "Subscription",
+      "calls": "LLM calls",
+      "tokens": "Tokens",
+      "illustrative": "Subscription costs are illustrative — those plans are flat-rate, not billed per token, and are never counted as spend."
+    },
+    "trend": {
+      "title": "Spend over time",
+      "empty": "No recorded usage in this window."
+    },
+    "legend": {
+      "metered": "Metered",
+      "subscription": "Subscription"
+    },
+    "spend": {
+      "byModel": "Spend by model",
+      "byAgentKind": "Spend by agent kind",
+      "heading": "Spend",
+      "empty": "No recorded usage in this window.",
+      "calls": "{count} call | {count} calls",
+      "tokens": "{input} in / {output} out",
+      "subscriptionAside": "+{value} subscription"
+    },
+    "activity": {
+      "heading": "Runs",
+      "empty": "No runs in this window.",
+      "runs": "{count} run | {count} runs",
+      "avg": "avg {value}"
+    },
+    "status": {
+      "done": "Completed",
+      "failed": "Failed",
+      "running": "Running",
+      "other": "Other"
     }
   },
   "auth": {
@@ -2256,7 +2323,26 @@
         "loading": "Loading infrastructure settings…",
         "kubeNoun": "the Kubernetes handler",
         "kubeOverrideNoun": "the Kubernetes override",
-        "customNoun": "this handler"
+        "customNoun": "this handler",
+        "cloudflareNoun": "the Cloudflare handler"
+      },
+      "cloudflare": {
+        "intro": "Stands up a per-pull-request Cloudflare Worker by driving the target repository's own preview workflow. cat-factory never talks to Cloudflare directly: it creates a deployment, reads its status, and posts an inactive status to tear down.",
+        "label": "Display name",
+        "subdomain": "workers.dev subdomain",
+        "subdomainHint": "The preview URL becomes https://WORKER.SUBDOMAIN.workers.dev — enter just the subdomain label, without \".workers.dev\".",
+        "token": "VCS API token",
+        "tokenPlaceholder": "Paste a fine-grained token",
+        "tokenKeep": "Leave blank to keep the stored token",
+        "tokenHint": "Needs Deployments: read & write on the repository, and nothing else.",
+        "repo": "Workflow repository (optional)",
+        "repoHint": "Leave blank to use each service frame's own repository. Pin it only when one repository holds the preview workflow for several services.",
+        "advanced": "Advanced",
+        "workerTemplate": "Worker name template",
+        "environmentTemplate": "Deployment environment template",
+        "templateHint": "These are the contract with the preview workflow: cat-factory derives the URL from them and the workflow names its resources the same way. Leave blank to use the reference workflow's naming. Available placeholders: pullNumber, branch, blockId.",
+        "apiBaseUrl": "VCS API base URL",
+        "connectedAs": "Previews deploy to {subdomain}.workers.dev."
       }
     },
     "providerConnection": {
@@ -4599,6 +4685,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Custom",
       "infraless": "No infrastructure"
     },
@@ -4606,6 +4693,7 @@
       "local-docker": "Local Docker",
       "local-k3s": "Local k3s",
       "remote-kubernetes": "Remote Kubernetes",
+      "cloudflare": "Cloudflare preview",
       "remote-custom": "Remote custom (HTTP)",
       "none": "None"
     }

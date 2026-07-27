@@ -203,6 +203,9 @@ importers:
 
   backend/internal/executor-harness:
     devDependencies:
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
       '@cat-factory/server':
         specifier: workspace:*
         version: link:../../packages/server

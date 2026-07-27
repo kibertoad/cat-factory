@@ -153,6 +153,8 @@ export type {
   KubernetesSecretEntry,
   KubernetesSecretInjection,
   KubernetesProvisionConfig,
+  // Cloudflare Workers preview (per-PR Worker, driven over the VCS deployments API).
+  CloudflareEnvironmentConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
   EnvironmentFailureReason,

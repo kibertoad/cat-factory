@@ -22,16 +22,16 @@ import {
   fetchReferenceBranches,
   hasAgentChanges,
   headCommit,
-  inferVcsProvider,
   mergeBranch,
-  openPullRequest,
   prepareExistingCheckout,
   pushBranch,
   reinitAndPush,
   unmergedPaths,
 } from './git.js'
+import { inferVcsProvider, openPullRequest } from './vcs-api.js'
 import type { PiRunStats, RunDiagnostics } from './pi.js'
 import type { EffortReport } from './effort.js'
+import { applyPrDescription } from './pr-description.js'
 import {
   makeDirClaimer,
   noChangesReason,
@@ -998,6 +998,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     validationReport,
     reproductionReport,
     effortReport,
+    prDescription,
   } = await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
   // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
@@ -1073,7 +1074,11 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       ghToken: job.ghToken,
       head: pushBranch,
       base: job.repo.baseBranch,
-      pr: job.pr,
+      // The agent-authored briefing (title/body) wins field-wise over the dispatch-time text.
+      pr: applyPrDescription(job.pr, prDescription),
+      // A resumed run's PR is already open, so refresh it rather than lose the briefing to the
+      // duplicate-PR 422 — only from a REAL briefing (see `refreshExisting` for why).
+      ...(prDescription ? { refreshExisting: true } : {}),
       apiBase: job.githubApiBase,
       // The provider (set by the server from the configured backend) selects GitHub-PR vs
       // GitLab-MR authoritatively; the clone URL supplies the GitLab REST base + project path.

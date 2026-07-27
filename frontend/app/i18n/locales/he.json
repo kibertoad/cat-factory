@@ -112,6 +112,7 @@
     "modelConfiguration": "תצורת מודל",
     "accountSettings": "הגדרות חשבון",
     "operatorDashboard": "תצפית על הפלטפורמה",
+    "reports": "דוחות",
     "environmentSetup": "הגדרת סביבה"
   },
   "board": {
@@ -800,6 +801,7 @@
         "infraless": "ללא תשתית",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "תצוגה מקדימה של Cloudflare Workers",
         "custom": "מותאם אישית"
       },
       "composePath": "נתיב docker-compose",
@@ -842,6 +844,7 @@
       "rendererHint": "Raw מחיל את המניפסטים כפי שהם. Kustomize בונה תחילה overlay (דורש את מתאם הפריסה בקונטיינר).",
       "customManifestId": "סוג מניפסט מותאם",
       "customManifestIdPlaceholder": "בחר סוג מניפסט",
+      "cloudflareHint": "אין כאן מה להגדיר: המתכון לכל בקשת משיכה נמצא בתהליך העבודה לתצוגה מקדימה של מאגר זה. חבר מטפל של Cloudflare Workers תחת תשתית כדי לבחור את החשבון ואת מוסכמות השמות.",
       "customNoTypes": "עדיין לא הוגדרו סוגי מניפסט מותאמים. הוסף אחד בחלון התשתית.",
       "customManifestIdHint": "הסוג המותאם שהשירות הזה מייצר, המותאם למטפל remote-custom שהמרחב מגדיר.",
       "customManifestPath": "נתיב המניפסט (אופציונלי)",
@@ -1457,6 +1460,70 @@
     },
     "live": {
       "title": "פעילות כעת"
+    }
+  },
+  "reports": {
+    "title": "דוחות",
+    "refresh": "רענון",
+    "loading": "טוען דוחות…",
+    "retry": "נסה שוב",
+    "error": "לא ניתן היה לטעון את הדוחות.",
+    "period": "מ־{from} עד {to}",
+    "unattributed": "ללא שיוך",
+    "window": {
+      "oneDay": "24 השעות האחרונות",
+      "sevenDays": "7 הימים האחרונים",
+      "thirtyDays": "30 הימים האחרונים",
+      "ninetyDays": "90 הימים האחרונים"
+    },
+    "filter": {
+      "board": "לוח",
+      "allBoards": "כל הלוחות"
+    },
+    "dimension": {
+      "workspace": "לוח",
+      "service": "שירות",
+      "taskType": "סוג משימה"
+    },
+    "breakdown": {
+      "title": "פילוח לפי"
+    },
+    "totals": {
+      "title": "בטווח הזה",
+      "metered": "עלות בפועל",
+      "subscription": "מנוי",
+      "calls": "קריאות למודל",
+      "tokens": "טוקנים",
+      "illustrative": "עלויות המנוי הן להמחשה בלבד — התוכניות האלו בתעריף קבוע, אינן מחויבות לפי טוקן ולעולם אינן נספרות כהוצאה."
+    },
+    "trend": {
+      "title": "עלות לאורך זמן",
+      "empty": "לא נרשם שימוש בטווח הזה."
+    },
+    "legend": {
+      "metered": "בפועל",
+      "subscription": "מנוי"
+    },
+    "spend": {
+      "byModel": "עלות לפי מודל",
+      "byAgentKind": "עלות לפי סוג סוכן",
+      "heading": "עלות",
+      "empty": "לא נרשם שימוש בטווח הזה.",
+      "calls": "קריאה {count} | {count} קריאות",
+      "tokens": "{input} נכנס / {output} יוצא",
+      "subscriptionAside": "+{value} מנוי"
+    },
+    "activity": {
+      "heading": "ריצות",
+      "empty": "לא היו ריצות בטווח הזה.",
+      "runs": "ריצה {count} | {count} ריצות",
+      "avg": "ממוצע {value}"
+    },
+    "status": {
+      "done": "הושלמו",
+      "failed": "נכשלו",
+      "running": "רצות",
+      "other": "אחר"
     }
   },
   "auth": {
@@ -2189,7 +2256,26 @@
         "loading": "טוען הגדרות תשתית…",
         "kubeNoun": "מטפל ה-Kubernetes",
         "kubeOverrideNoun": "עקיפת ה-Kubernetes",
-        "customNoun": "מטפל זה"
+        "customNoun": "מטפל זה",
+        "cloudflareNoun": "את מטפל Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "מקים Worker של Cloudflare לכל בקשת משיכה על ידי הפעלת תהליך העבודה לתצוגה מקדימה של המאגר היעד. cat-factory אף פעם לא פונה ישירות ל-Cloudflare: הוא יוצר פריסה, קורא את מצבה, ומפרסם מצב inactive כדי לפרק אותה.",
+        "label": "שם לתצוגה",
+        "subdomain": "תת-דומיין של workers.dev",
+        "subdomainHint": "כתובת התצוגה המקדימה תהיה https://WORKER.SUBDOMAIN.workers.dev — הזן רק את תווית תת-הדומיין, בלי \".workers.dev\".",
+        "token": "אסימון API של מערכת ניהול הגרסאות",
+        "tokenPlaceholder": "הדבק אסימון בעל הרשאות מדויקות",
+        "tokenKeep": "השאר ריק כדי לשמור על האסימון הקיים",
+        "tokenHint": "נדרשת הרשאת \"Deployments: read & write\" על המאגר בלבד.",
+        "repo": "המאגר שמכיל את תהליך העבודה (אופציונלי)",
+        "repoHint": "השאר ריק כדי להשתמש במאגר של כל מסגרת שירות. קבע ערך רק כאשר מאגר אחד מחזיק את תהליך התצוגה המקדימה עבור כמה שירותים.",
+        "advanced": "מתקדם",
+        "workerTemplate": "תבנית לשם ה-Worker",
+        "environmentTemplate": "תבנית לשם סביבת הפריסה",
+        "templateHint": "אלה ההסכם מול תהליך התצוגה המקדימה: cat-factory גוזר מהם את הכתובת, ותהליך העבודה מעניק לאותם משאבים את אותם שמות. השאר ריק כדי להשתמש בשמות של תהליך העבודה הייחוס. מצייני מקום זמינים: pullNumber, branch, blockId.",
+        "apiBaseUrl": "כתובת הבסיס של ה-API של מערכת ניהול הגרסאות",
+        "connectedAs": "תצוגות מקדימות נפרסות אל {subdomain}.workers.dev."
       }
     },
     "providerConnection": {
@@ -4425,6 +4511,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "מותאם",
       "infraless": "ללא תשתית"
     },
@@ -4432,6 +4519,7 @@
       "local-docker": "Docker מקומי",
       "local-k3s": "k3s מקומי",
       "remote-kubernetes": "Kubernetes מרוחק",
+      "cloudflare": "תצוגה מקדימה של Cloudflare",
       "remote-custom": "מותאם מרוחק (HTTP)",
       "none": "ללא"
     }

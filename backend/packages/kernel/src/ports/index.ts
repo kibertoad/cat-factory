@@ -94,6 +94,14 @@ export type {
   PlatformRunTrendPoint,
 } from './platform-metrics.js'
 export type {
+  ReportActivityGroup,
+  ReportRange,
+  ReportScope,
+  ReportSpendGroup,
+  ReportSpendTrendBucket,
+  ReportsRepository,
+} from './reports.js'
+export type {
   AgentContextFile,
   AgentContextFragment,
   AgentContextRecorder,

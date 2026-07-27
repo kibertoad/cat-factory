@@ -112,6 +112,7 @@
     "modelConfiguration": "Model yapılandırması",
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
+    "reports": "Raporlar",
     "environmentSetup": "Ortam kurulumu"
   },
   "board": {
@@ -800,6 +801,7 @@
         "infraless": "Altyapısız",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Cloudflare Workers önizlemesi",
         "custom": "Özel"
       },
       "composePath": "docker-compose yolu",
@@ -842,6 +844,7 @@
       "rendererHint": "Raw manifestleri olduğu gibi uygular. Kustomize önce bir overlay oluşturur (kapsayıcı dağıtım adaptörü gerekir).",
       "customManifestId": "Özel manifest türü",
       "customManifestIdPlaceholder": "Bir manifest türü seçin",
+      "cloudflareHint": "Burada yapılandırılacak bir şey yok: her pull request için izlenecek adımlar bu deponun kendi önizleme iş akışında. Hesabı ve adlandırmayı seçmek için Altyapı bölümünden bir Cloudflare Workers işleyicisi bağlayın.",
       "customNoTypes": "Henüz özel manifest türü tanımlanmadı. Altyapı penceresinden bir tane ekleyin.",
       "customManifestIdHint": "Bu servisin ürettiği özel tür; çalışma alanının yapılandırdığı remote-custom işleyiciyle eşleştirilir.",
       "customManifestPath": "Manifest yolu (isteğe bağlı)",
@@ -1457,6 +1460,70 @@
     },
     "live": {
       "title": "Şu anda etkin"
+    }
+  },
+  "reports": {
+    "title": "Raporlar",
+    "refresh": "Yenile",
+    "loading": "Raporlar yükleniyor…",
+    "retry": "Yeniden dene",
+    "error": "Raporlar yüklenemedi.",
+    "period": "{from} – {to}",
+    "unattributed": "Atanmamış",
+    "window": {
+      "oneDay": "Son 24 saat",
+      "sevenDays": "Son 7 gün",
+      "thirtyDays": "Son 30 gün",
+      "ninetyDays": "Son 90 gün"
+    },
+    "filter": {
+      "board": "Pano",
+      "allBoards": "Tüm panolar"
+    },
+    "dimension": {
+      "workspace": "Pano",
+      "service": "Servis",
+      "taskType": "Görev türü"
+    },
+    "breakdown": {
+      "title": "Şuna göre dağılım"
+    },
+    "totals": {
+      "title": "Bu dönemde",
+      "metered": "Ölçümlü harcama",
+      "subscription": "Abonelik",
+      "calls": "LLM çağrısı",
+      "tokens": "Token",
+      "illustrative": "Abonelik maliyetleri yalnızca tahminidir — bu planlar sabit ücretlidir, token başına faturalandırılmaz ve hiçbir zaman harcama olarak sayılmaz."
+    },
+    "trend": {
+      "title": "Zaman içinde harcama",
+      "empty": "Bu dönemde kayıtlı kullanım yok."
+    },
+    "legend": {
+      "metered": "Ölçümlü",
+      "subscription": "Abonelik"
+    },
+    "spend": {
+      "byModel": "Modele göre harcama",
+      "byAgentKind": "Ajan türüne göre harcama",
+      "heading": "Harcama",
+      "empty": "Bu dönemde kayıtlı kullanım yok.",
+      "calls": "{count} çağrı | {count} çağrı",
+      "tokens": "{input} giriş / {output} çıkış",
+      "subscriptionAside": "+{value} abonelik"
+    },
+    "activity": {
+      "heading": "Çalıştırmalar",
+      "empty": "Bu dönemde çalıştırma yok.",
+      "runs": "{count} çalıştırma | {count} çalıştırma",
+      "avg": "ort. {value}"
+    },
+    "status": {
+      "done": "Tamamlanan",
+      "failed": "Başarısız",
+      "running": "Çalışıyor",
+      "other": "Diğer"
     }
   },
   "auth": {
@@ -2190,7 +2257,26 @@
         "loading": "Altyapı ayarları yükleniyor…",
         "kubeNoun": "Kubernetes işleyicisi",
         "kubeOverrideNoun": "Kubernetes geçersiz kılması",
-        "customNoun": "bu işleyici"
+        "customNoun": "bu işleyici",
+        "cloudflareNoun": "Cloudflare işleyicisini"
+      },
+      "cloudflare": {
+        "intro": "Hedef deponun kendi önizleme iş akışını tetikleyerek her pull request için bir Cloudflare Worker ayağa kaldırır. cat-factory Cloudflare ile hiçbir zaman doğrudan konuşmaz: bir dağıtım oluşturur, durumunu okur ve kaldırmak için inactive durumu yazar.",
+        "label": "Görünen ad",
+        "subdomain": "workers.dev alt alan adı",
+        "subdomainHint": "Önizleme adresi https://WORKER.SUBDOMAIN.workers.dev olur — yalnızca alt alan adı etiketini girin, \".workers.dev\" olmadan.",
+        "token": "VCS API belirteci",
+        "tokenPlaceholder": "İnce ayarlı bir belirteç yapıştırın",
+        "tokenKeep": "Kayıtlı belirteci korumak için boş bırakın",
+        "tokenHint": "Depo üzerinde yalnızca \"Deployments: read & write\" yetkisi gerekir.",
+        "repo": "İş akışının bulunduğu depo (isteğe bağlı)",
+        "repoHint": "Her hizmet çerçevesinin kendi deposunu kullanmak için boş bırakın. Yalnızca tek bir depo birden çok hizmetin önizleme iş akışını barındırıyorsa sabitleyin.",
+        "advanced": "Gelişmiş",
+        "workerTemplate": "Worker adı şablonu",
+        "environmentTemplate": "Dağıtım ortamı adı şablonu",
+        "templateHint": "Bunlar önizleme iş akışıyla yapılan anlaşmadır: cat-factory adresi bunlardan türetir ve iş akışı kaynaklarını aynı şekilde adlandırır. Referans iş akışının adlandırmasını kullanmak için boş bırakın. Kullanılabilir yer tutucular: pullNumber, branch, blockId.",
+        "apiBaseUrl": "VCS API taban adresi",
+        "connectedAs": "Önizlemeler {subdomain}.workers.dev üzerine dağıtılır."
       }
     },
     "providerConnection": {
@@ -4426,6 +4512,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Özel",
       "infraless": "Altyapısız"
     },
@@ -4433,6 +4520,7 @@
       "local-docker": "Yerel Docker",
       "local-k3s": "Yerel k3s",
       "remote-kubernetes": "Uzak Kubernetes",
+      "cloudflare": "Cloudflare önizlemesi",
       "remote-custom": "Uzak özel (HTTP)",
       "none": "Yok"
     }

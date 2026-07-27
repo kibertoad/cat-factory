@@ -3,6 +3,7 @@ import { createApiClient, createSend, createSendWith } from './api/client'
 import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
 import { platformObservabilityApi } from './api/platformObservability'
+import { reportsApi } from './api/reports'
 import { authApi } from './api/auth'
 import { bootstrapApi } from './api/bootstrap'
 import { boardApi } from './api/board'
@@ -112,6 +113,7 @@ export function useApi() {
     ...modelsApi(ctx),
     ...accountsApi(ctx),
     ...platformObservabilityApi(ctx),
+    ...reportsApi(ctx),
     ...workspacesApi(ctx),
     ...boardApi(ctx),
     ...executionApi(ctx),

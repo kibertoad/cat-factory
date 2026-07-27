@@ -21,6 +21,7 @@ import {
   updateApiKeySchema,
 } from '../api-keys.js'
 import { platformObservabilitySchema, platformObservabilityWindowSchema } from '../observability.js'
+import { reportWindowSchema, reportsViewSchema } from '../reports.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -210,4 +211,21 @@ export const getPlatformObservabilityContract = defineApiContract({
   requestQuerySchema: v.object({ window: v.optional(platformObservabilityWindowSchema) }),
   pathResolver: ({ accountId }) => `/accounts/${accountId}/observability/platform`,
   responsesByStatusCode: { 200: platformObservabilitySchema, ...errorResponses },
+})
+
+// ---- reports (admin-only) -------------------------------------------------
+
+// Cross-cutting usage analytics for the account: spend per model / agent kind, and
+// spend + run activity per workspace / service / task type, over a time window. Admin
+// gated for the same reason as the dashboard above (cross-workspace operational data).
+// `workspaceId` narrows EVERY breakdown to one board; absent ⇒ the whole account.
+export const getReportsContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: accountIdParams,
+  requestQuerySchema: v.object({
+    window: v.optional(reportWindowSchema),
+    workspaceId: v.optional(v.string()),
+  }),
+  pathResolver: ({ accountId }) => `/accounts/${accountId}/reports`,
+  responsesByStatusCode: { 200: reportsViewSchema, ...errorResponses },
 })

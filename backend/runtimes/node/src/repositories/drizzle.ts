@@ -34,6 +34,7 @@ import type {
   PipelineRepository,
   PipelineScheduleRepository,
   PlatformMetricsRepository,
+  ReportsRepository,
   ProvisioningLogRepository,
   ReleaseHealthConfigRepository,
   RequirementReviewRepository,
@@ -72,6 +73,8 @@ import {
   DrizzlePipelineScheduleRepository,
   DrizzlePlatformMetricsRepository,
 } from './drizzle/execution.js'
+
+import { DrizzleReportsRepository } from './drizzle/reports.js'
 
 import {
   DrizzleAccountInvitationRepository,
@@ -149,6 +152,7 @@ export interface CoreRepositories {
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   platformMetricsRepository: PlatformMetricsRepository
+  reportsRepository: ReportsRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
@@ -200,6 +204,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),
+    reportsRepository: new DrizzleReportsRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),

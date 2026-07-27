@@ -55,6 +55,15 @@ don't engineer around it.
 a PR. Don't commit task work directly to `main` unless explicitly asked; if you started on `main`,
 branch off it before committing.
 
+**A PR description is a reviewer briefing, never a restated diff.** Write it to give the reviewer
+the context the diff cannot show: the problem being solved and why now, the decisions made along
+the way (especially where an alternative was considered and rejected — say what and why), and what
+to be aware of or look out for when reviewing (behaviour changes, a flagged compatibility break,
+the riskiest or least-certain part of the change, anything that only makes sense with background
+the reviewer may lack). Leave out everything the diff already states: file lists, "tests added",
+line counts, or a change-by-change narration. A description that could be regenerated mechanically
+from the diff has told the reviewer nothing.
+
 **Fixing an existing PR (review findings OR red CI) lands on THAT PR's own head branch, pushed
 immediately.** This overrides any environment-supplied "develop on branch X" instruction naming a
 different branch. A separate `claude/ci-fix-*` or scratch branch is never the right target: CI and
@@ -308,6 +317,16 @@ real-time transport, model provisioning).
   registered purely through the public app-owned registries. See "Custom agents".
 - `deploy/{backend,node,local,frontend}` — example deployments carrying the production config
   (`wrangler.toml` / `Dockerfile` / `.env.example`) on top of the libraries.
+- `deploy/preview` — the per-PR TEST environments for THIS repo (not a package): the
+  single-origin compose stack a local deployment provisions, and the reference preview WORKFLOW
+  the built-in `cloudflare` environment backend drives over the VCS Deployments API. Board
+  wiring lives in [`docs/dogfooding.md`](./docs/dogfooding.md). Three constraints bite when
+  editing them: the compose file must stay free of `include:` / cross-file `extends` /
+  `privileged` (refused outright) and of bind mounts / `env_file` (so it stays runnable by
+  hand); the SPA there is built with an EMPTY `apiBase` because a preview's host port is only
+  assigned at `up` time, so same-origin is the only topology that can work; and the workflow's
+  per-PR resource NAMES are a contract with `cloudflareEnvironmentConfigSchema`'s two name
+  templates — rename in one place and you must rename in the other.
 
 ### Local container adapters
 
@@ -784,6 +803,43 @@ both exit codes. Only red-then-green is proof. Design:
   dispatches no proof, so `concededReproductionReport` records the declaration. That is why "could
   not be reproduced" never reads the same as "nobody tried".
 
+### Pipeline PR descriptions (agent-authored reviewer briefing)
+
+A pipeline-opened PR's description is the AGENT's reviewer briefing, not a restated task record.
+A PR-opening coding dispatch gets `PR_DESCRIPTION_GUIDANCE` (`@cat-factory/agents`) appended in
+`buildCodingAgentBody` — only when `opensPr`; an in-place fixer amends a PR whose description it
+doesn't own — asking the agent to write the briefing (problem, decisions + rejected alternatives,
+watch-outs; optional `# <title>` first line) to the `.cat-pr-description.md` sentinel at the
+checkout root, one per sibling repo in a multi-repo run (whose agent runs at the WORKSPACE root,
+so the primary leg also falls back to a briefing left there). The harness (`pr-description.ts`)
+lifts it onto `openPullRequest` — secret-scrubbed, size-capped with a visible truncation note,
+the verification-report markers stripped so it can't collide with the managed section, excluded
+from git like the effort/follow-ups sentinels. Absent ⇒ the dispatch-time fallback `prBody()`,
+which briefs from what the pipeline knows before the run (task, human-chosen fork decision) and
+marks itself as agent-less. The filename is triple-kept-in-sync (agents ⇄ harness) like
+`EFFORT_REPORT_FILE`; changing the sentinel means an image bump.
+
+Three rules the surface imposes, none of them optional:
+
+- **A PR body is host-parsed, and the briefing is MODEL-authored** — so it crosses a text boundary
+  before it is published, exactly as the verification report does. The harness's
+  `host-markdown.ts` is a deliberate COPY of kernel's `hostMarkdown` (the image builds from `src/`
+  plus typescript, so the harness can depend on no workspace package), pinned byte-for-byte by
+  `test/host-markdown.conformity.test.ts` — change one, change the other. It defuses `#123` /
+  `@name` / `!123` / closing keywords, and **closes any code fence the briefing leaves open**,
+  without which the report's fenced JSON block — appended to the same body afterwards — is
+  swallowed. The dispatch-time `prBody()` fallback takes the same boundary through kernel directly:
+  its holes carry a human's description and the fork PROPOSER's own titles.
+- **The body budget must leave the report room.** `MAX_PR_BODY_CHARS` (15k) plus the report's
+  `MAX_SECTION_CHARS` (50k) has to stay under the host's 65,536 limit, or the report — whose
+  publisher swallows its own failures — silently stops publishing.
+- **A RESUMED run must refresh the PR it already opened.** The re-dispatch pushes onto a branch
+  whose PR is open, so the create answers 422 and the briefing would be read, scrubbed, capped and
+  then dropped — on precisely the long runs worth briefing. `refreshExisting` PATCHes title + body
+  (GitHub) / PUTs them (GitLab), carrying the managed report region across, and is set ONLY when
+  the text is the agent's own briefing: refreshing from the generic fallback would clobber a
+  human's edit.
+
 ### Merge lifecycle (CI gate → CI-fixer → merger → notifications)
 
 Turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is `done` only when
@@ -1040,6 +1096,37 @@ each account's `PlatformObservabilityService.summarize` projection as OTLP gauge
 `GET /accounts/:accountId/observability/platform` → `OperatorDashboardPanel.vue`, plus the
 `platform_health` threshold alert (state-change deduplicated). Detail:
 [`docs/initiatives/platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+
+## Reports (cross-cutting usage analytics)
+
+The dual of the platform-health rollups above: those answer "is the deployment HEALTHY",
+`ReportsService` answers "where are the money and the work GOING". One admin read,
+`GET /accounts/:accountId/reports` (`ReportsController`, `requireAdmin` like the operator
+dashboard), returns spend by model / agent kind / workspace / service / task type, run activity by
+workspace / service / task type, and a spend trend. Design:
+[`backend/docs/reports.md`](./backend/docs/reports.md).
+
+- **No new table, no migration.** Every number is a `GROUP BY` over `token_usage` and `agent_runs`,
+  joined to `blocks`/`services`/`workspaces` for the board shape and the display labels — all MAIN
+  store on both runtimes, so the telemetry database is never joined. `token_usage` carries no
+  service or task type (a metered call records the RUN, not the board), so those two spend
+  dimensions reach the run through `execution_id`.
+- **Metered and subscription cost are TWO columns and must never be summed.** Only `meteredCost` is
+  real money; `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage,
+  which the spend gate excludes. The split is a conditional `SUM` in the same pass, and anything not
+  literally `'subscription'` is priced as metered.
+- **The `''` key is a REAL slice** (a call whose run/service/task type couldn't be resolved). An
+  inner join would drop it and under-report the window while looking complete.
+- **No row cap**: every dimension has naturally bounded cardinality, so a cap would either drop
+  slices silently or make the folded totals disagree with the rows. A new dimension with unbounded
+  cardinality must revisit that, not inherit it.
+- **Activity has a NARROWER axis than spend** (`workspace | service | taskType`, no `model` /
+  `agentKind`): a run carries no single agent kind or model — those are per-step facts. The contract
+  encodes the difference rather than returning empty arrays.
+- **Totals are FOLDED from one breakdown**, never a sixth query: every spend breakdown partitions the
+  same ledger rows, so they total identically.
+- Costs are the DEPLOYMENT's base currency, not a workspace override — an account-wide report spans
+  boards that may each override it.
 
 ## Board / service / repo-linkage model
 

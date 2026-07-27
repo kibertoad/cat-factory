@@ -212,6 +212,17 @@ export {
   type PlatformObservabilityServiceDependencies,
 } from './modules/observability/PlatformObservabilityService.js'
 export {
+  ReportsService,
+  type ReportsServiceDependencies,
+} from './modules/reports/ReportsService.js'
+export {
+  REPORT_WINDOWS,
+  buildSpendTrend,
+  foldTotals,
+  toActivityRow,
+  toSpendRow,
+} from './modules/reports/reports.logic.js'
+export {
   PLATFORM_WINDOWS,
   buildTrend,
   summarizeOutcomes,

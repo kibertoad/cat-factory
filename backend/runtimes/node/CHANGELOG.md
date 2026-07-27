@@ -1,5 +1,41 @@
 # @cat-factory/node-server
 
+## 0.122.4
+
+### Patch Changes
+
+- Updated dependencies [fb71506]
+  - @cat-factory/agents@0.74.0
+  - @cat-factory/server@0.158.0
+  - @cat-factory/consensus@0.11.50
+  - @cat-factory/orchestration@0.149.2
+  - @cat-factory/provider-bedrock@0.7.299
+  - @cat-factory/provider-cloudflare@0.7.300
+
+## 0.122.3
+
+### Patch Changes
+
+- Updated dependencies [1c12289]
+  - @cat-factory/contracts@0.175.0
+  - @cat-factory/kernel@0.168.0
+  - @cat-factory/integrations@0.103.0
+  - @cat-factory/agents@0.73.2
+  - @cat-factory/consensus@0.11.49
+  - @cat-factory/eks@0.1.149
+  - @cat-factory/gates@0.7.40
+  - @cat-factory/gitlab@0.13.16
+  - @cat-factory/observability-otel@0.2.54
+  - @cat-factory/orchestration@0.149.1
+  - @cat-factory/prompt-fragments@0.14.23
+  - @cat-factory/server@0.157.3
+  - @cat-factory/spend@0.12.97
+  - @cat-factory/caching@0.10.53
+  - @cat-factory/observability-langfuse@0.7.271
+  - @cat-factory/provider-bedrock@0.7.298
+  - @cat-factory/provider-cloudflare@0.7.299
+  - @cat-factory/provider-s3@0.2.221
+
 ## 0.122.2
 
 ### Patch Changes

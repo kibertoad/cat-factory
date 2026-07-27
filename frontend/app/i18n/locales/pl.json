@@ -111,6 +111,7 @@
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
     "operatorDashboard": "Obserwowalność platformy",
+    "reports": "Raporty",
     "infrastructure": "Infrastruktura",
     "environmentSetup": "Konfiguracja środowiska"
   },
@@ -800,6 +801,7 @@
         "infraless": "Bez infrastruktury",
         "docker-compose": "Docker Compose",
         "kubernetes": "Kubernetes",
+        "cloudflare": "Podgląd Cloudflare Workers",
         "custom": "Niestandardowy"
       },
       "composePath": "Ścieżka docker-compose",
@@ -842,6 +844,7 @@
       "rendererHint": "Raw stosuje manifesty bez zmian. Kustomize najpierw buduje overlay (wymaga kontenerowego adaptera wdrożenia).",
       "customManifestId": "Niestandardowy typ manifestu",
       "customManifestIdPlaceholder": "Wybierz typ manifestu",
+      "cloudflareHint": "Nie ma tu nic do skonfigurowania: przepis dla każdego pull requesta znajduje się we własnym workflow podglądu tego repozytorium. Podłącz obsługę Cloudflare Workers w sekcji Infrastruktura, aby wybrać konto i nazewnictwo.",
       "customNoTypes": "Nie zdefiniowano jeszcze niestandardowych typów manifestów. Dodaj jeden w oknie Infrastruktura.",
       "customManifestIdHint": "Niestandardowy typ, który tworzy ta usługa, dopasowany do handlera remote-custom skonfigurowanego przez przestrzeń roboczą.",
       "customManifestPath": "Ścieżka manifestu (opcjonalnie)",
@@ -1457,6 +1460,70 @@
     },
     "live": {
       "title": "Aktywne teraz"
+    }
+  },
+  "reports": {
+    "title": "Raporty",
+    "refresh": "Odśwież",
+    "loading": "Wczytywanie raportów…",
+    "retry": "Spróbuj ponownie",
+    "error": "Nie udało się wczytać raportów.",
+    "period": "Od {from} do {to}",
+    "unattributed": "Nieprzypisane",
+    "window": {
+      "oneDay": "Ostatnie 24 godziny",
+      "sevenDays": "Ostatnie 7 dni",
+      "thirtyDays": "Ostatnie 30 dni",
+      "ninetyDays": "Ostatnie 90 dni"
+    },
+    "filter": {
+      "board": "Tablica",
+      "allBoards": "Wszystkie tablice"
+    },
+    "dimension": {
+      "workspace": "Tablica",
+      "service": "Usługa",
+      "taskType": "Typ zadania"
+    },
+    "breakdown": {
+      "title": "Podział według"
+    },
+    "totals": {
+      "title": "W tym okresie",
+      "metered": "Koszt rozliczany",
+      "subscription": "Subskrypcja",
+      "calls": "Wywołania LLM",
+      "tokens": "Tokeny",
+      "illustrative": "Koszty subskrypcji są poglądowe — te plany mają stałą cenę, nie są rozliczane za token i nigdy nie liczą się jako wydatek."
+    },
+    "trend": {
+      "title": "Koszty w czasie",
+      "empty": "W tym okresie nie zarejestrowano użycia."
+    },
+    "legend": {
+      "metered": "Rozliczane",
+      "subscription": "Subskrypcja"
+    },
+    "spend": {
+      "byModel": "Koszty według modelu",
+      "byAgentKind": "Koszty według typu agenta",
+      "heading": "Koszty",
+      "empty": "W tym okresie nie zarejestrowano użycia.",
+      "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
+      "tokens": "{input} wejścia / {output} wyjścia",
+      "subscriptionAside": "+{value} subskrypcja"
+    },
+    "activity": {
+      "heading": "Uruchomienia",
+      "empty": "W tym okresie nie było uruchomień.",
+      "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień",
+      "avg": "śr. {value}"
+    },
+    "status": {
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "running": "W trakcie",
+      "other": "Inne"
     }
   },
   "auth": {
@@ -2854,7 +2921,26 @@
         "loading": "Ładowanie ustawień infrastruktury…",
         "kubeNoun": "obsługę Kubernetes",
         "kubeOverrideNoun": "nadpisanie Kubernetes",
-        "customNoun": "tę obsługę"
+        "customNoun": "tę obsługę",
+        "cloudflareNoun": "obsługę Cloudflare"
+      },
+      "cloudflare": {
+        "intro": "Uruchamia Worker Cloudflare dla każdego pull requesta, wyzwalając workflow podglądu w docelowym repozytorium. cat-factory nigdy nie komunikuje się bezpośrednio z Cloudflare: tworzy wdrożenie, odczytuje jego status i publikuje status inactive, aby je usunąć.",
+        "label": "Nazwa wyświetlana",
+        "subdomain": "Subdomena workers.dev",
+        "subdomainHint": "Adres podglądu to https://WORKER.SUBDOMAIN.workers.dev — wpisz samą etykietę subdomeny, bez „.workers.dev”.",
+        "token": "Token API systemu kontroli wersji",
+        "tokenPlaceholder": "Wklej token o precyzyjnych uprawnieniach",
+        "tokenKeep": "Pozostaw puste, aby zachować zapisany token",
+        "tokenHint": "Wymaga uprawnienia „Deployments: read & write” do repozytorium i niczego więcej.",
+        "repo": "Repozytorium z workflow (opcjonalnie)",
+        "repoHint": "Pozostaw puste, aby użyć własnego repozytorium każdej ramki usługi. Ustaw tylko wtedy, gdy jedno repozytorium zawiera workflow podglądu dla wielu usług.",
+        "advanced": "Zaawansowane",
+        "workerTemplate": "Szablon nazwy Workera",
+        "environmentTemplate": "Szablon nazwy środowiska wdrożenia",
+        "templateHint": "To umowa z workflow podglądu: cat-factory wyprowadza z nich adres URL, a workflow tak samo nazywa swoje zasoby. Pozostaw puste, aby użyć nazewnictwa z workflow referencyjnego. Dostępne symbole: pullNumber, branch, blockId.",
+        "apiBaseUrl": "Bazowy adres URL API systemu kontroli wersji",
+        "connectedAs": "Podglądy są wdrażane pod adresem {subdomain}.workers.dev."
       }
     },
     "modelPolicy": {
@@ -4414,6 +4500,7 @@
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",
+      "cloudflare": "Cloudflare Workers",
       "custom": "Niestandardowy",
       "infraless": "Bez infrastruktury"
     },
@@ -4421,6 +4508,7 @@
       "local-docker": "Lokalny Docker",
       "local-k3s": "Lokalny k3s",
       "remote-kubernetes": "Zdalny Kubernetes",
+      "cloudflare": "Podgląd Cloudflare",
       "remote-custom": "Zdalny niestandardowy (HTTP)",
       "none": "Brak"
     }

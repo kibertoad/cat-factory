@@ -186,10 +186,16 @@ export type EnvironmentManifest = v.InferOutput<typeof environmentManifestSchema
  * The provision type a service declares — the INPUT SHAPE it produces. `infraless` means
  * the service stands up no environment (the Tester runs with no infra). A `custom` service
  * additionally pins a `manifestId` (see {@link serviceProvisioningSchema}).
+ *
+ * `cloudflare` is the per-PR Cloudflare Workers preview: unlike every other type the service
+ * declares NOTHING repo-specific here, because the recipe lives in the repo's own preview
+ * workflow rather than in a compose file or a manifest tree the platform reads. Declaring the
+ * type is the whole service side of it.
  */
 export const provisionTypeSchema = v.picklist([
   'kubernetes',
   'docker-compose',
+  'cloudflare',
   'custom',
   'infraless',
 ])
@@ -211,12 +217,14 @@ export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureRe
  * The engine a workspace/user handler uses to stand up / connect to an environment for a
  * provision type. `none` is the synthetic engine for `infraless`. `local-docker` runs a
  * compose stack locally; `local-k3s`/`remote-kubernetes` drive a kube apiserver;
+ * `cloudflare` drives a repo's preview workflow over the VCS deployments API;
  * `remote-custom` is the generic BYO HTTP management API.
  */
 export const infraEngineSchema = v.picklist([
   'local-docker',
   'local-k3s',
   'remote-kubernetes',
+  'cloudflare',
   'remote-custom',
   'none',
 ])
@@ -541,8 +549,100 @@ export const eksProvisionConfigSchema = v.object({
 })
 export type EksProvisionConfig = v.InferOutput<typeof eksProvisionConfigSchema>
 
+// ---------------------------------------------------------------------------
+// Cloudflare Workers preview environment backend.
+//
+// A native backend that stands up a per-PR Cloudflare Worker (its own D1 databases, its own
+// SPA preview) by driving the TARGET REPOSITORY'S OWN preview workflow over the VCS
+// Deployments API. The platform never talks to Cloudflare: it creates a deployment, reads
+// that deployment's statuses for readiness, and posts an `inactive` status to tear down.
+//
+// Why the deployments API and not the Cloudflare API. Standing a Worker up means BUILDING it
+// — installing a pnpm workspace, running migrations, uploading a bundle. That needs a CI
+// runner, which no facade has (and the Cloudflare facade has neither a filesystem nor a
+// container). The repository already has a runner; the deployments API is the smallest
+// possible control plane over it, and it is plain outbound HTTPS, so this backend works
+// identically on every facade. See `deploy/preview/README.md` for the reference workflow.
+// ---------------------------------------------------------------------------
+
+/** The secret-bundle key the Cloudflare env backend reads its VCS API token from. */
+export const CLOUDFLARE_ENV_TOKEN_SECRET_KEY = 'githubToken'
+
+/** Default templates, exported so the provider, the UI hints and the docs cannot drift apart. */
+export const CLOUDFLARE_DEFAULT_WORKER_NAME_TEMPLATE = 'cat-factory-pr-{{pullNumber}}'
+export const CLOUDFLARE_DEFAULT_ENVIRONMENT_NAME_TEMPLATE = 'pr-{{pullNumber}}'
+
+/**
+ * A `{{pullNumber}}`/`{{branch}}`/`{{blockId}}`-templated resource name. Constrained to the
+ * characters a Worker name and a deployment environment name both accept ONCE RENDERED, so a
+ * bad template fails at the write boundary rather than producing an unreachable URL.
+ */
+const cloudflareNameTemplate = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(120),
+  v.regex(
+    /^[a-z0-9{}-]+$/,
+    'may contain only lowercase letters, digits, hyphens and {{placeholders}}',
+  ),
+)
+
+/**
+ * The Cloudflare preview engine connection (the "how"). Everything here is non-secret; the
+ * VCS API token rides the encrypted secret bundle under
+ * {@link CLOUDFLARE_ENV_TOKEN_SECRET_KEY}.
+ *
+ * The two name templates are the CONTRACT WITH THE WORKFLOW, which is why they are config and
+ * not constants: the platform derives the environment name it deploys under and the Worker
+ * URL it hands the tester, and the workflow names its resources from the same values. Change
+ * one and you must change the other. They default to the reference workflow's shape, so a
+ * deployment that copied `deploy/preview` unmodified sets neither.
+ */
+export const cloudflareEnvironmentConfigSchema = v.object({
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /**
+   * The account's `*.workers.dev` subdomain — the preview URL is
+   * `https://<worker>.<subdomain>.workers.dev`. The platform can DERIVE that before anything
+   * is built, which is what lets a tester be handed a URL without waiting on a deploy that
+   * takes minutes.
+   */
+  workersSubdomain: v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(1),
+    v.maxLength(63),
+    v.regex(
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
+      'must be a bare workers.dev subdomain label, e.g. "my-account"',
+    ),
+  ),
+  /** VCS API root. Absent ⇒ `https://api.github.com`. Set it for GitHub Enterprise Server. */
+  apiBaseUrl: v.optional(urlString),
+  /**
+   * `owner/repo` carrying the preview workflow. Absent ⇒ THE BLOCK'S OWN REPO, resolved per
+   * provision — which is the point of a built-in backend over a pasted manifest: one handler
+   * serves every repository in the workspace instead of being pinned to one.
+   */
+  repo: v.optional(
+    v.pipe(v.string(), v.trim(), v.regex(/^[^/\s]+\/[^/\s]+$/, 'must be "owner/repo"')),
+  ),
+  /** Worker name template; the URL is derived from it. Absent ⇒ `cat-factory-pr-{{pullNumber}}`. */
+  workerNameTemplate: v.optional(cloudflareNameTemplate),
+  /** Deployment environment name template. Absent ⇒ `pr-{{pullNumber}}`. */
+  environmentNameTemplate: v.optional(cloudflareNameTemplate),
+  /** Fallback TTL (ms) after which the env is swept + torn down. */
+  defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
+})
+export type CloudflareEnvironmentConfig = v.InferOutput<typeof cloudflareEnvironmentConfigSchema>
+
 /** Built-in environment backend kinds the contract knows by name. */
-export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes', 'eks'] as const
+export const RESERVED_ENVIRONMENT_BACKEND_KINDS = [
+  'manifest',
+  'kubernetes',
+  'eks',
+  'cloudflare',
+] as const
 
 /**
  * The `kind` slug of a CUSTOM (third-party, programmatically-registered) environment
@@ -570,6 +670,7 @@ export const environmentBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesProvisionConfigSchema }),
   v.object({ kind: v.literal('eks'), eks: eksProvisionConfigSchema }),
+  v.object({ kind: v.literal('cloudflare'), cloudflare: cloudflareEnvironmentConfigSchema }),
   v.object({ kind: customEnvironmentBackendKindSchema, manifest: environmentManifestSchema }),
 ])
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>
@@ -686,6 +787,7 @@ export const infraHandlerConfigSchema = v.variant('engine', [
   v.object({ engine: v.literal('local-docker'), manifest: environmentManifestSchema }),
   v.object({ engine: v.literal('local-k3s'), kubernetes: kubernetesEngineConfigSchema }),
   v.object({ engine: v.literal('remote-kubernetes'), kubernetes: kubernetesEngineConfigSchema }),
+  v.object({ engine: v.literal('cloudflare'), cloudflare: cloudflareEnvironmentConfigSchema }),
   v.object({
     engine: v.literal('remote-custom'),
     manifest: environmentManifestSchema,
