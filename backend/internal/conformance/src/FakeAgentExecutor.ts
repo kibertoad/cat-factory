@@ -274,6 +274,13 @@ export interface FakeAgentOptions {
    * configured no checks.
    */
   validationReport?: AgentRunResult['validationReport']
+  /**
+   * The BUGFIX REPRODUCTION PROOF every coding result carries (the deterministic analogue of the
+   * harness running the declared reproduction command against the pre-fix and final trees). Set
+   * it to assert the engine records the report on the step; omitted ⇒ no report, exactly like a
+   * run that carried no declaration.
+   */
+  reproductionReport?: AgentRunResult['reproductionReport']
 }
 
 /**
@@ -425,9 +432,17 @@ export class FakeAgentExecutor implements AgentExecutor {
     const withValidation = this.options.validationReport
       ? { ...result, validationReport: this.options.validationReport }
       : result
+    // Only a dispatch that actually RESOLVED a reproduction spec gets a proof back, mirroring the
+    // harness: it runs the phase off the job-body field, so a run carrying no declaration comes
+    // back with nothing. Without this gate the fake would report a proof on every step and the
+    // "unconfigured means unchanged" assertion below would pass vacuously.
+    const withReproduction =
+      this.options.reproductionReport && context.reproduction
+        ? { ...withValidation, reproductionReport: this.options.reproductionReport }
+        : withValidation
     return this.options.effortReport
-      ? { ...withValidation, effortReport: this.options.effortReport }
-      : withValidation
+      ? { ...withReproduction, effortReport: this.options.effortReport }
+      : withReproduction
   }
 
   private async produceResult(context: AgentRunContext): Promise<AgentRunResult> {

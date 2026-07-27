@@ -53,6 +53,27 @@ export const reproTestOutcome = defineStructuredOutput(
     testPaths: v.fallback(v.array(v.fallback(v.string(), '')), []),
     /** Human-readable notes: what was reproduced, or — for `not_reproducible` — WHY (needs prod data, timing-dependent, …). */
     notes: v.fallback(v.optional(v.string()), undefined),
+    /**
+     * The command that runs EXACTLY the declared tests, as `sh -c` in the checkout. This is what
+     * the harness runs against the pre-fix tree and the final tree to PROVE the reproduction —
+     * the `outcome` field above has always been the model's own claim, and this is the field that
+     * makes it checkable. Empty ⇒ no proof can be attempted (the engine records `absent`).
+     * See `docs/initiatives/bugfix-reproduction-proof.md`.
+     */
+    command: v.fallback(v.optional(v.string()), undefined),
+    /**
+     * Optional command that makes a FRESH checkout of this repo runnable (a dependency install).
+     * The proof runs both trees in fresh worktrees, so without it a repo needing an install fails
+     * BOTH phases — which is reported as `inconclusive`, never as a false reproduction.
+     */
+    setupCommand: v.fallback(v.optional(v.string()), undefined),
+    /**
+     * For `not_reproducible` ONLY: what was verified INSTEAD of a failing test (a manual trace, a
+     * log correlation, a review of the affected path). This is what turns "could not reproduce"
+     * from an empty section into a reviewable declaration — the whole point of requiring an
+     * infeasibility claim to be structural.
+     */
+    alternativeVerification: v.fallback(v.optional(v.string()), undefined),
   }),
 )
 
@@ -74,11 +95,23 @@ const REPRO_TEST_SYSTEM_PROMPT =
   '{\n' +
   '  "outcome": "reproduced" | "partial" | "not_reproducible",\n' +
   '  "testPaths": ["paths of the test file(s) you added or changed"],\n' +
-  '  "notes": "what you reproduced, or — for not_reproducible — WHY you could not"\n' +
+  '  "notes": "what you reproduced, or — for not_reproducible — WHY you could not",\n' +
+  '  "command": "the command that runs EXACTLY those tests",\n' +
+  '  "setupCommand": "the command that makes a fresh checkout runnable, or omit if none",\n' +
+  '  "alternativeVerification": "for not_reproducible only: what you verified instead"\n' +
   '}\n' +
   'Use "reproduced" when a test fails for the reported reason, "partial" when a test captures ' +
   'only part of the reported behaviour, and "not_reproducible" when you produced no failing ' +
-  'test (leave "testPaths" empty and explain why in "notes").\n\n' +
+  'test (leave "testPaths" empty and explain why in "notes").\n' +
+  'The "command" is important and is not a formality: it is run automatically against the code ' +
+  'BEFORE the fix and again AFTER it, and only a command that fails before and passes after ' +
+  'counts as proof that the bug was real and is gone. Give the NARROWEST command that runs your ' +
+  'reproduction test(s) — a whole-suite command makes the proof slow and lets unrelated ' +
+  'failures muddy it. If the repository needs an install step before tests can run in a clean ' +
+  'checkout, give it as "setupCommand"; omit the field when none is needed.\n' +
+  'If you return "not_reproducible", you MUST also fill "alternativeVerification" with what you ' +
+  'checked instead (a manual trace, a log correlation, a review of the affected code path) so ' +
+  'the pull request records a real statement rather than a blank.\n\n' +
   FINAL_ANSWER_IN_REPLY
 
 /**

@@ -157,6 +157,31 @@ export interface AgentRunContext {
     }[]
   }
   /**
+   * The BUGFIX REPRODUCTION the harness must PROVE for this run: the command that runs the
+   * declared reproduction test(s), those test paths, and an optional setup command that makes a
+   * fresh worktree runnable. Resolved by the engine from the run's prior `repro-test` step
+   * declaration (gated on the task's `coder.reproductionProof` tri-state) and forwarded by the
+   * container executor onto the coding job body — but ONLY for a dispatch that would open a PR,
+   * the same rule as {@link validationChecks}, because the proof is published on that PR.
+   *
+   * The harness runs the command against the PRE-FIX tree and the FINAL tree in symmetric fresh
+   * worktrees and reports both exit codes: only red-then-green is proof. Absent when the run is
+   * not opted in or carries no declaration ⇒ the harness's existing path, unchanged. See
+   * `docs/initiatives/bugfix-reproduction-proof.md`.
+   */
+  reproduction?: {
+    command: string
+    testPaths: string[]
+    /**
+     * How many declared test paths the engine dropped while resolving (over the cap, absolute,
+     * traversing, over-long). Carried so the proof can state that the pre-fix tree was rebuilt
+     * from an incomplete reproduction rather than silently reporting a verdict about it.
+     */
+    omittedTestPaths?: number
+    setupCommand?: string
+    maxAttempts: number
+  }
+  /**
    * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
    * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
    * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)
@@ -602,6 +627,16 @@ export interface AgentRunResult {
    */
   validationReport?: unknown
   /**
+   * A coding step's BUGFIX REPRODUCTION PROOF: the declared reproduction command run against the
+   * pre-fix tree and the final tree, with both exit codes and bounded/secret-scrubbed output —
+   * or the agent's structural declaration that reproduction was infeasible, with its reason and
+   * stated alternative verification. Produced by the executor-harness running the command, NOT
+   * model output. The engine records it on the step (`PipelineStep.reproduction`). Carried as
+   * `unknown` so the port stays free of the contracts schema; the engine parses it before use.
+   * Absent when the run carried no declaration or was not opted in.
+   */
+  reproductionReport?: unknown
+  /**
    * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
    * local infra): whether the dependencies came up and the captured (redacted, bounded)
    * `docker compose up` logs. The engine persists it on the Tester step so the test window
@@ -800,6 +835,13 @@ export type AgentJobUpdate =
        * job whose service configured no checks / on an older harness image.
        */
       validationReport?: unknown
+      /**
+       * The reproduction proof as it stands mid-run (forwarded from
+       * {@link RunnerJobView.reproductionReport}), so the engine can surface "verifying the
+       * reproduction" / a failed verification on the step WHILE the loop is still running.
+       * Absent for a job carrying no declaration / on an older harness image.
+       */
+      reproductionReport?: unknown
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,
@@ -833,6 +875,13 @@ export type AgentJobUpdate =
        * failure detail. Absent for every other failure and for a job with no checks configured.
        */
       validationReport?: unknown
+      /**
+       * The reproduction proof of a job that failed for an UNRELATED reason after the proof ran
+       * (a red pre-PR validation check, an eviction). A failed verification never fails a job by
+       * itself (see the initiative's D6), so this is evidence carried alongside someone else's
+       * failure — recorded on the step so the work is not lost with the run.
+       */
+      reproductionReport?: unknown
     }
 
 /**

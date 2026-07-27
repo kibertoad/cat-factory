@@ -607,6 +607,21 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     an opt-in **Langfuse trace sink**: a fetch-based `LlmTraceSink` that streams LLM
     generations + container tool spans to Langfuse, running unchanged on both the Worker
     (workerd) and Node facades.
+  - `backend/packages/observability-otel` — `@cat-factory/observability-otel`, the opt-in
+    **OpenTelemetry (OTLP) publisher**: the same kernel `LlmTraceSink` port as the Langfuse
+    sink, shipped through TWO transports behind ONE behaviour — a hand-rolled exporter
+    speaking OTLP/HTTP JSON over `fetch` (`createOtelSink`, the `.` entry, which never imports
+    `@opentelemetry/*` so the SDK stays out of the workerd bundle) and the official-SDK
+    exporter (`createNodeOtelSink`, the `/node` entry) — kept from drifting by a shared
+    `src/mapping.ts` plus a `conformity.test.ts` that feeds the same events through both.
+    Also exports `createPlatformMetricsOtelExporter`, the deployment-level gauge push. See
+    "Telemetry & agent-context observability" below.
+  - `backend/packages/caching` — `@cat-factory/caching`, the app-level **caching seam**
+    (`createAppCaches`, built on `layered-loader`) behind the kernel `AppCaches` port, with
+    optional Redis-notified cross-replica invalidation. See "Caching" above.
+  - `backend/packages/eks` — `@cat-factory/eks`, the opt-in **AWS EKS** runner +
+    environment backends: reuses the native Kubernetes transport/provider verbatim, adding
+    only EKS IAM (SigV4 STS `GetCallerIdentity`) apiserver-token minting.
   - `backend/packages/sandbox` — `@cat-factory/sandbox`, the **parallel prompt/model
     testing surface** (versioned prompt candidates, experiment matrices, judge + objective
     grading), deliberately isolated from the core product so it can be extracted;
@@ -1715,14 +1730,18 @@ AgentRunController.ts`) resolves the kind via `getRef`, then calls
     board card, the inspector, and `TaskExecution.vue`. A failed execution now leaves
     its block `blocked` (NOT the old success-looking `pr_ready`).
 
-## Telemetry & agent-context observability (isolated store)
+## Telemetry & agent-context observability (isolated store + external sinks)
 
-Two observability sinks capture what runs do, and both live in a **dedicated telemetry
-store** (separate from the transactional domain — append-heavy/high-volume/short-retention):
-a separate **required** `TELEMETRY_DB` D1 database on Cloudflare and a `telemetry` Postgres
-**schema** (`pgSchema('telemetry')`, same connection) on Node. Both tables are pruned to the
-same window (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention
-sweep.
+**Three** observability sinks capture what runs do, and all three live in a **dedicated
+telemetry store** (separate from the transactional domain —
+append-heavy/high-volume/short-retention): a separate **required** `TELEMETRY_DB` D1 database
+on Cloudflare and a `telemetry` Postgres **schema** (`pgSchema('telemetry')`, same connection)
+on Node. All three tables are pruned to the same window
+(`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention sweep.
+
+That store is the deployment's OWN, short-retention record. Streaming the same activity to an
+operator's **external** backend is a separate, purely additive seam that writes to none of
+these tables — see "External trace destinations" at the end of this section.
 
 - **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing).
   Recorded by the LLM proxy via `LlmObservabilityService` for the proxy-metered Pi harness.
@@ -1780,15 +1799,69 @@ NOTHING`, NOT SQLite's `INSERT OR IGNORE`, which also swallows a NOT NULL/CHECK 
   task description, a decision note, or an injected secret-shaped file never lands verbatim
   in the telemetry store. `redactSecrets` also catches PEM-armored private keys by their
   header, so a pasted key is scrubbed regardless of the enclosing filename.
-- **Gating**: storing requires BOTH the deployment prompt-recording switch
-  (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext` setting (on by default; a
-  toggle in `WorkspaceSettingsPanel.vue`).
-- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/agent-context` →
-  `stores/observability.ts` → the "Provided context" view in `ObservabilityPanel.vue`
-  (alongside the existing "Model activity" call list).
-- **Parity**: the D1 repo (`D1AgentContextSnapshotRepository`) ⇄ Drizzle repo, asserted by
-  the cross-runtime `defineAgentContextSuite`. The Cloudflare facade fails fast at container
-  build if `TELEMETRY_DB` is unbound.
+
+- **`agent_search_queries`** — one row per web search a container agent actually PERFORMED:
+  the query text, the provider that served it, and the result count. The sibling of the
+  snapshot above — that keeps the context the agent was _provided_, this keeps what it went
+  and _looked up_ (which reaches no other sink: the search rides the container web-search
+  proxy, not the LLM proxy). Recorded best-effort by `WebSearchProxyController` through
+  `SearchQueryObservabilityService` (orchestration, the `AgentSearchQueryRecorder` port),
+  which clamps the stored query to `MAX_SEARCH_QUERY_CHARS` (8 KiB) so a pathological query
+  can't make the whole row fail to record.
+
+- **Gating**: storing the snapshot AND the search queries requires BOTH the deployment
+  prompt-recording switch (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext`
+  setting (on by default; a toggle in `WorkspaceSettingsPanel.vue`) — the operator opt-out
+  wins over the per-workspace toggle. Each service is wired only when its repository is
+  present, so an unconfigured facade (and the tests) collects nothing.
+- **Surfacing**: `GET /workspaces/:ws/executions/:executionId/{agent-context,search-queries}`
+  → `stores/observability.ts` → the "Provided context" and "Web search" views in
+  `ObservabilityPanel.vue` (alongside the existing "Model activity" call list). A run-scoped
+  endpoint returns an EMPTY list rather than erroring when its sink isn't wired.
+- **Parity**: the D1 repos (`D1AgentContextSnapshotRepository` /
+  `D1AgentSearchQueryRepository`) ⇄ the Drizzle repos, asserted by the cross-runtime
+  `defineAgentContextSuite`. The Cloudflare facade fails fast at container build if
+  `TELEMETRY_DB` is unbound.
+
+### External trace destinations (the `LlmTraceSink` seam) — additive, opt-in, never load-bearing
+
+Everything above is the deployment's own store. **Exporting the same per-call activity to an
+operator's observability backend goes through ONE kernel port — `LlmTraceSink`
+(`ports/llm-trace-sink.ts`) — and never through a second recording path.** Two packages
+implement it (`@cat-factory/observability-langfuse`, `@cat-factory/observability-otel`), and
+`composeTraceSinks([…])` collapses them into the single `CoreDependencies.llmTraceSink` slot:
+none ⇒ `undefined`, one ⇒ that sink, both ⇒ a fan-out. So **adding a destination is a new
+`LlmTraceSink` implementation composed into that array, never a new call site** in the
+observability service.
+
+- **Each facade builds the slot in one place** — `buildTraceSink(config)` (Worker
+  `infrastructure/container-trace-sinks.ts` ⇄ Node `container-executor-deps.ts` /
+  `modelProvider.ts`) — and every sink is opt-in on a full config (`LANGFUSE_ENABLED` + both
+  keys; `OTEL_ENABLED` + `OTEL_EXPORTER_OTLP_ENDPOINT`). Half-configured ⇒ not built, like
+  the other opt-in integrations.
+- **The OTel package is the one place the runtimes deliberately differ in TRANSPORT, not in
+  behaviour**: workerd can't run the official `@opentelemetry/*` SDK, so the Worker gets the
+  `fetch` OTLP exporter (`createOtelSink`) and Node the SDK one (`createNodeOtelSink`). They
+  share `src/mapping.ts` and are pinned equal by `conformity.test.ts` — so a change to span
+  names, attributes, trace-id grouping or metric names goes in the MAPPING layer, or the
+  conformity test fails (which is exactly its job).
+- **A sink never throws into the caller** and honours the same `LLM_RECORD_PROMPTS` privacy
+  switch as the local store (usage/timing/attributes still export; prompt + response bodies
+  don't). Observability must never break agent work — so a wired sink can't fail a run.
+- **Deployment-level (platform-operator) metrics** are the dual of the per-run sink: a
+  runtime-neutral `sweepPlatformMetrics` driver (orchestration
+  `modules/observability/platformMetricsSweep.ts`) enumerates accounts from the workspace
+  projection and pushes each account's `PlatformObservabilityService.summarize` projection to
+  `createPlatformMetricsOtelExporter` as OTLP **gauges**. Runtime-symmetric per the usual rule
+  — the Worker `scheduled` cron ⇄ a Node interval sweeper (`runtimes/node/src/platformMetrics.ts`)
+  — and opt-in ON TOP of the base exporter (`OTEL_PLATFORM_METRICS`). Best-effort per account:
+  one account's failed summarize/export is logged and skipped, never aborting the sweep.
+  The in-app half of the same projection is `GET /accounts/:accountId/observability/platform`
+  (admin-gated, 503 when the rollup isn't wired) → `stores/platformObservability.ts` →
+  `OperatorDashboardPanel.vue`, plus the `platform_health` threshold alert
+  (`platform-health.logic.ts` → a `NotificationService` card, state-change deduplicated).
+  Deeper detail + the remaining slices live in
+  [`docs/initiatives/platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model
 

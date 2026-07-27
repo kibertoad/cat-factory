@@ -67,6 +67,7 @@ export { type AgentTuning, type AgentGuardTuning, agentTuningFor } from './agent
 export {
   PLAYWRIGHT_E2E_TARGET_CONFIG_ID,
   CODER_FORK_DECISION_CONFIG_ID,
+  CODER_REPRODUCTION_PROOF_CONFIG_ID,
   configContributionsFor,
   configContributionCatalog,
 } from './agents/kinds/configs.js'
