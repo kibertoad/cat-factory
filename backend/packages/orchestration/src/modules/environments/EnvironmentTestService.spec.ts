@@ -124,6 +124,8 @@ function makeService(opts: {
   released?: RunnerJobRef[]
   repoContext?: RunRepoContext | null
   canProvision?: { ok: boolean; reason?: string }
+  /** The provider connection pre-flight result (`null` ⇒ nothing to probe). Default: ok. */
+  probe?: { ok: boolean; message?: string } | null
   /** Full replacement teardown port (e.g. one that throws NotFound on replay). */
   teardownImpl?: EnvironmentTestTeardown
 }) {
@@ -134,6 +136,7 @@ function makeService(opts: {
   let pollIdx = 0
   const provisioning: EnvironmentTestProvisioning = {
     canProvision: async () => opts.canProvision ?? { ok: true },
+    testProvisioning: async () => (opts.probe === undefined ? { ok: true } : opts.probe),
     startProvision: async (args) => {
       opts.onStartProvision?.(args)
       if (opts.dispatchThrows) {
@@ -268,6 +271,29 @@ describe('EnvironmentTestService', () => {
     const { service, runRepo } = makeService({ repoContext: null })
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
     expect(runRepo.rows.size).toBe(0)
+  })
+
+  it('pre-flights the provider connection and rejects a bad one BEFORE any branch/record', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probe: { ok: false, message: "Kargo project 'CAT_FACTORY' was not found." },
+    })
+    const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const conflict = err as ConflictError
+    expect(conflict.details?.reason).toBe('env_test_connection_failed')
+    expect(conflict.message).toContain("project 'CAT_FACTORY' was not found")
+    // A pre-dispatch gate: no run record, and no throwaway branch was created.
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+  })
+
+  it('provisions normally when the connection pre-flight passes (probe ok)', async () => {
+    const { service, runRepo } = makeService({ probe: { ok: true } })
+    const run = await service.startTest('ws', 'frame-1')
+    expect(run.status).toBe('running')
+    expect(runRepo.rows.size).toBe(1)
   })
 
   it('runs the full happy path on the synchronous (completed) provision path', async () => {
