@@ -705,7 +705,7 @@ describe('requirement regressions', () => {
     expect(section).toContain('❌ not met')
   })
 
-  it('keeps every regression in the table even when the cap drops most of the spec', () => {
+  it('keeps the regression row in the table even when the cap drops most of the spec', () => {
     // The generic cap keeps a PREFIX, and rows are emitted in spec order — so the one row a
     // reviewer must not miss would be dropped purely because of where its feature sorts.
     const total = hostMarkdown.MAX_LIST_ITEMS + 20
@@ -727,8 +727,59 @@ describe('requirement regressions', () => {
     expect(ids).toEqual([...ids].sort((a, b) => Number(a.slice(9)) - Number(b.slice(9))))
     // A capped list is only safe if it says it was capped — AND says it is not a prefix.
     expect(report.truncations.join('\n')).toContain(
-      `requirements.entries: showing ${hostMarkdown.MAX_LIST_ITEMS} of ${total} (every regression kept)`,
+      `requirements.entries: showing ${hostMarkdown.MAX_LIST_ITEMS} of ${total} ` +
+        `(not the first ${hostMarkdown.MAX_LIST_ITEMS}: every regression kept)`,
     )
     expect(() => parsePrVerificationReport(report)).not.toThrow()
+  })
+
+  it('says how many regressions fit when there are more of them than the row budget', () => {
+    // Priority is not a guarantee: a broken build can fail every established requirement at
+    // once, and then the table physically cannot hold them all. A note claiming "every
+    // regression kept" would be the same false reassurance as no note at all.
+    const total = hostMarkdown.MAX_LIST_ITEMS + 20
+    const failing = hostMarkdown.MAX_LIST_ITEMS + 10
+    const report = composePrVerificationReport(
+      instance([
+        testerStep(
+          Array.from({ length: failing }, (_, i) => ({
+            requirementId: `req-bulk-${i}`,
+            status: 'not_met',
+            detail: 'broke it',
+          })),
+        ),
+      ]),
+      { ...INPUTS, spec: bulkSpec(total) },
+    )
+
+    expect(report.requirements.regressions).toBe(failing)
+    expect(report.requirements.entries).toHaveLength(hostMarkdown.MAX_LIST_ITEMS)
+    expect(report.truncations.join('\n')).toContain(
+      `(not the first ${hostMarkdown.MAX_LIST_ITEMS}: only ${hostMarkdown.MAX_LIST_ITEMS} of ` +
+        `${failing} regressions fit)`,
+    )
+    // The call-out counts the whole spec, so it has to admit the table holds fewer than that —
+    // otherwise a reader counts the rows and concludes the difference was never broken.
+    const section = renderPrVerificationReport(report)
+    expect(section).toContain(`**🔴 ${failing} regressions**`)
+    expect(section).toContain(`table below shows ${hostMarkdown.MAX_LIST_ITEMS} of them`)
+  })
+
+  it('leaves the truncation note plain when a capped spec has no regressions at all', () => {
+    // With nothing to prioritise the selection IS the standard prefix, so an extra clause about
+    // regressions would describe a reordering that did not happen.
+    const total = hostMarkdown.MAX_LIST_ITEMS + 20
+    const report = composePrVerificationReport(
+      instance([testerStep([{ requirementId: 'req-bulk-0', status: 'met', detail: 'ok' }])]),
+      { ...INPUTS, spec: bulkSpec(total) },
+    )
+
+    expect(report.requirements.regressions).toBe(0)
+    expect(report.truncations).toContain(
+      `requirements.entries: showing ${hostMarkdown.MAX_LIST_ITEMS} of ${total}`,
+    )
+    expect(report.requirements.entries.map((e) => e.id)).toEqual(
+      Array.from({ length: hostMarkdown.MAX_LIST_ITEMS }, (_, i) => `req-bulk-${i}`),
+    )
   })
 })

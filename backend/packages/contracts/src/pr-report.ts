@@ -323,8 +323,10 @@ export const prReportRequirementsSchema = v.object({
    * exactly the collapse `not_covered` was kept separate from `not_met` to prevent, one axis
    * over.
    *
-   * Counted over the whole spec before any cap, and every regression row is guaranteed a place
-   * in {@link entries} regardless of where the cap falls.
+   * Counted over the whole spec before any cap, so this is the true total even when
+   * {@link entries} is capped. Regression rows are selected into `entries` AHEAD of every other
+   * row — priority, not a guarantee: a spec with more regressions than the row budget still
+   * loses some, and the `truncations` log says how many fit.
    */
   regressions: v.number(),
   /** Total requirements in the spec (`met + notMet + notCovered`). */
@@ -347,7 +349,9 @@ export const prVerificationReportSchema = v.object({
   observability: prReportObservabilitySchema,
   /**
    * What the report had to leave out to stay inside a pull-request body, one human-readable
-   * note per capped list (`"tests.outcomes: showing 50 of 118"`). Empty on any ordinary run.
+   * note per capped list (`"tests.outcomes: showing 50 of 118"`). A list whose cap is not a
+   * plain prefix adds a parenthetical saying so, since a reader who assumes the first N would
+   * conclude the tail was never ruled on. Empty on any ordinary run.
    *
    * A capped list is only safe if it SAYS it was capped — "50 failing checks" and "50 of 118
    * failing checks" call for very different reviewer reactions, and the whole point of this

@@ -368,8 +368,9 @@ What landed, all in the report's existing seams:
   before any cap; `PR_VERIFICATION_REPORT_VERSION` → 3.
 - **A leading call-out** on the rendered section when it is non-zero, plus a distinct
   `🔴 **regression**` row marker so the call-out points at identifiable rows, and a legend line.
-- **A regression-preserving cap** (`selectRequirementEntries`), replacing the generic prefix
-  `cap()` for this one list.
+- **A severity-first cap** (`selectRequirementEntries`), replacing the generic prefix `cap()` for
+  this one list: regressions are selected ahead of every other row, and the note says how many of
+  them fit.
 
 Gotchas worth carrying:
 
@@ -384,9 +385,15 @@ Gotchas worth carrying:
   first, the rest fill the remaining budget in spec order, and the selection is then RESTORED to
   spec order: severity decides what survives, the taxonomy still decides how it reads.
 - **A non-prefix cap has to SAY it is not a prefix.** The truncation note carries
-  `(every regression kept)`, because a reader who assumes the standard prefix would conclude the
-  requirements after the cut-off were never ruled on — the exact false reading `truncations` exists
-  to prevent.
+  `(not the first N: every regression kept)`, because a reader who assumes the standard prefix
+  would conclude the requirements after the cut-off were never ruled on — the exact false reading
+  `truncations` exists to prevent. With no regressions to prioritise the selection IS the plain
+  prefix, so the clause is omitted rather than describing a reordering that did not happen.
+- **Priority is not a guarantee, and the note must not claim it is.** A broken build can fail
+  every established requirement at once, so `regressions` can exceed the row budget; the note then
+  reads `only N of M regressions fit` and the call-out adds that the table shows fewer than it
+  counts. The first draft asserted `(every regression kept)` unconditionally — a note that
+  overstates what survived is the same false reassurance as no note at all, one level in.
 - **Evidence, not policy.** The report counts and marks a regression; it does not gate the merge,
   fail the run, or bounce a step. The report is the engine's evidence surface (`CLAUDE.md` → PR
   verification report) and gating belongs to the gate/judge registries, which have their own

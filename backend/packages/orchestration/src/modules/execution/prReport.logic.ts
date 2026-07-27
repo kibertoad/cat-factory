@@ -55,6 +55,15 @@ function scrubbed(value: string): string {
 }
 
 /**
+ * The ONE shape a truncation note takes, so the report's own log never speaks two dialects: a
+ * reader who learns to read one note can read all of them. `detail` is for a list whose cap is
+ * not a plain prefix — see {@link selectRequirementEntries}.
+ */
+function truncationNote(label: string, kept: number, total: number, detail?: string): string {
+  return `${label}: showing ${kept} of ${total}${detail ? ` (${detail})` : ''}`
+}
+
+/**
  * Cap a list, recording what was dropped in the report's own `truncations` log.
  *
  * A silently shortened list is the same failure this feature exists to remove: 50 of 112
@@ -62,7 +71,7 @@ function scrubbed(value: string): string {
  */
 function cap<T>(items: readonly T[], label: string, truncations: string[]): T[] {
   const { items: kept, dropped } = hostMarkdown.capList(items)
-  if (dropped > 0) truncations.push(`${label}: showing ${kept.length} of ${items.length}`)
+  if (dropped > 0) truncations.push(truncationNote(label, kept.length, items.length))
   return kept
 }
 
@@ -344,7 +353,7 @@ function isRegression(row: PrReportRequirement): boolean {
 }
 
 /**
- * Cap the requirement table WITHOUT ever dropping a regression.
+ * Cap the requirement table by SEVERITY FIRST, so a regression is the last thing dropped.
  *
  * The generic {@link cap} keeps a PREFIX, and these rows are emitted in spec order (module →
  * group → requirement). So on a large spec the single row a reviewer must not miss is dropped
@@ -353,8 +362,10 @@ function isRegression(row: PrReportRequirement): boolean {
  * remaining budget is filled in spec order, and the selection is restored to spec order so the
  * table still reads by feature rather than by severity.
  *
- * The truncation note SAYS the kept rows are not simply the first N: a reader who assumes a
- * prefix would wrongly conclude the tail was never ruled on.
+ * Priority is not a GUARANTEE: a spec with more regressions than the row budget still loses
+ * some, and the note must not claim otherwise. It reports how many of them actually fit, since
+ * a note that overstates what survived is the same false reassurance as no note at all. When
+ * there are no regressions the selection IS the plain prefix, so it carries no extra clause.
  */
 function selectRequirementEntries(
   rows: readonly PrReportRequirement[],
@@ -365,15 +376,22 @@ function selectRequirementEntries(
 
   const budget = items.length
   const kept = new Set<number>()
-  rows.forEach((row, i) => {
-    if (isRegression(row) && kept.size < budget) kept.add(i)
-  })
-  rows.forEach((_, i) => {
-    if (!kept.has(i) && kept.size < budget) kept.add(i)
-  })
-  truncations.push(
-    `requirements.entries: showing ${kept.size} of ${rows.length} (every regression kept)`,
-  )
+  for (const [i, row] of rows.entries()) {
+    if (kept.size >= budget) break
+    if (isRegression(row)) kept.add(i)
+  }
+  const keptRegressions = kept.size
+  const totalRegressions = rows.filter(isRegression).length
+  for (let i = 0; i < rows.length && kept.size < budget; i += 1) {
+    if (!kept.has(i)) kept.add(i)
+  }
+  const detail =
+    totalRegressions === 0
+      ? undefined
+      : keptRegressions === totalRegressions
+        ? `not the first ${budget}: every regression kept`
+        : `not the first ${budget}: only ${keptRegressions} of ${totalRegressions} regressions fit`
+  truncations.push(truncationNote('requirements.entries', kept.size, rows.length, detail))
   return rows.filter((_, i) => kept.has(i))
 }
 
@@ -668,11 +686,19 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
   // The regression count LEADS when there is one. It is a subset of `not met`, so it is stated
   // as its own line rather than as a fourth tally that would not add up to the total.
   if (reqs.regressions > 0) {
+    // The count is over the WHOLE spec while the table is capped, so on a spec with more
+    // regressions than the row budget the call-out would send a reader to a table that cannot
+    // show all of them. It says so rather than letting the reader count the rows and conclude
+    // the difference was never broken.
+    const shown = reqs.entries.filter(isRegression).length
     out.push(
       `**🔴 ${reqs.regressions} regression${reqs.regressions === 1 ? '' : 's'}** — ` +
         `${reqs.regressions === 1 ? 'a requirement' : 'requirements'} this service was ` +
         `OBSERVED to honour, now failing. Established behaviour breaking is not in-progress ` +
-        `work; check ${reqs.regressions === 1 ? 'it' : 'them'} before merging.`,
+        `work; check ${reqs.regressions === 1 ? 'it' : 'them'} before merging.` +
+        (shown < reqs.regressions
+          ? ` The table below shows ${shown} of them — the rest were cut for length.`
+          : ''),
       '',
     )
   }

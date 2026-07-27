@@ -22,7 +22,10 @@ so a reviewer had to cross-reference two columns of a table that may be capped.
   rows.
 - The requirement table's cap is no longer a plain prefix. Rows are emitted in spec order, so a
   prefix cap could drop the one row a reviewer must not miss purely by where its feature sorts.
-  Every regression is now kept, the remaining budget is filled in spec order, and the selection is
-  restored to spec order to render; the truncation note says the kept rows are not a prefix.
+  Regressions are now selected ahead of every other row, the remaining budget is filled in spec
+  order, and the selection is restored to spec order to render; the truncation note says the kept
+  rows are not a prefix. Priority is not a guarantee — a spec with more regressions than the row
+  budget still loses some, so the note reports how many FIT and the call-out says the table shows
+  fewer than it counts.
 
 This is evidence, not policy: nothing gates a merge or fails a run on it.

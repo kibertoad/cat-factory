@@ -878,10 +878,13 @@ agent's prose claims. Form:
 - **A section whose producing step didn't run says so** (`status: 'absent'` + a note); a silently
   missing section reads exactly like a clean one. Same for a CAPPED list: every cap records what it
   dropped in the report's `truncations` log. The requirement table's cap is the one that is NOT a
-  plain prefix: `selectRequirementEntries` keeps every regression first and then fills the budget
-  in spec order (restoring spec order to render), because a prefix cap drops the row a reviewer
-  must not miss purely by where its feature sorts. Its truncation note says so, since a reader who
-  assumes a prefix would conclude the tail was never ruled on.
+  plain prefix: `selectRequirementEntries` selects regressions first and then fills the budget in
+  spec order (restoring spec order to render), because a prefix cap drops the row a reviewer must
+  not miss purely by where its feature sorts. Its truncation note says so, since a reader who
+  assumes a prefix would conclude the tail was never ruled on. Priority is not a GUARANTEE —
+  more regressions than the row budget still lose some — so the note reports how many FIT and the
+  call-out admits the table holds fewer than it counts; a note overstating what survived is the
+  same false reassurance as no note at all.
 - **A PR body is NOT an inert string sink**; kernel's `hostMarkdown` is the boundary. The host
   auto-links `#123`/`@name`/`!123`, a **closing keyword before an issue reference CLOSES that issue
   on merge**, a raw newline ends a table row, and an unbalanced fence swallows the JSON block that
