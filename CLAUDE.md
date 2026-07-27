@@ -183,6 +183,12 @@ under `docs/initiatives/` and, on completion, converted to
 below. For a tracker still in flight, see
 [`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 
+A tracker also earns its keep when an initiative is **redirected** rather than delivered:
+[`docs/initiatives/service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md)
+records why a per-service acceptance-criteria TABLE was withdrawn (the in-repo `spec/` artifact and
+the `spec-writer` step already covered it) and what replaces it. Write the rejected approach down —
+the next iteration's cheapest failure mode is re-proposing it.
+
 **When the initiative's committed scope is complete, convert the tracker into an ADR and
 delete the tracker.** The tracker is a working document (per-slice checklist, file lists,
 image-tag reminders) that stops being useful once the work lands; the durable record is a
