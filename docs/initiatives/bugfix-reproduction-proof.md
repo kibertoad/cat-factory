@@ -297,15 +297,50 @@ Notes for Phase B (which consumes all of this):
 
 ### Phase B — the harness phase + image bump
 
+Implemented on branch `claude/bug-reproduction-proof-phase-mxq9c8`. Runner image `1.57.0`.
+
 | Item                                                                                      | Status | PR  |
 | ----------------------------------------------------------------------------------------- | ------ | --- |
-| `executor-harness/src/reproduction-proof.ts`: symmetric worktrees, red/green, teardown    | todo   |     |
-| Declared-test application onto the base worktree (non-resumed case only, D4)              | todo   |     |
-| Echo `omittedTestPaths` from the job body onto the report; stamp a fresh `at` per publish | todo   |     |
-| Heartbeat + per-job args; live publish on `RunnerJobView`, terminal on the result         | todo   |     |
-| Repair feedback on a failed verification, inside the existing budget (D6)                 | todo   |     |
-| **Concurrency test**: two jobs keep their worktrees isolated (required, D5)               | todo   |     |
-| Image-tag bump ritual: harness `version` + 3 pins (`pnpm sync:image-tags`) + changeset    | todo   |     |
+| `executor-harness/src/reproduction-proof.ts`: symmetric worktrees, red/green, teardown    | done   |     |
+| Declared-test application onto the base worktree (unconditional overlay — see below, D4)  | done   |     |
+| Echo `omittedTestPaths` from the job body onto the report; stamp a fresh `at` per publish | done   |     |
+| Heartbeat + per-job args; live publish on `RunnerJobView`, terminal on the result         | done   |     |
+| Repair feedback on a failed verification, inside the existing budget (D6)                 | done   |     |
+| **Concurrency test**: two jobs keep their worktrees isolated (required, D5)               | done   |     |
+| Image-tag bump ritual: harness `version` + 3 pins (`pnpm sync:image-tags`) + changeset    | done   |     |
+
+Notes for Phase C (which renders all of this):
+
+- **The overlay of declared test files onto the base worktree is UNCONDITIONAL**, which is a
+  refinement of D4's "needed only for the non-resumed case" — not a departure from it. In the
+  resumed case `baseSha` already carries the identical file, so the overlay is a no-op by
+  construction; making it unconditional removes the special case AND guarantees the property the
+  report actually claims, that both trees ran the byte-identical check. Keying off a `resumed`
+  flag would have let a coder that touched the test file leave the base running an older version
+  of it — asymmetry, reintroduced through the back door.
+- **A green base SKIPS the final phase.** `reproduced` requires a red base, so the second run
+  could only confirm what is already not proof, and each phase costs a full setup + test. The
+  contracts schema already documents `final` as absent "when the base run settled it"; Phase C's
+  renderer must therefore treat an absent `final` as normal for `inconclusive`, not as missing data.
+- **A declared test path that is not COMMITTED is reported as its own shape** (no `base`, no
+  `final`, a note naming the files). The proof runs against committed trees, so an unadded test
+  took no part in it — and is equally missing from the push, which is the more useful half to tell
+  the agent. Do not let Phase C render that case as "the test does not capture the defect".
+- **The proof runs BEFORE the pre-PR validation loop**, deliberately: validation is the GATE, so it
+  must stay the last thing that touches the tree. Consequence to accept — a subsequent validation
+  repair round can alter the tree after the proof measured it. The alternative (proof last) breaks
+  "only a green checkout opens a PR", which is the stronger invariant.
+- **A setup failure is not repairable** and short-circuits the loop with zero agent passes: the
+  setup command comes from the reproduction step's declaration, so a repair pass cannot change it,
+  and burning the budget against a broken environment buys nothing.
+- **The harness never emits `declared_infeasible`** — a concede dispatches no proof, so the engine
+  mints that verdict (Phase A's `concededReproductionReport`). Phase C's renderer sees all three.
+- **`agent.ts` is at 1,494 of its 1,500-line budget.** The next slice that touches it should expect
+  to extract the single-repo coding flow (`buildSingleRepoCodingSpec` + `runSingleRepoCoding`) into
+  its own module rather than raise the ratchet, which is never an option.
+- Verified: 380/380 harness tests (19 new proof tests driving a REAL local git repo through
+  `git worktree`, plus the 3 required concurrency cases), and typecheck across the harness +
+  contracts/server/integrations.
 
 ### Phase C — the PR report section
 
@@ -331,15 +366,15 @@ Notes for Phase B (which consumes all of this):
 | ------------------------------------------------------------------------ | ------ | --- |
 | Seed: insert `repro-test` before `coder`, bump `pl_bugfix` version       | todo   |     |
 | `pipelineShape.test.ts` case for the new shape                           | todo   |     |
-| Docs: CLAUDE.md flow note + root README capability row                   | todo   |     |
+| Docs: root README capability row (the CLAUDE.md flow note landed in B)   | todo   |     |
 | Convert this tracker to an ADR under `backend/docs/adr/` and `git rm` it | todo   |     |
 
 The glossary entry landed with Phase A (the vocabulary trap — the `repro-test` kind's `outcome`
 is a CLAIM, the proof is the VERIFICATION — is worth naming before the harness exists). The
-CLAUDE.md flow note and the root README capability row are deliberately deferred to Phase B/C:
-until the harness phase runs and the report renders, there is no runtime flow to describe and no
-user-facing capability to advertise, and documenting one early is exactly the staleness the
-CLAUDE.md sweep rule is aimed at.
+CLAUDE.md runtime-flow note landed with **Phase B**, which is when a runtime flow first exists to
+describe. The root README **capability** row stays deferred to Phase C: until the report renders on
+the pull request there is nothing user-facing to advertise, and advertising it early is exactly the
+staleness the CLAUDE.md sweep rule is aimed at.
 
 ## Conventions & gotchas carried between iterations
 

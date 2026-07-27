@@ -708,6 +708,99 @@ export async function headCommit(dir: string, signal?: AbortSignal): Promise<str
   return (await git(['rev-parse', 'HEAD'], { cwd: dir, signal })).trim()
 }
 
+/**
+ * Add a DETACHED worktree of `commitish` at `worktreePath`, sharing `dir`'s object database.
+ *
+ * The bugfix reproduction proof runs the declared check against two trees of the SAME clone (the
+ * pre-fix tree and the final tree), so a worktree is the only mechanism that gets both without a
+ * second clone, a second fetch, or disturbing the agent's own checkout — which must stay exactly
+ * as the agent left it, since the push and the PR come off it.
+ *
+ * `--detach` (rather than a branch) is deliberate: a worktree that claimed a branch would collide
+ * with the work branch checked out in `dir`, and nothing here ever commits.
+ *
+ * `worktreePath` is expected to live OUTSIDE the checkout (a per-job temp root), so the worktree's
+ * `.git` pointer file can never be swept into the agent's commit by a broad `git add -A`.
+ */
+export async function addWorktree(
+  dir: string,
+  worktreePath: string,
+  commitish: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await git(['worktree', 'add', '--detach', worktreePath, commitish], { cwd: dir, signal })
+}
+
+/**
+ * Remove a worktree previously added by {@link addWorktree} and prune the stale administrative
+ * entry, never throwing: teardown is bookkeeping, and a run whose PROOF succeeded must not fail
+ * because a temp directory could not be cleaned up. The caller still deletes the temp root, so a
+ * failure here leaks only a `.git/worktrees/<name>` record inside a container that is about to be
+ * destroyed anyway.
+ */
+export async function removeWorktree(
+  dir: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await git(['worktree', 'remove', '--force', worktreePath], { cwd: dir, signal })
+  } catch {
+    // Fall through to the prune, which cleans up the record even when the directory is gone.
+  }
+  try {
+    await git(['worktree', 'prune'], { cwd: dir, signal })
+  } catch {
+    // Best-effort by design (see the doc comment).
+  }
+}
+
+/**
+ * Which of `paths` actually exist in `commitish`'s tree. Used by the reproduction proof to tell a
+ * DECLARED test file that was committed from one that only ever existed as an untracked working-
+ * tree file: the proof runs against committed trees, so an unadded test is invisible to it — and
+ * equally invisible to the push, which is the point worth telling the agent about rather than
+ * reporting a verdict computed without the reproduction in it.
+ *
+ * Returns the input order/spelling of the paths that matched, so the caller can diff against its
+ * declared list to name the missing ones verbatim.
+ */
+export async function pathsPresentAtCommit(
+  dir: string,
+  commitish: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (paths.length === 0) return []
+  const out = await git(['ls-tree', '-r', '--name-only', '-z', commitish, '--', ...paths], {
+    cwd: dir,
+    signal,
+  })
+  // NUL-delimited so a path containing a newline (legal in git) can't split into two entries.
+  const present = new Set(out.split('\0').filter((p) => p !== ''))
+  return paths.filter((p) => present.has(p))
+}
+
+/**
+ * Check `paths` out of `commitish` into `dir`'s working tree (and index), leaving every other file
+ * untouched.
+ *
+ * This is how the reproduction's declared TEST files are placed onto the pre-fix worktree, and the
+ * narrowness is the whole safety property: a whole-tree checkout would drag the FIX across too and
+ * green the base, manufacturing a "the test does not capture the defect" verdict out of a
+ * perfectly good reproduction. Only the paths the caller has already sanitized are passed, and
+ * `--` stops any of them being read as a revision.
+ */
+export async function checkoutPathsFrom(
+  dir: string,
+  commitish: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  if (paths.length === 0) return
+  await git(['checkout', commitish, '--', ...paths], { cwd: dir, signal })
+}
+
 /** Stage everything and commit; returns false when there was nothing to commit. */
 export async function commitAll(
   dir: string,

@@ -52,6 +52,58 @@ export interface ValidationAttempt {
   fullTails: Map<string, string>
 }
 
+/**
+ * The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to, and the
+ * default it applies when the body omits one.
+ *
+ * DELIBERATE DUPLICATES of `VALIDATION_MAX_ATTEMPTS_CEILING` / `VALIDATION_DEFAULT_MAX_ATTEMPTS`
+ * in `@cat-factory/contracts` — the published image takes no schema dependency, so the harness
+ * cannot import them. Keep the two in step: the API validates writes against the contracts
+ * values, so a harness clamping to a DIFFERENT ceiling would silently cap a budget an operator
+ * was allowed to save, with nothing to flag the mismatch.
+ */
+export const VALIDATION_MAX_ATTEMPTS_CEILING = 10
+export const VALIDATION_DEFAULT_MAX_ATTEMPTS = 3
+
+/**
+ * Parse the optional PRE-PR VALIDATION CHECKS envelope off the job body: the service's ordered
+ * `{ label, command }` pairs and the repair-round budget. Every entry needs a non-empty command;
+ * entries without one are dropped, and a spec that ends up with no usable check returns
+ * `undefined` — so a malformed body degrades to the exact pre-feature behaviour (no loop, PR
+ * opens as before) rather than failing an otherwise-good coding run. `maxAttempts` is clamped to
+ * a sane range so a bad body can't make a container loop forever.
+ *
+ * Lives with the feature rather than in `job.ts` so each pre-PR verification phase owns its own
+ * job-body parser next to the loop that consumes it (the reproduction proof's
+ * `parseReproductionSpec` is the sibling); `job.ts` stays the job SHAPE plus the generic
+ * assembly.
+ */
+export function parseValidationChecksSpec(value: unknown): ValidationChecksSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (!Array.isArray(o.checks)) return undefined
+  const checks: ValidationCheckSpec[] = []
+  for (const raw of o.checks) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const c = raw as Record<string, unknown>
+    if (typeof c.command !== 'string' || c.command.trim() === '') continue
+    const label = typeof c.label === 'string' && c.label.trim() ? c.label.trim() : c.command
+    checks.push({ label, command: c.command })
+  }
+  if (checks.length === 0) return undefined
+  const parsed =
+    typeof o.maxAttempts === 'number' && Number.isFinite(o.maxAttempts) && o.maxAttempts > 0
+      ? Math.floor(o.maxAttempts)
+      : undefined
+  return {
+    checks,
+    maxAttempts: Math.min(
+      parsed ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
+      VALIDATION_MAX_ATTEMPTS_CEILING,
+    ),
+  }
+}
+
 /** One attempt's report — what the backend records on the step. */
 export interface ValidationReport {
   passed: boolean

@@ -5,6 +5,8 @@ import type {
   RunnerDispatchRequest,
   RunnerJobResult,
   RunnerValidationReport,
+  RunnerReproductionPhase,
+  RunnerReproductionReport,
   RunnerJobView,
   RunnerPollRequest,
   RunnerPoolAuthScheme,
@@ -385,6 +387,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const validationReport = this.mapValidationReport(manifest, json)
     if (validationReport) view.validationReport = validationReport
 
+    // The latest bugfix reproduction-proof attempt, when the manifest maps it — a latest-value
+    // publish like the validation report above, so re-reading it is harmless.
+    const reproductionReport = this.mapReproductionReport(manifest, json)
+    if (reproductionReport) view.reproductionReport = reproductionReport
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
@@ -508,6 +515,75 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (!path) return undefined
     return coerceValidationReport(environmentsLogic.extractByPath(json, path))
   }
+
+  /**
+   * Project the scheduler's live bugfix reproduction proof onto the canonical view, when the
+   * manifest maps it. Runs the SAME coercion as the terminal result envelope so the live and
+   * terminal channels can't validate a verdict differently on a pool-backed run.
+   */
+  private mapReproductionReport(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['reproductionReport'] | undefined {
+    const path = manifest.response.reproductionReportPath
+    if (!path) return undefined
+    return coerceReproductionReport(environmentsLogic.extractByPath(json, path))
+  }
+}
+
+/**
+ * Coerce a scheduler's `reproductionReport` envelope into the canonical
+ * {@link RunnerReproductionReport}. Returns undefined for anything that isn't a report-shaped
+ * object, so a malformed/absent envelope injects nothing (and the run behaves as if it carried no
+ * reproduction declaration — which, for a pool that doesn't proxy the field, it effectively did).
+ *
+ * `status` is narrowed to the union rather than passed through: an unrecognised value would reach
+ * the pull-request report as a verdict about a defect, and the safe reading of "I don't know what
+ * this says" is `inconclusive`, never `reproduced`. Mirrors the executor-harness's shape.
+ */
+function coerceReproductionReport(raw: unknown): RunnerReproductionReport | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.command !== 'string') return undefined
+  const status =
+    o.status === 'reproduced' || o.status === 'declared_infeasible' ? o.status : 'inconclusive'
+  const testPaths = Array.isArray(o.testPaths)
+    ? (o.testPaths as unknown[]).filter((p): p is string => typeof p === 'string')
+    : []
+  const report: RunnerReproductionReport = {
+    status,
+    command: o.command,
+    testPaths,
+    attempts: typeof o.attempts === 'number' ? o.attempts : 1,
+    maxAttempts: typeof o.maxAttempts === 'number' ? o.maxAttempts : 1,
+  }
+  if (typeof o.omittedTestPaths === 'number') report.omittedTestPaths = o.omittedTestPaths
+  const base = coerceReproductionPhase(o.base)
+  if (base) report.base = base
+  const final = coerceReproductionPhase(o.final)
+  if (final) report.final = final
+  if (typeof o.reason === 'string') report.reason = o.reason
+  if (typeof o.alternativeVerification === 'string') {
+    report.alternativeVerification = o.alternativeVerification
+  }
+  if (typeof o.note === 'string') report.note = o.note
+  if (typeof o.at === 'number') report.at = o.at
+  return report
+}
+
+/** Coerce one tree's phase outcome; undefined for anything without a usable exit code. */
+function coerceReproductionPhase(raw: unknown): RunnerReproductionPhase | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.exitCode !== 'number') return undefined
+  return {
+    exitCode: o.exitCode,
+    passed: o.passed === true,
+    ...(typeof o.outputTail === 'string' ? { outputTail: o.outputTail } : {}),
+    ...(typeof o.durationMs === 'number' ? { durationMs: o.durationMs } : {}),
+    ...(o.timedOut === true ? { timedOut: true } : {}),
+    ...(o.setupFailed === true ? { setupFailed: true } : {}),
+  }
 }
 
 /**
@@ -617,6 +693,11 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   // the Cloudflare/local transports (which return the harness view verbatim) show every command.
   const validationReport = coerceValidationReport(o.validationReport)
   if (validationReport) out.validationReport = validationReport
+  // The bugfix reproduction proof. Dropping it here would leave a pool-backed bugfix PR with no
+  // reproduction section at all — indistinguishable from a run that never declared one — while
+  // the Cloudflare/local transports (which return the harness view verbatim) publish the verdict.
+  const reproductionReport = coerceReproductionReport(o.reproductionReport)
+  if (reproductionReport) out.reproductionReport = reproductionReport
   return out
 }
 

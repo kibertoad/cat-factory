@@ -63,9 +63,17 @@ The implementation job (`POST /run`) is the canonical sequence:
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
    while they fail and the attempt budget remains the agent is re-run with the captured output
    as its instruction (see [pre-PR validation](../../../docs/initiatives/pre-pr-validation.md)),
-5. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
+5. **prove the reproduction**, when the job body carries `reproduction` — the declared check is
+   run against the pre-fix tree and the tree the PR will open from, in two freshly-created
+   symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
+   [bugfix reproduction proof](../../../docs/initiatives/bugfix-reproduction-proof.md)). Unlike
+   step 4 this NEVER gates the PR: a failed verification is fed back to the agent while budget
+   remains, then recorded as `inconclusive`. It runs BEFORE step 4 so validation stays the last
+   thing to touch the tree,
+6. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
    ONLY if step 4 ended green. A spent budget returns an error result with the validation report
-   and opens no PR. Absent `validationChecks`, step 4 does not happen at all.
+   and opens no PR. Absent `validationChecks` / `reproduction`, steps 4 and 5 do not happen at
+   all.
 
 Bootstrap differs at the ends — it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
@@ -134,6 +142,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`) — talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic — keyed off the job body, never the agent kind. |
+| `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic — keyed off the job body, never the agent kind. |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 
 ## Runner lifecycle knobs
@@ -147,6 +156,8 @@ runner):
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
 | `VALIDATION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a pre-PR validation check; a timeout counts as a failure (exit 124) so one hung command can't wedge the loop. |
+| `REPRODUCTION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a reproduction-proof setup or check command; a timeout counts as a failure (exit 124). |
+| `REPRODUCTION_HEARTBEAT_MS` | `30000` (30s) | How often the reproduction proof feeds the job inactivity watchdog while it runs commands the agent is not producing output for. |
 | `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
 | `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content — though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
 
