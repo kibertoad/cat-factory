@@ -11,7 +11,10 @@ import {
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   PublicApiKeyService,
+  TEST_SECRETS_CIPHER_INFO,
+  TestSecretsService,
   UserSecretService,
+  ValidationConfigService,
   type UserSecretKindRegistry,
   usdRateForSpendCurrency,
 } from '@cat-factory/integrations'
@@ -20,6 +23,9 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type { Env } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
+import { D1BlockRepository } from './repositories/D1BlockRepository'
+import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
 import { D1PublicApiKeyRepository } from './repositories/D1PublicApiKeyRepository'
@@ -228,5 +234,48 @@ export function buildOpenRouterCatalogService(
     // OpenRouter quotes USD; convert to the deployment's spend currency so persisted prices
     // (and the spend overlay) match the rest of the budget table.
     usdToCurrencyRate: usdRateForSpendCurrency(spendCurrency),
+  })
+}
+/**
+ * Build the SENSITIVE per-service test-credential store (sealed), or undefined when the shared
+ * encryption key is absent (the cipher must exist to seal/unseal). Backs the test-secrets CRUD
+ * controller, the engine's prompt refs (non-secret key + description), and the executor's
+ * out-of-band value injection into the Tester container. Stateless, so building a fresh instance
+ * per call site is safe (mirrors `buildResolvePackageRegistries`).
+ */
+export function buildTestSecretsService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): TestSecretsService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new TestSecretsService({
+    testSecretsRepository: new D1TestSecretsRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: TEST_SECRETS_CIPHER_INFO,
+    }),
+    blockRepository: new D1BlockRepository({ db }),
+    clock,
+  })
+}
+
+/**
+ * Build the per-service PRE-PR VALIDATION CHECK store — the commands the executor-harness runs
+ * against the checkout before opening a PR. Backs the validation-check CRUD controller and the
+ * engine's dispatch resolution (the commands ride the coding job body). Unlike the sealed stores
+ * beside it this needs no encryption key: the commands are operator-authored shell strings that
+ * run inside the run's own container, so there is nothing to seal and it is always wired.
+ * Stateless, so building a fresh instance per call site is safe.
+ */
+export function buildValidationConfigService(
+  db: D1Database,
+  clock: Clock,
+): ValidationConfigService {
+  return new ValidationConfigService({
+    validationConfigRepository: new D1ValidationConfigRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    clock,
   })
 }

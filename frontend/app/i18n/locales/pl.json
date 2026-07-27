@@ -1061,6 +1061,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "Walidacja przed PR",
+      "sectionHint": "Polecenia uruchamiane na kopii roboczej po zakończeniu pracy programisty, a przed otwarciem żądania scalenia. Niepowodzenie wraca do agenta do naprawy; tylko czysta kopia otwiera żądanie scalenia.",
+      "hint": "Każde polecenie jest uruchamiane przez `sh -c` w kopii roboczej tej usługi, po kolei. Poprawiaj kod, a nie sprawdzenie — agent ma polecenie ich nie osłabiać.",
+      "clear": "Wyczyść",
+      "configNoun": "sprawdzenia walidacyjne",
+      "label": "Nazwa",
+      "labelPlaceholder": "lint",
+      "command": "Polecenie",
+      "addCheck": "Dodaj sprawdzenie",
+      "removeCheck": "Usuń to sprawdzenie",
+      "empty": "Nie skonfigurowano żadnych sprawdzeń. Uruchomienia tej usługi otwierają żądanie scalenia bez lokalnej weryfikacji.",
+      "maxAttempts": "Próby",
+      "maxAttemptsHint": "Rundy poprawek",
+      "save": "Zapisz sprawdzenia",
+      "savedToast": "Sprawdzenia zapisane",
+      "saveFailed": "Nie udało się zapisać sprawdzeń",
+      "clearFailed": "Nie udało się wyczyścić sprawdzeń"
     }
   },
   "panels": {
@@ -1227,6 +1246,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Powiązane ustalenia",
         "unnamed": "Standard"
+      },
+      "validation": {
+        "heading": "Walidacja przed PR",
+        "passed": "Zaliczona",
+        "failed": "Niezaliczona",
+        "attempts": "Próba {attempts} z {maxAttempts}",
+        "passedSummary": "Wszystkie sprawdzenia ({total}) przeszły w próbie {attempts}. Żądanie scalenia zostało otwarte z czystej kopii roboczej.",
+        "failedSummary": "Po {attempts} z {maxAttempts} prób nadal nie przechodziło {failed} z {total} sprawdzeń, więc nie otwarto żądania scalenia.",
+        "exitCode": "kod wyjścia {code}",
+        "timedOut": "przekroczono czas"
       }
     },
     "inspector": {

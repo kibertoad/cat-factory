@@ -1061,6 +1061,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "Перевірки перед PR",
+      "sectionHint": "Команди, які виконуються на робочій копії після завершення роботи розробника та перед відкриттям запиту на злиття. Невдача повертається до агента на виправлення; лише чиста копія відкриває запит на злиття.",
+      "hint": "Кожна команда виконується через `sh -c` у робочій копії цієї служби, по черзі. Виправляйте код, а не перевірку — агенту наказано не послаблювати їх.",
+      "clear": "Очистити",
+      "configNoun": "перевірки",
+      "label": "Назва",
+      "labelPlaceholder": "lint",
+      "command": "Команда",
+      "addCheck": "Додати перевірку",
+      "removeCheck": "Вилучити цю перевірку",
+      "empty": "Перевірок не налаштовано. Запуски цієї служби відкривають запит на злиття без локальної перевірки.",
+      "maxAttempts": "Спроби",
+      "maxAttemptsHint": "Раунди виправлень",
+      "save": "Зберегти перевірки",
+      "savedToast": "Перевірки збережено",
+      "saveFailed": "Не вдалося зберегти перевірки",
+      "clearFailed": "Не вдалося очистити перевірки"
     }
   },
   "panels": {
@@ -1227,6 +1246,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Пов’язані зауваження",
         "unnamed": "Стандарт"
+      },
+      "validation": {
+        "heading": "Перевірки перед PR",
+        "passed": "Пройдено",
+        "failed": "Не пройдено",
+        "attempts": "Спроба {attempts} з {maxAttempts}",
+        "passedSummary": "Усі перевірки ({total}) пройшли у спробі {attempts}. Запит на злиття відкрито з чистої робочої копії.",
+        "failedSummary": "Після {attempts} із {maxAttempts} спроб {failed} із {total} перевірок усе ще не проходили, тому запит на злиття не відкрито.",
+        "exitCode": "код виходу {code}",
+        "timedOut": "перевищено час"
       }
     },
     "inspector": {

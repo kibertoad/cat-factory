@@ -690,6 +690,7 @@ interface NodeServerContainerBundle {
   gateways: ReturnType<typeof createNodeGateways>
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
+  validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
   apiKeys: NodeModelDepsResult['apiKeys']
@@ -729,6 +730,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     gateways,
     vcsRegistry,
     testSecretsService,
+    validationConfigService,
     subscriptions,
     personalSubscriptions,
     apiKeys,
@@ -853,6 +855,9 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    // The per-service pre-PR validation-check store the shared controller reads. Always present
+    // (nothing sealed — the commands run inside the run's own container).
+    validationConfig: validationConfigService,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,
@@ -938,6 +943,7 @@ interface NodeContainerFinalizeBundle {
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
+  resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -956,6 +962,7 @@ interface NodeContainerFinalizeBundle {
   repoProjectionRepository: DrizzleRepoProjectionRepository
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
+  validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
   traceSink: NodeModelDepsResult['traceSink']
@@ -995,6 +1002,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
+    resolveValidationChecks,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1013,6 +1021,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     repoProjectionRepository,
     vcsRegistry,
     testSecretsService,
+    validationConfigService,
     publicApiKeys,
     userSecrets,
     traceSink,
@@ -1115,6 +1124,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
+    resolveValidationChecks,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1185,6 +1195,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     gateways,
     vcsRegistry,
     testSecretsService,
+    validationConfigService,
     subscriptions,
     personalSubscriptions,
     apiKeys,
@@ -1346,19 +1357,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // search-query / harness-call telemetry sinks, the web-search upstream + availability
   // resolver, the package-registry + test-secret dispatch resolvers, the subscription-quota
   // provider), lifted into `container-run-services-deps.ts` to keep this root within budget.
-  const {
-    agentContextObservability,
-    searchQueryObservability,
-    recordHarnessCalls,
-    defaultWebSearchUpstream,
-    resolveWebSearchAvailability,
-    packageRegistrySecretCipher,
-    resolvePackageRegistries,
-    testSecretsService,
-    resolveTestSecrets,
-    resolveTestSecretRefs,
-    subscriptionQuotaProvider,
-  } = buildNodeRunServices({ env, config, repos, idGenerator, clock, caches: options.caches })
+  // Kept as ONE value and SPREAD into the finalize bundle below rather than destructured
+  // field-by-field: every field is either forwarded verbatim or read at a single call site, so
+  // the destructure was ~13 lines of pure re-listing that had to be edited twice per new run
+  // service (once here, once in the bundle literal).
+  const runServices = buildNodeRunServices({
+    env,
+    config,
+    repos,
+    idGenerator,
+    clock,
+    caches: options.caches,
+  })
 
   const container = buildNodeContainerExecutor({
     env,
@@ -1374,14 +1384,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     personalSubscriptions,
     resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
-    agentContextObservability,
-    resolveWebSearchAvailability,
+    agentContextObservability: runServices.agentContextObservability,
+    resolveWebSearchAvailability: runServices.resolveWebSearchAvailability,
     resolveRepoOrigin: options.resolveRepoOrigin,
-    resolvePackageRegistries,
-    resolveTestSecrets,
-    recordHarnessCalls,
+    resolvePackageRegistries: runServices.resolvePackageRegistries,
+    resolveTestSecrets: runServices.resolveTestSecrets,
+    recordHarnessCalls: runServices.recordHarnessCalls,
     recordSubscriptionQuotaUsage: (target, usage) =>
-      subscriptionQuotaProvider.recordUsage(target, usage),
+      runServices.subscriptionQuotaProvider.recordUsage(target, usage),
   })
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -1438,11 +1448,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       appRegistry,
       githubClient,
       mintInstallationToken: options.mintInstallationToken,
-      resolvePackageRegistries,
+      resolvePackageRegistries: runServices.resolvePackageRegistries,
       caches: options.caches,
     })
 
   return finalizeNodeContainer({
+    // The per-run services bundle, forwarded as a unit (see `runServices` above).
+    ...runServices,
     config,
     options,
     env,
@@ -1456,7 +1468,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveWorkspaceModelDefault,
     agentKindRegistry,
     providerRegistry,
-    packageRegistrySecretCipher,
     githubInstallationRepository,
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -1472,9 +1483,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     cloudflareModelsEnabled,
     deployDeps,
     runnerPoolConnectionRepository,
-    agentContextObservability,
-    searchQueryObservability,
-    resolveTestSecretRefs,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1488,11 +1496,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveTransport,
     bootstrapMintInstallationToken,
     remoteRepos,
-    defaultWebSearchUpstream,
     appRegistry,
     repoProjectionRepository,
     vcsRegistry,
-    testSecretsService,
     publicApiKeys,
     userSecrets,
     traceSink,

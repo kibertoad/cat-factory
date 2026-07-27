@@ -1,5 +1,6 @@
 import { redactSecrets } from './redact.js'
 import type { FollowUpLine } from './follow-ups.js'
+import type { ValidationReport } from './validation-checks.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
@@ -30,6 +31,13 @@ export interface RunOptions {
   onSpan?: (span: ToolSpan) => void
   /** Receives the forward-looking follow-up / question items the Coder streamed since the last poll. */
   onFollowUp?: (items: FollowUpLine[]) => void
+  /**
+   * Receives each completed PRE-PR VALIDATION attempt the moment the harness finishes running
+   * the service's check commands, so the backend can surface the repair loop LIVE ("lint failed,
+   * repairing — attempt 2 of 3") instead of only in the terminal result. Latest-wins (NOT a drain
+   * buffer): a published attempt is final, and the loop republishes a whole new one per round.
+   */
+  onValidationReport?: (report: ValidationReport) => void
   /**
    * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
    * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
@@ -162,6 +170,13 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * Absent on a job that produced output promptly (the overwhelming common case). Sticky once set.
    */
   coldStart?: { atMs: number; message: string }
+  /**
+   * The LATEST completed pre-PR validation attempt (see `docs/initiatives/pre-pr-validation.md`).
+   * Unlike {@link spans}/{@link followUps} this is NOT drain-on-read: it is a whole-value latest
+   * publish, so re-reading it on a later poll is harmless and a dropped poll loses nothing (the
+   * next round republishes). Absent for a job whose service configured no checks.
+   */
+  validationReport?: ValidationReport
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -424,6 +439,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onFollowUp: (items) => {
           entry.followUpBuffer.push(...items)
+        },
+        onValidationReport: (report) => {
+          entry.validationReport = report
         },
         onCallMetric: (call) => {
           // Stamp the job-scoped sequence on the metric OBJECT: the handler keeps the same

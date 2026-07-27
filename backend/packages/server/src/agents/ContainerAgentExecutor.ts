@@ -47,7 +47,7 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillForHarness } from './contextFiles.js'
-import { toRunResult } from './containerAgentResult.js'
+import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import {
   buildKindBody,
   renderReferenceBranchesSection,
@@ -720,37 +720,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(f.suggestedAction ? { suggestedAction: f.suggestedAction } : {}),
     }))
     const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
-    if (view.state === 'running') {
-      // Forward the latest subtask counts (if any) so the engine can surface live
-      // "N/M done" progress on the step; the shapes match field-for-field. Also forward
-      // the container's current lifecycle phase (clone / agent / push, from the harness)
-      // and its identity/address (id + url, from the transport) so the engine can show
-      // what the container is doing and where it lives — not just a blank "working".
-      const containerMeta = {
-        ...(view.phase ? { phase: view.phase } : {}),
-        ...(view.container ? { container: view.container } : {}),
-        ...(view.backend ? { backend: view.backend } : {}),
-        // Forward the harness liveness heartbeat (last stdout chunk / subagent transcript tail)
-        // so the engine can persist a throttled `lastActivityAt` and keep the run's `updated_at`
-        // fresh on a quiet-but-alive job — distinct from the subtask progress above, which only
-        // moves when the agent ticks its todo list. Absent on an older harness image.
-        ...(view.heartbeatAt ? { lastActivityAt: view.heartbeatAt } : {}),
-      }
-      return view.progress
-        ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
-        : { state: 'running', ...followUps, ...containerMeta }
-    }
-    // The harness's structured failure cause + extended diagnostic, forwarded so the engine
-    // classifies the failure without regex-matching `error`. Absent on an older image.
-    const failureMeta = {
-      ...(view.failureCause ? { failureCause: view.failureCause } : {}),
-      ...(view.detail ? { detail: view.detail } : {}),
-      ...(view.backend ? { backend: view.backend } : {}),
-      // Forward the transport's STRUCTURED container-eviction verdict so the driver recovers it on
-      // the right budget (RunDispatcher reads this field directly — there is no error-string
-      // fallback). Absent on a non-eviction failure.
-      ...(view.evicted ? { evicted: view.evicted } : {}),
-    }
+    if (view.state === 'running') return buildRunningUpdate(view, followUps)
+    const failureMeta = buildFailureMeta(view)
     // Completed OR failed: a subscription harness attaches its per-call telemetry to
     // BOTH — a failed token-spending run (no changes / unusable output / unresolved
     // conflicts) is exactly what an operator needs to inspect — so record it before the

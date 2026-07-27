@@ -1061,6 +1061,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "PR 前の検証",
+      "sectionHint": "コーダーの作業完了後、プルリクエストを開く前にチェックアウトに対して実行されるコマンドです。失敗した場合はエージェントに差し戻して修正させ、問題のないチェックアウトだけが PR を開きます。",
+      "hint": "各コマンドはこのサービスのチェックアウト内で `sh -c` により順番に実行されます。修正すべきはコードであり検査ではありません。エージェントには検査を弱めないよう指示しています。",
+      "clear": "消去",
+      "configNoun": "検証コマンド",
+      "label": "名前",
+      "labelPlaceholder": "lint",
+      "command": "コマンド",
+      "addCheck": "検査を追加",
+      "removeCheck": "この検査を削除",
+      "empty": "検査が設定されていません。このサービスの実行はローカル検証なしでプルリクエストを開きます。",
+      "maxAttempts": "試行回数",
+      "maxAttemptsHint": "修正の反復回数",
+      "save": "検査を保存",
+      "savedToast": "検査を保存しました",
+      "saveFailed": "検査を保存できませんでした",
+      "clearFailed": "検査を消去できませんでした"
     }
   },
   "panels": {
@@ -1227,6 +1246,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "関連する指摘",
         "unnamed": "基準"
+      },
+      "validation": {
+        "heading": "PR 前の検証",
+        "passed": "成功",
+        "failed": "失敗",
+        "attempts": "試行 {attempts}/{maxAttempts}",
+        "passedSummary": "{total} 件すべての検査が {attempts} 回目の試行で成功しました。プルリクエストは問題のないチェックアウトから開かれました。",
+        "failedSummary": "{maxAttempts} 回中 {attempts} 回試行しても {total} 件中 {failed} 件の検査が失敗したままだったため、プルリクエストは開かれませんでした。",
+        "exitCode": "終了コード {code}",
+        "timedOut": "タイムアウト"
       }
     },
     "inspector": {

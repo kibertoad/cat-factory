@@ -113,6 +113,15 @@ export const runnerPoolResponseMappingSchema = v.object({
    * are recorded only from the terminal result envelope, as before.
    */
   callMetricsPath: v.optional(v.string()),
+  /**
+   * Dot-path to the LATEST pre-PR validation attempt the harness published (the harness
+   * `validationReport` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `validationReport` so a pool-backed
+   * run surfaces the repair loop LIVE ("lint failed, repairing — attempt 2 of 3"), exactly like a
+   * Cloudflare/local container. Absent ⇒ the report is surfaced only from the terminal result
+   * envelope, which is still enough to gate the PR and carry the failure evidence.
+   */
+  validationReportPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**

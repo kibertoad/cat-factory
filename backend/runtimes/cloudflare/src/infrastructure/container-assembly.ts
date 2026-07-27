@@ -22,6 +22,7 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   TestSecretsService,
+  ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import {
@@ -73,6 +74,7 @@ import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
 import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
+import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
@@ -134,6 +136,7 @@ export interface WorkerContainerAssemblyInput {
   resolveTransport: ResolveRunnerTransport | null
   subscriptions: ProviderSubscriptionService | undefined
   testSecretsService: TestSecretsService | undefined
+  validationConfigService: ValidationConfigService
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
   publicApiKeys: PublicApiKeyService | undefined
@@ -191,6 +194,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     resolveTransport,
     subscriptions,
     testSecretsService,
+    validationConfigService,
     personalSubscriptions,
     apiKeys,
     notificationWebhookSupport,
@@ -350,6 +354,13 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
             testSecretsService.resolveRefsForBlock(workspaceId, blockId),
         }
       : {}),
+    // Fold the service frame's PRE-PR VALIDATION CHECKS onto the agent run context, so a
+    // PR-opening coding dispatch carries them in its job body and the harness gates the PR on
+    // them. Nothing sealed here (the commands run in the run's own container), so — unlike the
+    // test secrets above — this needs no ENCRYPTION_KEY and is always wired. Resolves to `null`
+    // for a service with no checks, which is the exact pre-feature behaviour.
+    resolveValidationChecks: (workspaceId: string, frameId: string) =>
+      validationConfigService.resolveForFrame(workspaceId, frameId),
     ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
@@ -408,6 +419,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   const {
     subscriptions,
     testSecretsService,
+    validationConfigService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
@@ -541,6 +553,11 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
       // connections.
       testSecretsRepository: new D1TestSecretsRepository({ db }),
+      // Same reasoning for the per-service PRE-PR VALIDATION CHECKS: the engine reads them via
+      // the `resolveValidationChecks` FUNCTION, and the inspector CRUD goes through the service,
+      // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode
+      // node's dispatch resolution + inspector reads come back `... is not wired`.
+      validationConfigRepository: new D1ValidationConfigRepository({ db }),
       // GitHub projection + installation reads the mothership serves over the persistence RPC even
       // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
       // DELEGATION (no local App), which enables `container.github`, so its board snapshot
@@ -572,6 +589,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    // The per-service pre-PR validation-check store the shared controller reads. Always present
+    // (no secret material), unlike the sealed stores around it.
+    validationConfig: validationConfigService,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

@@ -1348,77 +1348,10 @@ export const sharedStacks = pgTable(
 export * from './schema/sandbox.js'
 export * from './schema/tracker.js'
 
-// Post-release-health gate (pluggable observability — Datadog today). One connection per
-// workspace (mirror of D1 migration 0007's `observability_connections`). `credentials` is a
-// sealed JSON blob of the provider-specific secret (domain tag 'cat-factory:observability');
-// `summary` is a non-secret display blob. Plaintext credentials only in memory.
-export const observabilityConnections = pgTable('observability_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  provider: text('provider').notNull(),
-  credentials: text('credentials').notNull(),
-  summary: text('summary').notNull().default('{}'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Private package-registry entries per workspace (npm private orgs, GitHub Packages), so
-// agent containers can resolve private dependencies on checkout (mirror of D1 migration
-// 0034's `package_registry_connections`). `entries` is ONE sealed JSON array of
-// { id, ecosystem, vendor, scopes, token } (domain tag 'cat-factory:package-registries');
-// `summary` is a non-secret display blob. Plaintext tokens only in memory.
-export const packageRegistryConnections = pgTable('package_registry_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  entries: text('entries').notNull(),
-  summary: text('summary').notNull().default('[]'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
-// env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).
-// `credentials` is ONE sealed JSON blob { pagerDuty?, incidentIo? } (domain tag
-// 'cat-factory:incident-enrichment'); `summary` is a non-secret presence blob.
-export const incidentEnrichmentConnections = pgTable('incident_enrichment_connections', {
-  workspace_id: text('workspace_id').primaryKey(),
-  credentials: text('credentials').notNull(),
-  summary: text('summary').notNull().default('{}'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Per-block (service frame) monitor/SLO mapping the gate reads (mirror of D1
-// `release_health_configs`). `monitor_ids`/`slo_ids` are JSON arrays as `text`.
-export const releaseHealthConfigs = pgTable(
-  'release_health_configs',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    block_id: text('block_id').notNull(),
-    monitor_ids: text('monitor_ids').notNull().default('[]'),
-    slo_ids: text('slo_ids').notNull().default('[]'),
-    env_tag: text('env_tag'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
-)
-
-// Sensitive per-service test credentials (sealed; mirror of D1 migration 0044's
-// `test_secrets`). The SEALED sibling of the non-sensitive test-credential pools: a
-// third-party API token a Tester needs, delivered to the container out of band. `credentials`
-// is a sealed JSON blob of TestSecretEntry[] (domain tag 'cat-factory:test-secrets'); `summary`
-// is a non-secret TestSecretRef[] display blob. Keyed by the SERVICE FRAME block.
-export const testSecrets = pgTable(
-  'test_secrets',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    block_id: text('block_id').notNull(),
-    credentials: text('credentials').notNull(),
-    summary: text('summary').notNull().default('[]'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
-)
+// The opt-in integration tables (sealed connections + per-service-frame integration config)
+// live in their own module; re-exported here so drizzle-kit still sees one schema graph and
+// every existing `schema.js` import site is unchanged.
+export * from './schema-integrations.js'
 
 // Document-source integration (mirror of D1 migration 0012). A `source`
 // discriminator tags every row so one pair of tables serves every provider. The

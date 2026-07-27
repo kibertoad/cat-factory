@@ -318,6 +318,9 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/prompt-fragments/none') }, // fragment library (workspace scope)
+        // Pre-PR validation checks are operator-authored SHELL COMMANDS that run in the run's
+        // container, so the write is admin-tier even though the values are not secrets.
+        { perm: 'settings.manage', method: 'DELETE', path: w('/services/none/validation-checks') },
         // integrations.manage
         { perm: 'integrations.manage', method: 'DELETE', path: w('/package-registries/none') },
         {
