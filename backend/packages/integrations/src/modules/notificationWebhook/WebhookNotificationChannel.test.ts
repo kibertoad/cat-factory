@@ -201,4 +201,99 @@ describe('WebhookNotificationChannel', () => {
     expect(calls).toHaveLength(3)
     expect(errors).toHaveLength(1)
   })
+
+  describe('SSRF guard', () => {
+    it('refuses to deliver to a private/internal endpoint', async () => {
+      // A row can hold an internal URL even though the write boundary rejects one: an endpoint
+      // registered before the guard existed, or a hostname that has since resolved inward. The
+      // delivery path is the last line, so it must refuse rather than POST the signed body.
+      for (const url of [
+        'https://169.254.169.254/latest/meta-data/',
+        'https://10.0.0.5/hook',
+        'https://localhost/hook',
+      ]) {
+        const { channel: ch, calls, errors } = channel(webhook({ url }))
+        await ch.deliver('ws1', notification())
+        expect(calls, url).toHaveLength(0)
+        expect(errors, url).toHaveLength(1)
+      }
+    })
+
+    it('re-validates every redirect hop, so a public endpoint cannot bounce to an internal one', async () => {
+      // The whole reason delivery goes through `safeFetch`. Validating only the stored URL vouches
+      // for the FIRST hop; a receiver is free to 302 the delivery — body, signature headers and
+      // all — at the cloud-metadata endpoint, and a plain `fetch` would follow it.
+      const seen: string[] = []
+      const impl = (async (url: unknown) => {
+        seen.push(String(url))
+        if (seen.length === 1) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: 'https://169.254.169.254/latest/meta-data/' },
+          })
+        }
+        return new Response(null, { status: 200 })
+      }) as unknown as typeof fetch
+
+      const errors: unknown[] = []
+      const ch = new WebhookNotificationChannel({
+        notificationWebhookRepository: repoWith(webhook()),
+        secretCipher: cipher,
+        clock,
+        fetchImpl: impl,
+        sleep: async () => {},
+        onError: (error) => errors.push(error),
+      })
+      await ch.deliver('ws1', notification())
+
+      // The first hop went out; the internal target never did, and the block is not retried
+      // (re-walking the same chain reaches the same rejected host).
+      expect(seen).toEqual(['https://example.test/hook'])
+      expect(errors).toHaveLength(1)
+    })
+
+    it('allows an internal endpoint when the deployment widened its own policy', async () => {
+      // The escape hatch a developer running a local receiver needs. Scoped to the webhook's own
+      // config slice, so widening it cannot widen the runner-pool or environment guard.
+      const { impl, calls } = fetchStub([200])
+      const ch = new WebhookNotificationChannel({
+        notificationWebhookRepository: repoWith(webhook({ url: 'http://localhost:9000/hook' })),
+        secretCipher: cipher,
+        clock,
+        fetchImpl: impl,
+        sleep: async () => {},
+        urlSafetyPolicy: { schemes: ['https', 'http'], allowHosts: ['localhost'] },
+      })
+      await ch.deliver('ws1', notification())
+      expect(calls).toHaveLength(1)
+    })
+  })
+
+  it('stops retrying once the total delivery budget is spent', async () => {
+    // `NotificationService.raise` AWAITS the channel fan-out, so this budget is latency added to
+    // the engine step that parks a run. Three 5s attempts plus backoff would let a dead receiver
+    // add ~15.8s to a park; the ceiling is a wall-clock deadline, not an attempt count.
+    let now = 1_700_000_000_000
+    const { impl, calls } = fetchStub([500])
+    const errors: unknown[] = []
+    const ch = new WebhookNotificationChannel({
+      notificationWebhookRepository: repoWith(webhook()),
+      secretCipher: cipher,
+      // Each attempt "takes" 4s of wall clock, so the second exhausts the 6s budget and there is
+      // no third — where a plain attempt counter would have run all three.
+      clock: {
+        now: () => {
+          const value = now
+          now += 4000
+          return value
+        },
+      },
+      fetchImpl: impl,
+      sleep: async () => {},
+      onError: (error) => errors.push(error),
+    })
+    await ch.deliver('ws1', notification())
+    expect(calls.length).toBeLessThan(3)
+    expect(errors).toHaveLength(1)
+  })
 })

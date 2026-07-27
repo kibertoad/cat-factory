@@ -4,7 +4,9 @@ import type {
   NotificationWebhookRecord,
   NotificationWebhookRepository,
   SecretCipher,
+  UrlSafetyPolicy,
 } from '@cat-factory/kernel'
+import { assertSafeNotificationWebhookUrl } from './webhookUrl.js'
 
 // NotificationWebhookService: the management side of the outbound notification webhook — register
 // / read / remove the one endpoint a workspace delivers its notifications to. The DELIVERY side is
@@ -21,6 +23,13 @@ export interface NotificationWebhookServiceDependencies {
   notificationWebhookRepository: NotificationWebhookRepository
   secretCipher: SecretCipher
   clock: Clock
+  /**
+   * The deployment's widened endpoint guard, when configured. Absent ⇒ strict public-https. The
+   * SAME policy the delivery channel re-applies per redirect hop — they come from one builder for
+   * exactly this reason, so an endpoint can never be accepted at write time by a rule the delivery
+   * path would then reject (or, far worse, the reverse).
+   */
+  urlSafetyPolicy?: UrlSafetyPolicy
 }
 
 export class NotificationWebhookService {
@@ -34,6 +43,11 @@ export class NotificationWebhookService {
 
   /** Register or update the workspace's webhook. */
   async put(workspaceId: string, input: PutNotificationWebhookInput): Promise<NotificationWebhook> {
+    // Reject a private/internal/metadata endpoint HERE, where an operator sees the error, rather
+    // than leaving it to fail per-delivery later. The wire schema's `https://` prefix check is the
+    // friendly first pass; this is the guard that actually holds (and the same one the delivery
+    // path re-runs on every redirect hop).
+    assertSafeNotificationWebhookUrl(input.url, this.deps.urlSafetyPolicy)
     const existing = await this.deps.notificationWebhookRepository.get(workspaceId)
     const record: NotificationWebhookRecord = {
       workspaceId,

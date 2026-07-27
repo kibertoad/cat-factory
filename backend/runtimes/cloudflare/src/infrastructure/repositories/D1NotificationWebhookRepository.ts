@@ -1,8 +1,4 @@
-import type {
-  NotificationType,
-  NotificationWebhookRecord,
-  NotificationWebhookRepository,
-} from '@cat-factory/kernel'
+import type { NotificationWebhookRecord, NotificationWebhookRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { parseNotificationWebhookTypes } from '@cat-factory/server'
 
@@ -32,7 +28,7 @@ export class D1NotificationWebhookRepository implements NotificationWebhookRepos
     return {
       workspaceId: row.workspace_id,
       url: row.url,
-      types: parseNotificationWebhookTypes(row.types) as NotificationType[],
+      types: parseNotificationWebhookTypes(row.types),
       enabled: row.enabled === 1,
       secretSealed: row.secret_sealed,
       updatedAt: row.updated_at,

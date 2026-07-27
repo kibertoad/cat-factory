@@ -45,6 +45,7 @@ import {
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
 } from './publicApiAdmission.js'
+import { createParkAnnouncer, isParked } from './publicApiStream.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
 // gate (its `/api` prefix is in the authGate bypass list); every route authenticates IN-CONTROLLER
@@ -442,7 +443,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
       // timeout. A `blocked` run is a PARK awaiting a human decision — no longer a dead end, since
       // a `decide`-scope caller can answer it over `/api/v1/runs/:runId/decisions` — so the stream
       // announces the park and keeps watching rather than closing on it.
-      let announcedPark = false
+      const parks = createParkAnnouncer()
       for (;;) {
         if (stream.aborted) break
         // Re-verify the key periodically so a mid-stream revoke cuts the connection (the key was
@@ -469,13 +470,8 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         // which the caller should see through the SAME connection. Announced once per park rather
         // than every tick, so a long park doesn't spam identical frames; re-armed when the run
         // resumes, so a second park later in the pipeline is announced too.
-        if (execution.status === 'blocked') {
-          if (!announcedPark) {
-            await stream.writeSSE({ event: 'decision', data })
-            announcedPark = true
-          }
-        } else {
-          announcedPark = false
+        if (parks.shouldAnnounce(execution.status)) {
+          await stream.writeSSE({ event: 'decision', data })
         }
         // A `paused` run is NOT terminal — the spend gate pauses a run when the workspace budget
         // is exhausted and RESUMES it once budget frees up (ExecutionService.evaluateStep), so keep
@@ -484,7 +480,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
         if (
           execution.status !== 'running' &&
           execution.status !== 'paused' &&
-          execution.status !== 'blocked'
+          !isParked(execution.status)
         ) {
           // The run has stopped. When it ended in a terminal public status (succeeded/failed) the
           // event above already carried `done`/`error`. A raw status that maps to `running` but is
@@ -879,7 +875,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       let last = ''
       // Announce a park once per park (see the jobs stream for the rationale); re-armed on resume
       // so a later step's park is announced too.
-      let announcedPark = false
+      const parks = createParkAnnouncer()
       for (;;) {
         if (stream.aborted) break
         if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
@@ -911,13 +907,8 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
         // status happens to read `blocked`; `GET /api/v1/runs/:runId/decisions` then carries what
         // is actually being asked. The stream stays open across the park — answering resumes this
         // very run, and the caller should see that on the same connection.
-        if (execution.status === 'blocked') {
-          if (!announcedPark) {
-            await stream.writeSSE({ event: 'decision', data })
-            announcedPark = true
-          }
-        } else {
-          announcedPark = false
+        if (parks.shouldAnnounce(execution.status)) {
+          await stream.writeSSE({ event: 'decision', data })
         }
         if (execution.status === 'done' || execution.status === 'failed') break
         if (Date.now() - startedAt > SSE_MAX_MS) {

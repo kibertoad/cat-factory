@@ -281,6 +281,7 @@ export type {
   GoogleOAuthConfig,
   LangfuseConfig,
   ObservabilityConfig,
+  NotificationWebhookConfig,
   OtelConfig,
   PlatformAlertConfig,
   PrivilegedAppConfig,

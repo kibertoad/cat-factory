@@ -1,4 +1,9 @@
-import type { Clock, NotificationWebhookRepository, SecretCipher } from '@cat-factory/kernel'
+import type {
+  Clock,
+  NotificationWebhookRepository,
+  SecretCipher,
+  UrlSafetyPolicy,
+} from '@cat-factory/kernel'
 import { NotificationWebhookService } from './NotificationWebhookService.js'
 import { WebhookNotificationChannel } from './WebhookNotificationChannel.js'
 
@@ -13,6 +18,12 @@ export interface NotificationWebhookSupportDependencies {
   notificationWebhookRepository: NotificationWebhookRepository
   secretCipher: SecretCipher
   clock: Clock
+  /**
+   * The deployment's widened endpoint guard (its own `NOTIFICATION_WEBHOOK_ALLOW_*` slice), or
+   * absent for the strict public-https default. Handed to BOTH halves from here, so the rule that
+   * admits an endpoint at registration is by construction the rule the delivery path enforces.
+   */
+  urlSafetyPolicy?: UrlSafetyPolicy
   fetchImpl?: typeof fetch
   /** Structured-logger hook for a delivery that ultimately failed (best-effort ≠ invisible). */
   onError?: (
@@ -40,11 +51,13 @@ export function buildNotificationWebhookSupport(deps: NotificationWebhookSupport
       notificationWebhookRepository: deps.notificationWebhookRepository,
       secretCipher: deps.secretCipher,
       clock: deps.clock,
+      urlSafetyPolicy: deps.urlSafetyPolicy,
     }),
     channel: new WebhookNotificationChannel({
       notificationWebhookRepository: deps.notificationWebhookRepository,
       secretCipher: deps.secretCipher,
       clock: deps.clock,
+      urlSafetyPolicy: deps.urlSafetyPolicy,
       fetchImpl: deps.fetchImpl,
       onError: deps.onError,
     }),

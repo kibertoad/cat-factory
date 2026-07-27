@@ -21,6 +21,7 @@ import {
   InAppNotificationChannel,
   WebCryptoSecretCipher,
   logger,
+  resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
@@ -136,6 +137,7 @@ export interface NodeRealtimeDepsInput {
  */
 function selectNodeNotificationWebhookSupport(
   env: NodeJS.ProcessEnv,
+  config: AppConfig,
   clock: Clock,
   sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
 ): ReturnType<typeof buildNotificationWebhookSupport> | null {
@@ -144,7 +146,12 @@ function selectNodeNotificationWebhookSupport(
   // would make the two facades gate this feature on different conditions.
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) return null
+  // The endpoint guard, resolved from the webhook's OWN config slice (undefined ⇒ the strict
+  // public-https default). Handed to the builder, which gives it to both the write boundary and
+  // the delivery path so they can't admit/reject different endpoints. Symmetric with the Worker.
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
   return buildNotificationWebhookSupport({
+    ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
     notificationWebhookRepository: sourced(
       'notificationWebhookRepository',
       (d) => new DrizzleNotificationWebhookRepository(d),
@@ -192,7 +199,12 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, repos, sourced)
-  const notificationWebhookSupport = selectNodeNotificationWebhookSupport(env, clock, sourced)
+  const notificationWebhookSupport = selectNodeNotificationWebhookSupport(
+    env,
+    config,
+    clock,
+    sourced,
+  )
   const executionEventPublisher = realtimeSink
     ? new FanOutEventPublisher(new NodeEventPublisher(realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,

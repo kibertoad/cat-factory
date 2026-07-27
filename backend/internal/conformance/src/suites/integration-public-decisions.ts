@@ -224,5 +224,88 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
       expect(denied.status).toBe(404)
       expect(denied.body.error.code).toBe('not_found')
     })
+
+    it('cancels a headless job, freeing the in-flight slot its park was holding', async () => {
+      // This route is what makes admitting a PARKING pipeline safe at all: a parked run waits for
+      // a human indefinitely (there is deliberately no run-killing timeout — decision D1) while
+      // its anchor holds one of the workspace's MAX_ACTIVE_INITIATIVE_RUNS slots. Without a way to
+      // give up, the concurrency cap is a wall with no door.
+      //
+      // It belongs in conformance rather than a unit test because cancelling is per-runtime work:
+      // `stopRun` tears down the facade's own durable driver (Workflows ⇄ pg-boss) and writes the
+      // terminal row through its own store. A facade that mounted the route but left the run live
+      // would keep leaking slots, and the caller would see a `failed` job either way.
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const auth = await mintKey(app, workspace.id, 'write')
+
+      const created = await app.call<{ jobId: string }>(
+        'POST',
+        '/api/v1/initiatives',
+        { pipelineId: 'pl_initiative_breakdown', input: 'Ship a headless clarification loop.' },
+        auth,
+      )
+      expect(created.status).toBe(202)
+
+      // `write`, not `decide`: giving up on your own run is an ordinary mutation, and a caller
+      // must never be locked out of cleaning up work it started.
+      const cancelled = await app.call<{ id: string; status: string }>(
+        'POST',
+        `/api/v1/jobs/${created.body.jobId}/cancel`,
+        undefined,
+        auth,
+      )
+      expect(cancelled.status).toBe(200)
+      expect(cancelled.body.status).toBe('failed')
+
+      // Idempotent — a terminal run comes back as-is rather than erroring, so a caller retrying
+      // through a dropped connection doesn't have to distinguish the two.
+      const again = await app.call<{ status: string }>(
+        'POST',
+        `/api/v1/jobs/${created.body.jobId}/cancel`,
+        undefined,
+        auth,
+      )
+      expect(again.status).toBe(200)
+      expect(again.body.status).toBe('failed')
+
+      // The job stays READABLE afterwards: cancelling records a terminal state, it does not delete
+      // the run, so a caller can still fetch what happened.
+      const polled = await app.call<{ status: string }>(
+        'GET',
+        `/api/v1/jobs/${created.body.jobId}`,
+        undefined,
+        auth,
+      )
+      expect(polled.status).toBe(200)
+    })
+
+    it('refuses to cancel a job belonging to another workspace', async () => {
+      // Same scoping rule as the decision routes — and the route mutates, so a gap here is worse
+      // than a read leak: a foreign key could terminate a tenant's running work.
+      const app = harness.makeApp()
+      const { workspace: a } = await app.createOrgWorkspace({ seed: true })
+      const { workspace: b } = await app.createOrgWorkspace({ seed: true })
+      const ownerAuth = await mintKey(app, a.id, 'write')
+      const foreignAuth = await mintKey(app, b.id, 'admin')
+
+      const created = await app.call<{ jobId: string }>(
+        'POST',
+        '/api/v1/initiatives',
+        { pipelineId: 'pl_initiative_breakdown', input: 'A run another tenant must not touch.' },
+        ownerAuth,
+      )
+      expect(created.status).toBe(202)
+
+      // 404, not 403 — a 403 would confirm the run exists. Even an `admin` key gets nothing.
+      const denied = await app.call<{ error: { code: string } }>(
+        'POST',
+        `/api/v1/jobs/${created.body.jobId}/cancel`,
+        undefined,
+        foreignAuth,
+      )
+      expect(denied.status).toBe(404)
+      expect(denied.body.error.code).toBe('not_found')
+    })
   })
 }

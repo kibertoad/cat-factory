@@ -333,6 +333,12 @@ export {
   buildNotificationWebhookSupport,
   type NotificationWebhookSupportDependencies,
 } from './modules/notificationWebhook/support.js'
+export { assertSafeNotificationWebhookUrl } from './modules/notificationWebhook/webhookUrl.js'
+
+// The provider-neutral SSRF host/scheme guard behind every operator-supplied-URL integration
+// (environments, runner pools, notification webhooks). One implementation, so a bypass found in
+// any of them is fixed for all of them; each caller supplies only its wording + its own policy.
+export { assertSafePublicUrl, type PublicUrlGuardOptions } from './modules/shared/url-guard.js'
 
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),

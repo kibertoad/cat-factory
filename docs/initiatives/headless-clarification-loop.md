@@ -114,11 +114,39 @@ A caller should not have to poll to learn its run parked. Both shapes ride exist
 - **Webhook.** A new `WebhookNotificationChannel` in `@cat-factory/integrations`, composed
   into the existing `CompositeNotificationChannel` beside the in-app and Slack channels — the
   seam that exists for exactly this. Endpoint + secret are a persisted per-workspace setting
-  (`notification_webhooks`, D1 ⇄ Drizzle), deliveries are HMAC-signed with the server's
-  existing `HmacSigner` primitive, and delivery is best-effort with a small bounded retry.
+  (`notification_webhooks`, D1 ⇄ Drizzle), and delivery is best-effort.
 
 The channel is type-filtered per workspace (default: the parking types), so enabling it does
 not fire-hose every notification at an integration that only cares about parks.
+
+Three properties of the delivery path are load-bearing and easy to regress:
+
+- **Signing is a DETACHED HMAC, not the server's `HmacSigner`.** That primitive mints
+  self-contained tokens whose payload travels inside the signed string and is audience-keyed;
+  a webhook needs a signature detached from a body the receiver already has. Decisively,
+  `@cat-factory/server` sits ABOVE `integrations`, so importing it here would invert the
+  layering. `webhookSignature.ts` is the plain Web Crypto HMAC-SHA256 both use underneath, over
+  `<timestamp>.<body>` so the timestamp is bound into the MAC and a replay window is meaningful.
+- **The endpoint rides the shared SSRF seam, at BOTH boundaries.** The URL is operator-supplied
+  and the body carries the workspace's work descriptions, so `NotificationWebhookService.put`
+  rejects a private/internal/metadata host up front AND delivery goes through `safeFetch`, which
+  re-runs the guard on every redirect hop. Validating only the stored URL vouches for the FIRST
+  hop; a receiver is free to 302 the delivery at `169.254.169.254`, and the signature headers are
+  custom so the platform's own cross-origin `Authorization` stripping would not cover them.
+  Widened only by the webhook's OWN config slice (`NOTIFICATION_WEBHOOK_ALLOW_*`) — never another
+  integration's, since this is the one target URL a _workspace_, not the operator, chooses.
+- **The retry budget is a wall-clock deadline, not an attempt count.** `NotificationService.raise`
+  AWAITS the channel fan-out, so this time is latency on the engine step that parks the run.
+  Three 5s attempts plus backoff would let a dead receiver add ~15.8s to a park, which no other
+  channel does. Attempts stop when the total budget is gone, and each attempt's timeout is clamped
+  to what remains.
+
+**The webhook is an EXTERNAL channel** (everything that is not the in-app push), so it composes
+into that set on both facades rather than only into the local fan-out — the set the mothership
+delivers on a node's behalf. Its secret is sealed with the deployment key, so the deployment
+holding that key is the only side that can decrypt and deliver it; keeping it out of the external
+set would leave a mothership-mode laptop failing every delivery on a decrypt it cannot perform
+while the mothership never attempted one.
 
 ### D4 — Ticket reply grammar (slice 2): explicit commands, never natural-language guessing
 
@@ -285,6 +313,13 @@ registry the `headlessStartable` flag is computed against.
 - **The park is arbitrated by CAS/approval id already.** Slice 1 adds a second answer surface
   and slice 2 a third; none of them may invent arbitration. Verify the loser is REJECTED
   cleanly rather than adding a lock.
+- **An answer surface must carry the RUN's initiator, not the caller's.** The SPA controllers
+  wrap the run-resuming actions in `runWithInitiator(c.get('user')?.id, …)` so the resumed run's
+  container work uses that user's PAT (`PatPreferringAppRegistry` reads `currentInitiator()`).
+  A non-SPA surface has no acting user — but "so skip the scope" is WRONG, because these routes
+  are keyed by run id and deliberately accept a BOARD task run, which was very likely started in
+  the SPA and does carry a `usr_*` initiator. Pass `execution.initiatedBy`: correct for both, and
+  a no-op on a genuinely headless run (`null`). Slice 2's ticket surface must do the same.
 - **`intakeOrigin` rides `detail`.** Adding a run field there is free (no migration) but it is
   parsed tolerantly — an unknown value must degrade to `ui`, never throw the snapshot.
 - **The scope ladder is index-ordered.** `PUBLIC_API_SCOPES` order IS the ladder;

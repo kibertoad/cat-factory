@@ -30,6 +30,14 @@ import * as v from 'valibot'
  *    `write` integration sees exactly the pre-existing behaviour, including the refusal of
  *    parking pipelines. Minting a `decide` key is the operator asserting "this integration is
  *    the headless overseer for these runs".
+ *
+ *    **The grant is WORKSPACE-WIDE, not limited to runs the key started.** The decision surface
+ *    is keyed by run id and resolves any run in the key's workspace — including a board task a
+ *    human started in the SPA — because a headless overseer that could only answer its own runs
+ *    would be useless for the case it exists for (an integration watching a team's board). That
+ *    is the same reach a `write` key already has over board runs (start/stop/retry), one rung
+ *    up. Scope a key to a workspace accordingly, and prefer `write` for an integration that
+ *    only needs to author and launch.
  *  - `admin`  — everything `decide` can do, PLUS destructive / merge-adjacent operations
  *    (delete a task, act on a notification — which can perform a real merge).
  *

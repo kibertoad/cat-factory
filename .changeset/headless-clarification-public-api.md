@@ -36,4 +36,21 @@ polling; and `ExecutionInstance.intakeOrigin` (`ui` | `public-api`), recorded so
 push clarification questions to a tracker issue for headless-origin runs only. A UI-started
 task's behaviour is unchanged throughout.
 
+The webhook endpoint is held to the same SSRF guard as the other operator-supplied-URL
+integrations, at both boundaries: registration rejects a private/internal/cloud-metadata host,
+and delivery goes through the shared `safeFetch` so the guard re-runs on every redirect hop
+(a public endpoint cannot 302 the signed body at an internal target). Two new optional env
+vars, `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`, widen
+it for a receiver on an internal host or a developer's `localhost`; they are scoped to
+webhooks alone, so they never widen the runner-pool or environment guard. One delivery is
+bounded by a total wall-clock budget rather than an attempt count, because the notification
+fan-out is awaited by the engine step that raises it. The webhook counts as an EXTERNAL
+notification channel, so under mothership mode the mothership — which holds the key its
+signing secret is sealed with — is the side that delivers it.
+
+Also exported: `assertSafePublicUrl`, the provider-neutral URL guard now shared by the
+environment, runner-pool and notification-webhook integrations (previously an
+environment-labelled private function), so an SSRF bypass is fixed in one place for all of
+them.
+
 See `docs/initiatives/headless-clarification-loop.md`.

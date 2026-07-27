@@ -1034,11 +1034,16 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
  */
 function buildNotificationWebhookSupportForWorker(
   env: Env,
+  config: AppConfig,
   db: D1Database,
   clock: Clock,
 ): ReturnType<typeof buildNotificationWebhookSupport> | null {
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) return null
+  // The endpoint guard, resolved from the webhook's OWN config slice (undefined ⇒ the strict
+  // public-https default). Handed to the builder, which gives it to both the write boundary and
+  // the delivery path so they can't admit/reject different endpoints.
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
   return buildNotificationWebhookSupport({
     notificationWebhookRepository: new D1NotificationWebhookRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
@@ -1046,6 +1051,7 @@ function buildNotificationWebhookSupportForWorker(
       info: NOTIFICATION_WEBHOOK_CIPHER_INFO,
     }),
     clock,
+    ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
     // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
     // through the structured logger so a broken receiver is diagnosable.
     onError: (error, ctx) =>
@@ -2278,7 +2284,12 @@ export function buildContainer(
   // The outbound notification webhook: management service + delivery channel from ONE builder, so
   // the surface that reports an endpoint as configured and the channel that delivers to it can
   // never end up on different repositories/ciphers.
-  const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(env, db, clock)
+  const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(
+    env,
+    config,
+    db,
+    clock,
+  )
 
   return assembleWorkerContainer({
     env,
