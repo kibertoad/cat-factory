@@ -793,6 +793,21 @@ both exit codes. Only red-then-green is proof. Design:
   dispatches no proof, so `concededReproductionReport` records the declaration. That is why "could
   not be reproduced" never reads the same as "nobody tried".
 
+### Pipeline PR descriptions (agent-authored reviewer briefing)
+
+A pipeline-opened PR's description is the AGENT's reviewer briefing, not a restated task record.
+A PR-opening coding dispatch gets `PR_DESCRIPTION_GUIDANCE` (`@cat-factory/agents`) appended in
+`buildCodingAgentBody` — only when `opensPr`; an in-place fixer amends a PR whose description it
+doesn't own — asking the agent to write the briefing (problem, decisions + rejected alternatives,
+watch-outs; optional `# <title>` first line) to the `.cat-pr-description.md` sentinel at the
+checkout root, one per sibling repo in a multi-repo run. The harness (`pr-description.ts`) lifts
+it onto `openPullRequest` — secret-scrubbed, size-capped with a visible truncation note, the
+verification-report markers stripped so it can't collide with the managed section, excluded from
+git like the effort/follow-ups sentinels. Absent ⇒ the dispatch-time fallback `prBody()`, which
+briefs from what the pipeline knows before the run (task, human-chosen fork decision) and marks
+itself as agent-less. The filename is triple-kept-in-sync (agents ⇄ harness) like
+`EFFORT_REPORT_FILE`; changing the sentinel means an image bump.
+
 ### Merge lifecycle (CI gate → CI-fixer → merger → notifications)
 
 Turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is `done` only when

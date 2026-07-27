@@ -34,6 +34,12 @@ import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import { EFFORT_REPORT_FILE, type EffortReport } from './effort.js'
 import {
+  type AgentPrDescription,
+  applyPrDescription,
+  PR_DESCRIPTION_FILE,
+  readPrDescription,
+} from './pr-description.js'
+import {
   acquireRepoCheckout,
   agentNeverActed,
   agentOutputTail,
@@ -157,6 +163,12 @@ export interface CodingAgentOutcome {
   callMetrics?: HarnessCallMetric[]
   /** The agent's effort self-assessment, lifted from its sentinel file (absent when it wrote none). */
   effortReport?: EffortReport
+  /**
+   * The agent-authored PR description, lifted from its sentinel file (absent when it wrote none).
+   * The PR-opening caller folds it over the dispatch-time title/body via {@link applyPrDescription};
+   * absent means the fallback text, unchanged.
+   */
+  prDescription?: AgentPrDescription
   /**
    * Ralph loop: the verdict of the post-commit validation command (whether it exited 0, the
    * exit code, and a bounded/redacted output tail). Present only when {@link CodingAgentSpec.validation}
@@ -295,6 +307,9 @@ export async function runCodingAgent(
       // but that cannot un-stage a mid-run commit; the per-clone exclude is what prevents it. A bare
       // filename pattern matches the file in any subdirectory, so it covers a monorepo `workDir` too.
       await excludeFromGit(dir, EFFORT_REPORT_FILE, signal)
+      // Same treatment for the agent-authored PR-description sentinel: excluded locally so the
+      // agent's own `git add` can never stage the briefing into the PR it describes.
+      await excludeFromGit(dir, PR_DESCRIPTION_FILE, signal)
 
       // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
       // job view. Locally exclude it from git first so the agent's own `git add` can never
@@ -624,6 +639,14 @@ async function finalizeCodingRun(args: {
   // untracked scratch files/artifacts — the agent owns committing new files).
   await commitTrackedEdits(dir, spec.commitMessage, signal)
 
+  // The agent-authored PR description, read AFTER the validation loop (a repair round may have
+  // changed what the briefing should say) and removed so it never lingers in the checkout. The
+  // prompt asks for it at the top level of the checkout; a monorepo agent working in a service
+  // subdirectory may drop it in its cwd instead, so probe the checkout root first, then the cwd.
+  const prDescription =
+    (await readPrDescription(dir)) ??
+    (workDir !== dir ? await readPrDescription(workDir) : undefined)
+
   // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
   // push, so the two never run a concurrent `git push` to the same branch (the
   // final push below is then a fresh attempt whose failure is the real signal).
@@ -686,6 +709,7 @@ async function finalizeCodingRun(args: {
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
       ...(effortReport ? { effortReport } : {}),
+      ...(prDescription ? { prDescription } : {}),
     }
   }
 
@@ -1129,6 +1153,9 @@ async function prepareMultiRepoCheckouts(
       await createBranch(dir, leg.workBranch, signal)
     }
     leg.dir = dir
+    // Exclude the agent-authored PR-description sentinel locally (as the single-repo path does)
+    // so the agent's own `git add` can never stage the briefing into the PR it describes.
+    await excludeFromGit(dir, PR_DESCRIPTION_FILE, signal)
     // The branch tip before the agent runs. Captured BEFORE the resume base refresh below so
     // that refresh's merge commit counts as advancement and is pushed (as in the single-repo
     // path). A fresh leg produced work iff its branch advances past this; a resumed leg already
@@ -1201,6 +1228,9 @@ async function pushMultiRepoLegs(
     // A read-only reference leg is never committed or pushed — the third layer of the read-only
     // guarantee (the spec carries no branch/PR, and the clone phase gave it no work branch).
     if (leg.readOnly) continue
+    // Lift (and remove) the agent-authored PR description for THIS repo's PR before anything
+    // else touches the checkout — each sibling checkout carries its own briefing for its own PR.
+    const agentPrDescription = await readPrDescription(leg.dir)
     await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
     const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
     let hasWork = advanced || leg.resumed
@@ -1229,7 +1259,7 @@ async function pushMultiRepoLegs(
         ghToken: leg.ghToken,
         head: leg.workBranch,
         base: leg.repo.baseBranch,
-        pr: leg.pr,
+        pr: applyPrDescription(leg.pr, agentPrDescription),
         apiBase: job.githubApiBase,
         cloneUrl: leg.repo.cloneUrl,
         ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),

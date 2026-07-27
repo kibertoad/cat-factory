@@ -67,6 +67,40 @@ export const EFFORT_REPORT_GUIDANCE =
   'it to git. Write it exactly once, at the end.'
 
 /**
+ * The sentinel file a PR-opening coding agent writes its pull-request description to, at the root
+ * of the checkout the PR belongs to. Kept in sync with the harness's own constant (executor-harness
+ * has no dependency on this package), exactly like `EFFORT_REPORT_FILE` above.
+ */
+export const PR_DESCRIPTION_FILE = '.cat-pr-description.md'
+
+/**
+ * Appended to a coding kind's system prompt ONLY when its dispatch opens a pull request (see
+ * `buildCodingAgentBody`). It asks the agent to end its work by writing the reviewer-facing PR
+ * description — a briefing carrying what the diff cannot show (problem, decisions, watch-outs),
+ * never a restated diff — to a sentinel file the harness lifts onto the PR it opens. Without it
+ * the PR falls back to the generic dispatch-time text (`prBody`), which is composed BEFORE the
+ * agent runs and so can never describe the decisions actually made. This is a SIDE channel: the
+ * platform keeps the file out of the commit, so writing it never affects the deliverable.
+ */
+export const PR_DESCRIPTION_GUIDANCE =
+  'PULL REQUEST DESCRIPTION — when you have finished the work, write the reviewer-facing pull ' +
+  `request description to a file named \`${PR_DESCRIPTION_FILE}\` at the top level of the ` +
+  'repository checkout (in a multi-repo workspace: one file at the root of EACH sibling ' +
+  "repository you changed, each describing that repository's own pull request). The platform " +
+  'opens the pull request for you and uses this file as its description; if you skip it, a ' +
+  'generic auto-generated description is used instead. You may start the file with a single ' +
+  '`# <title>` heading line to set the pull request title (imperative mood, under 70 ' +
+  'characters). Write the rest as a briefing for a human reviewer, in markdown, covering what ' +
+  'the diff cannot show: the problem being solved and the intent of the change; the key ' +
+  'decisions you made along the way, especially where you considered an alternative and ' +
+  'rejected it (say what and why); and what the reviewer should be aware of or look out for — ' +
+  'behaviour changes, the riskiest or least-obvious part of the change, anything that only ' +
+  'makes sense with context the diff does not carry. Do NOT restate what the diff already ' +
+  'shows: no file lists, no per-change narration, no test tallies. Never include secrets, ' +
+  'tokens, or credentials. This file is a side channel: it is kept out of the commit, so never ' +
+  'reference it in code and never add it to git. Write it once, at the end of your work.'
+
+/**
  * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per
  * best-practice standard, how well the reviewed object adheres — a 1..10 rating plus the specific
  * issues that standard surfaced — as a `fragmentAdherence` array in its JSON output. The standards

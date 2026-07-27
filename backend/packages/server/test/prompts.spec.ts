@@ -317,7 +317,31 @@ describe('prBody', () => {
     )
     expect(body).toContain('**Add login** (task)')
     expect(body).toContain('do it')
-    expect(body).toContain('Pipeline: Ship')
+    expect(body).toContain('`Ship` pipeline')
+    // The fallback marks itself as dispatch-time text so a reviewer knows no agent briefing exists.
+    expect(body).toContain('the agent did not write')
+    // No fork decision ran ⇒ no approach section.
+    expect(body).not.toContain('Chosen implementation approach')
+  })
+
+  it('briefs the reviewer on the human-chosen implementation approach when the fork phase ran', () => {
+    const body = prBody(
+      context({
+        block: { id: 'b1', title: 'Add login', type: 'task', description: 'do it' },
+        implementationChoice: {
+          source: 'proposed',
+          title: 'Session cookie',
+          approach: 'Store the session server-side; the cookie carries only the id.',
+          note: 'Keep the cookie HttpOnly.',
+          alternativesConsidered: ['Stateless JWT', 'OAuth-only'],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(body).toContain('## Chosen implementation approach')
+    expect(body).toContain('**Session cookie**')
+    expect(body).toContain('Store the session server-side')
+    expect(body).toContain('Alternatives considered and rejected: Stateless JWT; OAuth-only.')
+    expect(body).toContain('Keep the cookie HttpOnly.')
   })
 })
 

@@ -188,11 +188,15 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > default (c
     "model": "@cf/test/model",
     "newBranch": "cat-factory/blk_1",
     "pr": {
-      "body": "Automated implementation for block **Add widget** (service).
+      "body": "Automated implementation for **Add widget** (service), delivered by the \`Standard build\` pipeline.
+
+## Task
 
 Implement the widget feature.
 
-Pipeline: Standard build",
+---
+
+_This description was generated when the run was dispatched; the agent did not write its own reviewer briefing for this pull request._",
       "title": "Add widget (Standard build)",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
@@ -239,7 +243,9 @@ This repository may contain a prescriptive SPECIFICATION for the service under t
 - \`spec/features/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.
 Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.
 
-EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
+EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.
+
+PULL REQUEST DESCRIPTION — when you have finished the work, write the reviewer-facing pull request description to a file named \`.cat-pr-description.md\` at the top level of the repository checkout (in a multi-repo workspace: one file at the root of EACH sibling repository you changed, each describing that repository's own pull request). The platform opens the pull request for you and uses this file as its description; if you skip it, a generic auto-generated description is used instead. You may start the file with a single \`# <title>\` heading line to set the pull request title (imperative mood, under 70 characters). Write the rest as a briefing for a human reviewer, in markdown, covering what the diff cannot show: the problem being solved and the intent of the change; the key decisions you made along the way, especially where you considered an alternative and rejected it (say what and why); and what the reviewer should be aware of or look out for — behaviour changes, the riskiest or least-obvious part of the change, anything that only makes sense with context the diff does not carry. Do NOT restate what the diff already shows: no file lists, no per-change narration, no test tallies. Never include secrets, tokens, or credentials. This file is a side channel: it is kept out of the commit, so never reference it in code and never add it to git. Write it once, at the end of your work.",
     "userPrompt": "Pipeline: Standard build
 Block: Add widget (service)
 Description: Implement the widget feature.
