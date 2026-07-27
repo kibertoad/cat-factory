@@ -31,7 +31,7 @@ const back = useIntegrationBack(open)
 // ticked, so a recommendation never enables a slug OpenRouter doesn't actually serve.
 const RECOMMENDED_SLUGS = [
   'anthropic/claude-fable-5',
-  'anthropic/claude-opus-4.8',
+  'anthropic/claude-opus-5',
   'openai/gpt-5.5',
   'google/gemini-3-pro',
   'deepseek/deepseek-chat',

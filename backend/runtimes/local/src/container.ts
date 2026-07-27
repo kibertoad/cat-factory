@@ -288,7 +288,7 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
     // when not in mothership mode — it stays the injected hub).
     ...(realtimeSink ? { realtimeSink } : {}),
-    // Local mode seeds a fresh workspace's model-preset library with Claude Opus 4.8 as the
+    // Local mode seeds a fresh workspace's model-preset library with Claude Opus 5 as the
     // default: the local facade runs subscription-only models (via the developer's ambient
     // `claude` CLI for inline steps + a leased personal credential for container steps), so
     // Claude is a first-class default here even though it can't run on the bare Cloudflare

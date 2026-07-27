@@ -249,7 +249,7 @@ export const MODEL_PRESET_SEED_IDS = {
 /**
  * The built-in model presets seeded for every workspace, using the catalog ids from
  * {@link MODEL_CATALOG}: "Kimi K2.7" (everything `kimi-k2.7`, the Cloudflare-served
- * baseline), "GLM-5.2" (everything `glm`), and "Claude Opus 4.8" (everything
+ * baseline), "GLM-5.2" (everything `glm`), and "Claude Opus 5" (everything
  * `claude-opus`, run via a Claude subscription or OpenRouter). A workspace always keeps
  * at least these until the operator edits the library. WHICH one is the workspace
  * default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first seed —
@@ -268,10 +268,13 @@ export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
   { id: MODEL_PRESET_SEED_IDS.glm, name: 'GLM-5.2', baseModelId: 'glm', overrides: {}, version: 1 },
   {
     id: MODEL_PRESET_SEED_IDS.claude,
-    name: 'Claude Opus 4.8',
+    name: 'Claude Opus 5',
     baseModelId: 'claude-opus',
     overrides: {},
-    version: 1,
+    // v2: `claude-opus` rolled forward from Opus 4.8 to Opus 5, so the preset's NAME
+    // changed. Bumping the version surfaces the reseed advisory to workspaces still
+    // holding the "Claude Opus 4.8"-named copy.
+    version: 2,
   },
 ]
 

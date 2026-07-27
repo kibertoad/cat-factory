@@ -160,7 +160,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
 
     const result = await transport.runInline({
       harness: 'claude-code',
-      model: 'claude-opus-4-8',
+      model: 'claude-opus-5',
       system: 'sys',
       prompt: 'go',
       subscriptionToken: 'oat-token',

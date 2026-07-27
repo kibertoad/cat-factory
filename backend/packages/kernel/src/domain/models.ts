@@ -312,17 +312,23 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'claude-opus',
     family: 'claude',
-    label: 'Claude Opus 4.8',
+    label: 'Claude Opus 5',
     description:
-      "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
-      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
+      "Anthropic's flagship agentic-coding model — a step change over Opus 4.8 at the " +
+      'same price, run via Claude Code on your Claude subscription, or pay-as-you-go ' +
+      'through OpenRouter (billed at Anthropic rates).',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-4.8', contextTokens: 1_000_000 },
+      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-5', contextTokens: 1_000_000 },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
     subscription: {
-      ref: { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' },
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-opus-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+      },
       vendor: 'claude',
     },
   },

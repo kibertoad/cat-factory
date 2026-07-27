@@ -65,6 +65,11 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // Anthropic (list prices from the Claude model catalog, USD→EUR ~0.92).
   // Claude Fable 5 is above Opus-tier ($10 in / $50 out per 1M).
   'anthropic:claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
+  // Claude Opus 5 lands at Opus-tier list price ($5 in / $25 out per 1M) — same as the
+  // Opus 4.8 it supersedes in the catalog. Opus 4.8 keeps its entry: a workspace can
+  // still pin it through the dynamic OpenRouter catalog, and historical spend rows
+  // recorded against it must keep costing correctly.
+  'anthropic:claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'anthropic:claude-opus-4-8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'anthropic:claude-sonnet-4-6': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-haiku-4-5': { inputPerMillion: 0.92, outputPerMillion: 4.6 },
@@ -107,6 +112,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
   // fallback is a mid-range guess for any uncatalogued slug.
   'openrouter:anthropic/claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
+  'openrouter:anthropic/claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:google/gemini-3-pro': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 3.68, outputPerMillion: 22.08 },
