@@ -109,7 +109,9 @@ async function reclaimAcceptanceCriteria(
 ): Promise<void> {
   const repo = deps.acceptanceCriterionRepository
   if (!repo) return
-  const doomedFrames = blocks.filter((b) => doomed.has(b.id) && b.level === 'frame').map((b) => b.id)
+  const doomedFrames = blocks
+    .filter((b) => doomed.has(b.id) && b.level === 'frame')
+    .map((b) => b.id)
   // The frame block may already be gone (the dangling case), so include the deleted id itself —
   // its criteria are exactly the ones that would otherwise be unreachable.
   const frameIds = doomedFrames.includes(deletedId) ? doomedFrames : [...doomedFrames, deletedId]
