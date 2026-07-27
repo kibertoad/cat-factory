@@ -3,6 +3,8 @@ import type {
   AgentFailure,
   Block,
   ExecutionInstance,
+  IntakeOrigin,
+  NotificationType,
   IssueIntakeConfig,
   Pipeline,
   PipelineStep,
@@ -17,7 +19,9 @@ import {
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
+  intakeOriginSchema,
   issueIntakeConfigSchema,
+  notificationTypeSchema,
   pipelinePurposeSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
@@ -778,6 +782,28 @@ export function serializeIssueIntakeColumn(config: IssueIntakeConfig | undefined
 }
 
 /**
+ * Parse a `notification_webhooks.types` JSON column (D1 migration 0061 ⇄ the Drizzle `types`
+ * column) onto the record's `types` filter. Lenient by design: NULL, malformed JSON, or entries
+ * that are no longer valid notification types read as an EMPTY filter — which the channel treats
+ * as "the default types", so a stale filter degrades to sensible deliveries rather than to a
+ * silently dead endpoint or a read that throws. Unknown members are dropped individually, so
+ * removing a notification type from the contract doesn't invalidate a whole workspace's filter.
+ * Shared by both runtimes' repos so the column can't drift.
+ */
+export function parseNotificationWebhookTypes(
+  value: string | null | undefined,
+): NotificationType[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry): entry is NotificationType => is(notificationTypeSchema, entry))
+  } catch {
+    return []
+  }
+}
+
+/**
  * A `kind='execution'` row of the unified `agent_runs` table (migration 0019).
  * The pipeline shape (pipelineId/Name, steps, currentStep) lives in the `detail`
  * JSON column; lifecycle/failure are top-level columns shared with bootstrap.
@@ -807,6 +833,8 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** How the run entered the system (see {@link ExecutionInstance.intakeOrigin}). */
+  intakeOrigin?: IntakeOrigin
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
   /** Successful outputs a restart discarded, oldest→newest (see {@link ExecutionInstance.outputHistory}). */
@@ -971,6 +999,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // How the run entered the system. Only a recognised value is surfaced — an absent (legacy)
+    // or unrecognised one is DROPPED so readers fall back to the `ui` default, which is the
+    // safe reading: a run whose intake we can't prove was headless never pushes its parked
+    // questions out to a tracker issue.
+    ...(is(intakeOriginSchema, detail.intakeOrigin) ? { intakeOrigin: detail.intakeOrigin } : {}),
     // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
     ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
     // Investigation diagnostics ride in `detail` too (only present once a container step
@@ -994,6 +1027,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    // Only persisted for a headless (`public-api`) run — `ui` is the read-time default, so
+    // storing it would put a redundant key on every ordinary run's detail JSON.
+    intakeOrigin: instance.intakeOrigin === 'public-api' ? 'public-api' : undefined,
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,

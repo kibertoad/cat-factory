@@ -428,6 +428,17 @@ export interface Env {
   /** `true` to permit `http` for a trusted internal pool scheduler URL. */
   RUNNERS_ALLOW_HTTP_URLS?: string
 
+  // ---- Outbound notification webhook (see config/notificationWebhooks.ts) -
+  /**
+   * Comma-separated hostnames exempt from the strict public-https guard on a workspace's
+   * outbound notification-webhook endpoint (see ENVIRONMENTS_ALLOW_URL_HOSTS). Scoped to
+   * webhooks alone: this is the one integration whose target URL a WORKSPACE chooses, so it
+   * must not ride another integration's operator-set allow-list.
+   */
+  NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS?: string
+  /** `true` to permit `http` for a plaintext receiver on a trusted internal network. */
+  NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS?: string
+
   // ---- Slack notification transport (see config/slack.ts; opt-in) ---------
   /**
    * Enables the Slack notification transport ('true'). The per-account bot token is

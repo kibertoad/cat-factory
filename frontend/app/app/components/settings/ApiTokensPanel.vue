@@ -11,10 +11,12 @@ import CopyButton from '~/components/common/CopyButton.vue'
 
 const { t, d } = useI18n()
 
-// The permission ladder a minted key can carry (read ⊂ write ⊂ admin), mirroring the backend
-// contract. A `read` key can only observe; `write` adds create/start/manage; `admin` adds the
-// destructive/merge-adjacent operations (e.g. deleting a task).
-const SCOPES: PublicApiScope[] = ['read', 'write', 'admin']
+// The permission ladder a minted key can carry (read ⊂ write ⊂ decide ⊂ admin), mirroring the
+// backend contract. A `read` key can only observe; `write` adds create/start/manage; `decide` adds
+// answering a run's PARKED human decisions (and, because of that, starting a headless run on a
+// pipeline that can park at all); `admin` adds the destructive/merge-adjacent operations (e.g.
+// deleting a task).
+const SCOPES: PublicApiScope[] = ['read', 'write', 'decide', 'admin']
 
 /** Localized label for a scope — an exhaustive switch, so a new scope is a compile error here. */
 function scopeLabel(scope: PublicApiScope): string {
@@ -23,6 +25,8 @@ function scopeLabel(scope: PublicApiScope): string {
       return t('settings.apiTokens.scopes.read')
     case 'write':
       return t('settings.apiTokens.scopes.write')
+    case 'decide':
+      return t('settings.apiTokens.scopes.decide')
     case 'admin':
       return t('settings.apiTokens.scopes.admin')
   }

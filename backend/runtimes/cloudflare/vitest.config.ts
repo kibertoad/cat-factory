@@ -97,10 +97,24 @@ export default defineConfig(async () => {
       // tips over into a spurious timeout. The driver is budget-bounded
       // (`maxRounds`/`jobMaxPolls`), so a genuinely stuck run fails fast via a
       // wrong-status assertion, never a hang — meaning a timeout here only ever
-      // means "slow", not "broken". 10s roughly doubles the observed worst case:
-      // enough to absorb CI variance without letting a real stall sit for long.
-      testTimeout: 10_000,
-      hookTimeout: 10_000,
+      // means "slow", not "broken".
+      //
+      // 10s was set as "roughly double the observed worst case" from a local run, and CI
+      // then disproved it: the shard carrying `conformance.spec.ts` runs ~2x the wall-clock
+      // of its siblings (the pre-existing `[ai]`-binding rejection storm below retries with
+      // exponential backoff on every inline Tester-QC call), and the heaviest double-drive
+      // spec — the spend-gate budget_paused card — tipped into a spurious 10s timeout while
+      // every other shard stayed green.
+      //
+      // So this now matches the NODE runtime's 30s (`runtimes/node/vitest.config.ts`), which
+      // is the real fix rather than a nudge: both facades run the SAME
+      // `defineConformanceSuite`, so holding the shared suite to a 3x tighter budget on the
+      // slower runtime (workerd + real D1) was a harness parity gap — the identical spec
+      // passes on the Postgres shards and only ever failed here. Given the budget-bounded
+      // driver above, the headroom cannot hide a stall; it only stops "slow" from reading as
+      // "broken".
+      testTimeout: 30_000,
+      hookTimeout: 30_000,
       // Ignore workerd's un-awaitable unhandled rejections so a benign, expected
       // one can't red an otherwise-green run. The `[ai]` binding cannot run in the
       // local pool (`remoteBindings: false`), so any engine path that fires an INLINE

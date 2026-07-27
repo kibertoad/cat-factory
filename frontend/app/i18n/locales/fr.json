@@ -2397,6 +2397,7 @@
       "scopes": {
         "read": "Lecture seule",
         "write": "Lecture et écriture",
+        "decide": "Répondre aux décisions",
         "admin": "Accès complet"
       },
       "toast": {

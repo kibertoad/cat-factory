@@ -550,6 +550,7 @@
       "scopes": {
         "read": "Nur Lesen",
         "write": "Lesen und Schreiben",
+        "decide": "Antworten auf Entscheidungen",
         "admin": "Vollzugriff"
       },
       "toast": {
