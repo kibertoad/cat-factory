@@ -1,5 +1,59 @@
 # @cat-factory/kernel
 
+## 0.163.0
+
+### Minor Changes
+
+- 829a905: Add Claude Opus 5 support: the `claude-opus` catalog entry rolls forward from Opus 4.8 to
+  Opus 5, with its own spend pricing and an updated OpenRouter recommended slug.
+
+  - `@cat-factory/kernel`: `MODEL_CATALOG`'s `claude-opus` entry now resolves to Anthropic's
+    **Claude Opus 5** — subscription ref `anthropic:claude-opus-5` (Claude Code harness, 1M
+    context, previously left implicit) and OpenRouter ref `anthropic/claude-opus-5`. This
+    mirrors how the entry already tracked the current Opus across 4.6 → 4.7 → 4.8, so a block
+    pinned to `claude-opus` picks up Opus 5 with no migration. **Breaking (pre-1.0,
+    acceptable):** Opus 4.8 is no longer a curated catalog entry — a workspace that wants it
+    specifically reaches it through the dynamic per-workspace OpenRouter catalog.
+  - `@cat-factory/kernel`: the built-in `mdp_claude` model preset is renamed to "Claude
+    Opus 5" and its catalog `version` bumped to `2`, so existing workspaces get the usual
+    reseed advisory for the built-in they still hold under the old name.
+  - `@cat-factory/spend`: adds `anthropic:claude-opus-5` and
+    `openrouter:anthropic/claude-opus-5` price entries at Opus-tier list price ($5 in / $25
+    out per 1M, ~4.6 / 23 EUR). The Opus 4.8 entries are kept so historical spend rows and
+    OpenRouter passthroughs still cost correctly.
+  - `@cat-factory/app`: "Enable recommended" in the OpenRouter catalog panel now offers
+    `anthropic/claude-opus-5` instead of `anthropic/claude-opus-4.8`, matching the curated
+    backend refs.
+  - `@cat-factory/cli` / `@cat-factory/local-server` / `@cat-factory/orchestration`: picker
+    label and doc comments follow the catalog ("Claude Opus 5").
+  - `@cat-factory/conformance`: the model-preset suite asserts the new `mdp_claude` catalog
+    version.
+
+### Patch Changes
+
+- 829a905: Refresh dependencies (direct + transitive) and bump the coding-agent CLIs baked into the
+  runner image.
+
+  - **Runner image (`@cat-factory/executor-harness`, image tag `1.57.0`)**: Pi
+    `0.80.6 → 0.82.1`, Claude Code `2.1.207 → 2.1.220`, Codex `0.144.1 → 0.145.0`, and the
+    two Pi extensions `@juicesharp/rpiv-todo` / `@juicesharp/rpiv-web-tools`
+    `1.20.0 → 2.1.0`. The todo extension's v2 tool result keeps the `details.tasks[]` shape
+    (`subject` + `pending`/`in_progress`/`completed`/`deleted` status) that
+    `parseTodoProgress` reads, so live subtask progress is unaffected. The image pins in
+    `deploy/backend` (`package.json` + `wrangler.toml`) and
+    `RECOMMENDED_HARNESS_IMAGE` are synced to the new tag.
+  - **Workspace dependencies**: refreshed the whole lockfile within the declared ranges, so
+    transitive dependencies move up too. Direct bumps include `ai` 7.0.37, `@ai-sdk/*`
+    (anthropic 4.0.21, openai 4.0.20, amazon-bedrock 5.0.32), `hono` 4.12.32,
+    `@hono/node-server` 2.0.12, `pg-boss` 12.26.3, `undici` 8.9.0, `wrangler` 4.114.0,
+    `@cloudflare/workers-types`, `@cloudflare/vitest-pool-workers` 0.18.8,
+    `@aws-sdk/client-s3` 3.1095.0, `@playwright/test` 1.62.0 and `turbo` 2.10.7. Every
+    version picked is the newest that already satisfies the `minimumReleaseAge` supply-chain
+    gate, and the AI-SDK family stays inside the majors that pair with `workers-ai-provider`
+    (`ai@^7`, `@ai-sdk/*@^4`). No third-party entries were added to
+    `minimumReleaseAgeExclude`. The frontend's `typescript@^6` pin is left alone (Nuxt /
+    `vue-tsc` toolchain).
+
 ## 0.162.0
 
 ### Minor Changes

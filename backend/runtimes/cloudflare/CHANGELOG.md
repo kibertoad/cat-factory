@@ -1,5 +1,50 @@
 # @cat-factory/worker
 
+## 0.106.2
+
+### Patch Changes
+
+- 829a905: Refresh dependencies (direct + transitive) and bump the coding-agent CLIs baked into the
+  runner image.
+
+  - **Runner image (`@cat-factory/executor-harness`, image tag `1.57.0`)**: Pi
+    `0.80.6 → 0.82.1`, Claude Code `2.1.207 → 2.1.220`, Codex `0.144.1 → 0.145.0`, and the
+    two Pi extensions `@juicesharp/rpiv-todo` / `@juicesharp/rpiv-web-tools`
+    `1.20.0 → 2.1.0`. The todo extension's v2 tool result keeps the `details.tasks[]` shape
+    (`subject` + `pending`/`in_progress`/`completed`/`deleted` status) that
+    `parseTodoProgress` reads, so live subtask progress is unaffected. The image pins in
+    `deploy/backend` (`package.json` + `wrangler.toml`) and
+    `RECOMMENDED_HARNESS_IMAGE` are synced to the new tag.
+  - **Workspace dependencies**: refreshed the whole lockfile within the declared ranges, so
+    transitive dependencies move up too. Direct bumps include `ai` 7.0.37, `@ai-sdk/*`
+    (anthropic 4.0.21, openai 4.0.20, amazon-bedrock 5.0.32), `hono` 4.12.32,
+    `@hono/node-server` 2.0.12, `pg-boss` 12.26.3, `undici` 8.9.0, `wrangler` 4.114.0,
+    `@cloudflare/workers-types`, `@cloudflare/vitest-pool-workers` 0.18.8,
+    `@aws-sdk/client-s3` 3.1095.0, `@playwright/test` 1.62.0 and `turbo` 2.10.7. Every
+    version picked is the newest that already satisfies the `minimumReleaseAge` supply-chain
+    gate, and the AI-SDK family stays inside the majors that pair with `workers-ai-provider`
+    (`ai@^7`, `@ai-sdk/*@^4`). No third-party entries were added to
+    `minimumReleaseAgeExclude`. The frontend's `typescript@^6` pin is left alone (Nuxt /
+    `vue-tsc` toolchain).
+
+- Updated dependencies [143e6bb]
+- Updated dependencies [829a905]
+- Updated dependencies [829a905]
+  - @cat-factory/orchestration@0.143.1
+  - @cat-factory/agents@0.70.1
+  - @cat-factory/consensus@0.11.41
+  - @cat-factory/integrations@0.100.2
+  - @cat-factory/kernel@0.163.0
+  - @cat-factory/observability-langfuse@0.7.263
+  - @cat-factory/provider-cloudflare@0.7.291
+  - @cat-factory/server@0.153.1
+  - @cat-factory/spend@0.12.89
+  - @cat-factory/eks@0.1.140
+  - @cat-factory/caching@0.10.45
+  - @cat-factory/gates@0.7.32
+  - @cat-factory/gitlab@0.13.8
+  - @cat-factory/observability-otel@0.2.46
+
 ## 0.106.1
 
 ### Patch Changes
