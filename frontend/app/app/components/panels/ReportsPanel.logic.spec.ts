@@ -6,7 +6,7 @@ import {
   isUnattributed,
   maxOf,
   segmentPct,
-  spendTotal,
+  spendMagnitude,
 } from './ReportsPanel.logic'
 
 const spend = (over: Partial<ReportSpendRow>): ReportSpendRow => ({
@@ -21,20 +21,23 @@ const spend = (over: Partial<ReportSpendRow>): ReportSpendRow => ({
 })
 
 describe('ReportsPanel logic', () => {
-  it('ranks a spend slice by its combined cost', () => {
-    expect(spendTotal(spend({ meteredCost: 2, subscriptionCost: 3 }))).toBe(5)
+  it('ranks a spend slice by its combined footprint', () => {
+    // Ranking/scaling only: the sum mixes real money with the illustrative cost of
+    // flat-rate quota usage, so no caller may render it as an amount. `ReportsSpendBreakdown`
+    // shows `meteredCost` and `subscriptionCost` as separate figures for exactly that reason.
+    expect(spendMagnitude(spend({ meteredCost: 2, subscriptionCost: 3 }))).toBe(5)
   })
 
   it('scales every segment against the widest row, not its own row', () => {
     // A per-row denominator would draw both bars full-width and erase the ranking.
     const rows = [spend({ meteredCost: 10 }), spend({ meteredCost: 2 })]
-    const max = maxOf(rows, spendTotal)
+    const max = maxOf(rows, spendMagnitude)
     expect(segmentPct(rows[0]!.meteredCost, max)).toBe(100)
     expect(segmentPct(rows[1]!.meteredCost, max)).toBe(20)
   })
 
   it('returns a zero max for an empty list and draws nothing from it', () => {
-    expect(maxOf([], spendTotal)).toBe(0)
+    expect(maxOf([], spendMagnitude)).toBe(0)
     expect(segmentPct(5, 0)).toBe(0)
     expect(columnPct(5, 0)).toBe(0)
   })

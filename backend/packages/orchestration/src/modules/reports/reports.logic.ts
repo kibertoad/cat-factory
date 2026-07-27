@@ -15,6 +15,21 @@ import type {
 // functions fold them into the wire projection. Kept pure (no clock, no I/O) so they're
 // unit-tested directly, mirroring `platform-observability.logic.ts`.
 
+/**
+ * The window's start, snapped DOWN to a bucket edge.
+ *
+ * `until - windowMs` lands wherever the request happened to arrive, which leaves the trend's
+ * first bucket holding a fraction of a bucket's data while rendering at the same width as
+ * its complete neighbours — a reader has no way to tell the short leading column from a
+ * genuinely quiet period, which is the one thing a trend must not get wrong. Snapping down
+ * makes every bucket complete except the trailing in-progress one, whose partialness is
+ * inherent and understood. The cost is that a window covers UP TO one bucket more than its
+ * nominal length; the projection reports the real `since` so the view says what it charted.
+ */
+export function alignWindowStart(until: number, windowMs: number, bucketMs: number): number {
+  return Math.floor((until - windowMs) / bucketMs) * bucketMs
+}
+
 /** Per-window sizing: how far back to aggregate and how wide each trend bucket is. */
 export const REPORT_WINDOWS: Record<ReportWindow, { windowMs: number; bucketMs: number }> = {
   '24h': { windowMs: 24 * 60 * 60_000, bucketMs: 60 * 60_000 }, // 24 × 1h buckets

@@ -59,7 +59,19 @@ export interface ReportSpendGroup {
   subscriptionCost: number
 }
 
-/** One slice of an activity breakdown, aggregated from the runs CREATED in the window. */
+/**
+ * One slice of an activity breakdown, aggregated from the runs CREATED in the window.
+ *
+ * Spans EVERY `agent_runs` kind (`execution`, `bootstrap`, `env-config-repair`), deliberately
+ * and unlike `PlatformMetricsRepository`, which groups by kind because its question is about
+ * run health. Here the activity breakdowns sit beside the spend breakdowns on the same
+ * dimension, and spend is the ledger of calls those same runs made — a bootstrap run's LLM
+ * calls are in `token_usage` like any other. Filtering activity to `execution` alone would
+ * put the two halves of one row on different populations, so a board could show more spend
+ * than it had runs to explain. The cost is that a bootstrap run, which carries no block and
+ * usually no service, lands in the `''` (unattributed) slice of the `service` and `taskType`
+ * breakdowns — where it belongs, since there is genuinely nothing to attribute it to.
+ */
 export interface ReportActivityGroup {
   key: string
   label: string | null

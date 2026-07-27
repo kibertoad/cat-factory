@@ -2,6 +2,7 @@ import type { ReportWindow, ReportsView } from '@cat-factory/contracts'
 import type { Clock, ReportRange, ReportScope, ReportsRepository } from '@cat-factory/kernel'
 import {
   REPORT_WINDOWS,
+  alignWindowStart,
   buildSpendTrend,
   foldTotals,
   toActivityRow,
@@ -40,7 +41,10 @@ export class ReportsService {
   ): Promise<ReportsView> {
     const { windowMs, bucketMs } = REPORT_WINDOWS[window]
     const until = this.deps.clock.now()
-    const since = until - windowMs
+    // Snapped to a bucket edge so the trend's leading column is a COMPLETE bucket; every
+    // breakdown and the totals aggregate over the same snapped window, so the tiles and the
+    // chart can never describe different spans. See `alignWindowStart`.
+    const since = alignWindowStart(until, windowMs, bucketMs)
     const scope: ReportScope = { accountId, workspaceId: workspaceId ?? null }
     const range: ReportRange = { since, until }
     const repo = this.deps.reportsRepository

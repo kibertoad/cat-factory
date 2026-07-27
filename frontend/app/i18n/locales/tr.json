@@ -1467,6 +1467,7 @@
     "refresh": "Yenile",
     "loading": "Raporlar yükleniyor…",
     "retry": "Yeniden dene",
+    "error": "Raporlar yüklenemedi.",
     "period": "{from} – {to}",
     "unattributed": "Atanmamış",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "Harcama",
       "empty": "Bu dönemde kayıtlı kullanım yok.",
       "calls": "{count} çağrı | {count} çağrı",
-      "tokens": "{input} giriş / {output} çıkış"
+      "tokens": "{input} giriş / {output} çıkış",
+      "subscriptionAside": "+{value} abonelik"
     },
     "activity": {
       "heading": "Çalıştırmalar",

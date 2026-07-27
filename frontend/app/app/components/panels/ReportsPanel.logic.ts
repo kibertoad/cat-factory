@@ -3,13 +3,20 @@ import type { ReportActivityRow, ReportSpendRow, ReportTrendPoint } from '~/type
 // Pure sizing/derivation behind `ReportsPanel.vue`: everything the template needs that is
 // arithmetic rather than markup, so it is unit-tested directly instead of through the DOM.
 
-/** Total cost of a spend slice — the ranking measure the bars are drawn against. */
-export function spendTotal(row: ReportSpendRow): number {
+// The two `*Magnitude` helpers add the metered and subscription costs together, which is a
+// number NOBODY MAY RENDER AS MONEY: only `meteredCost` is real spend, and `subscriptionCost`
+// is the illustrative equivalent-API cost of flat-rate quota usage, so their sum denominates
+// nothing. They exist purely as the RANKING and BAR-SCALING measure — the one job the sum is
+// valid for, because it orders slices by total footprint exactly as the SQL `ORDER BY` does.
+// Anything shown to a reader with a currency symbol must come off one of the two fields.
+
+/** A spend slice's combined footprint. Ranking/scaling only — never a displayed amount. */
+export function spendMagnitude(row: ReportSpendRow): number {
   return row.meteredCost + row.subscriptionCost
 }
 
-/** Total cost across a trend bucket, for scaling the columns. */
-export function trendTotal(point: ReportTrendPoint): number {
+/** A trend bucket's combined footprint. Ranking/scaling only — never a displayed amount. */
+export function trendMagnitude(point: ReportTrendPoint): number {
   return point.meteredCost + point.subscriptionCost
 }
 

@@ -40,7 +40,7 @@ if (databaseUrl) {
       await db.insert(agentRuns).values({
         workspace_id: row.workspaceId,
         id: row.id,
-        kind: 'execution',
+        kind: row.kind ?? 'execution',
         status: row.status,
         created_at: row.createdAt,
         updated_at: row.updatedAt,

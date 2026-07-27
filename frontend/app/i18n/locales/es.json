@@ -1467,6 +1467,7 @@
     "refresh": "Actualizar",
     "loading": "Cargando informes…",
     "retry": "Reintentar",
+    "error": "No se pudieron cargar los informes.",
     "period": "Del {from} al {to}",
     "unattributed": "Sin atribuir",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "Gasto",
       "empty": "No se registró uso en este periodo.",
       "calls": "{count} llamada | {count} llamadas",
-      "tokens": "{input} de entrada / {output} de salida"
+      "tokens": "{input} de entrada / {output} de salida",
+      "subscriptionAside": "+{value} suscripción"
     },
     "activity": {
       "heading": "Ejecuciones",

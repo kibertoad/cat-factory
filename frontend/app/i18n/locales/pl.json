@@ -1467,6 +1467,7 @@
     "refresh": "Odśwież",
     "loading": "Wczytywanie raportów…",
     "retry": "Spróbuj ponownie",
+    "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
     "unattributed": "Nieprzypisane",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "Koszty",
       "empty": "W tym okresie nie zarejestrowano użycia.",
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
-      "tokens": "{input} wejścia / {output} wyjścia"
+      "tokens": "{input} wejścia / {output} wyjścia",
+      "subscriptionAside": "+{value} subskrypcja"
     },
     "activity": {
       "heading": "Uruchomienia",

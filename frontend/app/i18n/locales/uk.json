@@ -1467,6 +1467,7 @@
     "refresh": "Оновити",
     "loading": "Завантаження звітів…",
     "retry": "Спробувати ще раз",
+    "error": "Не вдалося завантажити звіти.",
     "period": "З {from} по {to}",
     "unattributed": "Без прив’язки",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "Витрати",
       "empty": "За цей період використання не зафіксовано.",
       "calls": "{count} виклик | {count} виклики | {count} викликів",
-      "tokens": "{input} вхід / {output} вихід"
+      "tokens": "{input} вхід / {output} вихід",
+      "subscriptionAside": "+{value} підписка"
     },
     "activity": {
       "heading": "Запуски",

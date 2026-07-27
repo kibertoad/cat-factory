@@ -32,6 +32,8 @@ export interface ReportsSeedRun {
   status: string
   createdAt: number
   updatedAt: number
+  /** `agent_runs.kind`; defaults to `execution`. Activity counts every kind (see the port). */
+  kind?: string
   /** The account-owned service the run targets; null ⇒ unattributed. */
   serviceId?: string | null
   /** The block the run targets, resolved for the `taskType` dimension; null ⇒ unattributed. */
@@ -92,6 +94,14 @@ export function defineReportsSuite(
       const taskTwo = `task-2-${tag}`
       await seed.block(ws, frameOne, 'Checkout', null)
       await seed.block(wsB, frameTwo, 'Billing', null)
+      // A SECOND board of the same account carrying the SAME frame block id. Block ids are
+      // only unique within a workspace (which is why the services↔frame unique index is
+      // account-scoped), so a seeded/templated board legitimately collides like this. Every
+      // `service` assertion below is therefore also a fan-out guard: resolving the label by
+      // joining `blocks` straight from the aggregate would match both rows and DOUBLE this
+      // service's calls, tokens and cost. Same title, so the label stays deterministic
+      // whichever colliding row the pre-aggregation happens to pick.
+      await seed.block(wsB, frameOne, 'Checkout', null)
       await seed.service(svcOne, account, frameOne)
       await seed.service(svcTwo, account, frameTwo)
       await seed.block(ws, taskOne, 'Add coupon', 'feature')
@@ -134,6 +144,17 @@ export function defineReportsSuite(
         updatedAt: range.until,
         serviceId: svcOne,
         blockId: taskOne,
+      })
+      // A repo BOOTSTRAP on board A: a different `agent_runs.kind`, with no service and no
+      // block. Counted like any other run (its LLM calls are in the ledger the spend half
+      // reports), and unattributed on the service/task-type axes because it truly is.
+      await seed.run({
+        workspaceId: ws,
+        id: `run-boot-${tag}`,
+        kind: 'bootstrap',
+        status: 'done',
+        createdAt: 2_600,
+        updatedAt: 2_800,
       })
       // Another account's run → never visible under this account's scope.
       await seed.run({
@@ -284,6 +305,21 @@ export function defineReportsSuite(
       expect(rows.get(svcTwo)).toMatchObject({ label: 'Billing', calls: 1 })
     })
 
+    it('never multiplies a service slice when boards share a frame block id', async () => {
+      // The explicit statement of what the shared `frameOne` in the fixture guards. A
+      // fan-out here does not fail loudly: it silently inflates one slice, so the service
+      // breakdown stops summing to the same window totals every other breakdown reports.
+      const repo = makeRepo()
+      const { account, svcOne } = await seedFixture()
+      const model = await repo.spendByDimension(scopeOf(account), 'model', range)
+      const service = await repo.spendByDimension(scopeOf(account), 'service', range)
+      const calls = (rows: { calls: number }[]) => rows.reduce((sum, r) => sum + r.calls, 0)
+      expect(calls(service)).toBe(calls(model))
+      expect(byKey(service).get(svcOne)).toMatchObject({ label: 'Checkout', calls: 3 })
+      const activity = byKey(await repo.activityByDimension(scopeOf(account), 'service', range))
+      expect(activity.get(svcOne)).toMatchObject({ label: 'Checkout', runs: 2 })
+    })
+
     it('buckets a call with no resolvable run as unattributed rather than dropping it', async () => {
       // The `''` key is a real bucket: a report that silently omitted these rows would
       // under-report total spend while looking complete.
@@ -333,13 +369,14 @@ export function defineReportsSuite(
       const rows = byKey(await repo.activityByDimension(scopeOf(account), 'workspace', range))
       expect(rows.get(ws)).toMatchObject({
         label: 'Board A',
-        runs: 2,
-        done: 1,
+        // The two pipeline runs plus the bootstrap — every kind counts (see the port doc).
+        runs: 3,
+        done: 2,
         failed: 1,
         running: 0,
         other: 0,
-        // (400 + 600) / 2 — the out-of-window run never enters the average.
-        avgDurationMs: 500,
+        // (400 + 600 + 200) / 3 — the out-of-window run never enters the average.
+        avgDurationMs: 400,
       })
       expect(rows.get(wsB)).toMatchObject({ runs: 1, running: 1, done: 0, avgDurationMs: null })
     })
@@ -353,6 +390,19 @@ export function defineReportsSuite(
       expect(services.get(svcTwo)).toMatchObject({ label: 'Billing', runs: 1 })
       expect(taskTypes.get('feature')).toMatchObject({ runs: 2, done: 1, failed: 1 })
       expect(taskTypes.get('bug')).toMatchObject({ runs: 1, running: 1 })
+      // The bootstrap run has neither, so it lands in the unattributed slice of both.
+      expect(services.get('')).toMatchObject({ runs: 1 })
+      expect(taskTypes.get('')).toMatchObject({ runs: 1 })
+    })
+
+    it('counts every run kind, not just task pipelines', async () => {
+      // Activity sits beside spend on the same dimension, and spend is the ledger of the
+      // calls these same runs made — so restricting activity to `execution` would put the
+      // two halves of one row on different populations.
+      const repo = makeRepo()
+      const { account, ws } = await seedFixture()
+      const rows = byKey(await repo.activityByDimension(scopeOf(account, ws), 'workspace', range))
+      expect(rows.get(ws)?.runs).toBe(3)
     })
 
     it('buckets spend into contiguous time slices, oldest first', async () => {

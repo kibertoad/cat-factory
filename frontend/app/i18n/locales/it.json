@@ -3005,6 +3005,7 @@
     "refresh": "Aggiorna",
     "loading": "Caricamento dei report…",
     "retry": "Riprova",
+    "error": "Impossibile caricare i report.",
     "period": "Dal {from} al {to}",
     "unattributed": "Non attribuito",
     "window": {
@@ -3047,7 +3048,8 @@
       "heading": "Spesa",
       "empty": "Nessun utilizzo registrato in questo periodo.",
       "calls": "{count} chiamata | {count} chiamate",
-      "tokens": "{input} in ingresso / {output} in uscita"
+      "tokens": "{input} in ingresso / {output} in uscita",
+      "subscriptionAside": "+{value} abbonamento"
     },
     "activity": {
       "heading": "Esecuzioni",

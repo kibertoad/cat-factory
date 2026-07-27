@@ -1467,6 +1467,7 @@
     "refresh": "更新",
     "loading": "レポートを読み込んでいます…",
     "retry": "再試行",
+    "error": "レポートを読み込めませんでした。",
     "period": "{from} 〜 {to}",
     "unattributed": "未割り当て",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "費用",
       "empty": "この期間に記録された利用はありません。",
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
-      "tokens": "入力 {input} / 出力 {output}"
+      "tokens": "入力 {input} / 出力 {output}",
+      "subscriptionAside": "+{value} サブスクリプション"
     },
     "activity": {
       "heading": "実行",

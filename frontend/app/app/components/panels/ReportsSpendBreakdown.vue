@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ReportSpendRow } from '~/types/execution'
-import { maxOf, segmentPct, spendTotal } from './ReportsPanel.logic'
+import { maxOf, segmentPct, spendMagnitude } from './ReportsPanel.logic'
 
 // One ranked spend breakdown: a horizontal bar per slice, split into the metered
 // (`violet-500`, real money) and subscription (`amber-600`, illustrative equivalent-API
@@ -22,7 +22,7 @@ const props = defineProps<{
 
 const { t, n } = useI18n()
 const money = (value: number) => n(value, { key: 'currency', currency: props.currency })
-const max = computed(() => maxOf(props.rows, spendTotal))
+const max = computed(() => maxOf(props.rows, spendMagnitude))
 </script>
 
 <template>
@@ -34,7 +34,16 @@ const max = computed(() => maxOf(props.rows, spendTotal))
       <li v-for="row in rows" :key="row.key" class="text-xs" data-testid="reports-spend-row">
         <div class="mb-1 flex items-baseline justify-between gap-2">
           <span class="min-w-0 truncate text-slate-300">{{ labelOf(row) }}</span>
-          <span class="shrink-0 tabular-nums text-slate-400">{{ money(spendTotal(row)) }}</span>
+          <!-- The metered figure alone is the slice's SPEND. The subscription cost rides
+               beside it, in its own series colour and explicitly named, because it is the
+               illustrative cost of flat-rate quota usage — adding the two into one currency
+               figure would report money that was never billed. -->
+          <span class="shrink-0 tabular-nums text-slate-400">
+            {{ money(row.meteredCost) }}
+            <span v-if="row.subscriptionCost > 0" class="text-amber-400">
+              {{ t('reports.spend.subscriptionAside', { value: money(row.subscriptionCost) }) }}
+            </span>
+          </span>
         </div>
         <div class="flex h-1.5 gap-[2px]">
           <div

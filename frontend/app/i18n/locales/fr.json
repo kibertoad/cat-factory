@@ -1467,6 +1467,7 @@
     "refresh": "Actualiser",
     "loading": "Chargement des rapports…",
     "retry": "Réessayer",
+    "error": "Impossible de charger les rapports.",
     "period": "Du {from} au {to}",
     "unattributed": "Non attribué",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "Dépense",
       "empty": "Aucune utilisation enregistrée sur cette période.",
       "calls": "{count} appel | {count} appels",
-      "tokens": "{input} en entrée / {output} en sortie"
+      "tokens": "{input} en entrée / {output} en sortie",
+      "subscriptionAside": "+{value} abonnement"
     },
     "activity": {
       "heading": "Exécutions",

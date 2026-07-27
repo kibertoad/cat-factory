@@ -1530,6 +1530,7 @@
     "refresh": "Refresh",
     "loading": "Loading reports…",
     "retry": "Retry",
+    "error": "Reports could not be loaded.",
     "period": "{from} to {to}",
     "unattributed": "Unattributed",
     "window": {
@@ -1572,7 +1573,8 @@
       "heading": "Spend",
       "empty": "No recorded usage in this window.",
       "calls": "{count} call | {count} calls",
-      "tokens": "{input} in / {output} out"
+      "tokens": "{input} in / {output} out",
+      "subscriptionAside": "+{value} subscription"
     },
     "activity": {
       "heading": "Runs",

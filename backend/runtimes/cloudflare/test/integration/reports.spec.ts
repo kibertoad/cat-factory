@@ -33,11 +33,12 @@ const seed: ReportsSeed = {
     await env.DB.prepare(
       `INSERT INTO agent_runs
          (workspace_id, id, kind, status, detail, created_at, updated_at, service_id, block_id)
-       VALUES (?, ?, 'execution', ?, '{}', ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?)`,
     )
       .bind(
         row.workspaceId,
         row.id,
+        row.kind ?? 'execution',
         row.status,
         row.createdAt,
         row.updatedAt,

@@ -104,6 +104,49 @@ Every spend breakdown partitions the SAME ledger rows, so any of them totals ide
 (This is not the banned "reduce rows in JS" pattern — it reduces already-aggregated
 GROUP BY output, not raw rows.)
 
+This is only true while every breakdown stays one-row-per-ledger-row, which is why the
+`service` label is resolved through a **pre-aggregated** sub-select (`SERVICE_LABELS` /
+`serviceLabels`) instead of joining `blocks` straight from the aggregate. `blocks` is keyed
+`(workspace_id, id)` and a block id is only unique WITHIN a board — the reason the
+services↔frame unique index is account-scoped — so a seeded or templated frame id recurring
+across an account's boards would make a direct join match N rows and multiply that service's
+calls, tokens and cost by N. The failure is silent: the numbers stay plausible, and only the
+service breakdown's disagreement with the folded totals gives it away. Grouping the title
+down to one row per service first makes the join provably 1:1. The residual ambiguity (which
+colliding block's title wins) is confined to the cosmetic label. Conformance seeds exactly
+this collision, so every `service` assertion doubles as the fan-out guard.
+
+### Costs are never summed into one figure for a reader
+
+`meteredCost` and `subscriptionCost` are added together in exactly one place — the ranking
+and bar-scaling measure (`spendMagnitude` / `trendMagnitude`, mirroring the SQL `ORDER BY`).
+Nothing renders that sum with a currency symbol: only metered spend is money, and the
+subscription figure is the illustrative equivalent-API cost of flat-rate quota usage, so
+their sum denominates nothing. Each breakdown row shows the metered amount, with the
+subscription amount beside it in its own series colour when non-zero.
+
+### Activity counts every run kind
+
+The activity breakdowns span `execution`, `bootstrap` and `env-config-repair` alike —
+deliberately unlike `PlatformMetricsRepository`, which groups by kind because its question
+is run health. Here activity sits beside spend on the same row, and spend is the ledger of
+the calls those same runs made: a bootstrap's LLM calls are in `token_usage` like any
+other's. Filtering activity to `execution` would put the two halves of one row on different
+populations, so a board could show more spend than it had runs to explain. The cost is that
+a bootstrap run, carrying no block and usually no service, lands in the unattributed slice
+of the `service` and `taskType` breakdowns — which is where it belongs, since there is
+genuinely nothing to attribute it to.
+
+### The window start is snapped to a bucket edge
+
+`since` is `generatedAt - window` floored to a multiple of the trend's bucket width.
+Unsnapped, the first column of the chart holds a fraction of a bucket's data while rendering
+at the same width as its complete neighbours, and nothing distinguishes that short column
+from a genuinely quiet period — the one reading a trend must not get wrong. Snapping makes
+every bucket complete except the trailing in-progress one, whose partialness is inherent.
+A window therefore covers up to one bucket more than its nominal length; the projection
+reports the real `since`, and the panel prints it, so the view always says what it charted.
+
 ### Activity has a narrower axis than spend
 
 A RUN carries no single agent kind or model — those are per-step facts, which is precisely

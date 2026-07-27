@@ -3005,6 +3005,7 @@
     "refresh": "Aktualisieren",
     "loading": "Berichte werden geladen…",
     "retry": "Erneut versuchen",
+    "error": "Berichte konnten nicht geladen werden.",
     "period": "{from} bis {to}",
     "unattributed": "Nicht zugeordnet",
     "window": {
@@ -3047,7 +3048,8 @@
       "heading": "Kosten",
       "empty": "In diesem Zeitraum wurde keine Nutzung erfasst.",
       "calls": "{count} Aufruf | {count} Aufrufe",
-      "tokens": "{input} rein / {output} raus"
+      "tokens": "{input} rein / {output} raus",
+      "subscriptionAside": "+{value} Abo"
     },
     "activity": {
       "heading": "Läufe",

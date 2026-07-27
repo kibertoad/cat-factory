@@ -17,12 +17,12 @@
 import { LlmObservabilityService } from '../modules/observability/LlmObservabilityService.js'
 import { PlatformObservabilityService } from '../modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from '../modules/reports/ReportsService.js'
-import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
   createEnvironmentHandlerSeeder,
 } from '@cat-factory/integrations'
+import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import {
   createDocumentsModule,
   createEnvironmentsModule,

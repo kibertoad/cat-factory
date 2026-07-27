@@ -20,6 +20,27 @@ import type { D1Database } from '@cloudflare/workers-types'
 const ACCOUNT_WORKSPACES = 'SELECT id FROM workspaces WHERE account_id = ?'
 
 /**
+ * A service's display name, PRE-AGGREGATED to exactly one row per service id.
+ *
+ * `blocks` is keyed `(workspace_id, id)` and a block id is only unique WITHIN a workspace —
+ * which is why `idx_services_frame` is scoped by account rather than globally, and why a
+ * seeded/templated frame id legitimately recurs across an account's boards. Joining
+ * `blocks ON blocks.id = services.frame_block_id` directly from an aggregate would therefore
+ * FAN OUT: one ledger row would match N blocks and multiply that service's calls, tokens and
+ * cost by N, leaving the service breakdown disagreeing with the window totals. Grouping the
+ * title down to one row per service first makes the join provably 1:1, so the numbers are
+ * immune no matter how many boards share the id.
+ *
+ * `MIN(title)` still picks arbitrarily among colliding blocks. That ambiguity is confined to
+ * the LABEL, which is cosmetic; the aggregates it used to corrupt are not. `services` holds
+ * one row per service frame, so materialising this is cheap.
+ */
+const SERVICE_LABELS = `SELECT s.id AS service_id, MIN(b.title) AS title
+                        FROM services s
+                        LEFT JOIN blocks b ON b.id = s.frame_block_id
+                        GROUP BY s.id`
+
+/**
  * The joins and grouped key/label a spend dimension needs. `service` and `taskType` reach
  * the call's run through `execution_id` (a metered call records the run, not the board
  * shape), so a call with no resolvable run falls into the `''` (unattributed) bucket
@@ -38,10 +59,9 @@ const SPEND_DIMENSIONS: Record<
   },
   service: {
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
-            LEFT JOIN services s ON s.id = ar.service_id
-            LEFT JOIN blocks fb ON fb.id = s.frame_block_id`,
+            LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.service_id`,
     key: "COALESCE(ar.service_id, '')",
-    label: 'MAX(fb.title)',
+    label: 'MAX(sl.title)',
   },
   taskType: {
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
@@ -62,10 +82,9 @@ const ACTIVITY_DIMENSIONS: Record<
     label: 'MAX(w.name)',
   },
   service: {
-    joins: `LEFT JOIN services s ON s.id = ar.service_id
-            LEFT JOIN blocks fb ON fb.id = s.frame_block_id`,
+    joins: `LEFT JOIN (${SERVICE_LABELS}) sl ON sl.service_id = ar.service_id`,
     key: "COALESCE(ar.service_id, '')",
-    label: 'MAX(fb.title)',
+    label: 'MAX(sl.title)',
   },
   taskType: {
     joins: 'LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id',

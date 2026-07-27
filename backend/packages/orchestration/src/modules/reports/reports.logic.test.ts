@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ReportSpendTrendBucket } from '@cat-factory/kernel'
-import { REPORT_WINDOWS, buildSpendTrend, foldTotals, toSpendRow } from './reports.logic.js'
+import {
+  REPORT_WINDOWS,
+  alignWindowStart,
+  buildSpendTrend,
+  foldTotals,
+  toSpendRow,
+} from './reports.logic.js'
 
 const bucket = (over: Partial<ReportSpendTrendBucket>): ReportSpendTrendBucket => ({
   bucketStart: 0,
@@ -19,6 +25,22 @@ describe('reports logic', () => {
       expect(Number.isInteger(buckets), `${name} divides evenly`).toBe(true)
       expect(buckets, `${name} bucket count`).toBeGreaterThanOrEqual(24)
       expect(buckets, `${name} bucket count`).toBeLessThanOrEqual(48)
+    }
+  })
+
+  it('snaps the window start onto a bucket edge so the first column is complete', () => {
+    // A request arriving 900ms into a 1000ms bucket would otherwise chart a 100ms sliver at
+    // the same width as a full bucket, which reads as a quiet period rather than a partial one.
+    expect(alignWindowStart(10_900, 9_000, 1_000)).toBe(1_000)
+    // Already on an edge ⇒ unchanged, so the common case is not silently widened.
+    expect(alignWindowStart(10_000, 9_000, 1_000)).toBe(1_000)
+    // Snapping only ever moves the start EARLIER: a window never loses data to alignment.
+    for (const { windowMs, bucketMs } of Object.values(REPORT_WINDOWS)) {
+      const until = 1_800_000_123_456
+      const since = alignWindowStart(until, windowMs, bucketMs)
+      expect(since).toBeLessThanOrEqual(until - windowMs)
+      expect(until - windowMs - since).toBeLessThan(bucketMs)
+      expect(since % bucketMs).toBe(0)
     }
   })
 

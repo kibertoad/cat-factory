@@ -21,9 +21,23 @@ export const useReportsStore = defineStore('reports', () => {
   const workspaceFilter = ref<string | null>(null)
   const view = ref<ReportsView | null>(null)
   const loading = ref(false)
+  /** Whether the last load failed. The panel owns the localized wording. */
+  const failed = ref(false)
+  /**
+   * The backend's raw (untranslated) message for a failed load, shown beneath the localized
+   * heading as a last-resort detail — null when the failure carried no message at all.
+   */
   const error = ref<string | null>(null)
 
   const accountId = computed(() => accounts.activeAccount?.id ?? null)
+
+  /**
+   * Monotonicity guard. The window buttons, the board filter and the refresh button can each
+   * start a load, so two are easily in flight at once — and without this a staler response
+   * resolving later would overwrite the newer view (and its `loading`/error state) with
+   * numbers for a window the user already moved off. Only the newest load may commit.
+   */
+  let latest = 0
 
   async function load() {
     const id = accountId.value
@@ -31,14 +45,20 @@ export const useReportsStore = defineStore('reports', () => {
       view.value = null
       return
     }
+    const seq = ++latest
     loading.value = true
+    failed.value = false
     error.value = null
     try {
-      view.value = await api.getReports(id, window.value, workspaceFilter.value)
+      const next = await api.getReports(id, window.value, workspaceFilter.value)
+      if (seq !== latest) return
+      view.value = next
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load reports'
+      if (seq !== latest) return
+      failed.value = true
+      error.value = err instanceof Error ? err.message : null
     } finally {
-      loading.value = false
+      if (seq === latest) loading.value = false
     }
   }
 
@@ -61,6 +81,7 @@ export const useReportsStore = defineStore('reports', () => {
     workspaceFilter,
     view,
     loading,
+    failed,
     error,
     accountId,
     load,

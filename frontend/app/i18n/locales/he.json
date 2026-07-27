@@ -1467,6 +1467,7 @@
     "refresh": "רענון",
     "loading": "טוען דוחות…",
     "retry": "נסה שוב",
+    "error": "לא ניתן היה לטעון את הדוחות.",
     "period": "מ־{from} עד {to}",
     "unattributed": "ללא שיוך",
     "window": {
@@ -1509,7 +1510,8 @@
       "heading": "עלות",
       "empty": "לא נרשם שימוש בטווח הזה.",
       "calls": "קריאה {count} | {count} קריאות",
-      "tokens": "{input} נכנס / {output} יוצא"
+      "tokens": "{input} נכנס / {output} יוצא",
+      "subscriptionAside": "+{value} מנוי"
     },
     "activity": {
       "heading": "ריצות",

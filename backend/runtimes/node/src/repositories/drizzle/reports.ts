@@ -26,12 +26,49 @@ const meteredCost = sql<number>`coalesce(sum(case when ${tokenUsage.billing} = '
 const subscriptionCost = sql<number>`coalesce(sum(case when ${tokenUsage.billing} = 'subscription' then ${tokenUsage.cost_estimate} else 0 end), 0)::float8`
 
 /**
+ * A service's display name, PRE-AGGREGATED to exactly one row per service id.
+ *
+ * `blocks` is keyed `(workspace_id, id)` and a block id is only unique WITHIN a workspace —
+ * which is why `idx_services_frame` is scoped by account rather than globally, and why a
+ * seeded/templated frame id legitimately recurs across an account's boards. Joining
+ * `blocks ON blocks.id = services.frame_block_id` directly from an aggregate would therefore
+ * FAN OUT: one ledger row would match N blocks and multiply that service's calls, tokens and
+ * cost by N, leaving the service breakdown disagreeing with the window totals. Grouping the
+ * title down to one row per service first makes the join provably 1:1, so the numbers are
+ * immune no matter how many boards share the id.
+ *
+ * `min(title)` still picks arbitrarily among colliding blocks. That ambiguity is confined to
+ * the LABEL, which is cosmetic; the aggregates it used to corrupt are not. `services` holds
+ * one row per service frame, so materialising this is cheap. Mirrors `SERVICE_LABELS` in the
+ * D1 repository.
+ */
+function serviceLabels(db: DrizzleDb) {
+  return (
+    db
+      // Both fields carry an EXPLICIT alias so the subquery's emitted column names are pinned
+      // (and identical to the D1 sub-select's), rather than inherited from the source column.
+      .select({
+        serviceId: sql<string>`${services.id}`.as('service_id'),
+        title: sql<string | null>`min(${blocks.title})`.as('title'),
+      })
+      .from(services)
+      .leftJoin(blocks, eq(blocks.id, services.frame_block_id))
+      .groupBy(services.id)
+      .as('sl')
+  )
+}
+type ServiceLabels = ReturnType<typeof serviceLabels>
+
+/**
  * The grouped key + resolved label a spend dimension needs. `service` and `taskType` reach
  * the call's run through `execution_id` (a metered call records the run, not the board
  * shape), so a call with no resolvable run falls into the `''` (unattributed) bucket
  * rather than vanishing from the report.
  */
-function spendKeyAndLabel(dimension: ReportSpendDimension): {
+function spendKeyAndLabel(
+  dimension: ReportSpendDimension,
+  labels: ServiceLabels,
+): {
   key: SQL<string>
   label: SQL<string | null>
 } {
@@ -51,7 +88,7 @@ function spendKeyAndLabel(dimension: ReportSpendDimension): {
     case 'service':
       return {
         key: sql<string>`coalesce(${agentRuns.service_id}, '')`,
-        label: sql<string | null>`max(${blocks.title})`,
+        label: sql<string | null>`max(${labels.title})`,
       }
     case 'taskType':
       return {
@@ -62,7 +99,10 @@ function spendKeyAndLabel(dimension: ReportSpendDimension): {
 }
 
 /** The same, for the run-based activity breakdowns (a run already carries its service/block). */
-function activityKeyAndLabel(dimension: ReportActivityDimension): {
+function activityKeyAndLabel(
+  dimension: ReportActivityDimension,
+  labels: ServiceLabels,
+): {
   key: SQL<string>
   label: SQL<string | null>
 } {
@@ -75,7 +115,7 @@ function activityKeyAndLabel(dimension: ReportActivityDimension): {
     case 'service':
       return {
         key: sql<string>`coalesce(${agentRuns.service_id}, '')`,
-        label: sql<string | null>`max(${blocks.title})`,
+        label: sql<string | null>`max(${labels.title})`,
       }
     case 'taskType':
       return {
@@ -121,7 +161,8 @@ export class DrizzleReportsRepository implements ReportsRepository {
     dimension: ReportSpendDimension,
     range: ReportRange,
   ): Promise<ReportSpendGroup[]> {
-    const { key, label } = spendKeyAndLabel(dimension)
+    const labels = serviceLabels(this.db)
+    const { key, label } = spendKeyAndLabel(dimension, labels)
     // Alias the key expression and GROUP BY / ORDER BY the ALIAS, not the raw fragment:
     // Drizzle re-emits an inline `sql` expression with fresh bind-parameter placeholders in
     // each clause, and Postgres matches GROUP BY columns to the SELECT list by parse-tree
@@ -151,8 +192,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
             eq(agentRuns.id, tokenUsage.execution_id),
           ),
         )
-        .leftJoin(services, eq(services.id, agentRuns.service_id))
-        .leftJoin(blocks, eq(blocks.id, services.frame_block_id))
+        .leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
     } else if (dimension === 'taskType') {
       query = query
         .leftJoin(
@@ -187,7 +227,8 @@ export class DrizzleReportsRepository implements ReportsRepository {
     dimension: ReportActivityDimension,
     range: ReportRange,
   ): Promise<ReportActivityGroup[]> {
-    const { key, label } = activityKeyAndLabel(dimension)
+    const labels = serviceLabels(this.db)
+    const { key, label } = activityKeyAndLabel(dimension, labels)
     const groupKey = key.as('k')
     const runs = sql<string>`count(*)::bigint`
     // The status splits AND the terminal-run mean duration are conditional aggregates over
@@ -210,9 +251,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
     if (dimension === 'workspace') {
       query = query.leftJoin(workspaces, eq(workspaces.id, agentRuns.workspace_id))
     } else if (dimension === 'service') {
-      query = query
-        .leftJoin(services, eq(services.id, agentRuns.service_id))
-        .leftJoin(blocks, eq(blocks.id, services.frame_block_id))
+      query = query.leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
     } else if (dimension === 'taskType') {
       query = query.leftJoin(
         blocks,

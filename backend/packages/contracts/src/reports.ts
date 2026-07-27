@@ -65,7 +65,11 @@ export const reportSpendRowSchema = v.object({
 })
 export type ReportSpendRow = v.InferOutput<typeof reportSpendRowSchema>
 
-/** One slice of an activity breakdown, over the agent runs CREATED in the window. */
+/**
+ * One slice of an activity breakdown, over the agent runs CREATED in the window — every
+ * kind of run (task pipelines, repo bootstraps, env-config repairs), so this half of a row
+ * covers the same population whose LLM calls the spend half reports.
+ */
 export const reportActivityRowSchema = v.object({
   key: v.string(),
   label: v.nullable(v.string()),
@@ -109,7 +113,12 @@ export const reportsViewSchema = v.object({
   window: reportWindowSchema,
   /** When the projection was computed (epoch ms). */
   generatedAt: v.number(),
-  /** Start of the window (epoch ms) — `generatedAt - window`. */
+  /**
+   * Start of the window (epoch ms): `generatedAt - window`, snapped DOWN to a trend-bucket
+   * edge so the chart's first column is a complete bucket rather than a short one that reads
+   * as a quiet period. A window therefore covers up to one bucket more than its nominal
+   * length, and this is the real span every number in the projection was computed over.
+   */
   since: v.number(),
   /** The single workspace every breakdown was narrowed to, or null for the whole account. */
   workspaceId: v.nullable(v.string()),

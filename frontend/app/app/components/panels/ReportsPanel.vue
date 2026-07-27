@@ -7,15 +7,14 @@ import type {
   ReportSpendRow,
   ReportWindow,
 } from '~/types/execution'
-import { formatMs } from '~/utils/observability'
+import { formatMs, formatTokens } from '~/utils/observability'
 import {
   activitySegments,
   columnPct,
   isUnattributed,
   maxOf,
   segmentPct,
-  spendTotal,
-  trendTotal,
+  trendMagnitude,
 } from './ReportsPanel.logic'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
@@ -37,11 +36,13 @@ const ui = useUiStore()
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const reports = useReportsStore()
-const { t, d, n } = useI18n()
+const { t, te, d, n } = useI18n()
 
 const open = computed(() => ui.reportsOpen)
 const view = computed(() => reports.view)
 const loading = computed(() => reports.loading)
+const failed = computed(() => reports.failed)
+/** The backend's untranslated message, shown as detail under the localized heading. */
 const error = computed(() => reports.error)
 const accountName = computed(() => accounts.activeAccount?.name ?? '')
 
@@ -87,8 +88,12 @@ const activityByDimension = computed<ReportActivityRow[]>(() => {
   return activity.byTaskType
 })
 
-const maxTrend = computed(() => maxOf(view.value?.trend.points ?? [], trendTotal))
+const maxTrend = computed(() => maxOf(view.value?.trend.points ?? [], trendMagnitude))
 const hasSpend = computed(() => (view.value?.totals.calls ?? 0) > 0)
+// Hoisted: every activity bar is scaled against the busiest slice in the SAME list, so this
+// is invariant across the row loop. Computing it inline would re-scan the list once per
+// status segment of every row.
+const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.runs))
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
@@ -110,6 +115,11 @@ const STATUS_CLASSES: Record<'done' | 'failed' | 'running' | 'other', string> = 
   failed: 'bg-rose-500',
   running: 'bg-sky-500',
   other: 'bg-slate-500',
+}
+/** `te`-guarded so a locale missing the key shows the raw status, never a raw message key. */
+function statusLabel(status: 'done' | 'failed' | 'running' | 'other'): string {
+  const key = STATUS_KEYS[status]
+  return te(key) ? t(key) : status
 }
 
 function refresh() {
@@ -208,10 +218,11 @@ watch(
 
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div
-            v-if="error"
+            v-if="failed"
             class="mx-auto max-w-2xl rounded-lg border border-rose-800/60 bg-rose-950/40 p-4 text-sm text-rose-200"
           >
-            <p>{{ error }}</p>
+            <p>{{ t('reports.error') }}</p>
+            <p v-if="error" class="mt-1 text-xs text-rose-300/80">{{ error }}</p>
             <button
               class="mt-2 rounded-md border border-rose-700 px-3 py-1 text-xs hover:bg-rose-900/40"
               @click="refresh"
@@ -404,10 +415,7 @@ watch(
                               class="h-1.5 rounded-full"
                               :class="STATUS_CLASSES[segment.status]"
                               :style="{
-                                width: `${segmentPct(
-                                  segment.count,
-                                  maxOf(activityByDimension, (r) => r.runs),
-                                )}%`,
+                                width: `${segmentPct(segment.count, maxRuns)}%`,
                               }"
                             />
                           </div>
@@ -415,7 +423,7 @@ watch(
                                red-green adjacent, so identity is never colour alone. -->
                           <p class="mt-1 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
                             <span v-for="segment in activitySegments(row)" :key="segment.status">
-                              {{ n(segment.count, 'decimal') }} {{ t(STATUS_KEYS[segment.status]) }}
+                              {{ n(segment.count, 'decimal') }} {{ statusLabel(segment.status) }}
                             </span>
                             <span v-if="row.avgDurationMs != null">
                               ·
@@ -435,7 +443,7 @@ watch(
                           class="flex items-center gap-1"
                         >
                           <span class="h-2 w-2 rounded-sm" :class="STATUS_CLASSES[status]" />{{
-                            t(STATUS_KEYS[status])
+                            statusLabel(status)
                           }}
                         </span>
                       </div>
