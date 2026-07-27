@@ -24,12 +24,12 @@ import {
   fetchReferenceBranches,
   headCommit,
   listUntrackedFiles,
-  openPullRequest,
   prepareExistingCheckout,
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
+import { openPullRequest } from './vcs-api.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import { EFFORT_REPORT_FILE, type EffortReport } from './effort.js'
@@ -1041,6 +1041,7 @@ export async function runMultiRepoCoding(
       job,
       logger,
       opts,
+      root,
     )
 
     const anyWork = primaryPushed || peerPullRequests.length > 0
@@ -1214,6 +1215,8 @@ async function pushMultiRepoLegs(
   job: AgentJob,
   logger: Logger,
   opts: RunOptions,
+  /** The workspace root the agent ran in — the fallback probe for the primary's briefing. */
+  root: string,
 ): Promise<{
   primaryPushed: boolean
   primaryPrUrl: string | undefined
@@ -1230,7 +1233,13 @@ async function pushMultiRepoLegs(
     if (leg.readOnly) continue
     // Lift (and remove) the agent-authored PR description for THIS repo's PR before anything
     // else touches the checkout — each sibling checkout carries its own briefing for its own PR.
-    const agentPrDescription = await readPrDescription(leg.dir)
+    // The agent's cwd here is the WORKSPACE ROOT rather than any one checkout, so an agent that
+    // read the prompt loosely may well have written a single briefing there instead. Fall back
+    // to it for the PRIMARY leg only: at the root there is nothing to say which repo it
+    // describes, and the primary is the one the run is actually about.
+    const agentPrDescription =
+      (await readPrDescription(leg.dir)) ??
+      (leg.primary ? await readPrDescription(root) : undefined)
     await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
     const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
     let hasWork = advanced || leg.resumed
@@ -1260,6 +1269,9 @@ async function pushMultiRepoLegs(
         head: leg.workBranch,
         base: leg.repo.baseBranch,
         pr: applyPrDescription(leg.pr, agentPrDescription),
+        // See the single-repo call site: refresh a resumed leg's already-open PR, but only
+        // when the text is the agent's own briefing rather than the dispatch-time fallback.
+        ...(agentPrDescription ? { refreshExisting: true } : {}),
         apiBase: job.githubApiBase,
         cloneUrl: leg.repo.cloneUrl,
         ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),

@@ -1,4 +1,4 @@
-import type { AgentRunContext } from '@cat-factory/kernel'
+import { type AgentRunContext, hostMarkdown } from '@cat-factory/kernel'
 import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
 import {
   frameProfile,
@@ -294,15 +294,23 @@ export function buildFrontendInfraSpec(
  * fork-decision phase ran) the implementation approach a human chose, with the rejected
  * alternatives. The agent is asked to replace it with its own briefing via the PR-description
  * sentinel (`PR_DESCRIPTION_GUIDANCE`); this text is what a PR gets when the agent wrote none.
+ *
+ * Every hole here is filled with text the platform did not write — a human's task description, a
+ * human's free-text approach, and (for `alternativesConsidered`) the fork proposer MODEL's own
+ * titles — landing on a host-parsed surface where `#123` links, `@name` pages a real account and
+ * a closing keyword closes an issue on merge. So each crosses `hostMarkdown` on the way in, per
+ * its own rule: a host-bound body takes `inline`, `cell` or `prose`, never a bare template hole.
  */
 export function prBody(context: AgentRunContext): string {
   const lines = [
-    `Automated implementation for **${context.block.title}** (${context.block.type}), ` +
-      `delivered by the \`${context.pipelineName}\` pipeline.`,
+    `Automated implementation for **${hostMarkdown.inline(context.block.title)}** ` +
+      `(${context.block.type}), delivered by the \`${context.pipelineName}\` pipeline.`,
     '',
     '## Task',
     '',
-    context.block.description || '_No task description was provided._',
+    context.block.description
+      ? hostMarkdown.prose(context.block.description)
+      : '_No task description was provided._',
   ]
   const choice = context.implementationChoice
   if (choice) {
@@ -310,20 +318,25 @@ export function prBody(context: AgentRunContext): string {
       '',
       '## Chosen implementation approach',
       '',
-      `**${choice.title}**` +
+      `**${hostMarkdown.inline(choice.title)}**` +
         (choice.source === 'custom'
           ? ' (specified by a human reviewer)'
           : ' (picked by a human reviewer from the proposed forks)'),
       '',
-      choice.approach,
+      hostMarkdown.prose(choice.approach),
     )
     if (choice.alternativesConsidered.length) {
+      const { items, dropped } = hostMarkdown.capList(choice.alternativesConsidered)
+      const rendered = items.map((title) => hostMarkdown.inline(title)).join('; ')
       lines.push(
         '',
-        `Alternatives considered and rejected: ${choice.alternativesConsidered.join('; ')}.`,
+        `Alternatives considered and rejected: ${rendered}.` +
+          (dropped ? ` (${dropped} further alternatives omitted.)` : ''),
       )
     }
-    if (choice.note) lines.push('', `Reviewer note on the choice: ${choice.note}`)
+    if (choice.note) {
+      lines.push('', `Reviewer note on the choice: ${hostMarkdown.inline(choice.note)}`)
+    }
   }
   lines.push(
     '',

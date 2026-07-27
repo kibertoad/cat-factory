@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyPrDescription,
   PR_DESCRIPTION_FILE,
+  PR_REPORT_MARKER_END,
+  PR_REPORT_MARKER_START,
+  preserveManagedSection,
   readPrDescription,
 } from '../src/pr-description.js'
 
@@ -84,9 +87,72 @@ describe('readPrDescription', () => {
     expect(parsed?.body).toContain('Truncated by the platform')
   })
 
-  it('caps an over-long title line', async () => {
+  it('caps an over-long title line, marking the cut', async () => {
     write(`# ${'t'.repeat(500)}\n\nbody`)
-    expect((await readPrDescription(dir))?.title?.length).toBe(160)
+    const title = (await readPrDescription(dir))?.title
+    expect(title?.length).toBe(160)
+    expect(title?.endsWith('…')).toBe(true)
+  })
+
+  it('cuts an over-long title at a word boundary when one is near', async () => {
+    write(`# ${'word '.repeat(60)}tail\n\nbody`)
+    const title = (await readPrDescription(dir))?.title
+    expect(title?.endsWith('word…')).toBe(true)
+  })
+
+  // A briefing that uses `#` for its SECTION headings must not lose its first section to the
+  // pull request's title — the dispatch-time `<block> (<pipeline>)` title is the better answer
+  // than renaming the PR to "Problem".
+  it('does not treat a section heading as the title when the file has several', async () => {
+    write('# Problem\n\nRetries were unbounded.\n\n# Decisions\n\nCapped at three.')
+    const parsed = await readPrDescription(dir)
+    expect(parsed?.title).toBeUndefined()
+    expect(parsed?.body).toContain('# Problem')
+    expect(parsed?.body).toContain('# Decisions')
+  })
+
+  it('ignores a `#` comment inside fenced code when looking for the title', async () => {
+    write('# Cap the retry loop\n\n```sh\n# rebuild the image\npnpm image:publish\n```')
+    expect((await readPrDescription(dir))?.title).toBe('Cap the retry loop')
+  })
+
+  // The briefing lands verbatim on a host-parsed surface, and the platform auto-merges the PR
+  // it describes: an unescaped `Fixes #412` would close issue 412 for real.
+  it('defuses issue references, mentions and closing keywords', async () => {
+    write('Fixes https://github.com/acme/w/issues/412 — ask @alice about !77 and #9.')
+    const body = (await readPrDescription(dir))?.body
+    expect(body).not.toMatch(/@alice/)
+    expect(body).not.toMatch(/#9/)
+    expect(body).not.toMatch(/!77/)
+    expect(body).not.toMatch(/^Fixes\b/)
+    // The reader still sees the original characters — only the parser is defeated.
+    expect(body).toContain('&#64;alice')
+  })
+
+  it('leaves triggers inside a code span alone (the host does not link there either)', async () => {
+    write('Match the literal `#123` marker.')
+    expect((await readPrDescription(dir))?.body).toBe('Match the literal `#123` marker.')
+  })
+
+  // An unbalanced fence would swallow everything the engine appends afterwards — including the
+  // verification report's fenced JSON block, which is its machine-readable contract.
+  it('closes a code fence the briefing left open', async () => {
+    write('Decided to inline the helper:\n\n```ts\nconst x = 1\n')
+    expect((await readPrDescription(dir))?.body?.endsWith('```')).toBe(true)
+  })
+
+  it('closes a fence that TRUNCATION cut in half', async () => {
+    write(`Intro\n\n\`\`\`ts\n${'const x = 1\n'.repeat(3_000)}\`\`\`\n`)
+    const body = (await readPrDescription(dir))?.body
+    expect(body).toContain('Truncated by the platform')
+    expect(body?.endsWith('```')).toBe(true)
+  })
+
+  it('leaves the engine room in the PR body for its verification report', async () => {
+    write('y'.repeat(60_000))
+    const body = (await readPrDescription(dir))?.body
+    // kernel's `MAX_SECTION_CHARS` is 50k and GitHub rejects a body over 65,536.
+    expect(body!.length + 50_000).toBeLessThan(65_536)
   })
 
   it('keeps two concurrent checkouts fully separate (per-job state)', async () => {
@@ -123,5 +189,29 @@ describe('applyPrDescription', () => {
       title: 'T',
       body: 'dispatch-time text',
     })
+  })
+})
+
+// A resumed run's PR is already open, so refreshing it REWRITES a body the engine may already
+// have published its verification report into. That region has to survive the rewrite.
+describe('preserveManagedSection', () => {
+  const report = `${PR_REPORT_MARKER_START}\n## Verification\n\nCI: green\n${PR_REPORT_MARKER_END}`
+
+  it('carries an existing managed region across the rewrite', () => {
+    const next = preserveManagedSection(`old briefing\n\n${report}\n`, 'fresh briefing')
+    expect(next).toContain('fresh briefing')
+    expect(next).toContain('## Verification')
+    expect(next.indexOf('fresh briefing')).toBeLessThan(next.indexOf(PR_REPORT_MARKER_START))
+    expect(next).not.toContain('old briefing')
+  })
+
+  it('returns the new body unchanged when there is no managed region', () => {
+    expect(preserveManagedSection('old briefing', 'fresh briefing')).toBe('fresh briefing')
+    expect(preserveManagedSection(undefined, 'fresh briefing')).toBe('fresh briefing')
+  })
+
+  it('treats a malformed region as none rather than guessing at its bounds', () => {
+    const stray = `text ${PR_REPORT_MARKER_END} more ${PR_REPORT_MARKER_START}`
+    expect(preserveManagedSection(stray, 'fresh')).toBe('fresh')
   })
 })

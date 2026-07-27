@@ -97,8 +97,12 @@ export const PR_DESCRIPTION_GUIDANCE =
   'behaviour changes, the riskiest or least-obvious part of the change, anything that only ' +
   'makes sense with context the diff does not carry. Do NOT restate what the diff already ' +
   'shows: no file lists, no per-change narration, no test tallies. Never include secrets, ' +
-  'tokens, or credentials. This file is a side channel: it is kept out of the commit, so never ' +
-  'reference it in code and never add it to git. Write it once, at the end of your work.'
+  'tokens, or credentials. Do not reference issues or pull requests by number (`#123`, `!123`), ' +
+  'mention accounts (`@name`), or put issue-closing wording such as "fixes" or "closes" in front ' +
+  'of an issue link: the platform defuses all of those before publishing, so they would render ' +
+  'as inert text rather than doing what you intended. This file is a side channel: it is kept ' +
+  'out of the commit, so never reference it in code and never add it to git. Write it once, at ' +
+  'the end of your work.'
 
 /**
  * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per

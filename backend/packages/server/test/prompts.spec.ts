@@ -343,6 +343,35 @@ describe('prBody', () => {
     expect(body).toContain('Alternatives considered and rejected: Stateless JWT; OAuth-only.')
     expect(body).toContain('Keep the cookie HttpOnly.')
   })
+
+  // Every hole in this body carries text the platform did not write — a human's description and
+  // note, and the fork PROPOSER MODEL's own titles. It lands on a host-parsed surface that the
+  // merger step then merges for real, so an auto-link trigger must never reach it live.
+  it('defuses host auto-link triggers in every untrusted hole', () => {
+    const body = prBody(
+      context({
+        block: {
+          id: 'b1',
+          title: 'Fix login for @alice',
+          type: 'task',
+          description: 'Closes https://github.com/acme/app/issues/42 — see #17.',
+        },
+        implementationChoice: {
+          source: 'custom',
+          title: 'Approach for #99',
+          approach: 'Ping @bob when the cookie rotates.',
+          note: 'Blocks !31.',
+          alternativesConsidered: ['Reuse @acme/session'],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(body).not.toMatch(/@alice|@bob|@acme/)
+    expect(body).not.toMatch(/#17|#42|#99/)
+    expect(body).not.toMatch(/!31/)
+    expect(body).not.toMatch(/\bCloses https/)
+    // Defused, not deleted — the reader still sees what was written.
+    expect(body).toContain('&#64;alice')
+  })
 })
 
 describe('UI_TEST_REPORT_SHAPE_HINT', () => {

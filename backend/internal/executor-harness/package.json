@@ -30,6 +30,7 @@
     "image:publish": "bash scripts/publish-image.sh"
   },
   "devDependencies": {
+    "@cat-factory/kernel": "workspace:*",
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.0.12",
