@@ -26,6 +26,7 @@ import type {
   RunnerBackendRegistry,
   TestSecretsService,
   ValidationConfigService,
+  AcceptanceCriteriaService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
@@ -136,6 +137,14 @@ export interface ServerContainer extends Core {
    * threaded into the engine so a dispatch carries the resolved commands in the job body.
    */
   validationConfig?: ValidationConfigService
+  /**
+   * The per-service ACCEPTANCE-CRITERIA store: the durable given/when/then behaviour statements
+   * a service accumulates. Present only when the facade wired the criterion repository. Backs
+   * the criteria CRUD controller; its `resolveForFrame` is threaded into the engine (so a
+   * dispatch's prompts carry the CONFIRMED criteria) and its `recordDerived` into the
+   * post-requirements-review accretion hook.
+   */
+  acceptanceCriteria?: AcceptanceCriteriaService
   /**
    * The per-user individual-usage subscription store (Claude). Present only when the
    * facade wired the personal-subscription repositories (needs ENCRYPTION_KEY). Drives

@@ -167,6 +167,16 @@ export function isTestingKind(kind: AgentKind): boolean {
   return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND || kind === FIXER_AGENT_KIND
 }
 
+/**
+ * True for the kinds that RETURN a structured test report (the API + UI testers) — deliberately
+ * NOT the fixer, which is part of the same track but produces commits, not a report. Anything
+ * that asks for a report FIELD (the per-criterion acceptance verdicts) must key off this rather
+ * than {@link isTestingKind}, or the fixer is handed a reporting contract it never fulfils.
+ */
+export function isTesterReportingKind(kind: AgentKind): boolean {
+  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
+}
+
 /** The built-out system prompt for a Tester/Fixer kind, or undefined otherwise. */
 export function testingSystemPrompt(kind: AgentKind): string | undefined {
   if (kind === TESTER_AGENT_KIND) return TESTER_SYSTEM_PROMPT

@@ -44,6 +44,7 @@ import type {
   SubscriptionQuotaCycleRepository,
   TestSecretsRepository,
   ValidationConfigRepository,
+  AcceptanceCriterionRepository,
   TokenUsageRepository,
   TrackerSettingsRepository,
   UserRepository,
@@ -119,6 +120,7 @@ import {
 } from './drizzle/initiatives.js'
 
 import { DrizzleMergeTrackRecordRepository } from './drizzle/mergeTrackRecord.js'
+import { DrizzleAcceptanceCriterionRepository } from './drizzle/acceptanceCriteria.js'
 
 import {
   DrizzleIncidentEnrichmentConnectionRepository,
@@ -176,6 +178,7 @@ export interface CoreRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
   validationConfigRepository: ValidationConfigRepository
+  acceptanceCriterionRepository: AcceptanceCriterionRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
 
@@ -225,6 +228,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
     validationConfigRepository: new DrizzleValidationConfigRepository(db),
+    acceptanceCriterionRepository: new DrizzleAcceptanceCriterionRepository(db),
     subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
@@ -249,3 +253,4 @@ export {
 export { createDrizzleSandboxDeps } from './drizzle/sandbox.js'
 export { DrizzleTestSecretsRepository } from './drizzle/connections.js'
 export { DrizzleValidationConfigRepository } from './drizzle/connections.js'
+export { DrizzleAcceptanceCriterionRepository } from './drizzle/acceptanceCriteria.js'

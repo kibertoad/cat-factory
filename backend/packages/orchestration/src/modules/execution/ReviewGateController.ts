@@ -112,6 +112,22 @@ export interface ReviewKind<TReview extends ReviewCommon> {
    * workspace writeback settings), and opting in here would post the same questions twice.
    */
   readonly questionsOnPark?: boolean
+  /**
+   * Whether a settlement of this subject feeds the per-service ACCEPTANCE-CRITERIA store (the
+   * requirements loop only). The clarity kind deliberately does NOT opt in: it triages a BUG
+   * REPORT, so its incorporated document describes a defect's symptoms and repro — accreting
+   * those as "what this service must do" would fill the store with statements of what is
+   * currently broken.
+   */
+  readonly accretesCriteria?: boolean
+  /**
+   * The settled incorporated document to accrete acceptance criteria FROM, read off the review
+   * this controller already holds. Supplied only by a kind with {@link accretesCriteria}, so the
+   * hook never has to re-read a row the settlement path just wrote — the whole reason it takes a
+   * document rather than a block id. `null` ⇒ the loop settled with nothing folded in (an
+   * auto-pass, or every finding dismissed), which is a correct outcome with nothing to extract.
+   */
+  readonly incorporatedDoc?: (review: TReview) => string | null
 }
 
 /**
@@ -137,6 +153,24 @@ export interface ReviewGateControllerDeps {
   issueWriteback?: IssueWritebackProvider
   /** Structured logger for the best-effort writeback above. Absent → failures are silent. */
   logger?: PrReportLogger
+  /**
+   * Best-effort ACCRETION hook, run once whenever a review settles as `incorporated`: extract
+   * the durable acceptance criteria the settled document established and persist them against
+   * the run's service frame as `proposed` candidates (see
+   * `docs/initiatives/acceptance-criteria-store.md`).
+   *
+   * A HOOK on settlement rather than a pipeline step, for the same reason the PR verification
+   * report is one: a step would have to be inserted into all fifteen built-in pipelines, would
+   * never exist in a deployment-authored one, and would be skipped by exactly the runs whose
+   * requirements were hardest-won. Absent (no criterion store wired, tests, conformance) ⇒ no
+   * accretion at all and not a single extra call.
+   */
+  accrueAcceptanceCriteria?: (
+    workspaceId: string,
+    blockId: string,
+    reviewId: string,
+    doc: string,
+  ) => Promise<void>
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
@@ -228,6 +262,11 @@ export class ReviewGateController {
     // the dedicated window.
     const review = await this.review(kind, workspaceId, block.id)
     if (review.status === 'incorporated') {
+      // Auto-pass: no findings needed a human, so the run advances with no incorporation. The
+      // hook is still routed through the same funnel so "settled ⇒ accrete" is true of every
+      // path rather than most of them; `settled` then finds no incorporated document and returns
+      // immediately, which is both the correct outcome and free.
+      await this.settled(kind, workspaceId, block.id, review)
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     // Pre-answer the findings the reviewer judged answerable without a product owner, so the
@@ -240,6 +279,41 @@ export class ReviewGateController {
     if (review.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
     return this.park(kind, workspaceId, instance, step, block, review)
+  }
+
+  /**
+   * The single funnel for "this review has settled as `incorporated`". Runs the accretion hook
+   * and returns the review untouched, so every settlement site can wrap its result in one call
+   * rather than remembering to fire the hook.
+   *
+   * Entirely best-effort and entirely behind the settlement: the review is already persisted as
+   * `incorporated` by the time this runs, so a failing extraction can only cost the store a
+   * candidate — never the run its advance. Gated on {@link ReviewKind.accretesCriteria} so only
+   * the REQUIREMENTS subject accretes: a clarity review triages a bug report, whose "behaviours"
+   * are symptoms of a defect, not durable statements of what the service must do.
+   */
+  private async settled<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+    review: TReview,
+  ): Promise<TReview> {
+    const accrue = this.deps.accrueAcceptanceCriteria
+    if (!accrue || !kind.accretesCriteria || review.status !== 'incorporated') return review
+    // The document comes off the review IN HAND. An auto-pass settles with nothing folded in, so
+    // there is no artifact to extract from — and short-circuiting here means that (very common)
+    // path costs not one read, let alone a model call.
+    const doc = kind.incorporatedDoc?.(review)?.trim()
+    if (!doc) return review
+    try {
+      await accrue(workspaceId, blockId, review.id, doc)
+    } catch (e) {
+      this.deps.logger?.warn(
+        { workspaceId, blockId, reviewId: review.id, err: String(e) },
+        'acceptance-criteria accretion threw',
+      )
+    }
+    return review
   }
 
   /**
@@ -336,9 +410,9 @@ export class ReviewGateController {
     // prior doc when one exists, else falls back to the original description (nothing
     // was clarified). Mirrors a polling gate's precheck skip.
     if (!hasNotesToIncorporate(review.items, feedback)) {
-      const settled = await kind.markIncorporated(workspaceId, review.id)
-      await kind.emit(workspaceId, settled)
-      return settled
+      const settledReview = await kind.markIncorporated(workspaceId, review.id)
+      await kind.emit(workspaceId, settledReview)
+      return this.settled(kind, workspaceId, blockId, settledReview)
     }
     const block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
@@ -359,7 +433,9 @@ export class ReviewGateController {
     if (reviewed.status === 'ready' && autoRecommendEnabled) {
       await this.maybeAutoRecommend(kind, workspaceId, blockId)
     }
-    return reviewed
+    // A converged re-review IS a settlement (the run advances straight from here), so it accretes
+    // like the short-circuit above. `settled` is a no-op for any other status.
+    return this.settled(kind, workspaceId, blockId, reviewed)
   }
 
   /**
@@ -667,7 +743,7 @@ export class ReviewGateController {
     const updated = await kind.reReview(workspaceId, review.id, preset)
     if (updated.status === 'incorporated') {
       await this.resumeRun(kind, workspaceId, blockId)
-      return updated
+      return this.settled(kind, workspaceId, blockId, updated)
     }
     if (updated.status === 'ready') {
       // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
@@ -698,7 +774,7 @@ export class ReviewGateController {
     const review = await this.currentReview(kind, workspaceId, blockId)
     const updated = await kind.markIncorporated(workspaceId, review.id)
     await this.resumeRun(kind, workspaceId, blockId)
-    return updated
+    return this.settled(kind, workspaceId, blockId, updated)
   }
 
   /**

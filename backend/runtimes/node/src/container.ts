@@ -700,6 +700,7 @@ interface NodeServerContainerBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   validationConfigService: NodeRunServicesResult['validationConfigService']
+  acceptanceCriteriaService: NodeRunServicesResult['acceptanceCriteriaService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
   apiKeys: NodeModelDepsResult['apiKeys']
@@ -740,6 +741,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     vcsRegistry,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     subscriptions,
     personalSubscriptions,
     apiKeys,
@@ -867,6 +869,9 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
+    // The per-service acceptance-criteria store the shared controller reads. Always present
+    // (criteria are product knowledge, not secrets), like the validation-check store above.
+    acceptanceCriteria: acceptanceCriteriaService,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,
@@ -953,6 +958,9 @@ interface NodeContainerFinalizeBundle {
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
   resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
+  resolveAcceptanceCriteria: NodeRunServicesResult['resolveAcceptanceCriteria']
+  recordDerivedAcceptanceCriteria: NodeRunServicesResult['recordDerivedAcceptanceCriteria']
+  acceptanceCriteriaAlreadyDerived: NodeRunServicesResult['acceptanceCriteriaAlreadyDerived']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -972,6 +980,7 @@ interface NodeContainerFinalizeBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   validationConfigService: NodeRunServicesResult['validationConfigService']
+  acceptanceCriteriaService: NodeRunServicesResult['acceptanceCriteriaService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
   traceSink: NodeModelDepsResult['traceSink']
@@ -1012,6 +1021,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     searchQueryObservability,
     resolveTestSecretRefs,
     resolveValidationChecks,
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1031,6 +1043,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     publicApiKeys,
     userSecrets,
     traceSink,
@@ -1134,6 +1147,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     searchQueryObservability,
     resolveTestSecretRefs,
     resolveValidationChecks,
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     githubClient,
     tasks,
     fileGitHubIssue,
@@ -1205,6 +1221,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     subscriptions,
     personalSubscriptions,
     apiKeys,

@@ -1,3 +1,5 @@
+import type { AcceptanceCriterionDraft } from '@cat-factory/contracts'
+import { parseAcceptanceCriterionDrafts } from '@cat-factory/contracts'
 import type {
   Block,
   ModelProvider,
@@ -18,6 +20,7 @@ import {
   REVIEW_SYSTEM_PROMPT,
   REWORK_SYSTEM_PROMPT,
   WRITER_SYSTEM_PROMPT,
+  ACCEPTANCE_CRITERIA_EXTRACTION_SYSTEM_PROMPT,
 } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
@@ -46,8 +49,39 @@ import {
  */
 const RECOMMENDATION_CHUNK_SIZE = 4
 
+/**
+ * Output budget for the acceptance-criteria extraction. Deliberately small: the pass may add at
+ * most `ACCEPTANCE_CRITERIA_MAX_PER_EXTRACTION` short given/when/then triples, so a response
+ * anywhere near this ceiling means the model is writing prose rather than extracting — and the
+ * truncation guard drops it either way.
+ */
+const ACCEPTANCE_EXTRACTION_MAX_OUTPUT_TOKENS = 4_000
+
+/** The agent-kind tag the extraction's LLM call is recorded under in telemetry. */
+const ACCEPTANCE_EXTRACTION_AGENT_KIND = 'acceptance-criteria-extraction'
+
+/** The user half of the extraction prompt: the settled document, and what it belongs to. */
+function buildAcceptanceCriteriaPrompt(blockTitle: string, doc: string): string {
+  return [
+    `Task the requirements were written for: ${blockTitle}`,
+    '',
+    'Settled requirements document:',
+    doc,
+  ].join('\n')
+}
+
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
   requirementReviewRepository: RequirementReviewRepository
+  /**
+   * The facade's structured logger. Wire it: {@link RequirementReviewService.extractAcceptanceCriteria}
+   * is DESIGNED to swallow every failure (it runs behind an already-settled review), so without a
+   * log an unwired model, an exhausted quota or a revoked key leaves the accretion pass silently
+   * dead — the operator sees a criteria store that simply never fills, with nothing to explain it.
+   */
+  logger?: {
+    info(obj: Record<string, unknown>, msg?: string): void
+    warn(obj: Record<string, unknown>, msg?: string): void
+  }
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
   /** Linked tracker issues (optional; only when the task-source integration is on). */
@@ -102,9 +136,12 @@ export class RequirementReviewService extends IterativeReviewService<
     workspaceId: string,
     blockId: string,
   ) => Promise<string | undefined>
+  /** Held on the subclass: the base's `deps` is typed as the shared `IterativeReviewDeps`. */
+  private readonly logger?: RequirementReviewServiceDependencies['logger']
 
   constructor(deps: RequirementReviewServiceDependencies) {
     super(deps)
+    this.logger = deps.logger
     this.repository = deps.requirementReviewRepository
     this.documentRepository = deps.documentRepository
     this.taskRepository = deps.taskRepository
@@ -159,6 +196,74 @@ export class RequirementReviewService extends IterativeReviewService<
 
   protected newReview(common: ReviewCommon): RequirementReview {
     return { ...common, incorporatedRequirements: null, recommendations: [] }
+  }
+
+  // ---- Acceptance-criteria accretion (post-settlement extraction) ---------------------
+
+  /**
+   * Extract the DURABLE, service-level acceptance criteria a settled requirements document
+   * establishes — the accretion half of the acceptance-criteria store (see
+   * `docs/initiatives/acceptance-criteria-store.md`).
+   *
+   * One cheap LLM call over the review's `incorporatedRequirements`. It lives here rather than in
+   * its own service because this class already owns both inputs: the document, and the model
+   * resolution that answers "which model does this workspace/block use for requirements work".
+   * A separate collaborator would have had to duplicate the whole `IterativeReviewDeps` model
+   * stack to reach the same answer.
+   *
+   * **Returns `[]` on every failure path, and never throws.** It is called behind a settled
+   * review whose run is already advancing, so there is nothing useful a caller could do with an
+   * error and a great deal it could break: an unwired model (tests, the conformance harness),
+   * an exhausted quota, a model that answered with prose, or a truncated response must all leave
+   * the run exactly as they found it. Everything it produces lands as `proposed`, so even a bad
+   * extraction costs a human some triage rather than changing any behaviour — which is what makes
+   * this an acceptable place to swallow.
+   */
+  async extractAcceptanceCriteria(
+    workspaceId: string,
+    blockId: string,
+    doc: string,
+  ): Promise<AcceptanceCriterionDraft[]> {
+    if (!this.enabled) return []
+    try {
+      // The settled document is handed IN, off the review the caller already holds — this method
+      // never re-reads the row the settlement path just wrote. An empty one means the loop settled
+      // with nothing folded in (every finding dismissed, or an auto-pass); there is no artifact to
+      // extract from, and the raw block description is deliberately NOT a fallback: it is
+      // task-shaped prose, exactly the input this feature exists to stop treating as a
+      // service-level specification.
+      if (!doc.trim()) return []
+      const block = await this.deps.blockRepository.get(workspaceId, blockId)
+      if (!block) return []
+      const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+      const result = await generateText({
+        model: modelProvider.resolve(ref),
+        system: ACCEPTANCE_CRITERIA_EXTRACTION_SYSTEM_PROMPT,
+        prompt: buildAcceptanceCriteriaPrompt(block.title, doc),
+        temperature: 0,
+        maxOutputTokens: ACCEPTANCE_EXTRACTION_MAX_OUTPUT_TOKENS,
+        providerOptions: catFactoryObservability({
+          agentKind: ACCEPTANCE_EXTRACTION_AGENT_KIND,
+          workspaceId,
+        }),
+      })
+      // A length-truncated response is dropped whole rather than salvaged: the JSON is cut
+      // mid-object, so what survives is whichever criteria happened to be serialised first —
+      // a silently partial list that reads exactly like a complete one.
+      if (result.finishReason === 'length') return []
+      const parsed = extractJson(result.text)
+      const criteria =
+        parsed && typeof parsed === 'object' ? (parsed as { criteria?: unknown }).criteria : null
+      return parseAcceptanceCriterionDrafts(criteria)
+    } catch (e) {
+      // Swallowed on purpose (see the doc above) — but never silently: this is the one path whose
+      // whole failure mode is "nothing happens", so the log is the only evidence it ran at all.
+      this.logger?.warn(
+        { workspaceId, blockId, err: String(e) },
+        'acceptance-criteria extraction failed',
+      )
+      return []
+    }
   }
 
   // ---- Requirement Writer (the second companion: grounded recommendations) -----------

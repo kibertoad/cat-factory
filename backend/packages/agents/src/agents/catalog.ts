@@ -11,7 +11,11 @@ import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
-import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
+import {
+  isTesterReportingKind,
+  testingSystemPrompt,
+  testerEnvironmentSection,
+} from './prompts/testing.js'
 import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
@@ -24,6 +28,8 @@ import {
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
+  acceptanceCriteriaSection,
+  criteriaVerdictsSection,
   testSecretsSection,
 } from './prompts/standard.js'
 
@@ -218,6 +224,17 @@ function buildBaseUserPrompt(
   if (testerEnv) lines.push(testerEnv)
   const testSecrets = testSecretsSection(context)
   if (testSecrets) lines.push(testSecrets)
+  // The service's STANDING acceptance criteria, for every kind that reaches the generic prompt
+  // (the spec-writer, the testers, the custom kinds). The standard phases get the same section
+  // from `renderStandardUserPrompt`. Empty when the service has none confirmed.
+  const criteria = acceptanceCriteriaSection(context)
+  if (criteria) lines.push(criteria)
+  // Only the TESTER is asked to rule on them: it is the one kind that actually exercises the
+  // software, so it is the only one whose report can carry checkable per-criterion evidence.
+  if (isTesterReportingKind(context.agentKind)) {
+    const verdicts = criteriaVerdictsSection(context)
+    if (verdicts) lines.push(verdicts)
+  }
   const mockFrontend = mockFrontendSection(context)
   if (mockFrontend) lines.push(mockFrontend)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions

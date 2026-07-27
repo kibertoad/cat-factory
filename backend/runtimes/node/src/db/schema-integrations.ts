@@ -1,4 +1,4 @@
-import { bigint, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { bigint, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 
 // The opt-in INTEGRATION tables: a workspace's sealed third-party connections (observability,
 // private package registries, incident enrichment) and the per-SERVICE-FRAME configuration that
@@ -80,6 +80,38 @@ export const validationConfigs = pgTable(
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
+)
+
+// Per-service-frame ACCEPTANCE CRITERIA (mirror of D1 migration 0063's `acceptance_criteria`):
+// the durable given/when/then behaviour statements a service accumulates, keyed by the SERVICE
+// FRAME block (a run resolves them by walking its block up the frame chain).
+//
+// One ROW per criterion — unlike the frame-scoped configs above — because each carries its own
+// lifecycle (`proposed` from the accretion pass → `confirmed`/`retired` by a human) and a stable
+// id that the tester's per-criterion verdicts and the PR verification report join on.
+//
+// The clause columns are `*_text` because `when` is a RESERVED WORD in Postgres (and `then` in
+// both dialects); the D1 mirror uses the same names so the two runtimes stay identical. `tags`
+// is a JSON array as text. See docs/initiatives/acceptance-criteria-store.md.
+export const acceptanceCriteria = pgTable(
+  'acceptance_criteria',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id').notNull(),
+    title: text('title').notNull(),
+    given_text: text('given_text').notNull().default(''),
+    when_text: text('when_text').notNull().default(''),
+    outcome_text: text('outcome_text').notNull().default(''),
+    tags: text('tags').notNull().default('[]'),
+    status: text('status').notNull().default('proposed'),
+    provenance: text('provenance').notNull().default('authored'),
+    source_review_id: text('source_review_id'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  // The frame-chain read on every dispatch and the workspace hydrate both ride this index.
+  (t) => [index('idx_acceptance_criteria_workspace_block').on(t.workspace_id, t.block_id)],
 )
 
 // Sensitive per-service test credentials (sealed; mirror of D1 migration 0044's

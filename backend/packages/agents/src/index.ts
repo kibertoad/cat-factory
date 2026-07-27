@@ -74,6 +74,7 @@ export {
 // Tester / Fixer track prompts + helpers.
 export {
   isTestingKind,
+  isTesterReportingKind,
   testingSystemPrompt,
   testerEnvironmentSection,
   TESTER_QC_SYSTEM_PROMPT,
@@ -83,6 +84,7 @@ export {
   REVIEW_SYSTEM_PROMPT,
   REWORK_SYSTEM_PROMPT,
   WRITER_SYSTEM_PROMPT,
+  ACCEPTANCE_CRITERIA_EXTRACTION_SYSTEM_PROMPT,
 } from './agents/prompts/requirements.js'
 // Clarity-review (bug-report triage) prompt text.
 export {

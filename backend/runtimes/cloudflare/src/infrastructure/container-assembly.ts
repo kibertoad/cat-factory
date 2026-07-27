@@ -22,6 +22,7 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   TestSecretsService,
+  AcceptanceCriteriaService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -75,6 +76,7 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
+import { D1AcceptanceCriterionRepository } from './repositories/D1AcceptanceCriterionRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
@@ -137,6 +139,7 @@ export interface WorkerContainerAssemblyInput {
   subscriptions: ProviderSubscriptionService | undefined
   testSecretsService: TestSecretsService | undefined
   validationConfigService: ValidationConfigService
+  acceptanceCriteriaService: AcceptanceCriteriaService
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
   publicApiKeys: PublicApiKeyService | undefined
@@ -195,6 +198,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     subscriptions,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     personalSubscriptions,
     apiKeys,
     notificationWebhookSupport,
@@ -361,6 +365,21 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // for a service with no checks, which is the exact pre-feature behaviour.
     resolveValidationChecks: (workspaceId: string, frameId: string) =>
       validationConfigService.resolveForFrame(workspaceId, frameId),
+    // Fold the service frame's CONFIRMED acceptance criteria onto the agent run context, so the
+    // spec-writer / coder / reviewer / tester prompts state what the service must already do and
+    // the tester can return a per-criterion verdict. Like the validation checks above, nothing
+    // sealed and always wired; `null` for a service with none, which is byte-for-byte the
+    // pre-feature prompt. See docs/initiatives/acceptance-criteria-store.md.
+    resolveAcceptanceCriteria: (workspaceId: string, frameId: string) =>
+      acceptanceCriteriaService.resolveForFrame(workspaceId, frameId),
+    // The accretion half: persist the criteria the post-review extraction pass derived from a
+    // settled requirements review, as `proposed` candidates a human triages.
+    recordDerivedAcceptanceCriteria: (workspaceId, frameId, reviewId, drafts) =>
+      acceptanceCriteriaService.recordDerived(workspaceId, frameId, reviewId, drafts),
+    // The replay guard the engine consults BEFORE spending a model call on extraction: the
+    // durable driver's steps replay, so without it a settled review re-extracts every time.
+    acceptanceCriteriaAlreadyDerived: (workspaceId, frameId, reviewId) =>
+      acceptanceCriteriaService.hasDerivedFrom(workspaceId, frameId, reviewId),
     ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
@@ -420,6 +439,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     subscriptions,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
@@ -558,6 +578,12 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode
       // node's dispatch resolution + inspector reads come back `... is not wired`.
       validationConfigRepository: new D1ValidationConfigRepository({ db }),
+      // Same reasoning again for the per-service ACCEPTANCE CRITERIA: the engine reads them via
+      // the `resolveAcceptanceCriteria` / `recordDerivedAcceptanceCriteria` FUNCTIONS and the
+      // inspector CRUD goes through the service, so the repo isn't in `CoreDependencies` —
+      // reflect it explicitly or a mothership-mode node's dispatch resolution, triage list and
+      // accretion write all come back `... is not wired`.
+      acceptanceCriterionRepository: new D1AcceptanceCriterionRepository({ db }),
       // GitHub projection + installation reads the mothership serves over the persistence RPC even
       // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
       // DELEGATION (no local App), which enables `container.github`, so its board snapshot
@@ -592,6 +618,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,
+    // The per-service acceptance-criteria store the shared controller reads. Always present
+    // (no secret material), like the validation-check store above it.
+    acceptanceCriteria: acceptanceCriteriaService,
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

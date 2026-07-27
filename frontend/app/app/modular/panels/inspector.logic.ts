@@ -54,6 +54,7 @@ export const INSPECTOR_PANEL_IDS = [
   'service-fragments',
   'service-release-health',
   'service-validation-checks',
+  'service-acceptance-criteria',
   // epic / initiative body
   'epic-children',
   'initiative-inspector',
@@ -123,6 +124,12 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   // Deployable frames only — a doc repo ships no build to install/lint/test, exactly like the
   // test-infra and release-health panels above it.
   { id: 'service-validation-checks', order: 180, when: isDeployableFrame },
+  // The service's acceptance criteria: the durable given/when/outcome behaviour contract, and
+  // the triage queue for the candidates the post-review accretion pass proposes. Every FRAME —
+  // including a `document` repo, unlike the build/test/release panels above — because a
+  // documentation service still has required behaviour worth recording, it just has no suite
+  // to run.
+  { id: 'service-acceptance-criteria', order: 190, when: isFrame },
   { id: 'epic-children', order: 200, when: (b) => b.level === 'epic' },
   { id: 'initiative-inspector', order: 210, when: (b) => b.level === 'initiative' },
 ]

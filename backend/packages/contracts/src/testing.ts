@@ -59,6 +59,36 @@ export const testOutcomeSchema = v.object({
 export type TestOutcome = v.InferOutput<typeof testOutcomeSchema>
 
 /**
+ * Whether the Tester found a service's ACCEPTANCE CRITERION satisfied.
+ *  - `met`         — exercised and observed to hold.
+ *  - `not_met`     — exercised and observed NOT to hold (a blocker, like a failed outcome).
+ *  - `not_covered` — deliberately not exercised in this run (out of the change's scope, or
+ *                    not reachable in this environment). Explicitly distinct from `not_met`:
+ *                    "we didn't check" and "it's broken" must never look the same, which is
+ *                    the whole reason the criterion list exists.
+ */
+export const criterionVerdictStatusSchema = v.picklist(['met', 'not_met', 'not_covered'])
+export type CriterionVerdictStatus = v.InferOutput<typeof criterionVerdictStatusSchema>
+
+/**
+ * The Tester's verdict on ONE of the service's confirmed acceptance criteria.
+ *
+ * `criterionId` joins back to the persisted criterion (the id is carried into the prompt for
+ * exactly this purpose), so the PR verification report can render a criterion → evidence table
+ * without the model having to restate the criterion text. `evidence` is the reference that
+ * makes the verdict checkable — the test name, the request/response observed, the log line —
+ * NOT a restatement of the criterion.
+ */
+export const criterionVerdictSchema = v.object({
+  /** The id of the criterion this verdict is about (as supplied in the run context). */
+  criterionId: v.string(),
+  status: criterionVerdictStatusSchema,
+  /** What was observed that supports the verdict (test name, response, log line). */
+  evidence: v.optional(v.string()),
+})
+export type CriterionVerdict = v.InferOutput<typeof criterionVerdictSchema>
+
+/**
  * One screenshot the UI tester (`tester-ui`) captured of a distinct view while
  * exercising the functionality. The bytes are uploaded to the binary-artifact store
  * during the run (so they never bloat the report JSON); this entry references the
@@ -102,6 +132,15 @@ const testReportObjectSchema = v.object({
    * their own, withhold the greenlight. The engine re-applies this rule defensively.
    */
   concerns: v.array(testConcernSchema),
+  /**
+   * Per-criterion verdicts against the service's CONFIRMED acceptance criteria, when the run
+   * carried any (see `AgentRunContext.acceptanceCriteria`). Absent/empty when the service has
+   * no criteria — which is every run before a workspace adopts the store, so the report shape
+   * is unchanged for them. Verdicts are advisory evidence, NOT a second greenlight gate: the
+   * `outcomes`/`concerns` rules above remain the release decision, and a `not_met` verdict
+   * that matters shows up there too.
+   */
+  criteriaVerdicts: v.optional(v.array(criterionVerdictSchema)),
   /** Which environment the suite ran in, echoed back for the UI. */
   environment: v.optional(testEnvironmentSchema),
   /**

@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { criterionVerdictStatusSchema } from './testing.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
  * a bump means "re-read the schema", not "a compatibility shim exists".
  */
-export const PR_VERIFICATION_REPORT_VERSION = 1
+export const PR_VERIFICATION_REPORT_VERSION = 2
 
 /**
  * Whether a section has evidence to show.
@@ -204,6 +205,52 @@ export const prReportObservabilitySchema = v.object({
 })
 export type PrReportObservability = v.InferOutput<typeof prReportObservabilitySchema>
 
+/**
+ * One of the service's CONFIRMED acceptance criteria, paired with whatever the run observed
+ * about it. `verdict`/`evidence` come from the tester's `criteriaVerdicts`; both are null when
+ * the tester didn't run or returned no verdict for this criterion — which is reported as
+ * `not reported` rather than silently omitted, since an un-checked criterion is precisely the
+ * thing a reviewer needs to see.
+ */
+export const prReportCriterionSchema = v.object({
+  id: v.string(),
+  title: v.string(),
+  given: v.string(),
+  when: v.string(),
+  outcome: v.string(),
+  /**
+   * The tester's verdict, or null if none was returned. Shares the tester report's own
+   * {@link criterionVerdictStatusSchema} rather than a loose string, so an external consumer of
+   * the JSON block reads exactly the three values the renderer switches on.
+   */
+  verdict: v.optional(v.nullable(criterionVerdictStatusSchema)),
+  /** What the tester observed that supports the verdict. */
+  evidence: v.optional(v.nullable(v.string())),
+})
+export type PrReportCriterion = v.InferOutput<typeof prReportCriterionSchema>
+
+/**
+ * The service's acceptance criteria and how this run fared against them — the
+ * "criterion → evidence" view that the platform could not produce before a durable criterion
+ * list existed (see `docs/initiatives/acceptance-criteria-store.md`).
+ *
+ * `absent` covers BOTH empty cases and says which: the service has no confirmed criteria, or
+ * it has them but the run carried no tester to judge them. They are very different facts about
+ * a pull request, so the note distinguishes them.
+ */
+export const prReportAcceptanceCriteriaSchema = v.object({
+  status: prReportSectionStatusSchema,
+  note: v.optional(v.nullable(v.string())),
+  entries: v.array(prReportCriterionSchema),
+  /** How many of `entries` the tester judged `met` — the headline a reviewer scans for. */
+  met: v.number(),
+  /** How many were judged `not_met`. */
+  notMet: v.number(),
+  /** How many were left `not_covered` or drew no verdict at all. */
+  unverified: v.number(),
+})
+export type PrReportAcceptanceCriteria = v.InferOutput<typeof prReportAcceptanceCriteriaSchema>
+
 export const prVerificationReportSchema = v.object({
   /** See {@link PR_VERIFICATION_REPORT_VERSION}. */
   version: v.number(),
@@ -212,6 +259,7 @@ export const prVerificationReportSchema = v.object({
   run: prReportRunSchema,
   ci: prReportCiSchema,
   tests: prReportTestsSchema,
+  acceptanceCriteria: prReportAcceptanceCriteriaSchema,
   environments: prReportEnvironmentsSchema,
   merge: prReportMergeSchema,
   observability: prReportObservabilitySchema,

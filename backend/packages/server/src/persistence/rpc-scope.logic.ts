@@ -66,3 +66,37 @@ export async function checkOwnerPairScope(
   }
   return undefined
 }
+
+/**
+ * The `workspaceFieldList` BATCH record write (`upsertMany(records)`): every record must bind to an
+ * in-scope workspace via its own `workspaceId` FIELD — the batch mirror of `workspaceField`.
+ *
+ * Refusing the WHOLE call on one bad row, rather than filtering the array down, is deliberate: a
+ * partially-applied batch write would leave the caller believing it persisted rows that were
+ * silently dropped. A non-array arg, a record with a missing/non-string `workspaceId`, or any
+ * out-of-scope workspace → `denied`, else `undefined`.
+ */
+export async function checkWorkspaceFieldListScope(
+  records: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(records)) return denied
+  // Collect the DISTINCT workspaces first: a batch write is normally many rows for ONE workspace,
+  // and `resolveAccountId` is a repository read — resolving it per record would make the scope
+  // check itself an N+1 on the size of the batch.
+  const workspaceIds = new Set<string>()
+  for (const record of records) {
+    const workspaceId =
+      record && typeof record === 'object'
+        ? (record as { workspaceId?: unknown }).workspaceId
+        : undefined
+    if (typeof workspaceId !== 'string') return denied
+    workspaceIds.add(workspaceId)
+  }
+  for (const workspaceId of workspaceIds) {
+    if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
+  }
+  return undefined
+}

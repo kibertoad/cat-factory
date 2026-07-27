@@ -42,14 +42,18 @@ describe('inspector panel group', () => {
       'service-fragments',
       'service-release-health',
       'service-validation-checks',
+      'service-acceptance-criteria',
     ])
   })
 
   it('a document frame hides the test-infra / test-credentials / release-health panels', () => {
     // A doc repo stands up no test env and ships no release, so those panels don't apply.
+    // Acceptance criteria DO: a documentation service still has required behaviour worth
+    // recording — it just has no suite to run against it.
     expect(visibleIds(block('frame', 'document'))).toEqual([
       'container-summary',
       'service-fragments',
+      'service-acceptance-criteria',
     ])
   })
 
@@ -61,6 +65,7 @@ describe('inspector panel group', () => {
       'service-fragments',
       'service-release-health',
       'service-validation-checks',
+      'service-acceptance-criteria',
     ])
   })
 
@@ -73,6 +78,7 @@ describe('inspector panel group', () => {
       'service-fragments',
       'service-release-health',
       'service-validation-checks',
+      'service-acceptance-criteria',
     ])
   })
 

@@ -185,6 +185,7 @@ import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewReposit
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
+import { D1AcceptanceCriterionRepository } from './repositories/D1AcceptanceCriterionRepository'
 import { D1MergeTrackRecordRepository } from './repositories/D1MergeTrackRecordRepository'
 import { D1RiskPolicyRepository } from './repositories/D1RiskPolicyRepository'
 import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
@@ -256,7 +257,7 @@ import {
   buildSubscriptionService,
   buildTestSecretsService,
   buildUserSecretService,
-  buildValidationConfigService,
+  buildFrameConfigServices,
 } from './wireCredentialServices'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -709,6 +710,10 @@ export function selectMergeLifecycleDeps(
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
+    // The raw criterion store, wired ONLY so the board's delete cascade can reclaim a doomed
+    // service frame's acceptance criteria. Dispatch + accretion ride the resolver/accretion
+    // closures assembled in `container-assembly.ts`, never this. Mirrors the Node wiring.
+    acceptanceCriterionRepository: new D1AcceptanceCriterionRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
   // the integration is enabled) and the outbound webhook (when a workspace registered one) all
@@ -1992,11 +1997,10 @@ export function buildContainer(
   // vendor-credential controller, so both read the same pool.
   const subscriptions = buildSubscriptionService(env, db, clock)
 
-  // The sensitive per-service test-credential store (sealed) — shared by the test-secrets
-  // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
-  const testSecretsService = buildTestSecretsService(env, db, clock)
-
-  const validationConfigService = buildValidationConfigService(db, clock)
+  // The per-service-FRAME configuration stores (sealed test credentials, pre-PR validation
+  // checks, acceptance criteria) — each shared by its CRUD controller and its engine resolver.
+  const { testSecretsService, validationConfigService, acceptanceCriteriaService } =
+    buildFrameConfigServices(env, db, clock, idGenerator)
 
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
@@ -2142,6 +2146,7 @@ export function buildContainer(
     subscriptions,
     testSecretsService,
     validationConfigService,
+    acceptanceCriteriaService,
     personalSubscriptions,
     apiKeys,
     publicApiKeys,

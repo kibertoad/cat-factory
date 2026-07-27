@@ -1,5 +1,6 @@
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { parsePrVerificationReport } from '@cat-factory/contracts'
+import type { ResolvedAcceptanceCriterion, TestReport } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
@@ -31,7 +32,33 @@ function instance(
   } as ExecutionInstance
 }
 
-const INPUTS = { block: BLOCK, issues: [], runUrl: null, now: 1_700_000_000_000 }
+const INPUTS = {
+  block: BLOCK,
+  issues: [],
+  acceptanceCriteria: [],
+  runUrl: null,
+  now: 1_700_000_000_000,
+}
+
+/** Two confirmed criteria for the service under test — the join the report's table renders. */
+const CRITERIA: ResolvedAcceptanceCriterion[] = [
+  {
+    id: 'ac_1',
+    title: 'Expired sessions are rejected',
+    given: 'a token older than 24 hours',
+    when: 'it is presented to an authenticated endpoint',
+    outcome: 'the request is rejected with 401',
+    tags: ['auth'],
+  },
+  {
+    id: 'ac_2',
+    title: 'Sign-out invalidates every session',
+    given: '',
+    when: 'a user signs out',
+    outcome: 'all of that user\u2019s sessions stop working',
+    tags: [],
+  },
+]
 
 /** A tester summary whose transcript fence was never closed (a killed/truncated tool dump). */
 const TEST_REPORT_WITH_OPEN_FENCE = {
@@ -119,6 +146,109 @@ describe('composePrVerificationReport', () => {
     expect(report.tests.outcomes).toHaveLength(2)
     expect(report.tests.concerns).toEqual([{ title: 'logout 500s', severity: 'high' }])
     expect(report.tests.fixerAttempts).toBe(1)
+  })
+
+  it('joins the service acceptance criteria to the tester verdicts', () => {
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'tester-api',
+          test: {
+            phase: 'testing',
+            attempts: 1,
+            maxAttempts: 3,
+            lastReport: {
+              greenlight: true,
+              summary: 'All good.',
+              tested: [],
+              outcomes: [],
+              concerns: [],
+              // Only ONE of the two criteria drew a verdict — the case the section exists for.
+              criteriaVerdicts: [
+                { criterionId: 'ac_1', status: 'met', evidence: 'auth.spec.ts:expired token' },
+              ],
+            } as TestReport,
+          },
+        }),
+      ]),
+      { ...INPUTS, acceptanceCriteria: CRITERIA },
+    )
+
+    expect(report.acceptanceCriteria.status).toBe('reported')
+    expect(report.acceptanceCriteria.met).toBe(1)
+    expect(report.acceptanceCriteria.notMet).toBe(0)
+    // The un-judged criterion is COUNTED, not dropped: an unchecked requirement is exactly what
+    // a reviewer needs to see, and omitting it would make a half-verified PR look fully verified.
+    expect(report.acceptanceCriteria.unverified).toBe(1)
+    expect(report.acceptanceCriteria.entries.map((e) => e.verdict)).toEqual(['met', null])
+    expect(report.acceptanceCriteria.entries[0]?.evidence).toContain('auth.spec.ts')
+  })
+
+  it('distinguishes "no criteria recorded" from "criteria recorded but nobody checked them"', () => {
+    // These are different facts about a pull request and must not read the same.
+    const none = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), INPUTS)
+    expect(none.acceptanceCriteria.status).toBe('absent')
+    expect(none.acceptanceCriteria.note).toContain('no confirmed acceptance criteria')
+    expect(none.acceptanceCriteria.entries).toEqual([])
+
+    const unchecked = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), {
+      ...INPUTS,
+      acceptanceCriteria: CRITERIA,
+    })
+    expect(unchecked.acceptanceCriteria.status).toBe('absent')
+    expect(unchecked.acceptanceCriteria.note).toContain('no tester in this run returned a verdict')
+    // …but the contract itself is still listed, so the reviewer can see what went unverified.
+    expect(unchecked.acceptanceCriteria.entries).toHaveLength(2)
+    expect(unchecked.acceptanceCriteria.unverified).toBe(2)
+    expect(() => parsePrVerificationReport(unchecked)).not.toThrow()
+  })
+
+  it('caps the criteria table, records the omission, and still reads as unchecked when every verdict fell past the cap', () => {
+    // A service near the store ceiling overflows the report's 50-row list cap. Two things must
+    // hold: the omission is STATED (a silently truncated contract reads like a complete one), and
+    // the "did anybody check?" verdict is decided from what the table actually SHOWS — a run whose
+    // every verdict landed on a criterion past the cap has a non-empty verdict map and yet nothing
+    // to display, which must not report as `reported` with an all-zero tally.
+    const many: ResolvedAcceptanceCriterion[] = Array.from({ length: 60 }, (_, i) => ({
+      id: `ac_${i}`,
+      title: `Criterion ${i}`,
+      given: '',
+      when: 'something happens',
+      outcome: 'something observable follows',
+      tags: [],
+    }))
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'tester-api',
+          test: {
+            phase: 'testing',
+            attempts: 1,
+            maxAttempts: 3,
+            lastReport: {
+              greenlight: true,
+              summary: 'ran',
+              tested: [],
+              outcomes: [],
+              concerns: [],
+              // Only criteria BEYOND the 50-row cap were judged.
+              criteriaVerdicts: [
+                { criterionId: 'ac_55', status: 'met', evidence: 'suite.spec.ts' },
+              ],
+            } as TestReport,
+          },
+        }),
+      ]),
+      { ...INPUTS, acceptanceCriteria: many },
+    )
+
+    expect(report.acceptanceCriteria.entries).toHaveLength(50)
+    expect(report.truncations.some((t) => t.startsWith('acceptanceCriteria.entries'))).toBe(true)
+    expect(report.acceptanceCriteria.status).toBe('absent')
+    expect(report.acceptanceCriteria.note).toContain('no tester in this run returned a verdict')
+    expect(report.acceptanceCriteria.met).toBe(0)
+    expect(report.acceptanceCriteria.unverified).toBe(50)
+    expect(() => parsePrVerificationReport(report)).not.toThrow()
   })
 
   it('reports the deployer fan-out and whether the environments were torn down', () => {

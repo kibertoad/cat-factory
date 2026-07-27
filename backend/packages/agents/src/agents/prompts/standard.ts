@@ -6,6 +6,10 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens, renderTaskContext } from '@cat-factory/kernel'
+import {
+  ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS,
+  ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES,
+} from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
@@ -448,6 +452,92 @@ function implementationChoiceSection(context: AgentRunContext): string {
   return lines.join('\n')
 }
 
+/**
+ * Render the SERVICE ACCEPTANCE CRITERIA section — the durable given/when/outcome statements the
+ * service is already required to satisfy, resolved from the per-frame criteria store (see
+ * `docs/initiatives/acceptance-criteria-store.md`). Only CONFIRMED criteria ever reach the
+ * context, so everything here has been read by a human.
+ *
+ * These are STANDING requirements about the service, not this task's requirements: the value is
+ * that an agent changing one part of a service can see what the rest of it must keep doing, which
+ * is exactly the regression context that used to die with each task's requirements review. The
+ * wording says so explicitly, because an agent handed a list of behaviours will otherwise assume
+ * it has been asked to implement all of them.
+ *
+ * Each entry leads with its stable `id`: the tester is asked to return a per-criterion verdict
+ * keyed by that id (see `criteriaVerdictsSection`), and the PR verification report joins the
+ * verdicts back to the criteria on it. Empty string when the run carries no criteria — every run
+ * before a service adopts the store — so those prompts stay byte-for-byte unchanged.
+ */
+export function acceptanceCriteriaSection(context: AgentRunContext): string {
+  const criteria = context.acceptanceCriteria?.criteria
+  if (!criteria?.length) return ''
+  const lines = [
+    '',
+    'Service acceptance criteria (STANDING behaviour this service must satisfy — this is the',
+    'contract the service already has, NOT a list of work to do in this task). Preserve every one',
+    'of them; if your change makes one impossible, say so explicitly rather than breaking it',
+    'silently:',
+  ]
+  // Bounded on BOTH axes (see the constants' doc): a service at the store ceiling with long
+  // clauses would otherwise put over a megabyte into every standard-phase prompt. Whichever bound
+  // trips first ends the list, and the omission is STATED — a silently truncated contract reads
+  // exactly like a complete one.
+  let budget = ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS
+  let rendered = 0
+  for (const criterion of criteria) {
+    if (rendered >= ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES || budget <= 0) break
+    const entry = [
+      `- [${criterion.id}] ${criterion.title}`,
+      ...(criterion.given.trim() ? [`  - Given: ${criterion.given}`] : []),
+      `  - When: ${criterion.when}`,
+      `  - Then: ${criterion.outcome}`,
+      ...(criterion.tags.length ? [`  - Tags: ${criterion.tags.join(', ')}`] : []),
+    ]
+    lines.push(...entry)
+    budget -= entry.join('\n').length
+    rendered += 1
+  }
+  const omitted = criteria.length - rendered
+  if (omitted > 0) {
+    lines.push(
+      `- (${omitted} further confirmed criteria omitted for length — this list is NOT complete;` +
+        ' the service inspector holds all of them.)',
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
+ * The instruction that turns the criteria above into a machine-readable result: the extra
+ * `criteriaVerdicts` array a TESTER must add to its structured report, keyed by the criterion ids
+ * printed in {@link acceptanceCriteriaSection}.
+ *
+ * Kept separate from that section because the two have different audiences — every code-aware
+ * agent reads the criteria, but only the tester is asked to RULE on them — and rendered only for
+ * the tester kinds. Empty when the run carries no criteria, so the tester's report contract is
+ * unchanged for a service that has none.
+ */
+export function criteriaVerdictsSection(context: AgentRunContext): string {
+  const criteria = context.acceptanceCriteria?.criteria
+  if (!criteria?.length) return ''
+  return [
+    '',
+    'Also report on the service acceptance criteria listed above. Add a `criteriaVerdicts` array',
+    'to your JSON report, one entry per criterion you can speak to:',
+    '  "criteriaVerdicts": [ { "criterionId": string, "status": "met" | "not_met" | "not_covered", "evidence": string } ]',
+    '- `criterionId` MUST be one of the bracketed ids above, copied exactly.',
+    '- `met` / `not_met` require that you ACTUALLY exercised the criterion; `evidence` names what',
+    '  you observed (the test that covers it, the response you saw, the log line) — not a',
+    '  restatement of the criterion.',
+    '- Use `not_covered` for anything you did not exercise in this run, with the reason. Do NOT',
+    '  guess: "I did not check" and "it is broken" are different answers, and reporting the first',
+    '  as the second (or as `met`) destroys the point of the list.',
+    '- A `not_met` verdict on a criterion this change was supposed to satisfy is also a `concern`',
+    '  and blocks the greenlight; record it in both places.',
+  ].join('\n')
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
 export function renderStandardUserPrompt(
   phase: StandardPhase,
@@ -462,6 +552,11 @@ export function renderStandardUserPrompt(
     linkedContextSection(context, opts) +
     environmentSection(context) +
     involvedServicesSection(context) +
+    // The service's STANDING acceptance criteria — every standard phase benefits (the architect
+    // designs around them, the implementer must not break them, the reviewer checks against
+    // them), so unlike the two build-only sections below this is unconditional. Empty on every
+    // run whose service has no confirmed criteria.
+    acceptanceCriteriaSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
     // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
     (phase === 'build' ? technicalContextSection(context) : '') +

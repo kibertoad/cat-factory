@@ -8,6 +8,10 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import type {
+  ResolvedAcceptanceCriteria,
+  ResolvedAcceptanceCriterion,
+} from '@cat-factory/contracts'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 
 /** Minimal structured logger (pino-compatible); optional, like every other best-effort path. */
@@ -59,6 +63,20 @@ export interface PrVerificationReportControllerDeps {
    * (better than emitting a link to nowhere).
    */
   appBaseUrl?: string
+  /**
+   * Optional: resolve the service's CONFIRMED acceptance criteria for the run's BLOCK (the
+   * controller has no frame in hand, so this closure owns the frame walk). Absent — or resolving
+   * to none — ⇒ the criteria section reports `absent` with a note saying the service has no
+   * contract recorded, which is the honest answer rather than a silently missing section.
+   *
+   * One indexed read per publish, and it is the ONLY read this hook added: the criteria are
+   * service-scoped state that genuinely isn't on the `ExecutionInstance`, unlike every other
+   * section, which composes from memory.
+   */
+  resolveAcceptanceCriteria?: (
+    workspaceId: string,
+    blockId: string,
+  ) => Promise<ResolvedAcceptanceCriteria | null>
   /**
    * Optional structured logger for the best-effort failure path. Wire it: publishing is the
    * one part of the run that is DESIGNED to fail silently, so without a log a revoked token or
@@ -120,6 +138,7 @@ export class PrVerificationReportController {
         composePrVerificationReport(instance, {
           block,
           issues: await this.linkedIssues(workspaceId, instance.blockId),
+          acceptanceCriteria: await this.acceptanceCriteria(workspaceId, instance.blockId),
           repo: target.repo,
           provider: target.provider,
           runUrl: this.runUrl(workspaceId, instance),
@@ -178,6 +197,24 @@ export class PrVerificationReportController {
   }
 
   /**
+   * The service's confirmed acceptance criteria for the run's block. Degrades to `[]` on any
+   * failure: the report is bookkeeping, and a criterion-store outage must cost the section its
+   * detail, never the whole report its publish.
+   */
+  private async acceptanceCriteria(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<ResolvedAcceptanceCriterion[]> {
+    const resolve = this.deps.resolveAcceptanceCriteria
+    if (!resolve) return []
+    try {
+      return (await resolve(workspaceId, blockId))?.criteria ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /**
    * The deep link into the run's observability panel (Model activity / Provided context).
    * The SPA is a single canvas, so the target is the board with the run's view params — see
    * `useRunDeepLink` in `@cat-factory/app`, and slice 4 of the global-search initiative,
@@ -198,4 +235,44 @@ export class PrVerificationReportController {
       .join('&')
     return `${base.replace(/\/$/, '')}/?${query}`
   }
+}
+
+/**
+ * The engine's construction of a {@link PrVerificationReportController} — the hook that keeps a
+ * run's verification report on its PR as each step settles (a hook, not a pipeline step: see
+ * `docs/initiatives/pr-verification-report.md`). A no-op when no publisher is wired, so no-VCS
+ * deployments and the engine tests are untouched.
+ *
+ * It also owns the one piece of
+ * wiring the constructor cannot express declaratively: the report needs the service's confirmed
+ * ACCEPTANCE CRITERIA, but its own dep is keyed by the run's BLOCK while the criteria store is
+ * keyed by the SERVICE FRAME — so the frame walk is adapted in here.
+ *
+ * Factored out of the `ExecutionService` constructor (which is at its per-function line budget)
+ * following the established controller-extraction pattern: it takes a small deps object of
+ * already-built collaborators and bound call-backs, and the constructor keeps a one-line call.
+ */
+export function buildPrVerificationReportController(
+  deps: Omit<PrVerificationReportControllerDeps, 'resolveAcceptanceCriteria'> & {
+    /** Resolve a block's owning service frame id (the engine's context-builder walk), or null. */
+    resolveServiceFrameId: (workspaceId: string, blockId: string) => Promise<string | null>
+    /** The facade's FRAME-keyed criteria resolver; absent ⇒ the report reports them as absent. */
+    resolveAcceptanceCriteria?: (
+      workspaceId: string,
+      frameId: string,
+    ) => Promise<ResolvedAcceptanceCriteria | null>
+  },
+): PrVerificationReportController {
+  const { resolveServiceFrameId, resolveAcceptanceCriteria, ...base } = deps
+  return new PrVerificationReportController({
+    ...base,
+    ...(resolveAcceptanceCriteria
+      ? {
+          resolveAcceptanceCriteria: async (workspaceId: string, blockId: string) => {
+            const frameId = await resolveServiceFrameId(workspaceId, blockId)
+            return frameId ? resolveAcceptanceCriteria(workspaceId, frameId) : null
+          },
+        }
+      : {}),
+  })
 }

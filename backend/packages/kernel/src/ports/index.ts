@@ -507,6 +507,10 @@ export type {
   ValidationConfigRepository,
 } from './validation-repositories.js'
 export type {
+  AcceptanceCriterionRecord,
+  AcceptanceCriterionRepository,
+} from './acceptance-criteria-repositories.js'
+export type {
   PackageRegistryConnectionRecord,
   PackageRegistryConnectionRepository,
 } from './package-registry-repositories.js'

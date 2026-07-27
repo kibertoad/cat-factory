@@ -114,7 +114,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { buildResumedInstance, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
-import { PrVerificationReportController } from './PrVerificationReportController.js'
+import { buildPrVerificationReportController } from './PrVerificationReportController.js'
 
 // The engine's injected-collaborator contract lives next door (a ~350-line declaration block
 // that was crowding this file against its size budget); re-exported here so every existing
@@ -259,6 +259,9 @@ export class ExecutionService {
     environmentProvisioning,
     resolveTestSecretRefs,
     resolveValidationChecks,
+    resolveAcceptanceCriteria,
+    recordDerivedAcceptanceCriteria,
+    acceptanceCriteriaAlreadyDerived,
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
@@ -355,6 +358,7 @@ export class ExecutionService {
       environmentProvisioning,
       resolveTestSecretRefs,
       resolveValidationChecks,
+      resolveAcceptanceCriteria,
       fragmentResolver,
       skillResolver,
       spendService,
@@ -412,6 +416,9 @@ export class ExecutionService {
       forkChatService,
       issueWriteback,
       logger,
+      requirementReviewService,
+      recordDerivedAcceptanceCriteria,
+      acceptanceCriteriaAlreadyDerived,
     })
     this.testerController = gateWindows.testerController
     this.ralphController = gateWindows.ralphController
@@ -477,16 +484,8 @@ export class ExecutionService {
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
-      // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
-      // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
-      interviewControllers: [
-        this.initiativeInterviewController,
-        this.docInterviewController,
-      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
-      // Keeps the run's verification report on its PR as each step settles (a hook, not a
-      // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
-      // publisher is wired, so no-VCS deployments and the engine tests are untouched.
-      prVerificationReport: new PrVerificationReportController({
+      interviewControllers: reviewSubjects.interviewControllers,
+      prVerificationReport: buildPrVerificationReportController({
         blockRepository,
         clock,
         publisher: prVerificationReportPublisher,
@@ -494,6 +493,8 @@ export class ExecutionService {
         workspaceSettingsRepository,
         appBaseUrl,
         logger,
+        resolveServiceFrameId: (ws, id) => this.contextBuilder.resolveServiceFrameId(ws, id),
+        resolveAcceptanceCriteria,
       }),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,

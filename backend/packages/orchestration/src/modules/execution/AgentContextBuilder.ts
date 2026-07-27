@@ -47,7 +47,11 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
-import type { ResolvedReproduction, ResolvedValidationChecks } from '@cat-factory/contracts'
+import type {
+  ResolvedAcceptanceCriteria,
+  ResolvedReproduction,
+  ResolvedValidationChecks,
+} from '@cat-factory/contracts'
 import { resolveReproductionSpec } from './reproductionProof.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
@@ -221,6 +225,18 @@ export interface AgentContextBuilderDeps {
     frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
   /**
+   * Optional: resolve the CONFIRMED acceptance criteria configured for a run block's service
+   * frame (walked up the frame chain) — the durable given/when/then behaviour statements the
+   * service has accumulated. Rendered into the spec-writer / coder / reviewer / tester prompts.
+   * Absent (or resolving to `null`) ⇒ no criteria section, so every prompt is byte-for-byte
+   * what it was before this feature existed. See
+   * `docs/initiatives/acceptance-criteria-store.md`.
+   */
+  resolveAcceptanceCriteria?: (
+    workspaceId: string,
+    frameId: string,
+  ) => Promise<ResolvedAcceptanceCriteria | null>
+  /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
    * document-backed entries). When wired the engine uses it instead of the static
    * pool, so curated and living-document fragments actually reach a run.
@@ -307,6 +323,11 @@ export class AgentContextBuilder {
       // the container executor onto a PR-opening coding job body so the harness can run them
       // against the checkout before it opens the PR. `null` ⇒ the service configured none.
       validationChecks,
+      // The service frame's CONFIRMED acceptance criteria (walked up the same frame chain) —
+      // what this service is already required to do, carried with each criterion's stable id so
+      // the tester can return a per-criterion verdict the PR report joins on. `null` ⇒ the
+      // service has none confirmed.
+      acceptanceCriteria,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
       // preset steering resolved for THIS step's kind.
@@ -332,6 +353,7 @@ export class AgentContextBuilder {
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
       this.validationChecksFor(workspaceId, serviceFrame),
+      this.acceptanceCriteriaFor(workspaceId, serviceFrame),
       this.resolveInitiativeContext(workspaceId, block, agentKind),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
@@ -422,6 +444,7 @@ export class AgentContextBuilder {
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
       ...validationChecks,
+      ...acceptanceCriteria,
       ...reproduction,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
@@ -630,6 +653,30 @@ export class AgentContextBuilder {
       // doesn't reflect this repository, or a transient store outage, would otherwise fail EVERY
       // coding dispatch. Degrade to "no checks", which is exactly the unconfigured behaviour: the
       // PR opens as it did before the feature existed rather than the whole build stopping.
+      return {}
+    }
+  }
+
+  /**
+   * The service frame's CONFIRMED ACCEPTANCE CRITERIA, shaped as a spread-ready fragment (`{}`
+   * when the resolver is unwired, the block has no service frame, the service has none
+   * confirmed, or the read failed) — the same shape, and for the same call-site-complexity
+   * reason, as {@link validationChecksFor}.
+   *
+   * Takes the frame {@link buildContext} ALREADY resolved, so the ancestry walk still runs
+   * exactly once per dispatch. A read failure degrades to "no criteria" rather than failing the
+   * dispatch: an unreachable criterion store must cost a prompt SECTION, never the run — the
+   * agent then behaves exactly as it did before the service adopted the store.
+   */
+  private async acceptanceCriteriaFor(
+    workspaceId: string,
+    frame: Block | null,
+  ): Promise<{ acceptanceCriteria?: ResolvedAcceptanceCriteria }> {
+    if (!frame) return {}
+    try {
+      const resolved = await this.deps.resolveAcceptanceCriteria?.(workspaceId, frame.id)
+      return resolved && resolved.criteria.length > 0 ? { acceptanceCriteria: resolved } : {}
+    } catch {
       return {}
     }
   }

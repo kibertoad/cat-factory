@@ -93,6 +93,14 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
     // ONLY — the clarity gate has its own intake-semantics echo (see `echoClarityQuestions`)
     // and a brainstorm dialogue has no linked-issue surface at all.
     questionsOnPark: true,
+    // Acceptance-criteria accretion also rides the requirements subject only: the settled
+    // document here states what the service must DO, which is exactly what the store holds. A
+    // clarity review settles a bug report (symptoms of a defect) and a brainstorm a direction,
+    // neither of which is a durable behavioural contract.
+    accretesCriteria: true,
+    // The settled artifact the extraction reads, handed straight off the review the gate already
+    // holds — so accretion re-reads nothing the settlement path just wrote.
+    incorporatedDoc: (review) => review.incorporatedRequirements,
   }
 }
 
