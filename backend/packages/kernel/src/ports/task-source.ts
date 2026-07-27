@@ -6,6 +6,7 @@ import type {
   TaskDependencyLink,
   TaskSearchResult,
 } from '../domain/types.js'
+import type { TaskSourceWebhookAdapter } from './tracker-webhook.js'
 
 // Port for a single task source (Jira, …). A provider is the only place that
 // knows a source's specifics: how to validate its credentials, how to turn user
@@ -171,6 +172,17 @@ export interface TaskSourceProvider {
     workspaceId: string
     credentials: TaskCredentials | null
   }): Promise<TaskSourceDiagnostic>
+  /**
+   * Inbound-webhook capability: verify a delivery signed with the workspace connection's
+   * secret and map it onto a neutral {@link TrackerWebhookEvent}. Optional — a provider
+   * without it never receives deliveries (the shared receiver 404s that source), which is the
+   * push counterpart of a provider without {@link TaskSourceProvider.searchIssues} being
+   * unable to back a polling `bug-intake` schedule.
+   *
+   * Providers own their vendor parsing here exactly as VCS providers own theirs; the shared
+   * receiver owns only the transport (raw body, ack fast, hand off to the facade's queue).
+   */
+  readonly webhook?: TaskSourceWebhookAdapter
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

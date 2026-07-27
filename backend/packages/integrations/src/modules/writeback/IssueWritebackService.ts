@@ -11,9 +11,12 @@ import {
   type ReviewQuestionPostRepository,
   type TaskRecord,
   type TaskRepository,
+  type TaskSourceKind,
+  type ReviewReplyAck,
   type TrackerSettingsRepository,
 } from '@cat-factory/kernel'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
+import { renderReviewReplyAck } from './reviewReplies.logic.js'
 import {
   buildJiraCommentPayload,
   pickTransitionByCategory,
@@ -247,6 +250,26 @@ export class IssueWritebackService implements IssueWritebackProvider {
     return outcome
   }
 
+  /**
+   * Acknowledge a ticket reply on the very issue it arrived on.
+   *
+   * Deliberately NOT marker-gated, unlike {@link postReviewQuestions}: an ack is the terminal
+   * effect of an ingest that is ALREADY claimed exactly once by `tracker_comment_ingests`, so a
+   * second marker here would guard nothing and add a second thing to reason about. It is also not
+   * gated on the workspace writeback settings — a reply is an explicit request for a response, not
+   * an unsolicited courtesy.
+   *
+   * Best-effort throughout: the reply is applied and settled before this runs, so a tracker outage
+   * costs the acknowledgement, never the answer.
+   */
+  async postReviewReplyAck(
+    workspaceId: string,
+    issue: { source: TaskSourceKind; externalId: string },
+    ack: ReviewReplyAck,
+  ): Promise<void> {
+    await this.comment(workspaceId, issue, renderReviewReplyAck(ack))
+  }
+
   /** Run a writeback per issue, isolating failures so one bad issue can't block the rest. */
   private async forEachIssue(
     issues: TaskRecord[],
@@ -263,7 +286,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
    * once someone wires it, a throw is a failure to retry on the next replay, and neither may be
    * recorded as `posted`.
    */
-  private async comment(workspaceId: string, issue: TaskRecord, body: string): Promise<boolean> {
+  private async comment(
+    workspaceId: string,
+    // Narrowed to the natural key rather than the whole record: the ticket-reply ack addresses the
+    // issue the comment ARRIVED on, which it knows as `(source, externalId)` off the delivery and
+    // has no reason to re-read from the projection.
+    issue: Pick<TaskRecord, 'source' | 'externalId'>,
+    body: string,
+  ): Promise<boolean> {
     if (issue.source === 'github') {
       if (!this.deps.commentOnGitHubIssue) return false
       await this.deps.commentOnGitHubIssue(workspaceId, issue.externalId, body)

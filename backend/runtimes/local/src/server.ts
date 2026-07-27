@@ -102,7 +102,7 @@ export async function startLocal(
     defaultModelPresetId?: string
     /**
      * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
-     * local deploy-app wrapper (e.g. a Kargo adapter) passes this so the server auto-registers its
+     * local deploy-app wrapper passes this so the server auto-registers its
      * infra handler per workspace with no manual SPA step. Threaded into `buildLocalContainer` on
      * BOTH the Postgres path (through `start()` → `o`) and the mothership path, and used to
      * boot-backfill every existing workspace; new workspaces are seeded by `WorkspaceService.create`.

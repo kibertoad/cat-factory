@@ -224,6 +224,26 @@ new_sqlite_classes = ["DeployContainer"]
 # max_retries = 5
 # dead_letter_queue = "cat-factory-github-dlq"
 
+# Tracker webhook queue: the tracker receiver verifies + acks fast, enqueuing each
+# verified, parsed delivery here so push-driven intake (firing a matching bug-intake
+# schedule) and ticket replies (answering a parked requirements review) run out of
+# band. When the binding is absent (as below) the receiver applies each delivery
+# inline — fine for local dev, but it blocks the tracker's HTTP request on the whole
+# handle, which can include an LLM incorporation call. To enable the fast-ack async
+# path in production, create the queues and uncomment both blocks:
+#   wrangler queues create cat-factory-tracker-sync
+#   wrangler queues create cat-factory-tracker-dlq
+# [[queues.producers]]
+# binding = "TRACKER_SYNC_QUEUE"
+# queue = "cat-factory-tracker-sync"
+#
+# [[queues.consumers]]
+# queue = "cat-factory-tracker-sync"
+# max_batch_size = 10
+# max_concurrency = 5           # bounds concurrent tracker API usage per batch
+# max_retries = 5
+# dead_letter_queue = "cat-factory-tracker-dlq"
+
 # Optional admission queue. By default runs are created directly by
 # WorkflowsWorkRunner and bounded by Workflows' own concurrency. To instead cap
 # how fast runs are *started*, create the queues and uncomment both blocks (and

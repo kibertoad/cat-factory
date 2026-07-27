@@ -12,7 +12,13 @@
  * back here type-only), so the value dependency is one-way `container.ts` → this file.
  */
 
-import type { AppCaches, Block, ExecutionEventPublisher, JudgeAssessor } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  Block,
+  ExecutionEventPublisher,
+  JudgeAssessor,
+  TrackerIssueEvent,
+} from '@cat-factory/kernel'
 import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { type AgentKindRegistry } from '@cat-factory/agents'
@@ -41,6 +47,7 @@ import {
   TaskConnectionService,
   TaskImportService,
   TaskLinkService,
+  TrackerWebhookService,
   WebhookService,
   defaultEnvironmentBackendRegistry,
   defaultRunnerBackendRegistry,
@@ -114,6 +121,7 @@ import type {
   SharedStacksModule,
   SlackModule,
   TrackerModule,
+  TrackerWebhookModule,
   WorkspaceSettingsModule,
 } from './module-shapes.js'
 
@@ -1286,6 +1294,74 @@ export function createTrackerModule(deps: CoreDependencies): TrackerModule | und
 }
 
 /**
+ * Assemble the TRACKER WEBHOOK module: what a verified, parsed inbound tracker delivery does.
+ *
+ * Built after the engine because both of its branches drive engine-owned surfaces — the intake
+ * branch fires a recurring schedule, the reply branch drives the parked requirements review
+ * through the SAME `executionService.requirementsReview` actions the SPA controller calls. Binding
+ * those here (rather than letting `@cat-factory/integrations` reach for them) is what keeps the
+ * layering right AND makes "no parallel mutation path into the engine" true by construction.
+ *
+ * Every collaborator is optional, and the service degrades branch-by-branch: no recurring module ⇒
+ * pushed issue events are ignored (the polling schedule still covers intake); no requirements
+ * module or no ingest marker store ⇒ ticket replies are ignored. So a facade that wires only some
+ * of this behaves exactly as it did before, rather than half-working.
+ */
+export function createTrackerWebhookModule(
+  deps: CoreDependencies,
+  input: {
+    tasks: TasksModule | undefined
+    recurring: RecurringModule | undefined
+    requirements: RequirementsModule | undefined
+    executionService: ExecutionService
+  },
+): TrackerWebhookModule | undefined {
+  const { taskRepository, taskConnectionRepository } = deps
+  if (!taskRepository || !taskConnectionRepository || !input.tasks) return undefined
+  const requirementsService = input.requirements?.service
+  const recurring = input.recurring
+  const service = new TrackerWebhookService({
+    taskRepository,
+    taskConnectionRepository,
+    ...(recurring
+      ? {
+          triggerIntake: (workspaceId: string, event: TrackerIssueEvent) =>
+            recurring.service.triggerForIssueEvent(workspaceId, event),
+        }
+      : {}),
+    ...(requirementsService
+      ? {
+          reviewGateway: {
+            getForBlock: (ws, blockId) => requirementsService.getForBlock(ws, blockId),
+            replyToItem: (ws, reviewId, itemId, reply) =>
+              requirementsService.replyToItem(ws, reviewId, itemId, reply),
+            setItemStatus: (ws, reviewId, itemId, status) =>
+              requirementsService.setItemStatus(ws, reviewId, itemId, status),
+            // The run-DRIVING half goes through the engine's window actions, not the review
+            // service, so the park's CAS/approval-id arbitration and the task's preset knobs
+            // apply exactly as they do for the SPA and the public decision surface.
+            incorporate: (ws, blockId, feedback) =>
+              input.executionService.requirementsReview.incorporate(ws, blockId, feedback),
+            proceed: (ws, blockId) =>
+              input.executionService.requirementsReview.proceed(ws, blockId),
+            resolveExceeded: (ws, blockId, choice) =>
+              input.executionService.requirementsReview.resolveExceeded(ws, blockId, choice),
+          },
+        }
+      : {}),
+    ...(deps.trackerCommentIngestRepository
+      ? { commentIngestRepository: deps.trackerCommentIngestRepository }
+      : {}),
+    ...(deps.issueWritebackProvider ? { issueWriteback: deps.issueWritebackProvider } : {}),
+    resolveRunId: (ws, blockId) =>
+      deps.executionRepository.getByBlock(ws, blockId).then((run) => run?.id ?? null),
+    clock: deps.clock,
+    ...(deps.logger ? { log: (event) => deps.logger!.info(event, 'tracker webhook') } : {}),
+  })
+  return { service }
+}
+
+/**
  * Assemble the recurring-pipeline module when its repository is present. Built
  * after the execution engine since each fire starts a pipeline through it.
  */
@@ -1313,6 +1389,11 @@ export function createRecurringModule(
     taskConnectionService,
     // Pushes a `block-added` board event when the reused block is created, so it appears live.
     executionEventPublisher,
+    // Gives `triggerForIssueEvent`'s per-schedule isolation somewhere to report to; without it a
+    // webhook-fired schedule that consistently fails leaves no trace at all.
+    ...(deps.logger
+      ? { log: (event: Record<string, unknown>, msg: string) => deps.logger!.warn(event, msg) }
+      : {}),
   })
   return { service }
 }

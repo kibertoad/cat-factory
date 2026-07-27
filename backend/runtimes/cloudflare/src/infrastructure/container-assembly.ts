@@ -47,7 +47,11 @@ import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
 import type { ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
-import { CfGitHubWebhookIngest, WorkflowsBackfillScheduler } from './gateways/GitHubGateways'
+import {
+  CfGitHubWebhookIngest,
+  CfTrackerWebhookIngest,
+  WorkflowsBackfillScheduler,
+} from './gateways/GitHubGateways'
 import { WorkersAiLlmUpstream } from './ai/WorkersAiLlmUpstream'
 import { DurableObjectMachineEventRelay } from './events/DurableObjectMachineEventRelay'
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
@@ -635,6 +639,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       // fall back to inline handling when their binding is absent (local/dev/tests).
       githubBackfill: new WorkflowsBackfillScheduler(env.GITHUB_BACKFILL_WORKFLOW),
       githubWebhook: githubWebhookIngest,
+      // Inbound TRACKER deliveries via the tracker sync Queue; absent binding ⇒ the receiver
+      // applies each delivery inline, exactly like the GitHub seam above.
+      trackerWebhook: new CfTrackerWebhookIngest(env.TRACKER_SYNC_QUEUE),
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),

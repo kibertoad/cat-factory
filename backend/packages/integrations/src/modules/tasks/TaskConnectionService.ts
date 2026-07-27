@@ -9,7 +9,13 @@ import type {
   TaskSourceKind,
   TaskSourceState,
 } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
+  TRACKER_WEBHOOK_SECRET_KEY,
+  ValidationError,
+  trackerWebhookSecret,
+} from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { LinearOAuthSecret } from '@cat-factory/contracts'
@@ -318,7 +324,13 @@ export class TaskConnectionService {
     const record: TaskConnectionRecord = {
       workspaceId,
       source,
-      credentials,
+      // Carry the PLATFORM-owned keys across a re-connect. The bag is replaced wholesale (a
+      // reconnect is "here are my credentials now"), and a provider's `normalizeConnection`
+      // legitimately returns only the VENDOR credentials it validated — so without this, rotating
+      // a Jira API token would silently drop the inbound webhook secret and every subsequent
+      // delivery would 503 with nothing to point at the cause. Preserved HERE rather than in each
+      // provider so no provider can forget, and so a new platform-owned key is a one-line change.
+      credentials: { ...preservedPlatformCredentials(existing?.credentials), ...credentials },
       label,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
@@ -351,10 +363,186 @@ export class TaskConnectionService {
     return record
   }
 
+  /**
+   * The provider serving a source on this deployment, or undefined when it isn't registered.
+   * Exposed so the shared webhook receiver can reach a source's `webhook` adapter without a second
+   * registry of its own — the connection service is already the one thing that holds both the
+   * registry and the stored credentials a delivery is verified against.
+   */
+  providerFor(source: TaskSourceKind): TaskSourceProvider | undefined {
+    return this.deps.registry.get(source)
+  }
+
+  /**
+   * The workspace's stored connection RECORD (credentials included), or null when not connected.
+   *
+   * Distinct from {@link getConnection}, which deliberately projects credentials away for client
+   * responses. This is for server-internal callers that need the bag itself — today the webhook
+   * receiver, reading the inbound secret.
+   */
+  getConnectionRecord(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<TaskConnectionRecord | null> {
+    return this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+  }
+
+  /** The connection's inbound-webhook state, safe to read back at any time (never the secret). */
+  async getWebhookState(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<TaskSourceWebhookState> {
+    const record = await this.getConnectionRecord(workspaceId, source)
+    return {
+      source,
+      supported: this.deps.registry.get(source)?.webhook != null,
+      configured: trackerWebhookSecret(record?.credentials) !== '',
+      deliveryPath: trackerWebhookPath(workspaceId, source),
+      replyAllow: record?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+    }
+  }
+
+  /**
+   * Mint (or ROTATE) the connection's inbound-webhook secret, returning it exactly once.
+   *
+   * Rotation is destructive by design: the previous secret stops verifying the instant this
+   * returns, so a delivery signed with it is rejected rather than accepted during a grace window.
+   * Backwards compatibility is a non-goal here and a webhook secret with two live values is a
+   * webhook secret an attacker only has to steal once.
+   */
+  async mintWebhookSecret(
+    workspaceId: string,
+    source: TaskSourceKind,
+    input: { replyAllow?: string } = {},
+  ): Promise<TaskSourceWebhookState & { secret: string }> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.deps.registry.get(source)
+    if (!provider?.webhook) {
+      throw new ValidationError(`${source} does not accept inbound webhooks on this deployment`)
+    }
+    const record = await this.requireConnection(workspaceId, source)
+    const secret = generateWebhookSecret()
+    const credentials: TaskCredentials = {
+      ...record.credentials,
+      [TRACKER_WEBHOOK_SECRET_KEY]: secret,
+      ...(input.replyAllow !== undefined
+        ? { [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: input.replyAllow.trim() }
+        : {}),
+    }
+    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    return {
+      source,
+      supported: true,
+      configured: true,
+      deliveryPath: trackerWebhookPath(workspaceId, source),
+      replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      secret,
+    }
+  }
+
+  /**
+   * Edit the reply allow-list, leaving the webhook secret untouched.
+   *
+   * Deliberately NOT folded into {@link mintWebhookSecret}: that call rotates, and rotation is
+   * destructive the instant it returns. Tightening the allow-list is precisely what an operator
+   * does when a tracker turns out to be more public than they thought, and answering that with a
+   * silently rotated secret would take deliveries down until they re-pasted it into the vendor —
+   * a security control that costs an outage is a security control people avoid using.
+   */
+  async updateWebhookReplyAllow(
+    workspaceId: string,
+    source: TaskSourceKind,
+    replyAllow: string,
+  ): Promise<TaskSourceWebhookState> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const record = await this.requireConnection(workspaceId, source)
+    const credentials: TaskCredentials = {
+      ...record.credentials,
+      [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: replyAllow.trim(),
+    }
+    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    return {
+      source,
+      supported: this.deps.registry.get(source)?.webhook != null,
+      configured: trackerWebhookSecret(credentials) !== '',
+      deliveryPath: trackerWebhookPath(workspaceId, source),
+      replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+    }
+  }
+
+  /**
+   * Clear the inbound-webhook secret, so deliveries stop being accepted (they 503 at the receiver,
+   * which is the honest answer: the operator turned this off). The connection itself is untouched
+   * — polling intake and imports keep working exactly as before.
+   */
+  async clearWebhookSecret(workspaceId: string, source: TaskSourceKind): Promise<void> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    if (!record) return
+    const credentials = { ...record.credentials }
+    delete credentials[TRACKER_WEBHOOK_SECRET_KEY]
+    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+  }
+
   /** Disconnect a workspace from a source (tombstones the binding). */
   async disconnect(workspaceId: string, source: TaskSourceKind): Promise<void> {
     const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
     if (!record) return
     await this.deps.taskConnectionRepository.softDelete(workspaceId, source, this.deps.clock.now())
   }
+}
+
+/** The inbound-webhook state of one connection (the secret itself is never part of it). */
+export interface TaskSourceWebhookState {
+  source: TaskSourceKind
+  supported: boolean
+  configured: boolean
+  deliveryPath: string
+  replyAllow: string
+}
+
+/**
+ * Where a tracker should POST its deliveries, relative to the deployment's public base URL.
+ *
+ * Built here rather than in the controller so the string an operator PASTES and the route the
+ * receiver SERVES have one definition — a mismatch between them fails silently, as deliveries that
+ * simply never arrive.
+ */
+export function trackerWebhookPath(workspaceId: string, source: TaskSourceKind): string {
+  return `/webhooks/tasks/${source}/${workspaceId}`
+}
+
+/**
+ * A fresh inbound-webhook secret: 32 bytes of CSPRNG entropy, hex-encoded.
+ *
+ * `crypto.getRandomValues` (not `Math.random`) because this value is the ONLY thing standing
+ * between an anonymous POST and a run-driving command; it is a global on both workerd and Node.
+ * Hex rather than base64url so it survives being pasted into every vendor's webhook form without
+ * anyone wondering whether a `-` or `_` was part of it.
+ */
+function generateWebhookSecret(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  let out = ''
+  for (const byte of bytes) out += byte.toString(16).padStart(2, '0')
+  return out
+}
+
+/**
+ * The credential-bag keys the PLATFORM owns rather than the vendor — today the inbound-webhook
+ * secret and its reply allow-list. They are configured through their own endpoints, never sent to
+ * the vendor, and must survive a credential rotation.
+ *
+ * Note the merge order at the call site: preserved keys come FIRST, so an explicit value in the
+ * incoming bag still wins. That matters for the mint path, which writes the secret through the
+ * same store.
+ */
+function preservedPlatformCredentials(existing: TaskCredentials | undefined): TaskCredentials {
+  if (!existing) return {}
+  const preserved: TaskCredentials = {}
+  for (const key of [TRACKER_WEBHOOK_SECRET_KEY, TRACKER_WEBHOOK_REPLY_ALLOW_KEY]) {
+    const value = existing[key]
+    if (value !== undefined) preserved[key] = value
+  }
+  return preserved
 }

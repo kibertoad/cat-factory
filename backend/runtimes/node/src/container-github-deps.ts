@@ -67,7 +67,10 @@ import {
   DrizzleTaskRepository,
   DrizzleTaskSourceSettingsRepository,
 } from './repositories/tasks.js'
-import { DrizzleReviewQuestionPostRepository } from './repositories/drizzle/settings.js'
+import {
+  DrizzleReviewQuestionPostRepository,
+  DrizzleTrackerCommentIngestRepository,
+} from './repositories/drizzle/settings.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 
 // The engine's CI/mergeability gate reads never persist rate-limit snapshots (that is the
@@ -125,6 +128,10 @@ function selectNodeTasksDeps(
       taskConnectionRepository,
       taskSourceSettingsRepository: new DrizzleTaskSourceSettingsRepository(db),
       taskRepository: new DrizzleTaskRepository(db),
+      // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
+      // than the writeback, because it guards the INGEST half (a redelivered comment applying its
+      // answers twice), which exists only when the task projection does.
+      trackerCommentIngestRepository: new DrizzleTrackerCommentIngestRepository(db),
     },
     taskConnectionRepository,
   }

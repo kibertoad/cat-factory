@@ -630,6 +630,58 @@ distinguish "never landed" from "landed slowly". **The park commits FIRST**, the
 it. The comment body is untrusted model-authored text on a host-parsed surface, so every hole
 crosses `hostMarkdown` and `redactSecrets`.
 
+### Inbound tracker webhooks (push intake + ticket replies)
+
+Trackers PUSH as well as poll. `POST /webhooks/tasks/:source/:workspaceId` (`TaskWebhookController`)
+copies the GitHub VCS receiver step for step: verify HMAC over the RAW body BEFORE any parse, ack
+202 fast, hand the parsed event to the facade's queue, fall back to inline when none is bound.
+Design: [`docs/initiatives/tracker-webhook-intake.md`](./docs/initiatives/tracker-webhook-intake.md).
+
+- **The provider owns verify + parse** (`TaskSourceProvider.webhook`), as VCS providers own theirs;
+  a source without the capability is 404ed rather than accepted into a void. All three vendors sign
+  HMAC-SHA256 over the raw body and differ only in header + prefix, so the crypto is ONE helper.
+- **The workspace rides the PATH; the per-connection secret authenticates.** A tracker delivery
+  carries no installation id, and scanning every workspace's connections for one whose secret
+  verifies would be a deployment-wide N+1 on every unauthenticated POST. The secret lives in the
+  connection's sealed credential bag under `webhookSecret` (**no new table**), managed through
+  `GET|POST|PATCH|DELETE /workspaces/:ws/task-sources/:source/webhook` and returned exactly once —
+  `PATCH` edits the reply allow-list WITHOUT rotating, or tightening it would take deliveries down.
+  **An unconfigured secret FAILS CLOSED** (503): an empty HMAC key is one an attacker also has.
+- **Async hand-off is the `gateways.trackerWebhook` seam**: a `TRACKER_SYNC_QUEUE` consumer on the
+  Worker ⇄ the pg-boss `tracker.sync` worker on Node ⇄ the shared `InlineTrackerWebhookIngest`. The
+  message carries the already-verified, already-PARSED event, so it holds no secret, no vendor shape.
+- **Push is the fast path, NEVER the only path.** The recurring `bug-intake` schedule is unchanged
+  and remains the reconciliation sweep for missed deliveries.
+- **A qualifying issue event FIRES THE SCHEDULE; it never re-implements intake.** The pure
+  `issueEventMatchesIntake` gates `RecurringPipelineService.triggerForIssueEvent`, which calls the
+  same non-forced `fire` the cron sweeper calls — so one intake implementation, inherited overlap
+  protection, and no webhook-fired on-demand schedule. The predicate **fails open** on a field the
+  payload omits: a false positive costs one no-op run, a false negative costs silent latency.
+- **A ticket comment can ANSWER a parked requirements review**, closing the loop the question echo
+  above opens. Explicit commands only, never natural-language guessing: `@cat-factory answer <itemId>
+…` / `dismiss <itemId>` / `proceed` / `stop` / `extra-round`, trigger as the line's FIRST token, an
+  `answer` continuing onto following lines. A comment with no RECOGNISED verb is ignored entirely —
+  a bare `@cat-factory` mention is discussion, not a command sheet, and acking it would turn every
+  thread into a bot conversation. Every mutation routes through the SAME service methods the SPA and
+  `PublicDecisionController` call, so **never a parallel mutation path into the engine**. A reply
+  that leaves nothing open auto-incorporates.
+- **Three safety layers on reply text**, because on a public repo anyone can write one. (1) IDENTITY:
+  the platform's OWN comments are refused first — by the vendor bot flag where there is one, and by
+  the structural `isPlatformAuthoredComment` marker check everywhere, since Linear flags no bots and
+  the default allow-list admits any author; an ack that could re-enter its own ingest is an unbounded
+  comment loop, not a duplicate. Then the connection's optional `webhookReplyAllow` list. An
+  unauthorized reply is dropped SILENTLY — replying would confirm the hook exists. (2) DATA, NOT
+  INSTRUCTIONS: reply text becomes `item.reply`, capped and `redactSecrets`-scrubbed, and no verb
+  reaches outside the review. (3) BUDGET: the per-review iteration cap bounds the LLM cycles.
+- **Idempotency is an ATOMIC CLAIM on `tracker_comment_ingests`** taken BEFORE anything is applied,
+  copied from `review_question_posts` including its answer to "what if the claimer dies" (`failed`
+  re-claimable, `applied` terminal, `pending` re-claimable past
+  `TRACKER_COMMENT_INGEST_CLAIM_TTL_MS`). **A claim that ERRORS must propagate, never degrade to
+  "already ingested"**: the apply is idempotent precisely so the queue can retry, and swallowing it
+  drops a reporter's answer while reporting success.
+- **Commit the state, THEN talk to the tracker.** The reply is applied and its marker settled before
+  the `postReviewReplyAck` follow-up, so a tracker outage costs the ack and never the answer.
+
 ### Implementation-fork decision (two-phase Coder step)
 
 Optional phase on the `coder` step surfacing materially different implementations BEFORE code is

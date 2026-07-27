@@ -45,6 +45,27 @@ export const reviewQuestionPosts = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.review_id, t.iteration, t.issue_ref] })],
 )
 
+// Idempotency markers for INBOUND tracker comments (mirror of D1 migration 0064): one row per
+// (workspace, source, external_id, comment_id). Every tracker redelivers, and an async queue job is
+// retried on any error, so the row is CLAIMED before a comment's review commands are applied —
+// otherwise one reporter comment would answer the same finding several times. A `failed` row is
+// re-claimable; `applied` is terminal; a `pending` one is re-claimable only once abandoned, so an
+// ingester killed mid-apply cannot silence that comment forever.
+export const trackerCommentIngests = pgTable(
+  'tracker_comment_ingests',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    source: text('source').notNull(),
+    external_id: text('external_id').notNull(),
+    comment_id: text('comment_id').notNull(),
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error'),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.source, t.external_id, t.comment_id] })],
+)
+
 // Task-source integration (mirror of D1 migration 0014): a workspace's connections
 // to external issue trackers (Jira) and local projections of the issues it imported.
 // `credentials` is an encrypted JSON bag (AES-256-GCM envelope), never sent on the

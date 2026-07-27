@@ -213,6 +213,7 @@ import type {
   SharedStacksModule,
   SlackModule,
   TrackerModule,
+  TrackerWebhookModule,
   UserSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -238,6 +239,7 @@ export type {
   SharedStacksModule,
   SlackModule,
   TrackerModule,
+  TrackerWebhookModule,
   UserSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -417,6 +419,12 @@ export interface OptionalCoreModules {
   recurring?: RecurringModule
   /** Present only when the tracker-settings repository is wired (see CoreDependencies). */
   tracker?: TrackerModule
+  /**
+   * Inbound tracker webhook handling (push-driven intake + ticket replies to a parked review).
+   * Present only when the task projection + connections are wired; the shared receiver 503s
+   * without it. See `docs/initiatives/tracker-webhook-intake.md`.
+   */
+  trackerWebhook?: TrackerWebhookModule
   /** Present only when the service + mount repositories are wired (in-org sharing). */
   services?: ServicesModule
 }

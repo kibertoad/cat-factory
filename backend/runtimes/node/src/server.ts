@@ -35,6 +35,7 @@ import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startGitHubSyncWorker } from './execution/githubSyncRunner.js'
+import { startTrackerSyncWorker } from './execution/trackerSyncRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import {
   PgBossEnvironmentTestRunner,
@@ -267,8 +268,8 @@ export async function start(
     /**
      * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
      * deploy-app wrapper passes this so the server auto-registers the deployment's infra handlers
-     * per workspace with no manual SPA step — e.g. a Kargo adapter feeding its handler from
-     * `.kargo.yml`. Forwarded onto the `NodeContainerOptions` handed to `buildContainer` (so it
+     * per workspace with no manual SPA step. Forwarded onto the `NodeContainerOptions` handed to
+     * `buildContainer` (so it
      * rides through `createCore`), and used AFTER listen to boot-backfill every existing workspace;
      * new workspaces are seeded by `WorkspaceService.create`. Also reaches `buildLocalContainer` via
      * the local facade's builder. Omitted ⇒ no seeding.
@@ -665,6 +666,13 @@ async function bootServer(
     // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
     // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
     startGitHubSyncWorker(boss, container, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Async TRACKER ingest (the analogue of the Worker's TRACKER_SYNC_QUEUE consumer): drain the
+    // `tracker.sync` queue the webhook receiver enqueues onto, so a pushed issue event fires its
+    // intake schedule — and a ticket reply drives the parked review — out of band, while the
+    // tracker gets its prompt 2xx. A no-op queue when task sources aren't wired.
+    startTrackerSyncWorker(boss, container, logger, {
       concurrency: runtime.concurrency,
     }),
   ])

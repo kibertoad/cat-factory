@@ -12,6 +12,7 @@ import {
 } from '@cat-factory/kernel'
 import { JIRA_DESCRIPTOR } from './jira.logic.js'
 import * as jiraLogic from './jira.logic.js'
+import { jiraWebhookAdapter } from './webhook/adapters.js'
 
 // JiraProvider: the task-source provider for Jira Cloud. It authenticates with
 // HTTP Basic (account email + API token, the same scheme as Confluence), fetches
@@ -66,6 +67,12 @@ interface IssueResponse {
 
 export class JiraProvider implements TaskSourceProvider {
   readonly kind = 'jira' as const
+  /**
+   * Inbound webhook capability (verify + parse), so a jira delivery can drive intake and
+   * ticket replies without waiting for the next polling sweep. See
+   * `docs/initiatives/tracker-webhook-intake.md`.
+   */
+  readonly webhook = jiraWebhookAdapter
   readonly descriptor = JIRA_DESCRIPTOR
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {

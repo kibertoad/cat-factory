@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import {
+  configureTaskSourceWebhookSchema,
   connectTaskSourceSchema,
   createTaskFromIssueSchema,
   importTaskSchema,
@@ -15,6 +16,9 @@ import {
   taskSearchResultSchema,
   taskSourceDiagnosticSchema,
   taskSourceStateSchema,
+  taskSourceWebhookSchema,
+  taskSourceWebhookSecretSchema,
+  updateTaskSourceWebhookSchema,
 } from '../tasks.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -95,6 +99,41 @@ export const diagnoseTaskSourceContract = defineApiContract({
   pathResolver: ({ source }) => `/task-sources/${source}/diagnostics`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: taskSourceDiagnosticSchema, ...errorResponses },
+})
+
+// Inbound webhooks for one connection: read the delivery path + whether a secret is stored, mint
+// (rotate) that secret, or clear it. The minted secret is returned EXACTLY ONCE — the read route
+// never echoes it back. Admin-gated with the rest of this controller (`integrations.manage`).
+export const getTaskSourceWebhookContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
+  responsesByStatusCode: { 200: taskSourceWebhookSchema, ...errorResponses },
+})
+
+export const configureTaskSourceWebhookContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
+  requestBodySchema: configureTaskSourceWebhookSchema,
+  responsesByStatusCode: { 201: taskSourceWebhookSecretSchema, ...errorResponses },
+})
+
+// Edit the reply allow-list WITHOUT rotating the secret — see `updateTaskSourceWebhookSchema` for
+// why this is not folded into the mint above.
+export const updateTaskSourceWebhookContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
+  requestBodySchema: updateTaskSourceWebhookSchema,
+  responsesByStatusCode: { 200: taskSourceWebhookSchema, ...errorResponses },
+})
+
+export const clearTaskSourceWebhookContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
 // Linear-specific: list the connection's teams (for the ticket-filing team picker)

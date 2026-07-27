@@ -14,6 +14,7 @@ import type {
   ScheduleRun,
   ScheduleTemplate,
   ServiceRepository,
+  TrackerIssueEvent,
   UpdateScheduleInput,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -23,11 +24,12 @@ import {
   assertFound,
   ConflictError,
   CredentialRequiredError,
+  getErrorMessage,
   requireWorkspace,
   ValidationError,
 } from '@cat-factory/kernel'
 import type { IssueIntakeConfig } from '@cat-factory/contracts'
-import type { TaskConnectionService } from '@cat-factory/integrations'
+import { issueEventMatchesIntake, type TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import {
   assertPipelineLaunchable,
@@ -66,6 +68,13 @@ export interface RecurringPipelineServiceDependencies {
    * already carried the created schedule, so an emit failure never fails the create.
    */
   executionEventPublisher?: ExecutionEventPublisher
+  /**
+   * Structural log sink for the paths that deliberately swallow a failure. Today that is
+   * {@link RecurringPipelineService.triggerForIssueEvent}, whose per-schedule isolation would
+   * otherwise leave a webhook-fired schedule failing with NO trace anywhere — the operator sees
+   * only "push intake never happens". Absent ⇒ those paths stay silent, as they were.
+   */
+  log?: (event: Record<string, unknown>, msg: string) => void
 }
 
 /**
@@ -128,6 +137,7 @@ export class RecurringPipelineService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly taskConnectionService?: TaskConnectionService
   private readonly events?: ExecutionEventPublisher
+  private readonly log?: (event: Record<string, unknown>, msg: string) => void
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -142,6 +152,7 @@ export class RecurringPipelineService {
     this.workspaceMountRepository = deps.workspaceMountRepository
     this.taskConnectionService = deps.taskConnectionService
     this.events = deps.executionEventPublisher
+    this.log = deps.log
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -425,6 +436,63 @@ export class RecurringPipelineService {
       else skipped++
     }
     return { fired, skipped }
+  }
+
+  /**
+   * A tracker pushed an issue event: fire every ENABLED schedule in the workspace whose
+   * issue-intake configuration that event plausibly qualifies for. Returns how many started.
+   *
+   * This is the whole of push-driven intake (D3 of `docs/initiatives/tracker-webhook-intake.md`).
+   * It imports nothing and links nothing — the fired run's `bug-intake` step does all of that
+   * through the unchanged `BugIntakeService`, so there is exactly ONE intake implementation and a
+   * pushed pickup is byte-for-byte a cadence pickup that simply happened sooner. Consequently the
+   * run may legitimately pick a DIFFERENT, older issue than the one that triggered it: intake is
+   * oldest-first fair queueing, and the webhook's job is to drain the queue promptly, not reorder
+   * it.
+   *
+   * Deliberately NOT forced. `force` is the human run-now lever — it throws on overlap and bypasses
+   * the on-demand guard — and a webhook has no human present to unlock a personal credential, which
+   * is exactly the situation the unattended-fire guards exist for. So an on-demand schedule is never
+   * webhook-fired, an individual-usage model still refuses, and a burst of deliveries cannot start a
+   * second run over one that is already running or parked (`fire` returns false and leaves
+   * `nextRunAt` for the sweeper).
+   *
+   * ONE schedule read for the workspace, filtered in memory — never a point-read per schedule.
+   */
+  async triggerForIssueEvent(workspaceId: string, event: TrackerIssueEvent): Promise<number> {
+    const schedules = await this.schedules.list(workspaceId)
+    const now = this.clock.now()
+    let fired = 0
+    for (const schedule of schedules) {
+      if (!schedule.enabled || !schedule.issueIntake) continue
+      if (!issueEventMatchesIntake(schedule.issueIntake, event)) continue
+      // Best-effort per schedule: one schedule whose pipeline fails to start (a disconnected
+      // source, a missing model) must not stop the others — the same isolation `runDue` gets from
+      // `fire`'s own internal error handling, extended to the errors it deliberately rethrows.
+      try {
+        if (await this.fire(workspaceId, schedule, { now })) fired++
+      } catch (error) {
+        // NOT rethrown: the caller is a webhook consumer whose only lever is retry, and retrying
+        // would re-fire every OTHER matching schedule too. The polling sweep remains the backstop
+        // for whatever this fire could not start.
+        //
+        // But not silent either. This is the one path where a failure has no other trace — the
+        // delivery still 202s, `fired` just comes back lower, and a consistently-failing schedule
+        // reads as "push intake simply doesn't work" with nothing to grep for. So it must leave a
+        // log line, exactly as `TrackerWebhookService` does for its own silent drop.
+        this.log?.(
+          {
+            workspaceId,
+            scheduleId: schedule.id,
+            source: event.source,
+            externalId: event.externalId,
+            err: getErrorMessage(error),
+          },
+          'webhook-triggered schedule fire failed',
+        )
+      }
+    }
+    return fired
   }
 
   /**

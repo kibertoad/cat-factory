@@ -889,7 +889,7 @@ export class EnvironmentProvisioningService {
       // not failed), mirroring the provisionSync path — WITHOUT this, a reconcile that flips an env
       // to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing)
       // left `lastError` stale/empty, so the env-detail surface and the env self-test showed a
-      // generic "provisioning failed" instead of the real cause (e.g. a Kargo "404 No commit found
+      // generic "provisioning failed" instead of the real cause (e.g. a "404 No commit found
       // for the ref …" pointing at a project↔repo mismatch).
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,

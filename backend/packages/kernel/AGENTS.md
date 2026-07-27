@@ -25,6 +25,12 @@ else imports its **ports** and domain types from here.
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are
   `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See CLAUDE.md → "Gates vs
   agents" and `docs/initiatives/judge-registry.md`.
+- `ports/tracker-webhook.ts` — the INBOUND tracker seam: the neutral `TrackerWebhookEvent`
+  (`issue` | `comment`, keyed `(source, externalId)`) plus the optional
+  `TaskSourceProvider.webhook` capability a provider implements to verify + parse its vendor's
+  deliveries. Its dedup marker port is `ports/tracker-comment-ingest-repositories.ts` — the
+  `review_question_posts` claim shape, applied to the other direction of the same loop. See
+  CLAUDE.md → "Inbound tracker webhooks".
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

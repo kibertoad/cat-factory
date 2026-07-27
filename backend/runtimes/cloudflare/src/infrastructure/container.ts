@@ -241,6 +241,7 @@ import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
 import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
+import { D1TrackerCommentIngestRepository } from './repositories/D1TrackerCommentIngestRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
 import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
@@ -1480,6 +1481,10 @@ export function selectTasksDeps(
     }),
     taskSourceSettingsRepository: new D1TaskSourceSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
+    // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
+    // than the writeback, because it guards the INGEST half (a redelivered comment applying its
+    // answers twice), which exists only when the task projection does.
+    trackerCommentIngestRepository: new D1TrackerCommentIngestRepository({ db }),
   }
 }
 

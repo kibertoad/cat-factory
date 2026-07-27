@@ -1,6 +1,6 @@
 # Initiative: headless clarification loop
 
-**Status:** in progress (slices 1 + 2a landed; slice 2b next) · **Owner:** core · **Started:** 2026-07-26
+**Status:** complete (slices 1 + 2a landed here; slice 2b delivered by the tracker-webhook initiative) · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -31,11 +31,11 @@ converges — with the SPA flow completely unchanged.
 
 ## Slices
 
-| #   | Slice                                                                              | Status         | PR      |
-| --- | ---------------------------------------------------------------------------------- | -------------- | ------- |
-| 1   | Parked decisions over the public API (surface, admission, intake origin, park-out) | ✅ done        | #1368   |
-| 2a  | Questions OUT to the linked tracker issue (headless-origin, opt-in, idempotent)    | 🟡 in progress | this PR |
-| 2b  | Replies back IN (the D4 grammar, per-provider ingest, identity, loop policy)       | ⬜ todo        |         |
+| #   | Slice                                                                              | Status         | PR        |
+| --- | ---------------------------------------------------------------------------------- | -------------- | --------- |
+| 1   | Parked decisions over the public API (surface, admission, intake origin, park-out) | ✅ done        | #1368     |
+| 2a  | Questions OUT to the linked tracker issue (headless-origin, opt-in, idempotent)    | 🟡 in progress | this PR   |
+| 2b  | Replies back IN (the D4 grammar, per-provider ingest, identity, loop policy)       | ✅ done        | see below |
 
 Detailed per-item checklists live at the end of each slice section.
 
@@ -419,16 +419,34 @@ so the next driver replay retries it. Recorded here rather than papered over wit
   formatting variant (a Jira ADF table, a Linear-native block) — worth it only if a reader complains.
 - No follow-up comment when the review settles. That belongs with 2b, where a reply can settle it.
 
-## Slice 2b — replies back in
+## Slice 2b — replies back in — DELIVERED BY THE TRACKER-WEBHOOK INITIATIVE
 
-Design settled in D4–D8 above. Implementation notes to carry in:
+Slice 2b landed as part of
+[`tracker-webhook-intake.md`](./tracker-webhook-intake.md), which is its durable source of truth
+(its D4–D7 supersede the notes here). It was folded into that initiative rather than built
+standalone because the two share their entire transport: 2b needs a verified, parsed inbound
+tracker event keyed `(source, externalId)`, and that ingestion seam is exactly what push-driven
+intake needed as well. Building 2b alone would have meant building that seam for ONE consumer and
+then reworking it for the second.
 
-- The reply grammar (D4) parses against the SAME finding ids `renderReviewQuestionsComment`
-  (`@cat-factory/integrations`) already renders — import `issueRefFor` / the renderer rather than
-  re-deriving either, so a change to one cannot silently desync the two halves.
-- Per-provider ingest (D5) + `tracker_comment_cursors` for dedup, both runtimes.
-- The identity allow-list (D7) and the loop policy (D6), including the follow-up comment that
-  slice 2a deliberately left out.
-- Conformance: a fake tracker connection drives park → question posted exactly once across replays
-  (the 2a marker suite already pins the second half) → simulated reply → resume; plus the
-  unauthorized-reply and settled-review cases.
+What actually shipped, against the design above:
+
+- **The grammar is D4 verbatim** (`parseReviewReplyCommands`, `@cat-factory/integrations`
+  `writeback/reviewReplies.logic.ts`), parsing against the SAME finding ids
+  `renderReviewQuestionsComment` renders — the two are deliberate SIBLINGS in one directory so a
+  change to either cannot silently desync them.
+- **Ingest is WEBHOOK-only for all three providers**, not the per-provider split D5 proposed. D5
+  routed Jira and Linear to a polling sweep on the grounds that their webhooks need per-site /
+  per-workspace registration the platform does not perform. That is still true — but registration
+  turns out to be an OPERATOR paste (a delivery URL + a minted secret), not something the platform
+  must automate, and a sweep would have added a second runtime-symmetric cron, a second dedup
+  story, and a per-provider comment-listing read for a latency strictly worse than push. So all
+  three ride one receiver, and the operator pastes.
+- **Dedup is `tracker_comment_ingests`, not `tracker_comment_cursors`.** With no polling sweep
+  there is no window to advance a cursor over; what remains is "did we already apply THIS comment",
+  which is the `review_question_posts` claim shape — carried across verbatim, abandonment window
+  included, per the convention that tracker did well to record.
+- **The identity allow-list (D7) and the loop policy (D6) shipped as designed**, including the
+  follow-up comment 2a deliberately left out (`IssueWritebackProvider.postReviewReplyAck`).
+- **Conformance** covers the receiver's guards, an applied reply, and a redelivery applying once,
+  on both runtimes; the marker parity has its own suite alongside 2a's.

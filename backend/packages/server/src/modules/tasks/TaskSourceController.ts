@@ -1,5 +1,8 @@
 import {
+  clearTaskSourceWebhookContract,
+  configureTaskSourceWebhookContract,
   connectTaskSourceContract,
+  getTaskSourceWebhookContract,
   createTaskFromIssueContract,
   diagnoseTaskSourceContract,
   disconnectTaskSourceContract,
@@ -14,6 +17,7 @@ import {
   setTaskSourceEnabledContract,
   spawnEpicContract,
   taskSourceKindSchema,
+  updateTaskSourceWebhookContract,
   type TaskSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -184,6 +188,58 @@ export function taskSourceController(): Hono<AppEnv> {
       sourceParam(c),
     )
     return c.json(diagnostic, 200)
+  })
+
+  // ---- Inbound webhooks (push-driven intake + ticket replies) -------------
+  //
+  // The delivery endpoint is per (workspace, source) and authenticated by a per-connection secret
+  // stored in the connection's sealed credential bag — so this surface is just mint / read / clear
+  // and needs no table of its own. See `docs/initiatives/tracker-webhook-intake.md`.
+
+  // Where deliveries go and whether a secret is stored. Never echoes the secret back.
+  buildHonoRoute(app, getTaskSourceWebhookContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const state = await tasks.connectionService.getWebhookState(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+    )
+    return c.json(state, 200)
+  })
+
+  // Mint (or rotate) the secret. Returned EXACTLY ONCE — the read route above never repeats it, so
+  // an operator who loses it rotates rather than retrieves.
+  buildHonoRoute(app, configureTaskSourceWebhookContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const minted = await tasks.connectionService.mintWebhookSecret(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json'),
+    )
+    return c.json(minted, 201)
+  })
+
+  // Edit the reply allow-list WITHOUT rotating the secret. Its own route because rotation is
+  // destructive on return, and tightening the allow-list must not cost an outage.
+  buildHonoRoute(app, updateTaskSourceWebhookContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    const state = await tasks.connectionService.updateWebhookReplyAllow(
+      param(c, 'workspaceId'),
+      sourceParam(c),
+      c.req.valid('json').replyAllow,
+    )
+    return c.json(state, 200)
+  })
+
+  // Stop accepting deliveries. The connection itself is untouched — polling intake and imports
+  // keep working exactly as before.
+  buildHonoRoute(app, clearTaskSourceWebhookContract, async (c) => {
+    const tasks = requireTasks(c)
+    if (!tasks) return unavailable(c)
+    await tasks.connectionService.clearWebhookSecret(param(c, 'workspaceId'), sourceParam(c))
+    return c.body(null, 204)
   })
 
   // ---- Linear-specific ----------------------------------------------------

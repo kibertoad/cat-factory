@@ -7,6 +7,7 @@ import type {
   Workflow,
 } from '@cloudflare/workers-types'
 import { ENV_HELP, configProblem } from '@cat-factory/server'
+import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { DeployContainer } from './containers/DeployContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
@@ -28,6 +29,26 @@ export type GitHubSyncMessage =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
   | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
+
+/**
+ * Work enqueued on TRACKER_SYNC_QUEUE by the tracker webhook receiver so it can ack fast — a
+ * tracker expects a prompt 2xx and redelivers otherwise, while the handle may fire a whole
+ * pipeline (push-driven intake) or drive a parked review through an incorporation LLM call (a
+ * ticket reply).
+ *
+ * The message carries the already-VERIFIED, already-PARSED neutral event rather than the raw
+ * payload: verification and parsing both need the source's provider, which the receiver has
+ * resolved and the consumer would otherwise resolve again — and a queued message then carries no
+ * secret and no vendor shape.
+ *
+ * A separate queue from `GITHUB_SYNC_QUEUE` rather than a fourth `kind` on it: that queue's name,
+ * consumer concurrency and DLQ are all scoped to GitHub PROJECTION work, and a tracker delivery
+ * shares none of those properties.
+ */
+export interface TrackerSyncMessage {
+  workspaceId: string
+  event: TrackerWebhookEvent
+}
 
 /** Bindings and vars available to the Worker (declared in wrangler.toml). */
 export interface Env {
@@ -255,6 +276,12 @@ export interface Env {
   GITHUB_WEBHOOK_SECRET?: string
   /** Queue carrying webhook deliveries / resync jobs to the async consumer. */
   GITHUB_SYNC_QUEUE?: Queue<GitHubSyncMessage>
+  /**
+   * Queue carrying verified inbound TRACKER deliveries to the async consumer. Unbound ⇒ the
+   * receiver applies each delivery inline, which is fine for dev but blocks the tracker's HTTP
+   * request on the whole handle.
+   */
+  TRACKER_SYNC_QUEUE?: Queue<TrackerSyncMessage>
   /** Workflow that performs durable full-repo backfills. */
   GITHUB_BACKFILL_WORKFLOW?: Workflow
 

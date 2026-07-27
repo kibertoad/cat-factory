@@ -21,6 +21,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   orders by). See
   `docs/initiatives/headless-clarification-loop.md` and
   `docs/initiatives/public-api-expansion.md`.
+- `modules/tasks/TaskWebhookController.ts` + `webhooks/` — the three PUBLIC, session-gate-bypassing
+  webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
+  shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,
+  acks fast, and hands off through a `gateways` seam. The tracker one is the odd shape: its
+  workspace rides the PATH (a tracker delivery has no installation id to resolve one from) and its
+  secret is per CONNECTION rather than per deployment. See
+  `docs/initiatives/tracker-webhook-intake.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`

@@ -185,12 +185,16 @@ export interface ConformanceApp {
    */
   seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string): Promise<void>
   /**
-   * Seed a `ready` review with one still-open finding straight into the facade's real
-   * review store, so the suite can assert the async-incorporate route's pre-LLM guard
-   * (incorporation refused while a finding is unanswered) on every runtime without a live
+   * Seed a `ready` review with `openItems` still-open findings (one by default) straight into the
+   * facade's real review store, so the suite can assert the async-incorporate route's pre-LLM
+   * guard (incorporation refused while a finding is unanswered) on every runtime without a live
    * reviewer model.
+   *
+   * Seed MORE than one when the assertion must answer a finding WITHOUT settling the review:
+   * answering the last open finding legitimately triggers incorporation, which calls a real model
+   * no conformance harness has (the tracker-webhook suite's ticket replies need exactly that).
    */
-  seedReadyReview(workspaceId: string, blockId: string): Promise<void>
+  seedReadyReview(workspaceId: string, blockId: string, openItems?: number): Promise<void>
   /**
    * Seed an already-"incorporated" clarity (bug-report triage) review for a block straight
    * into the facade's real clarity store, so the suite can assert the engine substitutes the

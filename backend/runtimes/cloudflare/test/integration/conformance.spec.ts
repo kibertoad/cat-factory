@@ -176,10 +176,10 @@ const harness: ConformanceHarness = {
           workspaceId,
           makeIncorporatedReview(blockId, requirements),
         ),
-      seedReadyReview: (workspaceId, blockId) =>
+      seedReadyReview: (workspaceId, blockId, openItems) =>
         new D1RequirementReviewRepository({ db: env.DB }).upsert(
           workspaceId,
-          makeReadyReviewWithOpenItem(blockId),
+          makeReadyReviewWithOpenItem(blockId, openItems),
         ),
       seedIncorporatedClarityReview: (workspaceId, blockId, report) =>
         new D1ClarityReviewRepository({ db: env.DB }).upsert(
