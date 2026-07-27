@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import {
-  CompositeNotificationChannel,
-  type Clock,
-  type NotificationChannel,
-} from '@cat-factory/kernel'
+import { CompositeNotificationChannel, type NotificationChannel } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
 import { buildNodeRealtimeDeps } from '../src/container-realtime-deps.js'
+import { SystemClock } from '../src/runtime.js'
 
 // The Node facade's mothership-side notification DELIVERY seam
 // (docs/initiatives/mothership-mode.md, PR 4): a mothership serves
@@ -14,8 +11,6 @@ import { buildNodeRealtimeDeps } from '../src/container-realtime-deps.js'
 // real-time upstream relay. This pins that split at its source, `buildNodeRealtimeDeps`, so the
 // seam can't silently start double-pushing (or stop being wired). Pure unit coverage — the
 // consensus wrap is off, so the heavy model/agent deps are never touched.
-
-const clock: Clock = { now: () => 0 }
 
 function channel(tag: string): NotificationChannel & { tag: string } {
   return { tag, async deliver() {} }
@@ -35,7 +30,9 @@ function build(opts: { extra?: NotificationChannel[]; realtime?: boolean } = {})
     modelProviderResolver: (() => {}) as never,
     resolveWorkspaceModelDefault: async () => undefined,
     agentKindRegistry: {} as never,
-    clock,
+    // Required since the notification-webhook support joined this builder — the webhook's
+    // signing path stamps its timestamps off the injected clock.
+    clock: new SystemClock(),
     ...(opts.extra ? { extraNotificationChannels: opts.extra } : {}),
   })
 }

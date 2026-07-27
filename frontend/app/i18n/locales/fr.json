@@ -1060,6 +1060,25 @@
       "remove": "Retirer {repo}",
       "connectFirst": "Connectez GitHub pour joindre des dépôts de référence.",
       "hint": "Le rédacteur de documents les clone en lecture seule pour réutiliser des solutions existantes comme référence lors de la rédaction. Il ne les modifie jamais."
+    },
+    "validationChecks": {
+      "title": "Validation avant la PR",
+      "sectionHint": "Commandes exécutées sur la copie de travail une fois le développeur terminé et avant l'ouverture d'une demande de tirage. Un échec est renvoyé à l'agent pour correction ; seule une copie sans erreur ouvre une PR.",
+      "hint": "Chaque commande s'exécute avec `sh -c` dans la copie de travail de ce service, dans l'ordre. Il faut corriger le code, pas la vérification : il est demandé à l'agent de ne pas les affaiblir.",
+      "clear": "Vider",
+      "configNoun": "vérifications de validation",
+      "label": "Nom",
+      "labelPlaceholder": "lint",
+      "command": "Commande",
+      "addCheck": "Ajouter une vérification",
+      "removeCheck": "Supprimer cette vérification",
+      "empty": "Aucune vérification configurée. Les exécutions de ce service ouvrent une demande de tirage sans vérification locale.",
+      "maxAttempts": "Tentatives",
+      "maxAttemptsHint": "Cycles de correction",
+      "save": "Enregistrer les vérifications",
+      "savedToast": "Vérifications enregistrées",
+      "saveFailed": "Impossible d'enregistrer les vérifications",
+      "clearFailed": "Impossible de vider les vérifications"
     }
   },
   "panels": {
@@ -1226,6 +1245,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Constats associés",
         "unnamed": "Standard"
+      },
+      "validation": {
+        "heading": "Validation avant la PR",
+        "passed": "Réussie",
+        "failed": "Échouée",
+        "attempts": "Tentative {attempts} sur {maxAttempts}",
+        "passedSummary": "Les {total} vérifications ont réussi à la tentative {attempts}. La demande de tirage a été ouverte depuis une copie sans erreur.",
+        "failedSummary": "{failed} vérifications sur {total} échouaient encore après {attempts} tentatives sur {maxAttempts}, aucune demande de tirage n'a donc été ouverte.",
+        "exitCode": "code de sortie {code}",
+        "timedOut": "délai dépassé"
       }
     },
     "inspector": {

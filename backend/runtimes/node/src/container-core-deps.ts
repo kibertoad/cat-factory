@@ -128,6 +128,7 @@ export interface NodeCoreDepsBundle {
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
+  resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
   fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
@@ -181,6 +182,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
+    resolveValidationChecks,
     tasks,
     fileGitHubIssue,
     releaseHealthDeps,
@@ -196,6 +198,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
     // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
     ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
+    resolveValidationChecks,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

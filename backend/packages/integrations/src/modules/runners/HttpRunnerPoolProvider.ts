@@ -4,6 +4,7 @@ import type {
   ProviderConfigField,
   RunnerDispatchRequest,
   RunnerJobResult,
+  RunnerValidationReport,
   RunnerJobView,
   RunnerPollRequest,
   RunnerPoolAuthScheme,
@@ -378,6 +379,12 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const callMetrics = this.mapCallMetrics(manifest, json)
     if (callMetrics) view.callMetrics = callMetrics
 
+    // The latest pre-PR validation attempt, when the manifest maps it — so a pool-backed run
+    // shows the repair loop while it runs, exactly like a Cloudflare/local container. Unlike the
+    // drain channels above this is a latest-value publish, so re-reading it is harmless.
+    const validationReport = this.mapValidationReport(manifest, json)
+    if (validationReport) view.validationReport = validationReport
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
@@ -487,6 +494,52 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const metrics = coerceCallMetrics(environmentsLogic.extractByPath(json, path))
     return metrics.length > 0 ? metrics : undefined
   }
+
+  /**
+   * Project the scheduler's live pre-PR validation report onto the canonical view, when the
+   * manifest maps it. Runs the SAME coercion as the terminal result envelope so the live and
+   * terminal channels can't validate a report differently on a pool-backed run.
+   */
+  private mapValidationReport(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['validationReport'] | undefined {
+    const path = manifest.response.validationReportPath
+    if (!path) return undefined
+    return coerceValidationReport(environmentsLogic.extractByPath(json, path))
+  }
+}
+
+/**
+ * Coerce a scheduler's pre-PR `validationReport` envelope into the canonical
+ * {@link RunnerValidationReport}, keeping only well-formed per-command outcomes. Returns
+ * undefined for anything that isn't a report-shaped object, so a malformed/absent envelope
+ * injects nothing (and the run behaves as if the service configured no checks — which, for a
+ * pool that doesn't proxy the field, it effectively did). Mirrors the executor-harness's shape.
+ */
+function coerceValidationReport(raw: unknown): RunnerValidationReport | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  if (!Array.isArray(o.outcomes)) return undefined
+  const outcomes = (o.outcomes as unknown[])
+    .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+    .filter((x) => typeof x.label === 'string' && typeof x.exitCode === 'number')
+    .map((x) => ({
+      label: x.label as string,
+      command: typeof x.command === 'string' ? x.command : '',
+      exitCode: x.exitCode as number,
+      passed: x.passed === true,
+      ...(typeof x.outputTail === 'string' ? { outputTail: x.outputTail } : {}),
+      ...(typeof x.durationMs === 'number' ? { durationMs: x.durationMs } : {}),
+      ...(x.timedOut === true ? { timedOut: true } : {}),
+    }))
+  return {
+    passed: o.passed === true,
+    attempts: typeof o.attempts === 'number' ? o.attempts : 1,
+    maxAttempts: typeof o.maxAttempts === 'number' ? o.maxAttempts : outcomes.length > 0 ? 1 : 0,
+    outcomes,
+    ...(typeof o.at === 'number' ? { at: o.at } : {}),
+  }
 }
 
 /**
@@ -558,6 +611,12 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   // Cloudflare/local transports (which return the harness view verbatim).
   const effortReport = coerceEffortReport(o.effortReport)
   if (effortReport) out.effortReport = effortReport
+  // The pre-PR validation report: on a passing run it is the captured proof the checkout was
+  // green before the PR opened; on a failed one it is the evidence behind the failure. Dropping
+  // it here would leave a pool-backed run with a bare "validation failed" and no output, while
+  // the Cloudflare/local transports (which return the harness view verbatim) show every command.
+  const validationReport = coerceValidationReport(o.validationReport)
+  if (validationReport) out.validationReport = validationReport
   return out
 }
 

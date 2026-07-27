@@ -1346,6 +1346,25 @@
       "remove": "Rimuovi {repo}",
       "connectFirst": "Collega GitHub per allegare repository di riferimento.",
       "hint": "Il document writer li clona in sola lettura per riutilizzare soluzioni esistenti come riferimento durante la stesura. Non li modifica mai."
+    },
+    "validationChecks": {
+      "title": "Validazione prima della PR",
+      "sectionHint": "Comandi eseguiti sulla copia di lavoro quando lo sviluppatore ha finito e prima di aprire una richiesta di modifica. Un errore torna all'agente perché lo corregga; solo una copia senza errori apre una PR.",
+      "hint": "Ogni comando viene eseguito con `sh -c` nella copia di lavoro di questo servizio, in ordine. Va corretto il codice, non il controllo: all'agente viene chiesto di non indebolirli.",
+      "clear": "Svuota",
+      "configNoun": "controlli di validazione",
+      "label": "Nome",
+      "labelPlaceholder": "lint",
+      "command": "Comando",
+      "addCheck": "Aggiungi controllo",
+      "removeCheck": "Rimuovi questo controllo",
+      "empty": "Nessun controllo configurato. Le esecuzioni di questo servizio aprono una richiesta di modifica senza verifica locale.",
+      "maxAttempts": "Tentativi",
+      "maxAttemptsHint": "Cicli di correzione",
+      "save": "Salva controlli",
+      "savedToast": "Controlli salvati",
+      "saveFailed": "Impossibile salvare i controlli",
+      "clearFailed": "Impossibile svuotare i controlli"
     }
   },
   "panels": {
@@ -1512,6 +1531,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Rilievi correlati",
         "unnamed": "Standard"
+      },
+      "validation": {
+        "heading": "Validazione prima della PR",
+        "passed": "Superata",
+        "failed": "Fallita",
+        "attempts": "Tentativo {attempts} di {maxAttempts}",
+        "passedSummary": "Tutti i {total} controlli sono stati superati al tentativo {attempts}. La richiesta di modifica è stata aperta da una copia senza errori.",
+        "failedSummary": "{failed} controlli su {total} fallivano ancora dopo {attempts} tentativi su {maxAttempts}, quindi non è stata aperta alcuna richiesta di modifica.",
+        "exitCode": "codice di uscita {code}",
+        "timedOut": "tempo scaduto"
       }
     },
     "inspector": {

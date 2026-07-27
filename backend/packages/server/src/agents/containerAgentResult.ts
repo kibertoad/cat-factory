@@ -1,4 +1,12 @@
-import type { AgentRunResult, RunnerJobResult } from '@cat-factory/kernel'
+import type {
+  AgentJobUpdate,
+  AgentRunResult,
+  ContainerEvictionKind,
+  HarnessFailureCause,
+  RunnerJobResult,
+  RunnerJobView,
+  StreamedFollowUp,
+} from '@cat-factory/kernel'
 import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import {
   BLUEPRINTS_AGENT_KIND,
@@ -39,7 +47,16 @@ import {
 export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
   const mapped =
     result.custom !== undefined ? coerceCustomResult(result, agentKind) : mapPushOrPrResult(result)
-  return result.effortReport ? { ...mapped, effortReport: result.effortReport } : mapped
+  // The pre-PR validation report is orthogonal to the kind-specific channels (like
+  // `effortReport`), so attach it to EVERY mapped result: on the success path it is the captured
+  // proof the checkout was green BEFORE the PR opened — the whole point of the feature. A failed
+  // job never reaches here; its report rides the `failed` update's `validationReport`.
+  const withValidation = result.validationReport
+    ? { ...mapped, validationReport: result.validationReport }
+    : mapped
+  return result.effortReport
+    ? { ...withValidation, effortReport: result.effortReport }
+    : withValidation
 }
 
 /**
@@ -368,5 +385,59 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
     ...(environment ? { environment } : {}),
     ...(screenshots.length ? { screenshots } : {}),
     ...(abortReason ? { abort: { reason: abortReason } } : {}),
+  }
+}
+
+/**
+ * Map a `running` runner view into the engine's `running` {@link AgentJobUpdate}: the live
+ * subtask counts (so the step can surface "3/8 done"), the container's current lifecycle phase
+ * and identity/address, the harness liveness heartbeat (which keeps a quiet-but-alive run's
+ * `updated_at` fresh), and the latest pre-PR validation attempt (so the repair loop is visible
+ * WHILE it runs rather than only at the end). Pure — the executor's poll site owns the side
+ * effects (telemetry, usage attribution) and delegates the SHAPING here, alongside the terminal
+ * normalisation this file already owns.
+ */
+export function buildRunningUpdate(
+  view: RunnerJobView,
+  followUps: { followUps?: StreamedFollowUp[] },
+): Extract<AgentJobUpdate, { state: 'running' }> {
+  const containerMeta = {
+    ...(view.phase ? { phase: view.phase } : {}),
+    ...(view.container ? { container: view.container } : {}),
+    ...(view.backend ? { backend: view.backend } : {}),
+    ...(view.heartbeatAt ? { lastActivityAt: view.heartbeatAt } : {}),
+    // A published validation attempt is FINAL; the harness republishes a NEW attempt rather
+    // than mutating the last one, so forwarding the latest on every poll is safe.
+    ...(view.validationReport ? { validationReport: view.validationReport } : {}),
+  }
+  return view.progress
+    ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
+    : { state: 'running', ...followUps, ...containerMeta }
+}
+
+/**
+ * The structured failure metadata a terminal runner view carries, forwarded so the engine
+ * classifies a failure without regex-matching `error`: the harness's `failureCause`, its
+ * extended redacted `detail`, the serving `backend`, the transport's container-eviction verdict
+ * (which the driver recovers on its own budget), and — for a job that failed because its pre-PR
+ * validation stayed red until the attempt budget was spent — the validation report that is the
+ * EVIDENCE behind the failure. The report is read off the terminal result first (authoritative)
+ * and falls back to the view's last live publish, so a transport that forwards no terminal body
+ * still surfaces it. Every field is absent on an older harness image.
+ */
+export function buildFailureMeta(view: RunnerJobView): {
+  failureCause?: HarnessFailureCause
+  detail?: string
+  backend?: string
+  evicted?: ContainerEvictionKind
+  validationReport?: unknown
+} {
+  const validationReport = view.result?.validationReport ?? view.validationReport
+  return {
+    ...(view.failureCause ? { failureCause: view.failureCause } : {}),
+    ...(view.detail ? { detail: view.detail } : {}),
+    ...(view.backend ? { backend: view.backend } : {}),
+    ...(view.evicted ? { evicted: view.evicted } : {}),
+    ...(validationReport ? { validationReport } : {}),
   }
 }

@@ -320,6 +320,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // machine API, decrypted service-side under the LOCAL key). `listByWorkspace` has no consumer
   // on any SPA/run path yet, so it stays pending until a slice needs it.
   testSecretsRepository: { listByWorkspace: 'pending' },
+  // Pre-PR validation checks: the whole surface is allow-listed (the inspector CRUD + the
+  // dispatch's frame read). Nothing sealed — the commands are operator-authored shell strings
+  // that run inside the run's own container — so the plain record rides the machine API.
+  validationConfigRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /

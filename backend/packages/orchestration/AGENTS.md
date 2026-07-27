@@ -1,7 +1,10 @@
 # `@cat-factory/orchestration` — delivery-workflow engine + domain composition root
 
 **Entry:** `src/index.ts`; `src/container.ts` — `createCore()`, the domain composition root
-(the `CoreDependencies`/`Core` contract + the always-present spine assembly). The ~30
+(the `Core` contract + the always-present spine assembly). Its dependency contract,
+`CoreDependencies`, is ~815 lines of pure declaration and lives in its own
+`src/container/dependencies.ts`, re-exported from `container.ts` so every import site is
+unchanged — add a new dependency field there, not here. The ~30
 optional-module factory functions live in `src/container/modules.ts`, and their optional
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`

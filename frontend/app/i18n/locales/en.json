@@ -1117,6 +1117,25 @@
       "remove": "Remove {repo}",
       "connectFirst": "Connect GitHub to attach reference repositories.",
       "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
+    },
+    "validationChecks": {
+      "title": "Pre-PR validation",
+      "sectionHint": "Commands run against the checkout after the coder finishes and before a pull request is opened. A failure is handed back to the agent to fix; only a passing checkout opens a PR.",
+      "hint": "Each command runs with `sh -c` in this service's checkout, in order. Fix the code, not the check — the agent is told not to weaken them.",
+      "clear": "Clear",
+      "configNoun": "validation checks",
+      "label": "Name",
+      "labelPlaceholder": "lint",
+      "command": "Command",
+      "addCheck": "Add check",
+      "removeCheck": "Remove this check",
+      "empty": "No checks configured. Runs for this service open a pull request without any local verification.",
+      "maxAttempts": "Attempts",
+      "maxAttemptsHint": "Rounds of fixing",
+      "save": "Save checks",
+      "savedToast": "Validation checks saved",
+      "saveFailed": "Could not save the validation checks",
+      "clearFailed": "Could not clear the validation checks"
     }
   },
   "panels": {
@@ -1283,6 +1302,16 @@
         "outOfTen": "{value}/10",
         "relatedFindings": "Related findings",
         "unnamed": "Standard"
+      },
+      "validation": {
+        "heading": "Pre-PR validation",
+        "passed": "Passed",
+        "failed": "Failed",
+        "attempts": "Attempt {attempts} of {maxAttempts}",
+        "passedSummary": "All {total} checks passed on attempt {attempts}. The pull request was opened from a green checkout.",
+        "failedSummary": "{failed} of {total} checks were still failing after {attempts} of {maxAttempts} attempts, so no pull request was opened.",
+        "exitCode": "exit {code}",
+        "timedOut": "timed out"
       }
     },
     "inspector": {

@@ -38,6 +38,7 @@ import {
   runCodingAgent,
   runMultiRepoCoding,
 } from './coding-agent.js'
+import { validationFailureMessage } from './validation-checks.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -966,6 +967,11 @@ function buildSingleRepoCodingSpec(
           },
         }
       : {}),
+    // Pre-PR validation: the service's check commands, run against the checkout BEFORE the PR
+    // opens with failures fed back to the agent (see docs/initiatives/pre-pr-validation.md).
+    // Forwarded straight off the job body — the loop is generic machinery keyed on the data, not
+    // on the agent kind.
+    ...(job.validationChecks ? { validationChecks: job.validationChecks } : {}),
   }
 }
 
@@ -977,13 +983,49 @@ function buildSingleRepoCodingSpec(
  */
 async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
-  const { summary, stats, stderrTail, pushed, usage, callMetrics, validation, effortReport } =
-    await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
+  const {
+    summary,
+    stats,
+    stderrTail,
+    pushed,
+    usage,
+    callMetrics,
+    validation,
+    validationReport,
+    effortReport,
+  } = await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
   // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
   const ralphVerdict = validation ? { ralphVerdict: validation } : {}
   // The agent's effort self-assessment, spread onto every result path below (mirrors ralphVerdict).
   const effort = effortReport ? { effortReport } : {}
+  // The pre-PR validation report, spread onto every result path below: on the passing path it is
+  // the captured proof the checkout was green when the PR opened; on the exhausted path it is the
+  // evidence behind the failure below. Absent when the service configured no checks.
+  const validationFields = validationReport ? { validationReport } : {}
+
+  // Pre-PR validation spent its attempt budget with the checkout still red. FAIL the job — do
+  // NOT open a pull request, and do not pretend the push succeeded as a deliverable. The work is
+  // still on the branch (a retry resumes on it); the report carries each failing command's exit
+  // code and captured output so the step's failure detail says exactly what broke.
+  if (validationReport && !validationReport.passed) {
+    return {
+      // The work IS on the branch (the loop only runs for a pass that produced some, and the
+      // harness pushes it) — a retry resumes on top of it. `error` is what marks the job failed;
+      // reporting `pushed: false` here would misdescribe the branch state in the harness's own
+      // result for no benefit.
+      pushed,
+      branch: pushBranch,
+      summary,
+      stats,
+      error: validationFailureMessage(validationReport),
+      failureCause: 'agent',
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+      ...validationFields,
+      ...effort,
+    }
+  }
 
   if (!pushed) {
     // A no-op: a failure for the implementer, a clean non-event for the fixers.
@@ -996,6 +1038,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
         ...ralphVerdict,
+        ...validationFields,
         ...effort,
       }
     }
@@ -1008,6 +1051,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       failureCause: 'no-changes',
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...validationFields,
       ...effort,
     }
   }
@@ -1042,6 +1086,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
           stats,
           ...(usage ? { usage } : {}),
           ...(callMetrics ? { callMetrics } : {}),
+          ...validationFields,
           ...effort,
         }
       }
@@ -1058,6 +1103,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         failureCause: 'no-changes',
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
+        ...validationFields,
         ...effort,
       }
     }
@@ -1070,6 +1116,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
       ...ralphVerdict,
+      ...validationFields,
       ...effort,
     }
   }
@@ -1081,6 +1128,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     ...(usage ? { usage } : {}),
     ...(callMetrics ? { callMetrics } : {}),
     ...ralphVerdict,
+    ...validationFields,
     ...effort,
   }
 }

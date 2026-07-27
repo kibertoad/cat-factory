@@ -14,6 +14,8 @@ import type {
   PackageRegistryConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
+  ValidationConfigRecord,
+  ValidationConfigRepository,
   SubscriptionQuotaCycleRecord,
   SubscriptionQuotaCycleRepository,
   SubscriptionQuotaScope,
@@ -31,6 +33,7 @@ import {
   observabilityConnections,
   packageRegistryConnections,
   releaseHealthConfigs,
+  validationConfigs,
   subscriptionQuotaCycles,
   testSecrets,
 } from '../../db/schema.js'
@@ -385,6 +388,106 @@ export class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfig
         and(
           eq(releaseHealthConfigs.workspace_id, workspaceId),
           eq(releaseHealthConfigs.block_id, blockId),
+        ),
+      )
+  }
+}
+
+type ValidationConfigRow = typeof validationConfigs.$inferSelect
+
+/**
+ * Parse the persisted `checks` JSON array, tolerating a corrupt/legacy row: a malformed blob
+ * degrades to "no checks configured" — the exact pre-feature behaviour — rather than throwing
+ * inside a dispatch. Mirrors the D1 repository's parser.
+ */
+function parseValidationChecks(json: string): { label: string; command: string }[] {
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+      .filter((x) => typeof x.command === 'string' && x.command !== '')
+      .map((x) => ({
+        label: typeof x.label === 'string' && x.label ? x.label : (x.command as string),
+        command: x.command as string,
+      }))
+  } catch {
+    return []
+  }
+}
+
+function rowToValidationConfig(row: ValidationConfigRow): ValidationConfigRecord {
+  return {
+    workspaceId: row.workspace_id,
+    blockId: row.block_id,
+    checks: parseValidationChecks(row.checks),
+    maxAttempts: row.max_attempts,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * A service frame's PRE-PR VALIDATION CHECKS over Postgres (the Drizzle mirror of the Worker's
+ * `D1ValidationConfigRepository`, migration 0061): the commands the harness runs against the
+ * checkout before opening a PR. At most one row per (workspace, block); `checks` is a JSON array
+ * of `{ label, command }`. See docs/initiatives/pre-pr-validation.md.
+ */
+export class DrizzleValidationConfigRepository implements ValidationConfigRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<ValidationConfigRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(validationConfigs)
+      .where(
+        and(
+          eq(validationConfigs.workspace_id, workspaceId),
+          eq(validationConfigs.block_id, blockId),
+        ),
+      )
+      .limit(1)
+    return rows[0] ? rowToValidationConfig(rows[0]) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<ValidationConfigRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(validationConfigs)
+      .where(eq(validationConfigs.workspace_id, workspaceId))
+      .orderBy(validationConfigs.block_id)
+    return rows.map(rowToValidationConfig)
+  }
+
+  async upsert(record: ValidationConfigRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      block_id: record.blockId,
+      checks: JSON.stringify(record.checks),
+      max_attempts: record.maxAttempts,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(validationConfigs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [validationConfigs.workspace_id, validationConfigs.block_id],
+        set: {
+          checks: values.checks,
+          max_attempts: values.max_attempts,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(validationConfigs)
+      .where(
+        and(
+          eq(validationConfigs.workspace_id, workspaceId),
+          eq(validationConfigs.block_id, blockId),
         ),
       )
   }

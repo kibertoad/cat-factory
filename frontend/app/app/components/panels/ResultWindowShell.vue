@@ -20,10 +20,11 @@
 //
 // It also owns the one trailing section every step-backed window shows: the agent's effort
 // self-assessment (see the footer block below), so a window never renders it itself.
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
+import StepValidationReport from '~/components/panels/StepValidationReport.vue'
 import { effortBand, effortHint } from '~/utils/effort'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
@@ -85,11 +86,26 @@ const { dialogRef } = useModalBehavior({
 // step whose agent wrote no report both resolve to null, and the footer disappears.
 const ui = useUiStore()
 const execution = useExecutionStore()
-const effortReport = computed(() => {
+const activeStep = computed(() => {
   const view = ui.resultView
   if (!view || view.instanceId === null || view.stepIndex === null) return null
-  return execution.getInstance(view.instanceId)?.steps[view.stepIndex]?.effortReport ?? null
+  return execution.getInstance(view.instanceId)?.steps[view.stepIndex] ?? null
 })
+const effortReport = computed(() => activeStep.value?.effortReport ?? null)
+// The step's PRE-PR VALIDATION report — the second universal trailing section, resolved the same
+// way and for the same reason: every window whose step ran a coding job can show whether the
+// checkout actually passed the service's checks before the PR opened (and, on a red run, exactly
+// what failed). Absent for a service that configured no checks, and the footer disappears.
+const validationReport = computed(() => activeStep.value?.validation ?? null)
+const validationOpen = ref(false)
+// A failing report is the interesting one, so it opens expanded; a green one stays a one-line row.
+watch(
+  validationReport,
+  (report) => {
+    if (report && !report.passed) validationOpen.value = true
+  },
+  { immediate: true },
+)
 // Collapsed by default — the windows own the vertical space, and the row already carries the
 // difficulty plus the gist of what held the agent back.
 const effortOpen = ref(false)
@@ -202,6 +218,61 @@ const panelClass = computed(() => [
           </button>
           <div v-if="effortOpen" class="max-h-56 overflow-y-auto px-5 pb-3">
             <StepEffortReport :report="effortReport" variant="flat" />
+          </div>
+        </section>
+
+        <!-- Shared trailing section: the pre-PR validation report (the service's check commands
+             run against the checkout BEFORE the PR opened). Collapsed when green, expanded when
+             red — a failed checkout is the one an operator opened the window to read. -->
+        <section
+          v-if="validationReport"
+          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          data-testid="result-window-validation"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            :aria-expanded="validationOpen"
+            data-testid="result-window-validation-toggle"
+            @click="validationOpen = !validationOpen"
+          >
+            <UIcon
+              :name="validationReport.passed ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
+              class="h-3.5 w-3.5 shrink-0"
+              :class="validationReport.passed ? 'text-emerald-400' : 'text-rose-400'"
+            />
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              {{ t('panels.stepDetail.validation.heading') }}
+            </span>
+            <span
+              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+              :class="
+                validationReport.passed
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'bg-rose-500/15 text-rose-300'
+              "
+            >
+              {{
+                validationReport.passed
+                  ? t('panels.stepDetail.validation.passed')
+                  : t('panels.stepDetail.validation.failed')
+              }}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+              {{
+                t('panels.stepDetail.validation.attempts', {
+                  attempts: validationReport.attempts,
+                  maxAttempts: validationReport.maxAttempts,
+                })
+              }}
+            </span>
+            <UIcon
+              :name="validationOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+            />
+          </button>
+          <div v-if="validationOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
+            <StepValidationReport :report="validationReport" />
           </div>
         </section>
       </div>
