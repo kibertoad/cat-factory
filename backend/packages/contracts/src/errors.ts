@@ -65,6 +65,12 @@ export const CONFLICT_REASONS = [
   // The self-test needs a git provider to create/delete its throwaway branch, but the
   // workspace is not connected to one.
   'env_test_no_vcs',
+  // The self-test's handler resolves and is structurally configured, but its LIVE connection probe
+  // failed — a rejected token, an unreachable endpoint, a project/namespace that does not exist.
+  // Raised as a pre-flight BEFORE the throwaway branch is created, carrying the provider's own
+  // message so the SPA can word the specific cause. (A MISSING handler is
+  // `env_test_not_provisionable`, not this.)
+  'env_test_connection_failed',
   // Opt-in review-debt friction (soft tier): the workspace has enough tasks parked on human
   // review to cross its warn threshold. Creating a task is refused UNLESS the request carries
   // `acknowledgeReviewDebt: true`; the SPA turns this into a confirm-to-proceed dialog listing

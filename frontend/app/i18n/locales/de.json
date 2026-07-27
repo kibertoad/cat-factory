@@ -4162,7 +4162,8 @@
         "env_test_not_a_frame": "Kein Dienst",
         "env_test_infraless": "Nichts zu testen",
         "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
-        "env_test_no_vcs": "Git-Anbieter nicht verbunden"
+        "env_test_no_vcs": "Git-Anbieter nicht verbunden",
+        "env_test_connection_failed": "Umgebungsverbindung fehlgeschlagen"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -4184,7 +4185,9 @@
         "env_test_not_provisionable": "Dieser Service hat einen Bereitstellungstyp, aber es ist noch kein Workspace-Handler dafür verfügbar, sodass die Bereitstellung nicht laufen kann. Konfiguriere einen Umgebungs-Handler.",
         "env_test_not_provisionable_no_handler": "Für den Bereitstellungstyp dieses Service ist kein Workspace-Umgebungs-Handler konfiguriert. Registriere in Infrastruktur → Testumgebungen einen — für einen benutzerdefinierten Anbieter einen Custom (remote-custom)-Handler, dessen akzeptierte manifest id mit der übereinstimmt, die dieser Service festlegt.",
         "env_test_not_provisionable_type_mismatch": "Mehr als ein Umgebungs-Handler könnte auf den Bereitstellungstyp dieses Service passen. Lege für diesen Service eine manifest id fest, sodass genau einer aufgelöst wird, oder entferne den überlappenden Handler in Infrastruktur → Testumgebungen.",
-        "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden."
+        "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden.",
+        "env_test_connection_failed": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
+        "env_test_connection_failed_detail": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden: {detail}. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
