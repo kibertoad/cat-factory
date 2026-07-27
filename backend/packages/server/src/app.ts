@@ -21,6 +21,7 @@ import { gitlabController } from './modules/gitlab/GitLabController.js'
 import { vcsConnectController } from './modules/vcs/VcsConnectController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
+import { taskWebhookController } from './modules/tasks/TaskWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergeTrackRecordController } from './modules/merge/MergeTrackRecordController.js'
 import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
@@ -284,6 +285,10 @@ function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   // Provider-neutral VCS webhook receiver (GitLab first); not workspace-scoped. GitHub keeps
   // its own route above; this serves any other provider registered in the VCS registry.
   app.route('/vcs', vcsWebhookController())
+  // Tracker-facing webhook receiver (Jira / Linear / GitHub Issues); not session-scoped. Unlike
+  // the two VCS receivers this carries the WORKSPACE in its path, because a tracker delivery has
+  // no installation id to resolve one from — see `TaskWebhookController`.
+  app.route('/webhooks', taskWebhookController())
   // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/slack', slackOAuthController())
   // Linear-facing OAuth callback (browser redirect); not workspace-scoped.

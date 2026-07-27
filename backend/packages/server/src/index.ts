@@ -18,10 +18,12 @@ export {
   type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
+  type TrackerWebhookIngest,
   type WebSearchResponse,
   type WebSearchResult,
   type WebSearchUpstream,
 } from './runtime/gateways.js'
+export { InlineTrackerWebhookIngest } from './runtime/inlineTrackerWebhook.js'
 export {
   BraveWebSearchUpstream,
   SearxngWebSearchUpstream,

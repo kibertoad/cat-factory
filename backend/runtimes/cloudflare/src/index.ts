@@ -1,7 +1,12 @@
 import type { ExecutionContext, MessageBatch, ScheduledController } from '@cloudflare/workers-types'
 import { createApp } from './app'
 import { loadConfig } from './infrastructure/config'
-import type { Env, ExecutionStartMessage, GitHubSyncMessage } from './infrastructure/env'
+import type {
+  Env,
+  ExecutionStartMessage,
+  GitHubSyncMessage,
+  TrackerSyncMessage,
+} from './infrastructure/env'
 import { requireTelemetryDb } from './infrastructure/env'
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
@@ -36,7 +41,11 @@ import {
 } from './infrastructure/workflows/sweeper'
 import { WorkflowsEnvironmentTestRunner } from './infrastructure/workflows/WorkflowsEnvironmentTestRunner'
 import { D1EnvironmentTestRunRepository } from './infrastructure/repositories/D1EnvironmentTestRunRepository'
-import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
+import {
+  handleGitHubSyncBatch,
+  handleTrackerSyncBatch,
+  reconcileStaleRepos,
+} from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
@@ -206,6 +215,8 @@ let kaizenSweeping = false
 
 /** Queue name for GitHub webhook deliveries / resync jobs (see wrangler.toml). */
 const GITHUB_SYNC_QUEUE_NAME = 'cat-factory-github-sync'
+/** Queue name of the tracker-webhook consumer, matched against `batch.queue` in `queue()`. */
+const TRACKER_SYNC_QUEUE_NAME = 'cat-factory-tracker-sync'
 
 /**
  * Cron schedule (see wrangler.toml `triggers.crons`) that drives the retention
@@ -706,12 +717,18 @@ export default {
   },
 
   async queue(
-    batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage>,
+    batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
     env: Env,
   ): Promise<void> {
-    // Route by source queue — the single handler serves both queues.
+    // Route by source queue — the single handler serves all three queues.
     if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
       await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
+      return
+    }
+
+    // Inbound tracker deliveries (push-driven intake + ticket replies to a parked review).
+    if (batch.queue === TRACKER_SYNC_QUEUE_NAME) {
+      await handleTrackerSyncBatch(batch as MessageBatch<TrackerSyncMessage>, env)
       return
     }
 

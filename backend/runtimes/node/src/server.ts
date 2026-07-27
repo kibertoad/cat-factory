@@ -35,6 +35,7 @@ import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startGitHubSyncWorker } from './execution/githubSyncRunner.js'
+import { startTrackerSyncWorker } from './execution/trackerSyncRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import {
   PgBossEnvironmentTestRunner,
@@ -665,6 +666,13 @@ async function bootServer(
     // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
     // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
     startGitHubSyncWorker(boss, container, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Async TRACKER ingest (the analogue of the Worker's TRACKER_SYNC_QUEUE consumer): drain the
+    // `tracker.sync` queue the webhook receiver enqueues onto, so a pushed issue event fires its
+    // intake schedule — and a ticket reply drives the parked review — out of band, while the
+    // tracker gets its prompt 2xx. A no-op queue when task sources aren't wired.
+    startTrackerSyncWorker(boss, container, logger, {
       concurrency: runtime.concurrency,
     }),
   ])

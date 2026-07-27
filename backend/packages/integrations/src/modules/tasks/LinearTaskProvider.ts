@@ -39,6 +39,7 @@ import {
   mapLinearTeams,
   parseLinearRef,
 } from './linear.logic.js'
+import { linearWebhookAdapter } from './webhook/adapters.js'
 
 // LinearTaskProvider: the task-source provider for Linear. It authenticates with a
 // personal API key against Linear's single GraphQL endpoint (via the shared
@@ -53,6 +54,12 @@ import {
 
 export class LinearTaskProvider implements TaskSourceProvider {
   readonly kind = 'linear' as const
+  /**
+   * Inbound webhook capability (verify + parse), so a linear delivery can drive intake and
+   * ticket replies without waiting for the next polling sweep. See
+   * `docs/initiatives/tracker-webhook-intake.md`.
+   */
+  readonly webhook = linearWebhookAdapter
   readonly descriptor = LINEAR_TASK_DESCRIPTOR
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {

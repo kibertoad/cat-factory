@@ -1,5 +1,9 @@
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import type { ReviewQuestionPost, TaskRecord } from '@cat-factory/kernel'
+// The marker every platform-authored tracker comment opens with. Shared with the reply renderer
+// (and the ingest guard that keys off it) so the two can never emit different prefixes — a comment
+// this side stopped marking is a comment the reply path would start ingesting as a human's.
+import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
 
 // Pure rendering + keying for the headless clarification loop's question writeback (slice 2a
 // of `docs/initiatives/headless-clarification-loop.md`). Kept out of `IssueWritebackService`
@@ -81,7 +85,8 @@ export function renderReviewQuestionsComment(post: ReviewQuestionPost): string {
   const shown = post.findings.slice(0, MAX_FINDINGS)
   const omitted = post.findings.length - shown.length
   const lines = [
-    '🤖 cat-factory paused this work to get its requirements straight. It raised ' +
+    PLATFORM_COMMENT_MARKER +
+      'cat-factory paused this work to get its requirements straight. It raised ' +
       `${post.findings.length} open question${post.findings.length === 1 ? '' : 's'} ` +
       `(review pass ${post.iteration} of ${post.maxIterations}) and the run is waiting for ` +
       'answers before any code is written.',

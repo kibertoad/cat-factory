@@ -16,6 +16,7 @@ import {
   createRunnersModule,
   createServicesModule,
   createTrackerModule,
+  createTrackerWebhookModule,
 } from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { createEnvironmentsModule, createTasksModule } from './modules.js'
@@ -83,6 +84,19 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
       executionEventPublisher,
       tasks?.connectionService,
     ),
+  )
+  // Inbound tracker webhooks. Built LAST of the intake modules because it composes the two
+  // surfaces above it — the recurring scheduler (a qualifying issue event fires a schedule) and
+  // the engine's requirements-review actions (a ticket reply drives the parked review) — so it
+  // must see both already assembled. `modules.get` rather than a local, because `recurring` is
+  // itself registered through the registry just above.
+  modules.build('trackerWebhook', () =>
+    createTrackerWebhookModule(dependencies, {
+      tasks,
+      recurring: modules.get('recurring'),
+      requirements: modules.get('requirements'),
+      executionService,
+    }),
   )
   // The env-config-repair module is a sub-module of `environments` — surfaced as its own top-level
   // `Core.envConfigRepair` key. Registered here (not in the `environments` build above) so it emits

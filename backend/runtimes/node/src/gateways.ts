@@ -12,12 +12,14 @@ import {
   type LlmUpstreamEndpoint,
   type RealtimeGateway,
   type RuntimeGateways,
+  InlineTrackerWebhookIngest,
 } from '@cat-factory/server'
 import type { PgBoss } from 'pg-boss'
 import {
   PgBossGitHubBackfillScheduler,
   PgBossGitHubWebhookIngest,
 } from './execution/githubSyncRunner.js'
+import { PgBossTrackerWebhookIngest } from './execution/trackerSyncRunner.js'
 
 // Node implementations of the runtime gateway seams. Async GitHub ingest is backed by
 // pg-boss when the durable job engine is up (the production/dev path): backfills, webhook
@@ -121,6 +123,10 @@ export function createNodeGateways(env: NodeJS.ProcessEnv, boss?: PgBoss): Runti
       ? new PgBossGitHubBackfillScheduler(boss)
       : new InlineGitHubBackfillScheduler(),
     githubWebhook: boss ? new PgBossGitHubWebhookIngest(boss) : new InlineGitHubWebhookIngest(),
+    // Inbound TRACKER deliveries. The queue-less fallback is the SHARED inline seam rather than a
+    // Node-local class: unlike the GitHub-sync seams there is nothing runtime-specific about doing
+    // nothing, and a second copy is a second place for the boolean to be wrong.
+    trackerWebhook: boss ? new PgBossTrackerWebhookIngest(boss) : new InlineTrackerWebhookIngest(),
     llmUpstream: new HttpLlmUpstream(env),
     // Container web-search upstream is resolved per-account by the proxy controller
     // (keys moved out of env into the per-account settings store), so no boot-time

@@ -389,10 +389,10 @@ export function makeConformanceApp(
     )
   }
 
-  function seedReadyReview(workspaceId: string, blockId: string) {
+  function seedReadyReview(workspaceId: string, blockId: string, openItems?: number) {
     return new DrizzleRequirementReviewRepository(db).upsert(
       workspaceId,
-      makeReadyReviewWithOpenItem(blockId),
+      makeReadyReviewWithOpenItem(blockId, openItems),
     )
   }
 

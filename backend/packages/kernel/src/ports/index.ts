@@ -247,6 +247,20 @@ export type {
   TaskSourceRegistry,
 } from './task-source.js'
 export type {
+  TaskSourceWebhookAdapter,
+  TrackerCommentAuthor,
+  TrackerCommentEvent,
+  TrackerIssueEvent,
+  TrackerWebhookDelivery,
+  TrackerWebhookEvent,
+} from './tracker-webhook.js'
+export {
+  TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
+  TRACKER_WEBHOOK_SECRET_KEY,
+  isTaskSourceKind,
+  trackerWebhookSecret,
+} from './tracker-webhook.js'
+export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
   TaskSourceSettingsRecord,
@@ -560,6 +574,8 @@ export type {
   ReviewQuestionFinding,
   ReviewQuestionPost,
   ReviewQuestionPostOutcome,
+  ReviewReplyAck,
+  ReviewReplyRejection,
 } from './issue-writeback.js'
 export type {
   ReviewQuestionPostClaimWindow,
@@ -569,6 +585,14 @@ export type {
   ReviewQuestionPostStatus,
 } from './review-question-post-repositories.js'
 export { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from './review-question-post-repositories.js'
+export type {
+  TrackerCommentIngestClaimWindow,
+  TrackerCommentIngestKey,
+  TrackerCommentIngestRecord,
+  TrackerCommentIngestRepository,
+  TrackerCommentIngestStatus,
+} from './tracker-comment-ingest-repositories.js'
+export { TRACKER_COMMENT_INGEST_CLAIM_TTL_MS } from './tracker-comment-ingest-repositories.js'
 export {
   type NotificationChannel,
   type RaiseNotificationInput,

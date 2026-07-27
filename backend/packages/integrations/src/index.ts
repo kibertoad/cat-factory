@@ -109,6 +109,22 @@ export {
   type BugIntakePickup,
 } from './modules/tasks/BugIntakeService.js'
 export {
+  trackerWebhookPath,
+  type TaskSourceWebhookState,
+} from './modules/tasks/TaskConnectionService.js'
+export {
+  TrackerWebhookService,
+  type ReviewReplyGateway,
+  type TrackerWebhookOutcome,
+  type TrackerWebhookServiceDependencies,
+} from './modules/tasks/TrackerWebhookService.js'
+export { issueEventMatchesIntake } from './modules/tasks/intakeMatch.logic.js'
+export {
+  githubIssuesWebhookAdapter,
+  jiraWebhookAdapter,
+  linearWebhookAdapter,
+} from './modules/tasks/webhook/adapters.js'
+export {
   MapTaskSourceRegistry,
   type TaskContextView,
   renderTaskContext,
@@ -141,6 +157,12 @@ export {
   issueRefFor,
   renderReviewQuestionsComment,
 } from './modules/writeback/reviewQuestions.logic.js'
+export {
+  isAllowedReplyAuthor,
+  parseReviewReplyCommands,
+  renderReviewReplyAck,
+  type ReviewReplyCommand,
+} from './modules/writeback/reviewReplies.logic.js'
 export {
   createGitHubIssueViaToken,
   type GitHubIssueTokenRequest,
