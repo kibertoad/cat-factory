@@ -144,6 +144,17 @@ export interface RunnerJobResult {
    */
   validationReport?: RunnerValidationReport
   /**
+   * A coding job's BUGFIX REPRODUCTION PROOF: the declared reproduction command run against the
+   * pre-fix tree and the final tree, with both exit codes and captured output — or the agent's
+   * structural declaration that reproduction was infeasible. Computed by the harness from exit
+   * codes, so it is real evidence rather than the model's own claim about its test. Unlike a
+   * failed validation report this never fails the job (see the initiative's D6): the fix may
+   * well be correct, and how much the weak evidence matters is a reviewer's call. The executor's
+   * `toRunResult` forwards it onto {@link AgentRunResult.reproductionReport}. Absent when the
+   * run carried no declaration. See `docs/initiatives/bugfix-reproduction-proof.md`.
+   */
+  reproductionReport?: RunnerReproductionReport
+  /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
    * LLM proxy — so this is the only usage signal for them. The dispatch path folds
@@ -351,6 +362,66 @@ export interface RunnerJobView {
    * service configured no checks (and on an older harness image).
    */
   validationReport?: RunnerValidationReport
+  /**
+   * The reproduction proof as it stands, republished on every poll once the harness has run a
+   * verification pass. Lets the run surface a failed verification WHILE the repair loop is still
+   * running instead of only at the end; the same report rides
+   * {@link RunnerJobResult.reproductionReport} terminally. A published pass is FINAL — the
+   * harness republishes rather than mutating. Absent for a job carrying no declaration (and on
+   * an older harness image).
+   */
+  reproductionReport?: RunnerReproductionReport
+}
+
+/**
+ * The harness-computed reproduction proof of a bugfix coding job. Mirrors the contracts
+ * `reproductionReportSchema` structurally (the kernel stays free of the contracts dependency).
+ * See {@link RunnerJobResult.reproductionReport}.
+ */
+export interface RunnerReproductionReport {
+  /**
+   * `reproduced` — RED on the pre-fix tree, GREEN on the final tree (the only shape that is
+   * proof); `inconclusive` — any other shape, recorded honestly; `declared_infeasible` — the
+   * agent structurally declared reproduction impossible and nothing was run.
+   */
+  status: 'reproduced' | 'inconclusive' | 'declared_infeasible'
+  /** The command run against BOTH trees (empty for `declared_infeasible`). */
+  command: string
+  /** The declared test file(s) constituting the reproduction. */
+  testPaths: string[]
+  /**
+   * How many declared paths were dropped before the proof ran. Non-zero means the pre-fix tree
+   * was rebuilt from an INCOMPLETE reproduction, which the report states rather than implies.
+   */
+  omittedTestPaths?: number
+  /** The pre-fix tree's run; absent for `declared_infeasible`. */
+  base?: RunnerReproductionPhase
+  /** The final tree's run; absent for `declared_infeasible`. */
+  final?: RunnerReproductionPhase
+  /** How many agent+verify rounds ran (1 = settled on the first pass). */
+  attempts: number
+  maxAttempts: number
+  /** For `declared_infeasible`: WHY, verbatim from the agent. */
+  reason?: string
+  /** For `declared_infeasible`: what the agent verified INSTEAD, verbatim. */
+  alternativeVerification?: string
+  /** For `inconclusive`: which shape was observed, in one line. */
+  note?: string
+  /** Epoch ms the report was produced. */
+  at?: number
+}
+
+/** One tree's run of the reproduction command. */
+export interface RunnerReproductionPhase {
+  /** Exit code (0 = pass); 124 on watchdog timeout, 127 on spawn failure, 130 on abort. */
+  exitCode: number
+  passed: boolean
+  /** Bounded, secret-scrubbed tail of the command's combined stdout+stderr. */
+  outputTail?: string
+  durationMs?: number
+  timedOut?: boolean
+  /** Set when this phase's setup command failed, so the tree never ran the check meaningfully. */
+  setupFailed?: boolean
 }
 
 /**
