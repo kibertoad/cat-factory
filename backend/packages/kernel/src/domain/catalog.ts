@@ -34,6 +34,7 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   taskLimitShared: null,
   taskLimitPerType: null,
   storeAgentContext: true,
+  publishPrVerificationReport: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,

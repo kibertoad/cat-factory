@@ -447,6 +447,7 @@ export type {
   PrVerificationReportPublisher,
   PrReportPublishResult,
   PrReportSkipReason,
+  PrReportTarget,
 } from './pr-report.js'
 export type { CiCheck, RepoCiStatus, CiStatusReport, CiStatusProvider } from './ci-status.js'
 export type { DocQualityReport, DocQualityProvider } from './doc-quality.js'

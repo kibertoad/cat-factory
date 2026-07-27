@@ -1522,8 +1522,10 @@ export class RunDispatcher {
     // with its resolved `MergeDecision` recorded; BEFORE `finalizeBlock`, so the
     // `pipeline_complete` card a merger-less pipeline raises points at a PR that already carries
     // the finished report. A passing polling gate settles through here too, so the CI verdict
-    // needs no hook of its own. Best-effort + content-hashed inside the controller: no publisher
-    // wired, no PR yet, or an unchanged report ⇒ nothing happens.
+    // needs no hook of its own. Best-effort inside the controller: no publisher wired, no PR
+    // yet, or a settlement whose evidence is unchanged ⇒ nothing happens. A settlement that DOES
+    // change the evidence writes, so the report tracks the run rather than landing once at the
+    // end — which is the point, since a run that fails or parks part-way never reaches an end.
     await this.prVerificationReport.publishForRun(workspaceId, instance)
 
     if (isFinalStep) {

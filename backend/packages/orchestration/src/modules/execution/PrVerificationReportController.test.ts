@@ -3,7 +3,9 @@ import type {
   BlockRepository,
   ExecutionInstance,
   PrVerificationReportPublisher,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
@@ -41,6 +43,7 @@ function recordingPublisher() {
   return {
     sections,
     publisher: {
+      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' as const }),
       publish: async (_ws: string, _block: string, section: string) => {
         sections.push(section)
         return { published: true }
@@ -78,11 +81,61 @@ describe('PrVerificationReportController', () => {
     expect(reads).toBe(0)
   })
 
-  it('skips a block with no pull request', async () => {
+  it('skips when the adapter can resolve no pull request to publish onto', async () => {
+    // Resolution is the ADAPTER's job (it owns "which PR / which repo"), so an unresolvable
+    // block must short-circuit the hook before anything is composed.
+    const sections: string[] = []
+    let blockReads = 0
+    const publisher: PrVerificationReportPublisher = {
+      resolveTarget: async () => null,
+      publish: async (_ws, _block, section) => {
+        sections.push(section)
+        return { published: true }
+      },
+    }
+    await new PrVerificationReportController({
+      blockRepository: {
+        get: async () => {
+          blockReads += 1
+          return BLOCK
+        },
+      } as unknown as BlockRepository,
+      clock: { now: () => 0 },
+      publisher,
+    }).publishForRun('ws_1', makeInstance())
+    expect(sections).toHaveLength(0)
+    expect(blockReads).toBe(0)
+  })
+
+  it("states the repo and provider the ADAPTER resolved, not the run's last dispatch", async () => {
+    // A multi-repo run's last dispatch is a PEER repo; the report must name the repo whose PR
+    // it is actually written onto.
+    const sections: string[] = []
+    const publisher: PrVerificationReportPublisher = {
+      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'gitlab' }),
+      publish: async (_ws, _block, section) => {
+        sections.push(section)
+        return { published: true }
+      },
+    }
+    const instance = makeInstance({
+      diagnostics: { lastDispatch: { repo: { owner: 'acme', name: 'peer-lib' } } },
+    } as unknown as Partial<ExecutionInstance>)
+    await new PrVerificationReportController({
+      ...makeDeps(BLOCK, publisher),
+    }).publishForRun('ws_1', instance)
+    expect(sections[0]).toContain('acme/api (gitlab)')
+    expect(sections[0]).not.toContain('peer-lib')
+  })
+
+  it('does not publish when the workspace turned the report off', async () => {
     const { sections, publisher } = recordingPublisher()
-    await new PrVerificationReportController(
-      makeDeps({ id: 'blk_1', title: 'x' } as Block, publisher),
-    ).publishForRun('ws_1', makeInstance())
+    await new PrVerificationReportController({
+      ...makeDeps(BLOCK, publisher),
+      workspaceSettingsRepository: {
+        get: async () => ({ ...DEFAULT_WORKSPACE_SETTINGS, publishPrVerificationReport: false }),
+      } as unknown as WorkspaceSettingsRepository,
+    }).publishForRun('ws_1', makeInstance())
     expect(sections).toHaveLength(0)
   })
 
@@ -93,7 +146,7 @@ describe('PrVerificationReportController', () => {
     await controller.publishForRun('ws_1', instance)
     await controller.publishForRun('ws_1', instance)
     // The second pass composes an identical report (only `generatedAt` could differ, and it is
-    // masked out of the fingerprint), so a 12-step run makes one PR edit, not twelve.
+    // masked out of the fingerprint), so a repeated settlement costs no PR edit.
     expect(sections).toHaveLength(1)
 
     // A step settling with new evidence does publish again.
@@ -110,6 +163,7 @@ describe('PrVerificationReportController', () => {
 
   it('never lets a publisher failure escape into the run', async () => {
     const failing: PrVerificationReportPublisher = {
+      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' }),
       publish: async () => {
         throw new Error('GitHub is down')
       },
@@ -118,7 +172,7 @@ describe('PrVerificationReportController', () => {
     await expect(
       new PrVerificationReportController({
         ...makeDeps(BLOCK, failing),
-        logger: { warn: (_obj, msg) => warnings.push(msg) },
+        logger: { warn: (_obj, msg) => warnings.push(msg ?? '') },
       }).publishForRun('ws_1', makeInstance()),
     ).resolves.toBeUndefined()
     expect(warnings).toHaveLength(1)

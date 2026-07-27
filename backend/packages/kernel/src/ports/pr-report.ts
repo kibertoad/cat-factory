@@ -13,6 +13,8 @@
 // marker-delimited region of the PR body (`domain/pr-report.ts`), so a retry, a re-run, or a
 // replayed durable step updates in place instead of appending a second report.
 
+import type { VcsProvider } from '../domain/vcs-types.js'
+
 /** Why a publish did nothing, when it didn't publish. */
 export type PrReportSkipReason =
   /** The block has no recorded pull request yet (nothing to write onto). */
@@ -21,6 +23,24 @@ export type PrReportSkipReason =
   | 'no_repo'
   /** The PR body already carried exactly this section — no remote write was made. */
   | 'unchanged'
+
+/**
+ * Where a block's report would go, resolved by the adapter (which owns "which PR / which
+ * repo / which provider" — the engine has no VCS vocabulary of its own).
+ *
+ * The composer needs this BEFORE it renders, because the report states which repo and provider
+ * the run targeted. Deriving those from the run's own dispatch diagnostics instead would be a
+ * different question with a different answer: diagnostics record the MOST RECENT dispatch,
+ * which on a multi-repo task is a peer repo, not the repo whose PR is being written to.
+ */
+export interface PrReportTarget {
+  /** The pull/merge request the report is written onto. */
+  prNumber: number
+  /** `owner/name` of the repo that PR lives in. */
+  repo: string
+  /** The VCS provider that repo lives on. */
+  provider: VcsProvider
+}
 
 /** The outcome of one publish attempt. */
 export interface PrReportPublishResult {
@@ -33,6 +53,13 @@ export interface PrReportPublishResult {
 }
 
 export interface PrVerificationReportPublisher {
+  /**
+   * Resolve where the block's report would be published, or `null` when there is nowhere to
+   * write it yet (no recorded pull request, or no linked repo). The engine calls this FIRST —
+   * it both short-circuits the compose for a run that has no PR and supplies the repo/provider
+   * the report states. Never throws for an absent PR/repo; those are ordinary skips.
+   */
+  resolveTarget(workspaceId: string, blockId: string): Promise<PrReportTarget | null>
   /**
    * Upsert the engine-managed verification-report section on the block's pull request.
    * `section` is the fully rendered markdown (human-readable prose + the fenced JSON block);

@@ -37,6 +37,7 @@ import type {
   TicketTrackerProvider,
   WorkRunner,
   WorkspaceRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
@@ -62,6 +63,7 @@ import type {
   SkillResolver,
 } from './AgentContextBuilder.js'
 import type { ForkChatService } from './ForkChatService.js'
+import type { PrReportLogger } from './PrVerificationReportController.js'
 import type { KaizenScheduler } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 
@@ -440,4 +442,15 @@ export interface ExecutionServiceDependencies {
    * observability deep link. Absent → the report carries no link rather than a dead one.
    */
   appBaseUrl?: string
+  /**
+   * Optional: the per-workspace settings row, read by the verification-report hook for the
+   * `publishPrVerificationReport` opt-out. Absent ⇒ the default (on).
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * Optional structured logger (the facade's pino logger) for the engine's best-effort paths —
+   * today the PR verification report, whose whole contract is that it never fails a run. Absent
+   * ⇒ those failures are silent, which is why every facade wires it.
+   */
+  logger?: PrReportLogger
 }

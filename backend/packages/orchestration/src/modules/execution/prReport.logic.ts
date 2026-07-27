@@ -10,9 +10,11 @@ import type {
   PrVerificationReport,
   TestReport,
 } from '@cat-factory/kernel'
+import { redactSecrets } from '@cat-factory/kernel'
 import { PR_VERIFICATION_REPORT_VERSION } from '@cat-factory/contracts'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
+import { capList, cell, inline, MAX_SECTION_CHARS, prose } from './prReportText.logic.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -28,7 +30,39 @@ import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
 // Sections whose producing step did not run are emitted with `status: 'absent'` and a `note`
 // that SAYS so. A silently missing section is indistinguishable from a clean one, which is
 // exactly the false reassurance this feature exists to remove.
+//
+// Every free-text value the run produced (a tester summary, a merge rationale, a provisioner's
+// stderr) is SCRUBBED here with the same `redactSecrets` the telemetry store uses. A PR body
+// is a strictly more exposed surface than the private telemetry DB — it may be a public repo —
+// so anything worth scrubbing before it reaches our own database is worth scrubbing before it
+// reaches the host. Scrubbing at COMPOSE time (rather than over the rendered markdown) keeps
+// the human prose and the machine-readable JSON block consistent: both are produced from this
+// one already-scrubbed object. Rendering-level hazards (auto-linked mentions and issue
+// references, table-breaking newlines, unbalanced code fences) are handled at the interpolation
+// boundary — see `prReportText.logic.ts`.
 // ---------------------------------------------------------------------------
+
+/** Scrub credentials out of an optional free-text value, preserving `null`/`undefined`. */
+function scrub(value: string | null | undefined): string | null {
+  return value == null ? null : (redactSecrets(value) ?? null)
+}
+
+/** Scrub a required free-text value. */
+function scrubbed(value: string): string {
+  return redactSecrets(value) ?? ''
+}
+
+/**
+ * Cap a list, recording what was dropped in the report's own `truncations` log.
+ *
+ * A silently shortened list is the same failure this feature exists to remove: 50 of 112
+ * failing checks reads exactly like "112 checks, 50 failed". The report SAYS what it left out.
+ */
+function cap<T>(items: readonly T[], label: string, truncations: string[]): T[] {
+  const { items: kept, dropped } = capList(items)
+  if (dropped > 0) truncations.push(`${label}: showing ${kept.length} of ${items.length}`)
+  return kept
+}
 
 /** The non-run inputs the composer needs beyond the instance itself. */
 export interface PrReportInputs {
@@ -45,12 +79,26 @@ export interface PrReportInputs {
   now: number
 }
 
-/** The first step of `kind` that has any recorded state, else the first matching step. */
+/**
+ * The step a section should report on: the LAST matching step that carries evidence, else the
+ * first matching step (so a pipeline that has the step but hasn't reached it still gets the
+ * "not run yet" note rather than nothing).
+ *
+ * Last-with-evidence, not first-match: a pipeline may legitimately carry the same kind twice —
+ * a `ci` gate after the coder and another after the tester, say — and the later run is the one
+ * that describes the PR head as it stands now. Reporting the first would pin the section to a
+ * verdict two steps of work out of date.
+ */
 function findStep(
   instance: ExecutionInstance,
   matches: (step: PipelineStep) => boolean,
+  hasEvidence: (step: PipelineStep) => boolean,
 ): PipelineStep | undefined {
-  return instance.steps.find(matches)
+  const matching = instance.steps.filter(matches)
+  for (let i = matching.length - 1; i >= 0; i--) {
+    if (hasEvidence(matching[i]!)) return matching[i]
+  }
+  return matching[0]
 }
 
 /** A step is "settled" once it finished — a pending step has no evidence to report yet. */
@@ -58,8 +106,12 @@ function settled(step: PipelineStep | undefined): boolean {
   return !!step && (step.state === 'done' || step.progress >= 1)
 }
 
-function composeCi(instance: ExecutionInstance): PrVerificationReport['ci'] {
-  const step = findStep(instance, (s) => s.agentKind === CI_AGENT_KIND)
+function composeCi(instance: ExecutionInstance, truncations: string[]): PrVerificationReport['ci'] {
+  const step = findStep(
+    instance,
+    (s) => s.agentKind === CI_AGENT_KIND,
+    (s) => s.gate != null,
+  )
   if (!step) {
     return {
       status: 'absent',
@@ -77,9 +129,13 @@ function composeCi(instance: ExecutionInstance): PrVerificationReport['ci'] {
       fixerAttempts: 0,
     }
   }
-  const failingChecks: PrReportCheck[] = (gate.failingChecks ?? []).map((check) => ({
-    name: check.name,
-    conclusion: check.conclusion,
+  const failingChecks: PrReportCheck[] = cap(
+    gate.failingChecks ?? [],
+    'ci.failingChecks',
+    truncations,
+  ).map((check) => ({
+    name: scrubbed(check.name),
+    conclusion: scrub(check.conclusion),
     url: check.url ?? null,
     repo: check.repo ?? null,
   }))
@@ -93,8 +149,15 @@ function composeCi(instance: ExecutionInstance): PrVerificationReport['ci'] {
   }
 }
 
-function composeTests(instance: ExecutionInstance): PrVerificationReport['tests'] {
-  const step = findStep(instance, (s) => isTesterKind(s.agentKind))
+function composeTests(
+  instance: ExecutionInstance,
+  truncations: string[],
+): PrVerificationReport['tests'] {
+  const step = findStep(
+    instance,
+    (s) => isTesterKind(s.agentKind),
+    (s) => s.test?.lastReport != null,
+  )
   if (!step) {
     return {
       status: 'absent',
@@ -119,15 +182,18 @@ function composeTests(instance: ExecutionInstance): PrVerificationReport['tests'
   return {
     status: 'reported',
     greenlight: report.greenlight,
-    summary: report.summary,
+    summary: scrubbed(report.summary),
     environment: report.environment ?? null,
-    tested: [...report.tested],
-    outcomes: report.outcomes.map((o) => ({
-      name: o.name,
+    tested: cap(report.tested, 'tests.tested', truncations).map(scrubbed),
+    outcomes: cap(report.outcomes, 'tests.outcomes', truncations).map((o) => ({
+      name: scrubbed(o.name),
       status: o.status,
-      detail: o.detail ?? null,
+      detail: scrub(o.detail),
     })),
-    concerns: report.concerns.map((c) => ({ title: c.title, severity: c.severity })),
+    concerns: cap(report.concerns, 'tests.concerns', truncations).map((c) => ({
+      title: scrubbed(c.title),
+      severity: c.severity,
+    })),
     fixerAttempts: step.test?.attempts ?? 0,
     maxFixerAttempts: step.test?.maxAttempts ?? null,
   }
@@ -153,8 +219,15 @@ function teardownState(
   return live ? 'pending' : 'confirmed'
 }
 
-function composeEnvironments(instance: ExecutionInstance): PrVerificationReport['environments'] {
-  const step = findStep(instance, (s) => s.agentKind === DEPLOYER_AGENT_KIND)
+function composeEnvironments(
+  instance: ExecutionInstance,
+  truncations: string[],
+): PrVerificationReport['environments'] {
+  const step = findStep(
+    instance,
+    (s) => s.agentKind === DEPLOYER_AGENT_KIND,
+    (s) => Object.keys(s.deployEnvs ?? {}).length > 0,
+  )
   if (!step) {
     return {
       status: 'absent',
@@ -163,14 +236,16 @@ function composeEnvironments(instance: ExecutionInstance): PrVerificationReport[
       teardown: 'not_applicable',
     }
   }
-  const entries: PrReportEnvironment[] = Object.entries(step.deployEnvs ?? {}).map(
-    ([frameId, state]) => ({
-      frameId,
-      status: state.status,
-      url: state.url ?? null,
-      error: state.error ?? null,
-    }),
-  )
+  const entries: PrReportEnvironment[] = cap(
+    Object.entries(step.deployEnvs ?? {}),
+    'environments.entries',
+    truncations,
+  ).map(([frameId, state]) => ({
+    frameId,
+    status: state.status,
+    url: state.url ?? null,
+    error: scrub(state.error),
+  }))
   if (entries.length === 0) {
     return {
       status: 'absent',
@@ -188,7 +263,11 @@ function composeEnvironments(instance: ExecutionInstance): PrVerificationReport[
  * before that — both are read, so a report composed at either moment is truthful.
  */
 function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'] {
-  const step = findStep(instance, (s) => s.agentKind === MERGER_AGENT_KIND)
+  const step = findStep(
+    instance,
+    (s) => s.agentKind === MERGER_AGENT_KIND,
+    (s) => s.custom != null,
+  )
   if (!step) {
     return {
       status: 'absent',
@@ -216,7 +295,9 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
   }
   return {
     status: 'reported',
-    assessment,
+    assessment: assessment
+      ? { ...assessment, rationale: scrubbed(assessment.rationale) }
+      : assessment,
     outcome: custom.outcome ?? null,
     reason: custom.reason ?? null,
     presetName: custom.thresholds?.presetName ?? null,
@@ -228,31 +309,37 @@ export function composePrVerificationReport(
   instance: ExecutionInstance,
   inputs: PrReportInputs,
 ): PrVerificationReport {
+  const truncations: string[] = []
+  const steps = instance.steps.map((step, index) => ({
+    index,
+    agentKind: step.agentKind,
+    state: step.state,
+    model: step.model ?? null,
+  }))
   return {
     version: PR_VERIFICATION_REPORT_VERSION,
     generatedAt: inputs.now,
     run: {
       executionId: instance.id,
       blockId: instance.blockId,
-      blockTitle: inputs.block.title,
+      blockTitle: scrubbed(inputs.block.title),
       pipelineId: instance.pipelineId,
-      pipelineName: instance.pipelineName,
+      pipelineName: scrubbed(instance.pipelineName),
       repo: inputs.repo ?? null,
       provider: inputs.provider ?? null,
       startedAt: instance.createdAt ?? null,
-      steps: instance.steps.map((step, index) => ({
-        index,
-        agentKind: step.agentKind,
-        state: step.state,
-        model: step.model ?? null,
+      steps: cap(steps, 'run.steps', truncations),
+      issues: cap(inputs.issues, 'run.issues', truncations).map((issue) => ({
+        ...issue,
+        title: scrubbed(issue.title),
       })),
-      issues: inputs.issues,
     },
-    ci: composeCi(instance),
-    tests: composeTests(instance),
-    environments: composeEnvironments(instance),
+    ci: composeCi(instance, truncations),
+    tests: composeTests(instance, truncations),
+    environments: composeEnvironments(instance, truncations),
     merge: composeMerge(instance),
     observability: { runUrl: inputs.runUrl },
+    truncations,
   }
 }
 
@@ -265,10 +352,9 @@ function pct(score: number): string {
   return `${Math.round(score * 100)}%`
 }
 
-/** Escape a pipe so a value can't break out of a markdown table cell. */
-function cell(value: string): string {
-  return value.replaceAll('|', '\\|')
-}
+// Interpolation of untrusted text goes through `cell` / `inline` / `prose`
+// (`prReportText.logic.ts`) — never a bare template hole. See that module's header for what a
+// PR body does to raw text.
 
 function renderCi(ci: PrVerificationReport['ci']): string[] {
   const out = ['### Continuous integration', '']
@@ -305,7 +391,7 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
     `**Fixer attempts:** ${tests.fixerAttempts}` +
       (tests.maxFixerAttempts != null ? ` of ${tests.maxFixerAttempts}` : ''),
   )
-  if (tests.summary) out.push('', tests.summary)
+  if (tests.summary) out.push('', prose(tests.summary))
   if (tests.tested.length) {
     out.push('', '**Exercised:**', ...tests.tested.map((t) => `- ${t}`))
   }
@@ -355,7 +441,7 @@ function renderMerge(merge: PrVerificationReport['merge']): string[] {
         `**Impact** ${pct(merge.assessment.impact)}` +
         (merge.presetName ? ` (preset: ${merge.presetName})` : ''),
     )
-    if (merge.assessment.rationale) out.push('', merge.assessment.rationale)
+    if (merge.assessment.rationale) out.push('', prose(merge.assessment.rationale))
   }
   if (merge.outcome) {
     out.push(
@@ -370,22 +456,37 @@ function renderRun(run: PrVerificationReport['run'], runUrl: string | null): str
   const out = [
     '### Run',
     '',
-    `**Task:** ${cell(run.blockTitle)} (\`${run.blockId}\`)`,
-    `**Pipeline:** ${cell(run.pipelineName)} (\`${run.pipelineId}\`)`,
+    `**Task:** ${inline(run.blockTitle)} (\`${run.blockId}\`)`,
+    `**Pipeline:** ${inline(run.pipelineName)} (\`${run.pipelineId}\`)`,
     `**Execution:** \`${run.executionId}\``,
   ]
   if (run.repo) out.push(`**Repository:** ${run.repo}${run.provider ? ` (${run.provider})` : ''}`)
   if (run.issues.length) {
     out.push(
-      `**Tracker issues:** ${run.issues.map((i) => `[${cell(i.title)}](${i.url})`).join(', ')}`,
+      `**Tracker issues:** ${run.issues.map((i) => `[${inline(i.title)}](${i.url})`).join(', ')}`,
     )
   }
   if (runUrl) out.push(`**Observability:** [Model activity / Provided context](${runUrl})`)
   out.push('', '| # | Step | State | Model |', '| --- | --- | --- | --- |')
   for (const step of run.steps) {
-    out.push(`| ${step.index + 1} | ${step.agentKind} | ${step.state} | ${step.model ?? '—'} |`)
+    out.push(
+      `| ${step.index + 1} | ${cell(step.agentKind)} | ${cell(step.state)} | ${step.model ? cell(step.model) : '—'} |`,
+    )
   }
   return [...out, '']
+}
+
+/** Name whatever the report had to leave out, so a capped list never reads as a complete one. */
+function renderTruncations(truncations: readonly string[]): string[] {
+  if (!truncations.length) return []
+  return [
+    '### Omitted for length',
+    '',
+    ...truncations.map((note) => `- ${cell(note)}`),
+    '',
+    '_The full values are in the run’s observability panel._',
+    '',
+  ]
 }
 
 /**
@@ -395,7 +496,7 @@ function renderRun(run: PrVerificationReport['run'], runUrl: string | null): str
  * body between the kernel's markers — this function emits the section CONTENTS only.
  */
 export function renderPrVerificationReport(report: PrVerificationReport): string {
-  const lines = [
+  const body = [
     '## 🐈 Verification report',
     '',
     '_Maintained by cat-factory. These are captured facts from the run that produced this PR,',
@@ -406,6 +507,10 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     ...renderTests(report.tests),
     ...renderEnvironments(report.environments),
     ...renderMerge(report.merge),
+    ...renderTruncations(report.truncations),
+  ].join('\n')
+
+  const json = [
     '<details><summary>Machine-readable report (JSON)</summary>',
     '',
     '```json',
@@ -413,6 +518,22 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '```',
     '',
     '</details>',
-  ]
-  return lines.join('\n')
+  ].join('\n')
+
+  // The machine-readable half is the droppable one: a reviewer reads the prose above, while the
+  // JSON block is bulk an external consumer can re-fetch from the API. So when the section would
+  // blow the host's body limit — only reachable with pathological data, since every field is
+  // capped at compose time — the JSON goes and a note SAYS it went. Failing the publish instead
+  // would leave the PR with no report at all, and silently forever (publishing is best-effort
+  // by design), which is the outcome this budget exists to avoid.
+  const full = `${body}\n${json}`
+  if (full.length <= MAX_SECTION_CHARS) return full
+  const dropped = `${body}\n_The machine-readable JSON block was omitted: this report exceeds the ${MAX_SECTION_CHARS}-character budget for a pull-request description._`
+  if (dropped.length <= MAX_SECTION_CHARS) return dropped
+  // Absolute backstop: the prose alone is over budget. Cut it rather than let the host reject
+  // the whole write.
+  return `${dropped.slice(0, MAX_SECTION_CHARS - TRUNCATED_SECTION_NOTE.length)}${TRUNCATED_SECTION_NOTE}`
 }
+
+/** Closes a section that had to be cut at {@link MAX_SECTION_CHARS}. */
+const TRUNCATED_SECTION_NOTE = '\n\n_… report truncated to fit the pull-request body limit._'

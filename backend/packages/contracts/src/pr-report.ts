@@ -215,6 +215,15 @@ export const prVerificationReportSchema = v.object({
   environments: prReportEnvironmentsSchema,
   merge: prReportMergeSchema,
   observability: prReportObservabilitySchema,
+  /**
+   * What the report had to leave out to stay inside a pull-request body, one human-readable
+   * note per capped list (`"tests.outcomes: showing 50 of 118"`). Empty on any ordinary run.
+   *
+   * A capped list is only safe if it SAYS it was capped — "50 failing checks" and "50 of 118
+   * failing checks" call for very different reviewer reactions, and the whole point of this
+   * report is that a reader can trust what it shows to be the whole picture.
+   */
+  truncations: v.array(v.string()),
 })
 export type PrVerificationReport = v.InferOutput<typeof prVerificationReportSchema>
 

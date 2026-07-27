@@ -2795,6 +2795,11 @@
         "body": "Store the complete context provided to each agent: the composed prompts, the best-practice fragments folded in, and the full content of the files injected into its container, so it can be inspected later in the observability view. The bodies are kept for the same window as the per-call LLM telemetry. Turn off to stop storing it (existing snapshots are pruned by retention).",
         "toggle": "Store full agent context"
       },
+      "prReport": {
+        "heading": "Pull request verification report",
+        "body": "Maintain a verification report on each run's pull request: the CI verdict, the tester's report, ephemeral-environment lifecycle and the merge assessment, as captured facts rather than the agent's own claims. Credentials are scrubbed before anything is written. Turn off to stop publishing; a report already on a pull request is left as it is.",
+        "toggle": "Publish the verification report on pull requests"
+      },
       "retention": {
         "heading": "Screenshot retention",
         "body": "How long to keep the UI tester's captured screenshots and the reference design images they're reviewed against (the visual-confirmation gate). A daily cleanup job deletes both the image bytes and their metadata once they age past this window.",

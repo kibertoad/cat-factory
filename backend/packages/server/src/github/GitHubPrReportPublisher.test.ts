@@ -35,6 +35,42 @@ function makeDeps(block: Block | null, body: string | null) {
   }
 }
 
+describe('GitHubPrReportPublisher.resolveTarget', () => {
+  it('reports the repo the PR actually lives in, defaulting the provider to GitHub', async () => {
+    const h = makeDeps(BLOCK_WITH_PR, null)
+    expect(await new GitHubPrReportPublisher(h.deps).resolveTarget('ws_1', 'blk_1')).toEqual({
+      prNumber: 7,
+      repo: 'o/r',
+      provider: 'github',
+    })
+  })
+
+  it("takes the provider from the deployment's origin resolver, never a hard-coded 'github'", async () => {
+    // A GitLab deployment injects one origin builder; the report must state `gitlab` without
+    // this adapter branching on provider at all.
+    const h = makeDeps(BLOCK_WITH_PR, null)
+    const target = await new GitHubPrReportPublisher({
+      ...h.deps,
+      resolveRepoOrigin: () => ({ cloneUrl: 'https://gitlab.test/o/r.git', provider: 'gitlab' }),
+    }).resolveTarget('ws_1', 'blk_1')
+    expect(target?.provider).toBe('gitlab')
+  })
+
+  it('resolves nothing when the block has no PR yet', async () => {
+    const h = makeDeps({ id: 'blk_1' } as Block, null)
+    expect(await new GitHubPrReportPublisher(h.deps).resolveTarget('ws_1', 'blk_1')).toBeNull()
+  })
+
+  it('resolves nothing when the block has no linked repo', async () => {
+    const h = makeDeps(BLOCK_WITH_PR, null)
+    const publisher = new GitHubPrReportPublisher({
+      ...h.deps,
+      resolveRepoTarget: async () => null,
+    })
+    expect(await publisher.resolveTarget('ws_1', 'blk_1')).toBeNull()
+  })
+})
+
 describe('GitHubPrReportPublisher', () => {
   it('appends the section to the PR body, preserving the agent’s own description', async () => {
     const h = makeDeps(BLOCK_WITH_PR, 'Implements login.')

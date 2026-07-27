@@ -153,6 +153,40 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         expect(report.run.executionId).toBe(second.id)
       })
 
+      it('publishes nothing when the workspace turned the report off', async () => {
+        // The per-workspace opt-out (`publishPrVerificationReport`). A pull request is a more
+        // exposed surface than the telemetry store, so a workspace can decline it — and the
+        // setting has to be read through each facade's OWN settings repository, which is
+        // exactly the kind of wiring that silently works on one runtime and not the other.
+        const publisher = new FakePrReportPublisher()
+        const app = harness.makeApp(
+          { asyncKinds: ['coder'], pullRequest: PR },
+          {
+            prVerificationReportPublisher: publisher,
+            gateProviders: { ciStatus: makeFakeCi([true]) },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const off = await app.call('PUT', `/workspaces/${wsId}/settings`, {
+          publishPrVerificationReport: false,
+        })
+        expect(off.status).toBe(200)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(publisher.section('task_login')).toBeNull()
+        expect(publisher.calls).toHaveLength(0)
+      })
+
       it('publishes nothing when no report publisher is wired', async () => {
         // The pass-through that keeps every existing engine test — and every no-VCS
         // deployment — behaving exactly as it did before the feature.

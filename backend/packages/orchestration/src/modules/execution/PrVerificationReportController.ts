@@ -5,9 +5,15 @@ import type {
   PrReportIssue,
   PrVerificationReportPublisher,
   TaskRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { isVcsProvider } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
+
+/** Minimal structured logger (pino-compatible); optional, like every other best-effort path. */
+export interface PrReportLogger {
+  warn(obj: Record<string, unknown>, msg?: string): void
+}
 
 /**
  * The engine collaborator that keeps a run's **verification report** on its pull request.
@@ -42,22 +48,40 @@ export interface PrVerificationReportControllerDeps {
   /** Optional: resolves the task's linked tracker issues in ONE batched read. */
   taskRepository?: TaskRepository
   /**
+   * Optional: the per-workspace `publishPrVerificationReport` opt-out. Absent (or no saved
+   * settings row) ⇒ the default, which is ON — a deployment that wired a publisher wants the
+   * report.
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
    * Optional: the deployment's public SPA base URL, used to build the observability deep
    * link. Absent ⇒ the report's `observability.runUrl` is null and no link is rendered
    * (better than emitting a link to nowhere).
    */
   appBaseUrl?: string
-  /** Optional structured logger for the best-effort failure path. */
-  logger?: { warn?: (obj: unknown, msg: string) => void }
+  /**
+   * Optional structured logger for the best-effort failure path. Wire it: publishing is the
+   * one part of the run that is DESIGNED to fail silently, so without a log a revoked token or
+   * a rejected body leaves no trace anywhere — the report simply stops appearing.
+   */
+  logger?: PrReportLogger
 }
 
 export class PrVerificationReportController {
   /**
-   * The last section published per execution id, so a 12-step run does not make 12 identical
-   * PR edits. In-process only and deliberately so: it is a WRITE-AVOIDANCE cache, never a
-   * correctness mechanism — the marker splice is idempotent, so a cold process (or a peer
-   * replica) simply re-publishes the same section and the adapter's own unchanged-check
-   * suppresses the remote write.
+   * The last section published per execution id, so settlements that change nothing a reader
+   * would see cost no PR edit at all.
+   *
+   * It does NOT collapse a run to one edit: the report carries a per-step state table, so most
+   * settlements genuinely do change it and the report tracks the run as it progresses — which
+   * is the intent ("rewritten in place as the run progresses"). What the cache removes is the
+   * repeat write from a replayed durable step, a re-poll, or a settlement whose evidence is
+   * identical to the last one.
+   *
+   * In-process only and deliberately so: it is a WRITE-AVOIDANCE cache, never a correctness
+   * mechanism — the marker splice is idempotent, so a cold process (or a peer replica) simply
+   * re-publishes the same section and the adapter's own unchanged-check suppresses the remote
+   * write.
    */
   private readonly lastPublished = new Map<string, string>()
 
@@ -80,16 +104,24 @@ export class PrVerificationReportController {
     const publisher = this.deps.publisher
     if (!publisher) return
     try {
+      if (!(await this.publishingEnabled(workspaceId))) return
+      // Ask the adapter WHERE this would go before composing anything: it both short-circuits a
+      // run that has no PR yet (most runs, for most of their life) and supplies the repo +
+      // provider the report states — the same resolution the write itself uses, so the report
+      // can never name a different repo from the one it lands on.
+      const target = await publisher.resolveTarget(workspaceId, instance.blockId)
+      if (!target) return
+
       const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
       // Only a task carries an implementation PR; a frame/module run has nothing to report on.
-      if (!block?.pullRequest) return
+      if (!block) return
 
       const section = renderPrVerificationReport(
         composePrVerificationReport(instance, {
           block,
           issues: await this.linkedIssues(workspaceId, instance.blockId),
-          repo: this.repoFullName(instance),
-          provider: this.provider(instance),
+          repo: target.repo,
+          provider: target.provider,
           runUrl: this.runUrl(workspaceId, instance),
           now: this.deps.clock.now(),
         }),
@@ -103,8 +135,8 @@ export class PrVerificationReportController {
     } catch (error) {
       // A PR-report write is bookkeeping. A provider outage, a revoked token, or a PR someone
       // closed underneath the run must never turn a green run red.
-      this.deps.logger?.warn?.(
-        { err: error, executionId: instance.id, workspaceId },
+      this.deps.logger?.warn(
+        { err: error, executionId: instance.id, blockId: instance.blockId, workspaceId },
         'Failed to publish the PR verification report',
       )
     }
@@ -121,6 +153,18 @@ export class PrVerificationReportController {
     }
   }
 
+  /**
+   * The workspace's opt-out. Checked BEFORE anything is read or composed, so a workspace that
+   * turned the report off pays nothing for the hook. A workspace with no saved settings row
+   * reads as the default (on).
+   */
+  private async publishingEnabled(workspaceId: string): Promise<boolean> {
+    const repo = this.deps.workspaceSettingsRepository
+    if (!repo) return true
+    const settings = (await repo.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
+    return settings.publishPrVerificationReport
+  }
+
   private async linkedIssues(workspaceId: string, blockId: string): Promise<PrReportIssue[]> {
     const repo = this.deps.taskRepository
     if (!repo) return []
@@ -131,18 +175,6 @@ export class PrVerificationReportController {
       title: record.title,
       url: record.url,
     }))
-  }
-
-  /** `owner/name` of the repo the run's last container step operated on, when recorded. */
-  private repoFullName(instance: ExecutionInstance): string | null {
-    const repo = instance.diagnostics?.lastDispatch?.repo
-    return repo ? `${repo.owner}/${repo.name}` : null
-  }
-
-  /** The run's VCS provider, narrowed from the free-text diagnostics value. */
-  private provider(instance: ExecutionInstance): 'github' | 'gitlab' | null {
-    const provider = instance.diagnostics?.lastDispatch?.repo?.provider
-    return isVcsProvider(provider) ? provider : null
   }
 
   /**

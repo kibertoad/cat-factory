@@ -1,4 +1,8 @@
-import type { PrReportPublishResult, PrVerificationReportPublisher } from '@cat-factory/kernel'
+import type {
+  PrReportPublishResult,
+  PrReportTarget,
+  PrVerificationReportPublisher,
+} from '@cat-factory/kernel'
 import { readManagedSection, spliceManagedSection } from '@cat-factory/kernel'
 
 /**
@@ -15,6 +19,16 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
   readonly bodies = new Map<string, string>()
   /** Every publish call, in order, for asserting how many remote writes were attempted. */
   readonly calls: { workspaceId: string; blockId: string; published: boolean }[] = []
+  /**
+   * Blocks with no resolvable PR. A block absent from this set resolves, so the common case
+   * needs no seeding; add one to exercise the engine's "nowhere to publish" short-circuit.
+   */
+  readonly unresolvable = new Set<string>()
+
+  async resolveTarget(_workspaceId: string, blockId: string): Promise<PrReportTarget | null> {
+    if (this.unresolvable.has(blockId)) return null
+    return { prNumber: 1, repo: 'acme/api', provider: 'github' }
+  }
 
   async publish(
     workspaceId: string,

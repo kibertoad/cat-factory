@@ -1,6 +1,7 @@
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { parsePrVerificationReport } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
+import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 
 const BLOCK = { id: 'blk_1', title: 'Add login', level: 'task' } as unknown as Block
@@ -31,6 +32,15 @@ function instance(
 }
 
 const INPUTS = { block: BLOCK, issues: [], runUrl: null, now: 1_700_000_000_000 }
+
+/** A tester summary whose transcript fence was never closed (a killed/truncated tool dump). */
+const TEST_REPORT_WITH_OPEN_FENCE = {
+  greenlight: false,
+  summary: 'output was:\n```\nnpm test',
+  tested: [],
+  outcomes: [],
+  concerns: [],
+}
 
 describe('composePrVerificationReport', () => {
   it('names every section a pipeline did not produce, instead of omitting it', () => {
@@ -182,6 +192,81 @@ describe('composePrVerificationReport', () => {
     expect(raw.merge.assessment?.risk).toBe(0.5)
     expect(raw.merge.outcome).toBeNull()
   })
+
+  it('scrubs credentials out of every free-text field before they reach the PR', () => {
+    // A PR body is a MORE exposed surface than the telemetry store (it can be a public repo),
+    // so it gets the same `redactSecrets` scrub — in the prose AND in the JSON block, which is
+    // why the scrub happens at compose time rather than over the rendered markdown.
+    const token = 'ghp_' + 'A'.repeat(36)
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'tester-api',
+          test: {
+            attempts: 0,
+            lastReport: {
+              greenlight: true,
+              summary: `authenticated with ${token}`,
+              tested: [],
+              outcomes: [],
+              concerns: [],
+            },
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    expect(report.tests.status).toBe('reported')
+    expect(JSON.stringify(report)).not.toContain(token)
+    expect(renderPrVerificationReport(report)).not.toContain(token)
+  })
+
+  it('reports the LAST gate that has a verdict when a pipeline runs CI twice', () => {
+    // Two `ci` gates (after the coder, and again after the tester) — the later one describes
+    // the PR head as it stands now; the first is two steps of work out of date.
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'ci',
+          gate: { phase: 'checking', attempts: 2, maxAttempts: 10, lastVerdict: 'fail' },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+        step({ agentKind: 'coder' }),
+        step({
+          agentKind: 'ci',
+          gate: { phase: 'checking', attempts: 0, maxAttempts: 10, lastVerdict: 'pass' },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    expect(report.ci.status).toBe('reported')
+    expect(report.ci.verdict).toBe('pass')
+    expect(report.ci.fixerAttempts).toBe(0)
+  })
+
+  it('names what a capped list left out instead of shortening it silently', () => {
+    const failingChecks = Array.from({ length: 60 }, (_, i) => ({
+      name: `check-${i}`,
+      conclusion: 'failure',
+    }))
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'ci',
+          gate: {
+            phase: 'checking',
+            attempts: 0,
+            maxAttempts: 10,
+            lastVerdict: 'fail',
+            failingChecks,
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    expect(report.ci.failingChecks).toHaveLength(50)
+    expect(report.truncations).toContain('ci.failingChecks: showing 50 of 60')
+    expect(renderPrVerificationReport(report)).toContain('showing 50 of 60')
+  })
 })
 
 describe('renderPrVerificationReport', () => {
@@ -198,11 +283,71 @@ describe('renderPrVerificationReport', () => {
     expect(parsePrVerificationReport(JSON.parse(json))).toEqual(report)
   })
 
-  it('escapes pipes so a title cannot break out of a markdown table cell', () => {
+  it('escapes pipes so a value cannot break out of a markdown table cell', () => {
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'ci',
+          gate: {
+            phase: 'checking',
+            attempts: 0,
+            maxAttempts: 10,
+            lastVerdict: 'fail',
+            failingChecks: [{ name: 'build | lint', conclusion: 'failure' }],
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    const row = renderPrVerificationReport(report)
+      .split('\n')
+      .find((line) => line.includes('build'))!
+    expect(row).toContain('build \\| lint')
+    // Four cells' worth of delimiters, not five — the value stayed inside its column.
+    expect(row.split(/(?<!\\)\|/).length).toBe(4)
+  })
+
+  it('renders a title on a prose line verbatim (a pipe there is not a delimiter)', () => {
     const report = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), {
       ...INPUTS,
       block: { ...BLOCK, title: 'Fix a | b parsing' } as Block,
     })
-    expect(renderPrVerificationReport(report)).toContain('Fix a \\| b parsing')
+    expect(renderPrVerificationReport(report)).toContain('**Task:** Fix a | b parsing')
+  })
+
+  it('keeps a multi-line deploy error inside its table row', () => {
+    // A raw newline ends the row: the rest of the error used to spill out and shred the table.
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: DEPLOYER_AGENT_KIND,
+          deployEnvs: { frm_api: { status: 'failed', error: 'boom:\nline two' } },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    const row = renderPrVerificationReport(report)
+      .split('\n')
+      .find((line) => line.includes('frm_api'))!
+    expect(row).toContain('boom:<br>line two')
+    expect(row.endsWith('|')).toBe(true)
+  })
+
+  it('never lets an unbalanced fence in agent prose swallow the JSON block', () => {
+    // A truncated transcript in a tester summary would otherwise eat every section after it,
+    // including the machine-readable contract.
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'tester-api',
+          test: { attempts: 0, lastReport: TEST_REPORT_WITH_OPEN_FENCE },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    const section = renderPrVerificationReport(report)
+    const json = section.match(/```json\n([\s\S]*?)\n```/)
+    expect(json, 'the JSON block must still be extractable').not.toBeNull()
+    expect(parsePrVerificationReport(JSON.parse(json![1]!)).version).toBe(report.version)
   })
 })

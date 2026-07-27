@@ -125,6 +125,30 @@ The reference implementation is the merge/mergeability provider shape — a kern
   minimal boot-time replay in the SPA. That is a down-payment on slice 4 of
   [`global-search-and-deep-links.md`](./global-search-and-deep-links.md) — when that
   initiative lands the general parser, DELETE the narrow one rather than keeping both.
+- **A PR body is a PARSED, PUBLIC surface — never interpolate untrusted text bare.** Everything
+  the report shows is agent- or human-authored, and the host acts on what it finds: `#123` /
+  `@name` / `!123` auto-link (a mention notifies a real person), a **closing keyword in front of
+  an issue reference closes that issue when the PR merges**, a raw newline ends a table row, and
+  an unbalanced code fence swallows the JSON block that is the machine-readable contract. Every
+  interpolation therefore goes through `prReportText.logic.ts` (`cell` / `inline` / `prose`).
+  Two traps found the hard way: the escapes must run in ONE regex pass (each emits a `#`, so a
+  chained `.replace()` re-escapes the previous one's output — `@` → `&#64;` → `&&#35;64;`), and
+  they must skip inline code spans (the host does not auto-link there, so escaping only shows the
+  reader a literal `&#35;`).
+- **Free text is scrubbed with `redactSecrets` at COMPOSE time.** Same helper the telemetry store
+  uses; a PR body is the MORE exposed surface of the two. Compose-time (not over the rendered
+  markdown) so the prose and the JSON block can never disagree about what was redacted.
+- **Bound every list, and SAY what was dropped.** Per-list caps feed the report's `truncations`
+  log rather than silently shortening — a capped list that doesn't admit it is the same false
+  reassurance as a silently missing section. The rendered section also has a hard character
+  budget: over it, the JSON block goes (with a note), because a body the host rejects means NO
+  report at all, silently and forever.
+- **State the repo/provider the PUBLISHER resolved, not `diagnostics.lastDispatch`.** Diagnostics
+  record the most recent dispatch — on a multi-repo task that is a PEER repo, not the repo whose
+  PR is being written to. `resolveTarget` on the port answers the same question the write uses.
+- **Wire the logger.** This is the one engine path designed to swallow its failures, so an
+  unwired logger means a revoked token or a rejected body leaves no trace anywhere and the report
+  just stops appearing.
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).
@@ -141,6 +165,8 @@ The reference implementation is the merge/mergeability provider shape — a kern
 | 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                    | 🟩 done | this |
 | 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                        | 🟩 done | this |
 | 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                        | 🟩 done | this |
+| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                     | 🟩 done | this |
+| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                               | 🟩 done | this |
 | 9   | **Phase 2** — harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent) | ⬜ todo |      |
 | 10  | **Phase 2** — bugfix reproduction proof: the failing-then-passing test demonstrated across the fix                                            | ⬜ todo |      |
 | 11  | **Phase 2 follow-up** — per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                          | ⬜ todo |      |

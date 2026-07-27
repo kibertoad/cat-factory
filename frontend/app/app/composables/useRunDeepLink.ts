@@ -68,15 +68,23 @@ export function useRunDeepLink(): void {
   // opens rather than whichever one was last used on this device.
   if (link.workspaceId) workspace.workspaceId = link.workspaceId
 
-  const stop = watch(
+  // Applied at most once — a later refresh must not re-open a panel the user closed. The guard
+  // is a flag rather than `{ once: true }` (which would burn the single run on the immediate
+  // not-ready tick and never navigate) and `stop` is a `let` rather than a `const` (with
+  // `immediate`, the callback runs synchronously BEFORE the binding initialises, so an
+  // already-hydrated board would hit the temporal dead zone instead of navigating).
+  let applied = false
+  let stop: (() => void) | undefined
+  stop = watch(
     () => workspace.ready,
     (ready) => {
-      if (!ready) return
-      stop()
+      if (!ready || applied) return
+      applied = true
       if (link.blockId) ui.select(link.blockId)
       // `observability` is the only view this narrow parser serves — an unknown view still
       // lands the user on the right board and task rather than failing the navigation.
       if (link.view === 'observability') ui.openObservability(link.runId)
+      stop?.()
     },
     { immediate: true },
   )

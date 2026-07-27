@@ -29,7 +29,6 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type {} from '@cat-factory/kernel'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -108,8 +107,6 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import type {} from '@cat-factory/kernel'
-import type {} from '@cat-factory/integrations'
 import { dependenciesMet, descendantIds, serviceOf } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
@@ -317,7 +314,9 @@ export class ExecutionService {
     providerRegistry,
     initiativePresetRegistry,
     prVerificationReportPublisher,
+    workspaceSettingsRepository,
     appBaseUrl,
+    logger,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -507,7 +506,9 @@ export class ExecutionService {
         clock,
         publisher: prVerificationReportPublisher,
         taskRepository,
+        workspaceSettingsRepository,
         appBaseUrl,
+        logger,
       }),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,

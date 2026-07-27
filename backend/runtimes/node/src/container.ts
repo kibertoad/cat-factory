@@ -1404,6 +1404,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     gitlabEngineClient,
     providerRegistry,
     resolveRepoTarget,
+    resolveRepoOrigin: options.resolveRepoOrigin,
     githubInstallationRepository,
     repoProjectionRepository,
     blockRepository: repos.blockRepository,

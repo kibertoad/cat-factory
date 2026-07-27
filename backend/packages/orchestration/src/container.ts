@@ -294,8 +294,16 @@ export interface CoreDependencies {
    * surfaces omit the link rather than emitting a dead one.
    */
   appBaseUrl?: string
-  /** Optional structural logger (the facade's pino logger) for best-effort diagnostics. */
-  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  /**
+   * Optional structural logger (the facade's pino logger) for best-effort diagnostics.
+   * `warn` is required alongside `info` because the paths that need it most are the ones
+   * designed to swallow their failures (the PR verification report) — a logger that can only
+   * report success is no use to them.
+   */
+  logger?: {
+    info(obj: Record<string, unknown>, msg?: string): void
+    warn(obj: Record<string, unknown>, msg?: string): void
+  }
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
