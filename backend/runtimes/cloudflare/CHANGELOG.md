@@ -1,5 +1,68 @@
 # @cat-factory/worker
 
+## 0.107.0
+
+### Minor Changes
+
+- 640cadd: Judges: a registry seam for deployment-authored rubric evaluators that can block or bounce a run.
+
+  Three engine paths already shared one shape — an LLM produces a structured assessment, the engine
+  compares it to a per-task threshold, and the run advances, parks or escalates (requirements
+  auto-pass, the `merger`, `on-call`). That latent "verdict gate" family is now promoted into a
+  **fourth step-taxonomy bucket**: agents / polling gates / one-shot engine steps / **judges**.
+
+  A judge step runs an LLM assessment of the run's work against a **rubric**, and the engine
+  compares the verdict's score to the task's merge preset before disposing: advance, park for a
+  human, **bounce** the producing step with the findings as its rework brief, or fail the run.
+  Adding one is a registry entry, not a copy of the machinery — the same promise `registerGate`
+  makes for polling gates.
+
+  - **`JudgeRegistry`** (`@cat-factory/kernel`, app-owned + empty by default) threaded through
+    `CoreDependencies.judgeRegistry` beside `gateRegistry`. A registration supplies only its
+    differentiators: the rubric, an optional `parseVerdict`, `threshold`/`attemptBudget` read off
+    the preset, `onFail` (`park` / `bounce` / `fail`) and `bounceTargets`.
+  - **One generic driver** in the engine owns the state machine, threshold comparison, park,
+    bounce budget, persistence and emission. All live state rides `step.judge` — no side table, so
+    it is runtime-symmetric by construction.
+  - **No per-facade wiring**: the verdict producer is an injectable `JudgeAssessor` whose default
+    is built from the model-provider dependencies every facade already wires. An
+    absent/disabled assessor makes every judge step a **pass-through**, so existing pipelines are
+    byte-for-byte unchanged.
+  - Two new merge-preset knobs, `judgeMinScore` (default 0.7) and `judgeMaxBounces` (default 1),
+    mirrored D1 ⇄ Drizzle. The built-in presets' seed version bumps to 5, so existing workspaces
+    are advised to reseed.
+  - A rubric's per-workspace override is an ordinary **prompt-library fragment**
+    (`JudgeRubric.fragmentId`), so the feature adds no rubric storage.
+  - The verdict is a first-class section of the **PR verification report**, rendered through the
+    `hostMarkdown` helpers and scrubbed like every other model-authored field.
+  - A parked verdict is answerable from the SPA's new judge window **and** from
+    `POST /api/v1/runs/:runId/decisions/judge/resolve` — both call the same service method.
+
+  The `merger` is deliberately NOT rewritten onto this: it owns terminal block status and a real,
+  credential-bearing merge, and stays a privileged built-in. See
+  `docs/initiatives/judge-registry.md`.
+
+### Patch Changes
+
+- Updated dependencies [583fc80]
+- Updated dependencies [640cadd]
+  - @cat-factory/orchestration@0.145.0
+  - @cat-factory/contracts@0.170.0
+  - @cat-factory/kernel@0.164.0
+  - @cat-factory/agents@0.72.0
+  - @cat-factory/integrations@0.101.1
+  - @cat-factory/server@0.155.0
+  - @cat-factory/consensus@0.11.43
+  - @cat-factory/eks@0.1.142
+  - @cat-factory/gates@0.7.34
+  - @cat-factory/gitlab@0.13.10
+  - @cat-factory/observability-otel@0.2.48
+  - @cat-factory/prompt-fragments@0.14.18
+  - @cat-factory/spend@0.12.91
+  - @cat-factory/caching@0.10.47
+  - @cat-factory/observability-langfuse@0.7.265
+  - @cat-factory/provider-cloudflare@0.7.293
+
 ## 0.106.3
 
 ### Patch Changes

@@ -1,5 +1,56 @@
 # @cat-factory/contracts
 
+## 0.170.0
+
+### Minor Changes
+
+- 640cadd: Judges: a registry seam for deployment-authored rubric evaluators that can block or bounce a run.
+
+  Three engine paths already shared one shape — an LLM produces a structured assessment, the engine
+  compares it to a per-task threshold, and the run advances, parks or escalates (requirements
+  auto-pass, the `merger`, `on-call`). That latent "verdict gate" family is now promoted into a
+  **fourth step-taxonomy bucket**: agents / polling gates / one-shot engine steps / **judges**.
+
+  A judge step runs an LLM assessment of the run's work against a **rubric**, and the engine
+  compares the verdict's score to the task's merge preset before disposing: advance, park for a
+  human, **bounce** the producing step with the findings as its rework brief, or fail the run.
+  Adding one is a registry entry, not a copy of the machinery — the same promise `registerGate`
+  makes for polling gates.
+
+  - **`JudgeRegistry`** (`@cat-factory/kernel`, app-owned + empty by default) threaded through
+    `CoreDependencies.judgeRegistry` beside `gateRegistry`. A registration supplies only its
+    differentiators: the rubric, an optional `parseVerdict`, `threshold`/`attemptBudget` read off
+    the preset, `onFail` (`park` / `bounce` / `fail`) and `bounceTargets`.
+  - **One generic driver** in the engine owns the state machine, threshold comparison, park,
+    bounce budget, persistence and emission. All live state rides `step.judge` — no side table, so
+    it is runtime-symmetric by construction.
+  - **No per-facade wiring**: the verdict producer is an injectable `JudgeAssessor` whose default
+    is built from the model-provider dependencies every facade already wires. An
+    absent/disabled assessor makes every judge step a **pass-through**, so existing pipelines are
+    byte-for-byte unchanged.
+  - Two new merge-preset knobs, `judgeMinScore` (default 0.7) and `judgeMaxBounces` (default 1),
+    mirrored D1 ⇄ Drizzle. The built-in presets' seed version bumps to 5, so existing workspaces
+    are advised to reseed.
+  - A rubric's per-workspace override is an ordinary **prompt-library fragment**
+    (`JudgeRubric.fragmentId`), so the feature adds no rubric storage.
+  - The verdict is a first-class section of the **PR verification report**, rendered through the
+    `hostMarkdown` helpers and scrubbed like every other model-authored field.
+  - A parked verdict is answerable from the SPA's new judge window **and** from
+    `POST /api/v1/runs/:runId/decisions/judge/resolve` — both call the same service method.
+
+  The `merger` is deliberately NOT rewritten onto this: it owns terminal block status and a real,
+  credential-bearing merge, and stays a privileged built-in. See
+  `docs/initiatives/judge-registry.md`.
+
+### Patch Changes
+
+- 583fc80: Pre-flight the provider connection in the environment self-test. Before creating the throwaway branch, `startTest` now runs the resolved provider's connection probe (`testProvisioning` → the provider's `testConnection`); a bad connection — a rejected token, or a wrong project/endpoint — is rejected up front as a 409 (`env_test_connection_failed`) carrying the provider's own message, instead of failing opaquely mid-provision after a branch has already been created and has to be torn back down. Providers without a `testConnection` (or `infraless`) are unaffected (the probe returns null).
+
+  The new `env_test_connection_failed` reason is registered on the contracts `ConflictReason` union
+  and mapped in the SPA: the service inspector renders the provider's own message wrapped in
+  localized prose plus the "Configure infrastructure" jump, and the generic conflict toast carries a
+  title + description for it. Message keys added to all ten locales.
+
 ## 0.169.0
 
 ### Minor Changes
