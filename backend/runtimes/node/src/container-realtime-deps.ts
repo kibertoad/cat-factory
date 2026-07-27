@@ -118,6 +118,13 @@ export interface NodeRealtimeDepsInput {
   ) => Promise<string | undefined>
   agentKindRegistry: AgentKindRegistry
   clock: Clock
+  /**
+   * Extra delivery channels contributed by a downstream facade, composed alongside the ones built
+   * here. Local mode in mothership mode contributes its `RemoteNotificationChannel` (the org's
+   * external transports live on the mothership), so a laptop-raised notification still reaches
+   * the team's Slack. Empty/absent on a stock Node deployment.
+   */
+  extraNotificationChannels?: NotificationChannel[]
 }
 
 /**
@@ -175,6 +182,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     resolveWorkspaceModelDefault,
     agentKindRegistry,
     clock,
+    extraNotificationChannels,
   } = input
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -212,26 +220,42 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
       }))
     : standardAgentExecutor
 
+  // EXTERNAL channels = everything that is not the in-app push. They are what a mothership
+  // delivers on behalf of a mothership-mode node (`machineNotificationDelivery`), because they are
+  // the ones whose credentials never leave the mothership; the in-app frame for a laptop-raised
+  // notification already rides the real-time upstream relay, so it must NOT be delivered twice.
+  const externalNotificationChannels: NotificationChannel[] = [
+    ...(slackDeps.notificationChannel ? [slackDeps.notificationChannel] : []),
+    // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
+    // browser WebSocket, so a parked run would otherwise reach it only by polling (see
+    // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
+    //
+    // It belongs in the EXTERNAL set by the definition above — it is not the in-app push, and its
+    // signing secret is sealed with the deployment key. That placement is what makes it work under
+    // mothership mode: the row and its sealed secret live on the mothership, so the mothership is
+    // the only side that can decrypt and deliver it. Composing it only into the local fan-out
+    // would leave a laptop failing every delivery on a decrypt it cannot perform while the
+    // mothership never attempted one.
+    ...(notificationWebhookSupport ? [notificationWebhookSupport.channel] : []),
+    ...(extraNotificationChannels ?? []),
+  ]
   const notificationChannels: NotificationChannel[] = []
   if (executionEventPublisher)
     notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
-  if (slackDeps.notificationChannel) notificationChannels.push(slackDeps.notificationChannel)
-  // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
-  // browser WebSocket, so a parked run would otherwise reach it only by polling (see
-  // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
-  if (notificationWebhookSupport) notificationChannels.push(notificationWebhookSupport.channel)
-  const notificationChannel =
-    notificationChannels.length === 0
-      ? undefined
-      : notificationChannels.length === 1
-        ? notificationChannels[0]
-        : new CompositeNotificationChannel(notificationChannels)
+  notificationChannels.push(...externalNotificationChannels)
 
   return {
     slackDeps,
     executionEventPublisher,
     agentExecutor,
-    notificationChannel,
+    notificationChannel: composeChannels(notificationChannels),
+    externalNotificationChannel: composeChannels(externalNotificationChannels),
     notificationWebhookSupport,
   }
+}
+
+/** One channel as-is, several fanned out, none ⇒ undefined (the port is simply not wired). */
+function composeChannels(channels: NotificationChannel[]): NotificationChannel | undefined {
+  if (channels.length === 0) return undefined
+  return channels.length === 1 ? channels[0] : new CompositeNotificationChannel(channels)
 }

@@ -1268,10 +1268,19 @@ still open). Two new container agent kinds plus a special gate step implement it
     with `CompositeNotificationChannel` as the seam for **future email/Slack** channels.
     `WebhookNotificationChannel` (`@cat-factory/integrations`) is the third: a per-workspace
     outbound HTTPS endpoint (`notification_webhooks`, D1 ⇄ Drizzle) delivered HMAC-signed with a
-    sealed secret, best-effort with a bounded retry that gives up on a 4xx. It exists because a
-    HEADLESS caller has no in-app inbox and no browser WebSocket, so a parked run would otherwise
-    reach it only by polling. An EMPTY type filter means the parking + actionable-tail defaults,
-    NOT everything.
+    sealed secret, through the shared SSRF-guarded `safeFetch` seam, best-effort under one total
+    deadline that gives up on a 4xx. It exists because a HEADLESS caller has no in-app inbox and
+    no browser WebSocket, so a parked run would otherwise reach it only by polling. An EMPTY type
+    filter means the parking + actionable-tail defaults, NOT everything.
+    In **mothership mode** the org's EXTERNAL channels are unreachable from the laptop (their
+    credentials are sealed with the mothership's key), so `RemoteNotificationChannel` composes in
+    and asks the mothership to deliver the row by id over `POST /internal/notifications/deliver`
+    — the in-app frame still rides the real-time upstream relay. See
+    [`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md).
+    **The webhook is an EXTERNAL channel**, so it composes into that same set on both facades
+    (`externalNotificationChannels` ⇄ `buildExternalNotificationChannel`) rather than only into the
+    local fan-out — its secret is sealed with the deployment key, so the deployment holding that
+    key is the only side that can deliver it.
     `NotificationController` mounts `GET /notifications`, `POST /notifications/:id/act`
     (merge / confirm / retry by type), `POST …/dismiss`. SPA: `stores/notifications.ts`
   - the toolbar `NotificationsInbox.vue`; the snapshot carries open notifications +

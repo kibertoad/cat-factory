@@ -59,6 +59,7 @@ import { GitLabIdentityResolver } from '@cat-factory/gitlab'
 import type {
   AppCaches,
   InitiativePresetRegistry,
+  NotificationChannel,
   PipelineRegistry,
   PreviewTransport,
   ProviderRegistry,
@@ -411,6 +412,13 @@ export interface NodeContainerOptions {
    */
   realtimeSink?: LocalEventSink
   /**
+   * Extra notification delivery channels composed alongside the ones this facade builds (in-app +
+   * Slack). The local facade contributes its mothership `RemoteNotificationChannel` here, so a
+   * notification raised on a laptop is delivered by the mothership through the org's external
+   * transports (whose credentials never reach the machine). Unset on a stock Node deployment.
+   */
+  notificationChannels?: NotificationChannel[]
+  /**
    * The app-owned cache bag (docs/initiatives/caching-layer.md). `start()` builds it once
    * per process via `createAppCaches` — with the Redis-backed invalidation notification
    * factory when `REDIS_URL` is set (multi-node), bare in-memory otherwise — and owns its
@@ -667,6 +675,8 @@ export type NodeAccountDepsResult = ReturnType<typeof buildNodeAccountDeps>
 interface NodeServerContainerBundle {
   dependencies: CoreDependencies
   config: AppConfig
+  /** The non-in-app delivery channels, surfaced for the mothership delivery seam (see below). */
+  externalNotificationChannel: NodeRealtimeDepsResult['externalNotificationChannel']
   defaultWebSearchUpstream: NodeRunServicesResult['defaultWebSearchUpstream']
   resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
   repos: ReturnType<typeof createDrizzleRepositories>
@@ -705,6 +715,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
   const {
     dependencies,
     config,
+    externalNotificationChannel,
     defaultWebSearchUpstream,
     resolveRepoTarget,
     repos,
@@ -768,6 +779,16 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // (the per-workspace WorkspaceEventsHub Durable Object). Absent realtime ⇒ the endpoint 503s.
     ...(options.realtimeSink
       ? { machineEventRelay: new LocalMachineEventRelay(options.realtimeSink) }
+      : {}),
+    // Mothership-side notification DELIVERY (`POST /internal/notifications/deliver`): a
+    // mothership-mode node persists its notification rows here but holds none of the org's
+    // external delivery credentials (the Slack bot token is sealed with THIS deployment's key),
+    // so it asks the mothership to deliver a row by id. Wired with the EXTERNAL channels only —
+    // the in-app frame for a laptop-raised notification already arrives over the real-time
+    // upstream relay, so delivering it here too would double-push it. Wired symmetrically on the
+    // Cloudflare facade. No external channel (no Slack) ⇒ the endpoint 503s.
+    ...(externalNotificationChannel
+      ? { machineNotificationDelivery: externalNotificationChannel }
       : {}),
     repositories: {
       ...dependencies,
@@ -1004,6 +1025,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     executionEventPublisher,
     agentExecutor,
     notificationChannel,
+    externalNotificationChannel,
     notificationWebhookSupport,
   } = buildNodeRealtimeDeps({
     env,
@@ -1016,6 +1038,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     resolveWorkspaceModelDefault,
     agentKindRegistry,
     clock,
+    ...(options.notificationChannels
+      ? { extraNotificationChannels: options.notificationChannels }
+      : {}),
   })
 
   // Per-account settings + binary-artifact storage + the observability/incident gate-provider
@@ -1146,6 +1171,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
   return projectNodeServerContainer({
     dependencies,
     config,
+    externalNotificationChannel,
     defaultWebSearchUpstream,
     resolveRepoTarget,
     repos,

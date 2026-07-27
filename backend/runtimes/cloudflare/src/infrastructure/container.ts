@@ -715,9 +715,8 @@ export function selectMergeLifecycleDeps(
   const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
   if (publisher) channels.push(new InAppNotificationChannel(publisher))
-  const slackChannel = buildSlackChannel(config, db)
-  if (slackChannel) channels.push(slackChannel)
-  if (webhookChannel) channels.push(webhookChannel)
+  const externalChannel = buildExternalNotificationChannel(config, db, webhookChannel)
+  if (externalChannel) channels.push(externalChannel)
   if (channels.length === 1) deps.notificationChannel = channels[0]
   else if (channels.length > 1)
     deps.notificationChannel = new CompositeNotificationChannel(channels)
@@ -1055,6 +1054,37 @@ function buildNotificationWebhookSupportForWorker(
         'notification webhook delivery failed',
       ),
   })
+}
+
+/**
+ * This deployment's EXTERNAL notification channels — everything that is NOT the in-app push
+ * (Slack, plus a workspace's outbound notification webhook). Two consumers:
+ * {@link selectMergeLifecycleDeps} composes it into the engine's own fan-out, and the
+ * ServerContainer attaches it as `machineNotificationDelivery`, the seam the mothership-mode
+ * `POST /internal/notifications/deliver` endpoint delivers a laptop-raised notification through
+ * (its credentials never leave this deployment). In-app is excluded there on purpose: a laptop's
+ * in-app frame already arrives over the real-time upstream relay.
+ *
+ * The webhook belongs in this set for the same reason Slack does — its signing secret is sealed
+ * with THIS deployment's key, so this is the only side that can decrypt and deliver it. Keeping it
+ * out would leave a mothership-mode laptop failing every delivery on a decrypt it cannot perform
+ * while the mothership never attempted one. Symmetric with the Node facade.
+ *
+ * Called once per consumer (so the seam gets its own instance), exactly like `buildAppRegistry`,
+ * which the `githubTokenDelegation` seam also re-builds — the channel is a stateless adapter over
+ * D1 reads plus a cipher, so a second instance costs nothing.
+ */
+export function buildExternalNotificationChannel(
+  config: AppConfig,
+  db: D1Database,
+  webhookChannel?: NotificationChannel,
+): NotificationChannel | null {
+  const channels: NotificationChannel[] = []
+  const slackChannel = buildSlackChannel(config, db)
+  if (slackChannel) channels.push(slackChannel)
+  if (webhookChannel) channels.push(webhookChannel)
+  if (channels.length === 0) return null
+  return channels.length === 1 ? channels[0]! : new CompositeNotificationChannel(channels)
 }
 
 /**
