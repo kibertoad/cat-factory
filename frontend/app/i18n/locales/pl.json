@@ -1142,7 +1142,13 @@
       "fixing": "· naprawianie…",
       "tested": "Przetestowano",
       "outcomes": "Wyniki",
-      "concerns": "Zastrzeżenia"
+      "concerns": "Zastrzeżenia",
+      "requirementVerdicts": {
+        "title": "Werdykty wymagań",
+        "met": "Spełnione",
+        "notMet": "Niespełnione",
+        "notCovered": "Niesprawdzone"
+      }
     },
     "stepMeta": {
       "stateLabel": "Stan",
@@ -4136,6 +4142,20 @@
       "functional": "Funkcjonalne",
       "nonfunctional": "Niefunkcjonalne",
       "constraint": "Ograniczenie"
+    },
+    "state": {
+      "established": "Potwierdzone",
+      "aspirational": "Planowane",
+      "establishedCount": "Potwierdzone: {count}",
+      "aspirationalCount": "Planowane: {count}",
+      "groupRollup": "Potwierdzone: {established}/{total}",
+      "rollupHint": "„Potwierdzone” oznacza, że tester zaobserwował to zachowanie; „planowane” oznacza, że jest uzgodnione, ale jeszcze niezrealizowane.",
+      "noneMatchFilter": "Żadne wymaganie w tej grupie nie pasuje do filtra.",
+      "filter": {
+        "all": "Wszystkie",
+        "established": "Potwierdzone",
+        "aspirational": "Planowane"
+      }
     },
     "acceptance": {
       "given": "Given",

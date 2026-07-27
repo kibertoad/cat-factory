@@ -1142,7 +1142,13 @@
       "fixing": "· מתקן…",
       "tested": "נבדק",
       "outcomes": "תוצאות",
-      "concerns": "חששות"
+      "concerns": "חששות",
+      "requirementVerdicts": {
+        "title": "הכרעות לפי דרישה",
+        "met": "מתקיימת",
+        "notMet": "לא מתקיימת",
+        "notCovered": "לא נבדקה"
+      }
     },
     "stepMeta": {
       "stateLabel": "מצב",
@@ -4147,6 +4153,20 @@
       "functional": "פונקציונלי",
       "nonfunctional": "לא-פונקציונלי",
       "constraint": "אילוץ"
+    },
+    "state": {
+      "established": "מאומת",
+      "aspirational": "מתוכנן",
+      "establishedCount": "מאומת: {count}",
+      "aspirationalCount": "מתוכנן: {count}",
+      "groupRollup": "מאומת: {established}/{total}",
+      "rollupHint": "\"מאומת\" פירושו שבודק ראה את ההתנהגות מתקיימת; \"מתוכנן\" פירושו שסוכם עליה אך היא טרם מומשה.",
+      "noneMatchFilter": "אין דרישות בקבוצה זו שתואמות את הסינון.",
+      "filter": {
+        "all": "הכול",
+        "established": "מאומת",
+        "aspirational": "מתוכנן"
+      }
     },
     "acceptance": {
       "given": "בהינתן",

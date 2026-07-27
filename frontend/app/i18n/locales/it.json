@@ -1442,7 +1442,13 @@
       "fixing": "· correzione in corso…",
       "tested": "Testato",
       "outcomes": "Esiti",
-      "concerns": "Criticita'"
+      "concerns": "Criticita'",
+      "requirementVerdicts": {
+        "title": "Verdetti per requisito",
+        "met": "Soddisfatto",
+        "notMet": "Non soddisfatto",
+        "notCovered": "Non verificato"
+      }
     },
     "stepMeta": {
       "stateLabel": "Stato",
@@ -4478,6 +4484,20 @@
       "functional": "Funzionale",
       "nonfunctional": "Non funzionale",
       "constraint": "Vincolo"
+    },
+    "state": {
+      "established": "Verificato",
+      "aspirational": "Previsto",
+      "establishedCount": "Verificato: {count}",
+      "aspirationalCount": "Previsto: {count}",
+      "groupRollup": "Verificato: {established}/{total}",
+      "rollupHint": "«Verificato» significa che un tester ha osservato il comportamento; «previsto» significa che è concordato ma non ancora implementato.",
+      "noneMatchFilter": "Nessun requisito di questo gruppo corrisponde al filtro.",
+      "filter": {
+        "all": "Tutti",
+        "established": "Verificato",
+        "aspirational": "Previsto"
+      }
     },
     "acceptance": {
       "given": "Given",

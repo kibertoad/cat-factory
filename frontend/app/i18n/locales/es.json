@@ -1142,7 +1142,13 @@
       "fixing": "· corrigiendo…",
       "tested": "Probado",
       "outcomes": "Resultados",
-      "concerns": "Inquietudes"
+      "concerns": "Inquietudes",
+      "requirementVerdicts": {
+        "title": "Veredictos por requisito",
+        "met": "Cumplido",
+        "notMet": "No cumplido",
+        "notCovered": "No comprobado"
+      }
     },
     "stepMeta": {
       "stateLabel": "Estado",
@@ -4136,6 +4142,20 @@
       "functional": "Funcional",
       "nonfunctional": "No funcional",
       "constraint": "Restricción"
+    },
+    "state": {
+      "established": "Verificado",
+      "aspirational": "Previsto",
+      "establishedCount": "Verificado: {count}",
+      "aspirationalCount": "Previsto: {count}",
+      "groupRollup": "Verificado: {established}/{total}",
+      "rollupHint": "«Verificado» significa que una prueba observó el comportamiento; «previsto» significa que está acordado pero aún no implementado.",
+      "noneMatchFilter": "Ningún requisito de este grupo coincide con el filtro.",
+      "filter": {
+        "all": "Todos",
+        "established": "Verificado",
+        "aspirational": "Previsto"
+      }
     },
     "acceptance": {
       "given": "Given",

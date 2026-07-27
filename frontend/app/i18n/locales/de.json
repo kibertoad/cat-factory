@@ -1442,7 +1442,13 @@
       "fixing": "· wird korrigiert…",
       "tested": "Getestet",
       "outcomes": "Ergebnisse",
-      "concerns": "Bedenken"
+      "concerns": "Bedenken",
+      "requirementVerdicts": {
+        "title": "Urteile je Anforderung",
+        "met": "Erfüllt",
+        "notMet": "Nicht erfüllt",
+        "notCovered": "Nicht geprüft"
+      }
     },
     "stepMeta": {
       "stateLabel": "Status",
@@ -4478,6 +4484,20 @@
       "functional": "Funktional",
       "nonfunctional": "Nicht-funktional",
       "constraint": "Einschränkung"
+    },
+    "state": {
+      "established": "Nachgewiesen",
+      "aspirational": "Angestrebt",
+      "establishedCount": "Nachgewiesen: {count}",
+      "aspirationalCount": "Angestrebt: {count}",
+      "groupRollup": "Nachgewiesen: {established}/{total}",
+      "rollupHint": "„Nachgewiesen“ bedeutet, dass ein Tester das Verhalten beobachtet hat; „angestrebt“ bedeutet, es ist vereinbart, aber noch nicht umgesetzt.",
+      "noneMatchFilter": "Keine Anforderung in dieser Gruppe entspricht dem Filter.",
+      "filter": {
+        "all": "Alle",
+        "established": "Nachgewiesen",
+        "aspirational": "Angestrebt"
+      }
     },
     "acceptance": {
       "given": "Angenommen",

@@ -1,7 +1,7 @@
 # Initiative: service acceptance criteria — verification & lifecycle
 
-Status: **Phases 0–2 delivered; Phase 3 deliberately not pursued** (the first implementation was
-withdrawn — see below) · Owner: platform · Started: 2026-07-27
+Status: **Phases 0–2 + 4 delivered; Phase 3 deliberately not pursued** (the first implementation
+was withdrawn — see below) · Owner: platform · Started: 2026-07-27
 
 > **Next action for an operator:** run the three Phase 0 queries below against a real deployment
 > and fill in the results table. Nothing in Phases 1–2 depends on the answer; it only decides
@@ -95,6 +95,7 @@ layer or a new engine seam.
 | 1   | Implementation-state axis on `requirementItemSchema`         | done                    | —     |
 | 2   | Criterion → evidence section on the PR verification report   | done                    | —     |
 | 3   | Off-run promotion of a settled review into `spec/`           | not pursued (see below) | —     |
+| 4   | Implementation state + requirement evidence in the SPA       | done                    | —     |
 | —   | Withdrawn: per-service acceptance-criteria store             | closed                  | #1387 |
 | —   | Salvaged: `BoardService` removal-cascade extraction          | done                    | #1394 |
 
@@ -112,6 +113,12 @@ requirement ids — no second id space), a `requirements` section on `prVerifica
 (`PR_VERIFICATION_REPORT_VERSION` → 2), and the join in `prReport.logic.ts`, reading `spec/`
 through the existing `resolveRunRepoContext` seam — gated on a tester having reported and
 memoised per execution, so the settlements before the tester cost zero repo reads.
+
+**Slice 4** landed as the human half of Slice 1: an implementation-state badge on every
+requirement in the service-spec window, a per-group rollup with a three-way state filter, a
+service-wide rollup on the overview pane, and the tester's `requirementVerdicts` rendered on the
+tester step — the in-app twin of the PR report's requirement → evidence section. See the Phase 4
+section.
 
 **Slice 3 was not pursued**, on the tracker's own stated condition: `spec-writer` sits 0–1 steps
 behind the human gate in every built-in pipeline that pairs them, so Q3 is structurally
@@ -272,6 +279,50 @@ If a material share of settled reviews never reach `spec-writer` (parked-then-ab
 the spec-writer's ingest independent of the run: let a human promote a settled review's document
 into `spec/` from the inspector, reusing the same agent. **A staging table is still not indicated**
 — the `requirement_reviews` row already holds the document.
+
+### Phase 4 — The human surface for the implementation state — **DONE**
+
+Phase 1 put the `aspirational` / `established` axis in front of every AGENT consumer: the group
+markdown splits the two halves under headings that say what each means, the Gherkin render tags an
+aspirational scenario, the build and tester prompts carry the matching rules, and
+`specPromotionPostOp` maintains the field off the tester's verdicts. Phase 2 put the join in front
+of a PR REVIEWER. Nobody had put either in front of the platform's own reader: the service-spec
+window ("View Requirements") listed each requirement's priority and kind and could not say which of
+them the service is actually known to honour — the exact distinction the axis exists to draw, and
+the one a person opening the window is there to ask about.
+
+What landed, all in `@cat-factory/app`:
+
+- **A state badge on every requirement** in `ServiceSpecWindow.vue`, beside the existing priority
+  and kind chips, plus a **per-group rollup** (`Established: n/total`) and a **three-way filter**
+  (all / established / aspirational) over the group's requirements, and a **service-wide rollup**
+  on the overview pane so the headline answer is visible before drilling in.
+- **The tester's `requirementVerdicts` rendered on the tester step** (`StepTestReport.vue`), three-
+  valued exactly as the PR report renders them, so the evidence is readable in-app during the run
+  rather than only on the PR once the report publishes.
+- The counting/filtering is pure and lives in `ServiceSpecWindow.logic.ts` with its own
+  `.logic.spec.ts`, matching the `AppOverlayHost.logic.ts` pattern (the SFC-adjacent unit-testable
+  seam), since mounting Nuxt for a count is not the deal.
+
+**Frontend-only by construction, and that is the point.** `ServiceSpecView` already carries
+`state` (the backend reassembles the tree through the same `requirementItemSchema`, so the default
+is applied at the read boundary) and the verdicts already ride `step.testReport`. The axis had
+reached every wire shape it needed; only the last consumer was missing. No new endpoint, no new
+field, no backend change — so there is no facade-parity surface here either.
+
+Gotchas worth carrying:
+
+- **Read the state defensively.** `requirementState()` maps anything that is not literally
+  `established` to `aspirational`. That is not paranoia about the schema, it is the same answer the
+  domain gives: a requirement nobody has observed to hold is not standing behaviour, so an absent
+  or unrecognised value must land on the cautious side rather than claim the service honours it.
+- **Both lookups are enum-keyed, so both need the exhaustive `Record` guard** (i18n drift guard
+  tier 2): `Record<RequirementState, …>` in the window and
+  `Record<RequirementVerdictStatus, …>` in the tester panel, built from literal `t()` keys. A new
+  state or verdict then fails the typecheck instead of rendering a raw enum value at a reader.
+- **A filter that empties a non-empty group must say so.** Rendering nothing would read exactly
+  like "this group has no requirements", which is the same class of mistake as a silently missing
+  report section.
 
 ## Conventions & gotchas carried between iterations
 

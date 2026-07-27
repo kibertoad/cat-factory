@@ -1142,7 +1142,13 @@
       "fixing": "· düzeltiliyor…",
       "tested": "Test edildi",
       "outcomes": "Sonuçlar",
-      "concerns": "Endişeler"
+      "concerns": "Endişeler",
+      "requirementVerdicts": {
+        "title": "Gereksinim kararları",
+        "met": "Karşılandı",
+        "notMet": "Karşılanmadı",
+        "notCovered": "Kontrol edilmedi"
+      }
     },
     "stepMeta": {
       "stateLabel": "Durum",
@@ -4148,6 +4154,20 @@
       "functional": "İşlevsel",
       "nonfunctional": "İşlevsel olmayan",
       "constraint": "Kısıt"
+    },
+    "state": {
+      "established": "Doğrulanmış",
+      "aspirational": "Planlanan",
+      "establishedCount": "Doğrulanmış: {count}",
+      "aspirationalCount": "Planlanan: {count}",
+      "groupRollup": "Doğrulanmış: {established}/{total}",
+      "rollupHint": "“Doğrulanmış”, bir testçinin davranışı gözlemlediği anlamına gelir; “planlanan” ise üzerinde anlaşıldığı ama henüz uygulanmadığı anlamına gelir.",
+      "noneMatchFilter": "Bu gruptaki hiçbir gereksinim filtreyle eşleşmiyor.",
+      "filter": {
+        "all": "Tümü",
+        "established": "Doğrulanmış",
+        "aspirational": "Planlanan"
+      }
     },
     "acceptance": {
       "given": "Given",

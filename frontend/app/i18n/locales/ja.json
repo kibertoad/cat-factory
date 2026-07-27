@@ -1142,7 +1142,13 @@
       "fixing": "・修正中…",
       "tested": "テスト済み",
       "outcomes": "結果",
-      "concerns": "懸念事項"
+      "concerns": "懸念事項",
+      "requirementVerdicts": {
+        "title": "要件ごとの判定",
+        "met": "満たされている",
+        "notMet": "満たされていない",
+        "notCovered": "未確認"
+      }
     },
     "stepMeta": {
       "stateLabel": "状態",
@@ -4148,6 +4154,20 @@
       "functional": "機能要件",
       "nonfunctional": "非機能要件",
       "constraint": "制約"
+    },
+    "state": {
+      "established": "実証済み",
+      "aspirational": "未実証",
+      "establishedCount": "実証済み: {count}",
+      "aspirationalCount": "未実証: {count}",
+      "groupRollup": "実証済み: {established}/{total}",
+      "rollupHint": "「実証済み」はテスターが動作を確認したことを、「未実証」は合意済みだがまだ実装されていないことを示します。",
+      "noneMatchFilter": "このグループにフィルターと一致する要件はありません。",
+      "filter": {
+        "all": "すべて",
+        "established": "実証済み",
+        "aspirational": "未実証"
+      }
     },
     "acceptance": {
       "given": "Given",

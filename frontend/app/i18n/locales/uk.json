@@ -1142,7 +1142,13 @@
       "fixing": "· виправлення…",
       "tested": "Протестовано",
       "outcomes": "Результати",
-      "concerns": "Зауваження"
+      "concerns": "Зауваження",
+      "requirementVerdicts": {
+        "title": "Вердикти щодо вимог",
+        "met": "Виконано",
+        "notMet": "Не виконано",
+        "notCovered": "Не перевірено"
+      }
     },
     "stepMeta": {
       "stateLabel": "Стан",
@@ -4136,6 +4142,20 @@
       "functional": "Функціональна",
       "nonfunctional": "Нефункціональна",
       "constraint": "Обмеження"
+    },
+    "state": {
+      "established": "Підтверджено",
+      "aspirational": "Заплановано",
+      "establishedCount": "Підтверджено: {count}",
+      "aspirationalCount": "Заплановано: {count}",
+      "groupRollup": "Підтверджено: {established}/{total}",
+      "rollupHint": "«Підтверджено» означає, що тестувальник спостерігав цю поведінку; «заплановано» — що її погоджено, але ще не реалізовано.",
+      "noneMatchFilter": "Жодна вимога в цій групі не відповідає фільтру.",
+      "filter": {
+        "all": "Усі",
+        "established": "Підтверджено",
+        "aspirational": "Заплановано"
+      }
     },
     "acceptance": {
       "given": "Given",

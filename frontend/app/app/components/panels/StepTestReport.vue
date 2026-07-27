@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TestReport } from '~/types/domain'
+import type { RequirementVerdictStatus, TestReport } from '~/types/domain'
 import type { TesterStepState } from '~/types/execution'
 
 // A tester step's latest structured report (what was tested, the per-area outcomes,
@@ -21,6 +21,20 @@ const OUTCOME_COLOR: Record<string, string> = {
   passed: '#22c55e',
   failed: '#ef4444',
   skipped: '#64748b',
+}
+
+// Per-spec-requirement verdicts, keyed by the requirement id the service's in-repo `spec/`
+// carries. THREE-VALUED on purpose: "we didn't check" and "it's broken" must never render the
+// same, which is the whole reason the tester reports the list. Exhaustive `Record` over the
+// closed union (drift guard tier 2) with literal `t()` keys, so a new status fails the
+// typecheck rather than rendering a raw enum value.
+const VERDICT_META: Record<RequirementVerdictStatus, { label: string; color: string }> = {
+  met: { label: t('panels.testReport.requirementVerdicts.met'), color: '#22c55e' },
+  not_met: { label: t('panels.testReport.requirementVerdicts.notMet'), color: '#ef4444' },
+  not_covered: {
+    label: t('panels.testReport.requirementVerdicts.notCovered'),
+    color: '#64748b',
+  },
 }
 </script>
 
@@ -62,6 +76,35 @@ const OUTCOME_COLOR: Record<string, string> = {
         <span class="text-slate-300"
           >{{ o.name }}<span v-if="o.detail" class="text-slate-500"> — {{ o.detail }}</span></span
         >
+      </div>
+    </div>
+
+    <!-- requirement → evidence, in-app twin of the PR verification report's section: which of
+         the service's written-down requirements this run actually ruled on, and what it saw -->
+    <div
+      v-if="report.requirementVerdicts?.length"
+      class="mb-3 space-y-1"
+      data-testid="test-report-requirement-verdicts"
+    >
+      <div class="text-[11px] text-slate-500">
+        {{ t('panels.testReport.requirementVerdicts.title') }}
+      </div>
+      <div
+        v-for="(verdict, i) in report.requirementVerdicts"
+        :key="i"
+        class="flex items-start gap-2 text-[12px]"
+      >
+        <span
+          class="mt-1 h-2 w-2 shrink-0 rounded-full"
+          :style="{ backgroundColor: VERDICT_META[verdict.status]?.color ?? '#64748b' }"
+        />
+        <span class="text-slate-300">
+          <span class="font-mono text-[11px] text-slate-400">{{ verdict.requirementId }}</span>
+          <span class="text-slate-500">
+            — {{ VERDICT_META[verdict.status]?.label ?? verdict.status }}</span
+          >
+          <span v-if="verdict.detail" class="text-slate-500"> · {{ verdict.detail }}</span>
+        </span>
       </div>
     </div>
 
