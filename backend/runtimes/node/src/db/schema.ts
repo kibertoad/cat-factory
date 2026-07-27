@@ -353,6 +353,8 @@ export const blocks = pgTable(
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
     tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
+    // ...and the headless clarification loop's question echo (mirror of D1 migration 0062).
+    tracker_questions_on_park: text('tracker_questions_on_park'),
     // Headless marker (mirrors the D1 `blocks.internal` column): 1 ⇒ a public-API "initiative"
     // anchor block, excluded from every board projection. Null/absent ⇒ a normal, visible block.
     internal: integer('internal'),
@@ -1167,77 +1169,6 @@ export const notificationWebhooks = pgTable('notification_webhooks', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
-// A workspace's issue-tracker selection (mirror of D1 migration 0029).
-export const trackerSettings = pgTable('tracker_settings', {
-  workspace_id: text('workspace_id').primaryKey(),
-  tracker: text('tracker'),
-  jira_project_key: text('jira_project_key'),
-  linear_team_id: text('linear_team_id'),
-  // Issue-tracker writeback toggles (0/1): comment on a task's linked issue when its
-  // PR opens, and comment + close as resolved when it merges. Per-task overridable.
-  writeback_comment_on_pr_open: integer('writeback_comment_on_pr_open').notNull().default(0),
-  writeback_resolve_on_merge: integer('writeback_resolve_on_merge').notNull().default(0),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
-
-// Task-source integration (mirror of D1 migration 0014): a workspace's connections
-// to external issue trackers (Jira) and local projections of the issues it imported.
-// `credentials` is an encrypted JSON bag (AES-256-GCM envelope), never sent on the
-// wire. At most one live connection per (workspace, source); a `deleted_at` tombstone
-// lets a workspace disconnect/reconnect.
-export const taskConnections = pgTable(
-  'task_connections',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    credentials: text('credentials').notNull(),
-    label: text('label').notNull().default(''),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
-)
-
-// Per-workspace task-source toggle (mirrors D1 migration 0008). No row ⇒ the
-// default (enabled), so a source is offered as soon as it's available; an
-// `enabled: false` row is an explicit opt-out. Replaces the TASK_SOURCES env gate.
-export const taskSourceSettings = pgTable(
-  'task_source_settings',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    // Integer 0/1 to match the D1 (SQLite) store, per this file's boolean convention.
-    enabled: integer('enabled').notNull().default(1),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.source] })],
-)
-
-export const tasks = pgTable(
-  'tasks',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    source: text('source').notNull(),
-    external_id: text('external_id').notNull(),
-    title: text('title').notNull(),
-    url: text('url').notNull(),
-    status: text('status').notNull().default(''),
-    type: text('type').notNull().default(''),
-    assignee: text('assignee'),
-    priority: text('priority'),
-    labels: text('labels').notNull().default('[]'),
-    description: text('description').notNull().default(''),
-    comments: text('comments').notNull().default('[]'),
-    excerpt: text('excerpt').notNull().default(''),
-    linked_block_id: text('linked_block_id'),
-    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
-    index('idx_tasks_block').on(t.workspace_id, t.linked_block_id),
-  ],
-)
-
 // A workspace's binding to a self-hosted runner pool (mirror of D1 migration 0013):
 // the validated manifest + the encrypted scheduler-API secret bundle. The container
 // agent executor dispatches repo-operating jobs to this pool when one is registered.
@@ -1466,6 +1397,7 @@ export const sharedStacks = pgTable(
 // here so `db/schema.ts` remains the ONE import surface for the Drizzle schema: every repository,
 // the boot migrator and drizzle-kit's snapshot generation all read it from this module.
 export * from './schema/sandbox.js'
+export * from './schema/tracker.js'
 
 // The opt-in integration tables (sealed connections + per-service-frame integration config)
 // live in their own module; re-exported here so drizzle-kit still sees one schema graph and

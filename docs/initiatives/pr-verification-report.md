@@ -130,7 +130,8 @@ The reference implementation is the merge/mergeability provider shape — a kern
   `@name` / `!123` auto-link (a mention notifies a real person), a **closing keyword in front of
   an issue reference closes that issue when the PR merges**, a raw newline ends a table row, and
   an unbalanced code fence swallows the JSON block that is the machine-readable contract. Every
-  interpolation therefore goes through `prReportText.logic.ts` (`cell` / `inline` / `prose`).
+  interpolation therefore goes through kernel's `hostMarkdown` boundary (`cell` / `inline` /
+  `prose`), shared with the tracker-issue writebacks.
   Two traps found the hard way: the escapes must run in ONE regex pass (each emits a `#`, so a
   chained `.replace()` re-escapes the previous one's output — `@` → `&#64;` → `&&#35;64;`), and
   they must skip inline code spans (the host does not auto-link there, so escaping only shows the

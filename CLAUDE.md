@@ -1184,6 +1184,33 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   (`ExecutionInstance.intakeOrigin`, `ui` | `public-api`, in the `detail` JSON, carried across
   retry/restart) — a UI-started task's overseer is in the SPA and its behaviour is unchanged. See
   [`docs/initiatives/headless-clarification-loop.md`](./docs/initiatives/headless-clarification-loop.md).
+- **A HEADLESS park also ECHOES its open findings onto the task's linked tracker issue(s)**, opt-in
+  per workspace (`TrackerSettings.writebackQuestionsOnPark`, per-task override
+  `Block.trackerQuestionsOnPark`, resolved through the shared `resolveWritebackFlag`). Every
+  requirements park funnels through the single `ReviewGateController.park()`, which consults the
+  pure `shouldPostReviewQuestions` (`reviewQuestionWriteback.logic.ts`) — `intakeOrigin ===
+'public-api'`, a parking status, at least one OPEN finding — then calls
+  `IssueWritebackProvider.postReviewQuestions`. The comment renders each finding's **stable id**,
+  which is exactly what the `/api/v1/runs/:runId/decisions/…/items/:itemId/reply` route above takes.
+  Two rules govern anything added here: the echo rides the **requirements** subject only
+  (`ReviewKind.questionsOnPark` — the clarity gate already echoes its questions as INTAKE semantics
+  from its own `review()` closure, for every run, so opting it in would double-post), and because
+  the post runs in the **durable driver**, whose steps replay, it is idempotent by an ATOMIC CLAIM
+  on `review_question_posts` (`(workspace, review, iteration, issue)`, D1 ⇄ Drizzle) taken BEFORE
+  the comment — never by a marker written after it. A `failed` marker is re-claimable so a tracker
+  outage retries; `posted` is terminal for that iteration; a `pending` one is re-claimable only
+  once older than `REVIEW_QUESTION_POST_CLAIM_TTL_MS`, so a poster killed mid-post self-heals
+  instead of muting that iteration forever (a claim-before-post design must ALWAYS answer "what if
+  the claimer dies", or it has merely traded a double-post for a silent never-post). For the same
+  reason the post carries **no wall-clock deadline**: a timeout cannot tell "never landed" from
+  "landed slowly", and settling on that guess re-posts onto an issue a human is reading — a hung
+  transport is cut off by the driver's own step limit and recovered by that window instead.
+  Best-effort throughout, and ordered accordingly: **the park is committed FIRST** and the echo
+  runs behind it (a run that failed to park answers nobody, so it must never queue behind a third
+  party's HTTP), and the in-app `requirement_review` card the reviewer pass raises is unaffected.
+  The comment body is UNTRUSTED, model-authored text going onto a host-parsed — often public —
+  surface, so every hole crosses kernel's shared `hostMarkdown` boundary and `redactSecrets`,
+  exactly like the PR verification report; a tracker comment is no less exposed than a PR body.
 
 ## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
 
@@ -1424,8 +1451,8 @@ live in [`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-ver
   feature exists to remove. Same rule for a CAPPED list: every per-list cap records what it left
   out in the report's own `truncations` log (rendered as an "Omitted for length" section), because
   "50 failing checks" and "50 of 118" call for very different reviewer reactions.
-- **A PR body is NOT an inert string sink, and `prReportText.logic.ts` is the boundary that
-  treats it as such.** The host parses what is written there, and almost everything the report
+- **A PR body is NOT an inert string sink, and kernel's `hostMarkdown`
+  (`shared/host-markdown.logic.ts`) is the boundary that treats it as such.** The host parses what is written there, and almost everything the report
   interpolates is agent- or human-authored, so every hazard is live: `#123`/`@name`/`!123` are
   auto-linked (a mention notifies a real account), a **closing keyword in front of an issue
   reference CLOSES that issue when the PR merges** ("This closes #42" is idiomatic prose for a

@@ -350,6 +350,10 @@
         "resolveOnMerge": {
           "label": "Beim Mergen eines PR als gelöst schließen",
           "help": "Kommentiere, dass der PR gemergt wurde, und schließe / löse dann das verknüpfte Issue."
+        },
+        "questionsOnPark": {
+          "label": "Offene Fragen bei einem pausierten Headless-Lauf posten",
+          "help": "Wenn ein über die API gestarteter Lauf zur Klärung der Anforderungen pausiert, poste seine offenen Fragen — jeweils mit der ID, die eine Antwort nennt — am verknüpften Issue. In der App gestartete Aufgaben sind nicht betroffen."
         }
       },
       "probeFailure": {
@@ -1330,6 +1334,7 @@
       "issueWriteback": "Issue-Rückschreibung",
       "commentOnPrOpen": "Kommentar beim PR-Öffnen",
       "closeOnMerge": "Beim Mergen schließen",
+      "questionsOnPark": "Fragen beim Pausieren stellen",
       "writebackHint": "Schreibt zurück in das verknüpfte Tracker-Issue dieser Aufgabe. Überschreibt den Workspace-Standard.",
       "responsibleProduct": "Verantwortliches Produkt",
       "responsibleEmpty": "Nicht zugewiesen. Setze einen Product Owner, um ihn zu benachrichtigen, wenn die Anforderungsprüfung diese Aufgabe kennzeichnet.",

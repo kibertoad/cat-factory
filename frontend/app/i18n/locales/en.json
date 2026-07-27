@@ -1088,6 +1088,7 @@
       "issueWriteback": "Issue writeback",
       "commentOnPrOpen": "Comment on PR open",
       "closeOnMerge": "Close on merge",
+      "questionsOnPark": "Ask questions on park",
       "writebackHint": "Writes back to this task's linked tracker issue. Overrides the workspace default.",
       "responsibleProduct": "Responsible product",
       "responsibleEmpty": "Unassigned. Set a product owner to notify them when requirement review flags this task.",
@@ -2419,6 +2420,10 @@
         "resolveOnMerge": {
           "label": "Close as resolved when a PR merges",
           "help": "Comment that the PR merged, then close / resolve the linked issue."
+        },
+        "questionsOnPark": {
+          "label": "Post open questions on a parked headless run",
+          "help": "When a run started through the API pauses to clarify requirements, post its open questions — each with the id an answer names — on the linked issue. Tasks started in the app are unaffected."
         }
       },
       "probeFailure": {

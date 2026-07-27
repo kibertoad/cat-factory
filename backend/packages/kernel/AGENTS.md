@@ -24,6 +24,14 @@ else imports its **ports** and domain types from here.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).
+- `shared/host-markdown.logic.ts` — the **host text boundary** (`hostMarkdown.inline` / `cell` /
+  `prose` / `balanceFences` / `capList`): the one place untrusted, mostly model-authored text is
+  made safe to send to a VCS/tracker host. It defuses the auto-link triggers that would otherwise
+  notify a real account, cross-link an unrelated issue, or close one on merge, and balances code
+  fences. It lives in kernel because BOTH the PR verification report (orchestration) and the
+  tracker-issue writebacks (integrations) render through it — a second copy is how one of them
+  drifts into paging a stranger. Anything host-bound picks one of the three renderers; never a
+  bare template hole.
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,

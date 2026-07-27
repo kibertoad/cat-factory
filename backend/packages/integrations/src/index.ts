@@ -138,6 +138,10 @@ export {
   type IssueWritebackServiceDependencies,
 } from './modules/writeback/IssueWritebackService.js'
 export {
+  issueRefFor,
+  renderReviewQuestionsComment,
+} from './modules/writeback/reviewQuestions.logic.js'
+export {
   createGitHubIssueViaToken,
   type GitHubIssueTokenRequest,
 } from './modules/tracker/github.create.logic.js'

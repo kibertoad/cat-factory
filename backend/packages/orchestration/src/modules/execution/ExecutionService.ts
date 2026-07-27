@@ -410,6 +410,8 @@ export class ExecutionService {
       branchUpdater,
       resolveBinaryArtifactStore,
       forkChatService,
+      issueWriteback,
+      logger,
     })
     this.testerController = gateWindows.testerController
     this.ralphController = gateWindows.ralphController

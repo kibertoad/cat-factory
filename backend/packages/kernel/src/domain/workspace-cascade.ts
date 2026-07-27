@@ -84,6 +84,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'reference_architectures',
   'release_health_configs',
   'requirement_reviews',
+  'review_question_posts',
   'runner_pool_connections',
   'shared_stacks',
   'slack_settings',

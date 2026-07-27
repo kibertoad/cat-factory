@@ -1031,6 +1031,7 @@
       "issueWriteback": "Réécriture d'issue",
       "commentOnPrOpen": "Commenter à l'ouverture de la PR",
       "closeOnMerge": "Fermer à la fusion",
+      "questionsOnPark": "Poser les questions en pause",
       "writebackHint": "Réécrit dans l'issue de tracker liée à cette tâche. Remplace la valeur par défaut de l'espace de travail.",
       "responsibleProduct": "Produit responsable",
       "responsibleEmpty": "Non assigné. Définissez un responsable produit pour le notifier lorsque la revue d'exigences signale cette tâche.",
@@ -2231,6 +2232,10 @@
         "resolveOnMerge": {
           "label": "Clore comme résolu à la fusion d'une PR",
           "help": "Commente que la PR a été fusionnée, puis ferme / résout le ticket lié."
+        },
+        "questionsOnPark": {
+          "label": "Publier les questions ouvertes d'une exécution headless en pause",
+          "help": "Quand une exécution lancée via l'API se met en pause pour clarifier les exigences, publie ses questions ouvertes — chacune avec l'identifiant qu'une réponse doit nommer — sur le ticket lié. Les tâches lancées dans l'application ne sont pas concernées."
         }
       },
       "probeFailure": {

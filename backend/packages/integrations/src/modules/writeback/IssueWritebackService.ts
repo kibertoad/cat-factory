@@ -1,12 +1,19 @@
 import {
+  redactSecrets,
   resolveWritebackFlag,
+  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
+  type Clock,
   type IssueWritebackProvider,
   type PullRequestRef,
+  type ReviewQuestionPost,
+  type ReviewQuestionPostOutcome,
+  type ReviewQuestionPostRepository,
   type TaskRecord,
   type TaskRepository,
   type TrackerSettingsRepository,
 } from '@cat-factory/kernel'
+import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import {
   buildJiraCommentPayload,
   pickTransitionByCategory,
@@ -49,6 +56,13 @@ export interface IssueWritebackServiceDependencies {
    * Post a comment on a GitHub issue identified by its `owner/repo#number` external
    * id. The facade resolves the workspace's installation + repo ref and calls
    * `GitHubClient.comment`. Absent → GitHub writeback passes through.
+   *
+   * MUST THROW when it cannot deliver — an unparseable external id, or a workspace whose
+   * installation is gone. Returning normally is the seam's promise that the comment landed. The
+   * fire-and-forget hooks swallow the throw as they always have, but the parked-review writeback
+   * depends on it: a facade that silently returned on an unresolved target would have its marker
+   * recorded `posted` for a comment nobody ever received, permanently suppressing the retry that
+   * reconnecting the installation should produce.
    */
   commentOnGitHubIssue?: (workspaceId: string, externalId: string, body: string) => Promise<void>
   /**
@@ -74,6 +88,18 @@ export interface IssueWritebackServiceDependencies {
   resolveLinearConnection?: (workspaceId: string) => Promise<LinearConnection | null>
   /** HTTP transport for the Jira/Linear calls (each runtime exposes a global `fetch`). */
   fetchImpl?: FetchLike
+  /**
+   * Idempotency markers for the parked-review question writeback. Absent → the writeback
+   * passes through entirely, because posting without a marker would re-post the same
+   * findings on every durable-driver replay (see the port doc).
+   */
+  reviewQuestionPostRepository?: ReviewQuestionPostRepository
+  /**
+   * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
+   * like every other service here; defaults to the real clock so a test can pin time without
+   * every construction site having to.
+   */
+  clock?: Clock
 }
 
 /** The GitHub in-progress label applied on pickup when the schedule doesn't name one. */
@@ -92,7 +118,9 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
     const body = `🔧 A pull request was opened for this issue: ${pr.url}`
-    await this.forEachIssue(issues, (issue) => this.comment(workspaceId, issue, body))
+    await this.forEachIssue(issues, async (issue) => {
+      await this.comment(workspaceId, issue, body)
+    })
   }
 
   async onPullRequestMerged(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
@@ -144,7 +172,79 @@ export class IssueWritebackService implements IssueWritebackProvider {
       '',
       ...asked.map((q) => `- ${q}`),
     ].join('\n')
-    await this.forEachIssue(issues, (issue) => this.comment(workspaceId, issue, body))
+    await this.forEachIssue(issues, async (issue) => {
+      await this.comment(workspaceId, issue, body)
+    })
+  }
+
+  async postReviewQuestions(
+    workspaceId: string,
+    block: Block,
+    post: ReviewQuestionPost,
+  ): Promise<ReviewQuestionPostOutcome> {
+    const empty: ReviewQuestionPostOutcome = { posted: 0, skipped: 0, failed: 0 }
+    const markers = this.deps.reviewQuestionPostRepository
+    // No marker store ⇒ no idempotency ⇒ a replaying driver would spam the issue. Pass through
+    // rather than post unsafely; the park is still surfaced by the in-app review card.
+    if (!markers || post.findings.length === 0) return empty
+
+    const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
+    const enabled = resolveWritebackFlag(
+      settings?.writebackQuestionsOnPark ?? false,
+      block.trackerQuestionsOnPark,
+    )
+    if (!enabled) return empty
+
+    const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
+    if (issues.length === 0) return empty
+
+    const body = renderReviewQuestionsComment(post)
+    const now = () => (this.deps.clock ?? Date).now()
+    const outcome = { ...empty }
+    // Sequential on purpose: a review typically has ONE linked issue, and posting the same
+    // long comment to several trackers at once buys nothing while making a rate-limit
+    // response more likely.
+    for (const issue of issues) {
+      const key = {
+        workspaceId,
+        reviewId: post.reviewId,
+        iteration: post.iteration,
+        issueRef: issueRefFor(issue),
+      }
+      // Claim BEFORE posting: a crash between the comment and the marker write must not
+      // re-post on the next replay. A `failed` marker is re-claimable, so a tracker outage is
+      // retried rather than swallowed; a long-abandoned `pending` one is re-claimable too, so
+      // a poster killed mid-post doesn't silence this iteration forever.
+      const at = now()
+      const window = {
+        now: at,
+        reclaimPendingBefore: at - REVIEW_QUESTION_POST_CLAIM_TTL_MS,
+      }
+      if (!(await markers.claim(key, window).catch(() => false))) {
+        outcome.skipped += 1
+        continue
+      }
+      try {
+        // Deliberately NOT wrapped in a wall-clock deadline. A timeout cannot distinguish "the
+        // comment never landed" from "it landed, slowly": settling `failed` on that guess makes
+        // the next replay post a SECOND copy onto an issue a human is reading, which is the one
+        // outcome this whole marker exists to prevent. A hung transport is instead cut off by
+        // the driver's own step limit, and the claim's abandonment window (above) makes that
+        // row re-claimable — self-healing without ever inventing a duplicate.
+        const delivered = await this.comment(workspaceId, issue, body)
+        if (!delivered) throw new Error(`No ${issue.source} comment transport is wired`)
+        await markers.settle(key, { status: 'posted' }, now())
+        outcome.posted += 1
+      } catch (e) {
+        outcome.failed += 1
+        // Scrubbed like every other stored free text: a transport error can quote the request
+        // URL, and this row is read back by operators (and, in slice 2b, by support tooling).
+        const raw = e instanceof Error ? e.message : String(e)
+        const error = (redactSecrets(raw) ?? '').slice(0, 500)
+        await markers.settle(key, { status: 'failed', error }, now()).catch(() => {})
+      }
+    }
+    return outcome
   }
 
   /** Run a writeback per issue, isolating failures so one bad issue can't block the rest. */
@@ -155,21 +255,34 @@ export class IssueWritebackService implements IssueWritebackProvider {
     await Promise.all(issues.map((issue) => fn(issue).catch(() => {})))
   }
 
-  private async comment(workspaceId: string, issue: TaskRecord, body: string): Promise<void> {
+  /**
+   * Post a comment on one linked issue. Returns whether this deployment has a transport for that
+   * issue's source at all; a wired transport that cannot deliver THROWS (see the seam docs), so
+   * `true` means the comment landed. The fire-and-forget hooks ignore both signals, but the
+   * parked-review writeback distinguishes them: an unwired source is a permanent no-op to retry
+   * once someone wires it, a throw is a failure to retry on the next replay, and neither may be
+   * recorded as `posted`.
+   */
+  private async comment(workspaceId: string, issue: TaskRecord, body: string): Promise<boolean> {
     if (issue.source === 'github') {
-      await this.deps.commentOnGitHubIssue?.(workspaceId, issue.externalId, body)
-      return
+      if (!this.deps.commentOnGitHubIssue) return false
+      await this.deps.commentOnGitHubIssue(workspaceId, issue.externalId, body)
+      return true
     }
     if (issue.source === 'jira') {
+      if (!this.deps.resolveJiraConnection || !this.deps.fetchImpl) return false
       await this.jiraRequest(workspaceId, `issue/${encodeURIComponent(issue.externalId)}/comment`, {
         method: 'POST',
         body: buildJiraCommentPayload(body),
       })
-      return
+      return true
     }
     if (issue.source === 'linear') {
+      if (!this.deps.resolveLinearConnection || !this.deps.fetchImpl) return false
       await this.commentLinear(workspaceId, issue.externalId, body)
+      return true
     }
+    return false
   }
 
   private async resolve(workspaceId: string, issue: TaskRecord): Promise<void> {

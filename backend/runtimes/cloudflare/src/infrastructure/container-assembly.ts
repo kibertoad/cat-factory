@@ -97,7 +97,6 @@ import {
   selectIncidentEnrichmentDeps,
   selectMergeLifecycleDeps,
   selectPackageRegistryDeps,
-  selectRecurringDeps,
   selectReleaseHealthDeps,
   selectRepoBootstrapper,
   selectRequirementsDeps,
@@ -109,6 +108,7 @@ import {
   selectTraceSink,
   selectWorkRunner,
 } from './container.js'
+import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectGitHubDeps } from './github-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
 

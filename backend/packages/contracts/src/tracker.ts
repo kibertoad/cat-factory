@@ -31,6 +31,17 @@ export const trackerSettingsSchema = v.object({
    * Per-task overridable via `Block.trackerResolveOnMerge`. Default off.
    */
   writebackResolveOnMerge: v.boolean(),
+  /**
+   * Writeback: when a HEADLESS run's requirements review parks with open findings, post
+   * them — each with its stable finding id — as a comment on the task's linked tracker
+   * issue(s), so the loop is answerable from where the work was requested. Per-task
+   * overridable via `Block.trackerQuestionsOnPark`. Default off.
+   *
+   * Deliberately scoped to runs whose `ExecutionInstance.intakeOrigin` is `public-api`:
+   * a task started in the SPA has a human overseer in the app and its clarification
+   * surface is unchanged (see `docs/initiatives/headless-clarification-loop.md`).
+   */
+  writebackQuestionsOnPark: v.boolean(),
   updatedAt: v.number(),
 })
 export type TrackerSettings = v.InferOutput<typeof trackerSettingsSchema>
@@ -42,5 +53,6 @@ export const putTrackerSettingsSchema = v.object({
   linearTeamId: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),
   writebackCommentOnPrOpen: v.optional(v.boolean()),
   writebackResolveOnMerge: v.optional(v.boolean()),
+  writebackQuestionsOnPark: v.optional(v.boolean()),
 })
 export type PutTrackerSettingsInput = v.InferOutput<typeof putTrackerSettingsSchema>

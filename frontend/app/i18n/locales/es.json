@@ -1031,6 +1031,7 @@
       "issueWriteback": "Reescritura de incidencias",
       "commentOnPrOpen": "Comentar al abrir el PR",
       "closeOnMerge": "Cerrar al fusionar",
+      "questionsOnPark": "Preguntar al pausarse",
       "writebackHint": "Reescribe en la incidencia del tracker vinculada a esta tarea. Anula el valor predeterminado del espacio de trabajo.",
       "responsibleProduct": "Producto responsable",
       "responsibleEmpty": "Sin asignar. Define un responsable de producto para notificarle cuando la revisión de requisitos marque esta tarea.",
@@ -2231,6 +2232,10 @@
         "resolveOnMerge": {
           "label": "Cerrar como resuelta cuando se fusiona un PR",
           "help": "Comenta que el PR se fusionó y luego cierra / resuelve la incidencia vinculada."
+        },
+        "questionsOnPark": {
+          "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
+          "help": "Cuando una ejecución iniciada por la API se detiene para aclarar requisitos, publica sus preguntas abiertas — cada una con el id que debe nombrar la respuesta — en la incidencia vinculada. Las tareas iniciadas en la aplicación no se ven afectadas."
         }
       },
       "probeFailure": {

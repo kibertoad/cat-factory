@@ -65,6 +65,10 @@ export interface GateWindowControllerDeps {
   branchUpdater: ExecutionServiceDependencies['branchUpdater']
   resolveBinaryArtifactStore: ExecutionServiceDependencies['resolveBinaryArtifactStore']
   forkChatService: ExecutionServiceDependencies['forkChatService']
+  /** Tracker writeback — the review gate echoes a HEADLESS park's open findings through it. */
+  issueWriteback: ExecutionServiceDependencies['issueWriteback']
+  /** Facade logger for that best-effort echo. */
+  logger: ExecutionServiceDependencies['logger']
 }
 
 /**
@@ -91,6 +95,8 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     branchUpdater,
     resolveBinaryArtifactStore,
     forkChatService,
+    issueWriteback,
+    logger,
   } = deps
   const testerController = new TesterController({
     blockRepository,
@@ -179,6 +185,8 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     stepGraph,
     resolveRiskPolicy,
     dispatchIterationCap,
+    ...(issueWriteback ? { issueWriteback } : {}),
+    ...(logger ? { logger } : {}),
   })
   const forkDecisionController = new ForkDecisionController({
     blockRepository,
