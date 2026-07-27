@@ -2199,7 +2199,7 @@
         "intro": "対象リポジトリのプレビュー用ワークフローを起動して、プルリクエストごとに Cloudflare Worker を立ち上げます。cat-factory が Cloudflare と直接やり取りすることはありません。デプロイメントを作成し、その状態を読み取り、破棄時には inactive 状態を書き込みます。",
         "label": "表示名",
         "subdomain": "workers.dev サブドメイン",
-        "subdomainHint": "プレビュー URL は https://<worker>.<サブドメイン>.workers.dev です。「.workers.dev」を除いたラベルのみを入力してください。",
+        "subdomainHint": "プレビュー URL は https://WORKER.SUBDOMAIN.workers.dev になります。「.workers.dev」を除いたサブドメインのラベルだけを入力してください。",
         "token": "VCS API トークン",
         "tokenPlaceholder": "細かい権限のトークンを貼り付けてください",
         "tokenKeep": "空欄のままにすると保存済みのトークンを保持します",

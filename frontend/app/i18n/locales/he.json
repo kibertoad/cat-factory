@@ -2198,7 +2198,7 @@
         "intro": "מקים Worker של Cloudflare לכל בקשת משיכה על ידי הפעלת תהליך העבודה לתצוגה מקדימה של המאגר היעד. cat-factory אף פעם לא פונה ישירות ל-Cloudflare: הוא יוצר פריסה, קורא את מצבה, ומפרסם מצב inactive כדי לפרק אותה.",
         "label": "שם לתצוגה",
         "subdomain": "תת-דומיין של workers.dev",
-        "subdomainHint": "כתובת התצוגה המקדימה היא https://<worker>.<תת-דומיין>.workers.dev. רק התווית, בלי \".workers.dev\".",
+        "subdomainHint": "כתובת התצוגה המקדימה תהיה https://WORKER.SUBDOMAIN.workers.dev — הזן רק את תווית תת-הדומיין, בלי \".workers.dev\".",
         "token": "אסימון API של מערכת ניהול הגרסאות",
         "tokenPlaceholder": "הדבק אסימון בעל הרשאות מדויקות",
         "tokenKeep": "השאר ריק כדי לשמור על האסימון הקיים",

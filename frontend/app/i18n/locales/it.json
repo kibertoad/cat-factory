@@ -180,7 +180,7 @@
         "intro": "Avvia un Worker Cloudflare per ogni pull request attivando il workflow di anteprima del repository di destinazione. cat-factory non parla mai direttamente con Cloudflare: crea un deployment, ne legge lo stato e pubblica uno stato inactive per smantellarlo.",
         "label": "Nome visualizzato",
         "subdomain": "Sottodominio workers.dev",
-        "subdomainHint": "L’URL di anteprima è https://<worker>.<sottodominio>.workers.dev. Solo l’etichetta, senza \".workers.dev\".",
+        "subdomainHint": "L’URL di anteprima diventa https://WORKER.SUBDOMAIN.workers.dev: inserisci solo l’etichetta del sottodominio, senza \".workers.dev\".",
         "token": "Token API del VCS",
         "tokenPlaceholder": "Incolla un token a granularità fine",
         "tokenKeep": "Lascia vuoto per mantenere il token salvato",

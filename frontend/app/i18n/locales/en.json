@@ -2265,7 +2265,7 @@
         "intro": "Stands up a per-pull-request Cloudflare Worker by driving the target repository's own preview workflow. cat-factory never talks to Cloudflare directly: it creates a deployment, reads its status, and posts an inactive status to tear down.",
         "label": "Display name",
         "subdomain": "workers.dev subdomain",
-        "subdomainHint": "The preview URL is https://<worker>.<subdomain>.workers.dev. Just the label, without \".workers.dev\".",
+        "subdomainHint": "The preview URL becomes https://WORKER.SUBDOMAIN.workers.dev — enter just the subdomain label, without \".workers.dev\".",
         "token": "VCS API token",
         "tokenPlaceholder": "Paste a fine-grained token",
         "tokenKeep": "Leave blank to keep the stored token",

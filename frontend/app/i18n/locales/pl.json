@@ -2863,7 +2863,7 @@
         "intro": "Uruchamia Worker Cloudflare dla każdego pull requesta, wyzwalając workflow podglądu w docelowym repozytorium. cat-factory nigdy nie komunikuje się bezpośrednio z Cloudflare: tworzy wdrożenie, odczytuje jego status i publikuje status inactive, aby je usunąć.",
         "label": "Nazwa wyświetlana",
         "subdomain": "Subdomena workers.dev",
-        "subdomainHint": "Adres podglądu to https://<worker>.<subdomena>.workers.dev. Tylko etykieta, bez „.workers.dev”.",
+        "subdomainHint": "Adres podglądu to https://WORKER.SUBDOMAIN.workers.dev — wpisz samą etykietę subdomeny, bez „.workers.dev”.",
         "token": "Token API systemu kontroli wersji",
         "tokenPlaceholder": "Wklej token o precyzyjnych uprawnieniach",
         "tokenKeep": "Pozostaw puste, aby zachować zapisany token",

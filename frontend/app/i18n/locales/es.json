@@ -2863,7 +2863,7 @@
         "intro": "Levanta un Worker de Cloudflare por cada pull request activando el flujo de trabajo de vista previa del repositorio de destino. cat-factory nunca habla directamente con Cloudflare: crea un despliegue, lee su estado y publica un estado inactive para desmontarlo.",
         "label": "Nombre visible",
         "subdomain": "Subdominio de workers.dev",
-        "subdomainHint": "La URL de vista previa es https://<worker>.<subdominio>.workers.dev. Solo la etiqueta, sin \".workers.dev\".",
+        "subdomainHint": "La URL de vista previa será https://WORKER.SUBDOMAIN.workers.dev: introduce solo la etiqueta del subdominio, sin \".workers.dev\".",
         "token": "Token de la API del VCS",
         "tokenPlaceholder": "Pega un token de permisos detallados",
         "tokenKeep": "Déjalo en blanco para conservar el token guardado",

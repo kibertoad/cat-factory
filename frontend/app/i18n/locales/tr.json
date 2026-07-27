@@ -2199,7 +2199,7 @@
         "intro": "Hedef deponun kendi önizleme iş akışını tetikleyerek her pull request için bir Cloudflare Worker ayağa kaldırır. cat-factory Cloudflare ile hiçbir zaman doğrudan konuşmaz: bir dağıtım oluşturur, durumunu okur ve kaldırmak için inactive durumu yazar.",
         "label": "Görünen ad",
         "subdomain": "workers.dev alt alan adı",
-        "subdomainHint": "Önizleme adresi https://<worker>.<alt-alan>.workers.dev biçimindedir. Yalnızca etiketi girin, \".workers.dev\" olmadan.",
+        "subdomainHint": "Önizleme adresi https://WORKER.SUBDOMAIN.workers.dev olur — yalnızca alt alan adı etiketini girin, \".workers.dev\" olmadan.",
         "token": "VCS API belirteci",
         "tokenPlaceholder": "İnce ayarlı bir belirteç yapıştırın",
         "tokenKeep": "Kayıtlı belirteci korumak için boş bırakın",

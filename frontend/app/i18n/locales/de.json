@@ -180,7 +180,7 @@
         "intro": "Startet pro Pull Request einen Cloudflare Worker, indem der Preview-Workflow des Ziel-Repositorys angestoßen wird. cat-factory spricht nie direkt mit Cloudflare: Es legt ein Deployment an, liest dessen Status und setzt zum Abbau einen inactive-Status.",
         "label": "Anzeigename",
         "subdomain": "workers.dev-Subdomain",
-        "subdomainHint": "Die Preview-URL lautet https://<worker>.<subdomain>.workers.dev. Nur das Label, ohne \".workers.dev\".",
+        "subdomainHint": "Die Preview-URL lautet https://WORKER.SUBDOMAIN.workers.dev — gib nur das Subdomain-Label ein, ohne \".workers.dev\".",
         "token": "VCS-API-Token",
         "tokenPlaceholder": "Fein granuliertes Token einfügen",
         "tokenKeep": "Leer lassen, um das gespeicherte Token zu behalten",

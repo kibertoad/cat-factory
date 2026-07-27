@@ -2863,7 +2863,7 @@
         "intro": "Déploie un Worker Cloudflare par pull request en déclenchant le workflow d’aperçu du dépôt cible. cat-factory ne parle jamais directement à Cloudflare : il crée un déploiement, lit son statut et publie un statut inactive pour le démonter.",
         "label": "Nom affiché",
         "subdomain": "Sous-domaine workers.dev",
-        "subdomainHint": "L’URL d’aperçu est https://<worker>.<sous-domaine>.workers.dev. Uniquement le libellé, sans « .workers.dev ».",
+        "subdomainHint": "L’URL d’aperçu devient https://WORKER.SUBDOMAIN.workers.dev — saisissez uniquement le libellé du sous-domaine, sans « .workers.dev ».",
         "token": "Jeton d’API du VCS",
         "tokenPlaceholder": "Collez un jeton à portée fine",
         "tokenKeep": "Laissez vide pour conserver le jeton enregistré",
