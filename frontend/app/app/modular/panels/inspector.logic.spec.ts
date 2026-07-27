@@ -41,6 +41,7 @@ describe('inspector panel group', () => {
       'service-test-secrets',
       'service-fragments',
       'service-release-health',
+      'service-validation-checks',
     ])
   })
 
@@ -59,6 +60,7 @@ describe('inspector panel group', () => {
       'service-test-secrets',
       'service-fragments',
       'service-release-health',
+      'service-validation-checks',
     ])
   })
 
@@ -70,6 +72,7 @@ describe('inspector panel group', () => {
       'service-test-secrets',
       'service-fragments',
       'service-release-health',
+      'service-validation-checks',
     ])
   })
 

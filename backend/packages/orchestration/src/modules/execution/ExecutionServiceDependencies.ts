@@ -40,6 +40,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import type {
   BugIntakeService,
   EnvironmentProvisioningService,
@@ -283,6 +284,16 @@ export interface ExecutionServiceDependencies {
    * Wired from the facade's `TestSecretsService`; absent ⇒ no advertised secrets. NEVER values.
    */
   resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
+  /**
+   * Optional: resolve the pre-PR validation checks configured for a run block's service frame,
+   * folded onto the agent run context by the context builder and forwarded on the coding job
+   * body by the container executor. Wired from the facade's `ValidationConfigService`; absent ⇒
+   * no checks, so the harness's existing path is byte-for-byte unchanged.
+   */
+  resolveValidationChecks?: (
+    workspaceId: string,
+    frameId: string,
+  ) => Promise<ResolvedValidationChecks | null>
   /**
    * Optional: resolves the binary-artifact store (UI screenshots + reference design images)
    * for a workspace's account; the `visual-confirmation` gate reads it. Absent (or resolving

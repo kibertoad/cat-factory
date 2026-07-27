@@ -4,6 +4,7 @@ import {
   RegistrySubscriptionQuotaProvider,
   TEST_SECRETS_CIPHER_INFO,
   TestSecretsService,
+  ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
 import type { AppCaches, Clock, IdGenerator, WebSearchAvailability } from '@cat-factory/kernel'
@@ -168,6 +169,19 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     ? (workspaceId: string, blockId: string) =>
         testSecretsService.resolveRefsForBlock(workspaceId, blockId)
     : undefined
+  // Pre-PR validation checks: the service backs the CRUD controller and the engine's dispatch
+  // resolution (`resolveValidationChecks`), which folds the service frame's commands onto the
+  // agent run context so they ride the coding job body. Nothing is sealed here — the commands are
+  // operator-authored shell strings that run inside the run's own container — so, unlike the
+  // stores above, this needs no ENCRYPTION_KEY and is always wired.
+  const validationConfigService = new ValidationConfigService({
+    validationConfigRepository: repos.validationConfigRepository,
+    blockRepository: repos.blockRepository,
+    clock,
+  })
+  const resolveValidationChecks = (workspaceId: string, frameId: string) =>
+    validationConfigService.resolveForFrame(workspaceId, frameId)
+
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real reads land in B2). The
   // registry of REAL vendor adapters is empty today, so every vendor reports modeled.
@@ -189,6 +203,8 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     testSecretsService,
     resolveTestSecrets,
     resolveTestSecretRefs,
+    validationConfigService,
+    resolveValidationChecks,
     subscriptionQuotaProvider,
   }
 }

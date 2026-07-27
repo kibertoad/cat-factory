@@ -403,6 +403,24 @@ function buildCodingAgentBody(
               },
             }
           : {}),
+        // Pre-PR validation: the service frame's configured check commands, run by the harness
+        // against the checkout after the agent settles and BEFORE the PR opens, with failures fed
+        // back into the agent loop (see docs/initiatives/pre-pr-validation.md). Forwarded ONLY
+        // when this dispatch actually OPENS a PR — that is the whole point of "pre-PR", and an
+        // in-place fixer pushing onto an existing PR head is already covered by the `ci` gate.
+        // The peer/reference legs are excluded too: the checks run in the PRIMARY checkout only,
+        // so a multi-repo fan-out (one PR per repo) would validate just one of them.
+        ...(opensPr && context.validationChecks?.checks.length && !peerRepos && !referenceRepos
+          ? {
+              validationChecks: {
+                checks: context.validationChecks.checks.map((c) => ({
+                  label: c.label,
+                  command: c.command,
+                })),
+                maxAttempts: context.validationChecks.maxAttempts,
+              },
+            }
+          : {}),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the

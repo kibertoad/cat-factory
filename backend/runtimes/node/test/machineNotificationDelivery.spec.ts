@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CompositeNotificationChannel, type NotificationChannel } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
 import { buildNodeRealtimeDeps } from '../src/container-realtime-deps.js'
+import { SystemClock } from '../src/runtime.js'
 
 // The Node facade's mothership-side notification DELIVERY seam
 // (docs/initiatives/mothership-mode.md, PR 4): a mothership serves
@@ -29,6 +30,9 @@ function build(opts: { extra?: NotificationChannel[]; realtime?: boolean } = {})
     modelProviderResolver: (() => {}) as never,
     resolveWorkspaceModelDefault: async () => undefined,
     agentKindRegistry: {} as never,
+    // Required since the notification-webhook support joined this builder — the webhook's
+    // signing path stamps its timestamps off the injected clock.
+    clock: new SystemClock(),
     ...(opts.extra ? { extraNotificationChannels: opts.extra } : {}),
   })
 }

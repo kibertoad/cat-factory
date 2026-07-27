@@ -279,6 +279,7 @@ export class ExecutionService {
     skillResolver,
     environmentProvisioning,
     resolveTestSecretRefs,
+    resolveValidationChecks,
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
@@ -360,6 +361,7 @@ export class ExecutionService {
       initiatives: initiativeRepository,
       environmentProvisioning,
       resolveTestSecretRefs,
+      resolveValidationChecks,
       fragmentResolver,
       skillResolver,
     })

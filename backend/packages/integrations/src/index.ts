@@ -499,6 +499,10 @@ export {
   type TestSecretsServiceDependencies,
 } from './modules/testSecrets/TestSecretsService.js'
 export {
+  ValidationConfigService,
+  type ValidationConfigServiceDependencies,
+} from './modules/validation/ValidationConfigService.js'
+export {
   LocalSettingsService,
   type LocalSettingsServiceDependencies,
 } from './modules/localSettings/LocalSettingsService.js'

@@ -118,6 +118,21 @@ export interface AgentRunContext {
     iteration: number
   }
   /**
+   * The PRE-PR validation checks resolved for this run's service frame: the ordered shell
+   * commands the harness runs against the checkout after the coding agent settles and BEFORE
+   * opening a PR, plus the repair-round budget. Resolved by the engine (frame-chain walk over
+   * the service's `validation_configs` row) and forwarded by the container executor onto the
+   * coding job body — but ONLY for a dispatch that would open a PR, which is the whole point of
+   * "pre-PR". The harness runs them generically off the job body (no agent-kind switch), feeds a
+   * failure back to the agent, and refuses to open the PR while they are red. Absent when the
+   * service configured none ⇒ the harness's existing path, unchanged. See
+   * `docs/initiatives/pre-pr-validation.md`.
+   */
+  validationChecks?: {
+    checks: { label: string; command: string }[]
+    maxAttempts: number
+  }
+  /**
    * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
    * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
    * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)
@@ -552,6 +567,17 @@ export interface AgentRunResult {
    */
   ralphVerdict?: unknown
   /**
+   * A coding step's PRE-PR validation report: which of the service's configured check commands
+   * passed against the checkout, their exit codes and bounded/secret-scrubbed output tails, and
+   * how many agent+check rounds the harness spent. Produced by the executor-harness running the
+   * commands — NOT model output. The engine records it on the step (`PipelineStep.validation`)
+   * on both the passing path (the captured proof the PR was green before it opened) and the
+   * exhausted path (the evidence behind the failure). Carried as `unknown` so the port stays
+   * free of the contracts schema; the engine parses it before use. Absent when the service
+   * configured no checks.
+   */
+  validationReport?: unknown
+  /**
    * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
    * local infra): whether the dependencies came up and the captured (redacted, bounded)
    * `docker compose up` logs. The engine persists it on the Tester step so the test window
@@ -743,6 +769,13 @@ export type AgentJobUpdate =
        * run's `updated_at` — even when no subtask/phase changed. Absent on an older harness image.
        */
       lastActivityAt?: number
+      /**
+       * The LATEST pre-PR validation attempt's report (forwarded from
+       * {@link RunnerJobView.validationReport}), so the engine can surface "lint failed,
+       * repairing (attempt 2 of 3)" on the step WHILE the loop is still running. Absent for a
+       * job whose service configured no checks / on an older harness image.
+       */
+      validationReport?: unknown
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,
@@ -769,6 +802,13 @@ export type AgentJobUpdate =
       detail?: string
       backend?: string
       evicted?: ContainerEvictionKind
+      /**
+       * The pre-PR validation report of a job that failed BECAUSE its checks stayed red until
+       * the attempt budget was spent — the evidence behind the failure (each command's exit code
+       * + a bounded, secret-scrubbed output tail). The engine records it on the step beside the
+       * failure detail. Absent for every other failure and for a job with no checks configured.
+       */
+      validationReport?: unknown
     }
 
 /**

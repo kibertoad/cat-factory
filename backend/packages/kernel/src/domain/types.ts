@@ -338,6 +338,13 @@ export type {
   RalphStepState,
   RalphVerdict,
   RalphAttempt,
+  // Pre-PR validation shapes (per-service check commands + the harness's report).
+  ValidationCheck,
+  ValidationCheckOutcome,
+  ValidationReport,
+  ResolvedValidationChecks,
+  ServiceValidationConfig,
+  UpsertServiceValidationConfigInput,
   // Human-testing gate shapes (ephemeral env + human validation loop).
   HumanTestStepState,
   HumanTestEnvironment,
