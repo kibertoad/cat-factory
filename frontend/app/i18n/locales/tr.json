@@ -4163,10 +4163,9 @@
       "groupRollup": "Doğrulanmış: {established}/{total}",
       "rollupHint": "“Doğrulanmış”, bir testçinin davranışı gözlemlediği anlamına gelir; “planlanan” ise üzerinde anlaşıldığı ama henüz uygulanmadığı anlamına gelir.",
       "noneMatchFilter": "Bu gruptaki hiçbir gereksinim filtreyle eşleşmiyor.",
+      "showAll": "Tümünü göster",
       "filter": {
-        "all": "Tümü",
-        "established": "Doğrulanmış",
-        "aspirational": "Planlanan"
+        "all": "Tümü"
       }
     },
     "acceptance": {

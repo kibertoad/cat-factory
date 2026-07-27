@@ -29,7 +29,14 @@ const serviceSpec = useServiceSpecStore()
 type ViewMode = 'structured' | 'gherkin'
 const mode = ref<ViewMode>('structured')
 // Which half of the spec the reader wants: everything, only what the service is observed to
-// honour, or only what is agreed but not built yet. Reset on open alongside the view mode.
+// honour, or only what is agreed but not built yet.
+//
+// DELIBERATELY STICKY ACROSS GROUPS, and reset only on open (alongside the view mode and the
+// selection). "Show me what this service has actually proven" is a question about the SERVICE,
+// so re-answering it on every group click would defeat the filter the moment the reader
+// navigates. The cost is that a group with no match renders empty, which is why that case says
+// so and offers a way back rather than leaving the reader stranded in a filter they may have
+// set several groups ago.
 const stateFilter = ref<RequirementStateFilter>('all')
 // Selected feature group, keyed by its module + group index so a name collision can't
 // cross-select. Null = show the service overview.
@@ -137,11 +144,14 @@ const STATE_META: Record<RequirementState, { label: string; chip: string; icon: 
   },
 }
 
-// The state filter's three choices, as literal `t()` keys so the typed-key drift guard stays live.
+// The state filter's three choices. The two state choices REUSE the badge labels rather than
+// carrying their own catalog keys: a chip that reads differently from the badge it filters for
+// is a translation bug waiting to happen, and one key per state cannot drift from itself. Only
+// `all` needs a key of its own, and it is a literal `t()` so the typed-key drift guard stays live.
 const STATE_FILTERS: { value: RequirementStateFilter; label: string }[] = [
   { value: 'all', label: t('spec.state.filter.all') },
-  { value: 'established', label: t('spec.state.filter.established') },
-  { value: 'aspirational', label: t('spec.state.filter.aspirational') },
+  { value: 'established', label: STATE_META.established.label },
+  { value: 'aspirational', label: STATE_META.aspirational.label },
 ]
 
 // Service-wide rollup, shown on the overview pane: how much of the written-down behaviour the
@@ -399,12 +409,29 @@ function kindLabel(item: RequirementItem): string {
               </div>
             </div>
             <!-- the filter can legitimately empty a non-empty group; say so rather than
-                 rendering a blank pane that reads like "no requirements" -->
+                 rendering a blank pane that reads like "no requirements". The filter is sticky
+                 across groups, so the reader may have set it several groups ago — offer the way
+                 back here rather than making them find the toggle again. -->
             <div
               v-if="reqCount(selectedGroup) > 0 && visibleRequirements.length === 0"
-              class="mt-4 text-sm text-slate-500"
+              class="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500"
+              data-testid="spec-state-filter-empty"
             >
               {{ t('spec.state.noneMatchFilter') }}
+              <UButton
+                color="primary"
+                variant="link"
+                size="xs"
+                class="p-0"
+                data-testid="spec-state-filter-reset"
+                @click="
+                  () => {
+                    stateFilter = 'all'
+                  }
+                "
+              >
+                {{ t('spec.state.showAll') }}
+              </UButton>
             </div>
             <ul class="mt-4 space-y-4">
               <li

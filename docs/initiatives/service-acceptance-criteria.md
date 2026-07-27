@@ -320,9 +320,22 @@ Gotchas worth carrying:
   tier 2): `Record<RequirementState, …>` in the window and
   `Record<RequirementVerdictStatus, …>` in the tester panel, built from literal `t()` keys. A new
   state or verdict then fails the typecheck instead of rendering a raw enum value at a reader.
-- **A filter that empties a non-empty group must say so.** Rendering nothing would read exactly
-  like "this group has no requirements", which is the same class of mistake as a silently missing
-  report section.
+- **The two lookups' FALLBACKS answer differently, and each is right for its axis.** The state
+  coerces to the cautious value (`aspirational`); the verdict does NOT coerce, because there is no
+  cautious verdict — it renders the raw code in a colour (`UNKNOWN_VERDICT_COLOR`) distinct from
+  all three known ones. An unknown status is version skew, not a fourth state, and lending it
+  `not_covered`'s grey would make "we have no idea" read as "we didn't check", collapsing exactly
+  the distinction the three-valued verdict exists to draw. `StepTestReport.logic.spec.ts` pins the
+  colours disjoint, so a later palette edit can't silently re-collide them.
+- **A filter that empties a non-empty group must say so, AND offer the way back.** Rendering
+  nothing would read exactly like "this group has no requirements", which is the same class of
+  mistake as a silently missing report section. The filter is deliberately STICKY across groups —
+  "what has this service actually proven" is a question about the service, so re-answering it on
+  every group click would defeat it — and stickiness is what makes the reset affordance load-
+  bearing rather than decorative: the reader may have set the filter several groups ago.
+- **The filter chips REUSE the badge labels** rather than carrying their own catalog keys. A chip
+  that reads differently from the badge it filters for is a translation bug waiting to happen, and
+  one key per state cannot drift from itself; only `all` needs a key of its own.
 
 ## Conventions & gotchas carried between iterations
 

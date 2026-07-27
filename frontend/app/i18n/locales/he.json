@@ -4162,10 +4162,9 @@
       "groupRollup": "מאומת: {established}/{total}",
       "rollupHint": "\"מאומת\" פירושו שבודק ראה את ההתנהגות מתקיימת; \"מתוכנן\" פירושו שסוכם עליה אך היא טרם מומשה.",
       "noneMatchFilter": "אין דרישות בקבוצה זו שתואמות את הסינון.",
+      "showAll": "הצג הכול",
       "filter": {
-        "all": "הכול",
-        "established": "מאומת",
-        "aspirational": "מתוכנן"
+        "all": "הכול"
       }
     },
     "acceptance": {

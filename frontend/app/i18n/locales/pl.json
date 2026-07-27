@@ -4151,10 +4151,9 @@
       "groupRollup": "Potwierdzone: {established}/{total}",
       "rollupHint": "„Potwierdzone” oznacza, że tester zaobserwował to zachowanie; „planowane” oznacza, że jest uzgodnione, ale jeszcze niezrealizowane.",
       "noneMatchFilter": "Żadne wymaganie w tej grupie nie pasuje do filtra.",
+      "showAll": "Pokaż wszystkie",
       "filter": {
-        "all": "Wszystkie",
-        "established": "Potwierdzone",
-        "aspirational": "Planowane"
+        "all": "Wszystkie"
       }
     },
     "acceptance": {

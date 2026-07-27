@@ -16,10 +16,12 @@ them the service is actually known to honour.
   per-group rollup plus a three-way state filter (all / established / aspirational), and shows a
   service-wide rollup on the overview pane. The counting and filtering live in the pure
   `ServiceSpecWindow.logic.ts`; anything that is not literally `established` reads as
-  `aspirational`, so an unrecognised value never claims the service honours a behaviour.
+  `aspirational`, so an unrecognised value never claims the service honours a behaviour. The
+  filter is sticky across groups, so a group it empties says so and offers a reset.
 - `StepTestReport.vue` renders the tester's per-requirement verdicts (`met` / `not met` /
   `not checked`) — the in-app twin of the PR report's section, readable during the run rather
-  than only once the report publishes.
+  than only once the report publishes. An unrecognised status renders the raw code in its own
+  colour rather than borrowing `not_covered`'s, so version skew can never read as "not checked".
 
 Frontend-only: `ServiceSpecView` already carries `state` and the verdicts already ride
 `step.testReport`, so no endpoint, wire shape or backend behaviour changes.

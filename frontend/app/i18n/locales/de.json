@@ -4493,10 +4493,9 @@
       "groupRollup": "Nachgewiesen: {established}/{total}",
       "rollupHint": "„Nachgewiesen“ bedeutet, dass ein Tester das Verhalten beobachtet hat; „angestrebt“ bedeutet, es ist vereinbart, aber noch nicht umgesetzt.",
       "noneMatchFilter": "Keine Anforderung in dieser Gruppe entspricht dem Filter.",
+      "showAll": "Alle anzeigen",
       "filter": {
-        "all": "Alle",
-        "established": "Nachgewiesen",
-        "aspirational": "Angestrebt"
+        "all": "Alle"
       }
     },
     "acceptance": {

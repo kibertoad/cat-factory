@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { RequirementVerdictStatus, TestReport } from '~/types/domain'
 import type { TesterStepState } from '~/types/execution'
+import { resolveVerdictMeta, type VerdictMeta } from './StepTestReport.logic'
 
 // A tester step's latest structured report (what was tested, the per-area outcomes,
 // the concerns it raised and the greenlight verdict) plus the fixer-loop phase.
@@ -23,18 +24,19 @@ const OUTCOME_COLOR: Record<string, string> = {
   skipped: '#64748b',
 }
 
-// Per-spec-requirement verdicts, keyed by the requirement id the service's in-repo `spec/`
+// Per-spec-requirement verdict labels, keyed by the requirement id the service's in-repo `spec/`
 // carries. THREE-VALUED on purpose: "we didn't check" and "it's broken" must never render the
 // same, which is the whole reason the tester reports the list. Exhaustive `Record` over the
 // closed union (drift guard tier 2) with literal `t()` keys, so a new status fails the
-// typecheck rather than rendering a raw enum value.
-const VERDICT_META: Record<RequirementVerdictStatus, { label: string; color: string }> = {
-  met: { label: t('panels.testReport.requirementVerdicts.met'), color: '#22c55e' },
-  not_met: { label: t('panels.testReport.requirementVerdicts.notMet'), color: '#ef4444' },
-  not_covered: {
-    label: t('panels.testReport.requirementVerdicts.notCovered'),
-    color: '#64748b',
-  },
+// typecheck rather than rendering a raw enum value. Colours and the unknown-status fallback live
+// in the pure sibling, where the "never borrow a known colour" rule is unit-tested.
+const VERDICT_LABELS: Record<RequirementVerdictStatus, string> = {
+  met: t('panels.testReport.requirementVerdicts.met'),
+  not_met: t('panels.testReport.requirementVerdicts.notMet'),
+  not_covered: t('panels.testReport.requirementVerdicts.notCovered'),
+}
+function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
+  return resolveVerdictMeta(status, VERDICT_LABELS)
 }
 </script>
 
@@ -96,13 +98,11 @@ const VERDICT_META: Record<RequirementVerdictStatus, { label: string; color: str
       >
         <span
           class="mt-1 h-2 w-2 shrink-0 rounded-full"
-          :style="{ backgroundColor: VERDICT_META[verdict.status]?.color ?? '#64748b' }"
+          :style="{ backgroundColor: verdictMeta(verdict.status).color }"
         />
         <span class="text-slate-300">
           <span class="font-mono text-[11px] text-slate-400">{{ verdict.requirementId }}</span>
-          <span class="text-slate-500">
-            — {{ VERDICT_META[verdict.status]?.label ?? verdict.status }}</span
-          >
+          <span class="text-slate-500"> — {{ verdictMeta(verdict.status).label }}</span>
           <span v-if="verdict.detail" class="text-slate-500"> · {{ verdict.detail }}</span>
         </span>
       </div>

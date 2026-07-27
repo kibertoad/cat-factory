@@ -4163,10 +4163,9 @@
       "groupRollup": "実証済み: {established}/{total}",
       "rollupHint": "「実証済み」はテスターが動作を確認したことを、「未実証」は合意済みだがまだ実装されていないことを示します。",
       "noneMatchFilter": "このグループにフィルターと一致する要件はありません。",
+      "showAll": "すべて表示",
       "filter": {
-        "all": "すべて",
-        "established": "実証済み",
-        "aspirational": "未実証"
+        "all": "すべて"
       }
     },
     "acceptance": {

@@ -4321,10 +4321,9 @@
       "groupRollup": "Established: {established}/{total}",
       "rollupHint": "\"Established\" means a tester observed the behaviour hold; \"aspirational\" means it is agreed but not built yet.",
       "noneMatchFilter": "No requirements in this group match the filter.",
+      "showAll": "Show all",
       "filter": {
-        "all": "All",
-        "established": "Established",
-        "aspirational": "Aspirational"
+        "all": "All"
       }
     },
     "acceptance": {

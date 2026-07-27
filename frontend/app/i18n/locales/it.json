@@ -4493,10 +4493,9 @@
       "groupRollup": "Verificato: {established}/{total}",
       "rollupHint": "«Verificato» significa che un tester ha osservato il comportamento; «previsto» significa che è concordato ma non ancora implementato.",
       "noneMatchFilter": "Nessun requisito di questo gruppo corrisponde al filtro.",
+      "showAll": "Mostra tutti",
       "filter": {
-        "all": "Tutti",
-        "established": "Verificato",
-        "aspirational": "Previsto"
+        "all": "Tutti"
       }
     },
     "acceptance": {
