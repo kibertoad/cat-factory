@@ -47,7 +47,8 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
-import type { ResolvedValidationChecks } from '@cat-factory/contracts'
+import type { ResolvedReproduction, ResolvedValidationChecks } from '@cat-factory/contracts'
+import { resolveReproductionSpec } from './reproductionProof.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -343,6 +344,7 @@ export class AgentContextBuilder {
       this.resolveSkillForStep(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
+    const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
     const priorOutputs = [
       ...(architectureDirection
         ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
@@ -420,6 +422,7 @@ export class AgentContextBuilder {
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
       ...validationChecks,
+      ...reproduction,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
       // (identities are self-contained), so no repo reads here.
@@ -615,6 +618,33 @@ export class AgentContextBuilder {
    * every other frame-scoped resolver in that wave — so the ancestry walk still runs exactly once
    * per dispatch rather than a second time just for this read.
    */
+  /**
+   * The BUGFIX REPRODUCTION PROOF spec for this dispatch, as a spreadable `{ reproduction? }` —
+   * the same branch-free shape as {@link validationChecksFor}, and for the same reason: the
+   * `buildContext` call site is at its complexity ceiling.
+   *
+   * Unlike every other resolver here this is PURE and reads nothing: the declaration is already
+   * on the run's own steps (the prior `repro-test` step's structured outcome), so it costs no
+   * round-trip and needs no degrade-on-throw swallow. Reuses the service's pre-PR validation
+   * repair budget when one is configured, so an operator meets ONE attempt-budget concept rather
+   * than two. Absent ⇒ no context field ⇒ no job-body field ⇒ the harness's existing path.
+   */
+  private reproductionFor(
+    agentKind: string,
+    agentConfig: Block['agentConfig'],
+    instance: ExecutionInstance,
+    validationChecks: { validationChecks?: ResolvedValidationChecks },
+  ): { reproduction?: ResolvedReproduction } {
+    const reproduction = resolveReproductionSpec({
+      agentKind,
+      agentConfig,
+      steps: instance.steps,
+      currentStep: instance.currentStep,
+      maxAttempts: validationChecks.validationChecks?.maxAttempts,
+    })
+    return reproduction ? { reproduction } : {}
+  }
+
   private async validationChecksFor(
     workspaceId: string,
     frame: Block | null,

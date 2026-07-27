@@ -345,6 +345,12 @@ export type {
   ResolvedValidationChecks,
   ServiceValidationConfig,
   UpsertServiceValidationConfigInput,
+  // Bugfix reproduction-proof shapes (the resolved spec + the harness's report).
+  ReproductionProofMode,
+  ResolvedReproduction,
+  ReproductionStatus,
+  ReproductionPhaseOutcome,
+  ReproductionReport,
   // Human-testing gate shapes (ephemeral env + human validation loop).
   HumanTestStepState,
   HumanTestEnvironment,

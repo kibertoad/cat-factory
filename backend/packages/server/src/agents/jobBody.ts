@@ -326,6 +326,52 @@ function buildCodingRepoLegs(
 }
 
 /**
+ * The PRE-PR verification payloads a coding job body carries: the service's configured validation
+ * check commands, and the run's declared bugfix reproduction. Extracted together because they
+ * share one gate and one rationale — see
+ * [pre-PR validation](../../../../docs/initiatives/pre-pr-validation.md) and
+ * [reproduction proof](../../../../docs/initiatives/bugfix-reproduction-proof.md).
+ *
+ * Both are forwarded ONLY when this dispatch actually OPENS a PR: that is the whole point of
+ * "pre-PR" for the checks (an in-place fixer pushing onto an existing PR head is already covered
+ * by the `ci` gate), and the proof is published on the PR this dispatch opens. Both are dropped
+ * on a multi-repo fan-out too, because both run in the PRIMARY checkout only — with one PR per
+ * repo, they would speak for just one of them.
+ *
+ * Extracted from {@link buildCodingAgentBody} to keep it under the complexity ceiling — behaviour
+ * is byte-identical, and an absent field (never an empty object) is what preserves the harness's
+ * pre-feature code path.
+ */
+function buildPrePrVerification(
+  context: AgentRunContext,
+  gate: { opensPr: boolean; multiRepo: boolean },
+): { validationChecks?: Record<string, unknown>; reproduction?: Record<string, unknown> } {
+  if (!gate.opensPr || gate.multiRepo) return {}
+  const checks = context.validationChecks
+  const reproduction = context.reproduction
+  return {
+    ...(checks?.checks.length
+      ? {
+          validationChecks: {
+            checks: checks.checks.map((c) => ({ label: c.label, command: c.command })),
+            maxAttempts: checks.maxAttempts,
+          },
+        }
+      : {}),
+    ...(reproduction?.command
+      ? {
+          reproduction: {
+            command: reproduction.command,
+            testPaths: [...reproduction.testPaths],
+            ...(reproduction.setupCommand ? { setupCommand: reproduction.setupCommand } : {}),
+            maxAttempts: reproduction.maxAttempts,
+          },
+        }
+      : {}),
+  }
+}
+
+/**
  * The `container-coding` job body: branch off base onto the deterministic work branch, push it and
  * open a PR (coder-like); or, when the kind targets the PR branch, work in place and push back with
  * no new PR (fixer-like). Extracted verbatim from {@link buildRegisteredAgentBody} so each function
@@ -403,24 +449,9 @@ function buildCodingAgentBody(
               },
             }
           : {}),
-        // Pre-PR validation: the service frame's configured check commands, run by the harness
-        // against the checkout after the agent settles and BEFORE the PR opens, with failures fed
-        // back into the agent loop (see docs/initiatives/pre-pr-validation.md). Forwarded ONLY
-        // when this dispatch actually OPENS a PR — that is the whole point of "pre-PR", and an
-        // in-place fixer pushing onto an existing PR head is already covered by the `ci` gate.
-        // The peer/reference legs are excluded too: the checks run in the PRIMARY checkout only,
-        // so a multi-repo fan-out (one PR per repo) would validate just one of them.
-        ...(opensPr && context.validationChecks?.checks.length && !peerRepos && !referenceRepos
-          ? {
-              validationChecks: {
-                checks: context.validationChecks.checks.map((c) => ({
-                  label: c.label,
-                  command: c.command,
-                })),
-                maxAttempts: context.validationChecks.maxAttempts,
-              },
-            }
-          : {}),
+        // The PRE-PR verification payloads (validation checks + bugfix reproduction proof), both
+        // gated on this dispatch actually opening a PR in the primary checkout.
+        ...buildPrePrVerification(context, { opensPr, multiRepo: !!peerRepos || !!referenceRepos }),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
