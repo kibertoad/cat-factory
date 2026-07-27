@@ -18,6 +18,7 @@ import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLib
 import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { gitlabController } from './modules/gitlab/GitLabController.js'
+import { vcsConnectController } from './modules/vcs/VcsConnectController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
@@ -267,6 +268,7 @@ function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): voi
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', gitlabController())
+  app.route('/workspaces/:workspaceId', vcsConnectController())
   app.route('/workspaces/:workspaceId', slackController())
 }
 

@@ -3088,8 +3088,7 @@
   },
   "github": {
     "onboarding": {
-      "title": "חבר את cat-factory ל-GitHub",
-      "intro": "cat-factory פועל על ידי פתיחת בקשות משיכה במאגרים שלך. התקן את אפליקציית GitHub בחשבון או בארגון שלך כדי להמשיך, ותוכל להעניק לה גישה לכל מאגר או לבחור תת-קבוצה.",
+      "appIntro": "התקן את אפליקציית GitHub בחשבון או בארגון שלך; תוכל להעניק לה גישה לכל מאגר או לבחור תת-קבוצה.",
       "signedInAs": "מחובר כ-{login}",
       "signOut": "התנתק"
     },
@@ -3163,7 +3162,6 @@
         "closed": "סגור"
       },
       "toast": {
-        "disconnected": "GitHub נותק",
         "resync": "סנכרון מחדש {status}",
         "reposUpdated": "המאגרים המקושרים עודכנו",
         "branchCreated": "הענף {name} נוצר",
@@ -3179,10 +3177,6 @@
         "createBranch": "לא ניתן היה ליצור ענף",
         "openPr": "לא ניתן היה לפתוח בקשת משיכה",
         "merge": "לא ניתן היה למזג"
-      },
-      "confirmDisconnect": {
-        "title": "לנתק את GitHub?",
-        "body": "האפליקציה תאבד גישה למאגרים שלך עד לחיבור מחדש."
       }
     },
     "addService": {
@@ -5221,6 +5215,41 @@
       "minor": "הערות קטנות",
       "major": "עבודה מחדש משמעותית",
       "classHistory": "{merged} מוזגו בקטגוריה הזאת, {autoShare} מוזגו אוטומטית"
+    }
+  },
+  "vcs": {
+    "panel": {
+      "title": "ניהול קוד מקור",
+      "patMeta": "מחובר באמצעות אסימון גישה אישי",
+      "confirmDisconnect": {
+        "title": "לנתק את {provider}?",
+        "body": "האפליקציה תאבד גישה למאגרים שלך עד לחיבור מחדש."
+      },
+      "toast": {
+        "disconnected": "{provider} נותק"
+      }
+    },
+    "connect": {
+      "or": "או",
+      "noneConfigured": "לא הוגדר חיבור לניהול קוד מקור בפריסה הזו. בקש ממפעיל להגדיר אפליקציית GitHub או גישה ל-GitLab.",
+      "gitlab": {
+        "intro": "הדבק אסימון גישה אישי של GitLab כדי לחבר את סביבת העבודה הזו. cat-factory משתמש בו כדי להציג את הפרויקטים שלך, לדחוף ענפים ולפתוח בקשות מיזוג.",
+        "tokenLabel": "אסימון גישה אישי",
+        "scope": "נדרש היקף api",
+        "createToken": "צור אסימון ב-GitLab",
+        "submit": "חבר את GitLab",
+        "toast": {
+          "connected": "GitLab חובר"
+        },
+        "errors": {
+          "connect": "לא ניתן היה לחבר את GitLab"
+        }
+      }
+    },
+    "onboarding": {
+      "title": "חבר את cat-factory ל-{provider}",
+      "titleAny": "חבר את cat-factory למאגרים שלך",
+      "intro": "cat-factory פועל על ידי פתיחת בקשות משיכה במאגרים שלך. חבר את ספק המאגרים שלך כדי להמשיך."
     }
   }
 }

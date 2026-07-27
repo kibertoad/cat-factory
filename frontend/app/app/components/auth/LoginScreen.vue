@@ -2,28 +2,24 @@
 import { computed, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import SecretInput from '~/components/common/SecretInput.vue'
+import type { VcsProvider } from '~/types/domain'
+import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, VCS_PROVIDER_TOKEN_URLS } from '~/utils/vcs'
 
 const auth = useAuthStore()
 const { t } = useI18n()
 
 // Local-mode source-control PAT login. The PAT lives server-side in env (GITHUB_PAT /
 // GITLAB_PAT); the login screen only SELECTS a configured provider — no token is ever typed
-// into or shown in the browser. GitHub/GitLab are brand names (kept verbatim across locales),
-// as are the token-settings URLs, so they're inline constants rather than catalog keys — same
-// convention as the provider descriptors in ApiKeysSection. The "create a token" link prefers
-// the server's scopes-preselected deep link (`patLogin.setupUrls`); these are the fallback.
-type PatProvider = 'github' | 'gitlab'
+// into or shown in the browser. The brand labels / icons / token-settings URLs are the shared
+// provider descriptors in `~/utils/vcs` (brand names stay verbatim across locales, so they are
+// constants rather than catalog keys — the same convention as ApiKeysSection). The "create a
+// token" link prefers the server's scopes-preselected deep link (`patLogin.setupUrls`); the
+// descriptor's URL is the fallback.
+type PatProvider = VcsProvider
 const ALL_PROVIDERS: PatProvider[] = ['github', 'gitlab']
-const PROVIDER_LABELS: Record<PatProvider, string> = { github: 'GitHub', gitlab: 'GitLab' }
-const PROVIDER_ICONS: Record<PatProvider, string> = {
-  github: 'i-lucide-github',
-  gitlab: 'i-lucide-gitlab',
-}
-// Fallback token-creation pages, used only if the server didn't advertise a deep link.
-const PROVIDER_TOKEN_URLS: Record<PatProvider, string> = {
-  github: 'https://github.com/settings/tokens/new',
-  gitlab: 'https://gitlab.com/-/user_settings/personal_access_tokens',
-}
+const PROVIDER_LABELS = VCS_PROVIDER_LABELS
+const PROVIDER_ICONS = VCS_PROVIDER_ICONS
+const PROVIDER_TOKEN_URLS = VCS_PROVIDER_TOKEN_URLS
 
 const patLoginCfg = computed(() => auth.localMode?.patLogin)
 // Only providers whose PAT is configured in env can sign in (the token is the operational
