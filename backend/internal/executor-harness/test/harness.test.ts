@@ -1,19 +1,14 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import {
-  DEFAULT_PROGRESS_GUARD_LIMITS,
-  ProgressGuard,
-  type ProgressGuardLimits,
   classifyLlmUpstreamError,
-  mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,
-  progressGuardLimitsFromEnv,
   runDiagnostics,
   summarizePiRun,
   terminalRunError,
@@ -22,6 +17,13 @@ import {
   writeAgentsContext,
   writeWebToolsConfig,
 } from '../src/pi.js'
+import {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  ProgressGuard,
+  type ProgressGuardLimits,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from '../src/progress-guard.js'
 import {
   authenticatedCloneUrl,
   branchAheadOfBase,
@@ -35,6 +37,7 @@ import {
   unmergedPaths,
 } from '../src/git.js'
 import { producedRepoContent } from '../src/agent.js'
+import { checkoutHasBlueprints } from '../src/pi-workspace.js'
 import { stubTempHome } from './helpers.js'
 
 const exec = promisify(execFile)
@@ -809,6 +812,31 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(reason).toBeNull()
   })
 
+  // A subagent dispatch is the one call whose EDITS the guard cannot see: the parent stream
+  // carries the dispatch and its terminal result, while every Edit/Write the subagent makes
+  // happens on a transcript this guard never reads. Counting those dispatches as actions would
+  // therefore kill a coder that is delegating its implementation and making real progress.
+  it('never trips the no-edit bound on subagent dispatches (their edits are invisible here)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    // Both the current (`Agent`) and legacy (`Task`) dispatch names, well past the bound.
+    for (const name of ['Agent', 'Task']) {
+      const guard = new ProgressGuard(limits)
+      let reason: string | null = null
+      for (let i = 0; i < 10; i++) reason = guard.observeSignal({ name, isError: false })
+      expect(reason, `${name} dispatches must not trip the no-edit bound`).toBeNull()
+    }
+
+    // They are NEUTRAL, not edits: a dispatch does not satisfy the bound either, so genuine
+    // environment-probing after one is still caught (a read-only research subagent must not
+    // clear the suspicion the bound exists to hold).
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Agent', 'Bash', 'Bash', 'Bash']) {
+      reason = guard.observeSignal({ name, isError: false })
+    }
+    expect(reason).toMatch(/no progress/i)
+  })
+
   it('reads limits from the environment, falling back to defaults', () => {
     expect(progressGuardLimitsFromEnv({})).toEqual(DEFAULT_PROGRESS_GUARD_LIMITS)
     expect(
@@ -949,6 +977,38 @@ describe('web search (rpiv-web-tools) configuration', () => {
     // Only the provider — keys/base URLs come from the environment, never written here.
     expect(written).toEqual({ provider: 'exa' })
     expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
+  })
+})
+
+describe('checkoutHasBlueprints', () => {
+  let root: string
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'blueprints-test-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('detects blueprints/ at the checkout root', async () => {
+    expect(await checkoutHasBlueprints(root, false)).toBe(false)
+    await mkdir(join(root, 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(true)
+  })
+
+  // A multi-repo run's dir is the WORKSPACE ROOT with each repo checked out beside its siblings,
+  // so the root itself never holds `blueprints/` — checking only it would drop the orientation
+  // note for every multi-repo run, including ones whose legs are managed services.
+  it('detects blueprints/ in a leg of a multi-repo checkout', async () => {
+    await mkdir(join(root, 'service-a', 'src'), { recursive: true })
+    await mkdir(join(root, 'service-b', 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(false) // single-repo: root only
+    expect(await checkoutHasBlueprints(root, true)).toBe(true)
+  })
+
+  it('is false (never throws) for a directory that does not exist', async () => {
+    const missing = join(root, 'nope')
+    expect(await checkoutHasBlueprints(missing, false)).toBe(false)
+    expect(await checkoutHasBlueprints(missing, true)).toBe(false)
   })
 })
 

@@ -1368,6 +1368,24 @@ auth-enabled or it passes vacuously.
   (orchestration/integrations) → ports (kernel). Infra adapters live in each facade and implement
   the ports + the `gateways` seam, wired via constructor injection of one `dependencies` object.
   Opt-in integrations wire only when configured.
+- **Folded best-practice standards are two-tier, and the brief travels WITH its body.** An
+  implementer kind (`coder`/`fixer`/`ci-fixer`/`conflict-resolver` — the `brief-standards` trait)
+  re-sends its whole system prompt on every turn of a long loop, so it folds a fragment's condensed
+  `brief` instead of the full `body`; reviewer/planner kinds keep the full text. Two rules:
+  **`brief` is resolved alongside the body it condenses and NEVER re-looked-up by id** (a
+  workspace/account row may override a built-in id, and re-resolving would fold the built-in's
+  condensed text over the tenant's standard), and **every `composeBlockSystemPrompt` call site
+  threads `standardsVerbosityFor(kind, registry)`** — today the dispatch chokepoint
+  (`buildKindBody`), the inline `AiAgentExecutor`, and `ConsensusAgentExecutor`. A new compose site
+  that forgets it silently restores the full bodies. Authoring guidance:
+  [`backend/packages/prompt-fragments/README.md`](./backend/packages/prompt-fragments/README.md).
+- **A dispatch records what the poll site cannot re-derive** (`recordDispatchAttribution`). An async
+  container job settles on the durable poll path, which rebuilds the job handle from the STEP alone
+  — so the resolved `model`, the leased `subscriptionTokenId` and the run's `initiatedByUserId` are
+  persisted on the step at dispatch and re-supplied when polling. Anything a new executor resolves
+  at dispatch and reads back off the handle must join them, or it is silently absent on the path
+  that actually runs in production (the symptom is attribution quietly landing as "unknown"/nobody,
+  never an error).
 - **Final answer must land in the reply, not the reasoning channel.** Any agent whose deliverable IS
   its final reply (spec-writer, blueprinter, merger, on-call, task-estimator, the tester report, the
   reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY`

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RepoSpec, SkillSpec } from './job.js'
@@ -8,13 +8,10 @@ import {
   type ContextFileInfo,
   type PiRunOutcome,
   type PiRunStats,
-  type ProgressGuardLimits,
   type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
   materializeSkillResources,
-  mergeGuardLimits,
-  progressGuardLimitsFromEnv,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -22,6 +19,11 @@ import {
   writePiModelsConfig,
   writeWebToolsConfig,
 } from './pi.js'
+import {
+  type ProgressGuardLimits,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from './progress-guard.js'
 import type { RunOptions } from './runner.js'
 import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
 
@@ -227,6 +229,31 @@ export interface AgentRunSpec {
 }
 
 /**
+ * Whether the run's checkout actually ships a `blueprints/` folder — what gates the blueprint
+ * orientation note in AGENTS.md (an external repo has none, so the note would be ~10 lines of
+ * dead guidance pointing at files that don't exist, re-sent on every turn).
+ *
+ * A MULTI-REPO run's `dir` is the workspace ROOT with each repo checked out as a sibling under
+ * it, so the root itself never holds `blueprints/`: the legs are checked too, and the note is
+ * included when ANY leg ships one (it orients the agent to the concept, and the agent finds the
+ * per-repo folder from there). Best-effort throughout — any stat/readdir failure simply omits
+ * the note rather than failing the dispatch.
+ */
+export async function checkoutHasBlueprints(dir: string, multiRepo: boolean): Promise<boolean> {
+  const isBlueprintDir = (path: string): Promise<boolean> =>
+    stat(join(path, 'blueprints'))
+      .then((s) => s.isDirectory())
+      .catch(() => false)
+  if (await isBlueprintDir(dir)) return true
+  if (!multiRepo) return false
+  const legs = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const checks = await Promise.all(
+    legs.filter((e) => e.isDirectory()).map((e) => isBlueprintDir(join(dir, e.name))),
+  )
+  return checks.some(Boolean)
+}
+
+/**
  * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
@@ -310,12 +337,7 @@ export async function runAgentInWorkspace(
   }
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
-  // Only include the blueprint orientation note when the checkout actually ships `blueprints/`
-  // (a managed cat-factory service); external repos don't have one, so the note would be dead
-  // guidance re-sent every turn. Best-effort — a stat failure just omits the note.
-  const hasBlueprints = await stat(join(spec.dir, 'blueprints'))
-    .then((s) => s.isDirectory())
-    .catch(() => false)
+  const hasBlueprints = await checkoutHasBlueprints(spec.dir, spec.multiRepo === true)
   await writeAgentsContext(spec.systemPrompt, {
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,

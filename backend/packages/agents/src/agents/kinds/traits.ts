@@ -92,7 +92,10 @@ export const SPEC_AWARE_GUIDANCE = [
   `- \`${SPEC_MODULES_DIR}/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.`,
   `- \`${SPEC_MODULES_DIR}/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.`,
   `- \`${SPEC_FEATURES_DIR}/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.`,
-  `Navigate, don't dredge: \`${SPEC_OVERVIEW_PATH}\` is an INDEX — read it to map the service, then open ONLY the shards for the feature(s) you are changing PLUS any module your change calls into or that depends on it (follow the overview's links). Do NOT read the whole tree: a large service has many features, and loading them all buries the detail that matters and wastes your context budget. Equally, do not work blind to neighbours — the overview gives you that cross-module awareness cheaply, so you can honour the contracts of adjacent modules and avoid regressions without reading every shard in full.`,
+  // Kept to one imperative line ON PURPOSE: this rides the system prompt of every spec-aware
+  // kind, re-sent on every turn of the implementer kinds whose per-turn cost the `brief`
+  // standards exist to cut — so arguing the case at length here would spend back the saving.
+  `Navigate, don't dredge: read \`${SPEC_OVERVIEW_PATH}\` to map the service, then open ONLY the shards for the feature(s) you are changing PLUS any module your change calls into or that depends on it. Reading the whole tree wastes your context budget; reading only your own shard breaks the neighbours you touch.`,
   `Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.`,
 ].join('\n')
 

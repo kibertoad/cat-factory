@@ -21,6 +21,7 @@ function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
     category: fragment.category ?? null,
     summary: fragment.summary,
     body: fragment.body,
+    brief: fragment.brief ?? null,
     appliesTo: fragment.appliesTo ?? null,
     tags: fragment.tags ?? null,
     source: fragment.source ?? null,
@@ -40,6 +41,9 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
     category: record.category,
     summary: record.summary,
     body: record.body,
+    // Managed rows carry no condensed variant, so an override of a built-in id folds its own
+    // full body rather than inheriting the built-in's brief. See `ResolvedCatalogEntry.brief`.
+    brief: null,
     appliesTo: record.appliesTo,
     tags: record.tags,
     source:

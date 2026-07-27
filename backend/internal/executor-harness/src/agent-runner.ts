@@ -12,15 +12,14 @@ import {
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
-  ProgressGuard,
   publishCallMetric,
   type CallMetricPublisher,
   type HarnessCallMetric,
   type PiRunOutcome,
   type PiRunStats,
-  type ProgressGuardLimits,
   type TodoProgress,
 } from './pi.js'
+import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
@@ -167,7 +166,7 @@ function streamCli(
   opts: SubscriptionRunOptions,
   env: Record<string, string>,
   secrets: string[],
-  onEvent: (event: Record<string, unknown>) => void,
+  onEvent: (event: Record<string, unknown>, meta?: { final?: boolean }) => void,
 ): Promise<{ stderrTail: string }> {
   const { command, args } = cli
   return new Promise((resolve, reject) => {
@@ -191,7 +190,12 @@ function streamCli(
 
     const killChild = (): void => killChildProcess(child)
 
-    const processLine = (line: string): void => {
+    // `final` marks the at-close flush of a trailing unterminated line: the CLI has already
+    // exited, so an observer must not act on that record in a way that KILLS the run (mirrors
+    // `runPi`'s `runGuard = false` flush — without it, a guard tripping on the last buffered
+    // record could turn a clean exit into a spurious "no progress" failure). The record's
+    // progress/telemetry signal is still delivered; only kill decisions are suppressed.
+    const processLine = (line: string, final = false): void => {
       if (!line.startsWith('{')) return
       let event: Record<string, unknown>
       try {
@@ -200,7 +204,7 @@ function streamCli(
         return
       }
       try {
-        onEvent(event)
+        onEvent(event, { final })
       } catch {
         // A faulty observer must never break the run.
       }
@@ -239,10 +243,13 @@ function streamCli(
     })
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
-      if (lineBuffer.trim()) processLine(lineBuffer.trim())
       const stderrTail = redact(stderr, secrets).slice(-700)
+      if (lineBuffer.trim()) processLine(lineBuffer.trim(), true)
       if (aborted) {
-        reject(new Error('agent run aborted by watchdog'))
+        // Carry the tail on the rejection so a caller that REPLACES this generic message with a
+        // more specific cause (the no-progress guard's diagnostic) can still append it — the
+        // stderr is often the only evidence of what the CLI was doing when it was killed.
+        reject(Object.assign(new Error('agent run aborted by watchdog'), { stderrTail }))
         return
       }
       if (code !== 0) {
@@ -430,7 +437,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     }
   }
 
-  const onEvent = (event: Record<string, unknown>): void => {
+  const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
     if (type === 'assistant' && isObject(event.message)) {
       const message = event.message as Record<string, unknown>
@@ -476,7 +483,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         sliceTracker.onUser(content)
         planTracker.onUser(content)
         emitProgress()
-        feedGuard(content)
+        // Not on the at-close flush: the CLI has already exited, so tripping the guard there
+        // would kill nothing and only convert a clean exit into a spurious failure.
+        if (!meta?.final) feedGuard(content)
         messages.push({ role: 'tool', content })
       }
     } else if (type === 'result') {
@@ -587,8 +596,13 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     })
   } catch (err) {
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
-    // message, so replace it with the guard's actionable diagnostic (mirrors runPi's failure).
-    if (guardReason) throw new Error(guardReason)
+    // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
+    // it attached, since that is usually the only evidence of what the CLI was doing when it was
+    // killed. Byte-for-byte the shape `runPi` fails with.
+    if (guardReason) {
+      const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
+      throw new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason)
+    }
     throw err
   } finally {
     await subagents?.stop()

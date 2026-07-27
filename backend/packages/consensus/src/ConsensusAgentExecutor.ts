@@ -23,6 +23,7 @@ import {
   resolveAgentConfig,
   resolveInlineModelRef,
   standardsDeliveredAsFiles,
+  standardsVerbosityFor,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -194,6 +195,9 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
       standardsDeliveredAsFiles(context.injectedContextFiles),
+      // Same per-kind verbosity the single-actor executors resolve: a consensus session runs the
+      // SAME kind, so an implementer kind must not silently regain the full standards here.
+      standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
     )
     const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 

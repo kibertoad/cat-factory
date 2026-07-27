@@ -46,7 +46,7 @@ import {
   runAgentInWorkspace,
   withWorkspace,
 } from './pi-workspace.js'
-import type { ProgressGuardLimits } from './pi.js'
+import type { ProgressGuardLimits } from './progress-guard.js'
 import type { RunOptions } from './runner.js'
 import { log, type Logger } from './logger.js'
 import {

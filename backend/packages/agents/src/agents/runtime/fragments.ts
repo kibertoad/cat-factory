@@ -35,6 +35,15 @@ export interface ComposableFragment {
   /** The fragment's human title, used as the citation label when present (else the id). */
   title?: string
   body: string
+  /**
+   * The condensed variant of {@link body}, folded instead of it under `brief` verbosity. Supplied
+   * by WHOEVER RESOLVED THE BODY, never re-looked-up here by id: a workspace/account-tier row (or
+   * a live document-backed one) may OVERRIDE a built-in id, and re-resolving the brief from the
+   * static pool would fold the built-in's condensed text over the tenant's override — silently
+   * ignoring their standard for exactly the implementer kinds `brief` targets. A resolver with no
+   * brief for the id leaves this absent, which correctly falls back to the full `body`.
+   */
+  brief?: string
 }
 
 /** A block's fragment selection, as the prompt composer needs it. */
@@ -66,13 +75,10 @@ function foldStandards(
   if (fragments.length === 0) return baseSystem
   const blocks = fragments.map((fragment) => {
     const label = fragment.title?.trim() || fragment.id
-    // Implementer kinds fold the condensed `brief` when the fragment defines one; everyone
-    // else (and any fragment without a `brief`) gets the full `body`. The brief is looked up
-    // from the pool by id rather than threaded through every fragment-resolution site, so it
-    // applies uniformly to both the id-resolved and engine-resolved (`resolvedFragments`)
-    // sources; a tenant/document-backed fragment absent from the static pool keeps its full
-    // body. `getFragment` is already the composer's resolution source (see below).
-    const brief = verbosity === 'brief' ? getFragment(fragment.id)?.brief?.trim() : undefined
+    // Implementer kinds fold the condensed `brief` when the RESOLVED fragment carries one;
+    // everyone else (and any fragment resolved without a brief) gets the full `body`. See
+    // `ComposableFragment.brief` for why this must never re-resolve the brief by id.
+    const brief = verbosity === 'brief' ? fragment.brief?.trim() : undefined
     const body = brief || fragment.body.trim()
     return [
       `<best-practice-standard id="${escapeAttr(fragment.id)}" title="${escapeAttr(label)}">`,
@@ -99,7 +105,13 @@ export function composeSystemPrompt(
   const fragments = fragmentIds
     .map((id) => getFragment(id))
     .filter((fragment): fragment is NonNullable<typeof fragment> => fragment !== undefined)
-    .map((fragment) => ({ id: fragment.id, title: fragment.title, body: fragment.body }))
+    .map((fragment) => ({
+      id: fragment.id,
+      title: fragment.title,
+      body: fragment.body,
+      // This path resolves the body from the pool, so the pool's brief is the matching one.
+      ...(fragment.brief ? { brief: fragment.brief } : {}),
+    }))
   return foldStandards(baseSystem, fragments, verbosity)
 }
 

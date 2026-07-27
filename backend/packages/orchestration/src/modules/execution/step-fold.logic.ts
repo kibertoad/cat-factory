@@ -1,12 +1,31 @@
-import { sameSubtasks, type PipelineStep } from '@cat-factory/kernel'
+import { sameSubtasks, type AgentJobHandle, type PipelineStep } from '@cat-factory/kernel'
 import { shouldPersistActivity } from './job.logic.js'
 
-// The "fold one poll update onto the step" family: the small, pure-ish mutators the poll paths
+// The "fold one job update onto the step" family: the small, pure-ish mutators the poll paths
 // (agent + deployer) apply to a running step, each returning whether anything actually changed so
 // the caller only persists + emits on a real delta. Extracted from `RunDispatcher` — they never
 // touched `this`, they are shared by two poll paths, and the family grew a fourth member when the
 // pre-PR validation report started republishing live (see `validation.logic.ts`, which owns that
-// one because it also parses the harness payload).
+// one because it also parses the harness payload). {@link recordDispatchAttribution} is the one
+// member folding a DISPATCH rather than a poll — it lives here because every dispatch site needs
+// it and it is the exact counterpart the poll site reads back.
+
+/**
+ * Persist the attribution a DISPATCH knows and the poll site cannot re-derive: the resolved
+ * model, plus (for a subscription-harness job) the leased pool row and the run's initiator.
+ *
+ * An async container job settles on the durable poll path, which rebuilds the job handle from
+ * the step alone — so anything not recorded here is lost by the time the usage lands. Dropping
+ * the model made every subscription step's `token_usage` row read provider "unknown"; dropping
+ * the other two silently skips the pooled-token usage feedback (usage-aware rotation) and leaves
+ * the quota-cycle counters with no target. Each field is written only when the handle carries it,
+ * so a re-dispatch that resolves less never erases what an earlier one knew.
+ */
+export function recordDispatchAttribution(step: PipelineStep, handle: AgentJobHandle): void {
+  if (handle.model) step.model = handle.model
+  if (handle.subscriptionTokenId) step.subscriptionTokenId = handle.subscriptionTokenId
+  if (handle.initiatedByUserId) step.initiatedByUserId = handle.initiatedByUserId
+}
 
 export function applyContainerRunning(
   step: PipelineStep,

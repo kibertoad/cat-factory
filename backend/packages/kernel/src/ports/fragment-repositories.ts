@@ -103,6 +103,13 @@ export interface ResolvedCatalogEntry {
   category: string | null
   summary: string
   body: string
+  /**
+   * The condensed variant of {@link body} folded for implementer kinds, when the winning tier
+   * defines one. Only the built-in tier does today (managed rows have no `brief` column), so a
+   * tenant row that OVERRIDES a built-in id resolves with none — which is the correct outcome:
+   * the override's own full body is folded rather than the built-in's condensed text.
+   */
+  brief: string | null
   appliesTo: FragmentAppliesTo | null
   tags: string[] | null
   source: { sourceId: string; path: string; sha: string } | null

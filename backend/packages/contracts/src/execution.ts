@@ -849,6 +849,21 @@ export const pipelineStepSchema = v.object({
   /** Identifier of the model that produced `output`, for transparency. */
   model: v.optional(v.string()),
   /**
+   * Subscription-usage attribution captured at DISPATCH, alongside {@link model}. An async
+   * container job settles on the durable poll path, which rebuilds the job handle from what the
+   * step persists — it cannot re-resolve any of this. Without these, the poll site attributes
+   * a subscription run to nobody: the pooled-token usage feedback (usage-aware rotation) is
+   * skipped outright and the quota-cycle counters resolve a null target, exactly as the model
+   * itself used to record 'unknown'.
+   *
+   * Neither is a secret: `subscriptionTokenId` identifies the pool ROW whose credential was
+   * leased (never the credential), and `initiatedByUserId` is the run's initiator, already
+   * carried elsewhere in the run. Absent for a proxy-metered (non-subscription) job, and for a
+   * run with no known initiator (system paths).
+   */
+  subscriptionTokenId: v.optional(v.string()),
+  initiatedByUserId: v.optional(v.string()),
+  /**
    * Ids of the prompt-fragment library entries that were folded into this step's
    * system prompt — the manual selection on the block unioned with the relevance
    * selector's pick. Recorded for observability and replay-stability; absent when
