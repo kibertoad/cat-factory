@@ -45,6 +45,7 @@ export function useNavContributions() {
     localModels: () => ui.openLocalModels(),
     accountSettings: () => ui.openAccountSettings(),
     operatorDashboard: () => ui.openOperatorDashboard(),
+    reports: () => ui.openReports(),
     shortcuts: () => ui.openShortcutsHelp(),
   }
 

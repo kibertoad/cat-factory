@@ -112,6 +112,7 @@
     "modelConfiguration": "モデル設定",
     "accountSettings": "アカウント設定",
     "operatorDashboard": "プラットフォームの可観測性",
+    "reports": "レポート",
     "environmentSetup": "環境セットアップ"
   },
   "board": {
@@ -1459,6 +1460,68 @@
     },
     "live": {
       "title": "現在アクティブ"
+    }
+  },
+  "reports": {
+    "title": "レポート",
+    "refresh": "更新",
+    "loading": "レポートを読み込んでいます…",
+    "retry": "再試行",
+    "period": "{from} 〜 {to}",
+    "unattributed": "未割り当て",
+    "window": {
+      "oneDay": "過去24時間",
+      "sevenDays": "過去7日間",
+      "thirtyDays": "過去30日間",
+      "ninetyDays": "過去90日間"
+    },
+    "filter": {
+      "board": "ボード",
+      "allBoards": "すべてのボード"
+    },
+    "dimension": {
+      "workspace": "ボード",
+      "service": "サービス",
+      "taskType": "タスクの種類"
+    },
+    "breakdown": {
+      "title": "内訳の軸"
+    },
+    "totals": {
+      "title": "この期間",
+      "metered": "従量課金の費用",
+      "subscription": "サブスクリプション",
+      "calls": "LLM 呼び出し",
+      "tokens": "トークン",
+      "illustrative": "サブスクリプションの費用は参考値です。これらのプランは定額制で、トークン単位では課金されず、支出としては集計されません。"
+    },
+    "trend": {
+      "title": "期間中の費用推移",
+      "empty": "この期間に記録された利用はありません。"
+    },
+    "legend": {
+      "metered": "従量課金",
+      "subscription": "サブスクリプション"
+    },
+    "spend": {
+      "byModel": "モデル別の費用",
+      "byAgentKind": "エージェント種別の費用",
+      "heading": "費用",
+      "empty": "この期間に記録された利用はありません。",
+      "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
+      "tokens": "入力 {input} / 出力 {output}"
+    },
+    "activity": {
+      "heading": "実行",
+      "empty": "この期間に実行はありません。",
+      "runs": "{count} 件の実行 | {count} 件の実行",
+      "avg": "平均 {value}"
+    },
+    "status": {
+      "done": "完了",
+      "failed": "失敗",
+      "running": "実行中",
+      "other": "その他"
     }
   },
   "auth": {

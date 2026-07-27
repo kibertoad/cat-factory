@@ -1051,6 +1051,37 @@ each account's `PlatformObservabilityService.summarize` projection as OTLP gauge
 `platform_health` threshold alert (state-change deduplicated). Detail:
 [`docs/initiatives/platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
+## Reports (cross-cutting usage analytics)
+
+The dual of the platform-health rollups above: those answer "is the deployment HEALTHY",
+`ReportsService` answers "where are the money and the work GOING". One admin read,
+`GET /accounts/:accountId/reports` (`ReportsController`, `requireAdmin` like the operator
+dashboard), returns spend by model / agent kind / workspace / service / task type, run activity by
+workspace / service / task type, and a spend trend. Design:
+[`backend/docs/reports.md`](./backend/docs/reports.md).
+
+- **No new table, no migration.** Every number is a `GROUP BY` over `token_usage` and `agent_runs`,
+  joined to `blocks`/`services`/`workspaces` for the board shape and the display labels — all MAIN
+  store on both runtimes, so the telemetry database is never joined. `token_usage` carries no
+  service or task type (a metered call records the RUN, not the board), so those two spend
+  dimensions reach the run through `execution_id`.
+- **Metered and subscription cost are TWO columns and must never be summed.** Only `meteredCost` is
+  real money; `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage,
+  which the spend gate excludes. The split is a conditional `SUM` in the same pass, and anything not
+  literally `'subscription'` is priced as metered.
+- **The `''` key is a REAL slice** (a call whose run/service/task type couldn't be resolved). An
+  inner join would drop it and under-report the window while looking complete.
+- **No row cap**: every dimension has naturally bounded cardinality, so a cap would either drop
+  slices silently or make the folded totals disagree with the rows. A new dimension with unbounded
+  cardinality must revisit that, not inherit it.
+- **Activity has a NARROWER axis than spend** (`workspace | service | taskType`, no `model` /
+  `agentKind`): a run carries no single agent kind or model — those are per-step facts. The contract
+  encodes the difference rather than returning empty arrays.
+- **Totals are FOLDED from one breakdown**, never a sixth query: every spend breakdown partitions the
+  same ledger rows, so they total identically.
+- Costs are the DEPLOYMENT's base currency, not a workspace override — an account-wide report spans
+  boards that may each override it.
+
 ## Board / service / repo-linkage model
 
 - A "service" is a `Block` with `level: 'frame'`, `parentId: null`. Modules are sub-frames; tasks are

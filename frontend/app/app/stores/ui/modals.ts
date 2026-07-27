@@ -440,6 +440,10 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // from `observabilityConnectionOpen` (the Datadog connection) AND `observabilityInstanceId`
   // (the per-run LLM call panel).
   const operatorDashboardOpen = ref(false)
+  // Reports: the cross-cutting usage-analytics panel over the same account scope (spend per
+  // model / agent kind, spend + activity per workspace / service / task type). Admin-gated.
+  // Distinct from `operatorDashboardOpen`, which answers the deployment-HEALTH question.
+  const reportsOpen = ref(false)
   // Private package registries: the workspace's npm/GitHub-Packages entries agent
   // containers install with. Opened from the Integrations hub.
   const packageRegistriesOpen = ref(false)
@@ -485,6 +489,13 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeOperatorDashboard() {
     operatorDashboardOpen.value = false
+  }
+  function openReports() {
+    resetHubReturn()
+    reportsOpen.value = true
+  }
+  function closeReports() {
+    reportsOpen.value = false
   }
   function openPackageRegistries() {
     resetHubReturn()
@@ -544,6 +555,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     slackOpen,
     observabilityConnectionOpen,
     operatorDashboardOpen,
+    reportsOpen,
     packageRegistriesOpen,
     apiTokensOpen,
     modelConfigOpen,
@@ -559,6 +571,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     openObservabilityConnection,
     closeObservabilityConnection,
     openOperatorDashboard,
+    openReports,
+    closeReports,
     closeOperatorDashboard,
     openPackageRegistries,
     closePackageRegistries,

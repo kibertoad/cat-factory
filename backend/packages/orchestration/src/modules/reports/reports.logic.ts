@@ -1,0 +1,111 @@
+import type {
+  ReportActivityRow,
+  ReportSpendRow,
+  ReportTotals,
+  ReportTrendPoint,
+  ReportWindow,
+} from '@cat-factory/contracts'
+import type {
+  ReportActivityGroup,
+  ReportSpendGroup,
+  ReportSpendTrendBucket,
+} from '@cat-factory/kernel'
+
+// Pure reshaping behind the reports read: the port returns raw grouped rows; these
+// functions fold them into the wire projection. Kept pure (no clock, no I/O) so they're
+// unit-tested directly, mirroring `platform-observability.logic.ts`.
+
+/** Per-window sizing: how far back to aggregate and how wide each trend bucket is. */
+export const REPORT_WINDOWS: Record<ReportWindow, { windowMs: number; bucketMs: number }> = {
+  '24h': { windowMs: 24 * 60 * 60_000, bucketMs: 60 * 60_000 }, // 24 × 1h buckets
+  '7d': { windowMs: 7 * 24 * 60 * 60_000, bucketMs: 6 * 60 * 60_000 }, // 28 × 6h buckets
+  '30d': { windowMs: 30 * 24 * 60 * 60_000, bucketMs: 24 * 60 * 60_000 }, // 30 × 1d buckets
+  '90d': { windowMs: 90 * 24 * 60 * 60_000, bucketMs: 3 * 24 * 60 * 60_000 }, // 30 × 3d buckets
+}
+
+/** Widen a port spend group into its wire row (the shapes match; this pins the boundary). */
+export function toSpendRow(group: ReportSpendGroup): ReportSpendRow {
+  return {
+    key: group.key,
+    label: group.label,
+    inputTokens: group.inputTokens,
+    outputTokens: group.outputTokens,
+    calls: group.calls,
+    meteredCost: group.meteredCost,
+    subscriptionCost: group.subscriptionCost,
+  }
+}
+
+/** Widen a port activity group into its wire row. */
+export function toActivityRow(group: ReportActivityGroup): ReportActivityRow {
+  return {
+    key: group.key,
+    label: group.label,
+    runs: group.runs,
+    done: group.done,
+    failed: group.failed,
+    running: group.running,
+    other: group.other,
+    avgDurationMs: group.avgDurationMs,
+  }
+}
+
+/**
+ * Window-wide totals, summed from ONE breakdown. Every spend breakdown partitions the
+ * same ledger rows, so any of them totals identically — folding the model breakdown in JS
+ * costs nothing and avoids a sixth aggregate query purely to restate it.
+ */
+export function foldTotals(rows: ReportSpendRow[]): ReportTotals {
+  const totals: ReportTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    calls: 0,
+    meteredCost: 0,
+    subscriptionCost: 0,
+  }
+  for (const row of rows) {
+    totals.inputTokens += row.inputTokens
+    totals.outputTokens += row.outputTokens
+    totals.calls += row.calls
+    totals.meteredCost += row.meteredCost
+    totals.subscriptionCost += row.subscriptionCost
+  }
+  return totals
+}
+
+/**
+ * Fold the sparse trend buckets into a contiguous, zero-filled, oldest-first series
+ * spanning `[since, until]` at `bucketMs` resolution — so a quiet period reads as a flat
+ * run of zeros rather than a collapsed gap that implies continuous spend.
+ */
+export function buildSpendTrend(
+  buckets: ReportSpendTrendBucket[],
+  since: number,
+  until: number,
+  bucketMs: number,
+): ReportTrendPoint[] {
+  const byStart = new Map<number, ReportTrendPoint>()
+  const empty = (start: number): ReportTrendPoint => ({
+    start,
+    meteredCost: 0,
+    subscriptionCost: 0,
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+  })
+  const first = Math.floor(since / bucketMs) * bucketMs
+  const last = Math.floor(until / bucketMs) * bucketMs
+  for (let start = first; start <= last; start += bucketMs) byStart.set(start, empty(start))
+  for (const bucket of buckets) {
+    // A bucket outside the zero-filled span (a clock skew, or a row stamped in the
+    // future) still belongs in the series — add it rather than silently discarding spend.
+    const point = byStart.get(bucket.bucketStart) ?? empty(bucket.bucketStart)
+    point.meteredCost += bucket.meteredCost
+    point.subscriptionCost += bucket.subscriptionCost
+    point.calls += bucket.calls
+    point.inputTokens += bucket.inputTokens
+    point.outputTokens += bucket.outputTokens
+    byStart.set(bucket.bucketStart, point)
+  }
+  return [...byStart.values()].sort((a, b) => a.start - b.start)
+}

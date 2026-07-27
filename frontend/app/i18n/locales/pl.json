@@ -111,6 +111,7 @@
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
     "operatorDashboard": "Obserwowalność platformy",
+    "reports": "Raporty",
     "infrastructure": "Infrastruktura",
     "environmentSetup": "Konfiguracja środowiska"
   },
@@ -1459,6 +1460,68 @@
     },
     "live": {
       "title": "Aktywne teraz"
+    }
+  },
+  "reports": {
+    "title": "Raporty",
+    "refresh": "Odśwież",
+    "loading": "Wczytywanie raportów…",
+    "retry": "Spróbuj ponownie",
+    "period": "Od {from} do {to}",
+    "unattributed": "Nieprzypisane",
+    "window": {
+      "oneDay": "Ostatnie 24 godziny",
+      "sevenDays": "Ostatnie 7 dni",
+      "thirtyDays": "Ostatnie 30 dni",
+      "ninetyDays": "Ostatnie 90 dni"
+    },
+    "filter": {
+      "board": "Tablica",
+      "allBoards": "Wszystkie tablice"
+    },
+    "dimension": {
+      "workspace": "Tablica",
+      "service": "Usługa",
+      "taskType": "Typ zadania"
+    },
+    "breakdown": {
+      "title": "Podział według"
+    },
+    "totals": {
+      "title": "W tym okresie",
+      "metered": "Koszt rozliczany",
+      "subscription": "Subskrypcja",
+      "calls": "Wywołania LLM",
+      "tokens": "Tokeny",
+      "illustrative": "Koszty subskrypcji są poglądowe — te plany mają stałą cenę, nie są rozliczane za token i nigdy nie liczą się jako wydatek."
+    },
+    "trend": {
+      "title": "Koszty w czasie",
+      "empty": "W tym okresie nie zarejestrowano użycia."
+    },
+    "legend": {
+      "metered": "Rozliczane",
+      "subscription": "Subskrypcja"
+    },
+    "spend": {
+      "byModel": "Koszty według modelu",
+      "byAgentKind": "Koszty według typu agenta",
+      "heading": "Koszty",
+      "empty": "W tym okresie nie zarejestrowano użycia.",
+      "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
+      "tokens": "{input} wejścia / {output} wyjścia"
+    },
+    "activity": {
+      "heading": "Uruchomienia",
+      "empty": "W tym okresie nie było uruchomień.",
+      "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień",
+      "avg": "śr. {value}"
+    },
+    "status": {
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "running": "W trakcie",
+      "other": "Inne"
     }
   },
   "auth": {

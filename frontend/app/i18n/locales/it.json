@@ -3000,6 +3000,68 @@
       "title": "Attive ora"
     }
   },
+  "reports": {
+    "title": "Report",
+    "refresh": "Aggiorna",
+    "loading": "Caricamento dei report…",
+    "retry": "Riprova",
+    "period": "Dal {from} al {to}",
+    "unattributed": "Non attribuito",
+    "window": {
+      "oneDay": "Ultime 24 ore",
+      "sevenDays": "Ultimi 7 giorni",
+      "thirtyDays": "Ultimi 30 giorni",
+      "ninetyDays": "Ultimi 90 giorni"
+    },
+    "filter": {
+      "board": "Board",
+      "allBoards": "Tutti i board"
+    },
+    "dimension": {
+      "workspace": "Board",
+      "service": "Servizio",
+      "taskType": "Tipo di attività"
+    },
+    "breakdown": {
+      "title": "Suddivisione per"
+    },
+    "totals": {
+      "title": "In questo periodo",
+      "metered": "Spesa a consumo",
+      "subscription": "Abbonamento",
+      "calls": "Chiamate LLM",
+      "tokens": "Token",
+      "illustrative": "I costi degli abbonamenti sono indicativi: questi piani sono a tariffa fissa, non vengono fatturati per token e non contano mai come spesa."
+    },
+    "trend": {
+      "title": "Spesa nel tempo",
+      "empty": "Nessun utilizzo registrato in questo periodo."
+    },
+    "legend": {
+      "metered": "A consumo",
+      "subscription": "Abbonamento"
+    },
+    "spend": {
+      "byModel": "Spesa per modello",
+      "byAgentKind": "Spesa per tipo di agente",
+      "heading": "Spesa",
+      "empty": "Nessun utilizzo registrato in questo periodo.",
+      "calls": "{count} chiamata | {count} chiamate",
+      "tokens": "{input} in ingresso / {output} in uscita"
+    },
+    "activity": {
+      "heading": "Esecuzioni",
+      "empty": "Nessuna esecuzione in questo periodo.",
+      "runs": "{count} esecuzione | {count} esecuzioni",
+      "avg": "media {value}"
+    },
+    "status": {
+      "done": "Completate",
+      "failed": "Fallite",
+      "running": "In corso",
+      "other": "Altre"
+    }
+  },
   "auth": {
     "gate": {
       "loading": "Caricamento…"
@@ -4159,6 +4221,7 @@
     "modelConfiguration": "Configurazione del modello",
     "accountSettings": "Impostazioni dell'account",
     "operatorDashboard": "Osservabilità della piattaforma",
+    "reports": "Report",
     "environmentSetup": "Configurazione dell'ambiente"
   },
   "errors": {

@@ -79,6 +79,7 @@ import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
+import { D1ReportsRepository } from './repositories/D1ReportsRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
@@ -252,6 +253,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
+    // the Reports view.
+    reportsRepository: new D1ReportsRepository({ db }),
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.

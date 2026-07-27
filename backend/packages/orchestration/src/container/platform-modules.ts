@@ -16,6 +16,8 @@
 
 import { LlmObservabilityService } from '../modules/observability/LlmObservabilityService.js'
 import { PlatformObservabilityService } from '../modules/observability/PlatformObservabilityService.js'
+import { ReportsService } from '../modules/reports/ReportsService.js'
+import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
@@ -76,6 +78,19 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
       ? new PlatformObservabilityService({
           platformMetricsRepository: dependencies.platformMetricsRepository,
           clock: dependencies.clock,
+        })
+      : undefined,
+  )
+  // Cross-cutting usage analytics (the "where does the spend and the work go" dual of the
+  // health rollups above). Costs are reported in the DEPLOYMENT's base currency: an
+  // account-wide report spans boards that may each override it, so a per-workspace
+  // currency would be summing different denominations into one number.
+  modules.build('reports', () =>
+    dependencies.reportsRepository
+      ? new ReportsService({
+          reportsRepository: dependencies.reportsRepository,
+          clock: dependencies.clock,
+          currency: (dependencies.spendPricing ?? DEFAULT_SPEND_PRICING).currency,
         })
       : undefined,
   )

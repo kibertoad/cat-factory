@@ -3000,6 +3000,68 @@
       "title": "Jetzt aktiv"
     }
   },
+  "reports": {
+    "title": "Berichte",
+    "refresh": "Aktualisieren",
+    "loading": "Berichte werden geladen…",
+    "retry": "Erneut versuchen",
+    "period": "{from} bis {to}",
+    "unattributed": "Nicht zugeordnet",
+    "window": {
+      "oneDay": "Letzte 24 Stunden",
+      "sevenDays": "Letzte 7 Tage",
+      "thirtyDays": "Letzte 30 Tage",
+      "ninetyDays": "Letzte 90 Tage"
+    },
+    "filter": {
+      "board": "Board",
+      "allBoards": "Alle Boards"
+    },
+    "dimension": {
+      "workspace": "Board",
+      "service": "Service",
+      "taskType": "Aufgabentyp"
+    },
+    "breakdown": {
+      "title": "Aufschlüsselung nach"
+    },
+    "totals": {
+      "title": "In diesem Zeitraum",
+      "metered": "Abgerechnete Kosten",
+      "subscription": "Abo",
+      "calls": "LLM-Aufrufe",
+      "tokens": "Tokens",
+      "illustrative": "Abokosten sind nur kalkulatorisch – diese Tarife sind pauschal, werden nicht pro Token abgerechnet und zählen nie als Ausgaben."
+    },
+    "trend": {
+      "title": "Kosten im Zeitverlauf",
+      "empty": "In diesem Zeitraum wurde keine Nutzung erfasst."
+    },
+    "legend": {
+      "metered": "Abgerechnet",
+      "subscription": "Abo"
+    },
+    "spend": {
+      "byModel": "Kosten nach Modell",
+      "byAgentKind": "Kosten nach Agententyp",
+      "heading": "Kosten",
+      "empty": "In diesem Zeitraum wurde keine Nutzung erfasst.",
+      "calls": "{count} Aufruf | {count} Aufrufe",
+      "tokens": "{input} rein / {output} raus"
+    },
+    "activity": {
+      "heading": "Läufe",
+      "empty": "In diesem Zeitraum gab es keine Läufe.",
+      "runs": "{count} Lauf | {count} Läufe",
+      "avg": "Ø {value}"
+    },
+    "status": {
+      "done": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "running": "Läuft",
+      "other": "Sonstige"
+    }
+  },
   "auth": {
     "gate": {
       "loading": "Wird geladen…"
@@ -4159,6 +4221,7 @@
     "modelConfiguration": "Modellkonfiguration",
     "accountSettings": "Kontoeinstellungen",
     "operatorDashboard": "Plattform-Observability",
+    "reports": "Berichte",
     "environmentSetup": "Umgebungseinrichtung"
   },
   "errors": {

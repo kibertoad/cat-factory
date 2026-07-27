@@ -60,6 +60,7 @@ import { LlmObservabilityService } from './modules/observability/LlmObservabilit
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
 import { PlatformObservabilityService } from './modules/observability/PlatformObservabilityService.js'
+import { ReportsService } from './modules/reports/ReportsService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -341,6 +342,8 @@ export interface OptionalCoreModules {
   llmObservability?: LlmObservabilityService
   /** Present only when the platform-metrics rollup repository is wired (see CoreDependencies). */
   platformObservability?: PlatformObservabilityService
+  /** Present only when the reports rollup repository is wired (see CoreDependencies). */
+  reports?: ReportsService
   /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
   agentContextObservability?: AgentContextObservabilityService
   /** Present only when the agent-search-query repository is wired (see CoreDependencies). */

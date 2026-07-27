@@ -130,6 +130,7 @@
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
     "operatorDashboard": "Platform observability",
+    "reports": "Reports",
     "environmentSetup": "Environment setup"
   },
   "board": {
@@ -1522,6 +1523,68 @@
     },
     "live": {
       "title": "Live now"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "refresh": "Refresh",
+    "loading": "Loading reports…",
+    "retry": "Retry",
+    "period": "{from} to {to}",
+    "unattributed": "Unattributed",
+    "window": {
+      "oneDay": "Last 24 hours",
+      "sevenDays": "Last 7 days",
+      "thirtyDays": "Last 30 days",
+      "ninetyDays": "Last 90 days"
+    },
+    "filter": {
+      "board": "Board",
+      "allBoards": "All boards"
+    },
+    "dimension": {
+      "workspace": "Board",
+      "service": "Service",
+      "taskType": "Task type"
+    },
+    "breakdown": {
+      "title": "Breakdown by"
+    },
+    "totals": {
+      "title": "This window",
+      "metered": "Metered spend",
+      "subscription": "Subscription",
+      "calls": "LLM calls",
+      "tokens": "Tokens",
+      "illustrative": "Subscription costs are illustrative — those plans are flat-rate, not billed per token, and are never counted as spend."
+    },
+    "trend": {
+      "title": "Spend over time",
+      "empty": "No recorded usage in this window."
+    },
+    "legend": {
+      "metered": "Metered",
+      "subscription": "Subscription"
+    },
+    "spend": {
+      "byModel": "Spend by model",
+      "byAgentKind": "Spend by agent kind",
+      "heading": "Spend",
+      "empty": "No recorded usage in this window.",
+      "calls": "{count} call | {count} calls",
+      "tokens": "{input} in / {output} out"
+    },
+    "activity": {
+      "heading": "Runs",
+      "empty": "No runs in this window.",
+      "runs": "{count} run | {count} runs",
+      "avg": "avg {value}"
+    },
+    "status": {
+      "done": "Completed",
+      "failed": "Failed",
+      "running": "Running",
+      "other": "Other"
     }
   },
   "auth": {

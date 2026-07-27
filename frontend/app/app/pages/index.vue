@@ -35,6 +35,7 @@ const ObservabilityPanel = defineAsyncComponent(
 const OperatorDashboardPanel = defineAsyncComponent(
   () => import('~/components/panels/OperatorDashboardPanel.vue'),
 )
+const ReportsPanel = defineAsyncComponent(() => import('~/components/panels/ReportsPanel.vue'))
 const KaizenPanel = defineAsyncComponent(() => import('~/components/kaizen/KaizenPanel.vue'))
 // Occasional, externally store-gated surfaces — deferred to their own chunks like the
 // sibling document modals above. Each mounts only while its ui open-flag is set, so it
@@ -400,6 +401,7 @@ watch(
       <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
       <ObservabilityPanel v-if="ui.observabilityInstanceId" />
       <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />
+      <ReportsPanel v-if="ui.reportsOpen" />
       <KaizenPanel v-if="ui.kaizenScreenOpen" />
       <DocumentSourceConnectModal v-if="ui.documentConnect" />
       <DocumentImportModal v-if="ui.documentImport" />

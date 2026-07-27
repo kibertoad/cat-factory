@@ -75,6 +75,12 @@ export {
   type PlatformMetricsSeed,
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
+export {
+  defineReportsSuite,
+  type ReportsSeed,
+  type ReportsSeedRun,
+  type ReportsSeedUsage,
+} from './reports-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
