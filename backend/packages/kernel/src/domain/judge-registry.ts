@@ -2,7 +2,11 @@ import type { Block, JudgeVerdict, PipelineStep, RiskPolicy } from './types.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
-import { defaultProviderRegistry, type ProviderRegistry, type ProviderToken } from './provider-registry.js'
+import {
+  defaultProviderRegistry,
+  type ProviderRegistry,
+  type ProviderToken,
+} from './provider-registry.js'
 
 // ---------------------------------------------------------------------------
 // The JUDGE abstraction — the FOURTH bucket of the step taxonomy (agents / polling gates /

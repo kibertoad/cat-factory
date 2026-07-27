@@ -138,6 +138,17 @@ export type { ResolvedRunRiskPolicy } from './policy-types.js'
  * engine here can be tested with a
  * deterministic fake and no timing/delays.
  */
+/**
+ * Assemble the PR verification-report controller from the engine's already-resolved deps. A
+ * one-line seam extracted out of the constructor purely so that (large) composition stays inside
+ * its per-function line budget — the budget is a split trigger, never a number to raise.
+ */
+function buildPrReportController(
+  deps: ConstructorParameters<typeof PrVerificationReportController>[0],
+): PrVerificationReportController {
+  return new PrVerificationReportController(deps)
+}
+
 export class ExecutionService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
@@ -188,12 +199,16 @@ export class ExecutionService {
   /** The two brainstorm (structured-dialogue) subjects for {@link reviewGate}, by stage. */
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
+  // The three review-window sub-facades are built LAZILY by their getters (below) rather than in
+  // the constructor: they are thin wrappers over collaborators the constructor already assigned,
+  // and building them on first read keeps that (budgeted) constructor from carrying assembly that
+  // has no ordering constraint.
   /** Requirements-review window actions (exposed via {@link requirementsReview}). */
-  private readonly requirementsReviewActions: RequirementReviewActions
+  private requirementsReviewActions?: RequirementReviewActions
   /** Clarity-review (bug triage) window actions (exposed via {@link clarityReview}). */
-  private readonly clarityReviewActions: ClarityReviewActions
+  private clarityReviewActions?: ClarityReviewActions
   /** Brainstorm window actions (exposed via {@link brainstorm}). */
-  private readonly brainstormActions: BrainstormActions
+  private brainstormActions?: BrainstormActions
   /** Drives the interactive-planning interviewer gate (exposed via {@link initiativeInterview}). */
   private readonly initiativeInterviewController?: InitiativeInterviewController
   /** Drives the interactive document-interview gate (exposed via {@link docInterview}). */
@@ -493,7 +508,7 @@ export class ExecutionService {
       // Keeps the run's verification report on its PR as each step settles (a hook, not a
       // pipeline step — see docs/initiatives/pr-verification-report.md). A no-op when no
       // publisher is wired, so no-VCS deployments and the engine tests are untouched.
-      prVerificationReport: new PrVerificationReportController({
+      prVerificationReport: buildPrReportController({
         blockRepository,
         clock,
         publisher: prVerificationReportPublisher,
@@ -515,17 +530,6 @@ export class ExecutionService {
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
-    // Group the per-feature gate-window actions into cohesive sub-facades (exposed as
-    // getters below) so they stop bloating the engine's public surface as ~30 near-identical
-    // 3-line delegations. They close over the same shared collaborators the handlers use.
-    this.requirementsReviewActions = new RequirementReviewActions(
-      this.reviewGate,
-      this.requirementsKind,
-    )
-    this.clarityReviewActions = new ClarityReviewActions(this.reviewGate, this.clarityKind)
-    this.brainstormActions = new BrainstormActions(this.reviewGate, (stage) =>
-      this.brainstormKindFor(stage),
-    )
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
@@ -541,16 +545,24 @@ export class ExecutionService {
 
   /** Requirements-review window actions (run / incorporate / re-review / proceed / …). */
   get requirementsReview(): RequirementReviewActions {
+    this.requirementsReviewActions ??= new RequirementReviewActions(
+      this.reviewGate,
+      this.requirementsKind,
+    )
     return this.requirementsReviewActions
   }
 
   /** Clarity-review (bug-report triage) window actions. */
   get clarityReview(): ClarityReviewActions {
+    this.clarityReviewActions ??= new ClarityReviewActions(this.reviewGate, this.clarityKind)
     return this.clarityReviewActions
   }
 
   /** Brainstorm (structured-dialogue) window actions, keyed by stage. */
   get brainstorm(): BrainstormActions {
+    this.brainstormActions ??= new BrainstormActions(this.reviewGate, (stage) =>
+      this.brainstormKindFor(stage),
+    )
     return this.brainstormActions
   }
 

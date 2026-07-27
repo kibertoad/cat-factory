@@ -9,11 +9,11 @@ step with feedback, or fail the run.
 
 Three engine paths already share exactly that shape:
 
-| path | assessment | threshold | disposition |
-| --- | --- | --- | --- |
-| requirements auto-pass | reviewer findings + severities | `maxRequirementConcernAllowed` | advance / park |
-| `merger` | `MergeAssessment` (complexity/risk/impact) | the merge preset ceilings | merge / park for review |
-| `on-call` | `OnCallAssessment` (culprit confidence) | the gate's own handling | notify / enrich |
+| path                   | assessment                                 | threshold                      | disposition             |
+| ---------------------- | ------------------------------------------ | ------------------------------ | ----------------------- |
+| requirements auto-pass | reviewer findings + severities             | `maxRequirementConcernAllowed` | advance / park          |
+| `merger`               | `MergeAssessment` (complexity/risk/impact) | the merge preset ceilings      | merge / park for review |
+| `on-call`              | `OnCallAssessment` (culprit confidence)    | the gate's own handling        | notify / enrich         |
 
 `CLAUDE.md` names this "a latent 'verdict gate' family, not promoted to an abstraction until
 a second externally-authored member needs it". **That member has arrived.** Deployments want
@@ -53,7 +53,7 @@ no module-global side effect).
 **Decision: judges are a fourth bucket in the step taxonomy (agents / polling gates /
 one-shot engine steps / judges).**
 
-- Not a **gate**: a gate's `probe()` is a *programmatic precheck against a provider* whose
+- Not a **gate**: a gate's `probe()` is a _programmatic precheck against a provider_ whose
   entire point is to spin nothing up when it passes. A judge's assessment IS an LLM call —
   it always costs a model call, has no "pending" state to poll, and its verdict is a score,
   not a tri-state. Forcing it into `GateProbe` would mean a `probe()` that lies about being
@@ -176,21 +176,21 @@ exactly like the rest of the report. A judge step that did not run records
 
 ## Per-item status
 
-| # | Slice | Status | PR |
-| --- | --- | --- | --- |
-| 1 | Tracker (this document) | done | this PR |
-| 2 | Contracts: `judge.ts` (verdict / step state / resolve request), `step.judge`, preset knobs, `judge` result-view id, `judge_review` notification | done | this PR |
-| 3 | Kernel: `JudgeRegistry` / `JudgeDefinition` / `JudgeContext` / `defaultJudgeRegistry` / `stubJudgeContext` + the pure `judge-logic.ts` disposition | done | this PR |
-| 4 | Engine: `JudgeService` (inline assessor) + `JudgeStepController` (`evaluate` / `resolveDecision`) + step-handler registration + `resolveJudgeDecision` | done | this PR |
-| 5 | DI: `judgeRegistry` + `judgeAssessor` through `CoreDependencies`, both facades, `Core` spine re-export | done | this PR |
-| 6 | PR verification report: the `judges` section (compose + render + JSON) | done | this PR |
-| 7 | Public API: judges on `/api/v1/runs/:runId/decisions` (+ the resolve route) | done | this PR |
-| 8 | Frontend: `JudgeResultView.vue` in the `resultViews` slot + i18n (all locales) | done | this PR |
-| 9 | Conformance: evaluate / park / bounce / unwired pass-through on both runtimes | done | this PR |
-| 10 | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent` | done | this PR |
-| 11 | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README | done | this PR |
-| 12 | Strangler: re-express requirements auto-pass on the judge machine | todo | — |
-| 13 | Convert this tracker to an ADR once slice 12 lands (or is formally dropped) | todo | — |
+| #   | Slice                                                                                                                                                  | Status | PR      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- |
+| 1   | Tracker (this document)                                                                                                                                | done   | this PR |
+| 2   | Contracts: `judge.ts` (verdict / step state / resolve request), `step.judge`, preset knobs, `judge` result-view id, `judge_review` notification        | done   | this PR |
+| 3   | Kernel: `JudgeRegistry` / `JudgeDefinition` / `JudgeContext` / `defaultJudgeRegistry` / `stubJudgeContext` + the pure `judge-logic.ts` disposition     | done   | this PR |
+| 4   | Engine: `JudgeService` (inline assessor) + `JudgeStepController` (`evaluate` / `resolveDecision`) + step-handler registration + `resolveJudgeDecision` | done   | this PR |
+| 5   | DI: `judgeRegistry` + `judgeAssessor` through `CoreDependencies`, both facades, `Core` spine re-export                                                 | done   | this PR |
+| 6   | PR verification report: the `judges` section (compose + render + JSON)                                                                                 | done   | this PR |
+| 7   | Public API: judges on `/api/v1/runs/:runId/decisions` (+ the resolve route)                                                                            | done   | this PR |
+| 8   | Frontend: `JudgeResultView.vue` in the `resultViews` slot + i18n (all locales)                                                                         | done   | this PR |
+| 9   | Conformance: evaluate / park / bounce / unwired pass-through on both runtimes                                                                          | done   | this PR |
+| 10  | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent`                                                                         | done   | this PR |
+| 11  | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
+| 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
+| 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
 
 ## Deliberately NOT pursued
 

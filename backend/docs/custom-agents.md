@@ -187,7 +187,12 @@ judgeRegistry.register('scope-adherence', () => ({
   // with the findings as its rework brief, or fail the run.
   onFail: 'bounce',
   bounceTargets: ['coder'],
-  presentation: { label: 'Scope Adherence', icon: 'i-lucide-scale', color: '#f59e0b', description: '…' },
+  presentation: {
+    label: 'Scope Adherence',
+    icon: 'i-lucide-scale',
+    color: '#f59e0b',
+    description: '…',
+  },
 }))
 ```
 

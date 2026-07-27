@@ -516,8 +516,10 @@ describe('example org research-and-apply preset', () => {
 })
 
 describe('example scope-adherence judge', () => {
-  it('registers on the app-owned judge registry with the org\'s differentiators only', () => {
-    const entry = judgeRegistry.factories().find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)
+  it("registers on the app-owned judge registry with the org's differentiators only", () => {
+    const entry = judgeRegistry
+      .factories()
+      .find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)
     expect(entry).toBeDefined()
     const judge = entry!.factory(stubJudgeContext())
     // A judge supplies its rubric, its failure disposition and where to bounce — and nothing
@@ -534,7 +536,9 @@ describe('example scope-adherence judge', () => {
   })
 
   it('parses its extended verdict shape and degrades a noisy field instead of dropping it', () => {
-    const entry = judgeRegistry.factories().find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)!
+    const entry = judgeRegistry
+      .factories()
+      .find((f: { kind: string }) => f.kind === SCOPE_JUDGE_KIND)!
     const parse = entry.factory(stubJudgeContext()).parseVerdict!
     const verdict = parse({
       score: 0.4,

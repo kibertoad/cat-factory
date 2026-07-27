@@ -10,10 +10,9 @@ import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
-import { releaseSignalSchema } from './release.js'
 // The polling-GATE step-state cluster lives in its own module (the `forkDecision.ts` /
 // `judge.ts` shape); `PipelineStep` composes it back in below.
-import { gateAttemptSchema, gateStepStateSchema } from './gate.js'
+import { gateStepStateSchema } from './gate.js'
 import {
   environmentStatusSchema,
   infraEngineSchema,
@@ -260,7 +259,6 @@ export const priorStepOutputSchema = v.object({
 })
 export type PriorStepOutput = v.InferOutput<typeof priorStepOutputSchema>
 
-
 /**
  * State a `tester` step carries while it runs the Tester → Fixer loop. Unlike `ci`,
  * the gate's own work IS a container job (the Tester); on a withheld greenlight the
@@ -272,7 +270,7 @@ export type PriorStepOutput = v.InferOutput<typeof priorStepOutputSchema>
 /**
  * One round of the Tester→Fixer loop, recorded when a `fixer` job finishes so the test
  * window can show what each fixer attempt set out to fix and how it ended — the analogue of
- * a polling gate's {@link gateAttemptSchema}, since a fixer run is otherwise an opaque
+ * a polling gate's `gateAttemptSchema`, since a fixer run is otherwise an opaque
  * sub-job with no surface of its own (only a bare `attempts` count).
  */
 export const testerAttemptSchema = v.object({

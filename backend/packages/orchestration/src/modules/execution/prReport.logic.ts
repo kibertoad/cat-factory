@@ -334,13 +334,15 @@ function composeJudges(
       // preceding step to bounce to"); without it a pass-through judge would render as a blank
       // row that reads like a clean verdict.
       summary: scrubbed(judge.verdict?.summary ?? judge.note ?? ''),
-      findings: cap(judge.verdict?.findings ?? [], `judges.${step.agentKind}.findings`, truncations).map(
-        (f) => ({
-          ...f,
-          title: scrubbed(f.title),
-          ...(f.detail ? { detail: scrubbed(f.detail) } : {}),
-        }),
-      ),
+      findings: cap(
+        judge.verdict?.findings ?? [],
+        `judges.${step.agentKind}.findings`,
+        truncations,
+      ).map((f) => ({
+        ...f,
+        title: scrubbed(f.title),
+        ...(f.detail ? { detail: scrubbed(f.detail) } : {}),
+      })),
       bounces: judge.bounces ?? 0,
       maxBounces: judge.maxBounces ?? 0,
       model: judge.model ?? null,

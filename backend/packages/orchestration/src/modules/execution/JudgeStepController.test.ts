@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  Block,
-  ExecutionInstance,
-  JudgeAssessor,
-  PipelineStep,
-} from '@cat-factory/kernel'
+import type { Block, ExecutionInstance, JudgeAssessor, PipelineStep } from '@cat-factory/kernel'
 import { defaultJudgeRegistry, stubJudgeContext } from '@cat-factory/kernel'
 import { JudgeStepController } from './JudgeStepController.js'
 import { StepGraph } from './StepGraph.js'
@@ -65,7 +60,8 @@ function makeController(overrides: {
       casPersist: async () => {},
       emitInstance: async () => {},
       updateBlockProgress: async () => {},
-      parkStepOnDecision: async () => ({ kind: 'awaiting_decision', decisionId: 'appr_1' }) as const,
+      parkStepOnDecision: async () =>
+        ({ kind: 'awaiting_decision', decisionId: 'appr_1' }) as const,
     } as never,
     stepGraph,
     workRunner: { signalDecision: async () => {} } as never,

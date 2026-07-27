@@ -119,7 +119,8 @@ export const scopeAdherenceJudge: JudgeFactory = () => ({
     label: 'Scope Adherence',
     icon: 'i-lucide-scale',
     color: '#f59e0b',
-    description: 'Scores a change against the org rule: implement what was asked, and nothing else.',
+    description:
+      'Scores a change against the org rule: implement what was asked, and nothing else.',
     category: 'review',
   },
 })

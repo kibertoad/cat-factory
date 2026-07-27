@@ -135,6 +135,66 @@ export class JudgeStepController {
   }
 
   /**
+   * The PASS-THROUGH branch: no assessor wired (tests / no model configured) or the judge's own
+   * prerequisite is unwired. Recorded as `skipped` WITH a note — a judge that quietly did nothing
+   * must not read like one that passed — then finished like any other step.
+   */
+  private passThrough(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    judge: JudgeDefinition,
+    noAssessor: boolean,
+  ): Promise<AdvanceResult> {
+    const note = noAssessor
+      ? `The "${judge.rubric.name}" review was skipped (no assessment model is configured).`
+      : (judge.unwiredOutput ??
+        `The "${judge.rubric.name}" review was skipped (its provider is not configured).`)
+    step.judge = {
+      ...step.judge,
+      status: 'skipped',
+      rubricId: judge.rubric.id,
+      rubricName: judge.rubric.name,
+      rubricOverridden: step.judge?.rubricOverridden ?? false,
+      bounces: step.judge?.bounces ?? 0,
+      maxBounces: step.judge?.maxBounces ?? 0,
+      rounds: step.judge?.rounds ?? [],
+      note,
+    }
+    return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, { output: note })
+  }
+
+  /**
+   * Initialise `step.judge` on first entry. The threshold + bounce budget come from the task's
+   * merge preset ONCE and stay stable across bounce rounds — a preset edited mid-run must not
+   * move the bar the earlier rounds were judged against.
+   */
+  private async initState(
+    workspaceId: string,
+    step: PipelineStep,
+    block: Block,
+    judge: JudgeDefinition,
+  ): Promise<JudgeStepState> {
+    if (step.judge) {
+      step.judge = { ...step.judge, status: 'evaluating' }
+      return step.judge
+    }
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    step.judge = {
+      status: 'evaluating',
+      rubricId: judge.rubric.id,
+      rubricName: judge.rubric.name,
+      rubricOverridden: false,
+      threshold: judge.threshold ? judge.threshold(preset) : preset.judgeMinScore,
+      bounces: 0,
+      maxBounces: judge.attemptBudget ? judge.attemptBudget(preset) : preset.judgeMaxBounces,
+      rounds: [],
+    }
+    return step.judge
+  }
+
+  /**
    * Evaluate a judge step once: assess, dispose, and act. Shared by the fresh advance and the
    * re-entry after a bounce (the producer re-ran and the work is ready to be re-judged).
    */
@@ -147,83 +207,53 @@ export class JudgeStepController {
     judge: JudgeDefinition,
   ): Promise<AdvanceResult> {
     const assessor = this.deps.judgeAssessor
-    // Pass-through: no assessor (tests / no model wired) or the judge's own prerequisite is
-    // unwired. Recorded as `skipped` WITH a note — a judge that quietly did nothing must not
-    // read like one that passed.
     if (!assessor?.enabled || judge.wired?.() === false) {
-      const note =
-        judge.wired?.() === false
-          ? (judge.unwiredOutput ??
-            `The "${judge.rubric.name}" review was skipped (its provider is not configured).`)
-          : `The "${judge.rubric.name}" review was skipped (no assessment model is configured).`
-      step.judge = {
-        ...(step.judge ?? {}),
-        status: 'skipped',
-        rubricId: judge.rubric.id,
-        rubricName: judge.rubric.name,
-        rubricOverridden: step.judge?.rubricOverridden ?? false,
-        bounces: step.judge?.bounces ?? 0,
-        maxBounces: step.judge?.maxBounces ?? 0,
-        rounds: step.judge?.rounds ?? [],
-        note,
-      }
-      return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, { output: note })
+      return this.passThrough(workspaceId, instance, step, isFinalStep, judge, !assessor?.enabled)
     }
-
-    // Initialise on first entry: the threshold + bounce budget come from the task's merge
-    // preset ONCE and stay stable across bounce rounds (a preset edited mid-run must not move
-    // the bar the earlier rounds were judged against).
-    if (!step.judge) {
-      const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
-      step.judge = {
-        status: 'evaluating',
-        rubricId: judge.rubric.id,
-        rubricName: judge.rubric.name,
-        rubricOverridden: false,
-        threshold: judge.threshold ? judge.threshold(preset) : preset.judgeMinScore,
-        bounces: 0,
-        maxBounces: judge.attemptBudget ? judge.attemptBudget(preset) : preset.judgeMaxBounces,
-        rounds: [],
-      }
-    } else {
-      step.judge = { ...step.judge, status: 'evaluating' }
-    }
+    // The live state, kept as a local so the rest of the method reads it without re-narrowing
+    // `step.judge` (which stays the persisted source of truth and is re-assigned below).
+    let judgeState = await this.initState(workspaceId, step, block, judge)
 
     const { body: rubric, overridden } = await this.resolveRubric(workspaceId, judge)
-    step.judge.rubricOverridden = overridden
+    judgeState.rubricOverridden = overridden
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
 
     const stepIndex = instance.steps.indexOf(step)
-    const { verdict, model } = await this.assess(assessor, {
-      workspaceId,
-      block,
-      step,
-      rubric,
-      rubricName: judge.rubric.name,
-      priorOutputs: priorOutputsFor(instance, stepIndex),
-      previousFindings: step.judge.verdict ?? null,
-    }, judge, instance.initiatedBy ?? null)
+    const { verdict, model } = await this.assess(
+      assessor,
+      {
+        workspaceId,
+        block,
+        step,
+        rubric,
+        rubricName: judge.rubric.name,
+        priorOutputs: priorOutputsFor(instance, stepIndex),
+        previousFindings: judgeState.verdict ?? null,
+      },
+      judge,
+      instance.initiatedBy ?? null,
+    )
 
     const producerIndex = this.bounceTargetIndex(instance, stepIndex, judge)
     const decision = disposeJudgeVerdict({
       verdict,
-      threshold: step.judge.threshold ?? 0,
+      threshold: judgeState.threshold ?? 0,
       onFail: judge.onFail,
-      bounces: step.judge.bounces ?? 0,
-      maxBounces: step.judge.maxBounces ?? 0,
+      bounces: judgeState.bounces ?? 0,
+      maxBounces: judgeState.maxBounces ?? 0,
       hasBounceTarget: producerIndex >= 0,
     })
 
-    step.judge = {
-      ...step.judge,
+    judgeState = {
+      ...judgeState,
       verdict,
       model,
       disposition: decision.disposition,
       note: decision.note ?? null,
       rounds: [
-        ...(step.judge.rounds ?? []),
+        ...(judgeState.rounds ?? []),
         {
-          round: (step.judge.rounds?.length ?? 0) + 1,
+          round: (judgeState.rounds?.length ?? 0) + 1,
           at: this.deps.clock.now(),
           verdict,
           disposition: decision.disposition,
@@ -231,23 +261,31 @@ export class JudgeStepController {
         },
       ],
     }
+    step.judge = judgeState
 
     switch (decision.disposition) {
       case 'pass':
-        step.judge.status = 'passed'
+        judgeState.status = 'passed'
         return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
-          output: renderPassOutput(judge, verdict, step.judge.threshold ?? 0),
+          output: renderPassOutput(judge, verdict, judgeState.threshold ?? 0),
         })
       case 'fail':
-        step.judge.status = 'failed'
+        judgeState.status = 'failed'
         await this.deps.stateMachine.casPersist(workspaceId, instance)
         await this.deps.stateMachine.emitInstance(workspaceId, instance)
         return {
           kind: 'job_failed',
-          error: `The "${judge.rubric.name}" review failed this work (${verdict.score.toFixed(2)} < ${(step.judge.threshold ?? 0).toFixed(2)}). ${verdict.summary}`.trim(),
+          error:
+            `The "${judge.rubric.name}" review failed this work (${verdict.score.toFixed(2)} < ${(judgeState.threshold ?? 0).toFixed(2)}). ${verdict.summary}`.trim(),
         }
       case 'bounce':
-        return this.bounce(workspaceId, instance, step, judge, verdict, producerIndex, stepIndex)
+        return this.bounce(workspaceId, instance, {
+          step,
+          judge,
+          verdict,
+          producerIndex,
+          stepIndex,
+        })
       default:
         return this.park(workspaceId, instance, step, block, judge, verdict)
     }
@@ -298,13 +336,16 @@ export class JudgeStepController {
   private async bounce(
     workspaceId: string,
     instance: ExecutionInstance,
-    step: PipelineStep,
-    judge: JudgeDefinition,
-    verdict: JudgeVerdict,
-    producerIndex: number,
-    stepIndex: number,
-    extraFeedback?: string | null,
+    args: {
+      step: PipelineStep
+      judge: JudgeDefinition
+      verdict: JudgeVerdict
+      producerIndex: number
+      stepIndex: number
+      extraFeedback?: string | null
+    },
   ): Promise<AdvanceResult> {
+    const { step, judge, verdict, producerIndex, stepIndex, extraFeedback } = args
     const judgeState: JudgeStepState = {
       ...step.judge!,
       status: 'bouncing',
@@ -394,7 +435,11 @@ export class JudgeStepController {
         }
         approvalId = step.approval.id
         stepIndex = index
-        const resolution = { choice: input.choice, at: this.deps.clock.now(), ...(feedback ? { feedback } : {}) }
+        const resolution = {
+          choice: input.choice,
+          at: this.deps.clock.now(),
+          ...(feedback ? { feedback } : {}),
+        }
 
         if (input.choice === 'bounce') {
           bounceTo = this.bounceTargetIndex(inst, index, judge)
@@ -489,9 +534,12 @@ export class JudgeStepController {
     judge: JudgeDefinition,
   ): Promise<{ body: string; overridden: boolean }> {
     const fragmentId = judge.rubric.fragmentId
-    if (!fragmentId || !this.deps.fragmentResolver) return { body: judge.rubric.body, overridden: false }
+    if (!fragmentId || !this.deps.fragmentResolver)
+      return { body: judge.rubric.body, overridden: false }
     try {
-      const resolved = await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, [fragmentId])
+      const resolved = await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, [
+        fragmentId,
+      ])
       const body = resolved.find((f) => f.id === fragmentId)?.body?.trim()
       if (body) return { body, overridden: true }
     } catch {

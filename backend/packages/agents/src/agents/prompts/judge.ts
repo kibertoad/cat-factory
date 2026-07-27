@@ -32,7 +32,7 @@ export const JUDGE_AGENT_KIND = 'judge'
 export const JUDGE_SYSTEM_PROMPT =
   'You are an impartial reviewer scoring a piece of work against a RUBRIC you are given. You ' +
   'assess only — you never edit code, never open pull requests, and never decide what happens ' +
-  'next; the platform compares your score against the team\'s threshold and acts on it. ' +
+  "next; the platform compares your score against the team's threshold and acts on it. " +
   'Ground every judgement in the evidence you were given: quote or name the specific thing ' +
   'that satisfies or violates the rubric, and never invent a problem you cannot point at. If ' +
   'the evidence is too thin to judge a rubric point, say so in the summary rather than ' +
@@ -69,7 +69,12 @@ function renderPriorOutput(entry: { agentKind: string; output: string }): string
  * spent to answer.
  */
 export function renderJudgePrompt(subject: JudgeSubject): string {
-  const lines: string[] = ['Rubric — this is what you are scoring against:', '', subject.rubric.trim(), '']
+  const lines: string[] = [
+    'Rubric — this is what you are scoring against:',
+    '',
+    subject.rubric.trim(),
+    '',
+  ]
   const title = subject.block.title.trim()
   if (title) lines.push(`Task: ${title}`)
   const description = (subject.block.description ?? '').trim()
@@ -98,6 +103,8 @@ export function renderJudgePrompt(subject: JudgeSubject): string {
       '',
     )
   }
-  lines.push(`Score this work against the "${subject.rubricName}" rubric and reply with the JSON object.`)
+  lines.push(
+    `Score this work against the "${subject.rubricName}" rubric and reply with the JSON object.`,
+  )
   return lines.join('\n')
 }

@@ -36,7 +36,13 @@ function fakeAssessor(scores: number[], enabled = true): JudgeAssessor & { calls
           summary: `scored ${score}`,
           findings:
             score < 1
-              ? [{ title: 'Out of scope change', detail: 'touched an unrelated module', severity: 'high' }]
+              ? [
+                  {
+                    title: 'Out of scope change',
+                    detail: 'touched an unrelated module',
+                    severity: 'high',
+                  },
+                ]
               : [],
         },
         model: 'fake:judge',
@@ -69,7 +75,10 @@ function makeJudgeRegistry(onFail: 'park' | 'bounce' | 'fail'): JudgeRegistry {
 }
 
 /** Find the run's judge step, which every assertion below reads. */
-function judgeStep(exec: ExecutionInstance): { judge: JudgeStepState | null | undefined; state: string } {
+function judgeStep(exec: ExecutionInstance): {
+  judge: JudgeStepState | null | undefined
+  state: string
+} {
   const step = exec.steps.find((s) => s.agentKind === 'scope-judge')!
   return { judge: step.judge, state: step.state }
 }
@@ -85,9 +94,13 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
         name: 'Build + scope judge',
         agentKinds: ['coder', 'scope-judge'],
       })
-      const start = await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
-        pipelineId: pipeline.body.id,
-      })
+      const start = await app.call(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/task_login/executions`,
+        {
+          pipelineId: pipeline.body.id,
+        },
+      )
       expect(start.status).toBe(201)
 
       const exec = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
@@ -228,10 +241,13 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       // `createWorkspace` returned: in mothership mode the board is created on the mothership
       // while the SPA is served by the laptop node, and it is the node's projection that must
       // advertise the judge. (The custom-agent-kind suite reads it the same way.)
-      const snap = await app.call<{ customAgentKinds?: { kind: string; container: boolean; presentation: { label: string; resultView?: string } }[] }>(
-        'GET',
-        `/workspaces/${workspace.id}`,
-      )
+      const snap = await app.call<{
+        customAgentKinds?: {
+          kind: string
+          container: boolean
+          presentation: { label: string; resultView?: string }
+        }[]
+      }>('GET', `/workspaces/${workspace.id}`)
       const entry = (snap.body.customAgentKinds ?? []).find((k) => k.kind === 'scope-judge')
       expect(entry).toBeDefined()
       expect(entry?.presentation.label).toBe('Scope judge')

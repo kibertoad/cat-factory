@@ -456,7 +456,11 @@ function registerJudgeRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator(scoped.execution.initiatedBy, () =>
       c
         .get('container')
-        .executionService.resolveJudgeDecision(workspaceId, scoped.execution.id, c.req.valid('json')),
+        .executionService.resolveJudgeDecision(
+          workspaceId,
+          scoped.execution.id,
+          c.req.valid('json'),
+        ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

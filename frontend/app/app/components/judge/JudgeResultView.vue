@@ -286,7 +286,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
               class="flex flex-wrap items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-[12px] text-slate-300"
             >
               <span class="text-slate-500">{{ t('judge.round', { round: round.round }) }}</span>
-              <span class="font-medium text-slate-100">{{ n(round.verdict.score, 'percent') }}</span>
+              <span class="font-medium text-slate-100">{{
+                n(round.verdict.score, 'percent')
+              }}</span>
               <span class="text-slate-400">{{ DISPOSITION_LABELS[round.disposition] }}</span>
               <code v-if="round.model" class="text-[11px] text-slate-500">{{ round.model }}</code>
             </li>

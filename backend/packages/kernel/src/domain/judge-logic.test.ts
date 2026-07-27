@@ -12,23 +12,23 @@ const base = { threshold: 0.7, bounces: 0, maxBounces: 1, hasBounceTarget: true 
 
 describe('disposeJudgeVerdict', () => {
   it('passes at or above the threshold', () => {
-    expect(disposeJudgeVerdict({ ...base, verdict: verdict(0.9), onFail: 'park' }).disposition).toBe(
-      'pass',
-    )
+    expect(
+      disposeJudgeVerdict({ ...base, verdict: verdict(0.9), onFail: 'park' }).disposition,
+    ).toBe('pass')
     // Exactly AT the threshold passes: the number an operator typed into the preset must be
     // reachable, or a `1.0` threshold would be unsatisfiable and a `0.7` one would need 0.70001.
-    expect(disposeJudgeVerdict({ ...base, verdict: verdict(0.7), onFail: 'fail' }).disposition).toBe(
-      'pass',
-    )
+    expect(
+      disposeJudgeVerdict({ ...base, verdict: verdict(0.7), onFail: 'fail' }).disposition,
+    ).toBe('pass')
   })
 
   it('applies the registration disposition below the threshold', () => {
-    expect(disposeJudgeVerdict({ ...base, verdict: verdict(0.5), onFail: 'park' }).disposition).toBe(
-      'park',
-    )
-    expect(disposeJudgeVerdict({ ...base, verdict: verdict(0.5), onFail: 'fail' }).disposition).toBe(
-      'fail',
-    )
+    expect(
+      disposeJudgeVerdict({ ...base, verdict: verdict(0.5), onFail: 'park' }).disposition,
+    ).toBe('park')
+    expect(
+      disposeJudgeVerdict({ ...base, verdict: verdict(0.5), onFail: 'fail' }).disposition,
+    ).toBe('fail')
     expect(
       disposeJudgeVerdict({ ...base, verdict: verdict(0.5), onFail: 'bounce' }).disposition,
     ).toBe('bounce')

@@ -1,6 +1,5 @@
 import type {
   JudgeAssessor,
-  JudgeContext,
   JudgeDefinition,
   JudgeRegistry,
   JudgeStepState,
@@ -26,7 +25,6 @@ import type {
   PrReviewStepState,
   ResolvePrReviewInput,
   ChallengePrReviewFindingInput,
-  GateContext,
   GateDefinition,
   GateRegistry,
   StepResolverRegistry,
@@ -47,7 +45,6 @@ import type {
 } from '@cat-factory/kernel'
 import {
   ConflictError,
-  DEFAULT_RISK_POLICY,
   getErrorMessage,
   isAsyncAgentExecutor,
   NotFoundError,
