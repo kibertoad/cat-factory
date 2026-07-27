@@ -1914,6 +1914,9 @@
           "label": "ベンダーとキー",
           "description": "ワークスペースの LLM サブスクリプションとプロバイダー API キー。"
         },
+        "personalSubs": {
+          "label": "個人サブスクリプション (Claude、ChatGPT/Codex、GLM)"
+        },
         "github": {
           "description": "ワークスペースの GitHub App を接続し、リポジトリ、PR、Issue を閲覧します。"
         },
@@ -2937,9 +2940,15 @@
       "noModelBody": "エージェントを実行するにはモデルが必要です。AI が設定なしで動作するのは、Workers AI を有効にした Cloudflare デプロイのみです。それ以外の場合は、以下から少なくとも 1 つのソースを接続してください。",
       "operatorNote": "AWS Bedrock と Cloudflare Workers AI は、この画面からではなく、デプロイ運用者が環境設定で有効化します。",
       "routes": {
+        "personal": {
+          "title": "お使いのコーディングプランサブスクリプション",
+          "badge": "最も一般的",
+          "body": "すでに Claude、ChatGPT (Codex)、または GLM のコーディングプランを契約していますか? ここでユーザーごとに接続すると、エージェントは既存の定額クォータで実行されます。",
+          "cta": "自分のサブスクリプションを接続"
+        },
         "keys": {
           "title": "プロバイダーキーとサブスクリプション",
-          "body": "直接プロバイダーの API キー (OpenAI、Anthropic、Qwen など) を追加するか、商用のコーディングプランサブスクリプション (Kimi、DeepSeek) または個人向けのもの (Claude、GLM、Codex) を接続します。",
+          "body": "直接プロバイダーの API キー (OpenAI、Anthropic、Qwen など) を追加するか、チーム利用が許可されている商用のコーディングプランサブスクリプション (Kimi、DeepSeek) を接続します。",
           "cta": "LLM ベンダーを開く"
         },
         "openrouter": {
@@ -3056,7 +3065,11 @@
         "proxy": "プロキシ",
         "personal": "個人サブスクリプション"
       },
-      "poolIntro": "チーム / 組織での利用が許可されている商用コーディングプランのサブスクリプション (Kimi、DeepSeek) を接続すると、API キーの代わりに Claude Code ハーネス上でエージェントステップを実行できます。トークンは暗号化して保存され、プールされて利用状況に応じてローテーションされます。サブスクリプションモデルは定額のクォータなので、支出予算を消費しません。個人利用のサブスクリプション (Claude、GLM、ChatGPT/Codex) は、個人サブスクリプションタブでユーザーごとに接続します。",
+      "poolIntro": "チーム / 組織での利用が許可されている商用コーディングプランのサブスクリプション (Kimi、DeepSeek) を接続すると、API キーの代わりに Claude Code ハーネス上でエージェントステップを実行できます。トークンは暗号化して保存され、プールされて利用状況に応じてローテーションされます。サブスクリプションモデルは定額のクォータなので、支出予算を消費しません。",
+      "personalCallout": {
+        "text": "ご自身の Claude、ChatGPT (Codex)、GLM のコーディングプランをお使いですか? これらは個人利用のサブスクリプションで、ユーザーごとに接続します。",
+        "cta": "個人サブスクリプションへ"
+      },
       "vendorField": "ベンダー",
       "labelField": "ラベル (任意)",
       "labelPlaceholder": "例: 仕事用アカウント",

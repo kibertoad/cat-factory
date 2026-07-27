@@ -85,7 +85,9 @@ async function submit() {
 
 function goConnect() {
   personal.dismissPending()
-  ui.openVendorCredentials()
+  // Deep-link onto the personal tab: this CTA promises the individual-subscription connect
+  // form, and the modal's default tab is the (unrelated) workspace pool.
+  ui.openVendorCredentials('personal')
 }
 </script>
 

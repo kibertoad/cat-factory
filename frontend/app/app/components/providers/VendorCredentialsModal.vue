@@ -209,6 +209,28 @@ function vendorLabel(v: SubscriptionVendor): string {
         <!-- Workspace pool (commercial coding-plan subscriptions) -->
         <template #pool>
           <div class="space-y-5">
+            <!-- The pool is the modal's default tab, but most individual developers arrive
+                 looking for their OWN Claude / ChatGPT / GLM plan, which lives on the
+                 `personal` tab — point them there before they read a pool form that can't
+                 take their credential. -->
+            <div
+              class="flex items-center gap-3 rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2.5"
+            >
+              <UIcon name="i-lucide-user" class="h-5 w-5 shrink-0 text-indigo-300" />
+              <p class="min-w-0 flex-1 text-[13px] text-slate-300">
+                {{ t('providers.vendorCredentials.personalCallout.text') }}
+              </p>
+              <UButton
+                size="xs"
+                color="primary"
+                variant="subtle"
+                class="shrink-0"
+                @click="activeTab = 'personal'"
+              >
+                {{ t('providers.vendorCredentials.personalCallout.cta') }}
+              </UButton>
+            </div>
+
             <p class="text-sm text-slate-400">
               {{ t('providers.vendorCredentials.poolIntro') }}
             </p>

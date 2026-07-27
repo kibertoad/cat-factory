@@ -137,6 +137,15 @@ const groups = computed<IntegrationGroup[]>(() => {
         onClick: () => go(ui.openVendorCredentials),
       },
     ],
+    // Personal (individual-usage) subscriptions are per-USER, so they live in My setup —
+    // but this hub is where people look first when connecting "their Claude plan". A quiet
+    // pointer link keeps them findable without a workspace-scoped row competing here.
+    footerLink: {
+      key: 'personal-subs',
+      icon: 'i-lucide-user',
+      label: t('layout.integrationsHub.items.personalSubs.label'),
+      onClick: () => go(() => ui.openVendorCredentials('personal')),
+    },
   })
 
   // --- Source control --------------------------------------------------------

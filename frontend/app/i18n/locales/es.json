@@ -1914,6 +1914,9 @@
           "label": "Proveedores y claves",
           "description": "Suscripciones de LLM del espacio de trabajo y claves API de proveedores."
         },
+        "personalSubs": {
+          "label": "Suscripciones personales (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Conecta la GitHub App del espacio de trabajo y explora repositorios, PR e incidencias."
         },
@@ -2925,9 +2928,15 @@
       "noModelBody": "Los agentes necesitan un modelo para ejecutarse. La IA funciona de inmediato solo en un despliegue de Cloudflare con Workers AI habilitado; de lo contrario, conecta al menos una fuente abajo.",
       "operatorNote": "AWS Bedrock y Cloudflare Workers AI los habilita el operador del despliegue mediante la configuración del entorno, no desde esta pantalla.",
       "routes": {
+        "personal": {
+          "title": "Tu suscripción de plan de programación",
+          "badge": "La más popular",
+          "body": "¿Ya pagas por Claude, ChatGPT (Codex) o un plan de programación de GLM? Conéctalo aquí, por usuario, y los agentes se ejecutan con la cuota de tarifa plana que ya tienes.",
+          "cta": "Conectar mi suscripción"
+        },
         "keys": {
           "title": "Claves y suscripciones de proveedores",
-          "body": "Añade una clave de API directa de un proveedor (OpenAI, Anthropic, Qwen, …) o conecta una suscripción comercial de plan de programación (Kimi, DeepSeek) o una personal (Claude, GLM, Codex).",
+          "body": "Añade una clave de API directa de un proveedor (OpenAI, Anthropic, Qwen, …) o conecta una suscripción comercial de plan de programación que permita uso en equipo (Kimi, DeepSeek).",
           "cta": "Abrir proveedores de LLM"
         },
         "openrouter": {
@@ -3044,7 +3053,11 @@
         "proxy": "Proxies",
         "personal": "Suscripciones personales"
       },
-      "poolIntro": "Conecta una suscripción comercial de plan de programación (Kimi, DeepSeek) que permita uso de equipo/organización para ejecutar los pasos de agente en el harness de Claude Code en lugar de una clave de API. Los tokens se almacenan cifrados, se agrupan y se rotan según el uso. Los modelos de suscripción tienen cuota de tarifa plana, así que no consumen tu presupuesto de gasto. Las suscripciones de uso individual (Claude, GLM, ChatGPT/Codex) se conectan por usuario en la pestaña de Suscripciones personales.",
+      "poolIntro": "Conecta una suscripción comercial de plan de programación (Kimi, DeepSeek) que permita uso de equipo/organización para ejecutar los pasos de agente en el harness de Claude Code en lugar de una clave de API. Los tokens se almacenan cifrados, se agrupan y se rotan según el uso. Los modelos de suscripción tienen cuota de tarifa plana, así que no consumen tu presupuesto de gasto.",
+      "personalCallout": {
+        "text": "¿Usas tu propio plan de programación de Claude, ChatGPT (Codex) o GLM? Son suscripciones de uso individual y se conectan por usuario.",
+        "cta": "Ir a Suscripciones personales"
+      },
       "vendorField": "Proveedor",
       "labelField": "Etiqueta (opcional)",
       "labelPlaceholder": "p. ej. cuenta de trabajo",

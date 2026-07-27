@@ -1914,6 +1914,9 @@
           "label": "Dostawcy i klucze",
           "description": "Subskrypcje LLM obszaru roboczego i klucze API dostawców."
         },
+        "personalSubs": {
+          "label": "Subskrypcje osobiste (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
         },
@@ -2925,9 +2928,15 @@
       "noModelBody": "Agenci potrzebują modelu do działania. AI działa od razu tylko we wdrożeniu Cloudflare z włączonym Workers AI; w przeciwnym razie podłącz poniżej co najmniej jedno źródło.",
       "operatorNote": "AWS Bedrock i Cloudflare Workers AI włącza operator wdrożenia w konfiguracji środowiska, a nie z tego ekranu.",
       "routes": {
+        "personal": {
+          "title": "Twoja subskrypcja planu programistycznego",
+          "badge": "Najpopularniejsze",
+          "body": "Płacisz już za Claude, ChatGPT (Codex) lub plan programistyczny GLM? Podłącz go tutaj, per użytkownik, a agenci będą działać na ryczałtowym limicie, który już masz.",
+          "cta": "Podłącz moją subskrypcję"
+        },
         "keys": {
           "title": "Klucze i subskrypcje dostawców",
-          "body": "Dodaj bezpośredni klucz API dostawcy (OpenAI, Anthropic, Qwen, …) albo podłącz komercyjną subskrypcję planu programistycznego (Kimi, DeepSeek) lub osobistą (Claude, GLM, Codex).",
+          "body": "Dodaj bezpośredni klucz API dostawcy (OpenAI, Anthropic, Qwen, …) albo podłącz komercyjną subskrypcję planu programistycznego zezwalającą na użycie zespołowe (Kimi, DeepSeek).",
           "cta": "Otwórz dostawców LLM"
         },
         "openrouter": {
@@ -3044,7 +3053,11 @@
         "proxy": "Proxy",
         "personal": "Subskrypcje osobiste"
       },
-      "poolIntro": "Podłącz komercyjną subskrypcję planu programistycznego (Kimi, DeepSeek) zezwalającą na użycie zespołowe/organizacyjne, aby uruchamiać kroki agenta na harnessie Claude Code zamiast klucza API. Tokeny są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Modele subskrypcyjne mają ryczałtowy limit, więc nie obciążają Twojego budżetu wydatków. Subskrypcje do użytku indywidualnego (Claude, GLM, ChatGPT/Codex) podłącza się per użytkownik na karcie Subskrypcje osobiste.",
+      "poolIntro": "Podłącz komercyjną subskrypcję planu programistycznego (Kimi, DeepSeek) zezwalającą na użycie zespołowe/organizacyjne, aby uruchamiać kroki agenta na harnessie Claude Code zamiast klucza API. Tokeny są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Modele subskrypcyjne mają ryczałtowy limit, więc nie obciążają Twojego budżetu wydatków.",
+      "personalCallout": {
+        "text": "Korzystasz z własnego planu programistycznego Claude, ChatGPT (Codex) lub GLM? To subskrypcje do użytku indywidualnego, podłączane per użytkownik.",
+        "cta": "Przejdź do Subskrypcji osobistych"
+      },
       "vendorField": "Dostawca",
       "labelField": "Etykieta (opcjonalnie)",
       "labelPlaceholder": "np. konto służbowe",
