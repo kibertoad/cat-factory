@@ -121,7 +121,13 @@ function snapshotCustomAgentKinds(
       ? [
           {
             kind: judge.kind,
-            presentation: { resultView: 'judge' as const, ...judge.presentation },
+            // The default is applied with `??`, not by ordering the spread: a registration that
+            // writes `resultView: undefined` explicitly would spread that key over a preceding
+            // default and silently drop the judge back to the generic prose panel.
+            presentation: {
+              ...judge.presentation,
+              resultView: judge.presentation.resultView ?? 'judge',
+            },
             container: false,
           },
         ]

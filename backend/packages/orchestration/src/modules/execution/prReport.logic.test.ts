@@ -267,6 +267,117 @@ describe('composePrVerificationReport', () => {
     expect(report.truncations).toContain('ci.failingChecks: showing 50 of 60')
     expect(renderPrVerificationReport(report)).toContain('showing 50 of 60')
   })
+
+  it('reports every judge step, including one that passed', () => {
+    const report = composePrVerificationReport(
+      instance([
+        step({ agentKind: 'coder' }),
+        step({
+          agentKind: 'scope-adherence',
+          judge: {
+            status: 'passed',
+            rubricId: 'rubric_scope',
+            rubricName: 'Scope adherence',
+            rubricOverridden: true,
+            threshold: 0.7,
+            disposition: 'pass',
+            bounces: 1,
+            maxBounces: 1,
+            model: 'openai:gpt-x',
+            verdict: {
+              score: 0.82,
+              summary: 'Implements the ask; one drive-by rename left in.',
+              findings: [{ title: 'Drive-by rename', severity: 'low', where: 'src/a.ts' }],
+            },
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+
+    expect(report.judges.status).toBe('reported')
+    expect(report.judges.verdicts).toHaveLength(1)
+    const verdict = report.judges.verdicts[0]!
+    expect(verdict.stepKind).toBe('scope-adherence')
+    expect(verdict.rubricName).toBe('Scope adherence')
+    expect(verdict.rubricOverridden).toBe(true)
+    expect(verdict.score).toBe(0.82)
+    expect(verdict.threshold).toBe(0.7)
+    expect(verdict.disposition).toBe('pass')
+    // A PASSING judge is still reported: a reviewer wants to see the rubric ran and what it
+    // still noted, not only the judges that stopped the run.
+    expect(verdict.findings).toHaveLength(1)
+    expect(() => parsePrVerificationReport(report)).not.toThrow()
+  })
+
+  it('reports a SKIPPED judge with its note rather than a blank row', () => {
+    // A pass-through judge with no summary would otherwise render as an empty verdict, which
+    // reads exactly like a clean one — the false reassurance the whole report exists to remove.
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'scope-adherence',
+          judge: {
+            status: 'skipped',
+            rubricName: 'Scope adherence',
+            note: 'The "Scope adherence" review was skipped (no assessment model is configured).',
+            bounces: 0,
+            maxBounces: 0,
+            rounds: [],
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    expect(report.judges.verdicts[0]!.score).toBeNull()
+    expect(report.judges.verdicts[0]!.summary).toContain('no assessment model')
+  })
+
+  it('says so when the pipeline placed no judge at all', () => {
+    const report = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), INPUTS)
+    expect(report.judges.status).toBe('absent')
+    expect(report.judges.note).toContain('No rubric review step')
+    expect(report.judges.verdicts).toEqual([])
+  })
+
+  it('scrubs and escapes model-authored judge text before it reaches the PR body', () => {
+    const report = composePrVerificationReport(
+      instance([
+        step({
+          agentKind: 'scope-adherence',
+          judge: {
+            status: 'failed',
+            rubricName: 'Scope adherence',
+            threshold: 0.7,
+            disposition: 'fail',
+            bounces: 0,
+            maxBounces: 0,
+            verdict: {
+              score: 0.1,
+              summary: 'Closes #42 and cc @octocat',
+              findings: [
+                { title: 'Leaked | pipe\nand newline', detail: 'see #7', severity: 'critical' },
+              ],
+            },
+          },
+        } as unknown as Partial<PipelineStep> & { agentKind: string }),
+      ]),
+      INPUTS,
+    )
+    const section = renderPrVerificationReport(report)
+    // Only the MARKDOWN region is host-parsed; the trailing fenced JSON block carries the same
+    // values verbatim on purpose (a host auto-links nothing inside a code fence).
+    const markdown = section.split('```json')[0]!
+
+    // A bare `#42` behind a closing keyword CLOSES a real issue when the PR merges, `@octocat`
+    // notifies a real account, and a raw newline/pipe breaks the table row it sits in.
+    expect(markdown).not.toContain('Closes #42')
+    expect(markdown).toContain('&#35;42')
+    expect(markdown).not.toContain('@octocat')
+    expect(markdown).toContain('&#64;octocat')
+    // The pipe is escaped and the newline folded, so the finding stays inside ONE table cell.
+    expect(markdown).toContain('| critical | Leaked \\| pipe<br>and newline')
+  })
 })
 
 describe('renderPrVerificationReport', () => {

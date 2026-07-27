@@ -17,8 +17,13 @@ import type {
   RunInitiatorScope,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { ConflictError, disposeJudgeVerdict, renderJudgeRework } from '@cat-factory/kernel'
-import { parseJudgeVerdict } from '@cat-factory/contracts'
+import {
+  annotateOutOfRangeScore,
+  ConflictError,
+  disposeJudgeVerdict,
+  renderJudgeRework,
+} from '@cat-factory/kernel'
+import { activeJudgeStepIndex, parseJudgeVerdict } from '@cat-factory/contracts'
 import type { AdvanceResult } from './advance.js'
 import type { FragmentBodyResolver } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -112,26 +117,27 @@ export class JudgeStepController {
     return this.registryCache.get(agentKind)
   }
 
-  /** Every registered judge, for the workspace-snapshot palette projection. */
+  /**
+   * Every registered judge, for the workspace-snapshot palette projection. Reads the built map
+   * directly rather than re-looking-up each kind, so it needs no non-null assertion.
+   */
   all(): JudgeDefinition[] {
-    return this.deps.judgeRegistry.factories().map(({ kind }) => this.judgeFor(kind)!)
+    // Force the lazy build, then read the cache — `judgeFor` is the only place that builds it.
+    this.judgeFor('')
+    return [...(this.registryCache?.values() ?? [])]
   }
 
   /**
-   * The run's "active" judge state: prefer the step the run is currently on, else the latest
-   * step that carries judge state (a pipeline may place more than one judge). Mirrors
-   * `ForkDecisionController.getActive`; null when the run carries none.
+   * The run's active judge state — a parked step first, else the current one, else the latest to
+   * carry judge state. The precedence is the shared `activeJudgeStepIndex` contract, so this, the
+   * public API's decision projection and the SPA's optimistic echo cannot disagree about which
+   * rubric a verdict belongs to in a multi-judge pipeline. Null when the run carries none.
    */
   async getActive(workspaceId: string, executionId: string): Promise<JudgeStepState | null> {
     const instance = await this.deps.executionRepository.get(workspaceId, executionId)
     if (!instance) return null
-    const current = instance.steps[instance.currentStep]
-    if (current?.judge) return current.judge
-    for (let i = instance.steps.length - 1; i >= 0; i--) {
-      const judge = instance.steps[i]?.judge
-      if (judge) return judge
-    }
-    return null
+    const index = activeJudgeStepIndex(instance.steps, instance.currentStep)
+    return index >= 0 ? (instance.steps[index]!.judge ?? null) : null
   }
 
   /**
@@ -216,6 +222,13 @@ export class JudgeStepController {
 
     const { body: rubric, overridden } = await this.resolveRubric(workspaceId, judge)
     judgeState.rubricOverridden = overridden
+    // PERSIST before the (slow, billable) assessment, not just emit. The durable driver replays
+    // a step on retry, so without a committed `evaluating` marker a replay re-runs the model
+    // call from scratch — paying for it twice and, with a non-zero-temperature or drifting
+    // model, producing a second verdict that disagrees with the one already broadcast. This is
+    // the same clear-and-persist-before-the-side-effect the gate machine does for its helper
+    // dispatch; the emit follows so the board reflects the committed state.
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
 
     const stepIndex = instance.steps.indexOf(step)
@@ -307,7 +320,10 @@ export class JudgeStepController {
     const parse = judge.parseVerdict ?? parseJudgeVerdict
     try {
       const raw = await this.deps.runInitiatorScope(initiatedBy, () => assessor.assess(subject))
-      return { verdict: parse(raw.verdict), model: raw.model }
+      // Both the canonical schema and a registration's own clamp `score` to 0..1 with a fallback
+      // of 0, so a model that answered on a 0..100 scale yields 0.00 beside a sensible summary.
+      // Keep the cautious zero, but say WHY it is zero — see `annotateOutOfRangeScore`.
+      return { verdict: annotateOutOfRangeScore(raw.verdict, parse(raw.verdict)), model: raw.model }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)
       return {
@@ -474,6 +490,10 @@ export class JudgeStepController {
     )
 
     if (input.choice === 'proceed') {
+      // Dismiss the park's card BEFORE settling: `settleAdvancedGate` does not clear it (it is
+      // the shared gate-advance settle, not a judge one), and a `judge_review` left open on an
+      // answered park is exactly what the escalation sweep later flips red as "Overdue".
+      await this.deps.stateMachine.clearWaitingNotification(workspaceId, instance)
       await this.deps.stateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
       return state!
     }

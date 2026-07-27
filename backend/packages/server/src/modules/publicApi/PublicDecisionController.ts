@@ -1,4 +1,5 @@
 import {
+  activeJudgeStepIndex,
   choosePublicRunForkContract,
   resolvePublicRunJudgeContract,
   incorporatePublicRunRequirementsContract,
@@ -195,11 +196,11 @@ async function buildDecisionList<E extends AppEnv>(
   if (fork && isLiveFork(fork)) decisions.push(toForkDecision(fork))
 
   // The judge state is read off the run already in hand — no extra repository round-trip, since
-  // all judge state rides the run's steps (the whole reason it has no side table).
-  const judgeStep =
-    execution.steps[execution.currentStep]?.judge != null
-      ? execution.steps[execution.currentStep]
-      : [...execution.steps].reverse().find((s) => s.judge != null)
+  // all judge state rides the run's steps (the whole reason it has no side table). The step
+  // choice is the shared `activeJudgeStepIndex` precedence, so a multi-judge pipeline can't have this
+  // surface answer about one rubric while the SPA echoes the result onto another.
+  const judgeIndex = activeJudgeStepIndex(execution.steps, execution.currentStep)
+  const judgeStep = judgeIndex >= 0 ? execution.steps[judgeIndex] : undefined
   if (judgeStep?.judge && isLiveJudge(judgeStep.judge)) {
     decisions.push(toJudgeDecision(judgeStep.agentKind, judgeStep.judge))
   }

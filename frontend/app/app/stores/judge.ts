@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { activeJudgeStepIndex } from '@cat-factory/contracts'
 import type { JudgeStepState } from '~/types/execution'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -25,20 +26,17 @@ export const useJudgeStore = defineStore('judge', () => {
 
   /**
    * Reflect an authoritative judge state onto the run's judge step. A pipeline may place more
-   * than one judge, so target the step this verdict is about rather than the first one holding
-   * judge state: prefer the step still awaiting a decision, then the current step, and only then
-   * fall back to the first step carrying judge state. The stream corrects any mismatch; this
-   * keeps the immediate optimistic echo on the right step.
+   * than one judge, so target the step this verdict is about via the SHARED `activeJudgeStepIndex`
+   * precedence — the same one the backend used to decide which step the state came from. Rolling
+   * our own scan here is how the echo could land on a different rubric than the API answered
+   * about. The stream corrects any mismatch; this keeps the immediate optimistic echo right.
    */
   function reflect(executionId: string, state: JudgeStepState | null): void {
     if (!state) return
     const instance = execution.getInstance(executionId)
     if (!instance) return
-    const current = instance.steps[instance.currentStep]
-    const step =
-      instance.steps.find((s) => s.judge?.status === 'awaiting_decision') ??
-      (current?.judge ? current : undefined) ??
-      instance.steps.find((s) => s.judge)
+    const index = activeJudgeStepIndex(instance.steps, instance.currentStep)
+    const step = index >= 0 ? instance.steps[index] : undefined
     if (step) step.judge = state
   }
 

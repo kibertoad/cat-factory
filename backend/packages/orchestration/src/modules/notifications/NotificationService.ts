@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { assertFound, requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
+import { GATE_CLEARED_NOTIFICATION_TYPES } from '@cat-factory/contracts'
 
 export interface NotificationServiceDependencies {
   notificationRepository: NotificationRepository
@@ -225,20 +226,18 @@ export class NotificationService {
   /**
    * Resolve the auto-raised "waiting for a human decision" cards on a block once its run
    * has advanced past the gate (the human responded, or it auto-passed). Dismisses the
-   * gate-driven cards the run clears for itself — the generic `decision_required` card and
-   * the Follow-up companion's `followup_pending` card — but NOT the human-actionable cards a
+   * gate-driven cards the run clears for itself — but NOT the human-actionable cards a
    * stopped run leaves behind (`merge_review`, `pipeline_complete`, `requirement_review`, …),
    * which the human resolves by acting on them. Without this the card would linger open and
    * the escalation sweep would later flip it red ("Overdue") for a decision already made.
    * Idempotent + best-effort: a no-op when no such card is open.
+   *
+   * The type list is the shared {@link GATE_CLEARED_NOTIFICATION_TYPES} contract rather than a
+   * literal here: a hard-coded copy is how `judge_review` shipped un-clearable (it was added to
+   * the parking surfaces and to the review-debt list, but not to this one).
    */
   async clearWaitingDecision(workspaceId: string, blockId: string): Promise<void> {
-    for (const type of [
-      'decision_required',
-      'followup_pending',
-      'fork_decision_pending',
-      'pr_review_ready',
-    ] as const) {
+    for (const type of GATE_CLEARED_NOTIFICATION_TYPES) {
       const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
       if (!existing) continue
       const resolved: Notification = {

@@ -1709,7 +1709,26 @@ keys off which bucket, so know them before adding a step:
     resolved through the engine's existing `fragmentResolver`) — which is why this feature adds no
     rubric table.
   - A failing verdict NEVER silently advances: a bounce with a spent budget, or with no producing
-    step to bounce to, degrades to a **park** and records why.
+    step to bounce to, degrades to a **park** and records why. Nor does an unreadable one: a
+    thrown assessment becomes a **score-0 verdict**, and a score the 0..1 clamp zeroed because the
+    model answered on a 0..100 scale keeps that cautious zero but carries
+    `annotateOutOfRangeScore`'s finding saying so — the zero is right, reading it as a damning
+    verdict is not.
+  - **A facade that threads a `judgeRegistry` MUST also pass it to `validateRegistrations`.** The
+    boot check treats a judge kind as a legal pipeline step (else a pipeline placing one
+    false-positives as `pipeline_unknown_kind`), validates its `presentation.resultView` like an
+    agent kind's (else a typo silently falls back to the prose panel), and ERRORS on a judge kind
+    that collides with a gate kind — the polling-gate handler has the lower `order`, so a
+    collision makes the judge dead code.
+  - **"Which step is the active judge" has ONE definition**: `activeJudgeStepIndex`
+    (`@cat-factory/contracts`) — parked step first, then the cursor, then the last step carrying
+    judge state. The engine, the public-API decision projection, the inbox reveal and the SPA's
+    optimistic echo all read it; a local re-scan is how a multi-judge pipeline ends up answering
+    about one rubric and echoing onto another.
+  - The park's `judge_review` card is in **`GATE_CLEARED_NOTIFICATION_TYPES`** (contracts), the
+    shared list `NotificationService.clearWaitingDecision` iterates. A parking card that is not in
+    that list is never auto-dismissed, and the escalation sweep later flips an ANSWERED decision
+    red as "Overdue" — add every new parking type to it, not just to the notification union.
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It is a
   `StepCompletionResolver` (`buildStepResolverRegistry`) but a different archetype from the
   light, externally-authorable resolvers (output reshaping / notification / repo follow-up,

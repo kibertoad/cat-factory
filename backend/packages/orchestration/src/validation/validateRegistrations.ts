@@ -1,5 +1,11 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { GateRegistry, PipelineRegistry, TaskTypeRegistry } from '@cat-factory/kernel'
+import type {
+  GateRegistry,
+  JudgeDefinition,
+  JudgeRegistry,
+  PipelineRegistry,
+  TaskTypeRegistry,
+} from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -7,6 +13,7 @@ import {
   ON_CALL_AGENT_KIND,
   seedPipelines,
   stubGateContext,
+  stubJudgeContext,
 } from '@cat-factory/kernel'
 import { isNamespacedId, isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
 
@@ -55,6 +62,15 @@ export interface ValidateRegistrationsOptions {
    * cross-checks read the registered gates from it rather than a module global.
    */
   gateRegistry: GateRegistry
+  /**
+   * The app-owned JUDGE registry to validate (the facade's injected instance — the SAME one it
+   * threads through `CoreDependencies.judgeRegistry`). Optional: when omitted, judges are simply
+   * not cross-checked, which is right for a facade that wires none. A facade that threads one
+   * SHOULD pass it: a judge kind is a legal pipeline step, so without it a pipeline placing a
+   * registered judge false-positives as an unknown kind, and a judge's `presentation.resultView`
+   * is never checked. See `docs/initiatives/judge-registry.md`.
+   */
+  judgeRegistry?: JudgeRegistry
   /**
    * The app-owned pipeline registry to validate (the facade's injected instance — the SAME one it
    * threads through `CoreDependencies.pipelineRegistry`). Optional: when omitted, no
@@ -157,12 +173,85 @@ export function collectRegistrationProblems(
   //    output likely can't feed those post-ops from `result.custom`. Heuristic, so a warning.
   problems.push(...checkPostOpsStructuredOutput(agentKinds, registry))
 
-  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
-  problems.push(...checkPipelineKinds(opts, registeredKindIds, gateKinds, builtInHelperKinds))
+  // 4. Registered JUDGES: build each one (like the gates above) to read its differentiators,
+  //    check its result view, and catch a kind that collides with a gate.
+  const judges = buildJudges(opts, problems)
+  const judgeKinds = new Set(judges.map((j) => j.kind))
+  problems.push(...checkJudges(judges, gateKinds, knownResultViewIds))
 
-  // 5. Custom task types (only when a task-type registry is supplied).
+  // 5. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
+  problems.push(
+    ...checkPipelineKinds(opts, registeredKindIds, gateKinds, judgeKinds, builtInHelperKinds),
+  )
+
+  // 6. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
 
+  return problems
+}
+
+/**
+ * Build every registered judge with a stub context so its declared differentiators can be read
+ * (the {@link JudgeFactory} is a pure constructor, exactly like a gate factory). A factory that
+ * THROWS is a hard error rather than a silently-absent judge: the engine would build the same
+ * map lazily on the first run that reaches a judge step, and failing there means failing mid-run.
+ */
+function buildJudges(
+  opts: ValidateRegistrationsOptions,
+  problems: RegistrationProblem[],
+): JudgeDefinition[] {
+  const built: JudgeDefinition[] = []
+  for (const { kind, factory } of opts.judgeRegistry?.factories() ?? []) {
+    try {
+      built.push(factory(stubJudgeContext()))
+    } catch (err) {
+      problems.push({
+        severity: 'error',
+        code: 'judge_factory_threw',
+        message: `Judge "${kind}" factory threw while validating: ${(err as Error).message}`,
+      })
+    }
+  }
+  return built
+}
+
+/**
+ * Judge checks, the counterpart of the gate + agent-kind ones above:
+ *  - a judge kind that ALSO names a gate is dead code, not a config choice — the dispatcher's
+ *    polling-gate handler has the lower `order`, so the gate silently wins and the judge never
+ *    runs. The two registries are meant to be disjoint; this is what makes that true.
+ *  - a judge's `presentation.resultView` gets the SAME check a registered agent kind's does.
+ *    Without it a typo falls back to the generic prose panel — silently, which is exactly the
+ *    failure the agent-kind check exists to prevent.
+ */
+function checkJudges(
+  judges: JudgeDefinition[],
+  gateKinds: ReadonlySet<string>,
+  knownResultViewIds: ReadonlySet<string>,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const judge of judges) {
+    if (gateKinds.has(judge.kind)) {
+      problems.push({
+        severity: 'error',
+        code: 'judge_gate_kind_collision',
+        message:
+          `Judge "${judge.kind}" collides with a registered polling gate of the same kind. The ` +
+          `gate handler claims the step first, so the judge would never run. Rename one of them.`,
+      })
+    }
+    const resultView = judge.presentation?.resultView
+    if (resultView !== undefined && !isValidResultViewId(resultView, knownResultViewIds)) {
+      problems.push({
+        severity: 'error',
+        code: 'unknown_result_view',
+        message:
+          `Judge "${judge.kind}" declares resultView "${resultView}", which is neither a known ` +
+          `built-in result view nor a namespaced consumer id (<ns>:<name>). Use one of: ` +
+          `${[...knownResultViewIds].join(', ')} — or a namespaced id paired with a frontend component.`,
+      })
+    }
+  }
   return problems
 }
 
@@ -196,15 +285,19 @@ function checkPostOpsStructuredOutput(
 }
 
 /**
- * Section 4 of {@link collectRegistrationProblems}: every kind a registered pipeline names must
- * resolve to a known built-in, a registered kind, a registered gate, or a built-in helper. Only
- * run when a built-in catalog (`knownAgentKinds`) is supplied. Split out to keep the collector
- * under the complexity ceiling.
+ * Section 5 of {@link collectRegistrationProblems}: every kind a registered pipeline names must
+ * resolve to a known built-in, a registered kind, a registered gate, a registered JUDGE, or a
+ * built-in helper. Only run when a built-in catalog (`knownAgentKinds`) is supplied. Split out to
+ * keep the collector under the complexity ceiling.
+ *
+ * A judge kind is as legal a pipeline step as a gate kind — omitting it here would make the
+ * worked example's own `pl_org_scope` pipeline (coder → scope-adherence → …) fail boot.
  */
 function checkPipelineKinds(
   opts: ValidateRegistrationsOptions,
   registeredKindIds: ReadonlySet<string>,
   gateKinds: ReadonlySet<string>,
+  judgeKinds: ReadonlySet<string>,
   builtInHelperKinds: ReadonlySet<string>,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -216,6 +309,7 @@ function checkPipelineKinds(
         known.has(agentKind) ||
         registeredKindIds.has(agentKind) ||
         gateKinds.has(agentKind) ||
+        judgeKinds.has(agentKind) ||
         builtInHelperKinds.has(agentKind)
       if (!ok) {
         problems.push({
@@ -223,7 +317,7 @@ function checkPipelineKinds(
           code: 'pipeline_unknown_kind',
           message:
             `Pipeline "${pipeline.id}" references agent kind "${agentKind}", which is not a ` +
-            `known built-in, a registered kind, or a registered gate.`,
+            `known built-in, a registered kind, a registered gate, or a registered judge.`,
         })
       }
     }
@@ -232,7 +326,7 @@ function checkPipelineKinds(
 }
 
 /**
- * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
+ * Section 6 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
  * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
  * must resolve against the built-in + registered pipeline catalog (else the created task would
  * silently fall back to the positional default). Only run when a task-type registry is supplied.

@@ -148,6 +148,33 @@ export function isReviewWaitNotificationType(type: NotificationType): boolean {
 }
 
 /**
+ * The closed set of AUTO-RAISED, gate-driven cards the engine dismisses FOR ITSELF once a run
+ * advances past the park that raised them (`NotificationService.clearWaitingDecision`, reached
+ * via `RunStateMachine.clearWaitingNotification`). Every entry is a card whose only purpose is
+ * "this run is parked, come and answer it" — once the answer is in, the card is history and
+ * must go, or the escalation sweep later flips a settled decision red ("Overdue").
+ *
+ * Deliberately EXCLUDED: the human-ACTIONABLE cards a run leaves behind for someone to act on
+ * (`merge_review`, `pipeline_complete`, `requirement_review`, `clarity_review`, …). Those are
+ * resolved by acting on them, not by the run moving on.
+ *
+ * This is a SUBSET of {@link REVIEW_WAIT_NOTIFICATION_TYPES} but a genuinely different question
+ * ("does the engine clear this?" vs "does this count as review debt?"), so it is its own list —
+ * kept here beside its sibling so a new parking surface is added to both in one place rather
+ * than to a list hard-coded inside the service (which is exactly how `judge_review` shipped
+ * un-clearable).
+ */
+export const GATE_CLEARED_NOTIFICATION_TYPES = [
+  'decision_required',
+  'followup_pending',
+  'fork_decision_pending',
+  'judge_review',
+  'pr_review_ready',
+] as const satisfies readonly NotificationType[]
+
+export type GateClearedNotificationType = (typeof GATE_CLEARED_NOTIFICATION_TYPES)[number]
+
+/**
  * One credential the ENCRYPTION_KEY-drift sweep (ADR 0026 D6.2) could not decrypt, carried on a
  * `key_drift` notification. NEVER carries the secret value — only its non-secret identity (source
  * table, row id, a human label) plus WHY it failed, so the surfaced issue is legible and the

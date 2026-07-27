@@ -202,7 +202,7 @@ so a TASK can relax it), the bounce budget (`judgeMaxBounces`), the park + its `
 card, the persistence (all state rides `step.judge`, so it is runtime-symmetric with no table),
 the result window (the shared `judge` view), or the PR-report section.
 
-Three rules worth knowing before you register one:
+Rules worth knowing before you register one:
 
 - **Unwired is a pass-through.** With no assessment model configured, every judge step records
   `status: 'skipped'` with a note and advances — so adding a judge to a pipeline can never break
@@ -211,7 +211,18 @@ Three rules worth knowing before you register one:
   preceding producing step to bounce to, degrades to a **park** and records why.
 - **An unreadable assessment is a FAILING verdict**, not a crashed run: a thrown parse or a
   provider outage becomes a score-0 verdict that reaches a human. For a gate that blocks work,
-  "I could not tell" must land on the cautious side.
+  "I could not tell" must land on the cautious side. A score the 0..1 clamp zeroed because your
+  model answered on a 0..100 scale keeps that zero, but the engine attaches a finding saying so —
+  so tell your model the scale in the rubric, and read a bare `0.00` as "check the scale first".
+- **Your judge is validated at BOOT, so pass the registry to the boot check.** A facade calls
+  `validateRegistrations({ …, judgeRegistry })`; that is what makes a pipeline placing your judge
+  legal, checks your `presentation.resultView` (a typo would otherwise silently fall back to the
+  prose panel), and errors if your kind collides with a registered gate kind — a collision makes
+  your judge dead code, because the polling-gate handler claims the step first.
+- **Pick a model, or inherit one.** A judge resolves its model the way an agent step does (block
+  pin → the workspace's per-kind default for `judge` → the deployment default). The deployment
+  default is `CoreDependencies.judgeModel`, which falls back to the inline reviewers' model — set
+  it only when judges should run on something different from the reviewers.
 
 Full design + the deliberate non-goals (the `merger` is NOT rewritten onto this):
 [`../../docs/initiatives/judge-registry.md`](../../docs/initiatives/judge-registry.md).

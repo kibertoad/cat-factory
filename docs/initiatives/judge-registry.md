@@ -151,6 +151,56 @@ host-parsed, often public surface**. Every hole goes through `hostMarkdown` + `r
 exactly like the rest of the report. A judge step that did not run records
 `status: 'absent'` with a note — a silently missing section reads like a clean one.
 
+### D9 — A judge is a first-class registration for BOOT VALIDATION, not just at run time
+
+**Decision: `validateRegistrations` takes the `judgeRegistry` and checks it like the gates.**
+Three checks, each closing a way a judge could be silently wrong:
+
+- **A judge kind counts as a legal pipeline step.** Without it `checkPipelineKinds` reports a
+  pipeline placing a registered judge as `pipeline_unknown_kind` — the worked example's own
+  `pl_org_scope` would fail its own boot gate the moment a facade supplies `knownAgentKinds`.
+- **A judge's `presentation.resultView` gets the SAME check an agent kind's does.** A typo
+  otherwise degrades the window to the generic prose panel with no signal at all.
+- **A judge kind that collides with a gate kind is an ERROR.** The two registries are meant to
+  be disjoint, but the dispatcher's polling-gate handler has the lower `order`, so a collision
+  makes the judge silently dead code. "Disjoint by construction" is only true once something
+  checks it.
+
+A throwing factory is reported here too, rather than surfacing on the first run that happens to
+reach a judge step (the engine builds the same map lazily).
+
+### D10 — The park's card is CLEARED by the engine, on every resolution path
+
+**Decision: `judge_review` is in the shared `GATE_CLEARED_NOTIFICATION_TYPES` contract**, which
+`NotificationService.clearWaitingDecision` iterates.
+
+This shipped broken in the first cut and is worth recording as the shape of the trap: the type
+was added to the notification union AND to `REVIEW_WAIT_NOTIFICATION_TYPES` (the review-debt
+metric), but the DISMISSAL list was a third, hard-coded literal inside the service. The card was
+therefore never auto-cleared on any path — and an open parking card is exactly what the
+escalation sweep later flips red as "Overdue" for a decision a human already made. The list is
+now a named contract beside its sibling so a new parking surface is added in one place. Note
+`proceed` also needs an explicit `clearWaitingNotification`: it settles through the shared
+`settleAdvancedGate`, which deliberately does not clear (it is the generic gate-advance settle).
+
+### D11 — The assessment prompt is budgeted in TOTAL, and says what it dropped
+
+**Decision: a 24k-char total cap across prior outputs on top of the 6k per-entry cap**, spent
+newest-first, with an explicit "N earlier step output(s) omitted" line in the prompt.
+
+The per-entry cap is not a bound: a fifteen-step pipeline multiplies it into ~90 KB of prompt on
+every judge round, and a bounce pays it again. Newest-first because the work under review is
+what the last steps produced. The omission is STATED rather than silent for the same reason the
+report logs its truncations — a judge that scored a subset while its summary reads as if it saw
+everything produces a verdict a human cannot calibrate.
+
+### D12 — A judge's model is its own dependency, defaulted to the reviewers'
+
+**Decision: `judgeModel` / `judgeResolveModel` on `CoreDependencies`, falling back to
+`requirementReviewModel ?? documentPlannerModel`.** The fallback is what makes "no facade wiring"
+true; the named deps are so that "what model does a judge use?" is answerable from the dependency
+contract rather than from a silent reuse buried in `createCore`.
+
 ## Conventions & gotchas carried between iterations
 
 - **The assessment rides an injectable `JudgeAssessor` seam, not a direct `generateText`.**
@@ -173,6 +223,20 @@ exactly like the rest of the report. A judge step that did not run records
 - **Palette + result view.** A judge kind reaches the SPA through the snapshot's
   `customAgentKinds` projection (extended to read the judge registry) and the new built-in
   `judge` result view. A registration with no `presentation` is simply not a palette block.
+- **A facade that threads a `judgeRegistry` must also pass it to `validateRegistrations`** (D9),
+  or its judges are unvalidated and its judge-placing pipelines false-positive.
+- **"Which step is the active judge?" has ONE definition** — `activeJudgeStepIndex` in contracts.
+  The engine, the public-API projection, the inbox reveal and the SPA's optimistic echo each
+  grew their own scan with a different precedence, which in a multi-judge pipeline let the API
+  answer about one rubric while the SPA echoed the result onto another. Add a caller to the
+  shared helper; do not re-derive it.
+- **An out-of-range score is explained, not rescued.** The 0..1 clamp turns a `85` reply into
+  `0.00` beside a sensible summary. Keep the cautious zero (a judge blocks work, so "I could not
+  tell" belongs on the cautious side) but attach `annotateOutOfRangeScore`'s finding, or a
+  reviewer reads the model's scale error as a damning verdict.
+- **Persist BEFORE the assessment, not just emit.** The durable driver replays steps; without a
+  committed `evaluating` marker a replay re-runs the model call and can broadcast a second,
+  different verdict. Same rule the gate machine follows before dispatching a helper.
 
 ## Per-item status
 
@@ -186,9 +250,10 @@ exactly like the rest of the report. A judge step that did not run records
 | 6   | PR verification report: the `judges` section (compose + render + JSON)                                                                                 | done   | this PR |
 | 7   | Public API: judges on `/api/v1/runs/:runId/decisions` (+ the resolve route)                                                                            | done   | this PR |
 | 8   | Frontend: `JudgeResultView.vue` in the `resultViews` slot + i18n (all locales)                                                                         | done   | this PR |
-| 9   | Conformance: evaluate / park / bounce / unwired pass-through on both runtimes                                                                          | done   | this PR |
+| 9   | Conformance: evaluate / park / bounce / fail / human proceed-bounce-stop / unwired pass-through on both runtimes                                       | done   | this PR |
 | 10  | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent`                                                                         | done   | this PR |
 | 11  | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
+| 11b | Boot validation (D9), card clearing (D10), prompt budget (D11), judge model deps (D12), one `activeJudgeStepIndex`                                     | done   | this PR |
 | 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
 | 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
 

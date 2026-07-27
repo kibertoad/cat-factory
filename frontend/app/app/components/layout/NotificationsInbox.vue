@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { activeJudgeStepIndex } from '@cat-factory/contracts'
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
 
@@ -271,13 +272,15 @@ function revealForkDecision(n: Notification) {
 }
 
 /**
- * Open the judge window for a run parked on a rubric verdict: find the step carrying the parked
- * verdict and open it through the universal step dispatch (a registered judge declares the
- * `judge` result view). Falls back to focusing the block when the run isn't loaded.
+ * Open the judge window for a run parked on a rubric verdict: resolve the step through the
+ * SHARED `activeJudgeStepIndex` precedence (parked first — which is what the card is about) and open
+ * it via the universal step dispatch (a registered judge declares the `judge` result view).
+ * Falls back to focusing the block when the run isn't loaded. Using the shared helper rather
+ * than a local scan keeps a multi-judge pipeline opening the same rubric the card names.
  */
 function revealJudge(n: Notification) {
   const instance = n.executionId ? execution.getInstance(n.executionId) : undefined
-  const idx = instance?.steps.findIndex((s) => s.judge?.status === 'awaiting_decision') ?? -1
+  const idx = instance ? activeJudgeStepIndex(instance.steps, instance.currentStep) : -1
   if (instance && idx >= 0) ui.openStepDetail(instance.id, idx)
   else if (n.blockId) ui.select(n.blockId)
 }

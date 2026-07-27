@@ -641,8 +641,12 @@ export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | und
   return new JudgeService({
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
+    // `judgeModel` / `judgeResolveModel` exist so a deployment CAN point judges at their own
+    // model; unset, they fall back to the inline reviewers' — which is what makes "no facade
+    // wiring" true. The named deps are the documented seam, so a reader looking for "what model
+    // does a judge use?" finds an answer in the dependency contract rather than here.
+    modelRef: deps.judgeModel ?? deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.judgeResolveModel ?? deps.requirementReviewResolveModel,
     ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     resolveWorkspaceModelDefault: deps.modelPresetRepository
       ? (workspaceId, agentKind, modelPresetId) =>

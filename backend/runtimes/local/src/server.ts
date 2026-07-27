@@ -308,6 +308,7 @@ async function startLocalMothership(
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
+    judgeRegistry: container.judgeRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 
