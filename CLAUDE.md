@@ -564,7 +564,9 @@ unrelated runs. Design + the withdrawn alternative:
   evidence-backed change to a model that cannot see the evidence. Only `met` promotes.
 - **It NEVER demotes** — a run whose blast radius never touched a behaviour would otherwise strip the
   service's standing behaviour on every unrelated PR. A real regression is a `not_met` on an
-  `established` requirement: a failing test the run answers for, not a spec edit.
+  `established` requirement: a failing test the run answers for, not a spec edit. The PR
+  verification report is where that lands — it COUNTS and marks regressions
+  (`requirements.regressions`) so the distinction reaches a human rather than only a prompt.
 - **Idempotent by CONTENT** (re-read, recompute, byte-compare), which is the durable driver's replay
   answer. No marker row.
 - **It rewrites ONLY a shard that round-tripped byte-for-byte.** `readServiceSpec` SALVAGES (a
@@ -867,9 +869,19 @@ agent's prose claims. Form:
   every other section this reads EVERY tester step, because promotion does: a pipeline with both
   `tester-api` and `tester-ui` would otherwise report `not checked` against requirements the spec
   already records as `established`.
+  **`not_met` on an `established` requirement is a REGRESSION and is counted as one**
+  (`requirements.regressions`, a subset of `notMet`, so the tallies still sum to `total`). That is
+  the one derived fact the implementation-state axis exists to make computable: every other
+  consumer of the axis states the distinction in prose to a MODEL, and left uncomputed the two
+  readings of `not_met` — "not built yet" and "you broke it" — reach a REVIEWER as the same cell.
+  It is evidence, not policy: the report counts and marks it, and never gates a merge on it.
 - **A section whose producing step didn't run says so** (`status: 'absent'` + a note); a silently
   missing section reads exactly like a clean one. Same for a CAPPED list: every cap records what it
-  dropped in the report's `truncations` log.
+  dropped in the report's `truncations` log. The requirement table's cap is the one that is NOT a
+  plain prefix: `selectRequirementEntries` keeps every regression first and then fills the budget
+  in spec order (restoring spec order to render), because a prefix cap drops the row a reviewer
+  must not miss purely by where its feature sorts. Its truncation note says so, since a reader who
+  assumes a prefix would conclude the tail was never ruled on.
 - **A PR body is NOT an inert string sink**; kernel's `hostMarkdown` is the boundary. The host
   auto-links `#123`/`@name`/`!123`, a **closing keyword before an issue reference CLOSES that issue
   on merge**, a raw newline ends a table row, and an unbalanced fence swallows the JSON block that

@@ -328,6 +328,56 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
 }
 
 /**
+ * Whether a row is a REGRESSION: behaviour the spec records as `established` — observed to hold
+ * on some earlier run, which is the only thing that makes it standing behaviour — that this run's
+ * Tester observed to FAIL.
+ *
+ * This is the one derived fact the implementation-state axis exists to make computable. Every
+ * other consumer of the axis (the build prompt's two headings, the tester prompt's rule, the
+ * `@aspirational` Gherkin tag) states the distinction in prose to a MODEL; nothing computed it
+ * for a human. A `not_met` against an `aspirational` requirement is in-flight work; a `not_met`
+ * against an `established` one is the service losing behaviour it had. Left uncomputed, the two
+ * arrive at a reviewer as the same `not met` cell.
+ */
+function isRegression(row: PrReportRequirement): boolean {
+  return row.state === 'established' && row.verdict === 'not_met'
+}
+
+/**
+ * Cap the requirement table WITHOUT ever dropping a regression.
+ *
+ * The generic {@link cap} keeps a PREFIX, and these rows are emitted in spec order (module →
+ * group → requirement). So on a large spec the single row a reviewer must not miss is dropped
+ * precisely because of where its feature sorts — a silently-clean-looking table, which is the
+ * failure this whole report exists to remove. Regressions are therefore selected first, the
+ * remaining budget is filled in spec order, and the selection is restored to spec order so the
+ * table still reads by feature rather than by severity.
+ *
+ * The truncation note SAYS the kept rows are not simply the first N: a reader who assumes a
+ * prefix would wrongly conclude the tail was never ruled on.
+ */
+function selectRequirementEntries(
+  rows: readonly PrReportRequirement[],
+  truncations: string[],
+): PrReportRequirement[] {
+  const { items, dropped } = hostMarkdown.capList(rows)
+  if (dropped === 0) return items
+
+  const budget = items.length
+  const kept = new Set<number>()
+  rows.forEach((row, i) => {
+    if (isRegression(row) && kept.size < budget) kept.add(i)
+  })
+  rows.forEach((_, i) => {
+    if (!kept.has(i) && kept.size < budget) kept.add(i)
+  })
+  truncations.push(
+    `requirements.entries: showing ${kept.size} of ${rows.length} (every regression kept)`,
+  )
+  return rows.filter((_, i) => kept.has(i))
+}
+
+/**
  * Compose the REQUIREMENT → EVIDENCE section: every requirement in the service's in-repo
  * `spec/`, paired with the Tester's verdict on it.
  *
@@ -355,7 +405,7 @@ function composeRequirements(
   spec: SpecDoc | null | undefined,
   truncations: string[],
 ): PrVerificationReport['requirements'] {
-  const empty = { entries: [], met: 0, notMet: 0, notCovered: 0, total: 0 }
+  const empty = { entries: [], met: 0, notMet: 0, notCovered: 0, regressions: 0, total: 0 }
   const testerSteps = instance.steps.filter((s) => isTesterKind(s.agentKind))
   if (testerSteps.length === 0) {
     return {
@@ -430,10 +480,11 @@ function composeRequirements(
     rows.filter((r) => r.verdict === status).length
   return {
     status: 'reported',
-    entries: cap(rows, 'requirements.entries', truncations),
+    entries: selectRequirementEntries(rows, truncations),
     met: count('met'),
     notMet: count('not_met'),
     notCovered: count('not_covered'),
+    regressions: rows.filter(isRegression).length,
     total: rows.length,
   }
 }
@@ -605,11 +656,26 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
  * landing in a host-parsed, often public PR body.
  *
  * The three verdicts are given visibly DIFFERENT markers on purpose: "we didn't check" and
- * "it's broken" reading the same is the exact failure this section exists to remove.
+ * "it's broken" reading the same is the exact failure this section exists to remove. A
+ * REGRESSION — a failing verdict against a requirement the spec records as `established` —
+ * gets a fourth marker for the same reason one axis over: "this is not built yet" and "this used
+ * to work" are the two readings of `not met`, and only one of them should stop a REVIEWER. The
+ * report marks it; it does not gate on it (gating lives in the gate/judge registries).
  */
 function renderRequirements(reqs: PrVerificationReport['requirements']): string[] {
   const out = ['### Requirement verification', '']
   if (reqs.status === 'absent') return [...out, `_${reqs.note}_`, '']
+  // The regression count LEADS when there is one. It is a subset of `not met`, so it is stated
+  // as its own line rather than as a fourth tally that would not add up to the total.
+  if (reqs.regressions > 0) {
+    out.push(
+      `**🔴 ${reqs.regressions} regression${reqs.regressions === 1 ? '' : 's'}** — ` +
+        `${reqs.regressions === 1 ? 'a requirement' : 'requirements'} this service was ` +
+        `OBSERVED to honour, now failing. Established behaviour breaking is not in-progress ` +
+        `work; check ${reqs.regressions === 1 ? 'it' : 'them'} before merging.`,
+      '',
+    )
+  }
   out.push(
     `**${reqs.met} met** · **${reqs.notMet} not met** · **${reqs.notCovered} not checked** ` +
       `(of ${reqs.total} requirement${reqs.total === 1 ? '' : 's'} in \`spec/\`)`,
@@ -618,11 +684,14 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
     '| --- | --- | --- | --- | --- |',
   )
   for (const entry of reqs.entries) {
+    const regression = isRegression(entry)
     const verdict =
       entry.verdict === 'met'
         ? '✅ met'
         : entry.verdict === 'not_met'
-          ? '❌ not met'
+          ? regression
+            ? '🔴 **regression**'
+            : '❌ not met'
           : '➖ not checked'
     // An `aspirational` requirement is agreed-but-not-built, so say so inline rather than
     // leaving a reader to read `not checked` against it as a coverage gap.
@@ -636,8 +705,9 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
   out.push(
     '',
     '_`established` = observed to hold on some run; `aspirational` = agreed but not yet built,',
-    'so `not checked` against one is expected. The acceptance criteria themselves live in',
-    '`spec/` in this repository._',
+    'so `not checked` against one is expected and a failure against one is unfinished work, not',
+    'a break. A failure against an `established` requirement is a 🔴 regression. The acceptance',
+    'criteria themselves live in `spec/` in this repository._',
     '',
   )
   return out

@@ -1,6 +1,6 @@
 # Initiative: service acceptance criteria — verification & lifecycle
 
-Status: **Phases 0–2 + 4 delivered; Phase 3 deliberately not pursued** (the first implementation
+Status: **Phases 0–2 + 4–5 delivered; Phase 3 deliberately not pursued** (the first implementation
 was withdrawn — see below) · Owner: platform · Started: 2026-07-27
 
 > **Next action for an operator:** run the three Phase 0 queries below against a real deployment
@@ -96,6 +96,7 @@ layer or a new engine seam.
 | 2   | Criterion → evidence section on the PR verification report   | done                    | —     |
 | 3   | Off-run promotion of a settled review into `spec/`           | not pursued (see below) | —     |
 | 4   | Implementation state + requirement evidence in the SPA       | done                    | —     |
+| 5   | Regression signal on the PR verification report              | done                    | —     |
 | —   | Withdrawn: per-service acceptance-criteria store             | closed                  | #1387 |
 | —   | Salvaged: `BoardService` removal-cascade extraction          | done                    | #1394 |
 
@@ -120,10 +121,16 @@ service-wide rollup on the overview pane, and the tester's `requirementVerdicts`
 tester step — the in-app twin of the PR report's requirement → evidence section. See the Phase 4
 section.
 
+**Slice 5** landed the one DERIVED fact the axis makes possible and that nothing computed:
+`requirements.regressions` on the PR verification report (`PR_VERIFICATION_REPORT_VERSION` → 3),
+counting the `established` requirements the tester observed to FAIL, rendered as a leading
+call-out plus a distinct row marker, and a regression-preserving cap on the requirement table.
+See the Phase 5 section.
+
 **Slice 3 was not pursued**, on the tracker's own stated condition: `spec-writer` sits 0–1 steps
 behind the human gate in every built-in pipeline that pairs them, so Q3 is structurally
-near-100% and the initiative ends at Phases 1–2. Reconsider only if an operator runs Q3 and it
-comes back materially below ~90%.
+near-100% and Phase 3 buys nothing. Reconsider only if an operator runs Q3 and it comes back
+materially below ~90%.
 
 ## How to proceed
 
@@ -336,6 +343,61 @@ Gotchas worth carrying:
 - **The filter chips REUSE the badge labels** rather than carrying their own catalog keys. A chip
   that reads differently from the badge it filters for is a translation bug waiting to happen, and
   one key per state cannot drift from itself; only `all` needs a key of its own.
+
+### Phase 5 — The regression signal: make the axis COMPUTABLE, not just describable — **DONE**
+
+Phases 1–4 put the `aspirational` / `established` axis in front of every consumer: the build
+prompt's two headings, the tester prompt's rule, the `@aspirational` Gherkin tag, the PR report's
+state column, the SPA's badges. But every one of those STATES the distinction — mostly to a model
+— and none of them DERIVES anything from it. The one fact worth deriving was left for a reader to
+work out:
+
+> **A `not_met` against an `established` requirement is a regression. A `not_met` against an
+> `aspirational` one is work that is not finished yet.**
+
+That sentence was already written into `prompts/testing.ts`, `prompts/standard.ts`,
+`repo-ops/render.ts` and `CLAUDE.md` — four places, all prose, none of them computed. On the PR
+report both readings arrived as the same `❌ not met` cell and were pooled into the same `notMet`
+tally, so telling them apart meant cross-referencing two columns of a table that may be capped.
+This is precisely the collapse `not_covered` was kept separate from `not_met` to prevent, one axis
+over: keeping a distinction only in prose is the same as not keeping it.
+
+What landed, all in the report's existing seams:
+
+- **`requirements.regressions`** on `prReportRequirementsSchema`, counted over the whole spec
+  before any cap; `PR_VERIFICATION_REPORT_VERSION` → 3.
+- **A leading call-out** on the rendered section when it is non-zero, plus a distinct
+  `🔴 **regression**` row marker so the call-out points at identifiable rows, and a legend line.
+- **A regression-preserving cap** (`selectRequirementEntries`), replacing the generic prefix
+  `cap()` for this one list.
+
+Gotchas worth carrying:
+
+- **A SUBSET, never a fourth tally.** `regressions` counts a subset of `notMet`, so it is rendered
+  as its own line ABOVE the tallies rather than as a fourth term beside them. A four-term tally
+  that does not add up to `total` reads as an arithmetic bug and costs the reader trust in every
+  other number in the report.
+- **A prefix cap is not a safe cap for a severity-bearing list.** `hostMarkdown.capList` keeps the
+  first N, and requirement rows are emitted in spec order (module → group → requirement), so on a
+  spec past the cap the single row a reviewer must not miss is dropped purely by where its feature
+  happens to sort — a table that looks clean because of alphabetical luck. Regressions are selected
+  first, the rest fill the remaining budget in spec order, and the selection is then RESTORED to
+  spec order: severity decides what survives, the taxonomy still decides how it reads.
+- **A non-prefix cap has to SAY it is not a prefix.** The truncation note carries
+  `(every regression kept)`, because a reader who assumes the standard prefix would conclude the
+  requirements after the cut-off were never ruled on — the exact false reading `truncations` exists
+  to prevent.
+- **Evidence, not policy.** The report counts and marks a regression; it does not gate the merge,
+  fail the run, or bounce a step. The report is the engine's evidence surface (`CLAUDE.md` → PR
+  verification report) and gating belongs to the gate/judge registries, which have their own
+  attempt budgets and park semantics. A regression IS actionable — the tester already files an
+  established break as a concern for the fixer — so the report's job is to make sure a human
+  cannot miss it, not to add a second, weaker enforcement path beside the first.
+- **The SPA cannot show this, and should not try.** `StepTestReport.vue` renders the tester's
+  verdicts but has no spec state to join against, and the fix must NOT be to have the tester echo
+  the state back: the spec is the source of truth for `state`, and a model that reports state is a
+  model that can promote by assertion — the thing `coerceRequirement` and the spec-writer prompt
+  both exist to prevent. The join lives where both halves already are, which is the report.
 
 ## Conventions & gotchas carried between iterations
 
