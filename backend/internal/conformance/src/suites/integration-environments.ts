@@ -242,7 +242,10 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
         `${base}/connection`,
         { config: { kind: 'cloudflare', cloudflare }, secrets: { githubToken: 'ghp_test' } },
       )
-      expect(registered.status).toBe(201)
+      // Carry the body into the failure message: this call crosses the contract schema, the
+      // backend registry, the handler bridge and the store, and a bare "expected 422 to be 201"
+      // names none of them.
+      expect(registered.status, JSON.stringify(registered.body)).toBe(201)
       expect(registered.body.kind).toBe('cloudflare')
       // The token is the one secret the backend declares; a facade that dropped it would leave
       // every provision unauthenticated.
