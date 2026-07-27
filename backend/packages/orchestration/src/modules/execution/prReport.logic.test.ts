@@ -509,7 +509,9 @@ describe('requirement → evidence section', () => {
           // A title + detail carrying every PR-body hazard: a mention, an issue reference, a
           // closing keyword, a table-breaking pipe and a newline.
           { requirementId: 'req-login', status: 'met', detail: 'ok | fine\nsecond line' },
-          { requirementId: 'req-lockout', status: 'not_met', detail: 'closes #42 cc @octocat' },
+          // Deliberately the ASPIRATIONAL requirement, so this stays a plain `not met` and the
+          // test keeps asserting the three verdict markers rather than the regression one.
+          { requirementId: 'req-sso', status: 'not_met', detail: 'closes #42 cc @octocat' },
         ]),
       ]),
       { ...INPUTS, spec: SPEC },
@@ -592,5 +594,192 @@ describe('requirement → evidence section', () => {
     // inflates the machine-readable block until the body-size backstop drops it wholesale.
     expect(detail.length).toBeLessThanOrEqual(hostMarkdown.MAX_CELL_CHARS)
     expect(detail.endsWith('…')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Regressions. `not_met` has two readings and only one of them should stop a merge: against an
+// `aspirational` requirement it is work in progress, against an `established` one it is
+// behaviour the service was observed to have and no longer does. The whole point of the
+// implementation-state axis is that this is COMPUTABLE rather than left to a reader to
+// cross-reference two columns of a table that may be capped.
+// ---------------------------------------------------------------------------
+
+/** A spec of `count` established requirements, `req-bulk-0…`, in one group. */
+const bulkSpec = (count: number) => ({
+  service: 'Shop',
+  summary: '',
+  modules: [
+    {
+      name: 'Identity',
+      summary: '',
+      groups: [
+        {
+          name: 'Auth',
+          summary: '',
+          rules: [],
+          requirements: Array.from({ length: count }, (_, i) => ({
+            id: `req-bulk-${i}`,
+            title: `Bulk ${i}`,
+            statement: 'The system SHALL do the thing.',
+            kind: 'functional' as const,
+            priority: 'must' as const,
+            state: 'established' as const,
+            sourceBlockIds: [],
+            acceptance: [],
+          })),
+        },
+      ],
+    },
+  ],
+})
+
+describe('requirement regressions', () => {
+  it('counts a failing ESTABLISHED requirement as a regression', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([
+          // `req-lockout` is established — this is a break. `req-sso` is aspirational — this is
+          // simply not built yet. Both are `not_met`, and only one is a regression.
+          { requirementId: 'req-lockout', status: 'not_met', detail: 'no lockout after 5 tries' },
+          { requirementId: 'req-sso', status: 'not_met', detail: 'no SSO yet' },
+        ]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    expect(report.requirements.notMet).toBe(2)
+    expect(report.requirements.regressions).toBe(1)
+  })
+
+  it('does not count a failing ASPIRATIONAL requirement as a regression', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([{ requirementId: 'req-sso', status: 'not_met', detail: 'not built' }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    expect(report.requirements.notMet).toBe(1)
+    expect(report.requirements.regressions).toBe(0)
+  })
+
+  it('does not count an unchecked established requirement as a regression', () => {
+    // Silence is not evidence of a break: a tester targets the blast radius, so most
+    // established requirements are `not_covered` on any given run.
+    const report = composePrVerificationReport(
+      instance([testerStep([{ requirementId: 'req-login', status: 'met', detail: 'ok' }])]),
+      { ...INPUTS, spec: SPEC },
+    )
+    expect(report.requirements.notCovered).toBe(2)
+    expect(report.requirements.regressions).toBe(0)
+  })
+
+  it('leads the rendered section with the regression call-out', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([{ requirementId: 'req-lockout', status: 'not_met', detail: 'no lockout' }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    const rendered = renderPrVerificationReport(report)
+    const prose = rendered.slice(0, rendered.indexOf('<details>'))
+    const section = prose.slice(prose.indexOf('### Requirement verification'))
+
+    expect(section).toContain('**🔴 1 regression**')
+    // The regression row is marked differently from a plain `not met`, or the call-out would
+    // send a reviewer to a table that cannot say WHICH row it meant.
+    expect(section).toContain('🔴 **regression**')
+    expect(section).not.toContain('❌ not met')
+    // The count is a SUBSET of `not met`, so the tallies still add up to the total.
+    expect(section).toContain('**1 not met**')
+  })
+
+  it('says nothing about regressions when there are none', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([{ requirementId: 'req-sso', status: 'not_met', detail: 'not built' }]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    const section = renderPrVerificationReport(report)
+    expect(section).not.toContain('regression**')
+    expect(section).toContain('❌ not met')
+  })
+
+  it('keeps the regression row in the table even when the cap drops most of the spec', () => {
+    // The generic cap keeps a PREFIX, and rows are emitted in spec order — so the one row a
+    // reviewer must not miss would be dropped purely because of where its feature sorts.
+    const total = hostMarkdown.MAX_LIST_ITEMS + 20
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([
+          { requirementId: `req-bulk-${total - 1}`, status: 'not_met', detail: 'broke it' },
+        ]),
+      ]),
+      { ...INPUTS, spec: bulkSpec(total) },
+    )
+
+    expect(report.requirements.total).toBe(total)
+    expect(report.requirements.regressions).toBe(1)
+    expect(report.requirements.entries).toHaveLength(hostMarkdown.MAX_LIST_ITEMS)
+    expect(report.requirements.entries.map((e) => e.id)).toContain(`req-bulk-${total - 1}`)
+    // Restored to spec order, so the table still reads by feature rather than by severity.
+    const ids = report.requirements.entries.map((e) => e.id)
+    expect(ids).toEqual([...ids].sort((a, b) => Number(a.slice(9)) - Number(b.slice(9))))
+    // A capped list is only safe if it says it was capped — AND says it is not a prefix.
+    expect(report.truncations.join('\n')).toContain(
+      `requirements.entries: showing ${hostMarkdown.MAX_LIST_ITEMS} of ${total} ` +
+        `(not the first ${hostMarkdown.MAX_LIST_ITEMS}: every regression kept)`,
+    )
+    expect(() => parsePrVerificationReport(report)).not.toThrow()
+  })
+
+  it('says how many regressions fit when there are more of them than the row budget', () => {
+    // Priority is not a guarantee: a broken build can fail every established requirement at
+    // once, and then the table physically cannot hold them all. A note claiming "every
+    // regression kept" would be the same false reassurance as no note at all.
+    const total = hostMarkdown.MAX_LIST_ITEMS + 20
+    const failing = hostMarkdown.MAX_LIST_ITEMS + 10
+    const report = composePrVerificationReport(
+      instance([
+        testerStep(
+          Array.from({ length: failing }, (_, i) => ({
+            requirementId: `req-bulk-${i}`,
+            status: 'not_met',
+            detail: 'broke it',
+          })),
+        ),
+      ]),
+      { ...INPUTS, spec: bulkSpec(total) },
+    )
+
+    expect(report.requirements.regressions).toBe(failing)
+    expect(report.requirements.entries).toHaveLength(hostMarkdown.MAX_LIST_ITEMS)
+    expect(report.truncations.join('\n')).toContain(
+      `(not the first ${hostMarkdown.MAX_LIST_ITEMS}: only ${hostMarkdown.MAX_LIST_ITEMS} of ` +
+        `${failing} regressions fit)`,
+    )
+    // The call-out counts the whole spec, so it has to admit the table holds fewer than that —
+    // otherwise a reader counts the rows and concludes the difference was never broken.
+    const section = renderPrVerificationReport(report)
+    expect(section).toContain(`**🔴 ${failing} regressions**`)
+    expect(section).toContain(`table below shows ${hostMarkdown.MAX_LIST_ITEMS} of them`)
+  })
+
+  it('leaves the truncation note plain when a capped spec has no regressions at all', () => {
+    // With nothing to prioritise the selection IS the standard prefix, so an extra clause about
+    // regressions would describe a reordering that did not happen.
+    const total = hostMarkdown.MAX_LIST_ITEMS + 20
+    const report = composePrVerificationReport(
+      instance([testerStep([{ requirementId: 'req-bulk-0', status: 'met', detail: 'ok' }])]),
+      { ...INPUTS, spec: bulkSpec(total) },
+    )
+
+    expect(report.requirements.regressions).toBe(0)
+    expect(report.truncations).toContain(
+      `requirements.entries: showing ${hostMarkdown.MAX_LIST_ITEMS} of ${total}`,
+    )
+    expect(report.requirements.entries.map((e) => e.id)).toEqual(
+      Array.from({ length: hostMarkdown.MAX_LIST_ITEMS }, (_, i) => `req-bulk-${i}`),
+    )
   })
 })

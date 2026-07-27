@@ -28,7 +28,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
  * a bump means "re-read the schema", not "a compatibility shim exists".
  */
-export const PR_VERIFICATION_REPORT_VERSION = 2
+export const PR_VERIFICATION_REPORT_VERSION = 3
 
 /**
  * Whether a section has evidence to show.
@@ -309,6 +309,26 @@ export const prReportRequirementsSchema = v.object({
   met: v.number(),
   notMet: v.number(),
   notCovered: v.number(),
+  /**
+   * REGRESSIONS: requirements the spec records as `established` that the Tester observed to
+   * FAIL — a subset of {@link notMet}, and the only reading of this section that says the
+   * change BROKE something rather than merely not finishing it.
+   *
+   * The distinction is what the implementation-state axis exists to make computable. A
+   * `not_met` against an `aspirational` requirement is a behaviour that was agreed and is not
+   * built yet, which is the normal state of in-flight work; a `not_met` against an
+   * `established` one is behaviour the platform previously OBSERVED to hold and no longer
+   * does. Both were reported as plain `not_met`, so a reviewer had to cross-reference two
+   * columns of a capped table to tell "still building it" from "you broke the service" —
+   * exactly the collapse `not_covered` was kept separate from `not_met` to prevent, one axis
+   * over.
+   *
+   * Counted over the whole spec before any cap, so this is the true total even when
+   * {@link entries} is capped. Regression rows are selected into `entries` AHEAD of every other
+   * row — priority, not a guarantee: a spec with more regressions than the row budget still
+   * loses some, and the `truncations` log says how many fit.
+   */
+  regressions: v.number(),
   /** Total requirements in the spec (`met + notMet + notCovered`). */
   total: v.number(),
 })
@@ -329,7 +349,9 @@ export const prVerificationReportSchema = v.object({
   observability: prReportObservabilitySchema,
   /**
    * What the report had to leave out to stay inside a pull-request body, one human-readable
-   * note per capped list (`"tests.outcomes: showing 50 of 118"`). Empty on any ordinary run.
+   * note per capped list (`"tests.outcomes: showing 50 of 118"`). A list whose cap is not a
+   * plain prefix adds a parenthetical saying so, since a reader who assumes the first N would
+   * conclude the tail was never ruled on. Empty on any ordinary run.
    *
    * A capped list is only safe if it SAYS it was capped — "50 failing checks" and "50 of 118
    * failing checks" call for very different reviewer reactions, and the whole point of this
