@@ -1920,6 +1920,9 @@
           "label": "Fournisseurs et clés",
           "description": "Abonnements LLM de l'espace de travail et clés API des fournisseurs."
         },
+        "personalSubs": {
+          "label": "Abonnements personnels (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Connectez la GitHub App de l'espace de travail, parcourez dépôts, PR et tickets."
         },
@@ -2931,9 +2934,15 @@
       "noModelBody": "Les agents ont besoin d'un modèle pour s'exécuter. L'IA fonctionne d'emblée uniquement sur un déploiement Cloudflare avec Workers AI activé ; sinon, connectez au moins une source ci-dessous.",
       "operatorNote": "AWS Bedrock et Cloudflare Workers AI sont activés par l'opérateur du déploiement via la configuration de l'environnement, pas depuis cet écran.",
       "routes": {
+        "personal": {
+          "title": "Votre abonnement à un plan de codage",
+          "badge": "Le plus populaire",
+          "body": "Vous payez déjà pour Claude, ChatGPT (Codex) ou un plan de codage GLM ? Connectez-le ici, par utilisateur, et les agents s'exécutent sur le quota forfaitaire que vous avez déjà.",
+          "cta": "Connecter mon abonnement"
+        },
         "keys": {
           "title": "Clés et abonnements des fournisseurs",
-          "body": "Ajoutez une clé d'API directe d'un fournisseur (OpenAI, Anthropic, Qwen, …) ou connectez un abonnement commercial à un plan de codage (Kimi, DeepSeek) ou personnel (Claude, GLM, Codex).",
+          "body": "Ajoutez une clé d'API directe d'un fournisseur (OpenAI, Anthropic, Qwen, …) ou connectez un abonnement commercial à un plan de codage autorisant un usage en équipe (Kimi, DeepSeek).",
           "cta": "Ouvrir les fournisseurs de LLM"
         },
         "openrouter": {
@@ -3050,7 +3059,11 @@
         "proxy": "Proxys",
         "personal": "Abonnements personnels"
       },
-      "poolIntro": "Connectez un abonnement commercial à un plan de codage (Kimi, DeepSeek) qui autorise un usage équipe/organisation pour exécuter les étapes d'agent sur le harness Claude Code au lieu d'une clé d'API. Les tokens sont stockés chiffrés, mutualisés et alternés selon l'usage. Les modèles d'abonnement sont à quota forfaitaire, donc ils n'entament pas votre budget de dépense. Les abonnements à usage individuel (Claude, GLM, ChatGPT/Codex) se connectent par utilisateur dans l'onglet Abonnements personnels.",
+      "poolIntro": "Connectez un abonnement commercial à un plan de codage (Kimi, DeepSeek) qui autorise un usage équipe/organisation pour exécuter les étapes d'agent sur le harness Claude Code au lieu d'une clé d'API. Les tokens sont stockés chiffrés, mutualisés et alternés selon l'usage. Les modèles d'abonnement sont à quota forfaitaire, donc ils n'entament pas votre budget de dépense.",
+      "personalCallout": {
+        "text": "Vous utilisez votre propre plan de codage Claude, ChatGPT (Codex) ou GLM ? Ce sont des abonnements à usage individuel, connectés par utilisateur.",
+        "cta": "Aller aux Abonnements personnels"
+      },
       "vendorField": "Fournisseur",
       "labelField": "Libellé (facultatif)",
       "labelPlaceholder": "p. ex. compte pro",

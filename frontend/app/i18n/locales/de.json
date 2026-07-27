@@ -2028,6 +2028,9 @@
           "label": "Anbieter und Schlüssel",
           "description": "Workspace-LLM-Abonnements und Anbieter-API-Schlüssel."
         },
+        "personalSubs": {
+          "label": "Persönliche Abonnements (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Verbinden Sie die GitHub-App des Workspace, durchsuchen Sie Repos, PRs und Issues."
         },
@@ -2467,9 +2470,15 @@
       "noModelBody": "Agents benötigen ein Modell zum Ausführen. KI funktioniert nur bei einem Cloudflare-Deployment mit aktiviertem Workers AI sofort; andernfalls verbinden Sie mindestens eine der unten stehenden Quellen.",
       "operatorNote": "AWS Bedrock und Cloudflare Workers AI werden vom Deployment-Betreiber über die Umgebungskonfiguration aktiviert, nicht über diesen Bildschirm.",
       "routes": {
+        "personal": {
+          "title": "Ihr Coding-Plan-Abonnement",
+          "badge": "Am beliebtesten",
+          "body": "Sie zahlen bereits für Claude, ChatGPT (Codex) oder einen GLM-Coding-Plan? Verbinden Sie ihn hier pro Benutzer, und Agents laufen auf dem pauschalen Kontingent, das Sie bereits haben.",
+          "cta": "Mein Abonnement verbinden"
+        },
         "keys": {
           "title": "Provider-Schlüssel & Abonnements",
-          "body": "Fügen Sie einen direkten Provider-API-Schlüssel hinzu (OpenAI, Anthropic, Qwen, …) oder verbinden Sie ein kommerzielles Coding-Plan-Abonnement (Kimi, DeepSeek) oder ein persönliches (Claude, GLM, Codex).",
+          "body": "Fügen Sie einen direkten Provider-API-Schlüssel hinzu (OpenAI, Anthropic, Qwen, …) oder verbinden Sie ein kommerzielles Coding-Plan-Abonnement, das Teamnutzung erlaubt (Kimi, DeepSeek).",
           "cta": "LLM-Vendors öffnen"
         },
         "openrouter": {
@@ -2586,7 +2595,11 @@
         "proxy": "Proxys",
         "personal": "Persönliche Abonnements"
       },
-      "poolIntro": "Verbinden Sie ein kommerzielles Coding-Plan-Abonnement (Kimi, DeepSeek), das Team-/Organisationsnutzung erlaubt, um Agent-Schritte über den Claude-Code-Harness statt eines API-Schlüssels auszuführen. Tokens werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Abonnement-Modelle haben ein pauschales Kontingent, sodass sie Ihr Ausgabenbudget nicht belasten. Abonnements zur Einzelnutzung (Claude, GLM, ChatGPT/Codex) werden pro Benutzer im Tab \"Persönliche Abonnements\" verbunden.",
+      "poolIntro": "Verbinden Sie ein kommerzielles Coding-Plan-Abonnement (Kimi, DeepSeek), das Team-/Organisationsnutzung erlaubt, um Agent-Schritte über den Claude-Code-Harness statt eines API-Schlüssels auszuführen. Tokens werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Abonnement-Modelle haben ein pauschales Kontingent, sodass sie Ihr Ausgabenbudget nicht belasten.",
+      "personalCallout": {
+        "text": "Sie nutzen Ihren eigenen Coding-Plan von Claude, ChatGPT (Codex) oder GLM? Das sind Abonnements zur Einzelnutzung und werden pro Benutzer verbunden.",
+        "cta": "Zu Persönliche Abonnements"
+      },
       "vendorField": "Vendor",
       "labelField": "Bezeichnung (optional)",
       "labelPlaceholder": "z. B. Arbeitskonto",

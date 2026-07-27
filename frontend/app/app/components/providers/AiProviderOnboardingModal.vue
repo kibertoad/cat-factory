@@ -27,10 +27,23 @@ interface Route {
   title: string
   body: string
   cta: string
+  badge?: string
   onSelect: () => void
 }
 
+// The personal-subscription route leads: using an individual coding-plan subscription the
+// developer already pays for (Claude / ChatGPT-Codex / GLM) is the most common setup, and
+// it used to hide behind the generic "LLM vendors" route as the last tab, where new users
+// missed it. It deep-links straight onto the vendor modal's `personal` tab.
 const routes = computed<Route[]>(() => [
+  {
+    icon: 'i-lucide-user',
+    title: t('providers.onboarding.routes.personal.title'),
+    body: t('providers.onboarding.routes.personal.body'),
+    cta: t('providers.onboarding.routes.personal.cta'),
+    badge: t('providers.onboarding.routes.personal.badge'),
+    onSelect: () => go(() => ui.openVendorCredentials('personal')),
+  },
   {
     icon: 'i-lucide-key-round',
     title: t('providers.onboarding.routes.keys.title'),
@@ -85,7 +98,12 @@ const routes = computed<Route[]>(() => [
           >
             <UIcon :name="r.icon" class="mt-0.5 h-5 w-5 shrink-0 text-indigo-300" />
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-slate-100">{{ r.title }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-slate-100">{{ r.title }}</p>
+                <UBadge v-if="r.badge" color="primary" variant="subtle" size="sm">
+                  {{ r.badge }}
+                </UBadge>
+              </div>
               <p class="mt-0.5 text-[13px] leading-relaxed text-slate-400">{{ r.body }}</p>
             </div>
             <UButton

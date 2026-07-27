@@ -1993,6 +1993,9 @@
           "label": "Vendors and keys",
           "description": "Workspace LLM subscriptions and provider API keys."
         },
+        "personalSubs": {
+          "label": "Personal subscriptions (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
         },
@@ -3021,9 +3024,15 @@
       "noModelBody": "Agents need a model to run. AI works out of the box only on a Cloudflare deployment with Workers AI enabled; otherwise connect at least one source below.",
       "operatorNote": "AWS Bedrock and Cloudflare Workers AI are enabled by the deployment operator via environment configuration, not from this screen.",
       "routes": {
+        "personal": {
+          "title": "Your coding-plan subscription",
+          "badge": "Most popular",
+          "body": "Already pay for Claude, ChatGPT (Codex) or a GLM coding plan? Connect it here, per user, and agents run on the flat-rate quota you already have.",
+          "cta": "Connect my subscription"
+        },
         "keys": {
           "title": "Provider keys & subscriptions",
-          "body": "Add a direct provider API key (OpenAI, Anthropic, Qwen, …) or connect a commercial coding-plan subscription (Kimi, DeepSeek) or a personal one (Claude, GLM, Codex).",
+          "body": "Add a direct provider API key (OpenAI, Anthropic, Qwen, …) or connect a commercial coding-plan subscription that permits team use (Kimi, DeepSeek).",
           "cta": "Open LLM vendors"
         },
         "openrouter": {
@@ -3143,7 +3152,11 @@
         "proxy": "Proxies",
         "personal": "Personal subscriptions"
       },
-      "poolIntro": "Connect a commercial coding-plan subscription (Kimi, DeepSeek) that permits team/organization use to run agent steps on the Claude Code harness instead of an API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription models are flat-rate quota, so they don't draw on your spend budget. Individual-use subscriptions (Claude, GLM, ChatGPT/Codex) are connected per-user in the Personal subscriptions tab.",
+      "poolIntro": "Connect a commercial coding-plan subscription (Kimi, DeepSeek) that permits team/organization use to run agent steps on the Claude Code harness instead of an API key. Tokens are stored encrypted, pooled, and rotated by usage. Subscription models are flat-rate quota, so they don't draw on your spend budget.",
+      "personalCallout": {
+        "text": "Using your own Claude, ChatGPT (Codex) or GLM coding plan? Those are individual-use subscriptions and connect per user.",
+        "cta": "Go to Personal subscriptions"
+      },
       "vendorField": "Vendor",
       "labelField": "Label (optional)",
       "labelPlaceholder": "e.g. work account",

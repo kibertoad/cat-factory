@@ -1920,6 +1920,9 @@
           "label": "Sağlayıcılar ve anahtarlar",
           "description": "Çalışma alanı LLM abonelikleri ve sağlayıcı API anahtarları."
         },
+        "personalSubs": {
+          "label": "Kişisel abonelikler (Claude, ChatGPT/Codex, GLM)"
+        },
         "github": {
           "description": "Çalışma alanının GitHub App'ini bağlayın, depoları, PR'ları ve sorunları gözatın."
         },
@@ -2943,9 +2946,15 @@
       "noModelBody": "Agent'ların çalışması için bir model gerekir. AI yalnızca Workers AI etkinleştirilmiş bir Cloudflare dağıtımında kutudan çıktığı gibi çalışır; aksi takdirde aşağıdan en az bir kaynak bağlayın.",
       "operatorNote": "AWS Bedrock ve Cloudflare Workers AI, bu ekrandan değil, dağıtım operatörü tarafından ortam yapılandırması aracılığıyla etkinleştirilir.",
       "routes": {
+        "personal": {
+          "title": "Kendi kodlama planı aboneliğiniz",
+          "badge": "En popüler",
+          "body": "Zaten Claude, ChatGPT (Codex) veya bir GLM kodlama planı için ödeme mi yapıyorsunuz? Burada kullanıcı başına bağlayın; agent'lar zaten sahip olduğunuz sabit kotayla çalışır.",
+          "cta": "Aboneliğimi bağla"
+        },
         "keys": {
           "title": "Sağlayıcı anahtarları ve abonelikler",
-          "body": "Doğrudan bir sağlayıcı API anahtarı ekleyin (OpenAI, Anthropic, Qwen, …) ya da ticari bir kodlama planı aboneliği (Kimi, DeepSeek) veya kişisel bir abonelik (Claude, GLM, Codex) bağlayın.",
+          "body": "Doğrudan bir sağlayıcı API anahtarı ekleyin (OpenAI, Anthropic, Qwen, …) ya da ekip kullanımına izin veren ticari bir kodlama planı aboneliği (Kimi, DeepSeek) bağlayın.",
           "cta": "LLM sağlayıcılarını aç"
         },
         "openrouter": {
@@ -3062,7 +3071,11 @@
         "proxy": "Proxy'ler",
         "personal": "Kişisel abonelikler"
       },
-      "poolIntro": "Ekip/kuruluş kullanımına izin veren ticari bir kodlama planı aboneliğini (Kimi, DeepSeek) bağlayarak agent adımlarını bir API anahtarı yerine Claude Code harness'ında çalıştırın. Token'lar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Abonelik modelleri sabit kotalıdır, bu nedenle harcama bütçenizi etkilemezler. Bireysel kullanımlı abonelikler (Claude, GLM, ChatGPT/Codex) Kişisel abonelikler sekmesinde kullanıcı başına bağlanır.",
+      "poolIntro": "Ekip/kuruluş kullanımına izin veren ticari bir kodlama planı aboneliğini (Kimi, DeepSeek) bağlayarak agent adımlarını bir API anahtarı yerine Claude Code harness'ında çalıştırın. Token'lar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Abonelik modelleri sabit kotalıdır, bu nedenle harcama bütçenizi etkilemezler.",
+      "personalCallout": {
+        "text": "Kendi Claude, ChatGPT (Codex) veya GLM kodlama planınızı mı kullanıyorsunuz? Bunlar bireysel kullanım abonelikleridir ve kullanıcı başına bağlanır.",
+        "cta": "Kişisel aboneliklere git"
+      },
       "vendorField": "Sağlayıcı",
       "labelField": "Etiket (isteğe bağlı)",
       "labelPlaceholder": "örn. iş hesabı",
