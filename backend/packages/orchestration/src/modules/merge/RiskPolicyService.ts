@@ -88,6 +88,8 @@ export class RiskPolicyService {
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
+      judgeMinScore: input.judgeMinScore,
+      judgeMaxBounces: input.judgeMaxBounces,
       autoMergeEnabled: input.autoMergeEnabled,
       forkDecision: input.forkDecision ?? null,
       classRules: input.classRules,
@@ -132,6 +134,8 @@ export class RiskPolicyService {
       ...(patch.humanReviewGraceMinutes !== undefined
         ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
         : {}),
+      ...(patch.judgeMinScore !== undefined ? { judgeMinScore: patch.judgeMinScore } : {}),
+      ...(patch.judgeMaxBounces !== undefined ? { judgeMaxBounces: patch.judgeMaxBounces } : {}),
       ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
       ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
       // Replaces the whole map rather than merging, so clearing a class's rule is a plain
@@ -225,6 +229,8 @@ export class RiskPolicyService {
       releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
       releaseMaxAttempts: seed.releaseMaxAttempts,
       humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
+      judgeMinScore: seed.judgeMinScore,
+      judgeMaxBounces: seed.judgeMaxBounces,
       autoMergeEnabled: seed.autoMergeEnabled,
       forkDecision: seed.forkDecision,
       classRules: seed.classRules,

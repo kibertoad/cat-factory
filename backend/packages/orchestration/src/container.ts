@@ -92,6 +92,7 @@ import { type AgentKindRegistry } from '@cat-factory/agents'
 import type { FragmentLibraryModule, SkillLibraryModule } from './container-content-libraries.js'
 import type {
   GateRegistry,
+  JudgeRegistry,
   InitiativePresetRegistry,
   PipelineRegistry,
   TaskTypeRegistry,
@@ -274,6 +275,13 @@ export interface CoreSpine {
    */
   gateRegistry: GateRegistry
   /**
+   * The app-owned JUDGE registry the engine resolved (the facade's injected instance, else the
+   * empty default). Re-exposed so the HTTP layer's workspace-snapshot projection surfaces a
+   * registered judge as a palette block, and the facade passes the SAME instance to
+   * `validateRegistrations` at boot.
+   */
+  judgeRegistry: JudgeRegistry
+  /**
    * The app-owned pipeline registry the engine resolved (the facade's injected instance, else the
    * empty default). Re-exposed so the facade passes the SAME instance to `validateRegistrations` at
    * boot (a registered pipeline naming a nonexistent kind fails fast).
@@ -444,6 +452,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const {
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     providerRegistry,
     pipelineRegistry,
@@ -559,6 +568,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     requirements,
     docInterview,
     forkChat,
+    judgeAssessor,
     clarity,
     brainstorm,
     kaizen,
@@ -579,6 +589,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...dependencies,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
+    judgeAssessor,
     stepResolverRegistry,
     providerRegistry,
     initiativePresetRegistry,
@@ -685,6 +697,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     initiativePresetRegistry,

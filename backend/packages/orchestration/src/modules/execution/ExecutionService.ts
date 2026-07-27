@@ -1,4 +1,7 @@
 import type {
+  JudgeDefinition,
+  JudgeStepState,
+  ResolveJudgeInput,
   AgentFailureKind,
   Block,
   ExecutionInstance,
@@ -286,6 +289,8 @@ export class ExecutionService {
     pokeInitiativeLoop,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
+    judgeAssessor,
     stepResolverRegistry,
     providerRegistry,
     initiativePresetRegistry,
@@ -454,6 +459,8 @@ export class ExecutionService {
       agentExecutor,
       agentKindRegistry,
       gateRegistry,
+      judgeRegistry,
+      judgeAssessor,
       stepResolverRegistry,
       providerRegistry,
       workRunner,
@@ -1014,6 +1021,33 @@ export class ExecutionService {
   /** @see RunDispatcher.pollGate */
   pollGate(workspaceId: string, executionId: string): Promise<AdvanceResult> {
     return this.runDispatcher.pollGate(workspaceId, executionId)
+  }
+
+  /** @see JudgeStepController.getActive */
+  getJudgeState(workspaceId: string, executionId: string): Promise<JudgeStepState | null> {
+    return this.runDispatcher.getJudgeState(workspaceId, executionId)
+  }
+
+  /**
+   * Resolve a parked JUDGE step (proceed / bounce / stop) — the SINGLE service method behind
+   * both the SPA controller and the public API's decisions surface, so the park's CAS +
+   * approval-id arbitration applies identically whichever surface answers first.
+   * @see JudgeStepController.resolveDecision
+   */
+  resolveJudgeDecision(
+    workspaceId: string,
+    executionId: string,
+    input: ResolveJudgeInput,
+  ): Promise<JudgeStepState> {
+    return this.runDispatcher.resolveJudgeDecision(workspaceId, executionId, input)
+  }
+
+  /**
+   * Every registered judge (kind + rubric + presentation), for the workspace-snapshot palette
+   * projection — the judge counterpart of `agentKindRegistry.all()`.
+   */
+  registeredJudges(): JudgeDefinition[] {
+    return this.runDispatcher.registeredJudges()
   }
 
   /** @see RunDispatcher.resolveGatePollExhaustion */

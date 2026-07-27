@@ -3,6 +3,7 @@ import {
   NoopEventPublisher,
   NoopWorkRunner,
   defaultGateRegistry,
+  defaultJudgeRegistry,
   defaultPipelineRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
@@ -25,6 +26,7 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   return {
     agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
     gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
+    judgeRegistry: dependencies.judgeRegistry ?? defaultJudgeRegistry(),
     stepResolverRegistry: dependencies.stepResolverRegistry ?? defaultStepResolverRegistry(),
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),

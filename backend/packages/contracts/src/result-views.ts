@@ -38,6 +38,7 @@ export const RESULT_VIEW_IDS = [
   'initiative-planning',
   'doc-interview',
   'fork-decision',
+  'judge',
   'pr-review',
   'ralph-loop',
 ] as const

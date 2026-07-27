@@ -1,5 +1,6 @@
 import {
   choosePublicRunForkContract,
+  resolvePublicRunJudgeContract,
   incorporatePublicRunRequirementsContract,
   listPublicRunDecisionsContract,
   proceedPublicRunRequirementsContract,
@@ -9,6 +10,7 @@ import {
   setPublicRunFindingStatusContract,
   type ExecutionInstance,
   type ForkDecisionStepState,
+  type JudgeStepState,
   type PublicDecision,
   type PublicDecisionList,
   type RequirementReview,
@@ -107,6 +109,38 @@ function toForkDecision(state: ForkDecisionStepState): PublicDecision {
 }
 
 /**
+ * Project a run's JUDGE step state onto the external decision resource. The rubric body is
+ * deliberately omitted (see `publicJudgeDecisionSchema`) — a caller answers the findings.
+ */
+function toJudgeDecision(stepKind: string, state: JudgeStepState): PublicDecision {
+  return {
+    kind: 'judge',
+    stepKind,
+    status: state.status,
+    rubricId: state.rubricId ?? null,
+    rubricName: state.rubricName ?? null,
+    threshold: state.threshold ?? null,
+    verdict: state.verdict ?? null,
+    bounces: state.bounces ?? 0,
+    maxBounces: state.maxBounces ?? 0,
+  }
+}
+
+/**
+ * Whether a judge state is something the caller can still act on. `awaiting_decision` is the
+ * park; `evaluating`/`bouncing` are in flight and worth surfacing so a poller sees progress
+ * rather than an empty list that reads as "nothing is happening". A `passed`/`failed`/`skipped`
+ * judge is settled and carries no question.
+ */
+function isLiveJudge(state: JudgeStepState): boolean {
+  return (
+    state.status === 'awaiting_decision' ||
+    state.status === 'evaluating' ||
+    state.status === 'bouncing'
+  )
+}
+
+/**
  * Whether a requirements review is something the caller can still act on. A settled review
  * (`incorporated`) is history — it is the document downstream agents implement, not a question —
  * so it is dropped from the list rather than presented as answerable. `incorporating`/`reviewing`
@@ -159,6 +193,16 @@ async function buildDecisionList<E extends AppEnv>(
 
   const fork = await container.executionService.getForkDecision(workspaceId, execution.id)
   if (fork && isLiveFork(fork)) decisions.push(toForkDecision(fork))
+
+  // The judge state is read off the run already in hand — no extra repository round-trip, since
+  // all judge state rides the run's steps (the whole reason it has no side table).
+  const judgeStep =
+    execution.steps[execution.currentStep]?.judge != null
+      ? execution.steps[execution.currentStep]
+      : [...execution.steps].reverse().find((s) => s.judge != null)
+  if (judgeStep?.judge && isLiveJudge(judgeStep.judge)) {
+    decisions.push(toJudgeDecision(judgeStep.agentKind, judgeStep.judge))
+  }
 
   return {
     runId: execution.id,
@@ -261,6 +305,7 @@ export function publicDecisionController(): Hono<AppEnv> {
   registerDecisionReadRoutes(app)
   registerRequirementsDecisionRoutes(app)
   registerForkDecisionRoutes(app)
+  registerJudgeRoutes(app)
   return app
 }
 
@@ -388,6 +433,31 @@ function registerRequirementsDecisionRoutes(app: Hono<AppEnv>): void {
         scoped.blockId,
         c.req.valid('json').choice,
       )
+    return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
+  })
+}
+
+function registerJudgeRoutes(app: Hono<AppEnv>): void {
+  // Resolve a parked rubric verdict: proceed anyway, bounce the work back to the producing step
+  // for rework, or stop the run. Delegates to the SAME `executionService.resolveJudgeDecision`
+  // the SPA's judge window calls, so the park's CAS + approval-id arbitration and the task's
+  // preset knobs apply identically whichever surface answers first.
+  //
+  // Runs under the RUN'S OWN initiator for the same reason the fork choice does: a `bounce`
+  // resumes the producing step's container work, which must keep using the credentials the run
+  // was started with rather than silently demoting to the deployment default.
+  buildHonoRoute(app, resolvePublicRunJudgeContract, async (c) => {
+    const { runId } = c.req.valid('param')
+    const gated = await gateDecisionAction(c, runId)
+    if ('fail' in gated) {
+      return c.json(failureBody(gated.fail), gated.fail.status)
+    }
+    const { workspaceId, scoped } = gated
+    await runWithInitiator(scoped.execution.initiatedBy, () =>
+      c
+        .get('container')
+        .executionService.resolveJudgeDecision(workspaceId, scoped.execution.id, c.req.valid('json')),
+    )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 }

@@ -3,6 +3,7 @@ import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './t
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
+import { judgeStepStateSchema } from './judge.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { prReviewStepStateSchema } from './prReview.js'
@@ -1020,6 +1021,15 @@ export const pipelineStepSchema = v.object({
    * {@link forkDecisionStepStateSchema}.
    */
   forkDecision: v.optional(v.nullable(forkDecisionStepStateSchema)),
+  /**
+   * Live JUDGE state on a judge step (the fourth taxonomy bucket): the rubric identity, the
+   * latest structured verdict, the per-task threshold it was compared against, the bounce
+   * budget, and the round history. Created lazily by the engine on first entry and — like
+   * `forkDecision` / `followUps` — deliberately PRESERVED across `resetStepForRerun`, so a
+   * bounce that re-runs the producer plus this step does not erase the verdict it is looping
+   * on. Absent for non-judge steps. See {@link judgeStepStateSchema}.
+   */
+  judge: v.optional(v.nullable(judgeStepStateSchema)),
   /**
    * Live "Ralph loop" state carried on a `ralph` step: the persistent retry-until-done
    * loop's iteration count, budget, validation command, and per-iteration history. Seeded

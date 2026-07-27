@@ -1295,6 +1295,11 @@ export const riskPolicies = pgTable(
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
+    // Judge steps (the fourth step-taxonomy bucket): the minimum verdict score (0..1) a rubric
+    // assessment must reach to advance without a human, and how many rework BOUNCE rounds a
+    // judge may spend first. Mirrors D1's `judge_min_score` / `judge_max_bounces`.
+    judge_min_score: doublePrecision('judge_min_score').notNull().default(0.7),
+    judge_max_bounces: integer('judge_max_bounces').notNull().default(1),
     // When 0 the `merger` step never auto-merges — every PR is routed to human review.
     auto_merge_enabled: integer('auto_merge_enabled').notNull().default(1),
     // Estimate gating for the implementation-fork decision phase, a JSON `StepGating` blob

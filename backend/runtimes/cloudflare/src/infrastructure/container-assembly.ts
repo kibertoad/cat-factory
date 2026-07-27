@@ -213,6 +213,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     customManifestTypeRegistry,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -288,6 +289,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.
     gateRegistry,
+    // The app-owned JUDGE registry (the fourth step-taxonomy bucket); the engine's judge machine
+    // reads it, and it is re-exposed on Core for the snapshot's palette projection.
+    judgeRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.

@@ -24,6 +24,7 @@ import {
   createClarityModule,
   createDocInterviewService,
   createForkChatService,
+  createJudgeAssessor,
   createKaizenModule,
   createRequirementsModule,
   createTasksModule,
@@ -102,6 +103,9 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   )
   const docInterview = createDocInterviewService(dependencies)
   const forkChat = createForkChatService(dependencies)
+  // The judge assessor rides the same inline model deps as the reviewers, so a facade that
+  // wired a model gets working judges with no judge-specific wiring (see the tracker's D-notes).
+  const judgeAssessor = createJudgeAssessor(dependencies)
   const clarity = modules.build('clarity', () =>
     createClarityModule(dependencies, notifications?.service),
   )
@@ -135,6 +139,7 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     requirements,
     docInterview,
     forkChat,
+    judgeAssessor,
     clarity,
     brainstorm,
     kaizen,

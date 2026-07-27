@@ -20,6 +20,8 @@ interface RiskPolicyRow {
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
+  judge_min_score: number
+  judge_max_bounces: number
   auto_merge_enabled: number
   fork_decision: string | null
   class_rules: string | null
@@ -42,6 +44,8 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
+    judgeMinScore: row.judge_min_score,
+    judgeMaxBounces: row.judge_max_bounces,
     autoMergeEnabled: row.auto_merge_enabled === 1,
     forkDecision: row.fork_decision ? (JSON.parse(row.fork_decision) as StepGating) : null,
     // The column is NOT NULL DEFAULT '{}', but tolerate a null defensively: an empty rule map is
@@ -115,8 +119,9 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             max_requirement_iterations, max_requirement_concern_allowed,
             max_tester_quality_iterations,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
+            judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, version, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -129,6 +134,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
+           judge_min_score = excluded.judge_min_score,
+           judge_max_bounces = excluded.judge_max_bounces,
            auto_merge_enabled = excluded.auto_merge_enabled,
            fork_decision = excluded.fork_decision,
            class_rules = excluded.class_rules,
@@ -149,6 +156,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,
+        preset.judgeMinScore,
+        preset.judgeMaxBounces,
         preset.autoMergeEnabled ? 1 : 0,
         preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
         JSON.stringify(preset.classRules ?? {}),

@@ -95,6 +95,7 @@ export const notificationTypeSchema = v.picklist([
   'human_review',
   'followup_pending',
   'fork_decision_pending',
+  'judge_review',
   'pr_review_ready',
   'initiative',
   'platform_health',
@@ -131,6 +132,7 @@ export const REVIEW_WAIT_NOTIFICATION_TYPES = [
   'human_review',
   'followup_pending',
   'fork_decision_pending',
+  'judge_review',
   'pr_review_ready',
 ] as const satisfies readonly NotificationType[]
 

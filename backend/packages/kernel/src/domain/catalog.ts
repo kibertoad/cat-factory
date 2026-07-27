@@ -1,3 +1,4 @@
+import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
 import type {
   BlockType,
   MergeClassRules,
@@ -77,6 +78,11 @@ export const DEFAULT_RISK_POLICY = {
   // leaving a series of comments isn't churned mid-stream. Only applies to the unapproved
   // path (an approved PR's comments are addressed immediately).
   humanReviewGraceMinutes: 10,
+  // Judge steps (the fourth taxonomy bucket): the minimum verdict score a rubric assessment
+  // must reach to advance without a human, and how many rework BOUNCE rounds a judge may
+  // spend before it must ask one. See `docs/initiatives/judge-registry.md`.
+  judgeMinScore: DEFAULT_JUDGE_MIN_SCORE,
+  judgeMaxBounces: DEFAULT_JUDGE_MAX_BOUNCES,
   // Auto-merge is allowed: a within-threshold, credibly-explained assessment merges the PR.
   autoMergeEnabled: true,
   // Implementation-fork decision gate: disabled by default (see DEFAULT_FORK_DECISION_GATING).
@@ -112,6 +118,10 @@ export interface RiskPolicySeed {
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
+  /** Minimum judge verdict score (0..1) required to advance without a human. */
+  judgeMinScore: number
+  /** How many judge BOUNCE rounds are allowed before the judge must ask a human. */
+  judgeMaxBounces: number
   /** When false, the `merger` step never auto-merges — every PR is routed to human review. */
   autoMergeEnabled: boolean
   /** Estimate gating for the implementation-fork decision phase; disabled on the built-ins. */
@@ -151,11 +161,13 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
+    judgeMinScore: DEFAULT_RISK_POLICY.judgeMinScore,
+    judgeMaxBounces: DEFAULT_RISK_POLICY.judgeMaxBounces,
     autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
     forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
     classRules: { ...DEFAULT_MERGE_CLASS_RULES },
     isDefault: true,
-    version: 4,
+    version: 5,
   },
   {
     id: 'mp_manual_review',
@@ -171,6 +183,10 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
+    judgeMinScore: DEFAULT_RISK_POLICY.judgeMinScore,
+    // A manual-review preset never spends rework rounds on its own: a failing rubric verdict
+    // goes straight to the human it already routes everything to.
+    judgeMaxBounces: 0,
     // The whole point of this preset: never auto-merge — always raise a human review.
     autoMergeEnabled: false,
     forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
@@ -178,7 +194,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // shipping one here would only mislead an operator reading the preset.
     classRules: { ...DEFAULT_MERGE_CLASS_RULES },
     isDefault: false,
-    version: 4,
+    version: 5,
   },
 ]
 

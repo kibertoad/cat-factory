@@ -278,6 +278,16 @@ export type {
   ForkChatRequestInput,
   ChooseForkInput,
   ForkProposal,
+  // Judge shapes (the fourth step-taxonomy bucket): the rubric verdict an assessment
+  // returns + the live step state the engine parks/bounces on + the human's resolution.
+  JudgeFindingSeverity,
+  JudgeFinding,
+  JudgeVerdict,
+  JudgeDisposition,
+  JudgeStatus,
+  JudgeRound,
+  JudgeStepState,
+  ResolveJudgeInput,
   // PR deep-review shapes: the sliced, severity-ordered findings the read-only reviewer
   // produces + the live step state the engine parks on + the human's selection/resolution.
   PrReviewSeverity,

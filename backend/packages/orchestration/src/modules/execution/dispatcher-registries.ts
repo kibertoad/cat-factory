@@ -8,6 +8,7 @@ import type {
   ExecutionInstance,
   ForkProposal,
   GateDefinition,
+  JudgeDefinition,
   PipelineStep,
   PrReviewAgentOutput,
   PrReviewChallengeOutput,
@@ -151,6 +152,15 @@ export interface DispatcherRegistryDeps {
     gate: GateDefinition,
   ) => Promise<AdvanceResult>
   gateFor: (agentKind: string) => GateDefinition | undefined
+  evaluateJudge: (
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+    judge: JudgeDefinition,
+  ) => Promise<AdvanceResult>
+  judgeFor: (agentKind: string) => JudgeDefinition | undefined
   handleForkDecisionPhase: (ctx: StepHandlerContext) => Promise<AdvanceResult>
   handlePrReviewResolution: (ctx: StepHandlerContext) => Promise<AdvanceResult>
   handleAgentStep: (ctx: StepHandlerContext) => Promise<AdvanceResult>
@@ -327,6 +337,27 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
       canHandle: ({ step }) => d.gateFor(step.agentKind) !== undefined,
       handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
         d.evaluateGate(workspaceId, instance, step, block, isFinalStep, d.gateFor(step.agentKind)!),
+    },
+    // A JUDGE step (the fourth step-taxonomy bucket) runs an LLM assessment of the run's work
+    // against a registered RUBRIC, compares the verdict's score to the task's merge-preset
+    // threshold, and advances / parks / bounces the producing step / fails the run. Pass-through
+    // when no assessment model is wired. One generic machine drives every judge; see
+    // {@link JudgeStepController.evaluate}. `canHandle` is the judge-registry lookup, so this
+    // claims exactly the registered judge kinds — and it sits BESIDE the gate handler because the
+    // two registries are disjoint by construction (a kind is a gate or a judge, never both).
+    {
+      kind: 'judge',
+      order: 155,
+      canHandle: ({ step }) => d.judgeFor(step.agentKind) !== undefined,
+      handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+        d.evaluateJudge(
+          workspaceId,
+          instance,
+          step,
+          block,
+          isFinalStep,
+          d.judgeFor(step.agentKind)!,
+        ),
     },
     // An INLINE companion (architect-companion / spec-companion) grades the nearest
     // preceding producer right here and loops it back for automatic rework below the

@@ -28,6 +28,7 @@ import {
   type CoreDependencies,
   createCore,
   type GateRegistry,
+  type JudgeRegistry,
   type StepResolverRegistry,
 } from '@cat-factory/orchestration'
 import {
@@ -468,6 +469,14 @@ export interface NodeContainerOptions {
    * is symmetric.
    */
   gateRegistry?: GateRegistry
+  /**
+   * The app-owned JUDGE registry — the fourth step-taxonomy bucket (an LLM assessment against a
+   * rubric, compared to a per-task threshold, disposed as advance/park/bounce/fail). Rides its own
+   * option like `gateRegistry`; defaults to an EMPTY registry (the platform ships no built-in
+   * judges). Threaded into `createCore` + re-exposed on Core; the conformance suite injects a
+   * pre-loaded one to assert the seam is symmetric across runtimes.
+   */
+  judgeRegistry?: JudgeRegistry
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers). Rides its
    * own option; defaults to an empty registry. Threaded into `createCore`; the conformance suite
@@ -939,6 +948,7 @@ interface NodeContainerFinalizeBundle {
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
   gateRegistry: NodeAppRegistriesResult['gateRegistry']
+  judgeRegistry: NodeAppRegistriesResult['judgeRegistry']
   stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
   initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
   apiKeys: NodeModelDepsResult['apiKeys']
@@ -998,6 +1008,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     runnerBackendRegistry,
     customManifestTypeRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     apiKeys,
@@ -1118,6 +1129,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     customManifestTypeRegistry,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -1247,6 +1259,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     userSecretKindRegistry,
     agentKindRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     vcsRegistry,
@@ -1482,6 +1495,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     runnerBackendRegistry,
     customManifestTypeRegistry,
     gateRegistry,
+    judgeRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     apiKeys,
