@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.94.1
+
+### Patch Changes
+
+- Updated dependencies [ecd68c5]
+  - @cat-factory/contracts@0.162.0
+  - @cat-factory/kernel@0.156.0
+
 ## 0.94.0
 
 ### Minor Changes
