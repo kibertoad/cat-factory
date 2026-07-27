@@ -169,10 +169,25 @@ function sanitizeTestPaths(declared: readonly string[]): { paths: string[]; omit
   return { paths, omitted }
 }
 
-/** A repo-relative path with no traversal, no root/drive anchor and a sane length. */
+/**
+ * A repo-relative path with no traversal, no root/drive anchor, no leading dash, no git PATHSPEC
+ * MAGIC and a sane length. Mirrored by the harness's own `isSafeTestPath`
+ * (`executor-harness/src/reproduction-proof.ts`), which re-checks at its trust boundary — keep the
+ * two in step.
+ *
+ * The magic exclusion carries the weight here. The harness hands these to
+ * `git checkout <finalSha> -- <path>`, where `--` stops a path being read as a REVISION but does
+ * nothing about pathspec syntax: `:(glob)**`, `*` and `foo/*.ts` are all valid pathspecs. One of
+ * those would apply far more of the final tree onto the pre-fix worktree than the declared
+ * reproduction — dragging the fix across and GREENING the base, which surfaces as "the check
+ * passed before your change" about a test that is fine. These strings are MODEL-AUTHORED, so that
+ * is a reachable input, not a hypothetical one.
+ */
 function isSafeTestPath(path: string): boolean {
   if (path.length === 0 || path.length > REPRODUCTION_MAX_TEST_PATH_CHARS) return false
-  if (path.startsWith('/') || path.startsWith('~') || /^[a-zA-Z]:\//.test(path)) return false
+  if (path.startsWith('/') || path.startsWith('~') || path.startsWith('-')) return false
+  if (path.startsWith(':') || /[*?[\]]/.test(path)) return false
+  if (/^[a-zA-Z]:\//.test(path)) return false
   return !path.split('/').includes('..')
 }
 

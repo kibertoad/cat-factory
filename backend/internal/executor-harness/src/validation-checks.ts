@@ -1,6 +1,4 @@
-import { spawn } from 'node:child_process'
-import { killChildProcess, spawnDetached } from './process.js'
-import { MAX_CAPTURED_OUTPUT_CHARS, redactSecrets } from './redact.js'
+import { runCapturedCommand } from './captured-command.js'
 import type { RunOptions } from './runner.js'
 import type { Logger } from './logger.js'
 
@@ -52,6 +50,58 @@ export interface ValidationAttempt {
   fullTails: Map<string, string>
 }
 
+/**
+ * The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to, and the
+ * default it applies when the body omits one.
+ *
+ * DELIBERATE DUPLICATES of `VALIDATION_MAX_ATTEMPTS_CEILING` / `VALIDATION_DEFAULT_MAX_ATTEMPTS`
+ * in `@cat-factory/contracts` — the published image takes no schema dependency, so the harness
+ * cannot import them. Keep the two in step: the API validates writes against the contracts
+ * values, so a harness clamping to a DIFFERENT ceiling would silently cap a budget an operator
+ * was allowed to save, with nothing to flag the mismatch.
+ */
+export const VALIDATION_MAX_ATTEMPTS_CEILING = 10
+export const VALIDATION_DEFAULT_MAX_ATTEMPTS = 3
+
+/**
+ * Parse the optional PRE-PR VALIDATION CHECKS envelope off the job body: the service's ordered
+ * `{ label, command }` pairs and the repair-round budget. Every entry needs a non-empty command;
+ * entries without one are dropped, and a spec that ends up with no usable check returns
+ * `undefined` — so a malformed body degrades to the exact pre-feature behaviour (no loop, PR
+ * opens as before) rather than failing an otherwise-good coding run. `maxAttempts` is clamped to
+ * a sane range so a bad body can't make a container loop forever.
+ *
+ * Lives with the feature rather than in `job.ts` so each pre-PR verification phase owns its own
+ * job-body parser next to the loop that consumes it (the reproduction proof's
+ * `parseReproductionSpec` is the sibling); `job.ts` stays the job SHAPE plus the generic
+ * assembly.
+ */
+export function parseValidationChecksSpec(value: unknown): ValidationChecksSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (!Array.isArray(o.checks)) return undefined
+  const checks: ValidationCheckSpec[] = []
+  for (const raw of o.checks) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const c = raw as Record<string, unknown>
+    if (typeof c.command !== 'string' || c.command.trim() === '') continue
+    const label = typeof c.label === 'string' && c.label.trim() ? c.label.trim() : c.command
+    checks.push({ label, command: c.command })
+  }
+  if (checks.length === 0) return undefined
+  const parsed =
+    typeof o.maxAttempts === 'number' && Number.isFinite(o.maxAttempts) && o.maxAttempts > 0
+      ? Math.floor(o.maxAttempts)
+      : undefined
+  return {
+    checks,
+    maxAttempts: Math.min(
+      parsed ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
+      VALIDATION_MAX_ATTEMPTS_CEILING,
+    ),
+  }
+}
+
 /** One attempt's report — what the backend records on the step. */
 export interface ValidationReport {
   passed: boolean
@@ -63,7 +113,7 @@ export interface ValidationReport {
 
 /**
  * Per-command output kept on the REPORT (what crosses the wire and lands in the run's persisted
- * `detail` blob). Deliberately smaller than {@link MAX_CAPTURED_OUTPUT_CHARS}, which is what the
+ * `detail` blob). Deliberately smaller than `MAX_CAPTURED_OUTPUT_CHARS` (`redact.ts`), which is what the
  * AGENT sees in its repair prompt: the agent needs the full failure to fix it, the operator needs
  * enough to recognise it, and a chatty build must not inflate every run's stored state.
  */
@@ -143,15 +193,9 @@ export async function runValidationChecks(
 }
 
 /**
- * Run ONE check as `sh -c <command>` in `cwd`, capturing a bounded, secret-scrubbed tail of its
- * combined stdout+stderr. The exit code is the verdict — computed here by the harness, never
- * self-reported by the model, which is the whole point of a programmatic gate. A watchdog kills
- * the process tree on timeout and an aborted run resolves non-zero, so the loop is never blocked.
- *
- * The child inherits the JOB's environment (`RunOptions.agentEnv` layered over the process env),
- * not a mutated global: the harness spawns this itself rather than through the agent, so without
- * the explicit merge a native-mode job would run its checks without the private-registry npmrc
- * pointer (and against a sibling job's state, had this been staged in `process.env`).
+ * Run ONE check through the shared {@link runCapturedCommand} seam and shape it as a check
+ * outcome. The exit code is the verdict — computed by the harness, never self-reported by the
+ * model, which is the whole point of a programmatic gate.
  */
 async function runOneCheck(
   cwd: string,
@@ -159,76 +203,22 @@ async function runOneCheck(
   logger: Logger,
   opts: RunOptions,
 ): Promise<{ outcome: ValidationCheckOutcome; fullTail?: string }> {
-  const timeoutMs = validationCommandTimeoutMs()
-  const startedAt = Date.now()
   logger.info('validation: running check', { label: check.label })
-  return new Promise((resolve) => {
-    let out = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn('sh', ['-c', check.command], {
-      cwd,
-      detached: spawnDetached,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...opts.agentEnv },
-    })
-    // Keep only the tail; guard against unbounded buffering on a chatty command.
-    const capture = (chunk: Buffer): void => {
-      out = (out + chunk.toString('utf8')).slice(-MAX_CAPTURED_OUTPUT_CHARS)
-    }
-    child.stdout?.on('data', capture)
-    child.stderr?.on('data', capture)
-    const finish = (exitCode: number): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      const trimmed = out.trim()
-      // Scrub BEFORE truncating: a token straddling the cut would otherwise survive as a
-      // partial, and the pattern rules need the whole assignment to match.
-      const scrubbed = trimmed ? redactSecrets(trimmed) : ''
-      logger.info('validation: check finished', { label: check.label, exitCode })
-      resolve({
-        outcome: {
-          label: check.label,
-          command: check.command,
-          exitCode,
-          passed: exitCode === 0,
-          ...(scrubbed ? { outputTail: tailFor(scrubbed) } : {}),
-          durationMs: Date.now() - startedAt,
-          ...(timedOut ? { timedOut: true } : {}),
-        },
-        ...(scrubbed ? { fullTail: scrubbed } : {}),
-      })
-    }
-    const timer = setTimeout(() => {
-      logger.warn('validation: check timed out', { label: check.label, timeoutMs })
-      timedOut = true
-      killChildProcess(child, undefined, logger)
-      finish(124) // conventional timeout exit code (a non-zero fail)
-    }, timeoutMs)
-    timer.unref?.()
-    const onAbort = (): void => {
-      killChildProcess(child, undefined, logger)
-      finish(130) // aborted (a non-zero fail)
-    }
-    opts.signal?.addEventListener('abort', onAbort, { once: true })
-    child.on('error', (err) => {
-      logger.warn('validation: check failed to spawn', {
-        label: check.label,
-        error: err instanceof Error ? err.message : String(err),
-      })
-      finish(127) // spawn error / command not found (a non-zero fail)
-    })
-    child.on('close', (code) => finish(code ?? 1))
+  const { fullTail, ...run } = await runCapturedCommand({
+    cwd,
+    command: check.command,
+    timeoutMs: validationCommandTimeoutMs(),
+    reportTailChars: VALIDATION_REPORT_TAIL_CHARS,
+    logLabel: 'validation',
+    logFields: { label: check.label },
+    logger,
+    opts,
   })
-}
-
-/** Bound an already-scrubbed output tail to what the REPORT carries. */
-function tailFor(scrubbed: string): string {
-  if (scrubbed.length <= VALIDATION_REPORT_TAIL_CHARS) return scrubbed
-  const trimmed = scrubbed.length - VALIDATION_REPORT_TAIL_CHARS
-  return `…(${trimmed} earlier chars trimmed)\n${scrubbed.slice(-VALIDATION_REPORT_TAIL_CHARS)}`
+  logger.info('validation: check finished', { label: check.label, exitCode: run.exitCode })
+  return {
+    outcome: { label: check.label, command: check.command, ...run },
+    ...(fullTail ? { fullTail } : {}),
+  }
 }
 
 /**

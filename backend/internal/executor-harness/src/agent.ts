@@ -972,6 +972,10 @@ function buildSingleRepoCodingSpec(
     // Forwarded straight off the job body — the loop is generic machinery keyed on the data, not
     // on the agent kind.
     ...(job.validationChecks ? { validationChecks: job.validationChecks } : {}),
+    // Bugfix reproduction proof: the declared command run against the pre-fix and final trees
+    // (see docs/initiatives/bugfix-reproduction-proof.md). Forwarded straight off the job body —
+    // like the checks above, the loop is generic machinery keyed on the data, not the agent kind.
+    ...(job.reproduction ? { reproduction: job.reproduction } : {}),
   }
 }
 
@@ -992,6 +996,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     callMetrics,
     validation,
     validationReport,
+    reproductionReport,
     effortReport,
   } = await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
@@ -999,10 +1004,14 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
   const ralphVerdict = validation ? { ralphVerdict: validation } : {}
   // The agent's effort self-assessment, spread onto every result path below (mirrors ralphVerdict).
   const effort = effortReport ? { effortReport } : {}
-  // The pre-PR validation report, spread onto every result path below: on the passing path it is
-  // the captured proof the checkout was green when the PR opened; on the exhausted path it is the
-  // evidence behind the failure below. Absent when the service configured no checks.
-  const validationFields = validationReport ? { validationReport } : {}
+  // The two PRE-PR VERIFICATION reports, spread onto every result path below. The validation one:
+  // on the passing path it is the captured proof the checkout was green when the PR opened; on the
+  // exhausted path it is the evidence behind the failure below. The reproduction one is evidence
+  // on every path — it never gates the PR. Each is absent when its phase was not configured.
+  const verificationFields = {
+    ...(validationReport ? { validationReport } : {}),
+    ...(reproductionReport ? { reproductionReport } : {}),
+  }
 
   // Pre-PR validation spent its attempt budget with the checkout still red. FAIL the job — do
   // NOT open a pull request, and do not pretend the push succeeded as a deliverable. The work is
@@ -1022,7 +1031,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       failureCause: 'agent',
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
-      ...validationFields,
+      ...verificationFields,
       ...effort,
     }
   }
@@ -1038,7 +1047,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
         ...ralphVerdict,
-        ...validationFields,
+        ...verificationFields,
         ...effort,
       }
     }
@@ -1051,7 +1060,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       failureCause: 'no-changes',
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
-      ...validationFields,
+      ...verificationFields,
       ...effort,
     }
   }
@@ -1086,7 +1095,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
           stats,
           ...(usage ? { usage } : {}),
           ...(callMetrics ? { callMetrics } : {}),
-          ...validationFields,
+          ...verificationFields,
           ...effort,
         }
       }
@@ -1103,7 +1112,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         failureCause: 'no-changes',
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
-        ...validationFields,
+        ...verificationFields,
         ...effort,
       }
     }
@@ -1116,7 +1125,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
       ...ralphVerdict,
-      ...validationFields,
+      ...verificationFields,
       ...effort,
     }
   }
@@ -1128,7 +1137,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     ...(usage ? { usage } : {}),
     ...(callMetrics ? { callMetrics } : {}),
     ...ralphVerdict,
-    ...validationFields,
+    ...verificationFields,
     ...effort,
   }
 }
