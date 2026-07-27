@@ -6,6 +6,7 @@ import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { judgeStepStateSchema } from './judge.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
+import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
@@ -1049,6 +1050,18 @@ export const pipelineStepSchema = v.object({
    * service configured no checks. See {@link validationReportSchema}.
    */
   validation: v.optional(v.nullable(validationReportSchema)),
+  /**
+   * The harness-computed BUGFIX REPRODUCTION PROOF for a coding step that carried a declared
+   * reproduction: the declared command run against the pre-fix tree and the final tree, with
+   * both exit codes and captured output — or the agent's structural declaration that
+   * reproduction was infeasible, with its reason and stated alternative verification. The
+   * verdict is computed by the harness from exit codes, never self-reported by the model.
+   * Recorded by the engine from the runner result on every outcome (an `inconclusive` verdict
+   * never fails the step — see the initiative's D6). Rides the run's persisted `detail` blob —
+   * no migration. Absent when the run was not opted in or carried no declaration. See
+   * {@link reproductionReportSchema} and docs/initiatives/bugfix-reproduction-proof.md.
+   */
+  reproduction: v.optional(v.nullable(reproductionReportSchema)),
   /**
    * Transient re-entry marker carried on a parked `coder` step whose fork decision is
    * `answering`: set when the human sends a chat message so the run is signalled to

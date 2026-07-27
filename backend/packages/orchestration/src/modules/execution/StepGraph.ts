@@ -75,6 +75,11 @@ export class StepGraph {
     // Drop the prior run's structured output too, so a re-run that produces no `custom`
     // doesn't leave stale JSON for the `generic-structured` result view to render.
     step.custom = undefined
+    // Drop the prior run's reproduction proof: it describes a tree that no longer exists, and —
+    // unlike the validation report, which a re-run always re-produces when checks are configured
+    // — this one can legitimately go present → absent (a looped-back `repro-test` step has its
+    // `custom` cleared above, so the re-dispatch resolves no spec and nothing overwrites it).
+    step.reproduction = undefined
     step.rework = undefined
     // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
     // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to

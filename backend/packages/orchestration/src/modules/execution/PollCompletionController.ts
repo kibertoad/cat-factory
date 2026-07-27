@@ -20,6 +20,7 @@ import {
   coerceValidationReport,
   validationFailureDetail,
 } from './validation.logic.js'
+import { applyReproductionReport } from './reproductionProof.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
 type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
@@ -204,6 +205,11 @@ export class PollCompletionController {
     // shows WHICH check failed and what it printed. Persisted by `markContainerErrored` below,
     // which is why it is folded on first. A report-less failure is untouched.
     const validationDetail = this.applyValidationFailure(step, update.validationReport)
+    // A job that died for an UNRELATED reason may still have completed its reproduction proof (a
+    // failed verification never fails a job by itself). Record it so the evidence is not lost
+    // with the run — it never contributes to the failure detail, which belongs to whatever
+    // actually killed the job.
+    applyReproductionReport(step, update.reproductionReport)
     await this.markContainerErrored(workspaceId, instance, step)
     return {
       kind: 'job_failed',

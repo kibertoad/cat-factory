@@ -62,6 +62,7 @@ import {
   applySubtaskProgress,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
+import { applyReproductionReport, recordReproductionOutcome } from './reproductionProof.logic.js'
 import {
   commitInitiativeTracker,
   FORK_PROPOSER_KIND,
@@ -1071,6 +1072,9 @@ export class RunDispatcher {
     // Republish the latest pre-PR validation attempt so the repair loop is visible WHILE it
     // runs ("lint failed, repairing — attempt 2 of 3") instead of only at the end.
     if (applyValidationReport(s, update.validationReport)) changed = true
+    // Republish the reproduction proof so a failed verification is visible WHILE the repair loop
+    // still runs, for the same reason as the validation republish above.
+    if (applyReproductionReport(s, update.reproductionReport)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.recordBackendDiagnostics(target, update.backend)) changed = true
@@ -1413,6 +1417,12 @@ export class RunDispatcher {
     // the captured proof the checkout was green BEFORE the PR opened; the failed path records
     // it in `PollCompletionController.handleFailedPoll`.
     applyValidationReport(step, result.validationReport)
+
+    // The BUGFIX REPRODUCTION PROOF of a coding step — the harness's verdict, or (for a run whose
+    // reproduction step conceded, which dispatches no proof at all) the structural infeasibility
+    // declaration the engine mints itself. Recorded here for the same reason as the validation
+    // report above: it describes the JOB THAT JUST RAN, so it must land before any early return.
+    recordReproductionOutcome(step, result.reproductionReport, instance, this.clock.now())
 
     // Meter the LLM call into the usage ledger. Recorded whether the step completed or
     // raised a decision — both consumed tokens. A subscription-harness result is tagged

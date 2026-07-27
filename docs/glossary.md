@@ -135,6 +135,13 @@ introduces three kinds whose names invite confusion:
   reproduction test. Trap: it **SEEDS the shared work branch (`cat-factory/<blockId>`) but does
   NOT open the PR** (`opensPr: false`); the following `coder` resumes that branch and opens the one
   PR. A `not_reproducible` concession NEVER fails the run (`noChangesTolerated: true`).
+- **Reproduction proof** — the MACHINE verification of that kind's claim, distinct from the claim
+  itself: its `outcome` field is the model's own assertion, while the proof is the harness running
+  the declared `command` against the pre-fix tree and the final tree. Only red-then-green counts
+  (`reproduced`); anything else is `inconclusive`, and a concession is recorded as
+  `declared_infeasible` with the agent's stated alternative verification. Opted in per task via
+  the `coder.reproductionProof` tri-state, published on the run's PR report. See
+  [`docs/initiatives/bugfix-reproduction-proof.md`](./initiatives/bugfix-reproduction-proof.md).
 
 ### D1 ⇄ Drizzle migration parity
 
