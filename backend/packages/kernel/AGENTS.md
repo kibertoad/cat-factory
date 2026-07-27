@@ -17,10 +17,14 @@ else imports its **ports** and domain types from here.
   (`seed.ts`, `catalog.ts`, `models.ts`, `subtasks.logic.ts`, `change-class.ts` — the
   deterministic changed-file → change-class classifier + its risk ranking and the per-class
   merge-rule resolution), and the **public extension
-  registries**: `gate-registry.ts` + `gate-logic.ts`, `pipeline-registry.ts`,
-  `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
+  registries**: `gate-registry.ts` + `gate-logic.ts`, `judge-registry.ts` + `judge-logic.ts`,
+  `pipeline-registry.ts`, `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
   `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
+  `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
+  per-task threshold → advance / park / bounce / fail); its pure disposition rules are
+  `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See CLAUDE.md → "Gates vs
+  agents" and `docs/initiatives/judge-registry.md`.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

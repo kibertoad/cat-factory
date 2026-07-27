@@ -150,6 +150,67 @@ consumer-side extension surface — custom task types, interactive phases for co
 agents, overlays, notification kinds — is designed in
 `docs/initiatives/frontend-extension-mechanism.md`.
 
+## Judges — an evaluator that can BLOCK or BOUNCE a run
+
+An agent kind produces work; a **judge** decides whether the work is acceptable. It is the
+fourth step-taxonomy bucket (agents / polling gates / one-shot engine steps / judges) and the
+seam to reach for when a deployment wants its own rubric-based evaluator over a run's output —
+scope adherence, house engineering standards, doc completeness.
+
+Why it is not one of the other seams: a `StepCompletionResolver` returns a `StepResolution`
+(reshape output / own terminal status) and **cannot park or loop the run**, and a
+`GateDefinition`'s `probe()` is a cheap programmatic precheck with a `pending` state and a helper
+container to escalate to — neither shape fits "run an LLM assessment, compare the score to the
+task's tolerance, and act".
+
+A judge registration supplies ONLY its differentiators; the engine's one generic driver owns the
+state machine, the threshold comparison, the park, the bounce budget, persistence and emission:
+
+```ts
+import type { JudgeRegistry } from '@cat-factory/kernel'
+
+// The `judgeRegistry` here is the instance the facade injects (`CoreDependencies.judgeRegistry`).
+judgeRegistry.register('scope-adherence', () => ({
+  kind: 'scope-adherence',
+  rubric: {
+    id: 'rubric_scope_adherence',
+    name: 'Scope adherence',
+    body: 'Score how faithfully the change implements the task AS ASKED, and nothing beyond it. …',
+    // Optional: a workspace overrides the body by authoring a prompt-library fragment with this
+    // id — so a rubric needs no storage of its own.
+    fragmentId: 'frag_org_scope_adherence',
+  },
+  // Optional: your own valibot schema's parser (kernel carries no valibot dep). Defaults to the
+  // contract's `judgeVerdictSchema` (score + summary + findings).
+  parseVerdict: scopeVerdict.parse,
+  // What a verdict BELOW the task's threshold does: park for a human, bounce the producing step
+  // with the findings as its rework brief, or fail the run.
+  onFail: 'bounce',
+  bounceTargets: ['coder'],
+  presentation: { label: 'Scope Adherence', icon: 'i-lucide-scale', color: '#f59e0b', description: '…' },
+}))
+```
+
+What you do NOT write: the assessment call (the engine's `JudgeAssessor`, built from the
+model-provider deps the facade already wires), the threshold (the merge preset's `judgeMinScore`,
+so a TASK can relax it), the bounce budget (`judgeMaxBounces`), the park + its `judge_review`
+card, the persistence (all state rides `step.judge`, so it is runtime-symmetric with no table),
+the result window (the shared `judge` view), or the PR-report section.
+
+Three rules worth knowing before you register one:
+
+- **Unwired is a pass-through.** With no assessment model configured, every judge step records
+  `status: 'skipped'` with a note and advances — so adding a judge to a pipeline can never break
+  a deployment that has no model for it.
+- **A failing verdict never advances silently.** A bounce with a spent budget, or with no
+  preceding producing step to bounce to, degrades to a **park** and records why.
+- **An unreadable assessment is a FAILING verdict**, not a crashed run: a thrown parse or a
+  provider outage becomes a score-0 verdict that reaches a human. For a gate that blocks work,
+  "I could not tell" must land on the cautious side.
+
+Full design + the deliberate non-goals (the `merger` is NOT rewritten onto this):
+[`../../docs/initiatives/judge-registry.md`](../../docs/initiatives/judge-registry.md).
+
 ## The worked example
 
 `backend/internal/example-custom-agent` (`@cat-factory/example-custom-agent`, private)
@@ -165,7 +226,10 @@ registers:
   `container-coding` (not `container-explore`) so it opens a real, mergeable PR — the only way a
   post-op-rendered artifact reaches a later initiative phase's clone (see
   [`initiative-presets.md`](./initiative-presets.md) → "Cross-phase artifacts").
-- the **`pl_org_audit`**, **`pl_org_research`** and **`pl_org_apply`** pipelines chaining them, plus
+- **`scope-adherence`** — a rubric **judge** (`registerExampleScopeJudge`) that scores the Coder's
+  work against "implement what was asked and nothing else", sends it back to the Coder with the
+  findings as its rework brief on a miss, and parks a human once the task's rework budget is spent.
+- the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`** and **`pl_org_apply`** pipelines chaining them, plus
   the **`preset_org_audit`** and **`preset_org_research`** initiative presets (see
   [`initiative-presets.md`](./initiative-presets.md)).
 

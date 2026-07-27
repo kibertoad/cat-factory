@@ -85,7 +85,23 @@ The step taxonomy is `CLAUDE.md` → "Gates vs agents". Code:
   `@cat-factory/gates` (`backend/packages/gates/src/gates.ts` + `providers.ts`), registered via
   the public `registerGate` seam.
 - Gate _consumption_ (the engine driving them) — `backend/packages/orchestration/src/modules/
-execution/` (`evaluateGate` / `dispatchGateHelper` / `pollGate` in the run engine).
+execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `pollGate`).
+
+### Judges
+
+The FOURTH step-taxonomy bucket (`CLAUDE.md` → "Gates vs agents"): an inline LLM verdict against
+a **rubric**, compared to a per-task threshold, disposed as advance / park / **bounce** / fail.
+Distinct from a gate (whose `probe()` is a cheap programmatic precheck) and from a step resolver
+(which cannot park or loop a run). Code:
+
+- The registry + the definition a deployment supplies —
+  `backend/packages/kernel/src/domain/judge-registry.ts`; the pure disposition rules —
+  `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`).
+- Judge _consumption_ (the engine driving them) —
+  `backend/packages/orchestration/src/modules/execution/JudgeStepController.ts`; the inline
+  assessor behind it — `JudgeService.ts`.
+- The worked example — `backend/internal/example-custom-agent` (`scope-adherence`).
+- Design + non-goals — `docs/initiatives/judge-registry.md`.
 
 ### Agent kinds
 
@@ -98,6 +114,8 @@ enum — the kinds are string constants across two homes:
 - **Catalog agent kinds** (coder, spec-writer, blueprints, tester, merger, the companions, …) —
   `@cat-factory/agents` under `src/agents/kinds/` + `src/agents/prompts/`.
 - **Custom/registered kinds** — added via `registerAgentKind` (`CLAUDE.md` → "Custom agents").
+- **Judge kinds** — a deployment's own, registered on the app-owned `JudgeRegistry`; the platform
+  ships none (see "Judges" above).
 
 ### Bug-triage step vocabulary
 
