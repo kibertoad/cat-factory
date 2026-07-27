@@ -492,7 +492,8 @@
         "env_test_not_a_frame": "No es un servicio",
         "env_test_infraless": "Nada que probar",
         "env_test_not_provisionable": "Gestor de entorno no configurado",
-        "env_test_no_vcs": "Proveedor de Git no conectado"
+        "env_test_no_vcs": "Proveedor de Git no conectado",
+        "env_test_connection_failed": "Fallo de conexión del entorno"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -514,7 +515,9 @@
         "env_test_not_provisionable": "Este servicio tiene un tipo de aprovisionamiento, pero aún no hay ningún gestor del espacio de trabajo para él, así que el aprovisionamiento no puede ejecutarse. Configura un gestor de entornos.",
         "env_test_not_provisionable_no_handler": "No hay ningún gestor de entorno del espacio de trabajo configurado para el tipo de aprovisionamiento de este servicio. En Infraestructura → Entornos de prueba, registra uno; para un proveedor personalizado, un gestor Custom (remote-custom) cuyo manifest id aceptado coincida con el que fija este servicio.",
         "env_test_not_provisionable_type_mismatch": "Más de un gestor de entorno podría coincidir con el tipo de aprovisionamiento de este servicio. Fija un manifest id para este servicio de modo que se resuelva exactamente uno, o elimina el gestor superpuesto en Infraestructura → Entornos de prueba.",
-        "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno."
+        "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno.",
+        "env_test_connection_failed": "El gestor de entornos de este servicio no superó su prueba de conexión. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
+        "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
