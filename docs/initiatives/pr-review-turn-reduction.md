@@ -37,7 +37,8 @@ transcript. The backend already has the diff via the GitHub integration
   in the prompt.
 - **Slice 3 — measure (todo).** Re-run a representative review after Slice 2 and compare turn
   count + fresh-vs-cache token split (the sibling `token-telemetry-per-class-and-cost` initiative
-  makes that split honest) to confirm the reduction. Fold the result back here.
+  makes that split honest; the `token-burn-instrumentation` initiative builds the per-phase
+  breakdown this slice consumes) to confirm the reduction. Fold the result back here.
 - **Slice 4 — make the cost estimate honest (todo).** `claudeUsage` folds
   `cache_read_input_tokens` + `cache_creation_input_tokens` into `AgentTokenUsage.inputTokens`
   (kernel `ports/agent-executor.ts`), and `estimateCost` (`spend/src/pricing.ts`) prices all of it
