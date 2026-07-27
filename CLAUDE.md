@@ -1110,6 +1110,43 @@ derived from the blueprint (there is no longer a "feature" granularity level).
   agent (which runs through the runner transport, so it works on every backend);
   `BoardScanService` is purely the reconciler the engine drives with its result.
 
+## In-repo spec implementation state (`aspirational` ⇄ `established`)
+
+`spec/` is PRESCRIPTIVE ("what must be TRUE"). `requirementItemSchema.state` is what lets it also
+say what is true YET — `aspirational` (agreed, via the spec diff's PR review, but not observed) or
+`established` (a tester actually exercised its acceptance criteria and they passed). Without it an
+agreed-but-unbuilt requirement enters every build prompt as standing behaviour and draws a
+spurious `not_met` on unrelated runs; the field is what makes a behaviour contract safe to write
+down BEFORE it is honoured. Design + the withdrawn alternative:
+[`docs/initiatives/service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
+
+- **A FIELD, never a `spec/` sub-folder.** A folder encodes the state in the path, so every
+  promotion becomes a file move and the state can't be read without walking the tree.
+- **The split reaches an agent through the RENDERED FILES, not the prompt.** The build/test
+  prompts do not interpolate the spec (the agent reads `spec/` from its own checkout), so
+  `renderSpecGroupMarkdown` splits the two halves under headings that state what each MEANS, and
+  the Gherkin render tags an aspirational scenario `@aspirational` (skippable) plus a
+  `# requirement: <id>` anchor. The prompts carry only the matching RULE. An agent handed an
+  undifferentiated list of behaviours assumes it was asked to build them.
+- **Promotion has exactly ONE author: `specPromotionPostOp`** (`@cat-factory/agents`), keyed on
+  the tester kinds, off `testReport.requirementVerdicts`. Chosen over the spec-writer's own update
+  pass because the writer runs 0–1 steps behind the requirements gate while the tester runs near
+  the back: routing promotion through it would defer every promotion to the NEXT run and hand a
+  deterministic, evidence-backed state change to a model that cannot see the evidence. Only `met`
+  promotes — `not_covered` means nobody looked and `not_met` means it does not hold.
+- **It NEVER demotes.** A run whose blast radius never touched a behaviour would otherwise strip
+  the service's standing behaviour back to nothing on every unrelated PR. A genuine regression is
+  a `not_met` on an `established` requirement — a failing test the run answers for, not a spec edit.
+- **Idempotent by CONTENT, which is the durable driver's replay answer**: it re-reads the spec from
+  the branch, recomputes and byte-compares, so a replay commits nothing. No marker row.
+- **The Gherkin files are SEED-ONCE**, so promotion does NOT re-render them (that would discard a
+  pass-2 acceptance polish) — it surgically drops the stale `@aspirational` token from the tag line
+  above the `# requirement: <id>` anchor, and degrades to a no-op when a polished file lost the
+  anchor. The JSON shard stays the single source of truth for state; the tag is a runner convenience.
+- **The spec-writer must never claim `established`** — the prompt says so explicitly, and
+  `coerceRequirement` defaults an absent/garbled `state` to `aspirational`, so a model cannot
+  promote a requirement by asserting a fact it did not verify.
+
 ## Requirements review flow (iterative gate step + dedicated window)
 
 `requirements-review` is the FIRST step of the default pipelines — a special engine
@@ -1548,6 +1585,19 @@ live in [`docs/initiatives/pr-verification-report.md`](./docs/initiatives/pr-ver
   - provider it STATES come from the publisher's `resolveTarget` — the same resolution the write
     uses — never from `diagnostics.lastDispatch`, which records the most recent dispatch and is a
     PEER repo on a multi-repo task.
+- **The ONE exception to "already in memory" is the REQUIREMENT → EVIDENCE section**, which joins
+  the service's in-repo `spec/` to the tester's per-requirement verdicts. That needs a repo read,
+  so it is GATED then MEMOISED: nothing is read until a tester step has actually reported (before
+  that the section's answer is already determined, so the ~15 earlier settlements stay at zero
+  repo calls), and the reassembled tree is cached per execution id under the same bound as the
+  published-section cache. The memo deliberately holds the spec AS THE TESTER SAW IT — the
+  promotion post-op rewrites the spec on this same branch immediately after, so re-reading would
+  pair fresh state with stale verdicts. Read through the same `resolveRunRepoContext` seam the
+  repo-ops controller uses (so it is symmetric across facades by construction); unwired ⇒
+  `absent` with a note. Verdicts are three-valued (`met`/`not_met`/`not_covered`) because "we
+  didn't check" and "it's broken" must never render the same, and a requirement's implementation
+  state travels WITH its verdict so `not_covered` against an `aspirational` requirement reads as
+  expected rather than as a coverage gap.
 - **A section whose producing step didn't run says so** (`status: 'absent'` + a `note`) — a
   silently missing section reads exactly like a clean one, which is the false reassurance this
   feature exists to remove. Same rule for a CAPPED list: every per-list cap records what it left

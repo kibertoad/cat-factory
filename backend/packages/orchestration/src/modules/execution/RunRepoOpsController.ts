@@ -13,9 +13,15 @@ import type {
   RunRepoContext,
 } from '@cat-factory/kernel'
 import { type PullRequestRef, resolveAprioriWorkingBranch } from '@cat-factory/contracts'
-import { blueprintPostOp, runRepoOps, specPostOp } from '@cat-factory/agents'
+import { blueprintPostOp, runRepoOps, specPostOp, specPromotionPostOp } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { BLUEPRINTS_AGENT_KIND, MERGER_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from './ci.logic.js'
+import {
+  BLUEPRINTS_AGENT_KIND,
+  MERGER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
+  TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+} from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 
 /**
@@ -295,6 +301,11 @@ export class RunRepoOpsController {
   private static readonly BUILT_IN_POST_OPS: Record<string, RepoOp[]> = {
     [BLUEPRINTS_AGENT_KIND]: [blueprintPostOp],
     [SPEC_WRITER_AGENT_KIND]: [specPostOp],
+    // The tester kinds carry no artifact of their own; their post-op PROMOTES the in-repo
+    // spec's implementation state off the requirement verdicts they observed (see
+    // `specPromotionPostOp`). Both tester kinds report the same verdict shape, so both get it.
+    [TESTER_AGENT_KIND]: [specPromotionPostOp],
+    [UI_TESTER_AGENT_KIND]: [specPromotionPostOp],
   }
 
   /**
@@ -313,6 +324,11 @@ export class RunRepoOpsController {
    *    DETERMINISTICALLY here — NOT via {@link resolveRepoOpBranch}'s `work` case, whose
    *    PR-preferring branch would commit onto a divergent PR branch (read one tree, write
    *    another) if a PR were ever open on a branch other than `cat-factory/<blockId>`.
+   *  - the tester kinds' promotion post-op takes the same `pullRequest?.branch ?? baseBranch`
+   *    fallthrough as blueprints, which is what it wants: a tester runs after the coder opened
+   *    the PR, so the promotion lands on the PR branch and is reviewed in the SAME spec diff as
+   *    the requirement it promotes. (A tester run with no PR open falls back to base and
+   *    promotes nothing, since a spec it never tested against has no met verdicts.)
    */
   private async builtInRepoOpBranch(
     agentKind: string,

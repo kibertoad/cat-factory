@@ -514,6 +514,10 @@ export class ExecutionService {
         publisher: prVerificationReportPublisher,
         taskRepository,
         workspaceSettingsRepository,
+        // Same seam the repo-ops controller uses, so the report reads the run's `spec/`
+        // through the repo access the engine has already resolved. Unwired ⇒ the requirement
+        // section reports `absent` with a note.
+        resolveRunRepoContext,
         appBaseUrl,
         logger,
       }),

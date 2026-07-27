@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
-import { readServiceSpec } from '../src/modules/serviceSpec/readServiceSpec.js'
+import { readServiceSpec } from '../src/repo-ops/readServiceSpec.js'
 
 // An in-memory RepoFiles over a flat path→content map. listDirectory derives entries from
 // the keys (one level deep), so the reader is exercised exactly as it walks a real repo.

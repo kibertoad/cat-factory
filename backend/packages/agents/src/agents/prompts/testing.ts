@@ -29,9 +29,27 @@ const TEST_REPORT_SHAPE = [
   '  "concerns": [                    // bugs/risks to fix before re-testing; non-empty ⇒ greenlight false',
   '    { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" }',
   '  ],',
+  '  "requirementVerdicts": [         // one entry per spec requirement you ruled on (see below)',
+  '    { "requirementId": string, "status": "met" | "not_met" | "not_covered", "detail": string }',
+  '  ],',
   '  "environment"?: "local" | "ephemeral",',
   '  "abort"?: { "reason": string }   // set ONLY if you could not run a meaningful test at all',
   '}',
+].join('\n')
+
+/**
+ * The per-requirement verdict contract, shared by the API and UI testers. It is what turns the
+ * spec from a list of intentions into evidence: the ids are the SPEC's own requirement ids, so
+ * the platform can both promote a verified requirement to `established` and render
+ * criterion → evidence on the pull request without inventing a second id space.
+ */
+const REQUIREMENT_VERDICT_RULES = [
+  'Ruling on the spec requirements (`requirementVerdicts`):',
+  '- Each Gherkin scenario in `spec/features/**.feature` carries a `# requirement: <id>` comment naming the SPEC REQUIREMENT it came from. Report your verdicts under exactly those ids — do not invent your own ids, renumber them, or use the scenario title.',
+  "- Use `met` ONLY when you actually exercised that requirement's acceptance criteria and observed them hold. `not_met` when you exercised them and they did NOT hold. `not_covered` when you did not exercise them this run — out of the change's blast radius, unreachable in this setup, or not yet built.",
+  '- A scenario tagged `@aspirational` describes behaviour that is AGREED BUT NOT YET BUILT. Its absence is NOT a bug and NOT a regression: if it is not implemented, record `not_covered` (with a short reason) — never `not_met`, and never file it as a concern for the fixer. Only rule it `met`/`not_met` if this change was actually supposed to deliver it.',
+  '- `met` is load-bearing: it PROMOTES the requirement to standing behaviour that every future run must preserve. Never mark a requirement `met` on the strength of reading the code or the diff — only on something you ran and observed.',
+  '- Omitting a requirement entirely reads the same as `not_covered`, so prefer an explicit `not_covered` with a reason. If the service has no `spec/` at all, send an empty list.',
 ].join('\n')
 
 const TESTER_SYSTEM_PROMPT = [
@@ -47,6 +65,7 @@ const TESTER_SYSTEM_PROMPT = [
   '',
   'What to test:',
   "- Start from the specs written in earlier steps: the unified spec under `spec/` and especially its Gherkin acceptance scenarios in `spec/features/*.feature`. Walk the scenarios that cover THIS task's new functionality and confirm the running service actually behaves that way.",
+  '- The spec marks each requirement `established` (already-standing behaviour — a break is a regression worth reporting) or `aspirational` (agreed but not yet built — its absence is expected, not a bug). Read the heading in the group `.md`, or the `@aspirational` tag on the scenario, before judging anything a failure.',
   '- Explore the new functionality beyond the happy path: probe edge cases, bad input, error and boundary conditions, and the failure responses the external mocks can return — the kinds of things a scripted suite tends to miss.',
   '- Then do a REASONABLE amount of regression testing of related behaviour the change could plausibly affect — target the blast radius, do not re-test the whole system.',
   '- Run the existing automated suite where present, and add your own ad-hoc checks (API calls, flows, UI interactions) on top of it.',
@@ -57,6 +76,8 @@ const TESTER_SYSTEM_PROMPT = [
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason, rather than dropping it. The greenlight covers everything you claimed to test, so leave no claimed scenario unaccounted for.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker regardless of the greenlight flag, and will loop the fixer). If a check did not actually fail — it was inapplicable or intentionally not run — mark it `"skipped"`, not `"failed"`; reserve `"failed"` for a genuine failure you want fixed.',
   '- If you CANNOT run a meaningful test at all — the ephemeral environment never came up, a dependency the test needs is unavailable, or the change simply cannot be exercised in this setup — do NOT guess, do NOT greenlight, and do NOT file it as a bug for the fixer (it cannot provision infrastructure). Instead set `abort` with a concise `reason`, set greenlight=false, and stop. The run is handed to a human to resolve and retry.',
+  '',
+  REQUIREMENT_VERDICT_RULES,
   '',
   TEST_REPORT_SHAPE,
   '',
@@ -72,6 +93,7 @@ const UI_TEST_REPORT_SHAPE = [
   '  "tested": string[],            // one `outcomes` entry per area you list here (same name)',
   '  "outcomes": [ { "name": string, "status": "passed" | "failed" | "skipped", "detail": string } ],',
   '  "concerns": [ { "title": string, "detail": string, "severity": "low" | "medium" | "high" | "critical" } ],',
+  '  "requirementVerdicts": [ { "requirementId": string, "status": "met" | "not_met" | "not_covered", "detail": string } ],',
   '  "environment"?: "local" | "ephemeral",',
   '  "abort"?: { "reason": string },  // set ONLY if you could not run a meaningful test at all',
   '  "screenshots": [               // one entry per DISTINCT view you captured + uploaded',
@@ -93,6 +115,7 @@ const TESTER_UI_SYSTEM_PROMPT = [
   '',
   'What to do:',
   '- Walk the new UI functionality for THIS task (start from the Gherkin acceptance scenarios in `spec/features/*.feature`), plus a reasonable amount of regression of related screens the change could affect.',
+  '- The spec marks each requirement `established` (already-standing behaviour — a break is a regression) or `aspirational` (agreed but not yet built — its absence is expected, not a bug). Check the `@aspirational` tag on a scenario before judging anything a failure.',
   '- Use Playwright to navigate every DISTINCT view the functionality touches and verify it behaves correctly (interactions, validation, error states).',
   '- For EACH distinct view, capture ONE full-page screenshot (PNG). Be non-redundant: one screenshot per logical view, not many near-identical shots of the same screen.',
   '- If a reference-design directory is present (`.cat-context/reference-screenshots/`), capture the matching views and name each screenshot’s `view` to match the reference so they can be compared side by side. If it is absent, just use clear view names of your own.',
@@ -107,6 +130,8 @@ const TESTER_UI_SYSTEM_PROMPT = [
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason. The greenlight covers everything you claimed to test.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker and will loop the fixer). Mark a check you did not or could not run `"skipped"`, never `"failed"`.',
   '- If you CANNOT run a meaningful test at all — the app/environment never came up or cannot be driven — do NOT greenlight and do NOT file it as a bug for the fixer. Set `abort` with a concise `reason`, set greenlight=false, and stop; the run is handed to a human.',
+  '',
+  REQUIREMENT_VERDICT_RULES,
   '',
   UI_TEST_REPORT_SHAPE,
   '',

@@ -41,6 +41,7 @@
     "@cat-factory/prompt-fragments": "workspace:*",
     "ai": "^7.0.37",
     "handlebars": "^4.7.9",
+    "p-map": "^7.0.6",
     "valibot": "^1.4.2"
   },
   "devDependencies": {

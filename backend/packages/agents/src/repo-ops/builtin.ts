@@ -6,18 +6,22 @@ import {
   SPEC_FEATURES_DIR,
   SPEC_MODULES_DIR,
 } from '@cat-factory/contracts'
-import type { RepoFiles, RepoOp } from '@cat-factory/kernel'
+import type { AgentRunResult, RepoFiles, RepoOp } from '@cat-factory/kernel'
 import {
+  asString,
+  clearAspirationalTag,
   coerceBlueprintService,
   coerceSpecDoc,
   hashBlueprint,
   nextBlueprintVersion,
+  promoteRequirementStates,
   type RenderedFile,
   renderBlueprintFiles,
   renderBlueprintVersionFile,
   renderSpecFeatureFiles,
   renderSpecFiles,
 } from './render.js'
+import { readServiceSpec } from './readServiceSpec.js'
 
 // ---------------------------------------------------------------------------
 // BUILT-IN post-ops: the deterministic render + commit of the in-repo `blueprints/`
@@ -230,4 +234,99 @@ export const specPostOp: RepoOp = async (ctx) => {
     files: [...canonical, ...seededFeatures],
     ...(deletions.length > 0 ? { deletions } : {}),
   })
+}
+
+// ---------------------------------------------------------------------------
+// BUILT-IN post-op: tester-driven PROMOTION of the in-repo spec's implementation state.
+//
+// `spec/` is prescriptive — it says what must be TRUE — and `requirementItem.state` is what
+// lets it also say what is true YET. A newly written requirement is `aspirational`; a first
+// OBSERVED pass promotes it to `established`, which is what makes it standing behaviour for
+// every later build and test prompt.
+//
+// SEAM CHOICE — this post-op, NOT the spec-writer's own update pass. The spec-writer runs
+// near the front of every pipeline (0–1 steps behind the requirements gate) while the tester
+// runs near the back, so by the time verdicts exist this run's writer has long finished:
+// routing promotion through it would defer every promotion to the NEXT run (which may never
+// come) and would hand a deterministic, evidence-backed state change to a model that cannot
+// see the evidence. Promotion is mechanical, so it belongs in deterministic backend TS over
+// the checkout-free RepoFiles port — the same shape `specPostOp` already uses.
+//
+// IDEMPOTENT BY CONTENT, which is the exact answer the durable driver needs: it re-reads the
+// spec from the branch, recomputes the promoted tree and byte-compares. A REPLAY (or a re-test
+// after a fixer round) reads an already-promoted spec, produces identical bytes and commits
+// nothing. No marker row, no wall-clock guess.
+// ---------------------------------------------------------------------------
+
+/** The met requirement ids in a tester's structured report, or an empty set. */
+function metRequirementIds(result: AgentRunResult | undefined): Set<string> {
+  const report = result?.testReport
+  if (!report || typeof report !== 'object') return new Set()
+  const verdicts = (report as { requirementVerdicts?: unknown }).requirementVerdicts
+  if (!Array.isArray(verdicts)) return new Set()
+  const ids = new Set<string>()
+  for (const raw of verdicts) {
+    if (!raw || typeof raw !== 'object') continue
+    const v = raw as { requirementId?: unknown; status?: unknown }
+    // ONLY `met` promotes. `not_covered` means nobody looked, and `not_met` means it does not
+    // hold — neither is evidence that the service honours the behaviour.
+    if (v.status !== 'met') continue
+    const id = asString(v.requirementId)
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+/**
+ * POST-OP for the tester kinds: promote every spec requirement the Tester OBSERVED to pass
+ * from `aspirational` to `established`, and commit the updated shards onto the run's branch.
+ *
+ * Reads the spec back from the branch (the tester's own result carries no spec), re-renders
+ * only the canonical shards, and surgically drops the now-stale `@aspirational` tag from the
+ * seed-once Gherkin files — never re-rendering those, so a pass-2 acceptance polish survives.
+ *
+ * BEST-EFFORT: a throwing post-op fails its step, and promotion is bookkeeping — a spec that
+ * failed to promote must never turn a green tester run red. Every failure path is a silent
+ * no-op, exactly like the PR verification report's publish.
+ */
+export const specPromotionPostOp: RepoOp = async (ctx) => {
+  try {
+    const met = metRequirementIds(ctx.result)
+    if (met.size === 0) return
+
+    const view = await readServiceSpec(ctx.repo, ctx.branch)
+    if (!view.present || !view.spec) return
+
+    const promoted = promoteRequirementStates(view.spec, met)
+    if (promoted.length === 0) return
+
+    // Re-render the canonical shards only. The seed-once feature files are NOT re-rendered
+    // (that would discard pass-2 polish); their stale tag is edited in place below.
+    const canonical = renderSpecFiles(view.spec)
+    const files: RenderedFile[] = []
+    for (const f of canonical) {
+      const existing = await ctx.repo.getFile(f.path, ctx.branch)
+      if (!existing || existing.content !== f.content) files.push(f)
+    }
+
+    for (const feature of view.features) {
+      const current = await ctx.repo.getFile(feature.path, ctx.branch)
+      if (!current) continue
+      const updated = clearAspirationalTag(current.content, promoted)
+      if (updated !== current.content) files.push({ path: feature.path, content: updated })
+    }
+
+    // Nothing actually differs ⇒ a replay. Commit nothing.
+    if (files.length === 0) return
+
+    await ctx.repo.commitFiles({
+      branch: ctx.branch,
+      message: `Promote ${promoted.length} verified requirement${
+        promoted.length === 1 ? '' : 's'
+      } to established`,
+      files,
+    })
+  } catch {
+    // Bookkeeping: never fail a tester step because the spec could not be promoted.
+  }
 }

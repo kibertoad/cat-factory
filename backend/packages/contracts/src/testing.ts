@@ -81,6 +81,40 @@ export const testScreenshotSchema = v.object({
 export type TestScreenshot = v.InferOutput<typeof testScreenshotSchema>
 
 /**
+ * How a spec requirement fared when the Tester went looking for it. THREE-VALUED on purpose:
+ * "we didn't check" and "it's broken" must never render the same, which is the entire point of
+ * keeping the list — a reviewer reading a two-valued list cannot tell a requirement that was
+ * verified from one nobody looked at.
+ *
+ *  - `met`         — its acceptance criteria were exercised and observed to hold.
+ *  - `not_met`     — exercised and observed NOT to hold.
+ *  - `not_covered` — not exercised this run (out of the change's blast radius, unreachable in
+ *                    this setup, or simply not yet built — an `aspirational` requirement is
+ *                    EXPECTED to land here and must never be reported as `not_met`).
+ */
+export const requirementVerdictStatusSchema = v.picklist(['met', 'not_met', 'not_covered'])
+export type RequirementVerdictStatus = v.InferOutput<typeof requirementVerdictStatusSchema>
+
+/**
+ * One requirement-level verdict, keyed by the **spec requirement id** (`spec/modules/<m>/<g>.json`
+ * → `requirements[].id`, surfaced to the Tester as the `# requirement: <id>` comment above each
+ * Gherkin scenario). Deliberately the SAME id space as the spec — a second id space would make
+ * the join to `spec/` guesswork, which is what sank the withdrawn per-service store.
+ *
+ * Two consumers read this, and they must agree: the promotion post-op flips a `met` requirement
+ * from `aspirational` to `established` in the in-repo spec, and the PR verification report joins
+ * it back to the spec to render criterion → evidence.
+ */
+export const requirementVerdictSchema = v.object({
+  /** The spec requirement's stable id (e.g. `req-login-rate-limit`). */
+  requirementId: v.string(),
+  status: requirementVerdictStatusSchema,
+  /** What was actually observed — the evidence behind the verdict. */
+  detail: v.optional(v.string()),
+})
+export type RequirementVerdict = v.InferOutput<typeof requirementVerdictSchema>
+
+/**
  * A Tester's structured report. `greenlight` is the gate's verdict: true means the
  * change is safe to release (no blocking concerns); false routes the run through
  * the `fixer`. `tested` lists what the Tester decided to cover (this task's
@@ -102,6 +136,12 @@ const testReportObjectSchema = v.object({
    * their own, withhold the greenlight. The engine re-applies this rule defensively.
    */
   concerns: v.array(testConcernSchema),
+  /**
+   * Per-spec-requirement verdicts, keyed by the requirement id the Gherkin scenarios carry.
+   * Optional: absent on a run whose service has no `spec/`, and on every report produced before
+   * this contract existed — both read as "no requirement was ruled on", never as a failure.
+   */
+  requirementVerdicts: v.optional(v.array(requirementVerdictSchema)),
   /** Which environment the suite ran in, echoed back for the UI. */
   environment: v.optional(testEnvironmentSchema),
   /**

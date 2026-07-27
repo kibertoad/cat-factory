@@ -331,6 +331,8 @@ export type {
   // Structured in-repo specification (sharded module → group tree) shapes.
   RequirementPriority,
   RequirementKind,
+  /** Implementation state: agreed-but-not-built vs observed-to-hold. */
+  RequirementState,
   AcceptanceCriterion,
   RequirementItem,
   DomainRule,
@@ -398,6 +400,9 @@ export type {
   PrReportTests,
   PrReportEnvironment,
   PrReportEnvironments,
+  // Requirement → evidence: the spec's requirements joined to the tester's verdicts.
+  PrReportRequirement,
+  PrReportRequirements,
   PrReportMerge,
   PrReportObservability,
   RiskPolicy,
@@ -434,6 +439,9 @@ export type {
   TestOutcome,
   TestConcern,
   TestConcernSeverity,
+  // Per-spec-requirement verdicts, keyed by the spec's own requirement ids.
+  RequirementVerdict,
+  RequirementVerdictStatus,
   // Test quality-control companion (per-Tester-step) config.
   TesterQualityConfig,
   // Extensible per-step options bag (the new home for per-step pipeline parameters).

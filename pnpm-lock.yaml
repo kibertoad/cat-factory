@@ -279,6 +279,9 @@ importers:
       handlebars:
         specifier: ^4.7.9
         version: 4.7.9
+      p-map:
+        specifier: ^7.0.6
+        version: 7.0.6
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.2)

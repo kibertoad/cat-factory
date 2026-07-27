@@ -1,7 +1,8 @@
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AgentRunContext, RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { blueprintPostOp, specPostOp } from './builtin.js'
+import { blueprintPostOp, specPostOp, specPromotionPostOp } from './builtin.js'
+import { readServiceSpec } from './readServiceSpec.js'
 
 // The built-in blueprint post-op: the deterministic render + commit lifted out of the
 // executor-harness, exercised over an in-memory {@link RepoFiles}. Asserts the three
@@ -13,6 +14,11 @@ import { blueprintPostOp, specPostOp } from './builtin.js'
 class FakeRepo implements RepoFiles {
   readonly commits: CommitFilesInput[] = []
   constructor(private readonly fileMap: Map<string, string> = new Map()) {}
+
+  /** Every path currently committed — lets a test locate a rendered artifact by suffix. */
+  paths(): string[] {
+    return [...this.fileMap.keys()]
+  }
 
   async getFile(path: string) {
     const content = this.fileMap.get(path)
@@ -263,5 +269,137 @@ describe('specPostOp', () => {
     const repo = new FakeRepo()
     await specPostOp(specCtx(repo, { modules: [] }))
     expect(repo.commits).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The tester-driven promotion post-op: the ONLY author of `aspirational` → `established`.
+// What matters here is (1) only an OBSERVED pass promotes, (2) the seed-once Gherkin files
+// are edited surgically rather than re-rendered, and (3) it is idempotent by CONTENT, which
+// is the durable driver's replay answer.
+// ---------------------------------------------------------------------------
+
+const testerCtx = (repo: RepoFiles, testReport: unknown) => ({
+  repo,
+  branch: 'cat-factory/task_login',
+  opensPr: true,
+  context: {} as AgentRunContext,
+  result: { output: '', testReport },
+})
+
+/** A repo pre-seeded with the committed spec `SPEC` renders, as after a spec-writer run. */
+async function repoWithSpec(): Promise<FakeRepo> {
+  const repo = new FakeRepo()
+  await specPostOp(specCtx(repo, SPEC))
+  repo.commits.length = 0
+  return repo
+}
+
+/** The state of every requirement in the committed spec, by id. */
+async function statesOf(repo: FakeRepo): Promise<Record<string, string>> {
+  const view = await readServiceSpec(repo, 'cat-factory/task_login')
+  const out: Record<string, string> = {}
+  for (const m of view.spec?.modules ?? []) {
+    for (const g of m.groups ?? []) {
+      for (const r of g.requirements ?? []) out[r.id] = r.state ?? 'aspirational'
+    }
+  }
+  return out
+}
+
+describe('specPromotionPostOp', () => {
+  it('promotes only requirements the tester observed to pass', async () => {
+    const repo = await repoWithSpec()
+    const before = await statesOf(repo)
+    const ids = Object.keys(before)
+    expect(ids.length).toBeGreaterThan(1)
+    expect(Object.values(before).every((s) => s === 'aspirational')).toBe(true)
+
+    await specPromotionPostOp(
+      testerCtx(repo, {
+        requirementVerdicts: [
+          { requirementId: ids[0]!, status: 'met', detail: 'observed' },
+          { requirementId: ids[1]!, status: 'not_met', detail: 'broken' },
+        ],
+      }),
+    )
+
+    const after = await statesOf(repo)
+    expect(after[ids[0]!]).toBe('established')
+    // `not_met` is not evidence the service honours the behaviour — it must NOT promote.
+    expect(after[ids[1]!]).toBe('aspirational')
+  })
+
+  it('does not promote on not_covered, an absent verdict list, or a non-tester result', async () => {
+    for (const report of [
+      { requirementVerdicts: [{ requirementId: 'req-login', status: 'not_covered' }] },
+      { requirementVerdicts: [] },
+      {},
+      undefined,
+    ]) {
+      const repo = await repoWithSpec()
+      await specPromotionPostOp(testerCtx(repo, report))
+      expect(repo.commits).toHaveLength(0)
+    }
+  })
+
+  it('strips the @aspirational tag in place, without re-rendering the seed-once feature file', async () => {
+    const repo = await repoWithSpec()
+    const ids = Object.keys(await statesOf(repo))
+    const featurePath = [...repo.paths()].find((p) => p.endsWith('.feature'))!
+    // Simulate a pass-2 acceptance polish: extra prose the promotion must NOT discard.
+    const polished = `${(await repo.getFile(featurePath))!.content}\n  # hand-polished note\n`
+    await repo.commitFiles({
+      branch: 'cat-factory/task_login',
+      message: 'polish',
+      files: [{ path: featurePath, content: polished }],
+    })
+    repo.commits.length = 0
+
+    const promoted = ids.filter((id) => polished.includes(`# requirement: ${id}`))
+    expect(promoted.length).toBeGreaterThan(0)
+    await specPromotionPostOp(
+      testerCtx(repo, {
+        requirementVerdicts: promoted.map((requirementId) => ({ requirementId, status: 'met' })),
+      }),
+    )
+
+    const after = (await repo.getFile(featurePath))!.content
+    expect(after).toContain('# hand-polished note') // polish survived
+    for (const id of promoted) expect(after).toContain(`# requirement: ${id}`)
+    expect(
+      after.split('\n').filter((l) => l.trim().split(/\s+/).includes('@aspirational')),
+    ).toEqual([])
+  })
+
+  it('is idempotent by content — a replay commits nothing', async () => {
+    const repo = await repoWithSpec()
+    const ids = Object.keys(await statesOf(repo))
+    const verdicts = { requirementVerdicts: [{ requirementId: ids[0]!, status: 'met' }] }
+
+    await specPromotionPostOp(testerCtx(repo, verdicts))
+    expect(repo.commits).toHaveLength(1)
+
+    // REPLAY: the durable driver re-enters after the commit landed.
+    await specPromotionPostOp(testerCtx(repo, verdicts))
+    expect(repo.commits).toHaveLength(1)
+  })
+
+  it('never fails the step — a throwing repo is swallowed', async () => {
+    const exploding = {
+      getFile: async () => {
+        throw new Error('transport down')
+      },
+      listDirectory: async () => {
+        throw new Error('transport down')
+      },
+    } as unknown as RepoFiles
+    await expect(
+      specPromotionPostOp(
+        testerCtx(exploding, {
+          requirementVerdicts: [{ requirementId: 'req-login', status: 'met' }],
+        }),
+      ),
+    ).resolves.toBeUndefined()
   })
 })

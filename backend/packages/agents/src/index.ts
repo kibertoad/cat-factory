@@ -348,6 +348,8 @@ export {
   dedupeSpecIds,
   renderSpecFiles,
   renderSpecFeatureFiles,
+  promoteRequirementStates,
+  clearAspirationalTag,
 } from './repo-ops/render.js'
 // Driver for a registered kind's pre/post-op hooks (plain TS over the checkout-free
 // RepoFiles port). Here, not in @cat-factory/server, so the orchestration engine can
@@ -356,7 +358,12 @@ export { runRepoOps } from './repo-ops/run.js'
 // Built-in post-ops for migrated built-in kinds (blueprints/…): the deterministic render
 // + commit lifted out of the executor-harness, keyed by the engine's built-in op map (NOT
 // the registry, so they never leak into the custom-kind palette).
-export { blueprintPostOp, specPostOp } from './repo-ops/builtin.js'
+export { blueprintPostOp, specPostOp, specPromotionPostOp } from './repo-ops/builtin.js'
+// Checkout-free reassembly of the SHARDED in-repo `spec/` tree. Lives here (not in
+// @cat-factory/server, which is above both) because THREE layers read it: the SPA's
+// service-spec view (server), the tester-driven promotion post-op (below), and the PR
+// verification report's criterion → evidence join (orchestration).
+export { readServiceSpec } from './repo-ops/readServiceSpec.js'
 // Initiative tracker helpers: lenient plan coercion + the deterministic render/commit of
 // the in-repo `docs/initiatives/<slug>/` projection (the blueprint pattern applied to the
 // initiative entity). Driven from the engine's committer step handler, not a postOp — the

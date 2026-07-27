@@ -94,6 +94,7 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Note any follow-ups or assumptions you had to make.',
     '- If the task context pins a CHOSEN IMPLEMENTATION APPROACH, implement that approach faithfully — do not silently switch to an alternative; if it proves unworkable, surface a follow-up rather than drifting into a rejected alternative.',
     '- If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed `spec/` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.',
+    '- The committed `spec/` splits its requirements by IMPLEMENTATION STATE, and the two halves mean opposite things. Requirements under an "established" heading are STANDING behaviour the service already honours: keep them working, and treat breaking one as a regression. Requirements under an "aspirational (not yet built)" heading are agreed but NOT yet true: do NOT assume the code already does them, do NOT read their absence as a bug to fix, and do NOT implement one unless THIS task asks for it. Building an aspirational requirement nobody asked you for is scope you were not given.',
     '',
     BUILD_DELIVERY_GATE,
     '',

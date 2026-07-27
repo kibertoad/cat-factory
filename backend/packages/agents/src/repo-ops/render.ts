@@ -9,6 +9,7 @@ import {
   type RequirementItem,
   type RequirementKind,
   type RequirementPriority,
+  type RequirementState,
   type SpecDoc,
   type SpecModule,
   BLUEPRINT_JSON_PATH,
@@ -243,6 +244,7 @@ const MAX_RULES_PER_GROUP = 100
 
 const PRIORITIES: readonly RequirementPriority[] = ['must', 'should', 'could']
 const KINDS: readonly RequirementKind[] = ['functional', 'nonfunctional', 'constraint']
+const STATES: readonly RequirementState[] = ['aspirational', 'established']
 
 function slugify(name: string, fallback: string): string {
   const slug = name
@@ -304,12 +306,20 @@ function coerceRequirement(value: unknown, index: number): RequirementItem | nul
     .map((a, i) => coerceAcceptance(a, id, i))
     .filter((a): a is AcceptanceCriterion => a !== null)
     .slice(0, MAX_ACCEPTANCE)
+  // An unrecognised (or absent) state falls back to `aspirational`, never `established`:
+  // "we have not observed this to hold" is the safe default, and a model that omits or
+  // garbles the field must not be able to promote a requirement into standing behaviour.
+  // Promotion has exactly one author — the tester-driven promotion post-op.
+  const state = STATES.includes(o.state as RequirementState)
+    ? (o.state as RequirementState)
+    : 'aspirational'
   return {
     id,
     title: title ?? statement.slice(0, 120),
     statement,
     kind,
     priority,
+    state,
     sourceBlockIds: coerceStringList(o.sourceBlockIds, 40),
     acceptance,
   }
@@ -433,6 +443,82 @@ export function coerceSpecDoc(parsed: unknown, fallbackName: string): SpecDoc | 
   return doc
 }
 
+// ---------------------------------------------------------------------------
+// Implementation-state promotion (aspirational → established)
+// ---------------------------------------------------------------------------
+
+/**
+ * Flip every requirement whose id is in `metIds` from `aspirational` to `established`, in
+ * place, and return the ids actually promoted (already-`established` ones are NOT re-reported,
+ * so a caller can tell a no-op replay from real work).
+ *
+ * Promotion is ONE-WAY here on purpose. A tester that did not exercise a requirement this run
+ * reports `not_covered`, and a run whose blast radius never touched a behaviour must not
+ * demote it — otherwise every unrelated PR would silently strip the service's standing
+ * behaviour back to nothing. A genuine regression is a `not_met` on an ESTABLISHED
+ * requirement, which is a failing test the run has to answer for, not a spec edit.
+ */
+export function promoteRequirementStates(doc: SpecDoc, metIds: Iterable<string>): string[] {
+  const wanted = new Set(metIds)
+  if (wanted.size === 0) return []
+  const promoted: string[] = []
+  for (const module of doc.modules ?? []) {
+    for (const group of module.groups ?? []) {
+      for (const req of group.requirements ?? []) {
+        if (!wanted.has(req.id)) continue
+        if ((req.state ?? 'aspirational') === 'established') continue
+        req.state = 'established'
+        promoted.push(req.id)
+      }
+    }
+  }
+  return promoted
+}
+
+/**
+ * Drop the `@aspirational` tag from the scenarios of `promotedIds` in one already-committed
+ * `.feature` file, returning the new content (or the input unchanged when nothing matched).
+ *
+ * A SURGICAL edit rather than a re-render, because feature files are SEED-ONCE: the spec
+ * post-op writes one only when absent, so a later pass-2 acceptance polish survives a re-run.
+ * Re-rendering to refresh a tag would throw that polish away. Anchored on the
+ * `# requirement: <id>` comment the render emits directly above each scenario's tag line.
+ *
+ * Degrades to a no-op when a polished file no longer carries the anchor comment or the tag
+ * line: the JSON shard stays the single source of truth for state, and the tag is a runner
+ * convenience — a stale tag makes a runner skip a scenario it could have run, which is
+ * strictly safer than the reverse.
+ */
+export function clearAspirationalTag(content: string, promotedIds: Iterable<string>): string {
+  const wanted = new Set(promotedIds)
+  if (wanted.size === 0) return content
+  const lines = content.split('\n')
+  let changed = false
+  for (let i = 0; i < lines.length; i++) {
+    const marker = /^\s*#\s*requirement:\s*(\S+)\s*$/.exec(lines[i]!)
+    if (!marker || !wanted.has(marker[1]!)) continue
+    // The tag line, when there is one, sits immediately above the anchor comment.
+    const prev = i - 1
+    if (prev < 0) continue
+    const tagLine = lines[prev]!
+    if (!/^\s*@/.test(tagLine)) continue
+    const indent = /^(\s*)/.exec(tagLine)![1]!
+    const kept = tagLine
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t !== '@aspirational')
+    if (kept.length === tagLine.trim().split(/\s+/).length) continue
+    changed = true
+    if (kept.length === 0) {
+      lines.splice(prev, 1)
+      i--
+    } else {
+      lines[prev] = `${indent}${kept.join(' ')}`
+    }
+  }
+  return changed ? lines.join('\n') : content
+}
+
 /** The exact canonical JSON bytes written to a per-group shard. */
 function canonicalJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`
@@ -501,7 +587,25 @@ function walkSpecGroups(doc: SpecDoc): SpecGroupRef[] {
   return out
 }
 
-/** The human-readable render of one feature group (its requirements + scoped rules). */
+/** One requirement as a markdown bullet, with its id + acceptance criteria beneath it. */
+function renderRequirementMarkdown(r: RequirementItem): string[] {
+  const lines = [`- **${r.title}** \`${r.id}\` _(${r.priority}, ${r.kind})_ — ${r.statement}`]
+  for (const a of r.acceptance ?? []) {
+    lines.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
+  }
+  return lines
+}
+
+/**
+ * The human-readable render of one feature group (its requirements + scoped rules).
+ *
+ * Requirements are SPLIT BY IMPLEMENTATION STATE, under headings that say what each half means.
+ * This is the split that actually reaches an agent: the build/test prompts do not interpolate
+ * the spec (the agent reads `spec/` from its own checkout), so the file itself has to carry the
+ * distinction. Rendering the two halves in one undifferentiated list is precisely the failure
+ * mode the state axis exists to remove — an agent handed a list of behaviours assumes it was
+ * asked to build them, and a tester assumes it was asked to verify them.
+ */
 function renderSpecGroupMarkdown(module: SpecModule, group: RequirementGroup): string {
   const lines: string[] = [`# ${module.name} — ${group.name}`, '']
   if (group.summary) lines.push(group.summary, '')
@@ -509,14 +613,31 @@ function renderSpecGroupMarkdown(module: SpecModule, group: RequirementGroup): s
   if (requirements.length === 0) {
     lines.push('_No requirements captured yet._', '')
   } else {
-    lines.push('## Requirements', '')
-    for (const r of requirements) {
-      lines.push(`- **${r.title}** _(${r.priority}, ${r.kind})_ — ${r.statement}`)
-      for (const a of r.acceptance ?? []) {
-        lines.push(`  - _Given_ ${a.given} _When_ ${a.when} _Then_ ${a.outcome}`)
-      }
+    const established = requirements.filter((r) => (r.state ?? 'aspirational') === 'established')
+    const aspirational = requirements.filter((r) => (r.state ?? 'aspirational') !== 'established')
+    if (established.length > 0) {
+      lines.push(
+        '## Requirements — established',
+        '',
+        '> Observed to hold: a tester exercised these acceptance criteria and they passed.',
+        '> This is STANDING behaviour — breaking any of it is a regression.',
+        '',
+      )
+      for (const r of established) lines.push(...renderRequirementMarkdown(r))
+      lines.push('')
     }
-    lines.push('')
+    if (aspirational.length > 0) {
+      lines.push(
+        '## Requirements — aspirational (not yet built)',
+        '',
+        '> Agreed but NOT yet observed to hold. Do NOT assume the service already behaves this',
+        '> way, and do NOT treat its absence as a regression. Implement one of these only when',
+        '> THIS task asks for it; a tester should record it as `not_covered`, never `not_met`.',
+        '',
+      )
+      for (const r of aspirational) lines.push(...renderRequirementMarkdown(r))
+      lines.push('')
+    }
   }
   const rules = group.rules ?? []
   if (rules.length > 0) {
@@ -603,6 +724,17 @@ export function renderSpecFiles(doc: SpecDoc): RenderedFile[] {
  * requirement's scenarios are tagged `@must`. The `acceptance` agent later polishes
  * these (pass 2). Groups with no acceptance criteria produce no feature file. The caller
  * seeds these once (writes only when absent) so pass-2 polish survives a re-run.
+ *
+ * Two machine-readable anchors ride each scenario:
+ *  - `@aspirational` tags a scenario whose requirement is NOT yet observed to hold, so a
+ *    runner can skip it (`--tags 'not @aspirational'`) instead of reporting a not-yet-built
+ *    behaviour as a failure on every unrelated run.
+ *  - A `# requirement: <id>` comment carries the SPEC REQUIREMENT ID — the key the Tester
+ *    reports its per-requirement verdicts under, and the join key the PR verification report
+ *    uses to pair a criterion with its evidence. It is a comment rather than a tag because a
+ *    Gherkin tag is a bare word: an arbitrary requirement id (dots, colons, slashes from a
+ *    model-supplied `id`) is not safely expressible as one, and a mangled tag would silently
+ *    break the join.
  */
 export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
   const files: RenderedFile[] = []
@@ -610,10 +742,16 @@ export function renderSpecFeatureFiles(doc: SpecDoc): RenderedFile[] {
     const scenarios: string[] = []
     for (const r of group.requirements ?? []) {
       const acceptance = r.acceptance ?? []
+      const aspirational = (r.state ?? 'aspirational') !== 'established'
       for (let i = 0; i < acceptance.length; i++) {
         const a = acceptance[i]!
         const name = acceptance.length > 1 ? `${r.title} (#${i + 1})` : r.title
-        if (r.priority === 'must') scenarios.push('  @must')
+        const tags = [
+          ...(r.priority === 'must' ? ['@must'] : []),
+          ...(aspirational ? ['@aspirational'] : []),
+        ]
+        if (tags.length > 0) scenarios.push(`  ${tags.join(' ')}`)
+        scenarios.push(`  # requirement: ${r.id}`)
         scenarios.push(`  Scenario: ${name}`)
         if (a.given) scenarios.push(`    Given ${a.given}`)
         if (a.when) scenarios.push(`    When ${a.when}`)

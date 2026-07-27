@@ -4,11 +4,15 @@ import type {
   ExecutionInstance,
   PrReportIssue,
   PrVerificationReportPublisher,
+  ResolveRunRepoContext,
+  SpecDoc,
   TaskRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import { readServiceSpec } from '@cat-factory/agents'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
+import { isTesterKind } from './ci.logic.js'
 
 /** Minimal structured logger (pino-compatible); optional, like every other best-effort path. */
 export interface PrReportLogger {
@@ -47,6 +51,12 @@ export interface PrVerificationReportControllerDeps {
   publisher?: PrVerificationReportPublisher
   /** Optional: resolves the task's linked tracker issues in ONE batched read. */
   taskRepository?: TaskRepository
+  /**
+   * Optional: per-run, checkout-free repo access, used to reassemble the service's `spec/`
+   * for the requirement → evidence join. Absent (tests, a no-VCS deployment) ⇒ that section
+   * reports `absent` with a note saying the spec could not be read — never a silent blank.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
   /**
    * Optional: the per-workspace `publishPrVerificationReport` opt-out. Absent (or no saved
    * settings row) ⇒ the default, which is ON — a deployment that wired a publisher wants the
@@ -123,6 +133,7 @@ export class PrVerificationReportController {
           repo: target.repo,
           provider: target.provider,
           runUrl: this.runUrl(workspaceId, instance),
+          spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
           now: this.deps.clock.now(),
         }),
       )
@@ -163,6 +174,71 @@ export class PrVerificationReportController {
     if (!repo) return true
     const settings = (await repo.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
     return settings.publishPrVerificationReport
+  }
+
+  /**
+   * The service's in-repo `spec/`, reassembled from the run's branch for the requirement →
+   * evidence join. Null whenever it could not be read — which the section reports with a note
+   * rather than a blank.
+   *
+   * GATED, then MEMOISED, because this is the report's only repo-reading path and the hook
+   * fires on EVERY settled step:
+   *  - Gate: nothing is read until a tester step has actually produced a report. Before that
+   *    the section's answer is already determined ("no tester step" / "no report yet"), so a
+   *    read would buy nothing; this keeps the ~15 settlements before the tester at zero repo
+   *    calls, exactly as they were before this feature.
+   *  - Memo: reassembling the sharded tree costs one read per module + per group, so the
+   *    handful of settlements AFTER the tester would otherwise repeat it each time. Cached
+   *    per execution id under the same bound as {@link lastPublished}.
+   *
+   * The memo deliberately holds the spec as it stood when the tester ruled. That is the tree
+   * the verdicts were made against, so pairing a later re-read with those same verdicts would
+   * be less truthful, not more — and the promotion post-op rewrites the spec on this very
+   * branch right after the tester settles.
+   */
+  private async serviceSpec(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    prBranch: string | null | undefined,
+  ): Promise<SpecDoc | null> {
+    const resolve = this.deps.resolveRunRepoContext
+    if (!resolve) return null
+    const testerReported = instance.steps.some(
+      (s) => isTesterKind(s.agentKind) && s.test?.lastReport != null,
+    )
+    if (!testerReported) return null
+    const cached = this.specByRun.get(instance.id)
+    if (cached !== undefined) return cached
+    let spec: SpecDoc | null = null
+    try {
+      const ctx = await resolve(workspaceId, instance.blockId)
+      if (ctx) {
+        // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
+        // the PR branch and has not merged yet, so the default branch would be missing exactly
+        // the requirements the tester just ruled on.
+        const view = await readServiceSpec(ctx.repo, prBranch ?? ctx.baseBranch)
+        spec = view.present ? view.spec : null
+      }
+    } catch {
+      // Best-effort, like every other part of this hook: an unreadable spec reports `absent`
+      // with a note, and never fails the run.
+      spec = null
+    }
+    this.rememberSpec(instance.id, spec)
+    return spec
+  }
+
+  /** Per-execution spec memo, bounded exactly like {@link lastPublished}. */
+  private readonly specByRun = new Map<string, SpecDoc | null>()
+
+  private rememberSpec(executionId: string, spec: SpecDoc | null): void {
+    this.specByRun.delete(executionId)
+    this.specByRun.set(executionId, spec)
+    while (this.specByRun.size > PrVerificationReportController.MAX_TRACKED_RUNS) {
+      const oldest = this.specByRun.keys().next()
+      if (oldest.done) break
+      this.specByRun.delete(oldest.value)
+    }
   }
 
   private async linkedIssues(workspaceId: string, blockId: string): Promise<PrReportIssue[]> {

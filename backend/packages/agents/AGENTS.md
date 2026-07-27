@@ -12,7 +12,13 @@
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy).
 - `fragmentLibrary/` — the prompt-fragment library plumbing.
-- `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts.
+- `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts, plus the
+  built-in post-ops (`builtin.ts`: `blueprintPostOp`, `specPostOp`, and `specPromotionPostOp` —
+  the tester-driven `aspirational` → `established` promotion of the in-repo spec) and
+  `readServiceSpec.ts`, the checkout-free reassembly of the sharded `spec/` tree (read by the
+  SPA's service-spec view in `@cat-factory/server`, the promotion post-op, and the PR
+  verification report's requirement → evidence join in orchestration — hence it lives here,
+  below all three).
 - `presets/` — built-in initiative-preset pilots. `docs-refresh/docs-detect.logic.ts` is the
   deterministic, checkout-free repo probe (`detectDocsLayout`) behind the docs-refresh preset's
   form prefill (see `docs/initiatives/initiative-presets-and-docs-refresh.md`).

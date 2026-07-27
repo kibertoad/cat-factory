@@ -351,3 +351,197 @@ describe('renderPrVerificationReport', () => {
     expect(parsePrVerificationReport(JSON.parse(json![1]!)).version).toBe(report.version)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Requirement → evidence. The whole point of this section is that "we didn't check" and
+// "it's broken" never read the same, and that every empty case SAYS which empty it is.
+// ---------------------------------------------------------------------------
+
+const SPEC = {
+  service: 'Shop',
+  summary: '',
+  modules: [
+    {
+      name: 'Identity',
+      summary: '',
+      groups: [
+        {
+          name: 'Auth',
+          summary: '',
+          rules: [],
+          requirements: [
+            {
+              id: 'req-login',
+              title: 'Login',
+              statement: 'The system SHALL log users in.',
+              kind: 'functional' as const,
+              priority: 'must' as const,
+              state: 'established' as const,
+              sourceBlockIds: [],
+              acceptance: [
+                { id: 'req-login-ac-1', given: 'a user', when: 'they log in', outcome: 'a token' },
+              ],
+            },
+            {
+              id: 'req-sso',
+              title: 'SSO',
+              statement: 'The system SHALL support SSO.',
+              kind: 'functional' as const,
+              priority: 'should' as const,
+              state: 'aspirational' as const,
+              sourceBlockIds: [],
+              acceptance: [],
+            },
+            {
+              id: 'req-lockout',
+              title: 'Lockout',
+              statement: 'The system SHALL lock accounts out.',
+              kind: 'functional' as const,
+              priority: 'must' as const,
+              state: 'established' as const,
+              sourceBlockIds: [],
+              acceptance: [],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+}
+
+const testerStep = (requirementVerdicts?: unknown) =>
+  step({
+    agentKind: 'tester-api',
+    test: {
+      attempts: 1,
+      maxAttempts: 3,
+      lastReport: {
+        greenlight: true,
+        summary: 'ran it',
+        tested: [],
+        outcomes: [],
+        concerns: [],
+        ...(requirementVerdicts ? { requirementVerdicts } : {}),
+      },
+    },
+  } as unknown as Partial<PipelineStep> & { agentKind: string })
+
+describe('requirement → evidence section', () => {
+  it('joins the tester verdicts to the spec by requirement id', () => {
+    const report = composePrVerificationReport(
+      instance([
+        step({ agentKind: 'coder' }),
+        testerStep([
+          { requirementId: 'req-login', status: 'met', detail: 'logged in and got a token' },
+          { requirementId: 'req-lockout', status: 'not_met', detail: 'no lockout after 5 tries' },
+        ]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+
+    expect(report.requirements.status).toBe('reported')
+    expect(report.requirements.total).toBe(3)
+    expect(report.requirements.met).toBe(1)
+    expect(report.requirements.notMet).toBe(1)
+    // `req-sso` got no verdict at all — silence is `not_covered`, never `not_met`.
+    expect(report.requirements.notCovered).toBe(1)
+
+    const byId = Object.fromEntries(report.requirements.entries.map((e) => [e.id, e]))
+    expect(byId['req-login']!.verdict).toBe('met')
+    expect(byId['req-login']!.detail).toBe('logged in and got a token')
+    expect(byId['req-lockout']!.verdict).toBe('not_met')
+    expect(byId['req-sso']!.verdict).toBe('not_covered')
+    // The state travels WITH the verdict — `not_covered` against an aspirational requirement
+    // is expected, against an established one it is a coverage gap.
+    expect(byId['req-sso']!.state).toBe('aspirational')
+    expect(byId['req-login']!.state).toBe('established')
+    expect(byId['req-login']!.module).toBe('Identity')
+    expect(byId['req-login']!.group).toBe('Auth')
+    expect(byId['req-login']!.criteriaCount).toBe(1)
+    expect(() => parsePrVerificationReport(report)).not.toThrow()
+  })
+
+  it('distinguishes every reason the section can be empty', () => {
+    // 1. No tester step at all.
+    const noTester = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), {
+      ...INPUTS,
+      spec: SPEC,
+    })
+    expect(noTester.requirements.status).toBe('absent')
+    expect(noTester.requirements.note).toContain('No tester step')
+
+    // 2. A tester step that has not reported yet.
+    const notRun = composePrVerificationReport(
+      instance([step({ agentKind: 'tester-api', state: 'working', progress: 0 })]),
+      { ...INPUTS, spec: SPEC },
+    )
+    expect(notRun.requirements.note).toContain('no report')
+
+    // 3. The spec could not be read — distinct from "there is no spec".
+    const unreadable = composePrVerificationReport(instance([testerStep([])]), {
+      ...INPUTS,
+      spec: null,
+    })
+    expect(unreadable.requirements.note).toContain('could not be read')
+
+    // 4. A readable spec that records NO criteria — "nobody wrote any", not "nobody checked".
+    const noCriteria = composePrVerificationReport(instance([testerStep([])]), {
+      ...INPUTS,
+      spec: { service: 'Shop', summary: '', modules: [] },
+    })
+    expect(noCriteria.requirements.note).toContain('No acceptance criteria are recorded')
+
+    for (const r of [noTester, notRun, unreadable, noCriteria]) {
+      expect(r.requirements.entries).toEqual([])
+      expect(r.requirements.total).toBe(0)
+      expect(() => parsePrVerificationReport(r)).not.toThrow()
+    }
+  })
+
+  it('renders the three verdicts distinguishably and escapes model-authored text', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([
+          // A title + detail carrying every PR-body hazard: a mention, an issue reference, a
+          // closing keyword, a table-breaking pipe and a newline.
+          { requirementId: 'req-login', status: 'met', detail: 'ok | fine\nsecond line' },
+          { requirementId: 'req-lockout', status: 'not_met', detail: 'closes #42 cc @octocat' },
+        ]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    const rendered = renderPrVerificationReport(report)
+    // Only the PROSE half is asserted on: the machine-readable half is inside a ```json fence,
+    // where the host neither auto-links a mention nor parses a table row, so raw values there
+    // are correct (and are what an external consumer must be able to read back).
+    const prose = rendered.slice(0, rendered.indexOf('<details>'))
+    const section = prose.slice(prose.indexOf('### Requirement verification'))
+
+    expect(section).toContain('**1 met**')
+    expect(section).toContain('✅ met')
+    expect(section).toContain('❌ not met')
+    expect(section).toContain('➖ not checked')
+    // The hazards are neutralised: no raw mention, no live issue reference, no broken row.
+    expect(prose).not.toContain('@octocat')
+    expect(prose).not.toContain('#42')
+    expect(prose).not.toContain('ok | fine')
+    expect(prose).not.toContain('fine\nsecond line')
+    // …but the machine-readable block still carries the real values.
+    expect(rendered).toContain('cc @octocat')
+  })
+
+  it('keeps the FIRST verdict for a duplicated requirement id', () => {
+    const report = composePrVerificationReport(
+      instance([
+        testerStep([
+          { requirementId: 'req-login', status: 'met', detail: 'observed' },
+          { requirementId: 'req-login', status: 'not_covered' },
+        ]),
+      ]),
+      { ...INPUTS, spec: SPEC },
+    )
+    const login = report.requirements.entries.find((e) => e.id === 'req-login')!
+    expect(login.verdict).toBe('met')
+    expect(report.requirements.met).toBe(1)
+  })
+})
