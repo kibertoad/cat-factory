@@ -55,6 +55,13 @@ export interface EnvironmentTestProvisioning {
   pollProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<RunnerJobView>
   finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle>
   releaseProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<void>
+  /**
+   * Re-poll a recorded environment's status via its provider (`provider.status`) and persist any
+   * change. The self-test uses this to WAIT for a synchronously-recorded env (a REST provider that
+   * returns immediately with `provisioning` — e.g. Kargo) to actually reach `ready` before tearing
+   * it down, so the test confirms the env stands up rather than just that the create call returned.
+   */
+  refreshStatus(workspaceId: string, id: string): Promise<EnvironmentHandle>
 }
 
 /** The structural subset of the teardown service the self-test drives. */
@@ -366,11 +373,39 @@ export class EnvironmentTestService {
   private async advanceProvisioning(
     record: EnvironmentTestRunRecord,
   ): Promise<EnvironmentTestPollResult> {
-    // The synchronous (raw-manifest / compose) path already recorded the env in
-    // `startTest`; nothing to poll, just move on to teardown.
+    // Synchronous path: the env was recorded at dispatch (`startProvision` returned `completed`),
+    // but a REST provider can return BEFORE the env is actually up — e.g. Kargo's create responds
+    // immediately with `provisioning` and no URL. So poll the provider's status until the env truly
+    // reaches `ready` before tearing it down; the whole point of the self-test is to confirm the env
+    // stands up and is reachable, not merely that the create call returned a handle. The durable
+    // driver's poll budget bounds the wait — a stuck env is `expire()`d and cleaned up — and any
+    // terminal-not-ready status (`failed`/`expired`/torn down) fails the run with the provider's
+    // reason. (A provider that returns `ready` synchronously, e.g. compose, advances on the first
+    // poll, so this stays a fast no-wait for those.)
     if (record.environmentId) {
-      await this.patch(record, { stage: 'tearing_down' })
-      return { state: 'running' }
+      const handle = await this.deps.provisioning.refreshStatus(
+        record.workspaceId,
+        record.environmentId,
+      )
+      if (handle.status === 'ready') {
+        await this.patch(record, {
+          stage: 'tearing_down',
+          ...(handle.url ? { envUrl: handle.url } : {}),
+        })
+        return { state: 'running' }
+      }
+      if (handle.status === 'provisioning') {
+        // Still coming up — surface a URL if one has appeared, and keep polling.
+        if (handle.url && handle.url !== record.envUrl) {
+          await this.patch(record, { envUrl: handle.url })
+        }
+        return { state: 'running' }
+      }
+      // `failed` / `expired` / `torn_down` / `tearing_down` — it will never become ready.
+      throw new Error(
+        handle.lastError ??
+          `Environment provisioning did not become ready (status: ${handle.status}).`,
+      )
     }
     const view = await this.deps.provisioning.pollProvisionJob(
       record.workspaceId,

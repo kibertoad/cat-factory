@@ -114,6 +114,8 @@ function makeService(opts: {
   /** Makes `startProvision` throw AFTER persisting a failed registry row (the real shape). */
   dispatchThrows?: Error
   pollViews?: RunnerJobView[]
+  /** Successive `refreshStatus` results for the synchronous readiness poll (last repeats). Default: ready. */
+  statusPolls?: Partial<EnvironmentHandle>[]
   finalize?: EnvironmentHandle
   finalizeThrows?: Error
   block?: Block | null
@@ -134,6 +136,7 @@ function makeService(opts: {
   const teardowns = opts.teardowns ?? []
   const released = opts.released ?? []
   let pollIdx = 0
+  let statusIdx = 0
   const provisioning: EnvironmentTestProvisioning = {
     canProvision: async () => opts.canProvision ?? { ok: true },
     testProvisioning: async () => (opts.probe === undefined ? { ok: true } : opts.probe),
@@ -190,6 +193,11 @@ function makeService(opts: {
     },
     releaseProvisionJob: async (_ws, ref) => {
       released.push(ref)
+    },
+    refreshStatus: async (_ws, id) => {
+      const seq = opts.statusPolls
+      const next = seq ? (seq[statusIdx++] ?? seq[seq.length - 1]) : { status: 'ready' as const }
+      return { id, url: 'https://live', status: 'ready', ...next } as EnvironmentHandle
     },
   }
   const teardown: EnvironmentTestTeardown = opts.teardownImpl ?? {
@@ -326,6 +334,52 @@ describe('EnvironmentTestService', () => {
     expect(calls.deleted).toEqual([branch])
     // Nothing accretes in the registry: teardown tombstoned the synthetic-block record.
     expect(registry.rows).toEqual([])
+  })
+
+  it('waits for a synchronously-recorded env to reach ready BEFORE tearing it down', async () => {
+    const { repo } = fakeRepo()
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      // A REST provider (e.g. Kargo) records the env at dispatch but it's still coming up.
+      dispatch: { kind: 'completed', handle: { id: 'env-9', url: null } as EnvironmentHandle },
+      statusPolls: [{ status: 'provisioning' }, { status: 'provisioning' }, { status: 'ready' }],
+    })
+    const started = await service.startTest('ws', 'frame-1')
+
+    // First two polls: env still provisioning — stays in `provisioning`, nothing torn down yet.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect((await service.getRun('ws', started.id)).stage).toBe('provisioning')
+    expect(teardowns).toEqual([]) // NOT torn down while still coming up
+
+    // Third poll: env is ready → advance to teardown; then teardown + delete-branch → done.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect((await service.getRun('ws', started.id)).stage).toBe('tearing_down')
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
+
+    expect((await service.getRun('ws', started.id)).status).toBe('succeeded')
+    expect(teardowns).toEqual(['env-9'])
+  })
+
+  it('fails the run (with cleanup) when a synchronously-recorded env never becomes ready', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      dispatch: { kind: 'completed', handle: { id: 'env-9', url: null } as EnvironmentHandle },
+      statusPolls: [{ status: 'failed', lastError: 'VM failed to boot' }],
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    const result = await service.pollEnvTest('ws', started.id)
+    expect(result.state).toBe('failed')
+
+    const final = await service.getRun('ws', started.id)
+    expect(final.status).toBe('failed')
+    expect(final.failedStage).toBe('provisioning')
+    expect(final.error).toContain('VM failed to boot')
+    // Cleanup still runs: the recorded env is torn down and the throwaway branch deleted.
+    expect(teardowns).toEqual(['env-9'])
+    expect(calls.deleted).toEqual(calls.created)
   })
 
   it('passes the real frame as frameId and a synthetic blockId to provisioning', async () => {
