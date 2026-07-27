@@ -109,6 +109,11 @@ function makeService(
 ) {
   const connectionService = {
     resolveProvider: async () => ({ provider, manifest: MANIFEST }),
+    resolveProviderForRecord: async () => ({
+      provider,
+      manifest: MANIFEST,
+      resolveSecret: () => undefined,
+    }),
     resolveSecrets: async () => () => undefined,
   } as unknown as EnvironmentConnectionService
   let n = 0
@@ -181,6 +186,52 @@ describe('EnvironmentProvisioningService — provision context', () => {
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
+  })
+})
+
+describe('EnvironmentProvisioningService — refreshStatus', () => {
+  const FAILED_REASON =
+    'invalid prenv config: file or ref not found: 404 No commit found for the ref cat-factory/env-test/x'
+
+  /** Provisions `provisioning`, then reports `failed` (with a reason) on the next status poll. */
+  function comesUpFailed(): EnvironmentProvider {
+    const provisioning: ProvisionedEnvironment = {
+      externalId: 'ext-1',
+      url: null,
+      status: 'provisioning',
+      expiresAt: null,
+      access: null,
+      fields: { externalId: 'ext-1' },
+    }
+    return {
+      async provision() {
+        return provisioning
+      },
+      async status() {
+        return { ...provisioning, status: 'failed', error: FAILED_REASON }
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+  }
+
+  it("persists the provider's failure reason as lastError on a failed status poll", async () => {
+    const registry = fakeRegistry()
+    const service = makeService(comesUpFailed(), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    // Recorded as `provisioning` with no error yet.
+    expect(registry.records[0]!.status).toBe('provisioning')
+    expect(registry.records[0]!.lastError).toBeNull()
+
+    const handle = await service.refreshStatus('ws1', id)
+
+    expect(handle.status).toBe('failed')
+    // The provider's reason is persisted + surfaced (previously the patch dropped lastError, so a
+    // poll-time failure carried a stale/empty reason).
+    expect(handle.lastError).toBe(FAILED_REASON)
+    expect(registry.records[0]!.lastError).toBe(FAILED_REASON)
   })
 })
 
