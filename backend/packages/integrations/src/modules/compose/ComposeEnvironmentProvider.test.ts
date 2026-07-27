@@ -76,6 +76,7 @@ function fakeRuntime(
 function fakeRunRepo(files: Record<string, string>): RunRepoContext {
   return {
     baseBranch: 'main',
+    repoId: 'repo_1',
     repo: {
       async getFile(path) {
         const content = files[path]

@@ -20,6 +20,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
 import {
   activateForInteraction,
@@ -68,13 +69,23 @@ export function executionController(): Hono<AppEnv> {
     return c.json(block, 200)
   })
 
+  // `reviewEffort` is optional, so the historical body-less merge must keep working (the SPA,
+  // headless clients and the conformance suite all call it that way).
+  app.use('/blocks/:blockId/merge', optionalJsonBody)
   buildHonoRoute(app, mergeBlockContract, async (c) => {
     // Manual confirm-merge runs the engine GitHub client under the acting user's
-    // ambient context, so their per-user PAT (when set) authors the merge.
+    // ambient context, so their per-user PAT (when set) authors the merge. The optional
+    // `reviewEffort` records how much review the PR needed onto the block's merge track record in
+    // the same request; omitting it merges exactly as before and leaves the tag null.
+    const { reviewEffort } = c.req.valid('json')
     const block = await runWithInitiator(c.get('user')?.id, () =>
       c
         .get('container')
-        .executionService.mergePr(param(c, 'workspaceId'), c.req.valid('param').blockId),
+        .executionService.mergePr(
+          param(c, 'workspaceId'),
+          c.req.valid('param').blockId,
+          reviewEffort,
+        ),
     )
     return c.json(block, 200)
   })

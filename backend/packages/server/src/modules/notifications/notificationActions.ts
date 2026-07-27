@@ -1,4 +1,4 @@
-import type { Notification, NotificationType } from '@cat-factory/contracts'
+import type { Notification, NotificationType, ReviewEffort } from '@cat-factory/contracts'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -17,6 +17,10 @@ export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationTyp
   'pipeline_complete',
   'ci_failed',
   'test_failed',
+  // `merge_tag_request` is deliberately ABSENT: its whole action is recording a reviewer-effort
+  // tag the human chose, and the headless `act` route carries no tag — so admitting it would
+  // resolve the nudge while recording nothing. A headless caller tags through
+  // `POST /merge-track-records/:id/effort` (or dismisses the card).
 ])
 
 /**
@@ -33,11 +37,16 @@ export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationTyp
  * `null` and the merge falls back to the deployment's installation token. This lives at the
  * call site (not `NotificationService`) so the service stays free of execution/GitHub
  * concerns; `service.act` runs it exactly once behind its atomic open→acted claim.
+ *
+ * `reviewEffort` — supplied by the merge card's one-tap confirm-and-tag — records onto the run's
+ * merge track record how much review the PR actually needed. It is ALWAYS optional (a headless
+ * caller omits it entirely): an untagged merge records a null tag and nothing downstream breaks.
  */
 export function notificationActEffect(
   container: ServerContainer,
   workspaceId: string,
   userId: string | null | undefined,
+  reviewEffort?: ReviewEffort | null,
 ): (notification: Notification) => Promise<void> {
   return async (notification) => {
     switch (notification.type) {
@@ -45,7 +54,19 @@ export function notificationActEffect(
       case 'pipeline_complete':
         if (notification.blockId) {
           await runWithInitiator(userId, () =>
-            container.executionService.mergePr(workspaceId, notification.blockId!),
+            container.executionService.mergePr(workspaceId, notification.blockId!, reviewEffort),
+          )
+        }
+        break
+      case 'merge_tag_request':
+        // A post-hoc nudge for a PR that already merged externally: there is nothing to merge, so
+        // acting on it ONLY records the tag (when the human picked one). The record id travels on
+        // the card because an external merge has no run the block lookup would find reliably.
+        if (reviewEffort !== undefined && notification.payload?.mergeTrackRecordId) {
+          await container.mergeTrackRecords?.service.tag(
+            workspaceId,
+            notification.payload.mergeTrackRecordId,
+            reviewEffort,
           )
         }
         break

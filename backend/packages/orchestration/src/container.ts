@@ -4,6 +4,7 @@ import { ModuleRegistry } from './container/module-registry.js'
 import {
   createTesterQualityReviewer,
   createSlackModule,
+  createMergeTrackRecordModule,
   createRiskPoliciesModule,
   createSandboxModule,
   createReleaseHealthModule,
@@ -35,7 +36,6 @@ import type {} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 
-import type { BrainstormStage } from '@cat-factory/kernel'
 import type { EnvironmentHandlerSeeder } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
@@ -79,42 +79,15 @@ import {
   EnvironmentTeardownService,
   EnvironmentUserHandlerService,
   RunnerPoolConnectionService,
-  PreflightService,
   ProvisioningLogService,
-  SharedStackService,
-  SlackConnectionService,
-  SlackSettingsService,
-  SlackMemberMappingService,
   type VcsPatConnectionService,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
-import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
-import { KaizenService } from './modules/kaizen/KaizenService.js'
-import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
-import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
-import { NotificationService } from './modules/notifications/NotificationService.js'
-import { RiskPolicyService } from './modules/merge/RiskPolicyService.js'
-import { SandboxService } from './modules/sandbox/SandboxService.js'
-import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
-import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
-import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
-import { PackageRegistryService } from './modules/packageRegistries/PackageRegistryService.js'
-import { PreviewService } from './modules/preview/PreviewService.js'
-import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
-import type { AccountSettingsService } from '@cat-factory/integrations'
-import {
-  ModelPresetService,
-  resolvePresetModelForKind,
-} from './modules/modelPresets/ModelPresetService.js'
-import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
-import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
-import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
-import { InitiativeService } from './modules/initiative/InitiativeService.js'
-import { InitiativeLoopService } from './modules/initiative/InitiativeLoopService.js'
+import { resolvePresetModelForKind } from './modules/modelPresets/ModelPresetService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import type { FragmentLibraryModule, SkillLibraryModule } from './container-content-libraries.js'
 import type {
@@ -212,122 +185,61 @@ interface EnvConfigRepairModule {
   service: EnvConfigRepairService
 }
 
-/** The requirements-review feature's service, present only when its repository is wired. */
-export interface RequirementsModule {
-  service: RequirementReviewService
-}
-
-/** The Kaizen feature's service, present only when its repositories are wired. */
-export interface KaizenModule {
-  service: KaizenService
-}
-
-/** The clarity-review feature's service, present only when its repository is wired. */
-export interface ClarityModule {
-  service: ClarityReviewService
-}
-
-/** The brainstorm feature's per-stage services, present only when its repository is wired. */
-export interface BrainstormModule {
-  services: Record<BrainstormStage, BrainstormService>
-}
-
-/** The notifications feature's service, present only when its repository is wired. */
-export interface NotificationsModule {
-  service: NotificationService
-}
-
-/** The post-release-health (Datadog) settings service, present only when wired. */
-export interface ReleaseHealthModule {
-  service: ReleaseHealthService
-}
-
-/** The private package-registry settings service, present only when wired. */
-export interface PackageRegistriesModule {
-  service: PackageRegistryService
-}
-
-/** The browsable-frontend-preview service, present only when a preview transport is wired. */
-export interface PreviewModule {
-  service: PreviewService
-}
-
-/** The incident-enrichment (PagerDuty + incident.io) settings service, present only when wired. */
-export interface IncidentEnrichmentModule {
-  service: IncidentEnrichmentService
-}
-
-/** The per-account deployment-settings service, present only when wired (facade-built). */
-interface AccountSettingsModule {
-  service: AccountSettingsService
-}
-
-/** The Slack integration's services, present only when its repositories are wired. */
-export interface SlackModule {
-  connectionService: SlackConnectionService
-  settingsService: SlackSettingsService
-  memberMappingService: SlackMemberMappingService
-}
-
-/** The merge-preset feature's service, present only when its repository is wired. */
-export interface RiskPoliciesModule {
-  service: RiskPolicyService
-}
-
-/** The shared-stacks feature's service, present only when its repository is wired. */
-export interface SharedStacksModule {
-  service: SharedStackService
-}
-
-/** The preflight feature's service, present only when the host-probe seam is wired (local facade). */
-export interface PreflightsModule {
-  service: PreflightService
-}
-
-/** The Sandbox feature's services, present only when its repositories are wired. */
-export interface SandboxModule {
-  /** Management CRUD (prompt versions, fixtures, experiments). */
-  service: SandboxService
-  /** The run-driver + judge (`launch` an experiment). */
-  runService: SandboxRunService
-}
-
-/** The workspace-settings feature's service, present only when its repository is wired. */
-export interface WorkspaceSettingsModule {
-  service: WorkspaceSettingsService
-}
-
-/** The per-user-settings feature's service, present only when its repository is wired. */
-interface UserSettingsModule {
-  service: UserSettingsService
-}
-
-/** The model-preset feature's service, present only when its repository is wired. */
-export interface ModelPresetsModule {
-  service: ModelPresetService
-}
-
-/** The default service-fragment feature's service, present only when its repository is wired. */
-export interface ServiceFragmentDefaultsModule {
-  service: ServiceFragmentDefaultsService
-}
-
-/** The recurring-pipeline feature's service, present only when its repository is wired. */
-export interface RecurringModule {
-  service: RecurringPipelineService
-}
-
-/** The initiatives feature's service + execution loop, present only when its repository is wired. */
-export interface InitiativesModule {
-  service: InitiativeService
-  /** The execution loop (slice 3): tick/runDue driven by the cron seams + terminal pokes. */
-  loop: InitiativeLoopService
-}
-
-/** The issue-tracker-settings feature's service, present only when its repository is wired. */
-export interface TrackerModule {
-  service: TrackerSettingsService
-}
+// The small single-/few-service module SHAPES live beside nothing in particular — they are pure
+// declarations — so they are grouped in `container/module-shapes.ts` for file-size hygiene (the
+// same treatment `container-content-libraries.js` already gives the two library shapes) and
+// re-exported here so existing importers are unaffected. `container/modules.ts` imports them from
+// that module directly, which also drops its type-import back-edge onto this file.
+import type {
+  AccountSettingsModule,
+  BrainstormModule,
+  ClarityModule,
+  IncidentEnrichmentModule,
+  InitiativesModule,
+  KaizenModule,
+  MergeTrackRecordModule,
+  ModelPresetsModule,
+  NotificationsModule,
+  PackageRegistriesModule,
+  PreflightsModule,
+  PreviewModule,
+  RecurringModule,
+  ReleaseHealthModule,
+  RequirementsModule,
+  RiskPoliciesModule,
+  SandboxModule,
+  ServiceFragmentDefaultsModule,
+  SharedStacksModule,
+  SlackModule,
+  TrackerModule,
+  UserSettingsModule,
+  WorkspaceSettingsModule,
+} from './container/module-shapes.js'
+export type {
+  AccountSettingsModule,
+  BrainstormModule,
+  ClarityModule,
+  IncidentEnrichmentModule,
+  InitiativesModule,
+  KaizenModule,
+  MergeTrackRecordModule,
+  ModelPresetsModule,
+  NotificationsModule,
+  PackageRegistriesModule,
+  PreflightsModule,
+  PreviewModule,
+  RecurringModule,
+  ReleaseHealthModule,
+  RequirementsModule,
+  RiskPoliciesModule,
+  SandboxModule,
+  ServiceFragmentDefaultsModule,
+  SharedStacksModule,
+  SlackModule,
+  TrackerModule,
+  UserSettingsModule,
+  WorkspaceSettingsModule,
+} from './container/module-shapes.js'
 
 // The two content-library module shapes (`FragmentLibraryModule` / `SkillLibraryModule`) live
 // beside their factories in `container-content-libraries.js` for file-size hygiene; re-exported
@@ -471,6 +383,8 @@ export interface OptionalCoreModules {
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   riskPolicies?: RiskPoliciesModule
+  /** Present only when the merge track-record repository is wired (see CoreDependencies). */
+  mergeTrackRecords?: MergeTrackRecordModule
   /** Present only when the shared-stack repository is wired (see CoreDependencies). */
   sharedStacks?: SharedStacksModule
   /** Present only when the host-probe seam is wired (local facade — see CoreDependencies). */
@@ -629,6 +543,9 @@ export function createCore(dependencies: CoreDependencies): Core {
   // guard, the per-service task limit, and the escalation sweep can read them.
   modules.build('slack', () => createSlackModule(dependencies))
   modules.build('riskPolicies', () => createRiskPoliciesModule(dependencies, caches))
+  const mergeTrackRecords = modules.build('mergeTrackRecords', () =>
+    createMergeTrackRecordModule(dependencies),
+  )
   modules.build('sandbox', () => createSandboxModule(dependencies, agentKindRegistry))
   registerStandaloneModules(modules, dependencies)
   // The collaborators the engine needs BEFORE it is constructed (initiative + interview
@@ -674,6 +591,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     // Read-through slice for `resolveRiskPolicy` (the merge preset re-read on every gate
     // evaluation); `RiskPolicyService` invalidates it on every preset write.
     riskPolicyCache: caches.riskPolicy,
+    // The per-class change classification the merge policy's rules key off, plus the best-effort
+    // record of every merge decision. Absent ⇒ `unknown` class, no rule matches, nothing stored.
+    mergeTrackRecord: mergeTrackRecords?.service,
     // Route runtime fragment-id resolution through the merged tenant catalog (so
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
@@ -746,6 +666,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService,
     environments,
     tasks,
+    mergeTrackRecords,
     notifications,
     initiativeService,
     setInitiativeLoop,

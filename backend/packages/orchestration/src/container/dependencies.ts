@@ -79,6 +79,7 @@ import type {
   LlmCallMetricRepository,
   LlmTraceSink,
   MembershipRepository,
+  MergeTrackRecordRepository,
   ModelPresetRepository,
   ModelProvider,
   ModelProviderResolver,
@@ -875,6 +876,13 @@ export interface CoreDependencies {
   packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * Optional: persistence for the merge track record (one row per merge decision — change class,
+   * merger scores, reviewer-effort tag, outcome — plus the per-class SQL rollups). Absent ⇒ the
+   * whole feature is inert: no classification, no records, no rollups, and the merge policy falls
+   * back to the score thresholds exactly as before.
+   */
+  mergeTrackRecordRepository?: MergeTrackRecordRepository
   /** A workspace's shared stacks (long-lived compose infra a consumer environment attaches to). */
   sharedStackRepository?: SharedStackRepository
   /**

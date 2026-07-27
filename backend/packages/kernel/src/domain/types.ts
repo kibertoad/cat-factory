@@ -358,6 +358,16 @@ export type {
   MergeAxis,
   MergeDecision,
   MergeDecisionThresholds,
+  MergeClassRule,
+  MergeClassRules,
+  // Merge track record (per-class human evidence behind the auto-merge policy).
+  ChangeClass,
+  ReviewEffort,
+  MergeTrackDecision,
+  MergeTrackRecord,
+  MergeClassRollup,
+  ReviewEffortDistribution,
+  TagReviewEffortInput,
   // The engine-maintained PR verification report (composed by orchestration, published
   // through the `PrVerificationReportPublisher` port).
   PrVerificationReport,

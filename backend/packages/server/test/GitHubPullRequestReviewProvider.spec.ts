@@ -15,6 +15,7 @@ import type { ResolveRepoTarget } from '../src/agents/ContainerAgentExecutor.js'
 
 const resolveRepoTarget: ResolveRepoTarget = async () => ({
   installationId: 1,
+  repoId: '1001',
   owner: 'o',
   name: 'r',
   baseBranch: 'main',

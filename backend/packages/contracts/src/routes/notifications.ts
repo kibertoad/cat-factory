@@ -1,6 +1,6 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { notificationSchema } from '../notifications.js'
+import { actNotificationSchema, notificationSchema } from '../notifications.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,9 @@ export const actNotificationContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: notificationIdParams,
   pathResolver: ({ notificationId }) => `/notifications/${notificationId}/act`,
-  requestBodySchema: ContractNoBody,
+  // All-optional body: `{}` is the historical no-body act. A merge card can carry the
+  // reviewer-effort tag here so confirming the merge and tagging it is ONE request.
+  requestBodySchema: actNotificationSchema,
   responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
 })
 

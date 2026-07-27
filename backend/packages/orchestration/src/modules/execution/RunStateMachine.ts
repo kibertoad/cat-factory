@@ -23,6 +23,7 @@ import {
 import { allPullRequests } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { AdvanceResult } from './advance.js'
@@ -87,6 +88,13 @@ export interface RunStateMachineDeps {
   /** The pure step/cursor mutators ({@link StepGraph}) the transitions build on. */
   stepGraph: StepGraph
   notificationService?: NotificationService
+  /**
+   * The merge track record. A no-merger pipeline's `pipeline_complete` card is a MERGE decision
+   * point too (confirming it merges the PR), so the class + a `pending_review` record are written
+   * here as well — otherwise a whole class of human merges would leave no evidence behind.
+   * Best-effort and optional: absent ⇒ the card is raised exactly as before.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
   kaizenScheduler?: KaizenScheduler
   subscriptionActivations?: SubscriptionActivationRepository
   llmObservability?: LlmObservabilityService
@@ -128,6 +136,7 @@ export class RunStateMachine {
   private readonly clock: Clock
   private readonly stepGraph: StepGraph
   private readonly notificationService?: NotificationService
+  private readonly mergeTrackRecord?: MergeTrackRecordService
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly llmObservability?: LlmObservabilityService
@@ -147,6 +156,7 @@ export class RunStateMachine {
     this.clock = deps.clock
     this.stepGraph = deps.stepGraph
     this.notificationService = deps.notificationService
+    this.mergeTrackRecord = deps.mergeTrackRecord
     this.kaizenScheduler = deps.kaizenScheduler
     this.subscriptionActivations = deps.subscriptionActivations
     this.llmObservability = deps.llmObservability
@@ -502,6 +512,13 @@ export class RunStateMachine {
     instance: ExecutionInstance,
     block: Block,
   ): Promise<void> {
+    // Record the decision point BEFORE the card so the card can carry the record id (the human
+    // confirms + tags in one tap). No merger ran, so there are no scores — just the class.
+    const record = await this.mergeTrackRecord?.recordDecision(workspaceId, {
+      block,
+      executionId: instance.id,
+      decision: 'pending_review',
+    })
     if (!this.notificationService) return
     await this.notificationService.raise(workspaceId, {
       type: 'pipeline_complete',
@@ -514,6 +531,8 @@ export class RunStateMachine {
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
+        ...(record && record.changeClass !== 'unknown' ? { changeClass: record.changeClass } : {}),
+        ...(record ? { mergeTrackRecordId: record.id } : {}),
       },
     })
   }

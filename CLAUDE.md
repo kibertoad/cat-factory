@@ -1344,7 +1344,8 @@ still open). Two new container agent kinds plus a special gate step implement it
   `GitHubPullRequestMerger` → `GitHubClient.mergePullRequest` → block `done`) or
   raises a `merge_review` notification leaving the block `pr_ready`. A pipeline with
   **no** merger raises a `pipeline_complete` notification (confirm + merge) instead of
-  auto-`done`.
+  auto-`done`. Before deciding it also **classifies the PR** and consults the preset's
+  per-class rule — see "Merge track record" below.
 - **Merge threshold presets** — a per-workspace library
   (`merge_threshold_presets`; `MergePresetService` +
   `D1MergePresetRepository`; `GET|POST|PATCH|DELETE /workspaces/:ws/merge-presets`).
@@ -1352,7 +1353,42 @@ still open). Two new container agent kinds plus a special gate step implement it
   `TaskModelSettings.vue`); none → the workspace default (lazily seeded from
   `DEFAULT_MERGE_PRESET` in kernel). Carries the auto-merge ceilings + `ciMaxAttempts`
   - the requirements-review knobs `maxRequirementIterations` (default 6) and
-    `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow".
+    `maxRequirementConcernAllowed` (default `none`); see "Requirements review flow" — plus
+    the per-class `classRules` map ("Merge track record" below).
+- **Merge track record** — every merge decision persists one row in `merge_track_records`
+  (D1 ⇄ Drizzle): the run's **deterministic change class**, the merger's scores, the outcome
+  (`pending_review` → `auto_merged` / `human_merged` / `external_merged` / `rejected`), and a
+  nullable **reviewer-effort tag** (`none` / `minor` / `major`). This is the human evidence the
+  auto-merge thresholds are meant to approximate, so a workspace can widen policy on numbers
+  instead of a hunch. The whole feature is a **best-effort side channel of the merge path** —
+  classification and record writes swallow their own failures, so a merge can never fail or block
+  because of it.
+  - **Classification** is pure backend TypeScript over ONE VCS call: `RepoFiles.listChangedFiles`
+    → the pure `classifyChangedFiles` (kernel `domain/change-class.ts`). Deliberately NOT in the
+    harness (no image bump) and provider-neutral, so it works identically on GitLab. Classes are
+    ranked by risk (`docs` < `test` < `dependency` < `config` < `source` < `schema`) and a **mixed
+    diff takes the HIGHEST-ranked class present** — which is what makes a per-class rule safe: a
+    single touched source file lifts a dependency bump to `source`. An unreadable diff yields
+    `unknown`, and **`unknown` never matches a rule**, so a VCS outage can't change policy.
+  - **Per-class rules** (`RiskPolicy.classRules`, a partial map to `thresholds` / `always` /
+    `never`) resolve in `MergeResolver` with a fixed precedence: `autoMergeEnabled: false` (the
+    master switch) > the class rule (`always` bypasses BOTH the score comparison and the
+    empty-rationale backstop; `never` forces review) > the existing credibility + threshold
+    comparison. Surfaced on the decision as `reason: 'class_auto_merge' | 'class_requires_review'`.
+  - **Effort capture** rides the existing merge decision points: `POST /notifications/:id/act`
+    takes an optional `reviewEffort` (the card's one-tap confirm-and-tag, preselected from whether
+    the run's `pr-reviewer` step recorded findings), and `POST /merge-track-records/:id/effort`
+    tags out of band. Dismissing a merge card records `rejected`. A PR merged **directly on the
+    provider** is detected from the `pull_request` webhook (`WebhookServiceDependencies.externalMergeObserver`
+    → `makeExternalMergeObserver`), attributed by `(repoId, prNumber)` off the record itself — no
+    block lookup — and nudged with a dismissible `merge_tag_request` card. Tagging is a nudge,
+    never a gate: an untagged merge records a null tag and nothing downstream breaks on nulls.
+  - **Rollups** are ONE SQL aggregate per workspace (`GROUP BY change_class` + conditional `SUM`s)
+    behind `MergeTrackRecordRepository.rollupByClass` — never rows reduced in JS, never a query per
+    class. `GET /merge-track-records/rollups` returns every class; the preset editor
+    (`MergeClassRulesEditor.vue`) shows each class's rule next to its record.
+  - Full design (the class union, the precedence rationale, the external-merge detection, the preset
+    reshape): [`docs/initiatives/merge-track-record.md`](./docs/initiatives/merge-track-record.md).
 - **Notifications** — a first-class, human-actionable surface (NOT a mid-pipeline
   gate). `notifications` table + `NotificationService`
   (orchestration) behind a `NotificationChannel` port: the canonical row is persisted

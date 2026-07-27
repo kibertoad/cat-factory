@@ -24,10 +24,18 @@ export {
   providerCachesPrompts,
 } from './domain/cache-policy.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
+export {
+  CHANGE_CLASS_RANK,
+  classifyChangedPath,
+  classifyChangedFiles,
+  resolveMergeClassRule,
+  type ChangeClassification,
+} from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_RISK_POLICY,
+  DEFAULT_MERGE_CLASS_RULES,
   RISK_POLICY_SEEDS,
   seedRiskPolicies,
   type RiskPolicySeed,

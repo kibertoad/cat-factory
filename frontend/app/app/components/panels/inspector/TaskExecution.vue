@@ -13,6 +13,8 @@ import EmptyState from '~/components/common/EmptyState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { PipelineStep } from '~/types/execution'
+import type { ChangeClass, ReviewEffort } from '~/types/merge'
+import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -21,6 +23,7 @@ const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
+const trackRecords = useMergeTrackRecordsStore()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 const { confirm } = useConfirm()
@@ -203,6 +206,39 @@ async function resetRun() {
   }
 }
 
+/**
+ * The reviewer-effort tag for this merge, preselected from evidence rather than starting blank: if
+ * the run's `pr-reviewer` step recorded findings, review comments plausibly drove rework
+ * (`minor`); if it did not, the PR needed nothing (`none`). One tap confirms or corrects it, and
+ * `null` merges untagged — tagging is a nudge, never a gate.
+ */
+const mergeEffort = ref<ReviewEffort | null>(null)
+
+watch(
+  () => props.block.status === 'pr_ready',
+  (awaiting) => {
+    if (!awaiting) return
+    // ONE request for every class, only once and only when a merge decision is actually pending.
+    if (!trackRecords.loaded && !trackRecords.loading) void trackRecords.load()
+    // Preselect from evidence rather than leaving it blank. Set HERE (not at setup) because the
+    // run instance may still be loading when this component first mounts.
+    mergeEffort.value ??= (instance.value?.steps ?? []).some(
+      (s) => (s.prReview?.findings?.length ?? 0) > 0,
+    )
+      ? 'minor'
+      : 'none'
+  },
+  { immediate: true },
+)
+
+/** The change class the engine recorded on the run's merger step, when one resolved. */
+const mergeChangeClass = computed<ChangeClass | undefined>(() => {
+  const decision = instance.value?.steps.find((s) => s.agentKind === 'merger')?.custom as
+    | { changeClass?: ChangeClass }
+    | undefined
+  return decision?.changeClass
+})
+
 // Merging a PR is consequential and effectively irreversible — confirm first. `execution.mergePr`
 // surfaces its own error toast, so no catch is needed here.
 async function mergePr() {
@@ -213,7 +249,7 @@ async function mergePr() {
     icon: 'i-lucide-git-merge',
   })
   if (!ok) return
-  await execution.mergePr(props.block.id)
+  await execution.mergePr(props.block.id, mergeEffort.value)
 }
 </script>
 
@@ -548,17 +584,25 @@ async function mergePr() {
       :description="t('inspector.execution.empty.body')"
     />
 
-    <!-- PR ready: merge -->
-    <UButton
-      v-if="block.status === 'pr_ready'"
-      color="success"
-      variant="solid"
-      size="sm"
-      icon="i-lucide-git-merge"
-      block
-      @click="mergePr"
-    >
-      {{ t('inspector.execution.mergePr') }}
-    </UButton>
+    <!-- PR ready: record how much review it needed, then merge. -->
+    <template v-if="block.status === 'pr_ready'">
+      <MergeEffortChips
+        v-model="mergeEffort"
+        :change-class="mergeChangeClass"
+        :rollup="mergeChangeClass ? trackRecords.byClass[mergeChangeClass] : null"
+      />
+      <UButton
+        class="mt-2"
+        color="success"
+        variant="solid"
+        size="sm"
+        icon="i-lucide-git-merge"
+        block
+        data-testid="inspector-merge-pr"
+        @click="mergePr"
+      >
+        {{ t('inspector.execution.mergePr') }}
+      </UButton>
+    </template>
   </InspectorSection>
 </template>

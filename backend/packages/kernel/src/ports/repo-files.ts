@@ -1,4 +1,5 @@
 import type { CommitFilesInput, OpenedPullRequest, OpenPullRequestInput } from '../domain/types.js'
+import type { VcsProvider } from '../domain/vcs-types.js'
 import type {
   CommitFilesResult,
   CreateReviewInput,
@@ -125,6 +126,15 @@ export interface RunRepoContext {
   repo: RepoFiles
   /** The repo's default branch — the `base` clone target a repo-op resolves against. */
   baseBranch: string
+  /**
+   * The repo's provider-neutral identity ({@link VcsRepoRef}), so a caller that resolved a run's
+   * repo through this seam can also RECORD which repo it was — and later correlate an inbound
+   * webhook, which names a repository by exactly this id. Carried here rather than re-resolved
+   * because the resolution already read it.
+   */
+  repoId: string
+  /** Which VCS provider hosts it; absent ⇒ `github` (see the projection's `provider` column). */
+  provider?: VcsProvider
 }
 
 /**

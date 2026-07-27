@@ -26,6 +26,7 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
   MembershipRepository,
+  MergeTrackRecordRepository,
   ModelPresetRepository,
   ObservabilityConnectionRepository,
   PackageRegistryConnectionRepository,
@@ -117,6 +118,8 @@ import {
   DrizzleSharedStackRepository,
 } from './drizzle/initiatives.js'
 
+import { DrizzleMergeTrackRecordRepository } from './drizzle/mergeTrackRecord.js'
+
 import {
   DrizzleIncidentEnrichmentConnectionRepository,
   DrizzleObservabilityConnectionRepository,
@@ -161,6 +164,7 @@ export interface CoreRepositories {
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
   riskPolicyRepository: RiskPolicyRepository
+  mergeTrackRecordRepository: MergeTrackRecordRepository
   sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   userSettingsRepository: UserSettingsRepository
@@ -211,6 +215,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),
     riskPolicyRepository: new DrizzleRiskPolicyRepository(db),
+    mergeTrackRecordRepository: new DrizzleMergeTrackRecordRepository(db),
     sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     userSettingsRepository: new DrizzleUserSettingsRepository(db),

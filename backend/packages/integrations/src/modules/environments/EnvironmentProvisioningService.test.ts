@@ -199,6 +199,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
         openPullRequest: async () => ({ number: 1 }) as never,
       },
       baseBranch: 'main',
+      repoId: 'repo_1',
     })
   }
 

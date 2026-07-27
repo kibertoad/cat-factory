@@ -97,6 +97,8 @@ describe('buildResolveRepoTarget — monorepo service directories', () => {
     const target = await resolve('ws', 'task')
     expect(target).toMatchObject({
       installationId: 42,
+      // Stringified from the projection row's `githubId` — the neutral `VcsRepoRef.repoId`.
+      repoId: '1',
       owner: 'acme',
       name: 'platform',
       baseBranch: 'main',

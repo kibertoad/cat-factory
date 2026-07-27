@@ -57,16 +57,20 @@ const LEGACY_ALLOWANCES = new Map([
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
-  // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The Node
-  // root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
+  // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The small
+  // optional-module SHAPES then moved to `container/module-shapes.ts`, so it ratchets down again.
+  // The Node root's container-agent-executor wiring now lives in `container-executor-deps.ts`, and
+  // the Worker root's external LLM-trace destinations in `container-trace-sinks.ts` — both ratchet
+  // down accordingly.
   ['backend/runtimes/node/src/container.ts', 1550],
   // `CoreDependencies` (the ~815-line `createCore` contract) now lives in `container/dependencies.ts`,
-  // re-exported — the same split the engine's own dependency block got — so the domain composition
-  // root drops back under the DEFAULT budget and needs no allowance at all.
+  // re-exported — the same split the engine's own dependency block got — so, on top of the
+  // module-shapes extraction above, the domain composition root drops back under the DEFAULT
+  // budget and needs no allowance at all.
   // The per-service store factories (`buildTestSecretsService` / `buildValidationConfigService`)
   // now live with the rest of that family in `wireCredentialServices.ts`, so the Worker
   // composition root ratchets down accordingly.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2340],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2300],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -78,10 +82,11 @@ const LEGACY_ALLOWANCES = new Map([
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],
-  // The poll site's pure runner-view → engine-update shaping (`buildRunningUpdate` /
-  // `buildFailureMeta`) now lives with the rest of the output-boundary normalisation in
-  // `containerAgentResult.ts`, so the executor ratchets down accordingly.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1580],
+  // The repo-targeting declaration block (RepoTarget/ResolveRepoTarget/RepoOrigin/…) moved to
+  // `agents/repoTargeting.ts`, and the poll site's pure runner-view → engine-update shaping
+  // (`buildRunningUpdate` / `buildFailureMeta`) now lives with the rest of the output-boundary
+  // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1520],
   ['backend/packages/server/src/github/FetchGitHubClient.ts', 1550],
 ])
 

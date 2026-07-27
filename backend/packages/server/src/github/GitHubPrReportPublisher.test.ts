@@ -29,7 +29,8 @@ function makeDeps(block: Block | null, body: string | null) {
     body: () => current,
     deps: {
       githubClient,
-      resolveRepoTarget: async () => ({ installationId: 1, owner: 'o', name: 'r' }) as never,
+      resolveRepoTarget: async () =>
+        ({ installationId: 1, repoId: '1001', owner: 'o', name: 'r' }) as never,
       blockRepository: { get: async () => block } as unknown as BlockRepository,
     },
   }

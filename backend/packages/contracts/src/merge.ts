@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
+import { changeClassSchema, RULEABLE_CHANGE_CLASSES } from './mergeTrackRecord.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -36,6 +37,44 @@ export const REQUIREMENT_CONCERN_RANK: Record<RequirementConcernLevel, number> =
   medium: 2,
   high: 3,
 }
+
+// ---------------------------------------------------------------------------
+// Per-CLASS auto-merge rules. The score ceilings below apply uniformly to every
+// change, which leaves a workspace unable to express "auto-merge dependency bumps
+// and docs, always review schema changes". A preset therefore also carries an
+// optional rule per {@link ChangeClass}, resolved against the run's deterministic,
+// path-derived classification. See `docs/initiatives/merge-track-record.md`.
+// ---------------------------------------------------------------------------
+
+/**
+ * What a preset does with a pull request of a given change class:
+ *
+ *  - `thresholds` — compare the merger's scores against this preset's ceilings (the default,
+ *    and what an ABSENT entry means, so `{}` behaves exactly like no rules at all).
+ *  - `always`     — auto-merge regardless of the scores.
+ *  - `never`      — always route to a human, regardless of the scores.
+ */
+export const mergeClassRuleSchema = v.picklist(['thresholds', 'always', 'never'])
+export type MergeClassRule = v.InferOutput<typeof mergeClassRuleSchema>
+
+/**
+ * A preset's per-class rules: a PARTIAL map from change class to its rule. An absent class
+ * means `thresholds`, so an empty object is the "behave exactly as before" identity.
+ *
+ * `unknown` is deliberately NOT a member: an unclassifiable diff (no VCS client wired, a
+ * transient provider outage) must fall back to the score thresholds rather than silently
+ * adopt a widened policy. See `RULEABLE_CHANGE_CLASSES`.
+ */
+export const mergeClassRulesSchema = v.partial(
+  // STRICT: an unknown key (notably `unknown`, which no rule may ever match) is a 400 rather than
+  // being silently stripped. A caller who thinks they authored a rule must not be told it worked.
+  v.strictObject(
+    Object.fromEntries(RULEABLE_CHANGE_CLASSES.map((c) => [c, mergeClassRuleSchema])) as {
+      [K in (typeof RULEABLE_CHANGE_CLASSES)[number]]: typeof mergeClassRuleSchema
+    },
+  ),
+)
+export type MergeClassRules = v.InferOutput<typeof mergeClassRulesSchema>
 
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */
@@ -125,6 +164,12 @@ export const riskPolicySchema = v.object({
    * built-in presets.
    */
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
+  /**
+   * Per-change-class auto-merge rules ({@link mergeClassRulesSchema}). An absent class — and
+   * therefore an empty object — means "use the score ceilings above", so `{}` is the identity.
+   * A rule NEVER overrides `autoMergeEnabled: false`: that master switch wins first.
+   */
+  classRules: mergeClassRulesSchema,
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   /**
@@ -165,6 +210,8 @@ export const createRiskPolicySchema = v.object({
   autoMergeEnabled: v.optional(v.boolean(), true),
   /** Estimate gating for the implementation-fork decision phase; absent ⇒ off in `auto` mode. */
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
+  /** Per-change-class auto-merge rules; absent ⇒ every class uses the score ceilings. */
+  classRules: v.optional(mergeClassRulesSchema, {}),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -185,6 +232,8 @@ export const updateRiskPolicySchema = v.object({
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
   autoMergeEnabled: v.optional(v.boolean()),
   forkDecision: v.optional(v.nullable(stepGatingSchema)),
+  /** Replaces the whole rule map (not merged), so clearing a class is a plain omission. */
+  classRules: v.optional(mergeClassRulesSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
@@ -214,6 +263,13 @@ export const mergeDecisionThresholdsSchema = v.object({
   maxRisk: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   maxImpact: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   autoMergeEnabled: v.boolean(),
+  /**
+   * The rule the preset carried for the run's resolved change class, when one applied —
+   * so the decision banner can say "auto-merged because this preset always auto-merges
+   * dependency bumps" rather than implying the scores did it. Absent when the class was
+   * `unknown` (rules never match it) or the preset left the class on `thresholds`.
+   */
+  classRule: v.optional(mergeClassRuleSchema),
 })
 export type MergeDecisionThresholds = v.InferOutput<typeof mergeDecisionThresholdsSchema>
 
@@ -233,6 +289,11 @@ export const mergeDecisionSchema = v.object({
    *  - `merge_partial`: review; a MULTI-REPO task auto-merged some of its PRs but an
    *    intermediate merge failed (cross-repo merges are non-atomic), so the block is left
    *    blocked with a notification enumerating the merged vs unmerged repos.
+   *  - `class_auto_merge`: auto-merged because the preset's rule for the run's change class
+   *    is `always` — the scores (and the rationale-credibility backstop) were bypassed by an
+   *    explicit operator policy keyed on the DETERMINISTIC backend classification.
+   *  - `class_requires_review`: review; the preset's rule for the change class is `never`,
+   *    regardless of how low the scores were.
    */
   reason: v.picklist([
     'within_thresholds',
@@ -242,11 +303,20 @@ export const mergeDecisionSchema = v.object({
     'no_assessment',
     'merge_failed',
     'merge_partial',
+    'class_auto_merge',
+    'class_requires_review',
   ]),
   /** The merger's assessment (absent only when it produced no parseable one). */
   assessment: v.optional(mergeAssessmentSchema),
   thresholds: mergeDecisionThresholdsSchema,
   /** The axes that exceeded their ceiling (empty unless `reason` is `exceeded_thresholds`). */
   exceededAxes: v.array(mergeAxisSchema),
+  /**
+   * The run's deterministic change class, when classification resolved one. Recorded on the
+   * step so the SPA can show WHAT KIND of change the decision was made about (and, with the
+   * class's rollup, how that class has historically fared). Absent ⇒ classification did not
+   * run (no VCS client wired) — the same state `unknown` denotes on a track record.
+   */
+  changeClass: v.optional(changeClassSchema),
 })
 export type MergeDecision = v.InferOutput<typeof mergeDecisionSchema>

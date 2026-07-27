@@ -22,6 +22,7 @@ import { vcsConnectController } from './modules/vcs/VcsConnectController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
+import { mergeTrackRecordController } from './modules/merge/MergeTrackRecordController.js'
 import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { preflightController } from './modules/preflight/PreflightController.js'
@@ -187,8 +188,22 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
 /**
  * The per-workspace API — every controller mounted under `/workspaces/:workspaceId`. Order is
  * significant (shared middleware/routing), so it mirrors the historical registration order.
+ *
+ * Split into two ordered halves — the board / run / human-gate surfaces, then the workspace
+ * CONFIGURATION surfaces (policies, secrets, presets, integrations) — purely for the
+ * per-function statement budget. They are called back-to-back, so the mount order is
+ * byte-for-byte what it was when this was one function.
  */
 function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
+  registerWorkspaceRunControllers(app)
+  registerWorkspaceConfigControllers(app)
+}
+
+/**
+ * The first half of the per-workspace API: the board, the run/execution surfaces, and every
+ * human-gate window a parked run opens. Mounted before {@link registerWorkspaceConfigControllers}.
+ */
+function registerWorkspaceRunControllers<E extends AppEnv>(app: Hono<E>): void {
   // Per-workspace API.
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
@@ -223,7 +238,16 @@ function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', brainstormController())
   app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
+}
+
+/**
+ * The second half of the per-workspace API: the workspace's CONFIGURATION surfaces — merge and
+ * risk policy, shared infra, secrets, presets, and the per-provider integrations. Mounted
+ * immediately after {@link registerWorkspaceRunControllers}, preserving the historical order.
+ */
+function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', riskPolicyController())
+  app.route('/workspaces/:workspaceId', mergeTrackRecordController())
   app.route('/workspaces/:workspaceId', sharedStackController())
   app.route('/workspaces/:workspaceId', preflightController())
   app.route('/workspaces/:workspaceId', sandboxController())

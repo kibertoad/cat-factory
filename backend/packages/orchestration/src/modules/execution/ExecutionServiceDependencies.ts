@@ -54,6 +54,7 @@ import type { DocInterviewService } from '../docInterview/DocInterviewService.js
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type { InitiativeService } from '../initiative/InitiativeService.js'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -391,6 +392,14 @@ export interface ExecutionServiceDependencies {
    * `RiskPolicyService` on every preset write.
    */
   riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
+  /**
+   * Optional: the merge track record — the per-class change classification the merge policy's
+   * per-class rules key off, plus the best-effort record of every merge decision (and the
+   * reviewer-effort tag a human leaves). Absent (no repository wired / tests) ⇒ classification
+   * yields `unknown`, no per-class rule matches, nothing is persisted, and the merge path
+   * behaves exactly as it did before this existed.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
   /**
    * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
    * ambient context, so a per-user PAT (when set) is preferred over the deployment's

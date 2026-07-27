@@ -1173,7 +1173,9 @@
         "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
         "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
         "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge.",
-        "merge_partial": "Some of the task's pull requests merged, but a later one could not, so the change is waiting for a human to finish or revert the multi-repo merge."
+        "merge_partial": "Some of the task's pull requests merged, but a later one could not, so the change is waiting for a human to finish or revert the multi-repo merge.",
+        "class_auto_merge": "This preset always auto-merges this class of change, so the scores were not compared.",
+        "class_requires_review": "This preset always sends this class of change to a human, whatever the scores."
       },
       "scores": "Scores",
       "axis": {
@@ -1790,7 +1792,8 @@
         "fork_decision_pending": "Mark read",
         "pr_review_ready": "Mark read",
         "budget_paused": "Mark read",
-        "key_drift": "Drop stale credentials"
+        "key_drift": "Drop stale credentials",
+        "merge_tag_request": "Record effort"
       }
     },
     "aiProvidersBanner": {
@@ -2521,6 +2524,25 @@
         "onMissing": {
           "run": "Propose anyway",
           "skip": "Skip"
+        }
+      },
+      "classRules": {
+        "heading": "Rules per change class",
+        "help": "Each pull request is classified from the files it changed. A class can always auto-merge, always require review, or fall back to the score ceilings above. The counts show what that class has needed so far.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request still goes to a human. A class rule cannot override that.",
+        "noData": "No history yet",
+        "record": "{merged} merged, {autoShare} automatically",
+        "@record": {
+          "description": "'{autoShare}' is already a formatted percentage; do not add a % sign."
+        },
+        "frictionless": "{share} needed no comments",
+        "@frictionless": {
+          "description": "'{share}' is already a formatted percentage; do not add a % sign."
+        },
+        "rule": {
+          "thresholds": "Use score ceilings",
+          "always": "Always auto-merge",
+          "never": "Always require review"
         }
       }
     },
@@ -3352,7 +3374,8 @@
       "human_test_ready": "Ready for human testing",
       "visual_confirmation_ready": "Ready for visual confirmation",
       "pr_review_ready": "PR review findings",
-      "initiative": "Initiative updates"
+      "initiative": "Initiative updates",
+      "merge_tag_request": "Review-effort tag requested"
     },
     "role": {
       "engineering": "Engineering",
@@ -5315,6 +5338,36 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source"
+    }
+  },
+  "merge": {
+    "changeClass": {
+      "docs": "Docs & copy",
+      "test": "Tests",
+      "dependency": "Dependency bump",
+      "@dependency": {
+        "description": "A change that only bumps third-party package versions (a 'dependency bump'), not a change that depends on something."
+      },
+      "config": "Config & CI",
+      "source": "Source code",
+      "@source": {
+        "description": "'Source' here means program source code (as opposed to docs/config/tests), NOT the origin of something."
+      },
+      "schema": "Schema & migrations",
+      "unknown": "Unclassified"
+    },
+    "effort": {
+      "prompt": "Review effort",
+      "none": "No comments",
+      "@none": {
+        "description": "Answer to 'how much review effort did this PR need?': means the reviewer had NOTHING to say, not that no review happened."
+      },
+      "minor": "Minor notes",
+      "major": "Real rework",
+      "classHistory": "{merged} merged in this class, {autoShare} auto-merged",
+      "@classHistory": {
+        "description": "'{autoShare}' is already a formatted percentage; do not add a % sign."
+      }
     }
   },
   "vcs": {

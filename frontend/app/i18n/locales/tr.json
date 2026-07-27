@@ -1116,7 +1116,9 @@
         "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
         "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
         "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
-        "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor."
+        "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor.",
+        "class_auto_merge": "Bu ön ayar bu değişiklik kategorisini her zaman otomatik birleştirir, bu yüzden puanlar karşılaştırılmadı.",
+        "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir."
       },
       "scores": "Puanlar",
       "axis": {
@@ -1721,7 +1723,8 @@
         "fork_decision_pending": "Okundu olarak işaretle",
         "pr_review_ready": "Okundu işaretle",
         "budget_paused": "Okundu işaretle",
-        "key_drift": "Eski kimlik bilgilerini kaldır"
+        "key_drift": "Eski kimlik bilgilerini kaldır",
+        "merge_tag_request": "Eforu kaydet"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
@@ -2455,6 +2458,19 @@
         "onMissing": {
           "run": "Yine de öner",
           "skip": "Atla"
+        }
+      },
+      "classRules": {
+        "heading": "Değişiklik kategorisi kuralları",
+        "help": "Her pull request, değiştirdiği dosyalardan sınıflandırılır. Bir kategori her zaman otomatik birleştirilebilir, her zaman inceleme isteyebilir ya da yukarıdaki puan eşiklerine dönebilir. Sayılar o kategorinin şimdiye kadar neye ihtiyaç duyduğunu gösterir.",
+        "autoMergeOffWarning": "Bu ön ayarda otomatik birleştirme kapalı, bu yüzden her pull request yine bir kişiye gider. Kategori kuralı bunu geçersiz kılamaz.",
+        "noData": "Henüz geçmiş yok",
+        "record": "{merged} birleştirildi, {autoShare} otomatik",
+        "frictionless": "{share} hiç yorum gerektirmedi",
+        "rule": {
+          "thresholds": "Puan eşiklerini kullan",
+          "always": "Her zaman otomatik birleştir",
+          "never": "Her zaman inceleme iste"
         }
       }
     },
@@ -3268,7 +3284,8 @@
       "human_test_ready": "İnsan testine hazır",
       "visual_confirmation_ready": "Görsel onaya hazır",
       "pr_review_ready": "PR inceleme bulguları",
-      "initiative": "Girisim guncellemeleri"
+      "initiative": "Girisim guncellemeleri",
+      "merge_tag_request": "İnceleme eforu etiketi istendi"
     },
     "role": {
       "engineering": "Mühendislik",
@@ -5186,6 +5203,24 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynağın bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynağın bağlantısı kaldırılamadı"
+    }
+  },
+  "merge": {
+    "changeClass": {
+      "docs": "Dokümantasyon ve metinler",
+      "test": "Testler",
+      "dependency": "Bağımlılık güncellemesi",
+      "config": "Yapılandırma ve CI",
+      "source": "Kaynak kodu",
+      "schema": "Şema ve geçişler",
+      "unknown": "Sınıflandırılmamış"
+    },
+    "effort": {
+      "prompt": "İnceleme eforu",
+      "none": "Yorum yok",
+      "minor": "Küçük notlar",
+      "major": "Ciddi yeniden çalışma",
+      "classHistory": "Bu kategoride {merged} birleştirildi, {autoShare} otomatik"
     }
   },
   "vcs": {

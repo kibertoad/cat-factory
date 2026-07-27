@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import type { Notification } from '~/types/domain'
+import type { ReviewEffort } from '~/types/merge'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -53,10 +54,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
   /** Total open count, for the toolbar badge. */
   const count = computed(() => open.value.length)
 
-  /** Act on a notification (merge / confirm / retry); the board patches via the event. */
-  async function act(id: string) {
+  /**
+   * Act on a notification (merge / confirm / retry); the board patches via the event.
+   *
+   * `reviewEffort` is the merge card's one-tap "how much review did this need?" answer, recorded
+   * onto the run's merge track record in the same request. Always optional: acting without it
+   * merges exactly as before and leaves the record's tag null.
+   */
+  async function act(id: string, reviewEffort?: ReviewEffort | null) {
     const ws = useWorkspaceStore()
-    const resolved = await api.actNotification(ws.requireId(), id)
+    const resolved = await api.actNotification(ws.requireId(), id, reviewEffort)
     upsert(resolved)
     // The action (merge/confirm/retry) changed block/run state — reconcile fully.
     await ws.refresh()

@@ -7,6 +7,7 @@ import {
   RecordingEventPublisher,
   defineCacheSuite,
   defineConformanceSuite,
+  defineMergeTrackRecordSuite,
   defineReviewFrictionSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
@@ -269,6 +270,9 @@ defineWorkspaceRbacSuite(harness)
 // Opt-in review-debt friction: the four settings columns + the board's friction guard must
 // gate task creation identically on D1 and Postgres.
 defineReviewFrictionSuite(harness)
+// Merge track record: the classification → per-class rule → merge → effort tag → per-class SQL
+// rollup chain must behave identically on D1 and Postgres.
+defineMergeTrackRecordSuite(harness)
 // Caching initiative: the Worker serves the fragment catalog through the
 // ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
 // does through Node's live in-memory cache.

@@ -1,0 +1,115 @@
+import type {
+  Block,
+  GroupCacheHandle,
+  ReviewEffort,
+  RiskPolicy,
+  RiskPolicyCacheValue,
+  RiskPolicyRepository,
+} from '@cat-factory/kernel'
+import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
+import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
+import type { ResolvedRunRiskPolicy } from './policy-types.js'
+
+/** The collaborators the merge-policy layer needs; nothing else on the engine. */
+export interface RunMergePolicyDeps {
+  /**
+   * Optional: resolves a task's merge threshold preset (auto-merge ceilings, the per-class
+   * rules, and the CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_RISK_POLICY}.
+   */
+  riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * Optional: the `AppCaches.riskPolicy` slice — read-through for {@link RunMergePolicy.resolve}
+   * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →
+   * every resolve hits the repository. Invalidated by `RiskPolicyService` on every preset write.
+   */
+  riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
+  /**
+   * Optional: the merge track record (classification + the persisted evidence). Absent ⇒ the
+   * recording methods below are no-ops and the merge path behaves exactly as it did before.
+   */
+  mergeTrackRecord?: MergeTrackRecordService
+}
+
+/**
+ * The task's effective MERGE POLICY plus the EVIDENCE behind it, extracted out of
+ * `ExecutionService` as a cohesive collaborator (the `RunDispatcher` controller extractions are
+ * the model): resolving which merge-threshold preset governs a run, and settling that run's merge
+ * track record when a human merges or declines.
+ *
+ * The two belong together — the preset is the policy, the track record is what the policy is
+ * eventually judged against — and neither needs anything else the engine owns, so keeping them
+ * here stops the engine god-file re-growing.
+ *
+ * Every recording method is a **best-effort side channel of the merge path**: it swallows its own
+ * failures, because the merge has already landed and must never be reported as failed on account
+ * of bookkeeping.
+ */
+export class RunMergePolicy {
+  constructor(private readonly deps: RunMergePolicyDeps) {}
+
+  /**
+   * Resolve the merge threshold preset that governs a task: its explicitly-picked preset, else
+   * the workspace default, else the built-in {@link DEFAULT_RISK_POLICY}. Returns the thresholds
+   * the engine compares against, the per-class rules, and the CI attempt budget.
+   */
+  async resolve(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
+    const repo = this.deps.riskPolicyRepository
+    if (repo) {
+      // Read each preset through the cache slice when wired: the row is slow-moving admin config
+      // re-read on every gate evaluation. Group by workspace (one write drops the whole library),
+      // keyed per resolved id so a picked preset and the default cache separately. A null (deleted
+      // id / unseeded default) caches as a value and still falls through, exactly as an uncached
+      // read would (the `RiskPolicyCacheValue` wrapper).
+      const read = async (
+        key: string,
+        load: () => Promise<RiskPolicy | null>,
+      ): Promise<RiskPolicy | null> => {
+        const cache = this.deps.riskPolicyCache
+        if (!cache) return load()
+        return (await cache.get(key, workspaceId, async () => ({ policy: await load() }))).policy
+      }
+      if (block.riskPolicyId) {
+        const id = block.riskPolicyId
+        const picked = await read(`picked:${id}`, () => repo.get(workspaceId, id))
+        if (picked) return picked
+      }
+      const fallback = await read('default', () => repo.getDefault(workspaceId))
+      if (fallback) return fallback
+    }
+    return DEFAULT_RISK_POLICY
+  }
+
+  /**
+   * Settle the block's latest merge track record as `human_merged`, tagging the reviewer effort
+   * when one was supplied. Resolved by BLOCK (not by run) because the merge controls that reach
+   * here are block-scoped — a single point-read, never inside a loop.
+   */
+  async recordHumanMerge(
+    workspaceId: string,
+    blockId: string,
+    reviewEffort?: ReviewEffort | null,
+  ): Promise<void> {
+    const svc = this.deps.mergeTrackRecord
+    if (!svc) return
+    try {
+      const record = await svc.getLatestByBlock(workspaceId, blockId)
+      if (!record || !record.executionId) return
+      await svc.resolveDecision(workspaceId, record.executionId, 'human_merged', reviewEffort)
+    } catch {
+      // Best-effort (see the class doc).
+    }
+  }
+
+  /**
+   * Record that a human DECLINED to merge — they dismissed the review card rather than acting on
+   * it. The counterpart of {@link recordHumanMerge}: without it a class's rollup would leave
+   * rejections as forever-`pending_review` and overstate the auto-merge-share denominator.
+   */
+  async recordRejection(workspaceId: string, executionId: string): Promise<void> {
+    try {
+      await this.deps.mergeTrackRecord?.resolveDecision(workspaceId, executionId, 'rejected')
+    } catch {
+      // Best-effort (see the class doc).
+    }
+  }
+}

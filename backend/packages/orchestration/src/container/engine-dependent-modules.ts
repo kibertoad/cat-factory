@@ -20,7 +20,9 @@ import {
 import type { ModuleRegistry } from './module-registry.js'
 import type { createEnvironmentsModule, createTasksModule } from './modules.js'
 import type { ExecutionService } from '../modules/execution/ExecutionService.js'
-import type { CoreDependencies, NotificationsModule } from '../container.js'
+import { makeExternalMergeObserver } from '../modules/merge/externalMergeObserver.js'
+import type { CoreDependencies } from '../container.js'
+import type { MergeTrackRecordModule, NotificationsModule } from './module-shapes.js'
 import type { resolveCoreRuntime } from './runtime.js'
 
 type CoreRuntime = ReturnType<typeof resolveCoreRuntime>
@@ -34,6 +36,12 @@ export interface EngineDependentModulesInput {
   environments: ReturnType<typeof createEnvironmentsModule> | undefined
   tasks: ReturnType<typeof createTasksModule> | undefined
   notifications: NotificationsModule | undefined
+  /**
+   * The merge track record, when wired: the VCS webhook ingest attributes an externally-merged PR
+   * through it (and raises the reviewer-effort nudge). Absent ⇒ the observer is not wired and an
+   * external merge leaves the record as it was.
+   */
+  mergeTrackRecords: MergeTrackRecordModule | undefined
   initiativeService: InitiativeService | undefined
   setInitiativeLoop: (loop: InitiativeLoopService | undefined) => void
 }
@@ -48,10 +56,17 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
     environments,
     tasks,
     notifications,
+    mergeTrackRecords,
     initiativeService,
     setInitiativeLoop,
   } = input
-  modules.build('github', () => createGitHubModule(dependencies, caches))
+  const externalMergeObserver = mergeTrackRecords
+    ? makeExternalMergeObserver({
+        trackRecord: mergeTrackRecords.service,
+        notifications: notifications?.service,
+      })
+    : undefined
+  modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
   modules.build('runners', () => createRunnersModule(dependencies))
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.

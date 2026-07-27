@@ -455,6 +455,19 @@
           "run": "Proponi comunque",
           "skip": "Salta"
         }
+      },
+      "classRules": {
+        "heading": "Regole per categoria di modifica",
+        "help": "Ogni pull request viene classificata dai file che ha modificato. Una categoria può essere sempre unita automaticamente, richiedere sempre una revisione, oppure ricadere sulle soglie qui sopra. I conteggi mostrano che cosa ha richiesto finora quella categoria.",
+        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa comunque da una persona. Una regola di categoria non può ignorarlo.",
+        "noData": "Nessuno storico finora",
+        "record": "{merged} uniti, {autoShare} automaticamente",
+        "frictionless": "{share} senza alcun commento",
+        "rule": {
+          "thresholds": "Usa le soglie",
+          "always": "Unisci sempre automaticamente",
+          "never": "Richiedi sempre una revisione"
+        }
       }
     },
     "observabilityConnection": {
@@ -1406,7 +1419,9 @@
         "no_rationale": "Il merger ha valutato la PR ma non ha fornito alcuna motivazione, quindi il verdetto non poteva essere ritenuto affidabile per l'unione automatica; la PR e' in attesa che un umano la unisca.",
         "no_assessment": "Il merger non ha restituito una valutazione analizzabile, quindi la PR e' in attesa che un umano la unisca.",
         "merge_failed": "I punteggi rientravano nelle soglie {preset}, ma l'unione automatica non e' riuscita a completarsi (ad esempio protezione del branch o un conflitto), quindi la PR e' in attesa che un umano la unisca.",
-        "merge_partial": "Alcune delle pull request dell'attivita' sono state unite, ma una successiva non e' riuscita, quindi la modifica e' in attesa che un umano completi o annulli l'unione multi-repository."
+        "merge_partial": "Alcune delle pull request dell'attivita' sono state unite, ma una successiva non e' riuscita, quindi la modifica e' in attesa che un umano completi o annulli l'unione multi-repository.",
+        "class_auto_merge": "Questo preset unisce sempre automaticamente questa categoria di modifica, quindi i punteggi non sono stati confrontati.",
+        "class_requires_review": "Questo preset invia sempre questa categoria di modifica a una persona, indipendentemente dai punteggi."
       },
       "scores": "Punteggi",
       "axis": {
@@ -1818,7 +1833,8 @@
         "fork_decision_pending": "Segna come letto",
         "pr_review_ready": "Segna come letto",
         "budget_paused": "Segna come letto",
-        "key_drift": "Elimina credenziali obsolete"
+        "key_drift": "Elimina credenziali obsolete",
+        "merge_tag_request": "Registra l’impegno"
       }
     },
     "aiProvidersBanner": {
@@ -4247,7 +4263,8 @@
       "human_test_ready": "Pronto per il test umano",
       "visual_confirmation_ready": "Pronto per la conferma visiva",
       "pr_review_ready": "Rilievi revisione PR",
-      "initiative": "Aggiornamenti dell'iniziativa"
+      "initiative": "Aggiornamenti dell'iniziativa",
+      "merge_tag_request": "Richiesta impegno di revisione"
     },
     "role": {
       "engineering": "Ingegneria",
@@ -5186,6 +5203,24 @@
       "checkSourceFailed": "Impossibile controllare la fonte",
       "sourceUnlinked": "Fonte scollegata",
       "unlinkSourceFailed": "Impossibile scollegare la fonte"
+    }
+  },
+  "merge": {
+    "changeClass": {
+      "docs": "Documentazione e testi",
+      "test": "Test",
+      "dependency": "Aggiornamento dipendenze",
+      "config": "Configurazione e CI",
+      "source": "Codice sorgente",
+      "schema": "Schema e migrazioni",
+      "unknown": "Non classificato"
+    },
+    "effort": {
+      "prompt": "Impegno di revisione",
+      "none": "Nessun commento",
+      "minor": "Note minori",
+      "major": "Rilavorazione sostanziale",
+      "classHistory": "{merged} uniti in questa categoria, {autoShare} in automatico"
     }
   },
   "vcs": {

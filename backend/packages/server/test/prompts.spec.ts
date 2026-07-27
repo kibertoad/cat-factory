@@ -19,6 +19,7 @@ const agentKindRegistry = defaultAgentKindRegistry()
 
 const repo: RepoTarget = {
   installationId: 1,
+  repoId: '1001',
   owner: 'acme',
   name: 'widgets',
   baseBranch: 'main',

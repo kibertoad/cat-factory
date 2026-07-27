@@ -50,6 +50,9 @@ export interface MentionAudience {
 const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   merge_review: { roles: [], includeCreator: true },
   pipeline_complete: { roles: [], includeCreator: true },
+  // A post-hoc "how much review did that need?" nudge for a PR that already merged: the
+  // creator is the only person who can answer, and nobody else needs paging over it.
+  merge_tag_request: { roles: [], includeCreator: true },
   ci_failed: { roles: [], includeCreator: true },
   test_failed: { roles: [], includeCreator: true },
   requirement_review: { roles: ['product'], includeCreator: true },
@@ -160,6 +163,7 @@ export function resolveRoute(
 const TYPE_LABEL: Record<NotificationType, string> = {
   merge_review: ':eyes: Merge review',
   pipeline_complete: ':white_check_mark: Pipeline complete',
+  merge_tag_request: ':label: Tag review effort',
   ci_failed: ':rotating_light: CI failed',
   test_failed: ':rotating_light: Tests failed',
   requirement_review: ':memo: Requirement review',

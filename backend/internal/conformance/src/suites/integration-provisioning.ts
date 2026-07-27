@@ -23,7 +23,13 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
       expect(balanced.isDefault).toBe(true)
       expect(balanced.autoMergeEnabled).toBe(true)
-      expect(balanced.version).toBe(3)
+      // Bumped to 4 when the built-ins gained `classRules` (the per-class auto-merge rules), so
+      // existing workspaces are advised to reseed and pick the new field up.
+      expect(balanced.version).toBe(4)
+      // The built-ins ship NO per-class rules: every class falls back to the score ceilings, which
+      // is byte-for-byte the historical policy.
+      expect(balanced.classRules).toEqual({})
+      expect(manual.classRules).toEqual({})
       // The QC-companion budget round-trips with its default through both stores.
       expect(balanced.maxTesterQualityIterations).toBe(3)
       // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
@@ -110,8 +116,8 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         `/workspaces/${wsId}`,
       )
       expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-        mp_balanced: 3,
-        mp_manual_review: 3,
+        mp_balanced: 4,
+        mp_manual_review: 4,
       })
 
       // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -125,7 +131,9 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(reseeded.status).toBe(200)
       expect(reseeded.body.name).toBe('Balanced')
       expect(reseeded.body.autoMergeEnabled).toBe(true)
-      expect(reseeded.body.version).toBe(3)
+      expect(reseeded.body.version).toBe(4)
+      // A reseed also restores the canonical (empty) per-class rule map.
+      expect(reseeded.body.classRules).toEqual({})
       // The default is preserved across a reseed.
       expect(reseeded.body.isDefault).toBe(true)
 

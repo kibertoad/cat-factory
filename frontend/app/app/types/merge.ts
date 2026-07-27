@@ -6,6 +6,13 @@
 
 export type {
   MergeAssessment,
+  // Merge track record — the per-class human evidence behind the auto-merge policy.
+  ChangeClass,
+  MergeClassRollup,
+  MergeClassRule,
+  MergeClassRules,
+  MergeTrackRecord,
+  ReviewEffort,
   RequirementConcernLevel,
   RiskPolicy,
   CreateRiskPolicyInput,

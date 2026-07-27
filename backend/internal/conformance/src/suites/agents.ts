@@ -267,7 +267,10 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
         const app = harness.makeApp(
           { customResult: { findings: 'all clear' } },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }), agentKindRegistry },
+          {
+            resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }),
+            agentKindRegistry,
+          },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -356,7 +359,10 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
         const app = harness.makeApp(
           { customResult: { findings: 'all clear' } },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }), agentKindRegistry },
+          {
+            resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }),
+            agentKindRegistry,
+          },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -518,7 +524,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
             confidence: 1,
             mergeAssessment: { complexity: 0, risk: 0, impact: 0, rationale: 'Docs-only change.' },
           },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -560,7 +566,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         }
         const app = harness.makeApp(
           { customResult: SPIKE_FINDINGS },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -622,7 +628,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         }
         const app = harness.makeApp(
           { customResult: SPIKE_FINDINGS },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -675,7 +681,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
               modules: [{ name: 'Billing', summary: 'Invoices', references: ['src/billing.ts'] }],
             },
           },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
@@ -758,7 +764,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
               ],
             },
           },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id

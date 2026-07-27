@@ -23,7 +23,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `auth/` — HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
 - `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
-  `requireWorkspacePermission` — the admin-tier controller middleware); `config/` — the `AppConfig`
+  `requireWorkspacePermission` — the admin-tier controller middleware) and `optionalJsonBody`
+  (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
+  otherwise makes the transport require a body, which breaks body-less callers of a route that
+  merely gained an optional field); `config/` — the `AppConfig`
   contract; `runtime/gateways.ts` — the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `persistence/mappers.ts` — the dialect-agnostic row↔domain mappers shared by **both** stores.

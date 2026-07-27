@@ -10,7 +10,6 @@ import {
   type GitHubClient,
   type GroupCacheHandle,
   type IdGenerator,
-  type LlmTraceSink,
   type ModelProviderResolver,
   type NotificationChannel,
   composeTraceSinks,
@@ -76,6 +75,13 @@ import {
 // custom CA (Node/local) — exactly like a private-CA `kubernetes` connection — so on the Worker
 // the kind is offered but a connection to such a cluster fails TLS at run time, not silently.
 import { resolveWorkerRegistries } from './container-registries.js'
+import {
+  buildLangfuseSink,
+  buildOtelSink,
+  buildTraceSink,
+  selectTraceSink,
+} from './container-trace-sinks.js'
+export { selectTraceSink }
 import { assembleWorkerContainer } from './container-assembly.js'
 import {
   AgentContextObservabilityService,
@@ -88,8 +94,6 @@ import {
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
-import { createLangfuseSink } from '@cat-factory/observability-langfuse'
-import { createOtelSink } from '@cat-factory/observability-otel'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
@@ -118,7 +122,7 @@ import {
   type ServerContainer,
   type WebSearchUpstream,
 } from '@cat-factory/server'
-import { type AppConfig, type LangfuseConfig, type OtelConfig, loadConfig } from './config'
+import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import { loadOtelConfig } from './config/otel'
@@ -181,6 +185,7 @@ import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewReposit
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
+import { D1MergeTrackRecordRepository } from './repositories/D1MergeTrackRecordRepository'
 import { D1RiskPolicyRepository } from './repositories/D1RiskPolicyRepository'
 import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
 import {
@@ -694,6 +699,7 @@ export function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
+    mergeTrackRecordRepository: new D1MergeTrackRecordRepository({ db }),
     // Shared stacks (long-lived compose infra a consumer environment attaches to). CRUD +
     // persistence are runtime-symmetric; the Worker never brings a stack UP (no host daemon),
     // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
@@ -1139,49 +1145,6 @@ function buildSystemEmailSender(
   })
   if (!sender) return undefined
   return async () => sender
-}
-
-/**
- * The opt-in Langfuse trace sink. Built only when `LANGFUSE_ENABLED=true` and both keys are
- * set. A fetch-based sink, so it runs unchanged on the Worker runtime.
- */
-function buildLangfuseSink(langfuse: LangfuseConfig): LlmTraceSink | undefined {
-  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return undefined
-  return createLangfuseSink({
-    publicKey: langfuse.publicKey,
-    secretKey: langfuse.secretKey,
-    baseUrl: langfuse.baseUrl,
-    logger,
-  })
-}
-
-/**
- * The opt-in OpenTelemetry OTLP exporter. Built only when `OTEL_ENABLED=true` and an
- * endpoint is set. The Worker uses the FETCH-based exporter (`createOtelSink`) so it runs
- * on workerd; the Node facade uses the official-SDK exporter instead (both conformant).
- */
-function buildOtelSink(otel: OtelConfig): LlmTraceSink | undefined {
-  if (!otel.enabled || !otel.endpoint) return undefined
-  return createOtelSink({
-    endpoint: otel.endpoint,
-    headers: otel.headers,
-    serviceName: otel.serviceName,
-    logger,
-  })
-}
-
-/**
- * Compose every enabled external trace destination into the single sink slot: none ⇒
- * undefined, one ⇒ that sink, both ⇒ a fan-out. The observability service then fans every
- * recorded LLM call (+ tool spans) out to whichever are wired.
- */
-function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
-  return composeTraceSinks([buildLangfuseSink(config.langfuse), buildOtelSink(config.otel)])
-}
-
-export function selectTraceSink(config: AppConfig): Partial<CoreDependencies> {
-  const sink = buildTraceSink(config)
-  return sink ? { llmTraceSink: sink } : {}
 }
 
 // The deployment-wide trusted web-search upstream for CONTAINER agents, built from this
