@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { defineAgentFragmentConformance } from './agent-fragments.js'
 import { defineAgentGateConformance } from './agent-gates.js'
 import { defineValidationChecksConformance } from './validation-checks.js'
+import { defineReproductionProofConformance } from './reproduction-proof.js'
 import type { ConformanceHarness } from '../harness.js'
 
 export function defineAgentConformance(harness: ConformanceHarness): void {
@@ -647,6 +648,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
     defineAgentGateConformance(harness)
 
     defineValidationChecksConformance(harness)
+
+    defineReproductionProofConformance(harness)
 
     describe('built-in blueprints post-op', () => {
       // The migrated `blueprints` kind dispatches the generic `agent` (read-only structured

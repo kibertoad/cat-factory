@@ -1326,6 +1326,87 @@ checkout opens a PR. Full design + the decisions (config source, scope, budgets)
   checks" rather than failing the dispatch — so a mothership node on an older image, or a
   transient outage, can't stop every build.
 
+## Bugfix reproduction proof (the SECOND pre-PR harness phase — evidence, never a gate)
+
+A bugfix run's PR claims a change fixes a defect. Everything above proves the state of the work at
+the END; none of it shows the defect ever manifested. So the harness runs the run's **declared
+reproduction command against TWO trees** — the pre-fix tree and the tree the PR opens from — and
+publishes the two exit codes with their captured output. Only **red-then-green** is proof. Design +
+phase checklist: [`docs/initiatives/bugfix-reproduction-proof.md`](./docs/initiatives/bugfix-reproduction-proof.md).
+
+- **The declaration seam is singular: the prior `repro-test` step's structured outcome** (its
+  `command` / `setupCommand` / `testPaths` / `alternativeVerification`). The `coder` is deliberately
+  NOT made a structured-output kind — it is a side-effect kind that legitimately ends with no final
+  text. Gated on the per-task `coder.reproductionProof` tri-state (an `agentConfig` descriptor, the
+  `forkDecision` shape), resolved by the pure `reproductionProof.logic.ts` → `AgentRunContext.reproduction`
+  → the job body, on the `opensPr` dispatch only — the `validationChecks` path, step for step.
+- **SYMMETRY is the safety property, and the only defence against a false `reproduced`.** A non-zero
+  exit at base proves nothing on its own (a missing toolchain, an uninstalled dep, an unrelated
+  pre-existing breakage all produce one), so both phases run in freshly-created `git worktree`
+  checkouts with the SAME setup command and the byte-identical declared test files. An environmental
+  defect then fails BOTH, and red-then-red is `inconclusive`, never proof. Two mechanics are
+  load-bearing: target **`baseSha`** specifically (the coding clone is `--depth 1 --single-branch`,
+  so `HEAD~1`/`origin/<base>` are not in history), and apply the **declared PATHS only** onto the
+  base worktree — a whole-tree checkout would drag the fix across and green it. Red-for-the-wrong-
+  REASON is a stated limitation, not something the harness detects; both outputs ride the report so
+  a human can see why. Do not let a later iteration claim more.
+- **Declared test paths are refused for git PATHSPEC MAGIC, not just traversal** (both in the
+  engine's `isSafeTestPath` and the harness's own copy — keep them in step). They are handed to
+  `git checkout <finalSha> -- <path>`, where `--` stops a path being read as a REVISION but does
+  NOTHING about pathspec syntax: `:(glob)**`, `*`, `src/*.test.ts` are all valid pathspecs, so one
+  would apply far more of the final tree onto the base worktree than the reproduction — dragging
+  the fix across and greening the base. These strings are MODEL-AUTHORED, so that is a reachable
+  input. A refused path counts as an omission (`omittedTestPaths`), never a silent shortening.
+- **A GREEN pre-fix tree is only interpretable once you know what that tree IS.** In the designed
+  flow `baseSha` is the reproduction step's test commit, so green there means the test does not
+  demonstrate the defect. But a coder container evicted mid-run has already committed and
+  checkpoint-pushed its work, and the re-dispatch RESUMES that branch — `baseSha` then carries this
+  same step's own partial fix, the check legitimately passes, and stating "your test does not
+  demonstrate the defect" is false AND spends the whole repair budget inviting the agent to weaken
+  a perfectly good reproduction. So on a green base (and ONLY then — it costs a fetch) the harness
+  probes `changedFilesSinceBase`; non-test changes there mean the note says so and NO repair round
+  is spent. The probe is memoised per loop and degrades to the plain diagnosis when it cannot
+  answer (a shallow clone has no reachable merge base) — an unavailable answer must never suppress
+  a diagnosis on a guess.
+- **Repairable is an explicit OUTPUT of an attempt, not something re-derived from the report.**
+  Three shapes are NOT repairable, all for the same reason — the agent is not what is wrong, so a
+  round can only add cost or damage: a failed **setup** (it did not declare that command), a
+  **timed-out** tree (a watchdog kill is not a failing assertion), and the **prior-work base**
+  above.
+- **The phase is bounded twice: `maxAttempts` rounds AND `REPRODUCTION_TOTAL_BUDGET_MS`** (45m).
+  Attempts multiply two full tree runs each, and the phase's own heartbeat deliberately stops the
+  job-level inactivity watchdog from firing — which removes the accidental backstop it would
+  otherwise have had, so the wall-clock budget is what actually bounds it. Checked at phase
+  boundaries (real bound = budget + at most one command watchdog); exceeding it settles
+  `inconclusive` with a note, never a run failure.
+- **Both pre-PR phases spawn through ONE seam** — `captured-command.ts`'s `runCapturedCommand`
+  (watchdog, abort, exit-code conventions 124/127/130, scrub-then-bound capture). They were two
+  near-verbatim copies, which is how a fix to one silently misses the other.
+- **A failed verification is a REPAIR, not a run failure.** The captured output goes back to the
+  agent (with an explicit rule against weakening the reproduction) while budget remains, then
+  degrades to `inconclusive` with the PR still opening. Deliberately the OPPOSITE disposition from
+  `validationFailureMessage`: a red check means the WORK is broken so refusing the PR is right; an
+  unproven reproduction means the EVIDENCE is weak, which is a reviewer's call. A **setup** failure
+  spends no repair rounds — the agent cannot change a setup command it did not declare.
+- **The proof runs BEFORE the validation loop**, so validation stays the last thing to touch the
+  tree and "only a green checkout opens a PR" holds unconditionally. Order matters: reversing it
+  would let a reproduction repair round leave the checkout red behind the gate.
+- **Per-job state, absolutely** (a fresh `mkdtemp` worktree root; commands/cwd/env all arguments).
+  A shared root would let two concurrent bugfix runs check out over each other's base trees — which
+  surfaces as a FALSE VERDICT on a pull request, not a crash. `reproduction-proof.concurrency.test.ts`
+  is the required pin; the container path alone would never catch it. Both harness-spawned phases
+  feed the inactivity watchdog on the 30s heartbeat, for the reason the validation loop does.
+- **The verdict reaches the step LIVE and terminally** (`RunnerJobView`/`RunnerJobResult.reproductionReport`
+  → `AgentRunResult.reproductionReport` → `PipelineStep.reproduction`), on the success AND failure
+  paths, and through a runner pool via the `reproductionReportPath` manifest mapping. Each publish
+  stamps a FRESH `at` — the engine's `sameReproductionReport` compares on it.
+- **A CONCEDE is minted by the ENGINE, not here**: a run whose reproduction step declared the bug
+  infeasible dispatches no proof (there is nothing to run), so `concededReproductionReport` records
+  the declaration — reason + stated alternative verification — as `declared_infeasible`. That is why
+  "could not be reproduced" never reads the same as "nobody tried".
+- **Unconfigured ⇒ byte-for-byte the old behaviour**: tri-state `off`/`auto`-not-met, or no
+  declaration ⇒ no context field ⇒ no job-body field ⇒ the harness's pre-existing path.
+
 ## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
 
 The tail of a build pipeline turns an open PR into a merged one — gated on **real**

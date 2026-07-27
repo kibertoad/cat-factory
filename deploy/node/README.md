@@ -100,7 +100,7 @@ The named app schemas (`telemetry` / `sandbox` / `provisioning`) are fixed and n
 ## Choosing the default model preset
 
 Every workspace's model-preset library is seeded on first use with three built-ins
-(Kimi K2.7, GLM-5.2, Claude Opus 4.8); the Node facade marks **Kimi K2.7** as the
+(Kimi K2.7, GLM-5.2, Claude Opus 5); the Node facade marks **Kimi K2.7** as the
 default because it runs on the bare Cloudflare AI baseline. To ship a different
 out-of-the-box default, pass `defaultModelPresetId` to `start()` — the entry (`src/main.ts`)
 is yours to edit:

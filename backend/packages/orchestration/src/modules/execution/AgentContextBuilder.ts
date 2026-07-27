@@ -47,7 +47,8 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
-import type { ResolvedValidationChecks } from '@cat-factory/contracts'
+import type { ResolvedReproduction, ResolvedValidationChecks } from '@cat-factory/contracts'
+import { resolveReproductionSpec } from './reproductionProof.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -343,6 +344,7 @@ export class AgentContextBuilder {
       this.resolveSkillForStep(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
+    const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
     const priorOutputs = [
       ...(architectureDirection
         ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
@@ -420,6 +422,7 @@ export class AgentContextBuilder {
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
       ...validationChecks,
+      ...reproduction,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
       // (identities are self-contained), so no repo reads here.
@@ -604,7 +607,6 @@ export class AgentContextBuilder {
     }
   }
 
-  /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   /**
    * The service frame's PRE-PR VALIDATION CHECKS, already shaped as a spread-ready fragment (`{}`
    * when the resolver is unwired, the block has no service frame, the service configured none, or
@@ -632,6 +634,36 @@ export class AgentContextBuilder {
     }
   }
 
+  /**
+   * The BUGFIX REPRODUCTION PROOF spec for this dispatch, as a spreadable `{ reproduction? }` —
+   * the same branch-free shape as {@link validationChecksFor}, and for the same reason: the
+   * `buildContext` call site is at its complexity ceiling.
+   *
+   * Unlike every other resolver here this is PURE and reads nothing: the declaration is already
+   * on the run's own steps (the prior `repro-test` step's structured outcome), so it costs no
+   * round-trip and needs no degrade-on-throw swallow. Reuses the service's pre-PR validation
+   * repair budget when one is configured, so an operator meets ONE attempt-budget concept rather
+   * than two — a service that set that budget to fail fast gets a matching number of proof
+   * rounds, which is the intended coupling, not a leak. Absent ⇒ no context field ⇒ no job-body
+   * field ⇒ the harness's existing path.
+   */
+  private reproductionFor(
+    agentKind: string,
+    agentConfig: Block['agentConfig'],
+    instance: ExecutionInstance,
+    validationChecks: { validationChecks?: ResolvedValidationChecks },
+  ): { reproduction?: ResolvedReproduction } {
+    const reproduction = resolveReproductionSpec({
+      agentKind,
+      agentConfig,
+      steps: instance.steps,
+      currentStep: instance.currentStep,
+      maxAttempts: validationChecks.validationChecks?.maxAttempts,
+    })
+    return reproduction ? { reproduction } : {}
+  }
+
+  /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
     return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
   }

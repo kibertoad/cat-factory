@@ -156,22 +156,22 @@ The reference implementation is the merge/mergeability provider shape — a kern
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                                         | Status  | PR   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---- |
-| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                               | 🟩 done | this |
-| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                           | 🟩 done | this |
-| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                            | 🟩 done | this |
-| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                     | 🟩 done | this |
-| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                          | 🟩 done | this |
-| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                    | 🟩 done | this |
-| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                        | 🟩 done | this |
-| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                        | 🟩 done | this |
-| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                     | 🟩 done | this |
-| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                               | 🟩 done | this |
-| 9   | **Phase 2** — harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent) | ⬜ todo |      |
-| 10  | **Phase 2** — bugfix reproduction proof: the failing-then-passing test demonstrated across the fix                                            | ⬜ todo |      |
-| 11  | **Phase 2 follow-up** — per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                          | ⬜ todo |      |
-| 12  | **Phase 2 follow-up** — retire the narrow deep-link replay once global-search slice 4 lands                                                   | ⬜ todo |      |
+| #   | Slice                                                                                                                                                                            | Status         | PR   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---- |
+| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                  | 🟩 done        | this |
+| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                              | 🟩 done        | this |
+| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                               | 🟩 done        | this |
+| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                        | 🟩 done        | this |
+| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                             | 🟩 done        | this |
+| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                       | 🟩 done        | this |
+| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                           | 🟩 done        | this |
+| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                           | 🟩 done        | this |
+| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                        | 🟩 done        | this |
+| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                  | 🟩 done        | this |
+| 9   | **Phase 2** — harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                    | ⬜ todo        |      |
+| 10  | **Phase 2** — bugfix reproduction proof: the failing-then-passing test demonstrated across the fix — tracked in [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) | 🟨 in-progress |      |
+| 11  | **Phase 2 follow-up** — per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                             | ⬜ todo        |      |
+| 12  | **Phase 2 follow-up** — retire the narrow deep-link replay once global-search slice 4 lands                                                                                      | ⬜ todo        |      |
 
 ### Phase-2 notes (read before starting slice 9)
 
@@ -187,4 +187,8 @@ The reference implementation is the merge/mergeability provider shape — a kern
   referencing a stored artifact over inlining megabytes into a PR body.
 - Slice 10 pairs naturally with the existing `repro-test` agent kind (bug-triage phase G),
   whose `{ outcome, testPaths, notes }` assessment already names the reproduction tests — the
-  missing half is the before/after evidence.
+  missing half is the before/after evidence. **This is now its own initiative** — see
+  [`bugfix-reproduction-proof.md`](./bugfix-reproduction-proof.md) for the design decisions
+  (the proof is a harness phase, not a step; symmetric worktrees defend against a false
+  "reproduced"; the declaration seam stays `repro-test` rather than making the coder
+  structured) and the phase checklist. Read it before touching this row.

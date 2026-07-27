@@ -122,6 +122,15 @@ export const runnerPoolResponseMappingSchema = v.object({
    * envelope, which is still enough to gate the PR and carry the failure evidence.
    */
   validationReportPath: v.optional(v.string()),
+  /**
+   * Dot-path to the LATEST bugfix reproduction-proof attempt the harness published (the harness
+   * `reproductionReport` latest-value channel — NOT a drain buffer). A pool that proxies the
+   * cat-factory executor-harness verbatim should set this to `reproductionReport` so a pool-backed
+   * bugfix run surfaces a failed verification WHILE its repair loop runs, exactly like a
+   * Cloudflare/local container. Absent ⇒ the verdict is surfaced only from the terminal result
+   * envelope, which is still enough for the PR report and the step card.
+   */
+  reproductionReportPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**

@@ -16,9 +16,12 @@ import {
 // resolver wrapper that serves an enabled subscription harness ref either via the developer's host
 // CLI (native ambient vendor, binary present) or a warm container on a leased credential.
 
+// Must stay in step with the `claude-opus` catalog entry's subscription ref: the predicate and
+// the resolver wrapper resolve a vendor by looking the ref up in the real MODEL_CATALOG, so a
+// stale model id here makes every assertion below fall through to the delegated provider.
 const CLAUDE_SUB: ModelRef = {
   provider: 'anthropic',
-  model: 'claude-opus-4-8',
+  model: 'claude-opus-5',
   harness: 'claude-code',
 }
 const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
@@ -103,14 +106,14 @@ describe('wrapResolverWithInlineHarness', () => {
     // Drive the runner: it leases the initiator's personal credential and dispatches to the container.
     const runner = (model as unknown as { run: (r: InlineCliRequest) => Promise<unknown> }).run
     const result = (await runner({
-      model: 'claude-opus-4-8',
+      model: 'claude-opus-5',
       system: 'sys',
       prompt: 'go',
     })) as { text: string }
     expect(leasePersonalSubscriptionToken).toHaveBeenCalledWith('exec_1', 'usr_1', 'claude')
     expect(runInline).toHaveBeenCalledOnce()
     expect(runInline.mock.calls[0]![0].subscriptionToken).toBe('oat-token')
-    expect(result.text).toContain('claude-opus-4-8')
+    expect(result.text).toContain('claude-opus-5')
   })
 
   it('leases a POOLED token (workspace only) for a poolable vendor via the container', async () => {
@@ -150,7 +153,7 @@ describe('wrapResolverWithInlineHarness', () => {
         run: (r: InlineCliRequest) => Promise<unknown>
       }
     ).run
-    await expect(runner({ model: 'claude-opus-4-8', system: '', prompt: 'go' })).rejects.toThrow(
+    await expect(runner({ model: 'claude-opus-5', system: '', prompt: 'go' })).rejects.toThrow(
       /signed-in user and an active run/,
     )
   })
@@ -165,7 +168,7 @@ describe('wrapResolverWithInlineHarness', () => {
 
 describe('runnerForVendor', () => {
   const req: InlineCliRequest = {
-    model: 'claude-opus-4-8',
+    model: 'claude-opus-5',
     system: 'You are a reviewer.',
     prompt: 'Review it.',
   }
@@ -197,7 +200,7 @@ describe('runnerForVendor', () => {
       expect(calls[0]!.command).toBe('claude')
       expect(calls[0]!.args).toContain('--append-system-prompt')
       expect(calls[0]!.args).toContain('You are a reviewer.')
-      expect(calls[0]!.args).toContain('claude-opus-4-8')
+      expect(calls[0]!.args).toContain('claude-opus-5')
       expect(calls[0]!.stdin).toBe('Review it.')
     })
 

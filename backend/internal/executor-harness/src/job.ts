@@ -2,7 +2,16 @@ import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 import type { EffortReport } from './effort.js'
-import type { ValidationChecksSpec, ValidationReport } from './validation-checks.js'
+import {
+  parseValidationChecksSpec,
+  type ValidationChecksSpec,
+  type ValidationReport,
+} from './validation-checks.js'
+import {
+  parseReproductionSpec,
+  type ReproductionReport,
+  type ReproductionSpec,
+} from './reproduction-proof.js'
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -172,38 +181,6 @@ function parseValidationSpec(value: unknown): ValidationSpec | undefined {
       ? { progressPath: o.progressPath }
       : {}),
     ...(iteration !== undefined ? { iteration } : {}),
-  }
-}
-
-/**
- * Parse the optional PRE-PR VALIDATION CHECKS spec (see
- * docs/initiatives/pre-pr-validation.md): the service's ordered `{ label, command }` pairs and
- * the repair-round budget. Every entry needs a non-empty command; entries without one are
- * dropped, and a spec that ends up with no usable check returns `undefined` — so a malformed
- * body degrades to the exact pre-feature behaviour (no loop, PR opens as before) rather than
- * failing an otherwise-good coding run. `maxAttempts` is clamped to a sane range so a bad body
- * can't make a container loop forever.
- */
-function parseValidationChecksSpec(value: unknown): ValidationChecksSpec | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
-  const o = value as Record<string, unknown>
-  if (!Array.isArray(o.checks)) return undefined
-  const checks: { label: string; command: string }[] = []
-  for (const raw of o.checks) {
-    if (typeof raw !== 'object' || raw === null) continue
-    const c = raw as Record<string, unknown>
-    if (typeof c.command !== 'string' || c.command.trim() === '') continue
-    const label = typeof c.label === 'string' && c.label.trim() ? c.label.trim() : c.command
-    checks.push({ label, command: c.command })
-  }
-  if (checks.length === 0) return undefined
-  const parsed = posInt(o.maxAttempts)
-  return {
-    checks,
-    maxAttempts: Math.min(
-      parsed ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
-      VALIDATION_MAX_ATTEMPTS_CEILING,
-    ),
   }
 }
 
@@ -872,20 +849,17 @@ export interface AgentJob extends HarnessAuthFields {
    * job DATA, not the agent kind. See {@link ValidationChecksSpec}.
    */
   validationChecks?: ValidationChecksSpec
+  /**
+   * Coding mode: the run's BUGFIX REPRODUCTION PROOF — the declared reproduction command, the
+   * test file(s) that constitute it, and an optional setup command. When set, the harness runs
+   * that command against the pre-fix tree AND the tree the PR will open from, and reports both
+   * exit codes: only red-then-green is proof. Present only on a dispatch that opens a PR and
+   * whose run carries a reproduction declaration; absent ⇒ the run behaves exactly as before.
+   * Deliberately keyed off job DATA, not the agent kind. See
+   * `docs/initiatives/bugfix-reproduction-proof.md`.
+   */
+  reproduction?: ReproductionSpec
 }
-
-/**
- * The ceiling the harness clamps a body-supplied `validationChecks.maxAttempts` to, and the
- * default it applies when the body omits one.
- *
- * DELIBERATE DUPLICATES of `VALIDATION_MAX_ATTEMPTS_CEILING` / `VALIDATION_DEFAULT_MAX_ATTEMPTS`
- * in `@cat-factory/contracts` — the published image takes no schema dependency, so the harness
- * cannot import them. Keep the two in step: the API validates writes against the contracts
- * values, so a harness clamping to a DIFFERENT ceiling would silently cap a budget an operator
- * was allowed to save, with nothing to flag the mismatch.
- */
-export const VALIDATION_MAX_ATTEMPTS_CEILING = 10
-export const VALIDATION_DEFAULT_MAX_ATTEMPTS = 3
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
 export interface GuardLimitsSpec {
@@ -938,6 +912,14 @@ export interface AgentResult {
    * Absent when the job carried no {@link AgentJob.validationChecks}.
    */
   validationReport?: ValidationReport
+  /**
+   * The BUGFIX REPRODUCTION PROOF: the declared reproduction command's verdict across the pre-fix
+   * tree and the final tree, computed by the harness from exit codes. Present on every outcome of
+   * a job that carried {@link AgentJob.reproduction} — a verdict is evidence, not a gate, so an
+   * `inconclusive` one accompanies the opened PR exactly like a `reproduced` one does. Absent
+   * when the job carried no reproduction declaration.
+   */
+  reproductionReport?: ReproductionReport
   /**
    * Preview mode: the in-container URL the built app is served at (e.g. `http://localhost:4173`).
    * This is NOT host-reachable on its own — the container runtime publishes the serve port to an
@@ -1345,6 +1327,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     guardLimits: parseGuardLimits(o.guardLimits),
     validation: parseValidationSpec(o.validation),
     validationChecks: parseValidationChecksSpec(o.validationChecks),
+    reproduction: parseReproductionSpec(o.reproduction),
     reviewPrNumber: posInt(o.reviewPrNumber),
   })
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
@@ -1383,6 +1366,7 @@ interface ParsedAgentJobParts {
   guardLimits: ReturnType<typeof parseGuardLimits>
   validation: ReturnType<typeof parseValidationSpec>
   validationChecks: ReturnType<typeof parseValidationChecksSpec>
+  reproduction: ReturnType<typeof parseReproductionSpec>
   reviewPrNumber: number | undefined
 }
 
@@ -1436,6 +1420,7 @@ function assembleAgentJob(
     guardLimits,
     validation,
     validationChecks,
+    reproduction,
     reviewPrNumber,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
@@ -1465,6 +1450,7 @@ function assembleAgentJob(
     ...(guardLimits ? { guardLimits } : {}),
     ...(validation ? { validation } : {}),
     ...(validationChecks ? { validationChecks } : {}),
+    ...(reproduction ? { reproduction } : {}),
   }
 }
 

@@ -14,9 +14,12 @@ import {
 // has the vitest runner; kernel does not) since these functions gate the requirements reviewer +
 // the preset satisfiability guard.
 
+// Must stay in step with the `claude-opus` catalog entry's subscription ref: these helpers
+// resolve a vendor by looking the ref up in the real MODEL_CATALOG, so a stale model id here
+// silently resolves to `undefined` rather than `claude`.
 const CLAUDE_SUB: ModelRef = {
   provider: 'anthropic',
-  model: 'claude-opus-4-8',
+  model: 'claude-opus-5',
   harness: 'claude-code',
 }
 const GLM_SUB: ModelRef = { provider: 'zai', model: 'glm-5.2', harness: 'claude-code' }

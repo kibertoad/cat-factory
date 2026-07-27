@@ -97,7 +97,7 @@ export async function startLocal(
      * to change the out-of-the-box default without editing library code. Threaded into
      * `buildLocalContainer` on BOTH the Postgres and mothership paths. Applied only at FIRST seed
      * of a workspace's preset library, so a user's later manual default choice always wins.
-     * Omitted ⇒ the local facade default (Claude Opus 4.8).
+     * Omitted ⇒ the local facade default (Claude Opus 5).
      */
     defaultModelPresetId?: string
     /**

@@ -50,7 +50,7 @@ export interface NativeModel {
  * with the backend catalog when the flagship models change.
  */
 export const NATIVE_MODELS: NativeModel[] = [
-  { id: 'claude-opus', label: 'Claude Opus 4.8', harness: 'claude-code' },
+  { id: 'claude-opus', label: 'Claude Opus 5', harness: 'claude-code' },
   { id: 'claude-sonnet', label: 'Claude Sonnet 4.6', harness: 'claude-code' },
   { id: 'gpt-5.5', label: 'GPT-5.5', harness: 'codex' },
   { id: 'gpt-5.4', label: 'GPT-5.4', harness: 'codex' },

@@ -734,7 +734,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
 
       // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
       // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
-      // and Claude Opus 4.8. Each built-in carries its catalog version.
+      // and Claude Opus 5. Each built-in carries its catalog version.
       const initial = await call<ModelPreset[]>('GET', `/workspaces/${workspace.id}/model-presets`)
       expect(initial.status).toBe(200)
       const seeded = initial.body
@@ -796,7 +796,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       expect(snap.body.modelPresetCatalogVersions).toMatchObject({
         mdp_kimi: 1,
         mdp_glm: 1,
-        mdp_claude: 1,
+        mdp_claude: 2,
       })
 
       // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
