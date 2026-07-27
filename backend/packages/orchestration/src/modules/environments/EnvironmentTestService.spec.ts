@@ -232,6 +232,30 @@ describe('EnvironmentTestService', () => {
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
   })
 
+  it('rejects an un-provisionable service, keeping the conflict CODE and the handler sub-reason distinct', async () => {
+    // Regression: the sub-reason used to be passed as `{ reason }`, which `ConflictError` merges as
+    // `{ reason: code, ...details }` — so it CLOBBERED the `env_test_not_provisionable` code the SPA
+    // keys its localized copy + jump off, leaving only the raw message. The code must survive on
+    // `details.reason`; the handler sub-reason rides alongside on `details.handlerIssue`.
+    const { service, runRepo } = makeService({ canProvision: { ok: false, reason: 'no-handler' } })
+    const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const conflict = err as ConflictError
+    expect(conflict.details?.reason).toBe('env_test_not_provisionable')
+    expect(conflict.details?.handlerIssue).toBe('no-handler')
+    // A pre-dispatch gate 409: it throws before any run record is inserted.
+    expect(runRepo.rows.size).toBe(0)
+  })
+
+  it('carries the type-mismatch handler sub-reason on the un-provisionable conflict', async () => {
+    const { service } = makeService({ canProvision: { ok: false, reason: 'type-mismatch' } })
+    const err = await service.startTest('ws', 'frame-1').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    const conflict = err as ConflictError
+    expect(conflict.details?.reason).toBe('env_test_not_provisionable')
+    expect(conflict.details?.handlerIssue).toBe('type-mismatch')
+  })
+
   it('rejects a workspace with no git provider as a 409 (no run record is created)', async () => {
     const { service, runRepo } = makeService({ repoContext: null })
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)

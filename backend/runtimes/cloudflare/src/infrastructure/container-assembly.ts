@@ -16,6 +16,7 @@ import type {
   AccountSettingsService,
   ApiKeyService,
   LocalModelEndpointService,
+  NotificationWebhookService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
@@ -39,6 +40,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
+import type { NotificationChannel } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -138,6 +140,15 @@ export interface WorkerContainerAssemblyInput {
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
   publicApiKeys: PublicApiKeyService | undefined
+  /**
+   * The outbound notification-webhook feature (management service + delivery channel), or null
+   * when the deployment has no encryption key to seal the signing secret with. Both halves arrive
+   * together from one builder so they can't drift apart.
+   */
+  notificationWebhookSupport: {
+    service: NotificationWebhookService
+    channel: NotificationChannel
+  } | null
   localModelEndpoints: LocalModelEndpointService | undefined
   userSecrets: UserSecretService | undefined
   openRouterCatalog: OpenRouterCatalogService | undefined
@@ -186,6 +197,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     validationConfigService,
     personalSubscriptions,
     apiKeys,
+    notificationWebhookSupport,
     localModelEndpoints,
     openRouterCatalog,
     eventPublisher,
@@ -317,7 +329,15 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
-    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator, providerRegistry),
+    ...selectMergeLifecycleDeps({
+      env,
+      config,
+      db,
+      clock,
+      idGenerator,
+      providerRegistry,
+      webhookChannel: notificationWebhookSupport?.channel,
+    }),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
     // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
     // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s
@@ -403,6 +423,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     personalSubscriptions,
     apiKeys,
     publicApiKeys,
+    notificationWebhookSupport,
     localModelEndpoints,
     userSecrets,
     openRouterCatalog,
@@ -450,7 +471,11 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   const agentRunRepository = new D1AgentRunRepository({ db })
   // The EXTERNAL (non-in-app) delivery channels, for the mothership delivery seam below. Built
   // from the same source of truth `selectMergeLifecycleDeps` composes into the engine's fan-out.
-  const externalNotificationChannel = buildExternalNotificationChannel(config, db)
+  const externalNotificationChannel = buildExternalNotificationChannel(
+    config,
+    db,
+    notificationWebhookSupport?.channel,
+  )
 
   return {
     ...createCore(dependencies),
@@ -578,6 +603,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     apiKeys,
     // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
     publicApiKeys,
+    // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
+    notificationWebhooks: notificationWebhookSupport?.service,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a

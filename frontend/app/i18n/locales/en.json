@@ -554,6 +554,8 @@
         "env_test_not_a_frame": "The environment self-test runs per service, so it can only be started on a service, not on a module or task.",
         "env_test_infraless": "This service has no ephemeral-environment provisioning configured, so there is nothing for the self-test to exercise.",
         "env_test_not_provisionable": "This service has a provision type, but no workspace handler resolves for it yet, so provisioning can't run. Configure an environment handler.",
+        "env_test_not_provisionable_no_handler": "No workspace environment handler is configured for this service's provision type. In Infrastructure → Test environments, register one — for a custom provider, a Custom (remote-custom) handler whose accepted manifest id matches the one this service pins.",
+        "env_test_not_provisionable_type_mismatch": "More than one environment handler could match this service's provision type. Pin a manifest id for this service so exactly one resolves, or remove the overlapping handler in Infrastructure → Test environments.",
         "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one."
       },
       "action": {
@@ -2614,6 +2616,7 @@
       "scopes": {
         "read": "Read only",
         "write": "Read and write",
+        "decide": "Answer decisions",
         "admin": "Full access"
       },
       "toast": {

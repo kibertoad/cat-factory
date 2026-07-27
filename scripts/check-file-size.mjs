@@ -63,13 +63,18 @@ const LEGACY_ALLOWANCES = new Map([
   // `CoreDependencies` (the ~815-line `createCore` contract) now lives in `container/dependencies.ts`,
   // re-exported — the same split the engine's own dependency block got — so the domain composition
   // root drops back under the DEFAULT budget and needs no allowance at all.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2350],
+  // The per-service store factories (`buildTestSecretsService` / `buildValidationConfigService`)
+  // now live with the rest of that family in `wireCredentialServices.ts`, so the Worker
+  // composition root ratchets down accordingly.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2340],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
   // The opt-in integration tables (sealed connections + per-service-frame integration config)
-  // now live in `schema-integrations.ts`, re-exported from `schema.ts` — so it ratchets down.
-  ['backend/runtimes/node/src/db/schema.ts', 2240],
+  // now live in `schema-integrations.ts`, re-exported from `schema.ts`. Combined with main's own
+  // trimming the file is down to ~2130, so the allowance ratchets to the tighter of the two
+  // in-flight values and then some.
+  ['backend/runtimes/node/src/db/schema.ts', 2150],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2250],

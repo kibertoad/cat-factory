@@ -529,6 +529,20 @@ function buildRunnersConfig(env: NodeJS.ProcessEnv): AppConfig['runners'] {
     : { enabled: false }
 }
 
+/**
+ * The outbound notification webhook has no enable flag — it assembles wherever the shared
+ * ENCRYPTION_KEY is set (the signing secret must be sealable), and delivery is governed by whether
+ * a workspace registered an endpoint. Only the SSRF guard is configurable, and it is scoped to
+ * webhooks alone: this is the one integration whose target URL a WORKSPACE chooses, so it must not
+ * ride the operator-set runner/environment allow-lists. Mirrors the Worker.
+ */
+function buildNotificationWebhookConfig(env: NodeJS.ProcessEnv): AppConfig['notificationWebhooks'] {
+  return {
+    allowUrlHosts: csv(env.NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS),
+    allowHttpUrls: env.NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS === 'true',
+  }
+}
+
 /** Retention windows (ms) for the append-heavy telemetry/log tables. */
 function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
   return {
@@ -667,6 +681,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       slackEnabled && slackEncryptionKey
         ? { enabled: true, encryptionKey: slackEncryptionKey }
         : { enabled: false },
+    notificationWebhooks: buildNotificationWebhookConfig(env),
     // Observability post-release-health: opt-in (`OBSERVABILITY_ENABLED=true`) + the
     // shared ENCRYPTION_KEY (the per-workspace provider credentials are sealed at rest).
     // Mirrors the Worker. Incident-enrichment credentials (PagerDuty / incident.io) moved

@@ -512,6 +512,8 @@
         "env_test_not_a_frame": "L'auto-test d'environnement s'exécute par service, il ne peut donc être lancé que sur un service, pas sur un module ou une tâche.",
         "env_test_infraless": "Ce service n'a aucun provisionnement d'environnement éphémère configuré, il n'y a donc rien que l'auto-test puisse exercer.",
         "env_test_not_provisionable": "Ce service a un type de provisionnement, mais aucun gestionnaire de l'espace de travail ne s'y applique encore, le provisionnement ne peut donc pas s'exécuter. Configurez un gestionnaire d'environnement.",
+        "env_test_not_provisionable_no_handler": "Aucun gestionnaire d'environnement de l'espace de travail n'est configuré pour le type de provisionnement de ce service. Dans Infrastructure → Environnements de test, enregistrez-en un — pour un fournisseur personnalisé, un gestionnaire Custom (remote-custom) dont le manifest id accepté correspond à celui que ce service épingle.",
+        "env_test_not_provisionable_type_mismatch": "Plusieurs gestionnaires d'environnement pourraient correspondre au type de provisionnement de ce service. Épinglez un manifest id pour ce service afin qu'un seul se résolve, ou supprimez le gestionnaire qui se chevauche dans Infrastructure → Environnements de test.",
         "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun."
       },
       "action": {
@@ -2426,6 +2428,7 @@
       "scopes": {
         "read": "Lecture seule",
         "write": "Lecture et écriture",
+        "decide": "Répondre aux décisions",
         "admin": "Accès complet"
       },
       "toast": {

@@ -1327,6 +1327,15 @@ export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
  * column), like {@link ExecutionInstance.notes}/`frontendBindings`. Absent on legacy runs and on
  * runs with no container step (pure inline/gate pipelines). NEVER carries a token or secret.
  */
+/**
+ * How a run entered the system. `ui` is every in-app surface (the SPA board, an initiative
+ * spawn, a recurring schedule fire) and is the DEFAULT for anything that doesn't say
+ * otherwise; `public-api` is a run started headlessly through the `/api/v1` surface, where
+ * there is no human in the app to answer a park. See {@link ExecutionInstance.intakeOrigin}.
+ */
+export const intakeOriginSchema = v.picklist(['ui', 'public-api'])
+export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
+
 export const runDiagnosticsSchema = v.object({
   /** Context of the most recent container-step dispatch. */
   lastDispatch: v.optional(
@@ -1433,6 +1442,18 @@ export const executionInstanceSchema = v.object({
    * signed-in user (auth-disabled/local dev) and for legacy runs.
    */
   initiatedBy: v.optional(v.nullable(v.string())),
+  /**
+   * HOW this run entered the system — `ui` (the SPA / any in-app surface, the default) or
+   * `public-api` (started headlessly through `/api/v1`). Distinct from `initiatedBy`, which is
+   * `null` for a public-API run, a recurring-schedule fire AND auth-disabled dev alike, and
+   * from the launch-time `RunOrigin` (`manual`/`recurring`), which gates pipeline availability
+   * and is not persisted. Recorded because clarification behaviour diverges by intake: a
+   * headless run may push its parked questions out to the task's linked tracker issue, whereas
+   * a UI-started task's overseer is in the SPA and must keep behaving exactly as before.
+   * Carried forward across retry/restart. Absent on legacy runs ⇒ treated as `ui` (the safe
+   * reading: no outbound question writeback for a run whose intake we can't prove was headless).
+   */
+  intakeOrigin: v.optional(intakeOriginSchema),
   /**
    * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
    * creation timestamp independent of when its first step actually starts (the public-API

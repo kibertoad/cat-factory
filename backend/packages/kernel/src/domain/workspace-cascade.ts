@@ -70,6 +70,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'kaizen_verified_combos',
   'merge_threshold_presets',
   'model_presets',
+  'notification_webhooks',
   'notifications',
   'observability_connections',
   'package_registry_connections',

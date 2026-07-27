@@ -29,6 +29,7 @@ export type {
   EnvironmentTestStatus,
   ExecutionInstance,
   ExecutionStatus,
+  IntakeOrigin,
   Pipeline,
   PipelineAvailability,
   PipelineStep,

@@ -14,7 +14,8 @@ prerequisites are configured.
   `incident/`, `incidentEnrichment/` — incident enrichment.
 - `testSecrets/` — sealed per-service test credentials; `validation/` — per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved).
-- `slack/`, `email/` — notification channels; `writeback/`, `providers/`, `corpus/`,
+- `slack/`, `email/`, `notificationWebhook/` — notification channels (the last one is the outbound
+  HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/` — supporting services.
 - `backend-registries.ts` — a loose registration file sitting among the module dirs.
 
