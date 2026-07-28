@@ -471,6 +471,8 @@ export function makeConformanceApp(
     seedReadyReview,
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
+    requirementReviewRepository: () =>
+      createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),

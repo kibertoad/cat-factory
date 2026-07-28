@@ -682,6 +682,29 @@ rejects a length-truncated document rather than persisting a silently-incomplete
 is `requirement_reviews`, mirrored D1 ⇄ Drizzle, asserted by conformance. Pass-through when the
 reviewer model isn't wired.
 
+**A review row is ONE JSON blob, so every mutation is rev-guarded — never a blind `upsert`.** The
+three iterative-review stores (requirements / clarity / brainstorm) carry a `rev` and a
+`compareAndSwap`; `IterativeReviewService.mutateReview` loads, applies the mutation, CASes, and on
+a lost race RELOADS and RE-APPLIES on the winner's snapshot. A whole-row write from a stale read
+would drop whatever a second writer settled meanwhile — and since incorporation refuses to run
+while any finding is `open`, a lost dismissal wedges the loop on a phantom open item. Two
+consequences for new code: a mutation passed to `mutateReview` must be idempotent (it can run
+several times, so notifications/dispatches go AFTER it resolves, on the returned review), and a
+fresh review run is published with the atomic `replaceForBlock` / `replaceForBlockStage`, never a
+`delete` followed by an `upsert` — the pair can interleave into two live reviews for one block.
+Giving up after the bounded retries throws `ReviewContendedError`, which is a 409 for an HTTP
+caller AND the durable driver's re-drive signal in `advanceInstance` (the incorporation cycle's
+mutation carries paid-for LLM output, so failing the run there would discard it).
+
+**"One live row per block" is a UNIQUE INDEX, never a transaction around delete-then-insert.**
+`replaceForBlock` is a single conflict-targeted upsert against
+`(workspace_id, block_id[, stage])`. Wrapping a DELETE and an INSERT in a transaction does NOT
+give this: at Postgres' default READ COMMITTED a DELETE takes no predicate lock, so two concurrent
+publishers both delete nothing and both insert. SQLite serializes writers, so the same code is
+accidentally safe on D1 — which is exactly the trap, since the sequential conformance test passes
+on both. Assert an invariant like this with CONCURRENT writers, and enforce it with a constraint;
+a constraint-adding migration heals pre-existing duplicates first (D1 `0066` ⇄ Drizzle).
+
 **Headless callers drive the SAME loop** over `/api/v1/runs/:runId/decisions`
 (`PublicDecisionController`), delegating to the same service methods, gated on the `decide` rung of
 the scope ladder (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits

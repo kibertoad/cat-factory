@@ -23,7 +23,7 @@ import type {
   RequirementReviewItem,
   RequirementReviewRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   brainstormSessions,
@@ -46,6 +46,7 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
     iteration: row.iteration,
     maxIterations: row.max_iterations,
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations ?? '[]'),
+    rev: row.rev ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -53,12 +54,34 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
 
 /**
  * Requirements reviews over Postgres (the Drizzle mirror of the Worker's
- * `D1RequirementReviewRepository`, migration 0021). The reviewed items live as a JSON
- * array in `items`; the service keeps at most one live review per block (it deletes
- * the block's prior review before inserting a fresh one), so `getByBlock` returns the
- * latest. Behaviourally identical to the D1 repo so the cross-runtime conformance
- * suite asserts the same requirements-rework substitution against both stores.
+ * `D1RequirementReviewRepository`, migration 0021). The reviewed items live as a JSON array in
+ * `items`; a block holds at most ONE live review — a UNIQUE index on (workspace_id, block_id)
+ * enforces that, and {@link DrizzleRequirementReviewRepository.replaceForBlock} publishes a fresh
+ * one as a single upsert against it — so `getByBlock` returns it. Every read-modify-write rides
+ * the rev-guarded
+ * {@link compareAndSwap}. Behaviourally identical to the D1 repo, so the cross-runtime
+ * conformance suite asserts the same substitution AND the same concurrency semantics against
+ * both stores.
  */
+
+/** Row values for an insert (a fresh row starts at rev 0; the writes below own the bump). */
+function requirementReviewValues(workspaceId: string, review: RequirementReview) {
+  return {
+    workspace_id: workspaceId,
+    id: review.id,
+    block_id: review.blockId,
+    status: review.status,
+    items: JSON.stringify(review.items),
+    model: review.model,
+    incorporated_requirements: review.incorporatedRequirements,
+    iteration: review.iteration ?? 1,
+    max_iterations: review.maxIterations ?? 1,
+    recommendations: JSON.stringify(review.recommendations ?? []),
+    rev: 0,
+    created_at: review.createdAt,
+    updated_at: review.updatedAt,
+  }
+}
 
 export class DrizzleRequirementReviewRepository implements RequirementReviewRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -87,22 +110,13 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
     return rows[0] ? rowToRequirementReview(rows[0]) : null
   }
 
+  /**
+   * Force-write. A fresh insert starts at rev 0; a write over an existing row BUMPS it, so a
+   * concurrent {@link compareAndSwap} holding the old revision still detects that the row moved.
+   */
   async upsert(workspaceId: string, review: RequirementReview): Promise<void> {
-    const values = {
-      workspace_id: workspaceId,
-      id: review.id,
-      block_id: review.blockId,
-      status: review.status,
-      items: JSON.stringify(review.items),
-      model: review.model,
-      incorporated_requirements: review.incorporatedRequirements,
-      iteration: review.iteration ?? 1,
-      max_iterations: review.maxIterations ?? 1,
-      recommendations: JSON.stringify(review.recommendations ?? []),
-      created_at: review.createdAt,
-      updated_at: review.updatedAt,
-    }
-    await this.db
+    const values = requirementReviewValues(workspaceId, review)
+    const rows = await this.db
       .insert(requirementReviews)
       .values(values)
       .onConflictDoUpdate({
@@ -116,20 +130,86 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
           iteration: values.iteration,
           max_iterations: values.max_iterations,
           recommendations: values.recommendations,
+          rev: sql`${requirementReviews.rev} + 1`,
           updated_at: values.updated_at,
         },
       })
+      .returning({ rev: requirementReviews.rev })
+    if (rows[0]) review.rev = rows[0].rev
   }
 
-  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
-    await this.db
-      .delete(requirementReviews)
+  async compareAndSwap(workspaceId: string, review: RequirementReview): Promise<boolean> {
+    // Conditional update guarded on the rev last read onto this review; writes only while the
+    // stored row is unchanged, and never inserts (a deleted review must stay deleted).
+    const values = requirementReviewValues(workspaceId, review)
+    const rows = await this.db
+      .update(requirementReviews)
+      .set({
+        block_id: values.block_id,
+        status: values.status,
+        items: values.items,
+        model: values.model,
+        incorporated_requirements: values.incorporated_requirements,
+        iteration: values.iteration,
+        max_iterations: values.max_iterations,
+        recommendations: values.recommendations,
+        rev: sql`${requirementReviews.rev} + 1`,
+        updated_at: values.updated_at,
+      })
       .where(
         and(
           eq(requirementReviews.workspace_id, workspaceId),
-          eq(requirementReviews.block_id, blockId),
+          eq(requirementReviews.id, review.id),
+          eq(requirementReviews.rev, review.rev ?? 0),
         ),
       )
+      .returning({ rev: requirementReviews.rev })
+    if (!rows[0]) return false
+    review.rev = rows[0].rev
+    return true
+  }
+
+  /**
+   * Publish `review` as the block's one live review, as a SINGLE conflict-targeted upsert on the
+   * block's UNIQUE index.
+   *
+   * This deliberately is NOT a transactioned delete-then-insert. A transaction is not a
+   * uniqueness constraint: at Postgres' default READ COMMITTED a DELETE takes no predicate lock,
+   * so two concurrent review runs each delete nothing (or each other's already-gone row), each
+   * insert, and both commit — leaving the block with TWO live reviews, which is the exact hazard
+   * this method exists to prevent. (SQLite serializes writers, so D1 was accidentally safe; a
+   * domain invariant must not rest on which runtime it happens to run under.) One statement
+   * against the constraint has no window to interleave into on either runtime.
+   *
+   * The predecessor's row IS this row — its `id` is overwritten — so the superseded review is
+   * gone rather than left beside the live one, and `rev` restarts at 0 so a writer still holding
+   * the predecessor's revision can't match.
+   */
+  async replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void> {
+    const values = requirementReviewValues(workspaceId, review)
+    const rows = await this.db
+      .insert(requirementReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [requirementReviews.workspace_id, requirementReviews.block_id],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          incorporated_requirements: values.incorporated_requirements,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          recommendations: values.recommendations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: requirementReviews.rev })
+    // Read the revision back rather than assuming it: the caller keeps mutating this object
+    // through `compareAndSwap`, so a `rev` it only believes is right desynchronises it.
+    review.rev = rows[0]?.rev ?? 0
   }
 }
 
@@ -272,6 +352,7 @@ function rowToClarityReview(row: ClarityReviewRow): ClarityReview {
     clarifiedReport: row.clarified_report,
     iteration: row.iteration,
     maxIterations: row.max_iterations,
+    rev: row.rev ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -379,6 +460,24 @@ export class DrizzleConsensusSessionRepository implements ConsensusSessionReposi
  * conformance suite asserts the same clarified-brief substitution against both stores.
  */
 
+/** Row values for an insert (a fresh row starts at rev 0; the writes below own the bump). */
+function clarityReviewValues(workspaceId: string, review: ClarityReview) {
+  return {
+    workspace_id: workspaceId,
+    id: review.id,
+    block_id: review.blockId,
+    status: review.status,
+    items: JSON.stringify(review.items),
+    model: review.model,
+    clarified_report: review.clarifiedReport,
+    iteration: review.iteration ?? 1,
+    max_iterations: review.maxIterations ?? 1,
+    rev: 0,
+    created_at: review.createdAt,
+    updated_at: review.updatedAt,
+  }
+}
+
 export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -404,20 +503,8 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
   }
 
   async upsert(workspaceId: string, review: ClarityReview): Promise<void> {
-    const values = {
-      workspace_id: workspaceId,
-      id: review.id,
-      block_id: review.blockId,
-      status: review.status,
-      items: JSON.stringify(review.items),
-      model: review.model,
-      clarified_report: review.clarifiedReport,
-      iteration: review.iteration ?? 1,
-      max_iterations: review.maxIterations ?? 1,
-      created_at: review.createdAt,
-      updated_at: review.updatedAt,
-    }
-    await this.db
+    const values = clarityReviewValues(workspaceId, review)
+    const rows = await this.db
       .insert(clarityReviews)
       .values(values)
       .onConflictDoUpdate({
@@ -430,17 +517,69 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
           clarified_report: values.clarified_report,
           iteration: values.iteration,
           max_iterations: values.max_iterations,
+          rev: sql`${clarityReviews.rev} + 1`,
           updated_at: values.updated_at,
         },
       })
+      .returning({ rev: clarityReviews.rev })
+    if (rows[0]) review.rev = rows[0].rev
   }
 
-  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
-    await this.db
-      .delete(clarityReviews)
+  async compareAndSwap(workspaceId: string, review: ClarityReview): Promise<boolean> {
+    const values = clarityReviewValues(workspaceId, review)
+    const rows = await this.db
+      .update(clarityReviews)
+      .set({
+        block_id: values.block_id,
+        status: values.status,
+        items: values.items,
+        model: values.model,
+        clarified_report: values.clarified_report,
+        iteration: values.iteration,
+        max_iterations: values.max_iterations,
+        rev: sql`${clarityReviews.rev} + 1`,
+        updated_at: values.updated_at,
+      })
       .where(
-        and(eq(clarityReviews.workspace_id, workspaceId), eq(clarityReviews.block_id, blockId)),
+        and(
+          eq(clarityReviews.workspace_id, workspaceId),
+          eq(clarityReviews.id, review.id),
+          eq(clarityReviews.rev, review.rev ?? 0),
+        ),
       )
+      .returning({ rev: clarityReviews.rev })
+    if (!rows[0]) return false
+    review.rev = rows[0].rev
+    return true
+  }
+
+  /**
+   * A single conflict-targeted upsert on the block's UNIQUE index — see
+   * {@link DrizzleRequirementReviewRepository.replaceForBlock} for why a transactioned
+   * delete-then-insert does not hold this invariant under READ COMMITTED.
+   */
+  async replaceForBlock(workspaceId: string, review: ClarityReview): Promise<void> {
+    const values = clarityReviewValues(workspaceId, review)
+    const rows = await this.db
+      .insert(clarityReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [clarityReviews.workspace_id, clarityReviews.block_id],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          clarified_report: values.clarified_report,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: clarityReviews.rev })
+    review.rev = rows[0]?.rev ?? 0
   }
 }
 
@@ -464,6 +603,7 @@ function rowToBrainstormSession(row: BrainstormSessionRow): BrainstormSession {
     convergedDirection: row.converged_direction,
     iteration: row.iteration,
     maxIterations: row.max_iterations,
+    rev: row.rev ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -476,6 +616,25 @@ function rowToBrainstormSession(row: BrainstormSessionRow): BrainstormSession {
  * stores. Keyed per (block, stage): a block may hold a live `requirements` AND `architecture`
  * session at once.
  */
+
+/** Row values for an insert (a fresh row starts at rev 0; the writes below own the bump). */
+function brainstormSessionValues(workspaceId: string, session: BrainstormSession) {
+  return {
+    workspace_id: workspaceId,
+    id: session.id,
+    block_id: session.blockId,
+    stage: session.stage,
+    status: session.status,
+    items: JSON.stringify(session.items),
+    model: session.model,
+    converged_direction: session.convergedDirection,
+    iteration: session.iteration ?? 1,
+    max_iterations: session.maxIterations ?? 1,
+    rev: 0,
+    created_at: session.createdAt,
+    updated_at: session.updatedAt,
+  }
+}
 
 export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -510,21 +669,8 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
   }
 
   async upsert(workspaceId: string, session: BrainstormSession): Promise<void> {
-    const values = {
-      workspace_id: workspaceId,
-      id: session.id,
-      block_id: session.blockId,
-      stage: session.stage,
-      status: session.status,
-      items: JSON.stringify(session.items),
-      model: session.model,
-      converged_direction: session.convergedDirection,
-      iteration: session.iteration ?? 1,
-      max_iterations: session.maxIterations ?? 1,
-      created_at: session.createdAt,
-      updated_at: session.updatedAt,
-    }
-    await this.db
+    const values = brainstormSessionValues(workspaceId, session)
+    const rows = await this.db
       .insert(brainstormSessions)
       .values(values)
       .onConflictDoUpdate({
@@ -538,24 +684,75 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
           converged_direction: values.converged_direction,
           iteration: values.iteration,
           max_iterations: values.max_iterations,
+          rev: sql`${brainstormSessions.rev} + 1`,
           updated_at: values.updated_at,
         },
       })
+      .returning({ rev: brainstormSessions.rev })
+    if (rows[0]) session.rev = rows[0].rev
   }
 
-  async deleteByBlockStage(
-    workspaceId: string,
-    blockId: string,
-    stage: BrainstormStage,
-  ): Promise<void> {
-    await this.db
-      .delete(brainstormSessions)
+  async compareAndSwap(workspaceId: string, session: BrainstormSession): Promise<boolean> {
+    const values = brainstormSessionValues(workspaceId, session)
+    const rows = await this.db
+      .update(brainstormSessions)
+      .set({
+        block_id: values.block_id,
+        stage: values.stage,
+        status: values.status,
+        items: values.items,
+        model: values.model,
+        converged_direction: values.converged_direction,
+        iteration: values.iteration,
+        max_iterations: values.max_iterations,
+        rev: sql`${brainstormSessions.rev} + 1`,
+        updated_at: values.updated_at,
+      })
       .where(
         and(
           eq(brainstormSessions.workspace_id, workspaceId),
-          eq(brainstormSessions.block_id, blockId),
-          eq(brainstormSessions.stage, stage),
+          eq(brainstormSessions.id, session.id),
+          eq(brainstormSessions.rev, session.rev ?? 0),
         ),
       )
+      .returning({ rev: brainstormSessions.rev })
+    if (!rows[0]) return false
+    session.rev = rows[0].rev
+    return true
+  }
+
+  /**
+   * A single conflict-targeted upsert on the (block, STAGE) UNIQUE index — see
+   * {@link DrizzleRequirementReviewRepository.replaceForBlock} for why a transactioned
+   * delete-then-insert does not hold this invariant under READ COMMITTED. The stage is part of
+   * the conflict target, so the block's other live stage is untouched by construction rather
+   * than by a scoped delete.
+   */
+  async replaceForBlockStage(workspaceId: string, session: BrainstormSession): Promise<void> {
+    const values = brainstormSessionValues(workspaceId, session)
+    const rows = await this.db
+      .insert(brainstormSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          brainstormSessions.workspace_id,
+          brainstormSessions.block_id,
+          brainstormSessions.stage,
+        ],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          converged_direction: values.converged_direction,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: brainstormSessions.rev })
+    session.rev = rows[0]?.rev ?? 0
   }
 }

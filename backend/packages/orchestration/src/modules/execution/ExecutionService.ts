@@ -43,6 +43,7 @@ import {
   ConflictError,
   NotFoundError,
   RunContendedError,
+  ReviewContendedError,
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -935,7 +936,15 @@ export class ExecutionService {
       // either re-applies the mechanical step on the winning snapshot or no-ops on a
       // gone/terminal run (race-audit 2.2 driver-half / 2.3). Every other error still funnels
       // to the driver's failRun path.
-      if (error instanceof RunContendedError) return { kind: 'continue' }
+      //
+      // `ReviewContendedError` is the same signal from the REVIEW row rather than the run row
+      // (race-audit 2.5): the incorporation cycle's mutation carries the output of an LLM call
+      // the run has already paid for, so a contended give-up must re-derive it on fresh state
+      // rather than fail the run and discard it. The pending decision is still in storage (the
+      // instance is only persisted after the cycle settles), so the re-drive re-enters it.
+      if (error instanceof RunContendedError || error instanceof ReviewContendedError) {
+        return { kind: 'continue' }
+      }
       throw error
     }
   }
