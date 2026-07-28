@@ -4,7 +4,6 @@ import type { StepMetrics } from '~/types/execution'
 import {
   formatMs,
   formatTokens,
-  freshPromptTokens,
   headroomColor,
   headroomRatio,
   pct,
@@ -23,12 +22,12 @@ defineEmits<{ inspect: [] }>()
 const { t } = useI18n()
 
 const m = computed(() => props.metrics)
-// The headline "↑" is FRESH (uncached) input, not the raw prompt-token sum: a long agentic
-// run re-sends its whole transcript every turn, so the raw sum is ~all cache reads and reads
-// as a blow-up. The cached prefix is shown separately (the green chip) so the two are distinct.
-const freshPrompt = computed(() =>
-  freshPromptTokens(m.value.promptTokens, m.value.cachedPromptTokens ?? 0),
-)
+// The headline "↑" is FRESH input: `promptTokens` is exclusive of both cache classes at the
+// source, so no derivation is needed. The two cache classes ride their own chips because they
+// are priced an order of magnitude apart — a read is ~0.1x base input, a write 1.25-2x — and a
+// long run that keeps re-writing its prefix must not look like one riding a warm cache.
+const cacheRead = computed(() => m.value.cacheReadTokens ?? 0)
+const cacheWrite = computed(() => m.value.cacheWriteTokens ?? 0)
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
 const headroomTone = computed(() => headroomColor(headroom.value, m.value.truncatedCalls > 0))
@@ -55,18 +54,21 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         class="tabular-nums text-slate-400"
         :title="t('observability.metricsBar.promptCompletionTokens')"
       >
-        {{ formatTokens(freshPrompt) }}↑ {{ formatTokens(m.completionTokens) }}↓
+        {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
       <span
-        v-if="(m.cachedPromptTokens ?? 0) > 0"
+        v-if="cacheRead > 0"
         class="tabular-nums text-emerald-400/80"
-        :title="t('observability.metricsBar.cachedTokensHint')"
+        :title="t('observability.metricsBar.cacheReadHint')"
       >
-        {{
-          t('observability.metricsBar.cachedTokens', {
-            tokens: formatTokens(m.cachedPromptTokens ?? 0),
-          })
-        }}
+        {{ t('observability.metricsBar.cacheRead', { tokens: formatTokens(cacheRead) }) }}
+      </span>
+      <span
+        v-if="cacheWrite > 0"
+        class="tabular-nums text-amber-400/80"
+        :title="t('observability.metricsBar.cacheWriteHint')"
+      >
+        {{ t('observability.metricsBar.cacheWrite', { tokens: formatTokens(cacheWrite) }) }}
       </span>
       <div class="ms-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">

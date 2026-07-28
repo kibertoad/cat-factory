@@ -54,8 +54,11 @@ describe('createClaudeCallAggregator', () => {
     agg.flush()
 
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.inputTokens).toBe(49_661)
-    expect(calls[0]?.cachedInputTokens).toBe(49_621)
+    // `inputTokens` is FRESH input only; the cache classes are carried apart, so a turn whose
+    // prompt is 99.9% cache reads no longer hides behind one summed number.
+    expect(calls[0]?.inputTokens).toBe(40)
+    expect(calls[0]?.cacheReadTokens).toBe(49_621)
+    expect(calls[0]?.cacheWriteTokens).toBe(0)
     expect(calls[0]?.toolUses).toBe(5)
     expect(calls[0]?.text).toBe('Planning')
     // The tool results are carried on the call, so the reconstruction can replay the real

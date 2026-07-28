@@ -22,7 +22,8 @@ export interface AggregatedClaudeCall {
   reasoning: string
   stopReason: string | null
   inputTokens: number
-  cachedInputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
   outputTokens: number
   /** The `user` turns carrying this call's tool_result blocks, in arrival order. */
   toolResults: unknown[][]
@@ -95,7 +96,8 @@ export function createClaudeCallAggregator(handlers: {
           reasoning: '',
           stopReason: null,
           inputTokens: 0,
-          cachedInputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
           outputTokens: 0,
           toolResults: [],
           toolUses: 0,
@@ -107,7 +109,8 @@ export function createClaudeCallAggregator(handlers: {
       pending.reasoning += reasoning
       pending.toolUses += toolUses
       pending.inputTokens = Math.max(pending.inputTokens, usage.inputTokens)
-      pending.cachedInputTokens = Math.max(pending.cachedInputTokens, usage.cachedInputTokens)
+      pending.cacheReadTokens = Math.max(pending.cacheReadTokens, usage.cacheReadTokens)
+      pending.cacheWriteTokens = Math.max(pending.cacheWriteTokens, usage.cacheWriteTokens)
       pending.outputTokens = Math.max(pending.outputTokens, usage.outputTokens)
       // A block-split response reports its stop reason on the envelope that carries the end of the
       // message; earlier ones report none. Keep the first non-null rather than the last seen.
@@ -185,7 +188,8 @@ export function createClaudeStreamTelemetry(opts: {
         responseText: redactBody(call.text, opts.secrets),
         reasoningText: redactBody(call.reasoning, opts.secrets),
         inputTokens: call.inputTokens,
-        cachedInputTokens: call.cachedInputTokens,
+        cacheReadTokens: call.cacheReadTokens,
+        cacheWriteTokens: call.cacheWriteTokens,
         outputTokens: call.outputTokens,
         finishReason: call.stopReason,
       })

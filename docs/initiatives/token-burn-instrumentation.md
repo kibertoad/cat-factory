@@ -1,6 +1,6 @@
 # Initiative: per-run token-burn instrumentation & diagnosis
 
-**Status:** proposed · **Owner:** core · **Started:** 2026-07-28
+**Status:** in progress (Slice 2 next) · **Owner:** core · **Started:** 2026-07-28
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -61,12 +61,14 @@ driver this instrument is meant to rank, not a settled cause:
 
 ## End state
 
-- **Slice 1 — honest per-turn accounting (dependency).** The three input classes must be
+- **Slice 1 — honest per-turn accounting (dependency). ✅ landed.** The three input classes must be
   orthogonal and additive before any per-phase sum means anything. This is exactly the
   [`token-telemetry-per-class-and-cost`](./token-telemetry-per-class-and-cost.md) Slice 1
   (redefine `promptTokens` as fresh-only; carry `cacheReadTokens` + `cacheWriteTokens` distinctly
-  end to end). **This tracker consumes that split; it does not re-implement it.** If that slice
-  hasn't landed, land it first.
+  end to end). **This tracker consumes that split; it does not re-implement it.** Every row now
+  carries `promptTokens` (fresh) / `cacheReadTokens` / `cacheWriteTokens` additively, so Slice 3's
+  per-phase sums are meaningful and Slice 4's baseline can state WHICH class a phase burns. Read
+  that tracker's "Carried out of Slice 1" before adding a producer here.
 - **Slice 2 — turn index + phase attribution on every LLM call.** Stamp each `llm_call_metrics`
   row with (a) a per-job **turn ordinal** and (b) the **phase** that spent it — coder edit vs
   validation/repair vs reproduction proof vs follow-up generation vs fork decision vs exploration.
@@ -111,14 +113,14 @@ conformance suite):
 
 ## Per-slice checklist
 
-| #   | Slice                      | Scope                                                                                                            | Status     | PR    |
-| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ----- |
-| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done    | #1430 |
-| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ⬜ blocked |       |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo    |       |
-| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo    |       |
-| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo    |       |
-| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo    |       |
+| #   | Slice                      | Scope                                                                                                            | Status  | PR    |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ----- |
+| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done | #1430 |
+| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done |       |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo |       |
+| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo |       |
+| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
+| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo |       |
 
 ### Slice 0 — what the instrument was actually reporting (2026-07-28)
 
@@ -188,10 +190,13 @@ output split for the PARENT's own turns. Fixing it means deciding which source o
 - **Cache reads are NOT free and NOT cosmetic.** They occupy the context window and count toward
   Claude Code's own gauge. Any framing that discounts them because the dollar cost is low is
   measuring the wrong thing — the quota/latency/volume cost is what this tracker exists to measure.
-- **The read/write split is a hard dependency.** Summing cache read + cache write (today's
-  `cachedPromptTokens`) makes a per-phase attribution meaningless: a repair loop that re-writes the
-  cache looks identical to one that only re-reads it. Land
-  [`token-telemetry-per-class-and-cost`](./token-telemetry-per-class-and-cost.md) Slice 1 first.
+- **The read/write split is a hard dependency — now satisfied.** Summing cache read + cache write
+  (the old `cachedPromptTokens`) made a per-phase attribution meaningless: a repair loop that
+  re-writes the cache looked identical to one that only re-reads it. That split landed
+  ([`token-telemetry-per-class-and-cost`](./token-telemetry-per-class-and-cost.md) Slice 1), so the
+  phase axis can be added on top. Its corollary for THIS tracker: a per-phase rollup must aggregate
+  the three classes SEPARATELY. Re-summing them into one "input" figure for the panel would undo the
+  dependency this initiative waited for.
 - **`ProgressGuard` is not a token budget.** It stops _pathological non-progress_, not _productive
   excess_. A trivial task that legitimately edits, validates, repairs, reproduces and follows-up
   will never trip it, so "we already have a guard" is not a reason to skip the instrument.

@@ -316,7 +316,8 @@ export class RunStateMachine {
         step.metrics = {
           calls: s.calls,
           promptTokens: s.promptTokens,
-          cachedPromptTokens: s.cachedPromptTokens,
+          cacheReadTokens: s.cacheReadTokens,
+          cacheWriteTokens: s.cacheWriteTokens,
           completionTokens: s.completionTokens,
           peakCompletionTokens: s.peakCompletionTokens,
           maxOutputTokens: s.maxOutputTokens,

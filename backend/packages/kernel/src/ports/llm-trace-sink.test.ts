@@ -19,6 +19,8 @@ const EVENT: LlmGenerationEvent = {
   startedAt: 1,
   endedAt: 2,
   promptTokens: 1,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
   completionTokens: 1,
   totalTokens: 2,
   finishReason: 'stop',

@@ -757,7 +757,8 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       typeof e.reasoningText !== 'string' ||
       typeof e.messageCount !== 'number' ||
       typeof e.inputTokens !== 'number' ||
-      typeof e.cachedInputTokens !== 'number' ||
+      typeof e.cacheReadTokens !== 'number' ||
+      typeof e.cacheWriteTokens !== 'number' ||
       typeof e.outputTokens !== 'number'
     ) {
       continue
@@ -769,7 +770,8 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       responseText: e.responseText,
       reasoningText: e.reasoningText,
       inputTokens: e.inputTokens,
-      cachedInputTokens: e.cachedInputTokens,
+      cacheReadTokens: e.cacheReadTokens,
+      cacheWriteTokens: e.cacheWriteTokens,
       outputTokens: e.outputTokens,
       finishReason: typeof e.finishReason === 'string' ? e.finishReason : null,
       // The harness's job-scoped sequence number. It MUST survive coercion: it is what keeps a

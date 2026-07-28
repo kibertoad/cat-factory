@@ -32,33 +32,46 @@ DeepSeek / OpenAI), which flips that model's effective flavour `cloudflare → d
 - the model picker shows a `Prompt caching` / `No prompt caching` badge per flavour
   (`ModelConfigurationPanel.vue`, via `cachingBadge` in `stores/models.ts`);
 - the API-keys panel notes which direct keys enable caching (`ApiKeysSection.vue`);
-- the step metrics bar shows a cached-token split when present, and the per-agent-kind
-  summary now carries `cachedPromptTokens` + a derived `cacheHitRate`
-  (`StepMetricsBar.vue`, `observability.logic.ts`, both repositories).
+- the step metrics bar shows the cache split when present, and the per-agent-kind summary
+  carries `cacheReadTokens` + `cacheWriteTokens` as two distinct sums plus a derived
+  `cacheHitRate` (`StepMetricsBar.vue`, `observability.logic.ts`, both repositories).
 
 We deliberately **do not auto-flip the shipped model defaults** — that's a model-quality
 decision that needs benchmark evidence (below), not a blind change.
 
 ### Reading the hit rate
 
-`cacheHitRate = cachedPromptTokens / promptTokens`, clamped to `[0, 1]`. The clamp is not
-cosmetic: for **`auto-prefix`** providers (OpenAI/DeepSeek/Qwen) the cached count is a
-true subset of the prompt tokens, so the ratio is already in range; for **Anthropic**
-(`explicit-anthropic`) the API reports `cache_read_input_tokens` SEPARATELY from
-`input_tokens` (the cached prefix is not counted in the prompt total), so an un-clamped
-ratio could exceed 1 — the clamp renders a fully-served prefix as `100%` rather than a
-nonsensical `>100%`. `cachedTokensFromUsage` attributes Anthropic's field (raw
-`cache_read_input_tokens` and the AI SDK's `cacheReadInputTokens`) alongside the
-OpenAI/DeepSeek field names, so the inline Anthropic path — which opts in via
-`inlineCacheProviderOptions` — is actually measured, not silently reported as `0`.
+The three input classes are **orthogonal**: `promptTokens` is FRESH input only, and
+`cacheReadTokens` / `cacheWriteTokens` sit beside it, so the total input a call processed is
+their sum. `cacheHitRate = (read + write) / (fresh + read + write)` — a genuine 0..1 share
+that needs **no clamp**. (It used to be `cached / prompt` clamped to 1, because on the
+Anthropic shape `promptTokens` never contained the reads and the ratio could exceed 1. That
+clamp is gone with the denominator it was papering over.)
+
+Two functions reconcile the provider shapes at the recording sites:
+
+- **`cacheTokensFromUsage`** returns `{ read, write }`, reading the classes APART across the
+  field names providers use: OpenAI (`prompt_tokens_details.cached_tokens`), DeepSeek
+  (`prompt_cache_hit_tokens`), Anthropic (`cache_read_input_tokens` +
+  `cache_creation_input_tokens`, and the AI SDK's camelCase spellings). Only Anthropic exposes
+  a write class; on the others `write` is 0 rather than guessed. Keeping them apart is not
+  cosmetic either: a read costs ~0.1x base input while a **write costs 1.25-2x — more than
+  fresh** — so summed together, a loop that keeps invalidating and re-writing the prefix is
+  indistinguishable from one riding a warm cache.
+- **`freshPromptTokens`** normalises the prompt count to the fresh figure. For **`auto-prefix`**
+  providers (OpenAI/DeepSeek/Qwen) the cached count is a true SUBSET of the reported prompt
+  tokens, so it is subtracted (clamped at 0); for **Anthropic** (`explicit-anthropic`)
+  `input_tokens` is already exclusive of both classes, so nothing comes off. That is what makes
+  the inline Anthropic path — which opts in via `inlineCacheProviderOptions` — actually
+  measured, rather than silently reported as `0`.
 
 ## Open questions — providers currently `none` that may cache
 
-`cachedTokensFromUsage` already attributes cached tokens for **any** provider that
+`cacheTokensFromUsage` already attributes cached tokens for **any** provider that
 reports them (the proxy calls it unconditionally), so promoting a provider in
 `providerCachePolicy` changes only (a) the request hint for a key-routed provider and
 (b) the `cachesPrompts` capability the UI advertises. We keep these at `none` until a run
-demonstrably reports `cachedPromptTokens > 0`, so the UI never advertises caching a
+demonstrably reports `cacheReadTokens > 0`, so the UI never advertises caching a
 provider doesn't actually deliver:
 
 - **`moonshot` (direct Kimi)** — Moonshot documents context caching; unverified whether

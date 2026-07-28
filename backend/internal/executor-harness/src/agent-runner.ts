@@ -826,7 +826,8 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           responseText: redactBody(pendingText, secrets),
           reasoningText: '',
           inputTokens: perTurn.inputTokens,
-          cachedInputTokens: perTurn.cachedInputTokens,
+          cacheReadTokens: perTurn.cacheReadTokens,
+          cacheWriteTokens: perTurn.cacheWriteTokens,
           outputTokens: perTurn.outputTokens,
           finishReason: null,
         },
@@ -872,7 +873,8 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           responseText: redactBody(summary, secrets),
           reasoningText: '',
           inputTokens: usage?.inputTokens ?? 0,
-          cachedInputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
           outputTokens: usage?.outputTokens ?? 0,
           finishReason: null,
         },
@@ -978,14 +980,18 @@ function codexUsage(
 /**
  * Per-TURN Codex token usage off a `token_count` event's `info.last_token_usage` (the
  * delta for the turn just completed, as opposed to `codexUsage`'s cumulative total).
- * `input_tokens` is the total prompt count for the turn and already INCLUDES the cached
- * share (OpenAI semantics), so `cachedInputTokens` is surfaced as the subset it is —
- * NOT added on top (adding it would double-count every cached token).
+ *
+ * OpenAI semantics: `input_tokens` is the turn's WHOLE prompt count and already INCLUDES
+ * the cached share, so the fresh figure is the difference. Clamped at 0 because the two
+ * counts come off the same event and a vendor inconsistency must not mint a negative token
+ * count. Codex reports no separate cache-WRITE class, so that class is 0 here rather than
+ * guessed.
  */
 function codexLastTurnUsage(event: Record<string, unknown>):
   | {
       inputTokens: number
-      cachedInputTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
       outputTokens: number
     }
   | undefined {
@@ -996,7 +1002,12 @@ function codexLastTurnUsage(event: Record<string, unknown>):
   const cached = numberOf(raw.cached_input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }
+  return {
+    inputTokens: Math.max(0, input - cached),
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+    outputTokens: output,
+  }
 }
 
 /** Dispatch to the configured subscription harness runner. */

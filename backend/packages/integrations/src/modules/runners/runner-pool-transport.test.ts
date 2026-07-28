@@ -466,7 +466,8 @@ describe('HttpRunnerPoolProvider', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
     }

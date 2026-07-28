@@ -16,7 +16,8 @@ function call(responseText: string, inputTokens = 0, outputTokens = 0): HarnessC
     responseText,
     reasoningText: '',
     inputTokens,
-    cachedInputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens,
     finishReason: null,
   }

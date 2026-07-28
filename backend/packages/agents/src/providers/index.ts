@@ -36,7 +36,8 @@ export {
 } from './endpoints.js'
 export {
   type CachePolicy,
-  cachedTokensFromUsage,
+  cacheTokensFromUsage,
+  freshPromptTokens,
   inlineCacheProviderOptions,
   promptCacheParams,
   providerCachePolicy,

@@ -44,27 +44,55 @@ export function inlineCacheProviderOptions(provider: string): Record<string, unk
 }
 
 /**
- * The cached-input-token count a provider reports in its usage, across the field names
- * they use. Covers OpenAI (`prompt_tokens_details.cached_tokens`), DeepSeek
- * (`prompt_cache_hit_tokens`) and Anthropic (`cache_read_input_tokens`, or the AI SDK's
- * camelCase `cacheReadInputTokens`). NOTE on the Anthropic shape: its cache reads are
- * reported SEPARATELY from `input_tokens` (they are NOT a subset of it), so a hit-rate
- * computed as cached/prompt can exceed 1 — callers clamp it (see `cacheHitRate`).
+ * The two cache classes a provider reports in its usage, read APART rather than summed.
+ *
+ * They are priced very differently — a cache READ is ~0.1× base input, a cache WRITE is
+ * 1.25–2× base input, i.e. dearer than fresh — so lumping them makes per-phase spend
+ * unreadable: a repair loop that keeps invalidating and re-writing the prefix looks
+ * identical to one riding a warm cache. Covers OpenAI
+ * (`prompt_tokens_details.cached_tokens`), DeepSeek (`prompt_cache_hit_tokens`) and
+ * Anthropic (`cache_read_input_tokens` / `cache_creation_input_tokens`, or the AI SDK's
+ * camelCase spellings). Only Anthropic reports a separate write class; the others report
+ * reads only, so `write` is 0 there rather than guessed.
+ *
+ * NOTE on the shapes these come from, which is what {@link freshPromptTokens} exists to
+ * reconcile: OpenAI/DeepSeek report an INCLUSIVE prompt count (the cached share is a
+ * subset of it), while Anthropic reports `input_tokens` already EXCLUSIVE of both classes.
  */
-export function cachedTokensFromUsage(usage: unknown): number {
-  if (typeof usage !== 'object' || usage === null) return 0
+export function cacheTokensFromUsage(usage: unknown): { read: number; write: number } {
+  if (typeof usage !== 'object' || usage === null) return { read: 0, write: 0 }
   const u = usage as Record<string, unknown>
-  // OpenAI: prompt_tokens_details.cached_tokens.
+  const nonNegative = (value: unknown): number =>
+    typeof value === 'number' && value >= 0 ? value : 0
+  // OpenAI: prompt_tokens_details.cached_tokens (reads only).
   const details = u.prompt_tokens_details
   if (typeof details === 'object' && details !== null) {
     const cached = (details as Record<string, unknown>).cached_tokens
-    if (typeof cached === 'number' && cached >= 0) return cached
+    if (typeof cached === 'number' && cached >= 0) return { read: cached, write: 0 }
   }
-  // DeepSeek: prompt_cache_hit_tokens.
+  // DeepSeek: prompt_cache_hit_tokens (reads only).
   const hit = u.prompt_cache_hit_tokens
-  if (typeof hit === 'number' && hit >= 0) return hit
-  // Anthropic: cache_read_input_tokens (raw API) / cacheReadInputTokens (AI SDK).
-  const anthropicRead = u.cache_read_input_tokens ?? u.cacheReadInputTokens
-  if (typeof anthropicRead === 'number' && anthropicRead >= 0) return anthropicRead
-  return 0
+  if (typeof hit === 'number' && hit >= 0) return { read: hit, write: 0 }
+  // Anthropic: both classes, reported separately from input_tokens.
+  return {
+    read: nonNegative(u.cache_read_input_tokens ?? u.cacheReadInputTokens),
+    write: nonNegative(u.cache_creation_input_tokens ?? u.cacheCreationInputTokens),
+  }
+}
+
+/**
+ * Normalise a provider's reported prompt count to FRESH (uncached) input, the invariant
+ * every telemetry population site holds: `promptTokens` is exclusive of both cache classes,
+ * so total input = `promptTokens + cacheReadTokens + cacheWriteTokens`.
+ *
+ * The subtraction is what reconciles the two provider shapes. Where the prompt count is
+ * INCLUSIVE (OpenAI/DeepSeek) the cached share must come off it; where it is already
+ * exclusive (Anthropic) `prompt_tokens` does not carry the cache classes at all, so nothing
+ * is subtracted — which the arithmetic gets right on its own, because on that shape the
+ * usage the proxy scrapes reports the classes in fields of their own and the OpenAI-shaped
+ * `prompt_tokens` it maps to is the fresh count. Clamped at 0: the counts come off one
+ * payload and a vendor inconsistency must never mint a negative token count.
+ */
+export function freshPromptTokens(promptTokens: number, cacheRead: number): number {
+  return Math.max(0, promptTokens - cacheRead)
 }

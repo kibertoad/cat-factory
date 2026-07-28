@@ -82,8 +82,14 @@ export interface LlmTokenUsage {
  */
 export interface ProxyCallObservation {
   usage: LlmTokenUsage | null
-  /** Prompt tokens served from the provider's cache (subset of usage.prompt_tokens); 0 if none. */
-  cachedPromptTokens?: number
+  /**
+   * The call's two cache classes, when the upstream path already knows them apart. Omit and
+   * the proxy derives both from `usage` (`cacheTokensFromUsage`); supply them when the path
+   * owns a shape the OpenAI-style payload does not carry. `read` is a SUBSET of
+   * `usage.prompt_tokens` on the inclusive providers — the proxy subtracts it to reach the
+   * fresh count it records.
+   */
+  cacheTokens?: { read: number; write: number }
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
   finishReason: string | null
   /** The assistant response text (concatenated for streamed calls). */

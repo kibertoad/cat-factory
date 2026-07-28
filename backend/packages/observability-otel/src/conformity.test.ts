@@ -30,6 +30,8 @@ const GENERATION: LlmGenerationEvent = {
   startedAt: 2_000,
   endedAt: 2_750,
   promptTokens: 321,
+  cacheReadTokens: 4_000,
+  cacheWriteTokens: 200,
   completionTokens: 87,
   totalTokens: 408,
   finishReason: 'stop',
@@ -233,7 +235,14 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
     expect(sdkTel.serviceName).toBe('cat-factory')
 
     // Same metrics.
-    expect(fetchTel.tokenUsage).toEqual({ input: 321, output: 87 })
+    // One data point PER INPUT CLASS, not one lumped input figure: they are priced ~0.1x /
+    // 1.25-2x / 1x base input, so an operator's dashboard needs them apart.
+    expect(fetchTel.tokenUsage).toEqual({
+      input: 321,
+      cache_read: 4_000,
+      cache_write: 200,
+      output: 87,
+    })
     expect(sdkTel.tokenUsage).toEqual(fetchTel.tokenUsage)
     expect(fetchTel.duration.count).toBe(sdkTel.duration.count)
     expect(fetchTel.duration.sum).toBeCloseTo(sdkTel.duration.sum, 9)

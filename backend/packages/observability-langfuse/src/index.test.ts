@@ -66,6 +66,8 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     startedAt: 1_000,
     endedAt: 1_500,
     promptTokens: 100,
+    cacheReadTokens: 900,
+    cacheWriteTokens: 40,
     completionTokens: 40,
     totalTokens: 140,
     finishReason: 'stop',
