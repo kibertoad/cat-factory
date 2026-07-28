@@ -6,6 +6,7 @@ import {
   COMPANION_STATE_META,
   isCompanionKind,
   containerPhaseLabel,
+  dedicatedParkView,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
@@ -152,6 +153,12 @@ function openStep(i: number) {
 // Open the implementation-fork decision window for a coder step parked awaiting a choice.
 function openForkFor(i: number) {
   if (instance.value) ui.openForkDecision(instance.value.id, i)
+}
+
+// Open the follow-up triage window for a coder step parked on undecided follow-up items
+// (its dedicated chip — the generic approve resolver refuses this park server-side).
+function openFollowUpsFor(i: number) {
+  if (instance.value) ui.openFollowUps(instance.value.id, i)
 }
 
 // Open the PR deep-review findings-selection window for a pr-reviewer step parked awaiting
@@ -425,7 +432,7 @@ async function mergePr() {
               v-else-if="
                 s.approval &&
                 s.approval.status === 'pending' &&
-                s.forkDecision?.status === 'awaiting_choice'
+                dedicatedParkView(s) === 'fork-decision'
               "
               color="primary"
               variant="soft"
@@ -434,6 +441,23 @@ async function mergePr() {
               @click="openForkFor(i)"
             >
               {{ t('inspector.execution.chooseApproach') }}
+            </UButton>
+            <!-- A coder step parked on undecided follow-up items: triage them (file /
+                 send back / answer / dismiss) in the dedicated window, not a plain
+                 approval — the generic approve resolver refuses this park. -->
+            <UButton
+              v-else-if="
+                s.approval &&
+                s.approval.status === 'pending' &&
+                dedicatedParkView(s) === 'follow-ups'
+              "
+              color="primary"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-compass"
+              @click="openFollowUpsFor(i)"
+            >
+              {{ t('inspector.execution.triageFollowUps') }}
             </UButton>
             <!-- A pr-reviewer step parked awaiting a finding selection: open the dedicated
                  findings-selection window, not the generic approval gate. -->

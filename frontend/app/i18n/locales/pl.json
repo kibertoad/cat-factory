@@ -456,7 +456,10 @@
       "retryFailed": "Ponowienie nie powiodło się",
       "startFailed": "Nie udało się uruchomić",
       "mergeFailed": "Nie udało się scalić",
-      "restartFailed": "Nie udało się ponownie uruchomić"
+      "restartFailed": "Nie udało się ponownie uruchomić",
+      "approveFailed": "Nie udało się zatwierdzić",
+      "requestChangesFailed": "Nie udało się poprosić o zmiany",
+      "rejectFailed": "Nie udało się odrzucić"
     },
     "reviewFriction": {
       "warnTitle": "Zadania czekające na przegląd",
@@ -980,6 +983,7 @@
         "body": "Uruchom pipeline, aby zobaczyć tutaj historię uruchomień."
       },
       "chooseApproach": "Wybierz podejście",
+      "triageFollowUps": "Rozstrzygnij działania następcze",
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
       "reviewFindings": "Przejrzyj ustalenia"
     },
@@ -1213,6 +1217,10 @@
       "details": "Szczegóły",
       "approvalRequired": "Wymagane zatwierdzenie",
       "decisionRequired": "Wymagana decyzja",
+      "followUpsParked": "Coder zgłosił działania następcze, które wymagają rozstrzygnięcia, zanim uruchomienie będzie mogło kontynuować. Rozstrzygnij każdy element (utwórz, odeślij, odpowiedz lub odrzuć) w oknie działań następczych.",
+      "forkParked": "Ten krok Codera czeka na wybór podejścia do implementacji, zanim powstanie kod. Wybierz zaproponowane podejście (lub wpisz własne) w oknie decyzji.",
+      "openFollowUps": "Otwórz działania następcze",
+      "chooseApproach": "Wybierz podejście",
       "expandAll": "Rozwiń wszystkie sekcje",
       "collapseAll": "Zwiń wszystkie sekcje",
       "copyRawOutput": "Kopiuj surowy wynik",

@@ -518,6 +518,16 @@ export function defineExecutionReviewConformance(harness: ConformanceHarness): v
       expect(parkedCoder.forkDecision?.status).toBe('awaiting_choice')
       expect(parkedCoder.forkDecision?.forks).toHaveLength(2)
 
+      // The park rides `step.approval`, but the GENERIC approve resolver must refuse it:
+      // approving there would advance the run past the coder with the build never dispatched.
+      // Only the fork window (`/fork-decision/choose` below) resolves this park.
+      const strayApprove = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/steps/${parkedCoder.approval!.id}/approve`,
+        {},
+      )
+      expect(strayApprove.status).toBe(409)
+
       // The GET route returns the same live state.
       const view = await app.call<ForkDecisionStepState | null>(
         'GET',

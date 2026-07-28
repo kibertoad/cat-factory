@@ -1205,13 +1205,15 @@ export class ExecutionService {
   // {@link dispatchIterationCap}.
 
   /**
-   * Two gates park on a `step.approval` but are NOT generic prose approvals — they are
-   * iterative gates driven by their own dedicated surface, never the generic
+   * Several gates park on a `step.approval` but are NOT generic prose approvals — they are
+   * driven by their own dedicated surface, never the generic
    * approve/request-changes/reject resolvers (which would advance the run bypassing the
-   * loop). Guard those resolvers so a stray approve can't short-circuit either gate:
-   * - the requirements-review gate (driven by re-review / proceed / resolve-exceeded);
-   * - a companion gate that hit its rework cap (`companion.exceeded`), driven by
-   *   {@link resolveCompanionExceeded}'s one-more-round / proceed / stop-reset choices.
+   * loop). Guard those resolvers so a stray approve can't short-circuit any of them:
+   * the requirements/clarity review gates, the brainstorms, the human-testing and
+   * visual-confirmation gates, an interview-trait gate, a companion at its rework cap
+   * (`companion.exceeded`), the follow-up companion with undecided items, and a coder
+   * parked on the implementation-fork decision (whose approve would skip the build
+   * dispatch entirely).
    */
   private assertNotIterativeGate(step: PipelineStep): void {
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
@@ -1255,6 +1257,16 @@ export class ExecutionService {
     if (step.followUps?.enabled && step.followUps.items.some((i) => i.status === 'pending')) {
       throw new ConflictError(
         'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
+      )
+    }
+    if (
+      step.forkDecision?.status === 'awaiting_choice' ||
+      step.forkDecision?.status === 'answering'
+    ) {
+      // Approving here would advance the run PAST the coder step with the build never run
+      // (the park sits between the proposer and the Coder dispatch).
+      throw new ConflictError(
+        'Resolve the implementation-fork decision through its fork window (choose an approach), not the approval gate',
       )
     }
   }

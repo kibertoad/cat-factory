@@ -456,7 +456,10 @@
       "retryFailed": "再試行に失敗しました",
       "startFailed": "開始に失敗しました",
       "mergeFailed": "マージに失敗しました",
-      "restartFailed": "再起動に失敗しました"
+      "restartFailed": "再起動に失敗しました",
+      "approveFailed": "承認に失敗しました",
+      "requestChangesFailed": "変更リクエストに失敗しました",
+      "rejectFailed": "却下に失敗しました"
     },
     "reviewFriction": {
       "warnTitle": "レビュー待ちのタスク",
@@ -980,6 +983,7 @@
         "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
       },
       "chooseApproach": "アプローチを選択",
+      "triageFollowUps": "フォローアップを決定",
       "elapsedTooltip": "このステップの経過時間",
       "reviewFindings": "指摘を確認"
     },
@@ -1213,6 +1217,10 @@
       "details": "詳細",
       "approvalRequired": "承認が必要",
       "decisionRequired": "判断が必要",
+      "followUpsParked": "Coderが決定待ちのフォローアップ項目を提起しています。実行を続行するには、フォローアップウィンドウで各項目を処理してください(起票、差し戻し、回答、または却下)。",
+      "forkParked": "このCoderステップは、コードを書く前に実装アプローチの選択を待っています。決定ウィンドウで提案されたアプローチを選ぶか、独自のアプローチを入力してください。",
+      "openFollowUps": "フォローアップを開く",
+      "chooseApproach": "アプローチを選択",
       "expandAll": "すべてのセクションを展開",
       "collapseAll": "すべてのセクションを折りたたむ",
       "copyRawOutput": "生の出力をコピー",

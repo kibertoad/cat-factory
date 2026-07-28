@@ -456,7 +456,10 @@
       "retryFailed": "הניסיון החוזר נכשל",
       "startFailed": "ההפעלה נכשלה",
       "mergeFailed": "המיזוג נכשל",
-      "restartFailed": "ההפעלה מחדש נכשלה"
+      "restartFailed": "ההפעלה מחדש נכשלה",
+      "approveFailed": "האישור נכשל",
+      "requestChangesFailed": "בקשת השינויים נכשלה",
+      "rejectFailed": "הדחייה נכשלה"
     },
     "reviewFriction": {
       "warnTitle": "משימות ממתינות לסקירה",
@@ -980,6 +983,7 @@
         "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
       },
       "chooseApproach": "בחר גישה",
+      "triageFollowUps": "הכרע בהמשכים",
       "elapsedTooltip": "הזמן שחלף בשלב זה",
       "reviewFindings": "עיין בממצאים"
     },
@@ -1213,6 +1217,10 @@
       "details": "פרטים",
       "approvalRequired": "נדרש אישור",
       "decisionRequired": "נדרשת החלטה",
+      "followUpsParked": "ה-Coder העלה המשכים שדורשים הכרעה לפני שהריצה תוכל להמשיך. טפל בכל פריט (תייק, החזר, ענה או דחה) בחלון ההמשכים.",
+      "forkParked": "שלב ה-Coder הזה ממתין לבחירת גישת מימוש לפני כתיבת קוד. בחר גישה מוצעת (או הזן גישה משלך) בחלון ההחלטה.",
+      "openFollowUps": "פתח את ההמשכים",
+      "chooseApproach": "בחר גישה",
       "expandAll": "הרחב את כל המקטעים",
       "collapseAll": "כווץ את כל המקטעים",
       "copyRawOutput": "העתק פלט גולמי",

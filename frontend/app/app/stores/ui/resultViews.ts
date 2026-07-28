@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { useExecutionStore } from '~/stores/execution'
 import { agentKindMeta } from '~/utils/catalog'
+import { dedicatedParkView } from '~/utils/pipelineRender'
 
 /**
  * The step-inspection / result-view slice of the UI store: the dedicated result-view overlay
@@ -73,12 +74,15 @@ export function createUiResultViews() {
     // A step carrying a PR deep-review parks with BOTH a pending approval and
     // `prReview.status`, so the generic approval button funnels here; route it to the
     // findings-selection window regardless of catalog/manifest state (mirrors consensus).
+    // Likewise a coder parked on the implementation-fork choice or on undecided follow-up
+    // items: those parks ride `step.approval` too, but the generic approve resolver refuses
+    // them server-side, so the step must open the window that CAN resolve it.
     const view = step?.consensus?.enabled
       ? 'consensus-session'
       : step?.prReview
         ? 'pr-review'
         : step
-          ? agentKindMeta(step.agentKind).resultView
+          ? (dedicatedParkView(step) ?? agentKindMeta(step.agentKind).resultView)
           : undefined
     if (view && instance) {
       // The brainstorm window is shared by both stages; carry which one from the step's kind.

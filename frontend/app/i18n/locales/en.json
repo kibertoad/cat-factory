@@ -492,7 +492,10 @@
       "retryFailed": "Retry failed",
       "startFailed": "Failed to start",
       "mergeFailed": "Failed to merge",
-      "restartFailed": "Failed to restart"
+      "restartFailed": "Failed to restart",
+      "approveFailed": "Failed to approve",
+      "requestChangesFailed": "Failed to request changes",
+      "rejectFailed": "Failed to reject"
     },
     "reviewFriction": {
       "warnTitle": "Tasks waiting on review",
@@ -1040,6 +1043,7 @@
       "open": "Open",
       "mergePr": "Merge PR",
       "chooseApproach": "Choose approach",
+      "triageFollowUps": "Decide follow-ups",
       "elapsedTooltip": "Elapsed time on this step",
       "reviewFindings": "Review findings"
     },
@@ -1273,6 +1277,10 @@
       "details": "Details",
       "approvalRequired": "Approval required",
       "decisionRequired": "Decision required",
+      "followUpsParked": "The Coder surfaced follow-up items that need a decision before the run can continue. Triage each item (file, send back, answer, or dismiss) in the follow-ups window.",
+      "forkParked": "This Coder step is waiting for an implementation approach to be chosen before any code is written. Pick a proposed approach (or enter your own) in the fork-decision window.",
+      "openFollowUps": "Open follow-ups",
+      "chooseApproach": "Choose approach",
       "expandAll": "Expand all sections",
       "collapseAll": "Collapse all sections",
       "copyRawOutput": "Copy raw output",

@@ -1298,6 +1298,7 @@
       "open": "Öffnen",
       "mergePr": "PR mergen",
       "chooseApproach": "Ansatz wählen",
+      "triageFollowUps": "Folgeaufgaben entscheiden",
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "reviewFindings": "Befunde prüfen"
     },
@@ -1531,6 +1532,10 @@
       "details": "Details",
       "approvalRequired": "Freigabe erforderlich",
       "decisionRequired": "Entscheidung erforderlich",
+      "followUpsParked": "Der Coder hat Folgeaufgaben aufgeworfen, die entschieden werden müssen, bevor der Lauf fortgesetzt werden kann. Bearbeite jeden Punkt (anlegen, zurückgeben, beantworten oder verwerfen) im Folgeaufgaben-Fenster.",
+      "forkParked": "Dieser Coder-Schritt wartet darauf, dass ein Implementierungsansatz gewählt wird, bevor Code geschrieben wird. Wähle einen vorgeschlagenen Ansatz (oder gib einen eigenen ein) im Entscheidungsfenster.",
+      "openFollowUps": "Folgeaufgaben öffnen",
+      "chooseApproach": "Ansatz wählen",
       "expandAll": "Alle Abschnitte ausklappen",
       "collapseAll": "Alle Abschnitte einklappen",
       "copyRawOutput": "Rohausgabe kopieren",
@@ -4231,7 +4236,10 @@
       "retryFailed": "Wiederholung fehlgeschlagen",
       "startFailed": "Start fehlgeschlagen",
       "mergeFailed": "Zusammenführen fehlgeschlagen",
-      "restartFailed": "Neustart fehlgeschlagen"
+      "restartFailed": "Neustart fehlgeschlagen",
+      "approveFailed": "Freigeben fehlgeschlagen",
+      "requestChangesFailed": "Anfordern von Änderungen fehlgeschlagen",
+      "rejectFailed": "Ablehnen fehlgeschlagen"
     },
     "reviewFriction": {
       "warnTitle": "Aufgaben warten auf Prüfung",
