@@ -1551,7 +1551,7 @@ basic mode always STARTS railed). Full model:
   setting it is ROUTE COUNT, not how advanced the surface feels**: hiding the SOLE route to a
   capability removes that capability from the tier, while hiding a shortcut into a surface a basic
   destination also opens removes nothing. So it belongs on a surface beside the delivery path
-  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Integrations
+  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Model-providers
   hub already offers — never on the pipeline builder, the fragment library, the
   infrastructure/PREnv windows, or the operator/reports views, however deep those feel.
   `nav-contributions.spec.ts` pins the advanced set against a table naming each item's

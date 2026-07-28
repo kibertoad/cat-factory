@@ -952,20 +952,28 @@ function createConsumerOverlayHost() {
  * the shared hub came-from markers.
  */
 export function createUiModals() {
-  // Integrations / My-setup hub came-from markers — the one piece of state SHARED across slices
-  // (many `open*` handlers reset it), so it lives here and `resetHubReturn` is threaded into the
-  // slices that need it. `cameFromIntegrations` is true while an integration's own panel is showing
-  // AND it was reached from the Integrations hub; `cameFromPersonal` is the My-setup analogue.
+  // Model-providers / Integrations / My-setup hub came-from markers — the one piece of state
+  // SHARED across slices (many `open*` handlers reset it), so it lives here and `resetHubReturn`
+  // is threaded into the slices that need it. `cameFromIntegrations` is true while an
+  // integration's own panel is showing AND it was reached from the Integrations hub;
+  // `cameFromModelProviders` and `cameFromPersonal` are the analogues for the other two hubs.
+  //
+  // Three hubs, not two, because the vendor-credentials / OpenRouter / local-runner panels are
+  // reachable from more than one of them and a Back control that lands somewhere the user was
+  // never at is worse than none.
   const cameFromIntegrations = ref(false)
+  const cameFromModelProviders = ref(false)
   const cameFromPersonal = ref(false)
   const integrationsOpen = ref(false)
+  const modelProvidersOpen = ref(false)
   const personalSetupOpen = ref(false)
 
-  // Clear BOTH hub came-from markers. Every direct `open*` in the slices calls this so that a
+  // Clear EVERY hub came-from marker. Every direct `open*` in the slices calls this so that a
   // panel opened outside the hubs never grows a dead Back control, and so switching from one
-  // hub's panel to the other's clears the stale marker.
+  // hub's panel to another's clears the stale marker.
   function resetHubReturn() {
     cameFromIntegrations.value = false
+    cameFromModelProviders.value = false
     cameFromPersonal.value = false
   }
   function openIntegrations() {
@@ -976,6 +984,13 @@ export function createUiModals() {
   }
   function closeIntegrations() {
     integrationsOpen.value = false
+  }
+  function openModelProviders() {
+    resetHubReturn()
+    modelProvidersOpen.value = true
+  }
+  function closeModelProviders() {
+    modelProvidersOpen.value = false
   }
   function openPersonalSetup() {
     resetHubReturn()
@@ -1000,6 +1015,12 @@ export function createUiModals() {
     cameFromIntegrations.value = true
     integrationsOpen.value = false
   }
+  // The Model-providers analogue of `openFromIntegrations`.
+  function openFromModelProviders(open: () => void) {
+    open()
+    cameFromModelProviders.value = true
+    modelProvidersOpen.value = false
+  }
 
   const health = createHealthAdvisoryModals()
   const misc = createMiscModals()
@@ -1014,11 +1035,16 @@ export function createUiModals() {
   return {
     integrationsOpen,
     cameFromIntegrations,
+    modelProvidersOpen,
+    cameFromModelProviders,
     personalSetupOpen,
     cameFromPersonal,
     openIntegrations,
     closeIntegrations,
     openFromIntegrations,
+    openModelProviders,
+    closeModelProviders,
+    openFromModelProviders,
     openPersonalSetup,
     closePersonalSetup,
     openFromPersonal,

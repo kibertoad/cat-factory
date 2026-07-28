@@ -25,10 +25,21 @@ export type { AppSlots } from './slots'
 /** Which shell(s) render a contribution. */
 export type NavSurface = 'sidebar' | 'command' | 'toolbar'
 
-/** Sidebar section a contribution lands in (its i18n header is `nav.<group>`). */
+/**
+ * Sidebar section a contribution lands in (its i18n header is `nav.<group>`).
+ *
+ * `models` and `integrations` are deliberately SEPARATE sections even though a model
+ * provider is technically also an external system we connect to. They answer different
+ * questions: `models` is the ENGINE the harnesses run on (no provider ⇒ nothing runs at
+ * all), `integrations` is the optional systems that feed a run context or receive its
+ * output (source control, trackers, documents, chat, observability) — each of which a
+ * deployment can live without. Folding the providers in among them buried the one
+ * connection every deployment must make in a list of ones most never touch.
+ */
 export type NavSidebarGroup =
   | 'create'
   | 'repositories'
+  | 'models'
   | 'integrations'
   | 'infrastructure'
   | 'workspaceContext'
@@ -90,10 +101,10 @@ export const NAV_ACTIONS = [
   'addFromRepo',
   'bootstrapRepo',
   'integrationsHub',
+  'modelProviders',
   'sandbox',
   'kaizen',
   'infrastructure',
-  'environmentSetup',
   'fragmentLibrary',
   'mergeThresholds',
   'workspaceSettings',
@@ -169,8 +180,9 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  * Everything else stays in basic BECAUSE it is a sole route: authoring a flow
  * (`build-pipeline`), the standards/skills library (`fragments`, whose only other route is a
  * button two levels into Workspace settings), the PREnv + runner plumbing (`infrastructure`,
- * `environment-setup`), and the operator/cost views that are the only aggregate read of run
- * health and spend (`operator-dashboard`, `reports`).
+ * which is also the only route to the guided per-service Compose environment setup), and the
+ * operator/cost views that are the only aggregate read of run health and spend
+ * (`operator-dashboard`, `reports`).
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
@@ -222,6 +234,19 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     },
   },
   {
+    // The engines. Kept out of `integrations-hub` on purpose (see NavSidebarGroup): a
+    // deployment with no provider connected cannot run anything, so this is the one
+    // connection that must not sit in a list of optional ones.
+    id: 'model-providers',
+    labelKey: 'nav.modelProviders',
+    icon: 'i-lucide-plug-zap',
+    surfaces: S('sidebar'),
+    gate: (g) => g.canManageIntegrations,
+    action: 'modelProviders',
+    testId: 'nav-model-providers',
+    sidebar: { group: 'models', order: 10 },
+  },
+  {
     id: 'integrations-hub',
     labelKey: 'nav.integrations',
     icon: 'i-lucide-blocks',
@@ -267,16 +292,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'infrastructure',
     testId: 'nav-infrastructure',
     sidebar: { group: 'infrastructure', order: 10 },
-  },
-  {
-    id: 'environment-setup',
-    labelKey: 'nav.environmentSetup',
-    icon: 'i-lucide-flask-conical',
-    surfaces: S('sidebar'),
-    gate: (g) => g.infrastructureAvailable,
-    action: 'environmentSetup',
-    testId: 'nav-environment-setup',
-    sidebar: { group: 'infrastructure', order: 20 },
   },
   {
     id: 'fragments',
@@ -332,7 +347,10 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     gate: (g) => g.canManageSettings,
     action: 'modelConfiguration',
     testId: 'nav-model-config',
-    sidebar: { group: 'configuration', order: 20 },
+    // Beside `model-providers`, not in `configuration`: "which key do we hold" and "which
+    // model does each agent kind use" are two halves of one question, and splitting them
+    // across sections is what sent people to Integrations looking for a model.
+    sidebar: { group: 'models', order: 20 },
     command: {
       group: 'workspace',
       order: 40,
@@ -477,6 +495,7 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
 export const SIDEBAR_GROUP_ORDER: readonly NavSidebarGroup[] = [
   'create',
   'repositories',
+  'models',
   'integrations',
   'infrastructure',
   'workspaceContext',

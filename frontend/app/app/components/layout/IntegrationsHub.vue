@@ -1,16 +1,24 @@
 <script setup lang="ts">
-// The Integrations hub: a single modal that lists every external system the WORKSPACE can
-// enable or link in. Each row reuses the existing per-integration panel handlers on the `ui`
-// store (so the integrations themselves are unchanged); opening one closes the hub and
-// reveals that integration's own panel/modal.
+// The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
+// can enable or link in — the ones that feed a run its context (source control, documents,
+// trackers) or receive its output (chat, observability). Each row reuses the existing
+// per-integration panel handlers on the `ui` store (so the integrations themselves are
+// unchanged); opening one closes the hub and reveals that integration's own panel/modal.
 //
 // Sections gate on the same `available` probes the navbar used, so a system that the backend
 // has turned off simply doesn't appear here.
 //
-// Scope split: per-USER connections (a personal GitHub token, own-machine runners, personal
-// subscriptions) now live in the "My setup" hub (UserMenu → My setup), NOT here — keeping
-// this hub purely workspace-scoped. When auth is disabled there is no UserMenu to host them,
-// so a "Personal (only you)" group falls back into this hub so they stay reachable.
+// Scope split 1 — MODEL PROVIDERS are NOT integrations here. They are the engines the
+// harnesses run on (with none connected nothing runs at all), so they have their own
+// top-level hub, `ModelProvidersHub.vue`. Keeping them out is the point: an integration is
+// something a deployment can live without, and burying the one mandatory connection among a
+// dozen optional ones is what made this hub confusing.
+//
+// Scope split 2 — per-USER connections (a personal GitHub token, own-machine runners, personal
+// subscriptions) live in the "My setup" hub (UserMenu → My setup), NOT here, keeping this hub
+// workspace-scoped. When auth is disabled there is no UserMenu to host them, so a "Personal
+// (only you)" group falls back into this hub so the workspace-adjacent ones stay reachable
+// (the model-shaped ones fall back into the Model providers hub instead).
 const { t } = useI18n()
 const ui = useUiStore()
 const auth = useAuthStore()
@@ -23,8 +31,6 @@ const releaseHealth = useReleaseHealthStore()
 const packageRegistries = usePackageRegistriesStore()
 const publicApiKeys = usePublicApiKeysStore()
 const userSecrets = useUserSecretsStore()
-const apiKeys = useApiKeysStore()
-const workspace = useWorkspaceStore()
 
 // True when the per-user "My setup" hub is reachable (UserMenu renders only when signed in).
 // When false (auth disabled / local mode) we fold the personal rows back into this hub so
@@ -54,8 +60,6 @@ watch(
       void packageRegistries.ensureLoaded().catch(() => {})
       void publicApiKeys.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
-      // Drives the OpenRouter row's "Key connected" badge.
-      if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
     }
   },
   // Lazy v-if mount: the hub mounts with `integrationsOpen` already true → load immediately.
@@ -111,42 +115,9 @@ function go(fn: () => void) {
 const groups = computed<IntegrationGroup[]>(() => {
   const out: IntegrationGroup[] = []
 
-  // --- Models & providers ----------------------------------------------------
-  // Top of the hub: an OpenRouter key is the fastest path to 300+ models, so it leads.
-  const openRouterKeyConnected = apiKeys.configuredProviders.has('openrouter')
-  out.push({
-    title: t('layout.integrationsHub.groups.models'),
-    items: [
-      {
-        key: 'openrouter',
-        icon: 'i-lucide-waypoints',
-        label: 'OpenRouter',
-        description: t('layout.integrationsHub.items.openrouter.description'),
-        status: openRouterKeyConnected
-          ? t('layout.integrationsHub.status.keyConnected')
-          : undefined,
-        connected: openRouterKeyConnected,
-        recommended: true,
-        onClick: () => go(ui.openOpenRouter),
-      },
-      {
-        key: 'vendors',
-        icon: 'i-lucide-key-round',
-        label: t('layout.integrationsHub.items.vendors.label'),
-        description: t('layout.integrationsHub.items.vendors.description'),
-        onClick: () => go(ui.openVendorCredentials),
-      },
-    ],
-    // Personal (individual-usage) subscriptions are per-USER, so they live in My setup —
-    // but this hub is where people look first when connecting "their Claude plan". A quiet
-    // pointer link keeps them findable without a workspace-scoped row competing here.
-    footerLink: {
-      key: 'personal-subs',
-      icon: 'i-lucide-user',
-      label: t('layout.integrationsHub.items.personalSubs.label'),
-      onClick: () => go(() => ui.openVendorCredentials('personal')),
-    },
-  })
+  // NOTE: model providers (OpenRouter, vendor keys, personal subscriptions, local runners)
+  // are NOT listed here — they have their own top-level hub (`ModelProvidersHub.vue`, SideBar
+  // → "Model providers"). See the scope split at the top of this file.
 
   // --- Source control --------------------------------------------------------
   const code: IntegrationItem[] = []
@@ -325,6 +296,8 @@ const groups = computed<IntegrationGroup[]>(() => {
   // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
   // Per-user connections normally live in the My-setup hub; with auth disabled they fold in
   // here so they stay reachable. (The badge reflects the signed-in user's stored secret.)
+  // Only the source-control one: the per-user MODEL connections are listed unconditionally
+  // in the Model providers hub, so they need no fallback.
   if (!personalHubReachable.value) {
     const pat = !!userSecrets.statusFor('github_pat')
     out.push({
@@ -338,13 +311,6 @@ const groups = computed<IntegrationGroup[]>(() => {
           status: pat ? t('layout.integrationsHub.status.connected') : undefined,
           connected: pat,
           onClick: () => go(ui.openUserSecrets),
-        },
-        {
-          key: 'local-runners',
-          icon: 'i-lucide-server',
-          label: t('layout.integrationsHub.items.localRunners.label'),
-          description: t('layout.integrationsHub.items.localRunners.description'),
-          onClick: () => go(ui.openLocalModels),
         },
       ],
     })

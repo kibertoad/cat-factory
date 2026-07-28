@@ -111,6 +111,8 @@
     "repositories": "Repozytoria",
     "addFromRepo": "Dodaj z istniejącego repozytorium",
     "bootstrapRepo": "Zainicjuj repozytorium",
+    "models": "Modele",
+    "modelProviders": "Dostawcy modeli",
     "integrations": "Integracje",
     "sandbox": "Piaskownica",
     "kaizen": "Kaizen",
@@ -122,8 +124,7 @@
     "accountSettings": "Ustawienia konta",
     "operatorDashboard": "Obserwowalność platformy",
     "reports": "Raporty",
-    "infrastructure": "Infrastruktura",
-    "environmentSetup": "Konfiguracja środowiska"
+    "infrastructure": "Infrastruktura"
   },
   "board": {
     "toast": {
@@ -1931,7 +1932,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Powrót do Moja konfiguracja",
-      "backToIntegrations": "Powrót do Integracje"
+      "backToIntegrations": "Powrót do Integracje",
+      "backToModelProviders": "Powrót do Dostawcy modeli"
     },
     "commandBar": {
       "searchPlaceholder": "Wyszukaj lub uruchom polecenie…",
@@ -1992,23 +1994,21 @@
     },
     "integrationsHub": {
       "title": "Integracje",
-      "intro": "Połącz i zarządzaj zewnętrznymi systemami, które ten obszar roboczy może powiązać.",
+      "intro": "Połącz opcjonalne systemy zewnętrzne, które ten obszar roboczy może powiązać, i zarządzaj nimi. Modele, na których działają Twoi agenci, znajdziesz w sekcji Dostawcy modeli.",
       "searchPlaceholder": "Szukaj integracji…",
       "noMatches": "Żadna integracja nie pasuje do \"{query}\".",
       "getStarted": {
         "title": "Wprowadzenie",
-        "body": "Połącz źródło kodu i dostawcę modeli, aby uruchomić swój pierwszy potok."
+        "body": "Połącz źródło kodu, aby Twoje potoki miały nad czym pracować."
       },
       "status": {
         "connected": "Połączono",
-        "keyConnected": "Klucz połączony",
         "notConnected": "Niepołączono",
         "needsAttention": "Wymaga uwagi",
         "disabled": "Wyłączono",
         "recommended": "Zalecane"
       },
       "groups": {
-        "models": "Modele i dostawcy",
         "sourceControl": "Kontrola wersji",
         "communication": "Komunikacja",
         "documents": "Dokumenty",
@@ -2018,16 +2018,6 @@
         "personal": "Osobiste (tylko Ty)"
       },
       "items": {
-        "openrouter": {
-          "description": "Jedna brama do ponad 300 modeli. Dodaj swój klucz i włącz modele w jednym miejscu."
-        },
-        "vendors": {
-          "label": "Dostawcy i klucze",
-          "description": "Subskrypcje LLM obszaru roboczego i klucze API dostawców."
-        },
-        "personalSubs": {
-          "label": "Subskrypcje osobiste (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Połącz aplikację GitHub App obszaru roboczego, przeglądaj repozytoria, PR-y i zgłoszenia."
         },
@@ -2067,16 +2057,51 @@
           "label": "Mój token GitHub",
           "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (pushe, PR-y, CI, scalanie)."
         },
-        "localRunners": {
-          "label": "Moje lokalne silniki",
-          "description": "Twoje silniki modeli na własnej maszynie (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Szablony i przykłady"
         },
         "bugHunt": {
           "label": "Polowanie na błędy",
           "description": "Oceń otwarte, nieprzypisane błędy z tablicy i wybierz jeden do naprawy"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Dostawcy modeli",
+      "intro": "Silniki, na których działają Twoi agenci. Zanim jakikolwiek krok potoku będzie mógł się wykonać, musi być połączony co najmniej jeden dostawca.",
+      "searchPlaceholder": "Szukaj dostawców…",
+      "noMatches": "Żaden dostawca nie pasuje do \"{query}\".",
+      "getStarted": {
+        "title": "Nie połączono jeszcze żadnego dostawcy",
+        "body": "Kroki agenta nie mogą się wykonać, dopóki model nie będzie osiągalny. Klucz OpenRouter to najszybszy sposób na odblokowanie szerokiego katalogu, ale klucze dostawców, plan osobisty lub własny lokalny silnik sprawdzą się tak samo dobrze."
+      },
+      "status": {
+        "connected": "Połączono",
+        "keyConnected": "Klucz połączony",
+        "notConnected": "Niepołączono",
+        "recommended": "Zalecane",
+        "connectedCount": "{count} połączony | {count} połączone | {count} połączonych"
+      },
+      "groups": {
+        "workspace": "Dostawcy obszaru roboczego",
+        "personal": "Osobiste (tylko Ty)",
+        "personalNote": "Należą do Twojego konta, a nie do obszaru roboczego, i są używane tylko w uruchomieniach, które sam rozpoczynasz. Są też wymienione w sekcji Moja konfiguracja."
+      },
+      "items": {
+        "openrouter": {
+          "description": "Jedna brama do ponad 300 modeli. Dodaj swój klucz i włącz modele w jednym miejscu."
+        },
+        "vendors": {
+          "label": "Dostawcy i klucze",
+          "description": "Subskrypcje LLM obszaru roboczego i klucze API dostawców."
+        },
+        "personalSubs": {
+          "label": "Moje subskrypcje",
+          "description": "Plany do użytku indywidualnego, które odblokowujesz osobistym hasłem (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "Moje lokalne silniki",
+          "description": "Silniki modeli na Twojej własnej maszynie (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -2647,6 +2672,32 @@
         "stopFailed": "Nie udało się zatrzymać współdzielonego stosu",
         "removeFailed": "Nie udało się usunąć współdzielonego stosu"
       }
+    },
+    "composeEnvSetup": {
+      "title": "Kreator konfiguracji Docker Compose dla usługi",
+      "lead": "Prowadzi jedną usługę przez tworzenie receptury Docker Compose, z której stawiane są jej środowiska testowe, zamiast ręcznego wpisywania ścieżki compose i kroków przygotowania.",
+      "how": {
+        "title": "Jak to działa",
+        "scan": "Skanuje powiązane repozytorium usługi w poszukiwaniu plików compose, profili, plików env i zrzutów danych początkowych.",
+        "analyse": "Opcjonalnie uruchamia agenta analizującego środowisko, aby na podstawie skryptów repozytorium naszkicować kroki przygotowania i bramkę kondycji.",
+        "preflight": "Uruchamia kontrole wstępne receptury na maszynie, która będzie ją stawiać.",
+        "save": "Zapisuje recepturę na usłudze i rejestruje obsługę Docker Compose w obszarze roboczym.",
+        "outcome": "Od tej pory Deployer stawia dokładnie ten stos, ilekroć potok potrzebuje żywego środowiska, a Tester działa przeciwko niemu. Nic nie zostaje zastosowane, dopóki nie zapiszesz."
+      },
+      "needed": {
+        "title": "Potrzebujesz tego, gdy",
+        "running": "Testy usługi wymagają faktycznie działającej aplikacji: testy API lub interfejsu, migracje, dane początkowe.",
+        "compose": "Usługa jest stawiana przez Docker Compose i nie ma jeszcze zapisanej receptury.",
+        "setup": "Postawienie stosu wymaga więcej niż jednego polecenia: profili, plików env, danych początkowych lub kontroli gotowości."
+      },
+      "notNeeded": {
+        "title": "Możesz to pominąć, gdy",
+        "inContainer": "Potok tylko sprawdza lintem, buduje lub uruchamia testy jednostkowe. Dzieje się to w kontenerze agenta jako kontrole przed PR, bez stawiania żadnego środowiska.",
+        "otherBackend": "Usługa jest stawiana w inny sposób (Kubernetes, podgląd w chmurze albo bez infrastruktury). Skonfiguruj to powyżej.",
+        "noRepo": "Usługa nie ma powiązanego repozytorium, więc nie ma czego skanować."
+      },
+      "start": "Rozpocznij konfigurację",
+      "rerunHint": "Uruchom ponownie w dowolnym momencie, aby zmienić zapisaną recepturę."
     },
     "localMode": {
       "title": "Tryb lokalny",
@@ -5250,8 +5301,8 @@
   },
   "environmentWizard": {
     "progress": "Krok {index} z {total}",
-    "title": "Skonfiguruj środowisko testowe",
-    "subtitle": "Wykryj, przejrzyj i zapisz przepis Docker Compose, aby Deployer go udostępnił.",
+    "title": "Konfiguracja środowiska Docker Compose",
+    "subtitle": "Zbuduj recepturę Docker Compose, z której stawiane są środowiska testowe usługi: skanowanie repozytorium, przegląd, kontrole wstępne, zapis.",
     "recommended": "zalecane",
     "steps": {
       "pick": "Wybierz usługę",
@@ -5261,6 +5312,7 @@
     },
     "pick": {
       "intro": "Wybierz usługę, dla której skonfigurować środowisko Docker Compose.",
+      "scope": "Zmienia się tylko wybrana usługa. Uruchom to ponownie później, aby edytować jej recepturę.",
       "empty": "Brak usług. Najpierw dodaj usługę."
     },
     "review": {

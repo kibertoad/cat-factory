@@ -99,13 +99,16 @@ describe('navSlotFilter', () => {
     expect(kept).toContain('integrations-hub')
     expect(kept).toContain('workspace-settings')
     expect(kept).toContain('model-config')
+    // Model providers are NOT an integration: the split is what makes the engines findable.
+    expect(kept).toContain('model-providers')
     // ...and so does every destination that is the SOLE route to its capability, however deep
     // it feels: authoring a flow, the standards library, the PREnv/runner plumbing, and the
     // aggregate run-health / spend views.
     expect(kept).toContain('build-pipeline')
     expect(kept).toContain('fragments')
+    // Also the only route to the guided per-service Compose environment setup, which folded
+    // into this window rather than staying a sibling nav entry.
     expect(kept).toContain('infrastructure')
-    expect(kept).toContain('environment-setup')
     expect(kept).toContain('operator-dashboard')
     expect(kept).toContain('reports')
     // What drops is beside the delivery path (experimentation) or a shortcut into a surface
@@ -125,7 +128,7 @@ describe('navSlotFilter', () => {
       kaizen: 'none needed - self-grading history, not on the delivery path',
       'merge-thresholds': 'workspace-settings -> Merge tab',
       'service-fragment-defaults': 'workspace-settings -> Service best practices tab',
-      'local-models': 'integrations-hub -> Local runners',
+      'local-models': 'model-providers -> My local runners',
     }
     const advanced = NAV_CONTRIBUTIONS.filter((i) => i.advanced).map((i) => i.id)
     expect(advanced.sort()).toEqual(Object.keys(ALTERNATIVE_ROUTE).sort())
@@ -215,6 +218,7 @@ describe('NAV_CONTRIBUTIONS catalog integrity', () => {
     for (const group of [
       'create',
       'repositories',
+      'models',
       'integrations',
       'infrastructure',
       'workspaceContext',
@@ -240,15 +244,19 @@ describe('nav grouping helpers', () => {
     expect(groups.map((g) => g.group)).toEqual([
       'create',
       'repositories',
+      'models',
       'integrations',
       'infrastructure',
       'workspaceContext',
       'configuration',
     ])
+    // The engines are their own section, ahead of the optional integrations; `model-config`
+    // sits beside the providers it picks models from rather than under `configuration`.
+    const models = groups.find((g) => g.group === 'models')
+    expect(models?.items.map((i) => i.id)).toEqual(['model-providers', 'model-config'])
     const configuration = groups.find((g) => g.group === 'configuration')
     expect(configuration?.items.map((i) => i.id)).toEqual([
       'workspace-settings',
-      'model-config',
       'account-settings',
       'operator-dashboard',
       'reports',

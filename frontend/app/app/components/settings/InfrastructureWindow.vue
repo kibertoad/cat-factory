@@ -6,7 +6,10 @@
 //     mode — the warm-container-pool + checkout-reuse settings (the local agent-container
 //     runtime, folded in from the former LocalModeSettingsPanel).
 //   - "Test environments" — where the Tester's ephemeral environments run. Shows the test-env
-//     backend selector and the environment-provider connection.
+//     backend selector, the environment-provider connection, and the guided per-service Docker
+//     Compose setup (formerly a standalone "Environment setup" sidebar entry — it writes a
+//     service's Compose recipe plus the workspace's Compose handler, so it belongs beside the
+//     settings it edits rather than at the same level as them).
 // Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
@@ -16,6 +19,7 @@ import InfraHandlersConfigurator from '~/components/settings/InfraHandlersConfig
 import DefaultProvisionTypeSection from '~/components/settings/DefaultProvisionTypeSection.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
+import ComposeEnvironmentSetupSection from '~/components/settings/ComposeEnvironmentSetupSection.vue'
 
 // The shared-stacks tab uses its own slot key beyond the provider-connection kinds.
 type InfraTabValue = ProviderConnectionKind | 'shared-stacks'
@@ -141,6 +145,12 @@ watch([tabs, () => store.loaded], () => {
                    the engine + connection per provision type, plus the custom-type catalog. -->
               <div class="border-t border-slate-800 pt-4">
                 <InfraHandlersConfigurator />
+              </div>
+              <!-- The guided per-SERVICE Compose flow (formerly the standalone "Environment
+                   setup" sidebar entry). Last, because it fills in one service's recipe on
+                   top of the workspace-wide choices above. -->
+              <div class="border-t border-slate-800 pt-4">
+                <ComposeEnvironmentSetupSection />
               </div>
             </div>
           </template>
