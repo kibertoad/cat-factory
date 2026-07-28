@@ -1,5 +1,11 @@
 # @cat-factory/agents
 
+## 0.75.2
+
+### Patch Changes
+
+- 3260f2d: Record one `llm_call_metrics` row per model call instead of per stream envelope, and bound what a pr-review slice carries.
+
 ## 0.75.1
 
 ### Patch Changes
