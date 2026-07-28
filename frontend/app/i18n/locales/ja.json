@@ -23,6 +23,14 @@
       "dismiss": "閉じる"
     }
   },
+  "uiMode": {
+    "switcher": "インターフェース",
+    "basic": "基本",
+    "advanced": "詳細",
+    "basicHint": "日常的に使う機能のみ。すべて表示するには「詳細」に切り替えてください。",
+    "advancedHint": "すべての項目とすべての実行オプション。",
+    "pinned": "このデプロイで設定されています"
+  },
   "common": {
     "loading": "読み込み中…",
     "save": "保存",
@@ -95,6 +103,8 @@
     "menu": "ナビゲーションメニュー",
     "openMenu": "メニューを開く",
     "closeMenu": "メニューを閉じる",
+    "expandSidebar": "サイドバーを展開",
+    "collapseSidebar": "サイドバーを折りたたむ",
     "commandBar": "検索またはコマンドを実行…",
     "create": "作成",
     "buildPipeline": "パイプラインを構築",
@@ -1358,13 +1368,23 @@
       "transportOverhead": "転送オーバーヘッド",
       "modelExecution": "モデル実行",
       "truncated": "{count} 件が切り詰め | {count} 件が切り詰め",
-      "cached": "{tokens} キャッシュ済み"
+      "inputTokensHint": "入力 / 出力トークンの合計。入力にはキャッシュされたトークンも含まれます。それらも依然としてコンテキストウィンドウを占有するため、Claude Code のコンテキスト表示と同じ数え方です。",
+      "fresh": "{tokens} 新規",
+      "freshHint": "キャッシュから提供された分を含まない、ゼロから処理された入力",
+      "cacheRead": "{tokens} キャッシュ読み取り",
+      "cacheReadHint": "プロバイダーのキャッシュから提供された入力トークン (新規入力の約 0.1 倍の価格)",
+      "cacheWrite": "{tokens} キャッシュ書き込み",
+      "cacheWriteHint": "プロバイダーのキャッシュに書き込まれた入力トークン (新規入力の 1.25 倍から 2 倍の価格)"
     },
     "metricsBar": {
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
-      "promptCompletionTokens": "新規（キャッシュ外）のプロンプト / 完了トークン",
-      "cachedTokens": "({tokens} 件キャッシュ済み)",
-      "cachedTokensHint": "プロバイダーのキャッシュから提供されたプロンプトトークン",
+      "inputCompletionTokens": "入力 / 出力トークンの合計。入力にはキャッシュされたトークンも含まれます。それらも依然としてコンテキストウィンドウを占有するため、Claude Code のコンテキスト表示と同じ数え方です。",
+      "fresh": "{tokens} 新規",
+      "freshHint": "キャッシュから提供された分を含まない、ゼロから処理された入力",
+      "cacheRead": "{tokens} キャッシュ読み取り",
+      "cacheReadHint": "プロバイダーのキャッシュから提供された入力トークン (新規入力の約 0.1 倍の価格)",
+      "cacheWrite": "{tokens} キャッシュ書き込み",
+      "cacheWriteHint": "プロバイダーのキャッシュに書き込まれた入力トークン (新規入力の 1.25 倍から 2 倍の価格)",
       "errors": "{count} 件のエラー | {count} 件のエラー",
       "warnings": "{count} 件の警告 | {count} 件の警告",
       "outputLimit": "出力上限",
@@ -1374,7 +1394,7 @@
       "modelExecution": "モデル実行"
     },
     "call": {
-      "tokensTitle": "{prompt} プロンプト / {completion} 完了トークン",
+      "tokensTitle": "入力トークン {input} 件 (うち新規 {fresh} 件) / 出力トークン {completion} 件",
       "outputUsedVsLimit": "使用済み出力 vs 上限",
       "transportVsExecution": "転送オーバーヘッド / モデル実行",
       "error": "エラー",
@@ -1384,7 +1404,9 @@
       "streamed": "ストリーミング",
       "buffered": "バッファ済み",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} プロンプトをキャッシュ",
+      "fresh": "{tokens} 新規",
+      "cacheRead": "{tokens} キャッシュ読み取り",
+      "cacheWrite": "{tokens} キャッシュ書き込み",
       "total": "合計 {duration}",
       "prompt": "プロンプト",
       "promptPrefixOmitted": "(新規メッセージのみ: 以前の {count} 件を省略)",
@@ -1940,7 +1962,8 @@
         "localModels": "マイローカルランナー",
         "sandbox": "Sandbox を開く",
         "shortcuts": "キーボードショートカット",
-        "bugHunt": "バグハント"
+        "bugHunt": "バグハント",
+        "toggleUiMode": "インターフェースモードを切り替え"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1961,7 +1984,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
         "shortcuts": "キーボード ショートカット キー ヘルプ",
-        "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て"
+        "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
+        "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示"
       }
     },
     "integrationsHub": {
@@ -2398,7 +2422,12 @@
       "test": {
         "button": "接続をテスト",
         "ok": "接続 OK",
-        "failed": "接続に失敗しました"
+        "failed": "接続に失敗しました",
+        "warningsTitle": "この設定の不足点",
+        "warnings": {
+          "runner_manifest_no_release": "release テンプレートがありません。実行をキャンセルしてもプールにジョブの停止を伝えられないため、取り残されたジョブはプールが自分で回収するまでランナーを占有し続けます。",
+          "runner_manifest_no_status_path": "ステータスパスがありません。ポーリングは常に実行中と解釈されるため、ジョブは実行のポーリング上限を使い切ることでしか終了できません。"
+        }
       },
       "toast": {
         "saved": "{title} を保存しました",
@@ -3548,10 +3577,11 @@
       "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
       "refPlaceholder": "課題の URL またはキーを貼り付け…",
       "searchFailed": "検索に失敗しました: {error}",
+      "searchNeedsRepo": "このサービスはまだリポジトリに紐付けられていないため、検索する対象がありません。リポジトリに紐付けるか、課題の URL を貼り付けて直接添付してください。",
       "imported": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
-      "noMatches": "一致する課題がありません。",
-      "emptySearchable": "タイトルで検索するか、インポート済みの課題を選択してください。",
+      "noMatches": "このサービスのリポジトリに一致する課題はありません。他のリポジトリの課題を添付するには URL を貼り付けてください。",
+      "emptySearchable": "このサービスのリポジトリをタイトルで検索するか、インポート済みの課題を選択してください。",
       "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。",
       "sourceLabel": "ソース",
       "noSource": "ソースを選択",
@@ -3967,6 +3997,7 @@
     "title": "要件レビュー",
     "iteration": "イテレーション {current} / {max}",
     "intro": "AI レビュアーがこの {level} の収集された要件(説明とリンクされた PRD やトラッカーの課題)を検査し、以下の所見を挙げました。関連するものに{answer}し、無関係なものを{dismiss}してから取り込んでください。レビュアーは要件が明確になるまで再レビューします。",
+    "scopeNote": "この段階では製品要件とビジネス要件のみを扱います。つまり、ソフトウェアが何をすべきか、どのようなルールに従うかです。技術選定、アーキテクチャ、データ構造といった技術的な決定は、コードベースを参照できるアーキテクトとリサーチャーのステップで後から行われます。",
     "levelFallback": "項目",
     "answerVerb": "回答",
     "dismissVerb": "却下",

@@ -29,6 +29,11 @@ export default defineNuxtConfig({
       // Base URL of the cat-factory worker API. Defaults to the local wrangler
       // dev server; override per-environment with NUXT_PUBLIC_API_BASE.
       apiBase: 'http://localhost:8787',
+      // Interface tier the SPA starts in: 'basic' (the default) or 'advanced'.
+      // Set with NUXT_PUBLIC_UI_MODE; like `apiBase` this is baked in at build
+      // time (`ssr: false`). An empty value means "no deployment pin", so the
+      // user's own browser-stored choice decides — see `stores/uiMode.ts`.
+      uiMode: '',
     },
   },
 

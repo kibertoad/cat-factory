@@ -7,6 +7,7 @@ import type {
   RepoOp,
   RepoOpContext,
 } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import { makeRepoFiles, makeResolveRepoFiles, runRepoOps } from '../src/agents/repoFiles.js'
 
 const REF = { owner: 'acme', repo: 'widgets' }
@@ -279,6 +280,7 @@ describe('runRepoOps', () => {
     } as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    logger: noopLogger,
   })
 
   it('runs ops in order', async () => {

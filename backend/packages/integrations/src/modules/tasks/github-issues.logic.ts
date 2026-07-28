@@ -8,6 +8,7 @@ import type {
   TrackerBoard,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
 // unit-testable without a live API: parsing an issue reference out of user input
@@ -153,15 +154,28 @@ export function parseIssueDependencyLinks(
 }
 
 /**
- * Build the GitHub issue-search text, scoping it to a single repo when a service's
- * repo is known. The `repo:owner/name` qualifier keeps hits from leaking in from
- * sibling repositories the installation can also see; the adapter appends
- * `is:issue`, so this returns only the user's text plus the optional scope.
+ * Build the GitHub issue-search text for ONE repository. The scope is REQUIRED, and that
+ * is a security property rather than an ergonomic one: `/search/issues` has no implicit
+ * scope of its own, so a query carrying no `repo:` qualifier searches whatever the
+ * credential can reach. Under a GitHub App installation token that happens to be the
+ * installation's own repos, which is why an unscoped query looked harmless; under a PAT
+ * (local mode, and any per-workspace PAT connection) the SAME query searches every public
+ * repository on GitHub and hands the user strangers' issues. There is no caller for whom
+ * an unscoped issue search is correct, so the type system refuses to build one.
+ *
+ * The adapter appends `is:issue`, so this returns the repo qualifier plus the user's text.
+ * The slug is shape-validated exactly as {@link buildGitHubIntakeQuery}'s board is: `repo:`
+ * is unquotable, so a value smuggling a second qualifier could otherwise widen the scope
+ * this whole function exists to enforce.
+ *
+ * An EMPTY query yields the bare `repo:owner/name`, i.e. the scoped repo's issues rather
+ * than nothing. That is unreachable over HTTP (the wire contract requires a non-empty query)
+ * and it is the right answer for an internal caller: the scope is the floor of what this
+ * search may return, never a filter that can be dropped.
  */
-export function buildGitHubIssueSearchQuery(query: string, scope?: TaskSearchRepoScope): string {
+export function buildGitHubIssueSearchQuery(query: string, scope: TaskSearchRepoScope): string {
   const text = query.trim()
-  if (!scope) return text
-  const repoQualifier = `repo:${scope.owner}/${scope.repo}`
+  const repoQualifier = `repo:${assertBoardSlug(`${scope.owner}/${scope.repo}`)}`
   return text ? `${repoQualifier} ${text}` : repoQualifier
 }
 
@@ -188,7 +202,7 @@ const REPO_SLUG = new RegExp(`^${SEG}/${SEG}$`)
 function assertBoardSlug(slug: string): string {
   if (!REPO_SLUG.test(slug)) {
     throw new ValidationError(`'${slug}' is not a GitHub repository scope; expected owner/repo.`, {
-      reason: 'invalid_board',
+      reason: 'invalid_board' satisfies TaskSourceReadReason,
     })
   }
   return slug
@@ -209,10 +223,23 @@ function assertBoardSlug(slug: string): string {
  * Every value that reaches the search text is either quoted or, for the unquotable board
  * scope, shape-validated (see {@link assertBoardSlug}) — a caller-supplied string must never
  * be able to add a qualifier of its own.
+ *
+ * The board is REQUIRED for the same reason {@link buildGitHubIssueSearchQuery}'s scope is:
+ * a boardless query searches everything the credential can see, which under a PAT is all of
+ * public GitHub — and intake does not merely *display* its hit, it imports it and starts a
+ * pipeline on it. A schedule stored without a repo is refused loudly (the fire reports the
+ * failure) rather than quietly scanning the world.
  */
 export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
-  const parts: string[] = []
-  if (query.board.githubRepo) parts.push(`repo:${assertBoardSlug(query.board.githubRepo.trim())}`)
+  const board = query.board.githubRepo?.trim()
+  if (!board) {
+    throw new ValidationError(
+      'This GitHub issue search has no repository configured. Set the intake board to the ' +
+        'owner/repo it should scan; an unscoped GitHub search reaches every public repository.',
+      { reason: 'missing_board' satisfies TaskSourceReadReason },
+    )
+  }
+  const parts: string[] = [`repo:${assertBoardSlug(board)}`]
   parts.push('is:open')
   // `no:assignee` is GitHub search's unassigned qualifier — pushed down like the rest, so a
   // hunt never spends its overscan window on issues somebody already owns.
@@ -227,27 +254,56 @@ export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
 }
 
 /**
- * Resolve raw search input that names ONE specific issue (rather than free text)
- * into its canonical `owner/repo#number` external id, so the caller can fetch it
+ * Resolve raw search input that names ONE specific issue in the SCOPED repo (rather than
+ * free text) into its canonical `owner/repo#number` external id, so the caller can fetch it
  * and surface it as the exact match instead of a fuzzy search hit. Two forms:
- *   1. An explicit reference — a full issue URL, the `owner/repo/issues/n` path, or
- *      the `owner/repo#n` shorthand — parsed verbatim (its own repo wins, even if
- *      it differs from `scope`, so a pasted URL points at the actual issue).
- *   2. A bare issue number (`11`) — resolved against `scope` (the service's repo),
- *      which is the only way to know which repo a lone number belongs to.
+ *   1. An explicit reference — a full issue URL, the `owner/repo/issues/n` path, or the
+ *      `owner/repo#n` shorthand — accepted only when it names the SCOPED repo.
+ *   2. A bare issue number (`11`) — resolved against `scope` (the service's repo), which is
+ *      the only way to know which repo a lone number belongs to.
  * Returns null when the input is neither (treat it as free-text search).
+ *
+ * A reference naming a DIFFERENT repository resolves to null on purpose: search results are
+ * the service's own repo and nothing else, so a stray paste can never make another repo's
+ * issue look like a hit the search found. Linking that issue is still supported — it is an
+ * explicit reference, handled by the picker's "attach by reference" row, which imports the
+ * ref directly and never rides this search path.
+ *
+ * Repo comparison is case-insensitive: GitHub owner/repo names are case-PRESERVING but
+ * case-INSENSITIVE for lookup, so `Owner/Repo#1` and `owner/repo#1` are the same issue and
+ * matching them exactly would reject a paste from the browser address bar.
+ *
+ * The id is then rebuilt from the SCOPE rather than echoed back in the casing the user typed.
+ * An external id is stored verbatim (`fetchTask` passes it straight through to the
+ * projection), so returning `Owner/Repo#1` here would persist a SECOND row for an issue the
+ * search already knows as `owner/repo#1` — two context keys, two "imported" entries, one
+ * issue. The scope's casing comes from the repo projection, i.e. GitHub's own, so it is the
+ * canonical form. (`walkIntakeHits` lowercases both sides of its exclusion check for exactly
+ * this hazard; here the canonical form is known, so it can be normalised instead.)
  */
 export function detectExactGitHubIssueRef(
   query: string,
-  scope?: TaskSearchRepoScope,
+  scope: TaskSearchRepoScope,
 ): string | null {
   const trimmed = query.trim()
   const ref = parseGitHubIssueRef(trimmed)
-  if (ref) return ref
-  if (scope && /^\d+$/.test(trimmed)) {
+  if (ref) {
+    const id = parseGitHubIssueExternalId(ref)
+    if (!id || !isScopedRepo(id, scope)) return null
+    return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: id.number })
+  }
+  if (/^\d+$/.test(trimmed)) {
     return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: Number(trimmed) })
   }
   return null
+}
+
+/** Whether a parsed issue id names the scoped repository (case-insensitively, as GitHub does). */
+function isScopedRepo(id: GitHubIssueExternalId, scope: TaskSearchRepoScope): boolean {
+  return (
+    id.owner.toLowerCase() === scope.owner.toLowerCase() &&
+    id.repo.toLowerCase() === scope.repo.toLowerCase()
+  )
 }
 
 /** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */

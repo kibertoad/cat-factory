@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { runBestEffort } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { makeWaitUntil } from '../../http/waitUntil.js'
@@ -104,19 +105,28 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const waitUntil = makeWaitUntil(c)
     const recordSearch = (resultCount: number): void => {
       if (!searchQueryObservability) return
+      // Swallowed: observability never breaks a search — but a sink that rejects every write
+      // leaves the run's search history simply absent, which reads as "the agent searched for
+      // nothing" rather than "we failed to record it".
       waitUntil(
-        searchQueryObservability
-          .record({
+        runBestEffort(
+          log,
+          'webSearch.recordQuery',
+          () =>
+            searchQueryObservability.record({
+              workspaceId: session.workspaceId,
+              executionId: session.executionId,
+              agentKind: session.agentKind,
+              provider: upstream.provider,
+              query,
+              resultCount,
+            }),
+          {
             workspaceId: session.workspaceId,
             executionId: session.executionId,
-            agentKind: session.agentKind,
             provider: upstream.provider,
-            query,
-            resultCount,
-          })
-          .catch(() => {
-            // Swallowed: observability never breaks a search.
-          }),
+          },
+        ),
       )
     }
 

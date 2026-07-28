@@ -33,9 +33,11 @@ import {
   type RepoEntry,
   type RepoFileContent,
   describeVcsApiError,
+  runBestEffort,
   VCS_DOC_URLS,
 } from '@cat-factory/kernel'
 import { githubProjection as gp } from '@cat-factory/integrations'
+import { logger } from '../observability/logger.js'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { postPrReview } from './reviewPosting.js'
@@ -1466,7 +1468,12 @@ export class FetchGitHubClient implements GitHubClient {
       observedAt: this.deps.clock.now(),
     }
     // Best-effort: rate-limit accounting must never fail the actual call.
-    await this.deps.rateLimitRepository.record(snapshot).catch(() => {})
+    await runBestEffort(
+      logger,
+      'github.recordRateLimit',
+      () => this.deps.rateLimitRepository.record(snapshot),
+      { installationId, resource: snapshot.resource },
+    )
   }
 }
 

@@ -1,5 +1,6 @@
 import type { CommitFilesInput } from '@cat-factory/contracts'
-import type { AgentRunContext, RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
+import type { AgentRunContext, Logger, RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
+import { createRecordingLogger, noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { blueprintPostOp, specPostOp, specPromotionPostOp } from './builtin.js'
 import { readServiceSpec } from './readServiceSpec.js'
@@ -64,6 +65,7 @@ const ctx = (repo: RepoFiles, blueprintService: unknown) => ({
   repo,
   branch: 'main',
   opensPr: false,
+  logger: noopLogger,
   context: {} as AgentRunContext,
   result: { output: '', blueprintService },
 })
@@ -138,6 +140,7 @@ const specCtx = (repo: RepoFiles, spec: unknown) => ({
   repo,
   branch: 'cat-factory/task_login',
   opensPr: false,
+  logger: noopLogger,
   context: {} as AgentRunContext,
   result: { output: '', spec },
 })
@@ -279,10 +282,11 @@ describe('specPostOp', () => {
 // is the durable driver's replay answer.
 // ---------------------------------------------------------------------------
 
-const testerCtx = (repo: RepoFiles, testReport: unknown) => ({
+const testerCtx = (repo: RepoFiles, testReport: unknown, logger: Logger = noopLogger) => ({
   repo,
   branch: 'cat-factory/task_login',
   opensPr: true,
+  logger,
   context: {} as AgentRunContext,
   result: { output: '', testReport },
 })
@@ -476,6 +480,70 @@ describe('specPromotionPostOp', () => {
 
       expect((await statesOf(repo))[intact]).toBe('established')
       expect(repo.commits[0]!.files.map((f) => f.path)).not.toContain(shards[0])
+    })
+  })
+
+  // The D3 half of the observability initiative: promotion stays a no-op on every failure
+  // path, but a run that verified requirements and promoted NONE must no longer look exactly
+  // like a run that had nothing to promote.
+  describe('says what it declined to do', () => {
+    it('warns when every promotable requirement is stranded in an unsafe shard', async () => {
+      const repo = await repoWithSpec()
+      const shardPath = [...repo.paths()].find(
+        (p) => p.startsWith('spec/modules/') && p.endsWith('.json') && !p.endsWith('_module.json'),
+      )!
+      const victim = JSON.parse((await repo.getFile(shardPath))!.content).requirements[0].id
+      const shard = JSON.parse((await repo.getFile(shardPath))!.content)
+      shard.requirements.push({
+        id: 'req-oversized',
+        title: 'x'.repeat(130),
+        statement: 'The system SHALL survive a lenient write.',
+        kind: 'functional',
+        priority: 'must',
+        state: 'aspirational',
+        sourceBlockIds: [],
+        acceptance: [],
+      })
+      await repo.commitFiles({
+        branch: 'cat-factory/task_login',
+        message: 'lenient write',
+        files: [{ path: shardPath, content: `${JSON.stringify(shard, null, 2)}\n` }],
+      })
+      const log = createRecordingLogger()
+
+      await specPromotionPostOp(
+        testerCtx(repo, { requirementVerdicts: [{ requirementId: victim, status: 'met' }] }, log),
+      )
+
+      const dropped = log.lines.find((l) => l.msg.includes('spec promotion dropped'))
+      expect(dropped?.level).toBe('warn')
+      expect(dropped?.fields.op).toBe('specPromotion')
+    })
+
+    it('warns with the cause when the commit throws, and still does not fail the step', async () => {
+      const repo = await repoWithSpec()
+      const id = Object.keys(await statesOf(repo))[0]!
+      repo.commitFiles = () => Promise.reject(new Error('403 from the branch protection rule'))
+      const log = createRecordingLogger()
+
+      await expect(
+        specPromotionPostOp(
+          testerCtx(repo, { requirementVerdicts: [{ requirementId: id, status: 'met' }] }, log),
+        ),
+      ).resolves.toBeUndefined()
+
+      const failed = log.lines.find((l) => l.msg.includes('spec promotion failed'))
+      expect(failed?.level).toBe('warn')
+      expect(failed?.fields.err).toContain('branch protection')
+    })
+
+    it('is quiet at info/warn when there was simply nothing to promote', async () => {
+      const repo = await repoWithSpec()
+      const log = createRecordingLogger()
+
+      await specPromotionPostOp(testerCtx(repo, { requirementVerdicts: [] }, log))
+
+      expect(log.lines.every((l) => l.level === 'debug')).toBe(true)
     })
   })
 })

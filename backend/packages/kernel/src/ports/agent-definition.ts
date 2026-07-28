@@ -1,5 +1,6 @@
 import type { InjectedContextFile, PullRequestRef } from '../domain/types.js'
 import type { AgentRunContext, AgentRunResult } from './agent-executor.js'
+import type { Logger } from './logging.js'
 import type { RepoFiles } from './repo-files.js'
 
 // ---------------------------------------------------------------------------
@@ -131,6 +132,16 @@ export interface RepoOpContext {
    * e.g. render `spec/` from `result.spec`); absent for preOps.
    */
   result?: AgentRunResult
+  /**
+   * Where an op reports work it declined to do. A post-op is BEST-EFFORT by contract (a
+   * bookkeeping commit must never turn a green step red), which means every early return and
+   * every swallowed throw is otherwise indistinguishable from success — the spec-promotion
+   * hole this port field exists to close (`docs/initiatives/observability-logging-gaps.md`, D3).
+   *
+   * REQUIRED, not optional: an absent optional logger is silent by definition, which is exactly
+   * the failure mode. A test or a harness passes `noopLogger` explicitly.
+   */
+  logger: Logger
 }
 
 /**

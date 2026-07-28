@@ -10,6 +10,7 @@
 // unavailable or failed still shows its candidates (flagged as unassessed, since the scan is
 // useful on its own), and a scan that hit its cap says so — a silently shortened list reads
 // exactly like an exhaustive one.
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type {
   BugHuntAnalysisStatus,
   BugHuntCandidate,
@@ -69,8 +70,9 @@ const boardItems = computed(() =>
  * backend's reason code, not on "any error": an unreachable tracker or an expired token would
  * otherwise present as a free-text field that simply moves the same failure to the next click.
  */
+const BOARDS_UNSUPPORTED: TaskSourceReadReason = 'boards_unsupported'
 const boardIsFreeText = computed(
-  () => !hunt.boardsLoading && hunt.boardsErrorReason === 'boards_unsupported',
+  () => !hunt.boardsLoading && hunt.boardsErrorReason === BOARDS_UNSUPPORTED,
 )
 
 /** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */

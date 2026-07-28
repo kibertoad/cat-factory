@@ -208,7 +208,14 @@ is named: it adapts pino onto the port. Full patterns:
 - **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps
   the swallow — a best-effort path must NEVER propagate into its caller — and adds one `warn` naming
   the operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the
-  cause with `describeError(error)` instead of discarding it.
+  cause with `describeError(error)` instead of discarding it. `scripts/check-silent-catch.mjs`
+  enforces this over `backend/packages` + `backend/runtimes`; a drop that genuinely needs no report
+  keeps the idiom under a `// silent-catch-ok: <why>` comment, which is a sentence a reviewer reads.
+  EVERY spelling of an empty handler counts, including a body holding only a comment — the guard
+  masks comments/strings before matching, so its detection lives in `scripts/silent-catch.mjs` with
+  fixtures beside it; extend those when you touch it.
+  The executor/deploy harnesses are out of scope (a source change there bumps the runner image, so
+  they batch into one slice) and so is the SPA (it has no logger to report through yet).
 - **`describeError` scrubs through `redactSecrets`**, because a `fetch`/spawn/SDK error routinely
   echoes the request URL or an auth header. Any OTHER field carrying command output, a URL, or model
   text goes through `redactSecrets` at the emit site. Never log an auth header or a decrypted
@@ -485,6 +492,8 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 > and CI's `Build & typecheck` job is authoritative for both.
 
 - `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
+- `node scripts/check-silent-catch.mjs` — bans `.catch(() => {})` in backend non-test source.
+  `node --test 'scripts/*.test.mjs'` runs that guard's own fixtures (CI runs both).
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.
@@ -695,6 +704,17 @@ unrelated runs. Design + the withdrawn alternative:
 The FIRST step of the default pipelines, handled inline in the engine (not a container agent). The
 reviewer inspects a block's collected requirements and raises severity-tagged findings; the run
 parks and the dedicated window drives an iterative loop until convergence.
+
+**This stage settles the PRODUCT / BUSINESS layer ONLY** — what the software must do, the rules
+that govern it, and business-level quality expressed as an outcome. The technical layer belongs to
+the later `architect` and `researcher` steps, which refine it with the repository and the in-repo
+`tech-spec/` in hand. A technical finding here is not a bonus: it asks a product owner something
+they cannot answer and buries the questions only they can, which is what stalls the loop. The
+boundary is ONE shared `PRODUCT_SCOPE_BOUNDARY` block folded into all THREE prompts of the flow
+(`prompts/requirements.ts` — reviewer, incorporation editor, Requirement Writer) plus the matching
+user prompts in `requirements.logic.ts`, because it only holds if every agent honours it: an editor
+that writes a design into the incorporated document undoes a reviewer that stayed product-level.
+Editing any of them means bumping its number in `kinds/versions.ts`.
 
 1. Findings raised; the human answers or dismisses each.
 2. An incorporation companion folds answers into ONE standard-format document (status `merged`).
@@ -1218,6 +1238,29 @@ error handling — and the phased plan to close them — are tracked in
     chain, and those interleave with the parent's now that telemetry streams; a tip nothing can
     chain onto loses delta compression on exactly the subagent-heavy runs where it matters.
 
+  **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input,
+  with `cacheReadTokens` + `cacheWriteTokens` beside it, so total input is their sum. They are
+  priced ~1x / ~0.1x / 1.25-2x base input respectively — a cache WRITE costs more than fresh —
+  so any producer summing them makes a loop that keeps invalidating its prefix read exactly like
+  one riding a warm cache. A new producer normalises to fresh at the source through the SINGLE
+  `readInputTokenClasses`, never a read-the-classes helper paired by hand with a subtract-them
+  one: it subtracts where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex)
+  and leaves the already-exclusive field alone where it reports them apart (Anthropic), and
+  **reads the two cache classes INDEPENDENTLY** — an OpenAI-shaped gateway fronting Anthropic
+  (`litellm`, OpenRouter) reports a read field AND a write field on one payload, so detecting one
+  must never suppress the other. Only Anthropic reports a write class — 0
+  elsewhere, never guessed. A count that survives a wire boundary is read LENIENTLY on the way in
+  (`coerceCallMetrics`): a runner pool runs whatever harness image its workspace pinned, so
+  requiring a field a new image added would drop that pool's telemetry wholesale instead of
+  losing the one class the old image never measured. Distinct from the harness's
+  `PiRunOutcome.usage`, which is the
+  key-rotation WEIGHT and deliberately keeps summing every billed bucket. **On every SPA surface the
+  headline `↑` is the TOTAL of the three (`totalInputTokens`), with the classes as the breakdown** —
+  the like-for-like of Claude Code's context gauge, which counts the same buckets. Splitting the
+  classes makes COST readable; leading with the fresh figure would make VOLUME unreadable, and did
+  (a ~31M-token run rendered as 685). Design + the gotchas:
+  [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
+
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
   (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list
@@ -1444,6 +1487,51 @@ event left to restore it.
   the snapshot or reconcile rather than replace.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order
   refreshes and assert the fresher one wins.
+
+## Basic vs advanced interface mode (frontend)
+
+The SPA renders at one of two tiers: `basic` (the shipped default — the everyday surface) and
+`advanced` (everything). Resolution is `NUXT_PUBLIC_UI_MODE` → the user's persisted choice →
+`basic`, first match wins, in `stores/uiMode.ts` (which also owns the sidebar's collapsed rail:
+basic mode always STARTS railed). Full model:
+[`frontend/app/README.md`](./frontend/app/README.md#interface-modes-basic--advanced).
+
+**A new user-facing surface must decide its tier, and the answer is never "ignore this".**
+
+- **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
+  `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
+  RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
+  un-disentangleable in the specs (and a consumer item loses the declarative flag).
+- **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
+  disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
+  field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred
+  flag), so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an
+  input NOTHING else supplies stays in BOTH tiers however advanced it feels — the e2e suite caught
+  exactly this on the apriori-branch picker, which has no default to fall back to.
+- **Gate an override control on `showOverrideField(isAdvanced, ...values)`, NOT on `isAdvanced`
+  alone** (`utils/uiMode.ts`). The rule above holds only while the override is UNSET, which is
+  guaranteed at CREATION time (a fresh form starts from the defaults) but never for an EXISTING
+  entity: a block can already carry an override written by a teammate on the advanced tier, by the
+  API, or by this user before switching down. Hiding it then would leave a basic-mode user on
+  settings they can neither see nor clear — the exact divergence the rule forbids. The helper keeps
+  the control whenever any value it edits is set (`false` counts — a tri-state `false` is a choice,
+  not absence), so basic stays clean for the common case without ever concealing a deviation.
+- **The env pin makes the switcher READ-ONLY** (`envPinned`), and `setMode` refuses to write. A
+  persisted preference the resolver would then ignore is a lie to the user, not a fallback. That
+  refusal is hygiene, not the invariant — a persisted setup store must return its state to persist
+  it, so a direct write to `storedMode` is always possible; the tier is safe because `resolveUiMode`
+  consults the env FIRST, so such a write can only leave a stale value, never change the mode.
+- **The rail state is a PER-TIER preference** (`railCollapsed`, keyed by `UiMode`), not one shared
+  boolean. Each tier has its own default (`DEFAULT_RAIL_COLLAPSED`: basic railed, advanced expanded)
+  AND its own memory, so a choice in either tier survives a reload and a round trip through the
+  other. Don't reintroduce a single flag with a reset watcher — it can only honour one tier's
+  default, and it does so by discarding the other tier's explicit choice.
+- **Never mark the way BACK as `advanced`.** Basic is the shipped default, so anything that is the
+  only route to the advanced half (the `ui-mode` palette entry, the sidebar switcher) has to stay
+  visible in basic mode, or the tier is a one-way door for a user who never finds the switcher.
+- **An e2e spec whose subject is not the tier pins it** with `useAdvancedInterfaceMode(page)`
+  before `openBoard`; `ui-mode.spec.ts` owns the default, the switch, the rail, and the palette
+  route back.
 
 ## Internationalization (i18n)
 

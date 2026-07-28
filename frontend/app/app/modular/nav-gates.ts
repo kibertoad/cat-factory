@@ -13,7 +13,9 @@ import type { NavGates } from '~/modular/nav-contributions'
  * permission or connection flip re-gates every shell with no `recalculateSlots()`.
  *
  * This mirrors the exact gating the pre-slice-1 `SideBar` computeds encoded (see
- * `useWorkspaceAccess` for the dev-open "absent access ⇒ allow all" parity).
+ * `useWorkspaceAccess` for the dev-open "absent access ⇒ allow all" parity), plus
+ * the interface tier (`advancedMode`), which rides the same service so a mode flip
+ * re-gates all three shells through the same reactive path as a permission flip.
  */
 export function createNavGates(): NavGates {
   const access = useWorkspaceAccess()
@@ -22,6 +24,7 @@ export function createNavGates(): NavGates {
   const accounts = useAccountsStore()
   const auth = useAuthStore()
   const providerConnections = useProviderConnectionsStore()
+  const uiMode = useUiModeStore()
 
   const infrastructureAvailable = computed(
     () =>
@@ -58,6 +61,9 @@ export function createNavGates(): NavGates {
     },
     get isAccountAdmin() {
       return isAccountAdmin.value
+    },
+    get advancedMode() {
+      return uiMode.isAdvanced
     },
   }
 }

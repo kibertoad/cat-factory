@@ -46,6 +46,11 @@ on the published npm version** instead:
 - `wrangler.toml` — set `name` to your Pages project.
 - The backend URL is **not** in config: it is baked in at build time from
   `NUXT_PUBLIC_API_BASE` (the SPA is `ssr: false`).
+- `NUXT_PUBLIC_UI_MODE` (optional, same build-time story) pins the interface tier every
+  visitor starts in — `basic` (the default: everyday surface only) or `advanced` (everything).
+  Setting it **overrides** each user's own choice and turns the in-app switcher into a
+  read-only indicator, so leave it unset unless you want the tier fixed fleet-wide. See
+  [the layer README](../../frontend/app/README.md#interface-modes-basic--advanced).
 
 ## Run & deploy
 
@@ -53,6 +58,7 @@ on the published npm version** instead:
 pnpm dev                            # local dev against http://localhost:8787 (layer default)
 
 # build the static SPA with your production API base, then deploy
+# (add NUXT_PUBLIC_UI_MODE=advanced to pin every visitor to the full interface)
 NUXT_PUBLIC_API_BASE=https://catfactory-api.kiberion.com pnpm generate
 pnpm deploy                         # wrangler pages deploy (project + dir from wrangler.toml)
 ```

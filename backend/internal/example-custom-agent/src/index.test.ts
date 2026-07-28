@@ -18,6 +18,7 @@ import {
   stubJudgeContext,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
+  noopLogger,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -197,6 +198,7 @@ describe('example custom agents', () => {
       repo,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       context: { agentKind: SECURITY_AUDITOR_KIND } as never,
       result: { output: 'done', custom: { risk: 0.1, summary: 'Clean', findings: [] } },
     })
@@ -220,6 +222,7 @@ describe('example custom agents', () => {
       repo,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       context: { agentKind: SECURITY_AUDITOR_KIND } as never,
       result: { output: 'done', custom: assessment },
     })
@@ -235,6 +238,7 @@ describe('example custom agents', () => {
       repo,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       context: { agentKind: SECURITY_AUDITOR_KIND } as never,
       result: { output: 'no json' },
     })
@@ -380,6 +384,7 @@ describe('example org research-and-apply preset', () => {
       repo,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       // The engine threads the item's `spawn.taskTypeFields` onto the block, so the post-op reads
       // the SAME `targetPath` the seedPlan derived + stamped.
       context: {
@@ -409,6 +414,7 @@ describe('example org research-and-apply preset', () => {
       repo,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       context: { agentKind: ORG_RESEARCH_KIND, block: {} } as never,
       result: { output: 'done', custom: { verdict: 'GO' } },
     })
@@ -420,6 +426,7 @@ describe('example org research-and-apply preset', () => {
       repo: { commitFiles: commitFiles2 } as unknown as RepoFiles,
       branch: 'cat-factory/blk_1',
       opensPr: false,
+      logger: noopLogger,
       context: { agentKind: ORG_RESEARCH_KIND, block: {} } as never,
       result: { output: 'no json' },
     })

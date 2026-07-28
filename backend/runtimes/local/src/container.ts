@@ -26,7 +26,7 @@ import {
   createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
-import { ConflictError, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
+import { ConflictError, MODEL_PRESET_SEED_IDS, runBestEffort } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
@@ -648,7 +648,7 @@ function resolveLocalRunnerTransports(params: {
   // resolveHarnessImage), so this is no longer gated on the raw env var; a container runtime
   // that's down just makes the fire-and-forget promise reject harmlessly (dispatch reuses the
   // same cached promise and fails loudly then).
-  void resolveContainerTransport().catch(() => {})
+  void runBestEffort(logger, 'local.warmContainerTransport', () => resolveContainerTransport())
 
   // The DEPLOY job client (the async container-backed Kubernetes render lifecycle). Local runs
   // it on a DEDICATED deploy backend — the developer's host `kubectl`/`kustomize`/`helm` (native

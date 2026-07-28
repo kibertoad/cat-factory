@@ -125,7 +125,7 @@ describe('GitHubIssuesProvider', () => {
         url: 'https://github.com/octo/app/issues/7',
       },
     ]
-    const results = await provider.search({}, 'csv', 'ws_1')
+    const results = await provider.search({}, 'csv', 'ws_1', { owner: 'octo', repo: 'app' })
     expect(results).toEqual([
       {
         source: 'github',
@@ -136,8 +136,10 @@ describe('GitHubIssuesProvider', () => {
         excerpt: '',
       },
     ])
-    // Only ws_1's installation (100) was queried — never ws_2's (200).
-    expect(client.searchIssuesCalls).toEqual([{ installationId: 100, query: 'csv' }])
+    // Only ws_1's installation (100) was queried — never ws_2's (200) — and the query carries
+    // the repo scope, which is what actually confines the results: the installation token used
+    // to do that implicitly, but a PAT-authenticated client searches all of public GitHub.
+    expect(client.searchIssuesCalls).toEqual([{ installationId: 100, query: 'repo:octo/app csv' }])
   })
 
   it('returns no results when the workspace has no installation', async () => {
@@ -154,7 +156,20 @@ describe('GitHubIssuesProvider', () => {
         url: 'https://github.com/octo/app/issues/7',
       },
     ]
-    expect(await provider.search({}, 'csv', 'ws_unknown')).toEqual([])
+    expect(await provider.search({}, 'csv', 'ws_unknown', { owner: 'octo', repo: 'app' })).toEqual(
+      [],
+    )
+    expect(client.searchIssuesCalls).toEqual([])
+  })
+
+  it('refuses an unscoped search rather than querying whatever the credential can see', async () => {
+    const { provider, client } = providerWith(DETAIL, [
+      installation({ workspaceId: 'ws_1', installationId: 100 }),
+    ])
+
+    // Only reachable with the explicit repo-less `null`; omitting the argument no longer
+    // typechecks, which is where the guarantee actually lives.
+    await expect(provider.search({}, 'csv', 'ws_1', null)).rejects.toThrow(/scoped to a repository/)
     expect(client.searchIssuesCalls).toEqual([])
   })
 })

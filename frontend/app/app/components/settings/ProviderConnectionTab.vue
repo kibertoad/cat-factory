@@ -12,7 +12,9 @@
 //   - a MANIFEST-driven provider (no template) → the full JSON manifest editor
 //     (ProviderManifestEditor), which replaces the old "use the API" disclaimer.
 import { computed, ref, toRaw, watch } from 'vue'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, ProviderConnectionKind } from '~/types/providerConnections'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
@@ -56,7 +58,7 @@ const showLogs = ref(false)
 
 // --- Shared state -------------------------------------------------------------------
 const values = ref<Record<string, string>>({})
-const testResult = ref<{ ok: boolean; message?: string } | null>(null)
+const testResult = ref<ConnectionTestResult | null>(null)
 const testing = ref(false)
 const busy = ref(false)
 
@@ -514,6 +516,8 @@ function fieldHelp(key: string): string | undefined {
           {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
         </span>
       </div>
+
+      <ConnectionWarnings :warnings="testResult?.warnings" />
 
       <div class="flex justify-end">
         <UButton

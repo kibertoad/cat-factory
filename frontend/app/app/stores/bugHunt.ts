@@ -1,17 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BugHuntResult, RunBugHuntInput, TaskSourceKind, TrackerBoard } from '~/types/domain'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { apiErrorReason } from '~/composables/api/errors'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
-
-/** The backend's `error.details.reason` code, when it sent one (see `useApi`'s error envelope). */
-function errorReasonOf(error: unknown): string | null {
-  const details = apiErrorEnvelope(error)?.details
-  if (!details || typeof details !== 'object') return null
-  const reason = (details as Record<string, unknown>).reason
-  return typeof reason === 'string' ? reason : null
-}
 
 /**
  * Bug-hunt state: the boards of the tracker being browsed, the last hunt's ranked candidates,
@@ -68,7 +60,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       if (boardsSource.value !== source) return
       boards.value = []
       boardsError.value = e instanceof Error ? e.message : String(e)
-      boardsErrorReason.value = errorReasonOf(e)
+      boardsErrorReason.value = apiErrorReason(e)
     } finally {
       boardsLoading.value = false
     }

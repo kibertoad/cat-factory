@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
+    "test:run": "vitest run",
     "bench": "node --experimental-strip-types src/cli.ts"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "workers-ai-provider": "^4.0.0"
   },
   "devDependencies": {
+    "@cat-factory/sandbox": "workspace:*",
     "@types/node": "^26.1.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"

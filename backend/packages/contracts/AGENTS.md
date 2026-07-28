@@ -15,6 +15,9 @@ top-level files are the domain contracts.
   **block** (`task` is the tracker-boundary name, `card` the UI/events name — one thing, three
   names; `docs/glossary.md`).
 - `events.ts` — the `WorkspaceEvent` union pushed to the SPA; `errors.ts` — the `reason`/`code`
-  vocabulary the SPA maps to i18n keys.
+  vocabulary the SPA maps to i18n keys. A `reason` union scoped to ONE surface lives with that
+  surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same: the code
+  is declared HERE, so a rename fails the typecheck on both sides rather than degrading the
+  SPA to the backend's untranslated prose.
 
 **See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".

@@ -14,12 +14,15 @@ import { RunStateMachine } from './RunStateMachine.js'
 // with a `pipeline_complete` card, which assumes a PR to confirm/merge. These tests pin that
 // fork so a read-only pipeline finishes cleanly and a PR-producing one still asks for confirm.
 
-function makeMachine(block: Block) {
+function makeMachine(block: Block, onRaise?: () => void) {
   const updates: { id: string; patch: Record<string, unknown> }[] = []
   const raised: { type: string }[] = []
+  /** Interleaved log of both side effects, so a test can pin their ORDER (see F11). */
+  const order: string[] = []
   const blockRepository: BlockRepository = {
     get: async () => block,
     update: async (_ws: string, id: string, patch: Record<string, unknown>) => {
+      order.push('update')
       updates.push({ id, patch })
     },
   } as unknown as BlockRepository
@@ -28,6 +31,8 @@ function makeMachine(block: Block) {
   } as unknown as ExecutionEventPublisher
   const notificationService = {
     raise: async (_ws: string, n: { type: string }) => {
+      order.push('raise')
+      onRaise?.()
       raised.push({ type: n.type })
     },
   } as unknown as NotificationService
@@ -42,7 +47,7 @@ function makeMachine(block: Block) {
     stepGraph: {} as never,
     notificationService,
   })
-  return { machine, updates, raised }
+  return { machine, updates, raised, order }
 }
 
 function instanceWith(kinds: string[]): ExecutionInstance {
@@ -81,5 +86,31 @@ describe('RunStateMachine.finalizeBlock — no-PR terminal path', () => {
 
     expect(updates).toEqual([{ id: 'task_1', patch: { status: 'pr_ready', progress: 1 } }])
     expect(raised).toEqual([{ type: 'pipeline_complete' }])
+  })
+
+  it('raises pipeline_complete BEFORE flipping the block, and leaves it alone if the raise fails', async () => {
+    // F11: the card is the only actionable prompt for a confirm-and-merge, and nothing re-drives
+    // a settled run. Flipping first meant a raise failure left a `pr_ready` block that looks
+    // finished-and-waiting with an empty inbox; raising first makes the surviving state the
+    // honest one (the run fails, the block keeps its prior status).
+    const prBlock = () =>
+      ({
+        id: 'task_1',
+        level: 'task',
+        status: 'in_progress',
+        pullRequest: { branch: 'feat/x', url: 'https://example.test/pr/1' },
+      }) as unknown as Block
+
+    const ordered = makeMachine(prBlock())
+    await ordered.machine.finalizeBlock('ws_1', instanceWith(['coder']), undefined)
+    expect(ordered.order).toEqual(['raise', 'update'])
+
+    const failing = makeMachine(prBlock(), () => {
+      throw new Error('notification store down')
+    })
+    await expect(
+      failing.machine.finalizeBlock('ws_1', instanceWith(['coder']), undefined),
+    ).rejects.toThrow('notification store down')
+    expect(failing.updates).toEqual([])
   })
 })

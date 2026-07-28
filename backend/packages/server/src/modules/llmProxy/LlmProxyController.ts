@@ -1,6 +1,6 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
+import { promptCacheParams, readInputTokenClasses } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor, runBestEffort } from '@cat-factory/kernel'
@@ -514,9 +514,12 @@ export function llmProxyController(): Hono<AppEnv> {
       // path made the call; `totalMs` is the proxy's end-to-end time. Both are
       // best-effort and must never break the proxy.
       const observe = (obs: ProxyCallObservation): void => {
-        const promptTokens = obs.usage?.prompt_tokens ?? 0
         const completionTokens = obs.usage?.completion_tokens ?? 0
-        const cachedPromptTokens = obs.cachedPromptTokens ?? cachedTokensFromUsage(obs.usage)
+        // The three input classes are recorded ORTHOGONALLY, so total input is their sum. An
+        // upstream path that already knows the split (a gateway whose own shape carries it)
+        // hands all three over together; otherwise they are read off the usage payload, which
+        // is where the inclusive-vs-exclusive reconciliation lives.
+        const input = obs.inputTokens ?? readInputTokenClasses(obs.usage)
         const totalMs = Date.now() - t0
 
         // Live activity event — emitted regardless of whether the persistence sink is
@@ -527,7 +530,7 @@ export function llmProxyController(): Hono<AppEnv> {
         // persists. Best-effort: a publish failure (no subscribers, transient hub error)
         // must not break metering.
         waitUntil(
-          Promise.resolve(
+          runBestEffort(log, 'llmProxy.publishCallObserved', () =>
             // `?.` on the publisher itself, not just the method: a minimal container
             // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
             // emit is best-effort — a missing publisher must never break metering.
@@ -543,10 +546,11 @@ export function llmProxyController(): Hono<AppEnv> {
               messageCount,
               toolCount,
               requestMaxTokens,
-              promptTokens,
-              cachedPromptTokens,
+              promptTokens: input.fresh,
+              cacheReadTokens: input.cacheRead,
+              cacheWriteTokens: input.cacheWrite,
               completionTokens,
-              totalTokens: promptTokens + completionTokens,
+              totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
               finishReason: obs.finishReason,
               upstreamMs: obs.upstreamMs,
               overheadMs: Math.max(0, totalMs - obs.upstreamMs),
@@ -555,7 +559,7 @@ export function llmProxyController(): Hono<AppEnv> {
               httpStatus: obs.httpStatus,
               errorMessage: obs.errorMessage,
             }),
-          ).catch(() => {}),
+          ),
         )
 
         if (!llmObservability) return
@@ -572,10 +576,11 @@ export function llmProxyController(): Hono<AppEnv> {
               messageCount,
               toolCount,
               requestMaxTokens,
-              promptTokens,
-              cachedPromptTokens,
+              promptTokens: input.fresh,
+              cacheReadTokens: input.cacheRead,
+              cacheWriteTokens: input.cacheWrite,
               completionTokens,
-              totalTokens: promptTokens + completionTokens,
+              totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
               finishReason: obs.finishReason,
               totalMs,
               upstreamMs: obs.upstreamMs,

@@ -109,9 +109,23 @@ function buildRevisionContext(step: PipelineStep): {
  * `step.gate.attempts` (incremented per helper dispatch). Either uniquely tags each
  * re-dispatch, so the harness job id changes round to round and a re-test never re-attaches
  * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
+ *
+ * Eviction recoveries count too — the deploy path has always done this
+ * (`deployEvictionEpoch`, whose comment calls itself "analogous to the agent path's
+ * `dispatchEpochFor`"), and the agent path owes the same for a stronger reason. A pool is
+ * told to keep routing STICKY BY JOB ID (see `backend/docs/runner-pool-integration.md` §7) so
+ * a replay or sweeper re-drive reaches the same job — correct for a live job, and exactly
+ * wrong after an eviction, where reusing the id routes the recovery straight back to the dead
+ * job instead of onto a fresh member. That would make the whole eviction-recovery budget a
+ * no-op for pool-backed runs. A fresh id is right for every other transport too: nothing can
+ * re-attach to a container that no longer exists.
+ *
+ * Every component is monotonic per step, so the sum is monotonic and each re-dispatch after
+ * any increment mints a strictly larger epoch — two different rounds can never collide on one id.
  */
 export function dispatchEpochFor(step: PipelineStep): number {
-  const base = step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0
+  const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
+  const base = (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions
   // The optional fork-decision phase dispatches the read-only proposer on the coder step
   // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
   // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder

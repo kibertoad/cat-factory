@@ -7,12 +7,19 @@
 // them once the block exists (see useContextLinking). A search hit / pasted ref
 // carries `needsImport: true` so it's fetched + persisted before linking.
 //
+// Search results are always confined to ONE repository (`scopeBlockId`'s service).
+// An issue in another repo is reachable only by pasting its URL, which the explicit
+// "attach by reference" row below imports directly — it never comes back as a hit,
+// so what the search offers is exactly what the service owns.
+//
 // The tracker being searched is ALWAYS on screen (even when the workspace offers
 // exactly one), and its menu doubles as the "add a tracker" affordance: attaching a
 // context issue is where a missing integration is discovered, and the connect modal
 // opens over the caller's form rather than navigating away from it.
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
 import { buildSourceChoices, reconcileSource } from '~/components/tasks/ContextIssuePicker.logic'
 
@@ -21,10 +28,13 @@ const props = defineProps<{
   chosenKeys?: string[]
   /**
    * The block the picker is attaching context to (a service frame or a task/module
-   * under one). Scopes a GitHub search to that service's linked repo, so hits stay
-   * in-repo and a pasted URL / bare issue number resolves to the exact issue.
+   * under one). REQUIRED: it is what scopes a GitHub search to that service's linked
+   * repo, so hits stay in-repo and a bare issue number resolves to the exact issue.
+   * A search with no scope reaches every repository the deployment's credential can
+   * see (under a PAT, all of public GitHub), so there is no unscoped mode — a caller
+   * that has no block yet must not render the picker.
    */
-  scopeBlockId?: string
+  scopeBlockId: string
   /**
    * Controlled source: when provided the parent owns the selected tracker (via
    * `v-model:source`); omitted, the picker manages it internally (the add-task case).
@@ -147,7 +157,14 @@ async function runSearch() {
     results.value = await tasks.search(source.value, q, props.scopeBlockId)
   } catch (e) {
     results.value = []
-    searchError.value = e instanceof Error ? e.message : String(e)
+    // "This service has no repo" is the one failure with an action attached, so it gets its
+    // own localized copy off the backend's machine-readable reason rather than the raw
+    // message (CLAUDE.md "Backend strings"). Anything else keeps the generic wording.
+    const notLinked: TaskSourceReadReason = 'repo_not_linked'
+    searchError.value =
+      apiErrorReason(e) === notLinked
+        ? t('tasks.picker.searchNeedsRepo')
+        : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
   } finally {
     searching.value = false
   }
@@ -295,7 +312,7 @@ onMounted(() => {
     />
 
     <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      {{ t('tasks.picker.searchFailed', { error: searchError }) }}
+      {{ searchError }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">

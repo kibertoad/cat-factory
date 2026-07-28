@@ -6,12 +6,14 @@ import type {
   BlockRepository,
   ExecutionInstance,
   IssueWritebackProvider,
+  Logger,
   PipelineStep,
   RepoFiles,
   RepoOp,
   ResolveRunRepoContext,
   RunRepoContext,
 } from '@cat-factory/kernel'
+import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { type PullRequestRef, resolveAprioriWorkingBranch } from '@cat-factory/contracts'
 import { blueprintPostOp, runRepoOps, specPostOp, specPromotionPostOp } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -42,6 +44,11 @@ export interface RunRepoOpsControllerDeps {
   agentKindRegistry: AgentKindRegistry
   resolveRunRepoContext?: ResolveRunRepoContext
   issueWriteback?: IssueWritebackProvider
+  /**
+   * Handed to every op through {@link RepoOpContext.logger}, so a best-effort hook (spec
+   * promotion above all) can say what it declined to do. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
 }
 
 /**
@@ -57,6 +64,7 @@ export class RunRepoOpsController {
   private readonly agentKindRegistry: AgentKindRegistry
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
   private readonly issueWriteback?: IssueWritebackProvider
+  private readonly log: Logger
 
   constructor(deps: RunRepoOpsControllerDeps) {
     this.blockRepository = deps.blockRepository
@@ -64,6 +72,7 @@ export class RunRepoOpsController {
     this.agentKindRegistry = deps.agentKindRegistry
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.issueWriteback = deps.issueWriteback
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'repoOps' })
   }
 
   /**
@@ -181,6 +190,7 @@ export class RunRepoOpsController {
       context,
       branch,
       opensPr: runOpensPr(instance),
+      logger: this.opLogger(workspaceId, instance, step, 'pre'),
     })
     // Surface any files a preOp prepared onto the SAME context object the executor dispatches
     // with (the caller passes one `context` to both preOps and `startJob`), so the executor
@@ -244,6 +254,7 @@ export class RunRepoOpsController {
         branch,
         opensPr,
         result,
+        logger: this.opLogger(workspaceId, instance, step, 'post'),
       })
       // A delivering kind (e.g. `spike` in PR mode) opened a PR for the findings; record it on
       // the block so the downstream conflicts/CI/human-review/merge tail acts on it — the SAME
@@ -257,8 +268,35 @@ export class RunRepoOpsController {
     // resolution for the no-PR case — so the post-op commits where the agent read.
     if (builtIn.length > 0) {
       const branch = await this.builtInRepoOpBranch(step.agentKind, block, runRepo)
-      await runRepoOps(builtIn, { repo: runRepo.repo, context, branch, opensPr, result })
+      await runRepoOps(builtIn, {
+        repo: runRepo.repo,
+        context,
+        branch,
+        opensPr,
+        result,
+        logger: this.opLogger(workspaceId, instance, step, 'post'),
+      })
     }
+  }
+
+  /**
+   * The per-dispatch logger an op reports through, with the run's correlation bound once so a
+   * hook's own lines needn't re-spread them. `phase` distinguishes a pre-op's drop from a
+   * post-op's, which otherwise read identically for a kind that declares both.
+   */
+  private opLogger(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    phase: 'pre' | 'post',
+  ): Logger {
+    return this.log.child({
+      workspaceId,
+      executionId: instance.id,
+      blockId: instance.blockId,
+      agentKind: step.agentKind,
+      phase,
+    })
   }
 
   /**
@@ -275,10 +313,14 @@ export class RunRepoOpsController {
     const priorBlock = await this.blockRepository.get(workspaceId, blockId)
     if (priorBlock?.pullRequest?.url === pullRequest.url) return
     await this.blockRepository.update(workspaceId, blockId, { pullRequest })
-    if (this.issueWriteback && priorBlock) {
-      await this.issueWriteback
-        .onPullRequestOpened(workspaceId, priorBlock, pullRequest)
-        .catch(() => {})
+    const writeback = this.issueWriteback
+    if (writeback && priorBlock) {
+      await runBestEffort(
+        this.log,
+        'writeback.onPullRequestOpened',
+        () => writeback.onPullRequestOpened(workspaceId, priorBlock, pullRequest),
+        { workspaceId, blockId, source: 'postOp' },
+      )
     }
   }
 

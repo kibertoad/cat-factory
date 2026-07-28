@@ -186,6 +186,56 @@ describe('llm proxy /v1/chat/completions', () => {
     expect(activity).not.toHaveProperty('reasoningText')
   })
 
+  it('records a cached upstream call as its three orthogonal input classes', async () => {
+    // The proxy is where an upstream's usage payload becomes the recorded input split, and a
+    // wrong sign here quietly halves or doubles every number downstream. The upstream shape is
+    // INCLUSIVE (the OpenAI wire): `prompt_tokens` is the whole prompt, with the cached share
+    // inside it — so the recorded fresh figure is the difference, and the three classes must
+    // still add back up to what the vendor said it billed.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const executionId = `ex-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId, executionId })
+    await seedQwenKey(workspaceId)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+              usage: {
+                prompt_tokens: 5_000,
+                prompt_tokens_details: { cached_tokens: 4_400 },
+                completion_tokens: 5,
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token, 'cheap-model'), testEnv())
+    expect(res.status).toBe(200)
+
+    const activity = recorder.llmCalls[0]!
+    expect(activity.promptTokens).toBe(600)
+    expect(activity.cacheReadTokens).toBe(4_400)
+    // Qwen exposes no write class: 0, never guessed into existence.
+    expect(activity.cacheWriteTokens).toBe(0)
+    expect(activity.completionTokens).toBe(5)
+    // The classes are additive, so the total is their sum plus the output — and its input half
+    // still equals the vendor's own `prompt_tokens`.
+    expect(activity.totalTokens).toBe(5_005)
+    // The live event is asserted rather than the persisted row because both sinks are composed
+    // from the SAME values in one pass: what could drift is the derivation, which this pins,
+    // not the two writes. The row's own column mapping is pinned by the conformance suite.
+  })
+
   it('returns 502 when the locked provider has no configured key', async () => {
     const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
     const token = await mint({ provider: 'qwen', model: 'qwen3-max' })

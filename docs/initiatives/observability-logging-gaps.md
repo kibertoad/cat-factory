@@ -1,6 +1,6 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** Phase 1 landed (1.1–1.5); Phases 2–6 open · **Owner:** core · **Started:** 2026-07-28
+**Status:** Phases 1 + 1b landed; Phases 2–6 open · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
 
@@ -119,6 +119,11 @@ ones:
 
 There is no `runBestEffort(fn, logger)` helper and nothing counts the drops. Blocked on A1 for
 the domain packages.
+
+_(Phase 1 added the helper; Phase 1b drained every site above, taking `backend/packages` +
+`backend/runtimes` to zero behind `scripts/check-silent-catch.mjs`. What remains is the
+executor/deploy harnesses (17, batched into 5.5), the SPA (~40, blocked on 6.5's sink), and the
+~110 bare `catch {}` blocks this finding wrongly reported as absent — now slice 1.2d.)_
 
 **B2 — Half the wire error vocabulary can't carry `details.reason`. (P1)**
 Only `not_found`/`validation`/`conflict`/`credential_required`/`forbidden` have `DomainError`
@@ -269,6 +274,8 @@ harness silences: a clean-exit failure (`no-usable-output`, `llm-upstream`) neve
 no log.
 
 **D3 — Spec promotion is a fully silent no-op on every failure path. (P2)**
+_(FIXED in Phase 1.2b — `RepoOpContext.logger` is a required field now, and every outcome names
+itself; `warn` is reserved for a promotion that was genuinely dropped.)_
 `agents/src/repo-ops/builtin.ts:414-416` plus ~6 early returns (unsafe shard, replay, zero
 landed) — all indistinguishable from success. A tester run that verified 10 requirements but
 could not promote any (GitHub 403, shard mismatch) reports as fully green with no log, no
@@ -385,13 +392,89 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   needed. `backend/packages/observability-langfuse`'s undici-mocked tests fail in a proxied sandbox
   both before and after; untouched.
 
-### Phase 1b — Finish the conversion (the tail Phase 1 deliberately left)
+### Phase 1b — Finish the conversion (the tail Phase 1 deliberately left) — **LANDED**
 
-| #    | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Fixes  | Sev |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
-| 1.2b | Convert the REMAINING `.catch(() => {})` sites to `runBestEffort` — the B1 table's `InitiativeLoopService` (6), `DeployerStepController` (2, leaked provisioning leases), `PublicApiController` (the half-created-run rollback), `RunDispatcher`/`review-kinds` issue-writeback hooks — and thread a logger into the `RepoOp` ctx so spec promotion stops being a silent no-op. Prefer a `grep -rn 'catch(() => {})'` sweep over a hand-list: the count moves. | B1, D3 | P1  |
-| 1.2c | Add a lint rule (oxlint `no-restricted-syntax`) banning `.catch(() => {})` and a bare `catch {}` in non-test source, so the tail can't regrow while it is being drained. Land it only AFTER 1.2b, or it fails the tree.                                                                                                                                                                                                                                        | B1     | P2  |
-| 1.4b | Bind a `child({ workspaceId, executionId })` in the remaining engine drivers that still pass ids inline per call (`ExecutionWorkflow` — `BootstrapWorkflow`/`EnvConfigRepairWorkflow` already do it right), so a run's Worker-side lines are greppable the way `driveExecution`'s now are.                                                                                                                                                                     | A3     | P2  |
+| #    | Step                                                                                                                                                                                                                                                                                                                                                                            | Fixes  | Sev | Status                                              |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- | --------------------------------------------------- |
+| 1.2b | Convert the REMAINING `.catch(() => {})` sites to `runBestEffort` — the B1 table's `InitiativeLoopService` (6), `DeployerStepController` (2, leaked provisioning leases), `PublicApiController` (the half-created-run rollback), `RunDispatcher`/`review-kinds` issue-writeback hooks — and thread a logger into the `RepoOp` ctx so spec promotion stops being a silent no-op. | B1, D3 | P1  | ✅ backend non-harness is at zero                   |
+| 1.2c | Add a lint rule banning `.catch(() => {})` and a bare `catch {}` in non-test source, so the tail can't regrow while it is being drained.                                                                                                                                                                                                                                        | B1     | P2  | ◐ a guard SCRIPT, promise-drop half only — see 1.2d |
+| 1.4b | Bind a `child({ workspaceId, executionId })` in the remaining engine drivers that still pass ids inline per call (`ExecutionWorkflow`).                                                                                                                                                                                                                                         | A3     | P2  | ✅                                                  |
+| 1.2d | Drain the ~110 bare `catch {}` blocks in `backend/packages` + `backend/runtimes` and extend the guard to them. Most are documented deliberate swallows, so this is per-site judgement (log / `describeError` / annotate), not a sweep — which is why it was split out of 1.2c rather than lumped into it.                                                                       | B1     | P2  |                                                     |
+
+#### What Phase 1b actually shipped
+
+- **`scripts/check-silent-catch.mjs`**, wired into CI's always-on `repo-guards` job. It is a
+  SCRIPT, not the oxlint rule 1.2c specified: oxlint (1.75) ships no `no-restricted-syntax`, so
+  the rule as written could not be authored. The repo already has this shape —
+  `check-file-size.mjs` exists beside oxlint's `max-lines` for the same reason.
+  - **Detection MASKS comments and string literals before matching** (`scripts/silent-catch.mjs`,
+    fixtures in `silent-catch.test.mjs`, run by `node --test` in the same CI job). The first cut
+    matched raw source and then asked whether the hit was in a comment, using a prefix heuristic —
+    which read the `//` inside a URL as a comment opener, so `fetch('https://…').catch(() => {})`
+    turned the guard off on precisely the line it exists to catch. Masking answers the question
+    structurally instead of guessing, and the fixtures exist because a guard that regresses
+    silently still reports green.
+  - **Every spelling of an empty handler counts** — arrow or `function`, typed param or not, and a
+    body holding only a comment. That last one is the important one: without it an author can
+    document a swallow inline and never state a reason, which makes the escape hatch optional.
+    Widening it immediately turned up two drops the narrow pattern had missed
+    (`HttpMachineEventClient.publish`, the web-search query recorder), both now converted.
+    `.catch(noop)` stays out of reach by design: whether a named function is empty is not a
+    question a text scan can answer, and guessing makes a guard unpredictable.
+- **The guard's scope is narrower than "non-test source", deliberately, and the gap is tracked:**
+  - The **harnesses** (executor + deploy) are excluded, because a source change there bumps the
+    published runner image — this initiative's own rule batches all harness work into slice 5.5.
+    17 sites remain there.
+  - The **SPA** is excluded: it has no logger to report through until client-side error reporting
+    (6.5 / C8) lands. ~40 sites remain there, and they need a sink before they need a rule.
+  - A **bare `catch {}`** is not checked. The audit above claimed there were none in non-test
+    source; there are ~110 in this scope alone. Draining them is 1.2d.
+- **An escape hatch with a mandatory reason**: `// silent-catch-ok: <why>` above the drop. Exactly
+  one site uses it (`readiness.ts`'s late-rejection swallow, whose rejection the surrounding race
+  already reports — logging it again would warn on every probe timeout).
+- **`RepoOpContext.logger` is REQUIRED**, the same call the initiative made for
+  `CoreDependencies.logger` and for the same reason: an absent optional logger is silent by
+  definition, which is the failure mode. `specPromotionPostOp` now names each outcome — `debug`
+  for the ordinary no-ops (nothing met, no `spec/` tree, a replay), `warn` only where a promotion
+  was genuinely DROPPED (an unsafe shard, a throwing commit). That is D3 closed.
+- **Three engine collaborators gained a logger they had no way to report through**:
+  `RunDispatcher` (both issue-writeback hooks), `DeployerStepController` (both provisioning-lease
+  releases — a leaked lease holds billed compute or a self-hosted pool slot, with no other
+  symptom), and `InitiativeLoopService` (whose per-initiative isolation meant an initiative
+  failing EVERY tick read as idle in the sweeper's aggregate counts).
+- **Two `try { … .catch(() => {}) } catch {}` doubles collapsed** into one `runBestEffort`
+  (`LlmObservabilityService`, `InstrumentedModelProvider`): the helper already covers the
+  synchronous throw the outer `try` was there for.
+- **One more local logger interface retired** — `warnOnGitHubPatProblemInBackground`'s
+  `{ warn: (msg: string) => void }`, missed by Phase 1's sweep. Its test now uses kernel's
+  `createRecordingLogger`.
+- **`ExecutionWorkflow` binds `child({ workspaceId, executionId, workflow: 'execution' })`**, and
+  its poll-failure messages are scrubbed with `redactSecrets` where they are minted — they are
+  both logged AND folded into the run's user-visible failure text, and a `fetch` error routinely
+  echoes the request URL back in its own message.
+
+#### Notes for the next implementer
+
+- **`runBestEffort` inside `waitUntil` is the shape to copy for post-response work.** The Node
+  fallback in `makeWaitUntil` used to swallow, so a rejection from any controller's
+  fire-and-forget telemetry reached the process-level guard with no idea which controller
+  scheduled it.
+- **A `.catch(fallbackValue)` is not a silent drop and the guard does not flag it** — but it still
+  owes a `describeError`. `IssueWritebackService`'s claim read is the worked example: a store
+  failure there reads as "someone else holds the claim", which silently suppresses the post.
+- **Requiring a new context field is cheap and finds real holes.** Making `RepoOpContext.logger`
+  required cost ~40 one-line test edits and nothing else, because every production construction
+  site is in one file.
+- **A guard's own blind spots are worth more attention than its findings.** Both extra drops this
+  slice converted were found by WIDENING the detector, not by reading code — and the widening was
+  prompted by asking what shapes the pattern could not express, not by a failure. Do the same for
+  1.2d: the bare-`catch {}` sweep is a text scan too, and `catch (e) { /* fine */ }` will be its
+  equivalent hole.
+- **Bind the narrowed value to a local before a `runBestEffort` closure.** TypeScript drops
+  property narrowing across a callback boundary, so `() => this.maybe!.thing()` is the shape that
+  falls out naturally — an assertion resting on a guard several lines up, which nothing rechecks
+  when that condition later grows a branch. `const x = this.maybe; if (x) …` costs one line and
+  keeps the typechecker responsible for it.
 
 ### Phase 2 — Error identity survives the trip
 
@@ -443,6 +526,11 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 
 ## Conventions & gotchas for implementers
 
+- **`.catch(() => {})` is guarded, not just discouraged.** `scripts/check-silent-catch.mjs` fails
+  CI on a new one in `backend/packages` / `backend/runtimes`; a genuinely-silent drop annotates
+  itself with `// silent-catch-ok: <reason>`. The harnesses and the SPA are out of that scope on
+  purpose (see Phase 1b) — do not "fix" a site there ahead of its own slice, because a harness
+  edit bumps the runner image.
 - **The logger port has landed** (`kernel/src/ports/logging.ts`); the B/D fixes in domain packages
   are no longer blocked. Take a `logger?: Logger` dependency and normalise once
   (`this.log = deps.logger ?? noopLogger`); never import `@cat-factory/server` into a domain

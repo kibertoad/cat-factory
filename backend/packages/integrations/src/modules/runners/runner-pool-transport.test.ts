@@ -384,6 +384,55 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.detail).toBe('Phase timings: clone=2s, agent=600s.')
   })
 
+  for (const status of [404, 410]) {
+    it(`reports a job the scheduler no longer knows (${status}) as an EVICTION, not a poll fault`, async () => {
+      // A pool member dying mid-job leaves the scheduler 404ing (or 410ing) its id. Without this
+      // mapping the throw counts against the engine's poll-failure tolerance and the run dies
+      // `timeout` without ever trying a fresh member; the structured `evicted` field is what
+      // engages the engine's re-dispatch recovery.
+      capture('/api/jobs/job-7', 'GET', { message: 'no such job' }, status)
+      const provider = new HttpRunnerPoolProvider()
+      const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+      expect(view.state).toBe('failed')
+      expect(view.evicted).toBe('crash')
+      expect(view.error).toContain('container evicted or crashed')
+      // The status LEADS, and the scheduler's own account rides `detail`: a 404 also covers a
+      // mistyped poll path and a scheduler that 404s an unauthorized read, and an operator
+      // handed a bare "container evicted or crashed" has nothing to act on. The detail carries
+      // the provider's fix-it remedy (its error message), which names where to correct it.
+      expect(view.error).toContain(`Runner pool poll → ${status}`)
+      expect(view.detail).toContain('Settings')
+    })
+  }
+
+  it('still throws on a non-404 poll fault (a broken scheduler is not an eviction)', async () => {
+    // A 500 says the SCHEDULER is unwell, not that the job is gone: re-dispatching onto a
+    // fresh member would be wrong, so it stays a throw for the poll-failure tolerance to bound.
+    capture('/api/jobs/job-7', 'GET', { message: 'upstream exploded' }, 500)
+    const provider = new HttpRunnerPoolProvider()
+    await expect(
+      provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' }),
+    ).rejects.toBeInstanceOf(RunnerPoolApiError)
+  })
+
+  it('tags a reclaimed-runner status as an eviction so a fresh member is tried', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'preempted' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
+    // No `errorPath` value in the response, so the provider explains the loss itself.
+    expect(view.error).toContain('preempted')
+  })
+
+  it('leaves `evicted` unset on an ordinary job failure', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'tests failed' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBeUndefined()
+  })
+
   it('leaves failureCause/detail unset when the manifest does not map them (older pool)', async () => {
     capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'boom' })
     const provider = new HttpRunnerPoolProvider()
@@ -466,7 +515,8 @@ describe('HttpRunnerPoolProvider', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
     }
@@ -490,6 +540,42 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.state).toBe('done')
     // The well-formed entry survives with every field; the malformed one is dropped.
     expect(view.result?.callMetrics).toEqual([good])
+  })
+
+  it('keeps call telemetry from a harness image that predates the cache-class split', async () => {
+    // A pool runs whatever harness image its WORKSPACE pinned, so an image older than the
+    // fresh/read/write split is a normal operating state, not a malformed envelope. Its
+    // entries carry no cache fields; requiring them would fail every entry and drop ALL of
+    // that pool's telemetry silently — the run would report zero model calls rather than
+    // "cache breakdown unknown". The call, its tokens and its bodies must survive, with the
+    // split it never measured reading as 0.
+    const legacy = {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"user","content":"u"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+    }
+    capture('/api/jobs/job-9b', 'GET', {
+      state: 'succeeded',
+      result: { summary: 'coded', callMetrics: [legacy] },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-9b',
+      resolveSecret: () => 't',
+    })
+    expect(view.result?.callMetrics).toEqual([
+      { ...legacy, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    ])
   })
 
   // D2: every runner-pool failure carries the UI-first remedy naming where the pool is

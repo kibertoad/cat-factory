@@ -1,5 +1,107 @@
 # @cat-factory/integrations
 
+## 0.106.0
+
+### Minor Changes
+
+- c47eb66: Confine every GitHub issue search to one repository, and refuse an unscoped one.
+
+  `/search/issues` carries no scope of its own: a query with no `repo:` qualifier returns whatever
+  the credential can reach. Under a GitHub App installation token that is the installation's own
+  repos, so an unscoped query looked harmless — but under a PAT (local mode, and any per-workspace
+  PAT connection) the same query searches every public repository on GitHub, and the issue picker
+  offered strangers' issues as if they were the service's own. The repo scope is now required by
+  construction rather than supplied by each caller: `buildGitHubIssueSearchQuery` takes a mandatory
+  scope, `GitHubIssuesProvider.search` refuses a call without one, and the search endpoint's
+  `blockId` is a required field. `buildGitHubIntakeQuery` gets the same treatment — a `bug-intake`
+  schedule with no repository configured now fails its fire loudly instead of scanning all of public
+  GitHub and importing whatever it found.
+
+  The kernel port carries that requirement: `TaskSourceProvider.search`'s `scope` is now a REQUIRED
+  parameter with a NULLABLE value (`TaskSearchRepoScope | null`). A repo-less source (Jira, Linear)
+  states its `null`; a caller can no longer reach an unscoped search by omitting the argument, which
+  is a typecheck failure. Repo-less provider implementations are unchanged — they declare fewer
+  parameters.
+
+  A reference naming ANOTHER repository is no longer resolved into the results either, so search
+  results are exactly the service's own issues. Linking such an issue still works: paste its URL and
+  the picker's "attach by reference" row imports it directly, which never rode the search path. A
+  reference that DOES name the scoped repo is now normalised to the scope's casing before it becomes
+  an external id: GitHub lookup is case-insensitive but an external id is stored verbatim, so
+  `Owner/Repo#1` and `owner/repo#1` used to import as two projection rows for one issue.
+
+  The `reason` codes these refusals carry are declared in `@cat-factory/contracts`
+  (`TASK_SOURCE_READ_REASONS`) and imported by both the emit sites and the SPA, so renaming one
+  fails the typecheck instead of silently degrading the SPA to the backend's untranslated prose.
+  `boards_unsupported`, which the bug hunt already relied on as a bare literal on both sides, joins
+  the same union.
+
+  Wire break (pre-1.0, no migration): `POST /workspaces/:ws/task-sources/:source/search` now requires
+  `blockId`, and a search from a service frame with no linked repository is refused with
+  `reason: 'repo_not_linked'` rather than silently widened.
+
+- 5abcb9e: Drain the remaining silent promise drops in the backend and stop them regrowing. Every
+  `.catch(() => {})` in `backend/packages` and `backend/runtimes` now goes through
+  `runBestEffort`, so a swallowed failure leaves one `warn` naming the operation with its cause
+  attached, and `scripts/check-silent-catch.mjs` fails CI on a new one (a drop that genuinely needs
+  no report annotates itself with `// silent-catch-ok: <reason>`). The guard counts every spelling
+  of an empty handler, including a body holding only a comment — which caught two further drops:
+  the mothership event relay (`HttpMachineEventClient.publish`, which additionally now treats a
+  REFUSED publish as a failure rather than a delivery, so an expired machine token stops reading as
+  success) and the web-search query recorder.
+
+  `RepoOpContext` gains a required `logger`, which closes the spec-promotion hole: a tester run that
+  verified requirements but promoted none used to be indistinguishable from one that had nothing to
+  promote. `RunDispatcher`, `DeployerStepController` and `InitiativeLoopService` gain the logger they
+  previously had no way to report through — so an issue-writeback drop, a leaked provisioning lease
+  and a permanently-failing initiative tick are all visible now. `ExecutionWorkflow` binds its run
+  correlation once with `logger.child` and scrubs its poll-failure causes with `redactSecrets`.
+
+### Patch Changes
+
+- Updated dependencies [c47eb66]
+- Updated dependencies [5abcb9e]
+  - @cat-factory/contracts@0.181.0
+  - @cat-factory/kernel@0.174.0
+
+## 0.105.0
+
+### Minor Changes
+
+- bead6df: Stop two ways a run could sit wedged with nothing left to move it.
+
+  A self-hosted runner pool that lost a job now says so. A poll that 404s (or 410s), and a scheduler
+  status that names a reclaimed runner (`evicted` / `preempted` / `oomkilled` / `node_lost` / …), are
+  read as the RUNNER going away rather than the job failing, so the step is re-dispatched instead of
+  burning the run's whole ~70-minute poll budget and dying `timeout`. A job-level failure vocabulary
+  (`error` / `cancelled` / `timeout` / …) and a success vocabulary (`completed` / `succeeded` / …)
+  likewise end the poll loop honestly; a status word that matches nothing still keeps the driver
+  waiting, since wrongly killing a live run is the worse mistake. A pool is asked to route stickily
+  by job id, so an eviction recovery now dispatches under a FRESH id (as the deploy path already
+  did) — reusing it would have routed the retry back to the job whose runner just died, making the
+  recovery a no-op for pool-backed runs.
+
+  A manifest that defines no `release` template — or no status path — reports the gap on its
+  connection test in Settings, and logs it once at registration. Each gap crosses the wire as a
+  code, so the SPA renders translated copy rather than backend prose.
+
+  The merge-review and pipeline-complete notifications are now raised BEFORE the block flips to
+  `pr_ready`. Raising second meant that if the card failed to raise, the run failed but the task was
+  already sitting in `pr_ready` with an empty inbox: a PR-ready task with no review action and
+  nothing to re-drive it.
+
+  Breaking for anyone importing them directly: `runnersLogic.mapJobState` is replaced by
+  `runnersLogic.classifyJobStatus`, which returns `{ state, evicted? }`;
+  `runnersLogic.manifestWarnings` and `RunnerBackendProvider.warnings` return
+  `{ code, message }` objects rather than strings. The `(container evicted or crashed)` wording every
+  transport had copied is now kernel's `CONTAINER_EVICTION_ERROR`.
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+
 ## 0.104.0
 
 ### Minor Changes

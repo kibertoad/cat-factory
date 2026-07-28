@@ -23,6 +23,7 @@ import {
   parseLogLevel,
   setLogLevel,
 } from '@cat-factory/server'
+import { runBestEffort } from '@cat-factory/kernel'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -174,7 +175,7 @@ async function bootLocal(
   // (potentially multi-GB) pull never delays serving the board: it never throws, and the
   // container transport is built lazily on first dispatch, so the refresh races ahead of any
   // actual use. Disable with LOCAL_HARNESS_IMAGE_REFRESH=off.
-  void preflightHarnessImage(localized).catch(() => {})
+  void runBestEffort(logger, 'local.preflightHarnessImage', () => preflightHarnessImage(localized))
 
   // NB: reaping per-run containers a previous run orphaned (a crash/hard kill leaves exited
   // managed containers behind) + draining pool orphans + pre-warming is done on the SERVING

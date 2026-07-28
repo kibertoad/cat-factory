@@ -17,7 +17,9 @@
 import { computed, ref, watch } from 'vue'
 import * as v from 'valibot'
 import { environmentManifestSchema, runnerPoolManifestSchema } from '@cat-factory/contracts'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 const props = defineProps<{
@@ -34,7 +36,7 @@ const props = defineProps<{
   /** Bubbled-up busy state from the tab's store calls (so the editor shows loading). */
   testing: boolean
   busy: boolean
-  testResult: { ok: boolean; message?: string } | null
+  testResult: ConnectionTestResult | null
 }>()
 
 const emit = defineEmits<{
@@ -285,6 +287,8 @@ function onSave() {
         {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
       </span>
     </div>
+
+    <ConnectionWarnings :warnings="testResult?.warnings" />
 
     <div class="flex justify-end">
       <UButton

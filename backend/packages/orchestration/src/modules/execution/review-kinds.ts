@@ -7,9 +7,10 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IssueWritebackProvider,
+  Logger,
   RequirementReview,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError } from '@cat-factory/kernel'
+import { assertFound, ConflictError, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { bugInvestigation } from '@cat-factory/agents'
 import type { ReviewKind } from './ReviewGateController.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -36,6 +37,8 @@ export interface ReviewKindDeps {
   clarityReviewService?: ClarityReviewService
   brainstormServices?: Record<BrainstormStage, BrainstormService>
   issueWriteback?: IssueWritebackProvider
+  /** Where the clarity-question echo below reports a drop. Absent ⇒ `noopLogger`. */
+  logger?: Logger
 }
 
 /**
@@ -296,8 +299,14 @@ async function echoClarityQuestions(
   blockId: string,
   review: ClarityReview,
 ): Promise<void> {
-  if (!deps.issueWriteback || review.status === 'incorporated') return
+  const writeback = deps.issueWriteback
+  if (!writeback || review.status === 'incorporated') return
   const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
   if (questions.length === 0) return
-  await deps.issueWriteback.postQuestions(workspaceId, blockId, questions).catch(() => {})
+  await runBestEffort(
+    deps.logger ?? noopLogger,
+    'writeback.postClarityQuestions',
+    () => writeback.postQuestions(workspaceId, blockId, questions),
+    { workspaceId, blockId, questionCount: questions.length },
+  )
 }

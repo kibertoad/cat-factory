@@ -32,33 +32,57 @@ DeepSeek / OpenAI), which flips that model's effective flavour `cloudflare → d
 - the model picker shows a `Prompt caching` / `No prompt caching` badge per flavour
   (`ModelConfigurationPanel.vue`, via `cachingBadge` in `stores/models.ts`);
 - the API-keys panel notes which direct keys enable caching (`ApiKeysSection.vue`);
-- the step metrics bar shows a cached-token split when present, and the per-agent-kind
-  summary now carries `cachedPromptTokens` + a derived `cacheHitRate`
-  (`StepMetricsBar.vue`, `observability.logic.ts`, both repositories).
+- the step metrics bar leads with TOTAL input (fresh + both cache classes, `totalInputTokens` —
+  the like-for-like of Claude Code's context gauge) and shows the three classes as its breakdown,
+  and the per-agent-kind summary carries `cacheReadTokens` + `cacheWriteTokens` as two distinct
+  sums plus a derived `cacheHitRate` (`StepMetricsBar.vue`, `observability.logic.ts`, both
+  repositories). Splitting the classes is about making cost readable — it must never be allowed
+  to shrink the headline VOLUME, which is what a cache-dominated agentic run actually burns.
 
 We deliberately **do not auto-flip the shipped model defaults** — that's a model-quality
 decision that needs benchmark evidence (below), not a blind change.
 
 ### Reading the hit rate
 
-`cacheHitRate = cachedPromptTokens / promptTokens`, clamped to `[0, 1]`. The clamp is not
-cosmetic: for **`auto-prefix`** providers (OpenAI/DeepSeek/Qwen) the cached count is a
-true subset of the prompt tokens, so the ratio is already in range; for **Anthropic**
-(`explicit-anthropic`) the API reports `cache_read_input_tokens` SEPARATELY from
-`input_tokens` (the cached prefix is not counted in the prompt total), so an un-clamped
-ratio could exceed 1 — the clamp renders a fully-served prefix as `100%` rather than a
-nonsensical `>100%`. `cachedTokensFromUsage` attributes Anthropic's field (raw
-`cache_read_input_tokens` and the AI SDK's `cacheReadInputTokens`) alongside the
-OpenAI/DeepSeek field names, so the inline Anthropic path — which opts in via
-`inlineCacheProviderOptions` — is actually measured, not silently reported as `0`.
+The three input classes are **orthogonal**: `promptTokens` is FRESH input only, and
+`cacheReadTokens` / `cacheWriteTokens` sit beside it, so the total input a call processed is
+their sum. `cacheHitRate = (read + write) / (fresh + read + write)` — a genuine 0..1 share
+that needs **no clamp**. (It used to be `cached / prompt` clamped to 1, because on the
+Anthropic shape `promptTokens` never contained the reads and the ratio could exceed 1. That
+clamp is gone with the denominator it was papering over.)
+
+**One** function reconciles the provider shapes at the recording sites: `readInputTokenClasses`
+takes a usage payload and returns all three classes. It is deliberately not a "read the cache
+classes" helper plus a "subtract them" helper — splitting it made the shape decision a rule the
+CALLER had to know and pair correctly, which is the entire subtlety. The shape is decided by
+WHICH read field the payload carries, and the two cache classes are read INDEPENDENTLY of one
+another:
+
+- **Inclusive** — OpenAI (`prompt_tokens_details.cached_tokens`) and DeepSeek
+  (`prompt_cache_hit_tokens`), i.e. the **`auto-prefix`** providers. `prompt_tokens` is the
+  whole prompt and every cache class the payload reports is a partition of it, so both come
+  off (clamped at 0) to leave fresh. Subtracting **both**, not just the read, is what keeps the
+  recorded total equal to the vendor's own `prompt_tokens`.
+- **Exclusive** — **Anthropic** (`explicit-anthropic`): `cache_read_input_tokens` +
+  `cache_creation_input_tokens` (and the AI SDK's camelCase spellings) sit BESIDE an
+  `input_tokens` that is already fresh-only, so nothing is subtracted. That is what makes the
+  inline Anthropic path — which opts in via `inlineCacheProviderOptions` — actually measured
+  rather than silently reported as `0`.
+
+Reading the two classes independently is what makes the **gateway** shape work: an
+OpenAI-compatible gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under the
+OpenAI field AND a `cache_creation_input_tokens` beside it. Letting the read detection short-
+circuit the write would drop the DEAREST class on the only path that reports it — a read costs
+~0.1x base input while a **write costs 1.25-2x, more than fresh** — which is precisely the spend
+this split exists to expose.
 
 ## Open questions — providers currently `none` that may cache
 
-`cachedTokensFromUsage` already attributes cached tokens for **any** provider that
+`readInputTokenClasses` already attributes cached tokens for **any** provider that
 reports them (the proxy calls it unconditionally), so promoting a provider in
 `providerCachePolicy` changes only (a) the request hint for a key-routed provider and
 (b) the `cachesPrompts` capability the UI advertises. We keep these at `none` until a run
-demonstrably reports `cachedPromptTokens > 0`, so the UI never advertises caching a
+demonstrably reports `cacheReadTokens > 0`, so the UI never advertises caching a
 provider doesn't actually deliver:
 
 - **`moonshot` (direct Kimi)** — Moonshot documents context caching; unverified whether

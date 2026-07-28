@@ -1,6 +1,7 @@
 # Initiative: stuck-run audit (agent / step / container wedge cases)
 
-**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) landed; C–D todo · **Owner:** core · **Started:** 2026-07-02
+**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) + C-engine (F4/F11) landed; F8 + D todo ·
+**Owner:** core · **Started:** 2026-07-02
 **Audited at:** `main` @ `fc8df61` (original file:line references are against that commit; the
 line numbers in individual findings have since drifted — the anchoring file + symbol names are
 kept current, so search by symbol, not line).
@@ -104,19 +105,22 @@ NOT taken: it would require widening `listStale` to see `paused` runs, and the i
 `paused`/`blocked` to the sweeper is load-bearing for the decision model.
 
 **F4 — Runner-pool transport: no eviction classification, unknown status → `running`, release
-may be a no-op.**
-`backend/packages/integrations/src/modules/runners/runners.logic.ts:47-60` — `mapJobState`
-falls back to `'running'` for any unclassifiable status, and the pool poll has no 404→eviction
-mapping (unlike `CloudflareContainerTransport.ts:133-142` and the local `harnessHttp.ts:93`).
-A pool member dying mid-job therefore burns the full ~70-min poll budget before failing
-`timeout`, and because the error never matches `isContainerEvictionError`, the transient
-eviction re-dispatch (`RunDispatcher.ts:806-844`) never engages — no fresh member is tried.
-`HttpRunnerPoolProvider.ts:88-91`: `release` is a silent no-op when the manifest defines no
+may be a no-op.** ✅ FIXED (this PR)
+`backend/packages/integrations/src/modules/runners/runners.logic.ts` — `mapJobState`
+fell back to `'running'` for any unclassifiable status, and the pool poll had no 404→eviction
+mapping (unlike `CloudflareContainerTransport` and the local `harnessHttp.ts`).
+A pool member dying mid-job therefore burned the full ~70-min poll budget before failing
+`timeout`, and because nothing set `RunnerJobView.evicted`, the eviction re-dispatch
+(`RunDispatcher.recoverContainerEviction`) never engaged — no fresh member was tried.
+`HttpRunnerPoolProvider.release` is a silent no-op when the manifest defines no
 release template, so the orphaned pool job may never be cancelled.
-**Fix:** classify a 404/absent job as an eviction (throw the `evicted or crashed`-shaped
-error so recovery engages); treat a scheduler-reported failed/unknown terminal status as
-`failed`, not `running`; log loudly at wiring time when a manifest lacks `release`.
-`runners.logic.ts` already has table tests to extend.
+**Fix (landed):** `mapJobState` became `classifyJobStatus`, returning `{ state, evicted? }`.
+A 404/410 poll and a reclaim-word status (`evicted`/`preempted`/`oomkilled`/`node_lost`/…) both
+mint `evicted: 'crash'` so the engine re-dispatches onto a fresh member; a job-level failure
+vocabulary (`error`/`cancelled`/`timeout`/…) and a success vocabulary
+(`completed`/`succeeded`/…) end the poll loop honestly instead of on the timeout budget.
+Registration now logs the manifest gaps (`release`, `statusPath`) through the kernel `Logger`.
+See the Group C notes for the two deviations from the fix sketch above.
 
 **F5 — `blocked` run + terminally-dead CF Workflows instance = the human's decision is
 discarded.**
@@ -190,14 +194,16 @@ pipeline's current state; leave `nextRunAt` so the next pass retries). Unit-test
 `running`/`paused`/`blocked` (skip) vs terminal (fire).
 
 **F11 — Block flipped `pr_ready` BEFORE the `merge_review` card is raised; a raise failure
-loses the only actionable prompt.**
-`backend/packages/orchestration/src/modules/execution/MergeResolver.ts:133-143`
-(`raiseReviewAndBlock`), same order in `raisePipelineComplete`
-(`RunStateMachine.ts:407-430`). If `notificationService.raise` throws, the run fails but the
-block is already `pr_ready` with no inbox card — a human sees a PR-ready task with no
+loses the only actionable prompt.** ✅ FIXED (this PR)
+`MergeResolver.raiseReviewAndBlock`, same order in `RunStateMachine`'s
+`finalizeBlock` → `raisePipelineComplete`. If `notificationService.raise` threw, the run failed
+but the block was already `pr_ready` with no inbox card — a human saw a PR-ready task with no
 merge-review action and nothing re-drives the review.
-**Fix:** raise the card first, then flip the block (or make the raise failure-tolerant with a
-retry on the escalation sweep).
+**Fix (landed):** the card is raised first, then the block flips. The retry-on-escalation-sweep
+alternative was not taken: it needs new persisted state to know a raise is owed, while the
+ordering swap costs nothing and makes the surviving failure the honest one (run failed, block
+unchanged, visible on the board) instead of a task dressed up as PR-ready. Unit-tested on both
+sites — ordering AND "a failed raise leaves the block alone".
 
 **F12 — A >10-min poll gap sleeps the CF container and burns the single eviction recovery.**
 `backend/runtimes/cloudflare/src/infrastructure/.../ExecutionContainer.ts:43-48`
@@ -273,9 +279,9 @@ of each PR.
 | F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B — invisible parks      | ✅ done    | this PR |
 | F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ✅ done    | this PR |
 | F10 | Recurring fire clobbers `blocked` run               | orchestration          | B                        | ✅ done    | this PR |
-| F4  | Pool transport: no eviction mapping / no-op release | integrations           | C — transport bounds     | ⬜ todo    |         |
-| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C                        | ⬜ todo    |         |
-| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ⬜ todo    |         |
+| F4  | Pool transport: no eviction mapping / no-op release | integrations           | C — transport bounds     | ✅ done    | this PR |
+| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ✅ done    | this PR |
+| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)        | ⬜ todo    |         |
 | F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D — hang ceilings        | ⬜ todo    |         |
 | F9  | Node advance has no timeout                         | node driver            | D                        | ⬜ todo    |         |
 | F12 | Sleep-eviction burns the single recovery            | CF container           | D                        | ⬜ todo    |         |
@@ -283,8 +289,11 @@ of each PR.
 | F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)           | ✅ done    | this PR |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
-no signal), then C, then D (most invasive; D is deferrable). Next up: **C** (transport bounds +
-the `pr_ready`-before-`merge_review` ordering).
+no signal), then C, then D (most invasive; D is deferrable). C landed its two non-harness
+findings (F4, F11); F8 was split off because a harness change is image-bumping and the
+conventions below keep those out of a non-harness slice. Next up: **F8 + F6 + F13 as one
+harness/image slice**, then the rest of **D** (F9 Node advance timeout, F12 sleep-eviction
+budget).
 
 ### Group A implementation notes (landed)
 
@@ -343,19 +352,89 @@ instance.id`. The whole point of the card is that it is a `blocked` run's ONLY r
   the budget threshold DURING its own run (an earlier step's usage over-runs a later step), which
   is why the F3 conformance test needs a multi-step pipeline + a tiny (not zero) budget.
 
+### Group C implementation notes (landed)
+
+- **F4** — `mapJobState` became `classifyJobStatus`, returning `{ state, evicted? }`, and
+  `HttpRunnerPoolProvider` now sets `RunnerJobView.evicted` from it. Two deliberate deviations
+  from the fix sketch:
+  - **"unknown terminal status → `failed`" was NOT taken.** The audit's wording covers the
+    real bug (a scheduler saying `error`/`evicted` read as `running`), but implementing it
+    literally would fail every pool whose scheduler reports an unmapped `queued` /
+    `provisioning` / `assigning` — the wrong-kill class this whole audit exists to prevent, and
+    on the FIRST poll rather than after a budget. Instead there are three explicit vocabularies
+    (eviction / failure / success) matched after the manifest's own `statusMap`, and a genuinely
+    unrecognised word still falls back to `running`. Such a run stays bounded by the poll budget,
+    and a manifest can always map the word.
+  - **Reclaim words are narrow on purpose.** `evicted`, `preempted`, `oomkilled`, `node_lost`
+    and friends mint `evicted: 'crash'`; `cancelled`, `killed`, `aborted` and `terminated` do
+    NOT, because they routinely mean a human stopped the job and re-dispatching would
+    resurrect it. The eviction check also runs on a status the manifest mapped to `failed`, so
+    `{"from":"evicted","to":"failed"}` still gets the recovery — an operator naming their
+    scheduler's word is describing the STATE, not declining the retry.
+  - **Every failure word must be terminal in EVERY vocabulary it could come from.** The first
+    cut had `unschedulable` in the failure set; Kubernetes reports it as a condition on a
+    PENDING pod while the cluster autoscales, so it would have killed a live run on its FIRST
+    poll — the same wrong-kill the bullet above declines. A word that can also mean "waiting
+    for capacity" belongs in no vocabulary; the manifest maps it when a pool means it
+    terminally. Both sides of a `statusMap` comparison are trimmed + lower-cased, so a padded
+    or pretty-cased enum still binds what the operator declared.
+  - `crash`, not `transient`: a pool member is ordinary infrastructure, while `transient` is
+    reserved for churn a facade knows is expected (a Cloudflare rollout).
+  - **A 404 is not proof of an eviction**, so the view's `error` leads with the raw status
+    (`Runner pool poll → 404: …`) and the scheduler's own message rides `detail`. A mistyped
+    `poll` template (the `dispatch` one can be right while it is wrong) and an endpoint that
+    404s an unauthorized read both land here, and an operator handed a bare "container evicted
+    or crashed" has nothing to act on. `evicted or crashed` stays a SUBSTRING, which is all
+    the dispatch-time `isContainerEvictionError` needs — the wording itself is now kernel's
+    `CONTAINER_EVICTION_ERROR` rather than a constant copied into all four transports.
+  - **An eviction recovery re-dispatches under a FRESH job id** (`dispatchEpochFor` now counts
+    `evictionRecoveries` + `transientEvictionRecoveries`, which the deploy path's
+    `deployEvictionEpoch` had always done). Without it the recovery was close to a no-op for
+    exactly the backend this finding is about: a pool is asked to keep routing **sticky by job
+    id**, so re-dispatching under the same id routes the retry back to the dead job, the next
+    poll 404s again, the budget (1) is spent, and the run fails `evicted` — faster and more
+    honest than the 70-minute wedge, but never the "fresh pool member" the fix promises. A
+    fresh id is correct for every transport: nothing can re-attach to a container that no
+    longer exists. `release` is deliberately NOT called first — the runner is already gone;
+    the pool docs now say a vanished job is the pool's to reap.
+  - The release/status-path gaps ride a new optional `warnings(config)` on
+    `RunnerBackendProvider` — the connection service stays kind-agnostic — and reach an
+    operator on BOTH of their surfaces: logged once at `register()` (the deployment operator's
+    copy; `resolve()` would re-log per dispatch) and returned on the CONNECTION TEST, which is
+    where the person who pasted the config is actually looking. A log line nobody reads is not
+    a warning. Each gap crosses the wire as a `{ code, message }` (the backend does not
+    localize prose), the SPA maps the code through an exhaustive `Record` in
+    `utils/connectionWarnings.ts`, and `message` is the untranslated fallback.
+    `RunnerPoolConnectionService` gained `logger?: Logger` (normalised to `noopLogger`), wired
+    in all three composition roots.
+- **F11** — the ordering swap on both sites, plus tests that pin it AND pin "a failed raise
+  leaves the block alone". Pure orchestration, so runtime-symmetric by construction (like F7 and
+  F10) and unit-tested rather than conformance-tested — there is no per-facade behaviour to
+  diverge, only a call order inside one shared service.
+- **F8 deferred, not skipped.** It is the only Group C finding that touches the executor-harness,
+  and the conventions below require a harness change to bump the image + the three tag pins. It
+  belongs with F6 and F13 in one harness slice rather than dragging an image bump into an
+  engine PR.
+
 ## Conventions & gotchas for implementers
 
 - **Runtime symmetry is mandatory** for anything touching engine/sweeper/notification
-  behaviour (F3, F7, F9, F10, F11): land Worker + Node together with a conformance assertion
-  (`@cat-factory/conformance`), per the CLAUDE.md rule. F1/F2/F5 are CF-only by nature (the
-  Node sweeper is the reference implementation being ported _from_).
+  behaviour (F3, F7, F9, F10, F11): land Worker + Node together, per the CLAUDE.md rule. A
+  conformance assertion is what proves it when a fix touches per-facade state (F3 did — a new
+  notification type crossing both notification repos); a fix that only reorders or widens logic
+  inside ONE shared orchestration service (F7, F10, F11) has no per-facade surface to diverge,
+  so unit tests are the honest coverage. F1/F2/F5 are CF-only by nature (the Node sweeper is
+  the reference implementation being ported _from_), and F4 lives in the shared `integrations`
+  transport both facades resolve.
 - **Harness changes (F6, F8, F13) are image-bumping:** bump `@cat-factory/executor-harness`'s
   version + the three tag pins (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) per the release rules in CLAUDE.md — keep them separate from
   non-harness slices.
 - **`sweepStuckRuns` is pure orchestration over `SweepDeps`** — extend its fake-based unit
   tests for F1/F2/F5; don't test through real Workflows.
-- **`runners.logic.ts` has table tests** — extend them for F4's state-mapping changes.
+- **`runners.logic.ts` now has table tests** (`runners.logic.test.ts`, added with F4 — the
+  audit's claim that they already existed was wrong; the pool coverage lived entirely in
+  `runner-pool-transport.test.ts`). Extend both for further status/eviction mapping work.
 - **The sweepers only see `status='running'`** — any fix that wants sweeper coverage for a
   park must either flip the status or extend `listStale` deliberately (and symmetrically);
   don't widen it casually, the invisibility of `blocked`/`paused` is load-bearing for the

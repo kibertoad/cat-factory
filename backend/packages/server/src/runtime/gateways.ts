@@ -1,3 +1,4 @@
+import type { InputTokenClasses } from '@cat-factory/agents'
 import type { WebSearchProvider } from '@cat-factory/contracts'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Logger } from '../observability/logger.js'
@@ -82,8 +83,17 @@ export interface LlmTokenUsage {
  */
 export interface ProxyCallObservation {
   usage: LlmTokenUsage | null
-  /** Prompt tokens served from the provider's cache (subset of usage.prompt_tokens); 0 if none. */
-  cachedPromptTokens?: number
+  /**
+   * The call's three input classes (fresh + both cache classes, additive), when the upstream
+   * path already knows them apart. Omit and the proxy derives all three from `usage` via
+   * `readInputTokenClasses`, which reconciles the inclusive (OpenAI/DeepSeek) and exclusive
+   * (Anthropic) provider shapes.
+   *
+   * All three travel together on purpose: `fresh` is only meaningful relative to the classes
+   * subtracted from it, so a path that supplied the cache classes alone would leave the proxy
+   * re-deriving `fresh` from a payload whose shape it just overrode.
+   */
+  inputTokens?: InputTokenClasses
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
   finishReason: string | null
   /** The assistant response text (concatenated for streamed calls). */

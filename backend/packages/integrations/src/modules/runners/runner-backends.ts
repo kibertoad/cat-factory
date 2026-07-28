@@ -1,5 +1,6 @@
 import type {
   ConnectionTestResult,
+  ConnectionWarning,
   ProviderConfigField,
   RunnerBackendConfig,
   RunnerPoolProvider,
@@ -16,6 +17,7 @@ import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 import {
   assertManifestUrlsSafe,
+  manifestWarnings,
   referencedSecretKeys as manifestSecretKeys,
 } from './runners.logic.js'
 
@@ -110,6 +112,14 @@ export interface RunnerBackendProvider {
   }
   /** Validate the config at the write boundary (SSRF / URL + runtime safety). Throws if unsafe. */
   assertConfigSafe(config: RunnerBackendConfig, opts?: RunnerBackendSafetyOptions): void
+  /**
+   * Non-fatal gaps in an otherwise-valid config: logged once at registration AND returned on
+   * the connection test, which is where the operator actually sees them (a deployment log line
+   * reaches whoever reads logs, not whoever pasted the config). A backend describes its own
+   * gaps because only it can read its config shape — the connection service stays
+   * kind-agnostic. Absent ⇒ this backend reports none.
+   */
+  warnings?(config: RunnerBackendConfig): ConnectionWarning[]
   /** Build the live transport the execution engine dispatches/polls/releases through. */
   buildTransport(config: RunnerBackendConfig, ctx: RunnerBackendContext): RunnerTransport
   /** Probe the backend without persisting anything. */
@@ -186,6 +196,7 @@ export const manifestRunnerBackend: RunnerBackendProvider = {
       assertManifestUrlsSafe(config.manifest, opts?.urlPolicy ?? STRICT_URL_SAFETY_POLICY)
     }
   },
+  warnings: (config) => (config.kind === 'manifest' ? manifestWarnings(config.manifest) : []),
   buildTransport: (config, ctx) => {
     if (config.kind !== 'manifest') throw new Error('Expected a manifest runner config')
     const provider = ctx.runnerPoolProvider ?? defaultHttpProvider(ctx.urlPolicy)

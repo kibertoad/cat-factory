@@ -10,8 +10,22 @@ const REQUIREMENT_REVIEW: RubricDimension[] = [
     key: 'gap_coverage',
     label: 'Gap coverage',
     description:
-      'Surfaces the genuine gaps, ambiguities and risks that would block confident implementation.',
+      'Surfaces the genuine product-level gaps, ambiguities and risks that would block confident implementation.',
     weight: 3,
+  },
+  // The requirements-review stage settles the product / business layer only; the technical layer
+  // is the architect's and researcher's, which see the repository and the `tech-spec/` and this
+  // stage does not. No other dimension catches a well-written, well-calibrated finding that is
+  // simply not this stage's to raise — `signal_noise` scores volume, not layer.
+  {
+    key: 'product_scope',
+    label: 'Product scope discipline',
+    description:
+      'Raises only product / business questions a product owner who does not read code could ' +
+      'answer. Leaves technology and library choice, architecture, API and schema shape, ' +
+      'algorithms, performance technique and infrastructure to the architect and researcher, ' +
+      'and does not smuggle one in at a low severity.',
+    weight: 2,
   },
   {
     key: 'specificity',

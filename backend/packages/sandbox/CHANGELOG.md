@@ -1,5 +1,52 @@
 # @cat-factory/sandbox
 
+## 0.10.2
+
+### Patch Changes
+
+- Updated dependencies [c47eb66]
+- Updated dependencies [5abcb9e]
+  - @cat-factory/contracts@0.181.0
+  - @cat-factory/kernel@0.174.0
+  - @cat-factory/agents@0.78.0
+  - @cat-factory/sandbox-fixtures@0.7.212
+
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+  - @cat-factory/agents@0.77.1
+  - @cat-factory/sandbox-fixtures@0.7.211
+
+## 0.10.0
+
+### Minor Changes
+
+- a04f609: Make the requirements-review product-scope boundary visible to both graders and humans.
+
+  The `requirement-review` rubric now carries a `Product scope discipline` dimension (weight 2).
+  Without it neither the Sandbox judge nor `cat-bench` could see the change that confined the stage
+  to the product / business layer: a well-written, well-calibrated _technical_ finding scored fine on
+  every existing axis, since `signal_noise` grades volume rather than layer. `gap_coverage` is
+  narrowed to product-level gaps for the same reason.
+
+  The two hand-kept copies of the rubrics (`@cat-factory/sandbox` and the benchmark harness) are now
+  pinned equal by a conformity test, since a dimension added to one and not the other fails nothing
+  on its own and just makes the two surfaces' scores quietly incomparable.
+
+  The requirements-review window gains a `requirements.scopeNote` line explaining that the stage
+  covers product and business requirements only and that technical decisions are settled later by the
+  Architect and Researcher steps. Without it the absence of technical questions reads as the reviewer
+  having missed something.
+
+### Patch Changes
+
+- Updated dependencies [a04f609]
+  - @cat-factory/agents@0.77.0
+
 ## 0.9.164
 
 ### Patch Changes

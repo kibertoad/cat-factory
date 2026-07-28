@@ -1,4 +1,8 @@
-import { harnessDispatchError, type RunnerJobView } from '@cat-factory/kernel'
+import {
+  CONTAINER_EVICTION_ERROR,
+  harnessDispatchError,
+  type RunnerJobView,
+} from '@cat-factory/kernel'
 
 // Shared HTTP plumbing for talking to an executor-harness instance over its `/jobs` +
 // `/health` API. Both local runner transports — the per-run/pooled CONTAINER transport
@@ -12,9 +16,11 @@ import { harnessDispatchError, type RunnerJobView } from '@cat-factory/kernel'
  * The failed-poll error the engine classifies as a container eviction (matched by
  * orchestration `isContainerEvictionError`, also used by the bootstrap flow). A
  * vanished/exited harness maps to it so the run stops and the stale-run sweeper can
- * re-drive it — mirroring the Worker transport's 404 mapping.
+ * re-drive it — mirroring the Worker transport's 404 mapping. Re-exported from kernel
+ * (`CONTAINER_EVICTION_ERROR`), which owns the wording as a cross-transport contract, so the
+ * local transports keep importing it from the protocol module they already share.
  */
-export const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+export const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 
 /** The shared-secret header sent on every harness call. */
 const SECRET_HEADER = 'x-harness-secret'
@@ -128,7 +134,18 @@ async function postMortemOf(opts: {
 export interface InlineJobResult {
   text: string
   finishReason?: 'stop' | 'length'
-  usage?: { inputTokens?: number; outputTokens?: number }
+  /**
+   * The input side split into its three orthogonal classes (`inputTokens` is FRESH input,
+   * exclusive of both caches), mirroring the harness's `InlineResult.usage`. A harness image
+   * predating the split omits the cache fields, which reads as 0 — the same answer it gave
+   * when it reported one lumped count.
+   */
+  usage?: {
+    inputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+    outputTokens?: number
+  }
 }
 
 /** The harness `/jobs/{id}` view for an `inline` job (its own result shape, not RunnerJobView). */

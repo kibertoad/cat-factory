@@ -1,5 +1,68 @@
 # @cat-factory/agents
 
+## 0.78.0
+
+### Minor Changes
+
+- 5abcb9e: Drain the remaining silent promise drops in the backend and stop them regrowing. Every
+  `.catch(() => {})` in `backend/packages` and `backend/runtimes` now goes through
+  `runBestEffort`, so a swallowed failure leaves one `warn` naming the operation with its cause
+  attached, and `scripts/check-silent-catch.mjs` fails CI on a new one (a drop that genuinely needs
+  no report annotates itself with `// silent-catch-ok: <reason>`). The guard counts every spelling
+  of an empty handler, including a body holding only a comment — which caught two further drops:
+  the mothership event relay (`HttpMachineEventClient.publish`, which additionally now treats a
+  REFUSED publish as a failure rather than a delivery, so an expired machine token stops reading as
+  success) and the web-search query recorder.
+
+  `RepoOpContext` gains a required `logger`, which closes the spec-promotion hole: a tester run that
+  verified requirements but promoted none used to be indistinguishable from one that had nothing to
+  promote. `RunDispatcher`, `DeployerStepController` and `InitiativeLoopService` gain the logger they
+  previously had no way to report through — so an issue-writeback drop, a leaked provisioning lease
+  and a permanently-failing initiative tick are all visible now. `ExecutionWorkflow` binds its run
+  correlation once with `logger.child` and scrubs its poll-failure causes with `redactSecrets`.
+
+### Patch Changes
+
+- Updated dependencies [c47eb66]
+- Updated dependencies [5abcb9e]
+  - @cat-factory/contracts@0.181.0
+  - @cat-factory/kernel@0.174.0
+  - @cat-factory/prompt-fragments@0.15.4
+
+## 0.77.1
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+  - @cat-factory/prompt-fragments@0.15.3
+
+## 0.77.0
+
+### Minor Changes
+
+- a04f609: Confine the requirements-review stage to the product / business layer.
+
+  The reviewer was routinely raising technical design questions — which library to use, how to shape
+  an endpoint, whether to cache — and the incorporation editor was writing the resulting decisions
+  into the standardized requirements document. Both ask a product owner something they cannot answer,
+  bury the questions only they can, and pre-empt the `architect` and `researcher` steps, which settle
+  the technical layer later with the repository and the in-repo `tech-spec/` in hand.
+
+  All three prompts of the flow (reviewer, incorporation editor, Requirement Writer) now fold in one
+  shared scope-boundary block: what is in scope (behaviour, business rules, actors and permissions,
+  data meaning, scope boundaries, quality expressed as a business outcome), what is out (technology
+  choice, architecture, API and schema shape, algorithms, performance technique, infrastructure,
+  coding and test approach), and the test to apply to each point — could a product owner who does not
+  read code settle it from business knowledge alone? The matching user prompts restate it, since they
+  land last in context and carry the output contract. Two behaviour notes: a technical concern is now
+  dropped outright rather than kept at a low severity, and raising no findings at all is stated as the
+  expected outcome for purely technical work.
+
+  Prompt versions bumped together: `requirement-review@v4`, `requirement-rework@v3`,
+  `requirement-writer@v3`.
+
 ## 0.76.0
 
 ### Minor Changes

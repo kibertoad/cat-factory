@@ -298,7 +298,12 @@
       "test": {
         "button": "Verbindung testen",
         "ok": "Verbindung OK",
-        "failed": "Verbindung fehlgeschlagen"
+        "failed": "Verbindung fehlgeschlagen",
+        "warningsTitle": "Lücken in dieser Konfiguration",
+        "warnings": {
+          "runner_manifest_no_release": "Kein Release-Template: Beim Abbrechen eines Laufs kann dem Pool nicht mitgeteilt werden, dass er seinen Job stoppen soll. Ein verwaister Job belegt seinen Runner, bis der Pool ihn von selbst zurücknimmt.",
+          "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist."
+        }
       },
       "toast": {
         "saved": "{title} gespeichert",
@@ -1992,7 +1997,8 @@
         "localModels": "Meine lokalen Runner",
         "sandbox": "Sandbox öffnen",
         "shortcuts": "Tastenkürzel",
-        "bugHunt": "Fehlerjagd"
+        "bugHunt": "Fehlerjagd",
+        "toggleUiMode": "Oberflächenmodus wechseln"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2013,7 +2019,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
-        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen"
+        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
+        "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden"
       }
     },
     "shortcuts": {
@@ -2899,13 +2906,23 @@
       "transportOverhead": "Transport-Overhead",
       "modelExecution": "Modellausführung",
       "truncated": "{count} abgeschnitten | {count} abgeschnitten",
-      "cached": "{tokens} gecacht"
+      "inputTokensHint": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",
+      "fresh": "{tokens} frisch",
+      "freshHint": "Eingabe, die von Grund auf verarbeitet wurde, ohne Anteil aus dem Cache",
+      "cacheRead": "{tokens} aus dem Cache gelesen",
+      "cacheReadHint": "Eingabe-Tokens, die aus dem Cache des Providers bedient wurden (etwa 0,1x der Preis frischer Eingabe-Tokens)",
+      "cacheWrite": "{tokens} in den Cache geschrieben",
+      "cacheWriteHint": "Eingabe-Tokens, die in den Cache des Providers geschrieben wurden (1,25x bis 2x der Preis frischer Eingabe-Tokens)"
     },
     "metricsBar": {
       "calls": "{count} Aufruf | {count} Aufrufe",
-      "promptCompletionTokens": "Frische (nicht gecachte) Prompt-/Completion-Tokens",
-      "cachedTokens": "({tokens} zwischengespeichert)",
-      "cachedTokensHint": "Prompt-Tokens, die aus dem Cache des Providers bedient wurden",
+      "inputCompletionTokens": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",
+      "fresh": "{tokens} frisch",
+      "freshHint": "Eingabe, die von Grund auf verarbeitet wurde, ohne Anteil aus dem Cache",
+      "cacheRead": "{tokens} aus dem Cache gelesen",
+      "cacheReadHint": "Eingabe-Tokens, die aus dem Cache des Providers bedient wurden (etwa 0,1x der Preis frischer Eingabe-Tokens)",
+      "cacheWrite": "{tokens} in den Cache geschrieben",
+      "cacheWriteHint": "Eingabe-Tokens, die in den Cache des Providers geschrieben wurden (1,25x bis 2x der Preis frischer Eingabe-Tokens)",
       "errors": "{count} Fehler | {count} Fehler",
       "warnings": "{count} Warnung | {count} Warnungen",
       "outputLimit": "Ausgabelimit",
@@ -2915,7 +2932,7 @@
       "modelExecution": "Modellausführung"
     },
     "call": {
-      "tokensTitle": "{prompt} Prompt- / {completion} Completion-Tokens",
+      "tokensTitle": "{input} Eingabe-Tokens (davon {fresh} frisch) / {completion} Ausgabe-Tokens",
       "outputUsedVsLimit": "Ausgabe genutzt vs. Limit",
       "transportVsExecution": "Transport-Overhead / Modellausführung",
       "error": "Fehler",
@@ -2925,7 +2942,9 @@
       "streamed": "gestreamt",
       "buffered": "gepuffert",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} Prompt zwischengespeichert",
+      "fresh": "{tokens} frisch",
+      "cacheRead": "{tokens} aus dem Cache gelesen",
+      "cacheWrite": "{tokens} in den Cache geschrieben",
       "total": "gesamt {duration}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nur neue Nachrichten: {count} frühere ausgelassen)",
@@ -3242,10 +3261,11 @@
       "searchPlaceholder": "Issues durchsuchen oder eine URL/einen Schlüssel einfügen…",
       "refPlaceholder": "Eine Issue-URL oder einen -Schlüssel einfügen…",
       "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchNeedsRepo": "Dieser Service ist noch mit keinem Repository verknüpft, es gibt also nichts zu durchsuchen. Verknüpfen Sie ihn mit einem Repository oder fügen Sie eine Issue-URL ein, um ein Issue direkt anzuhängen.",
       "imported": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
-      "noMatches": "Keine passenden Issues.",
-      "emptySearchable": "Nach Titel suchen oder ein importiertes Issue auswählen.",
+      "noMatches": "Keine passenden Issues im Repository dieses Service. Fügen Sie eine Issue-URL ein, um eines von anderswo anzuhängen.",
+      "emptySearchable": "Durchsuchen Sie das Repository dieses Service nach Titel oder wählen Sie ein importiertes Issue aus.",
       "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen.",
       "sourceLabel": "Quelle",
       "noSource": "Quelle wählen",
@@ -3551,6 +3571,7 @@
     "title": "Anforderungsprüfung",
     "iteration": "Iteration {current} / {max}",
     "intro": "Ein KI-Prüfer hat die gesammelten Anforderungen dieses {level} untersucht — die Beschreibung sowie alle verknüpften PRDs und Tracker-Issues — und die folgenden Befunde erhoben. {answer} Sie die relevanten und {dismiss} Sie die irrelevanten, arbeiten Sie sie dann ein; der Prüfer prüft erneut, bis die Anforderungen klar sind.",
+    "scopeNote": "Diese Phase umfasst ausschließlich Produkt- und Geschäftsanforderungen: was die Software leisten muss und welche Regeln dafür gelten. Technische Entscheidungen wie Technologieauswahl, Architektur und Datenstrukturen treffen später die Schritte Architekt und Rechercheur, die dabei Zugriff auf die Codebasis haben.",
     "levelFallback": "Element",
     "answerVerb": "Beantworten",
     "dismissVerb": "verwerfen",
@@ -4201,6 +4222,14 @@
       "dismiss": "Schließen"
     }
   },
+  "uiMode": {
+    "switcher": "Oberfläche",
+    "basic": "Einfach",
+    "advanced": "Erweitert",
+    "basicHint": "Nur die alltäglichen Werkzeuge. Für alles auf „Erweitert“ umschalten.",
+    "advancedHint": "Alle Bereiche und alle Ausführungsoptionen.",
+    "pinned": "Von dieser Installation festgelegt"
+  },
   "common": {
     "loading": "Wird geladen…",
     "save": "Speichern",
@@ -4273,6 +4302,8 @@
     "menu": "Navigationsmenü",
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen",
+    "expandSidebar": "Seitenleiste ausklappen",
+    "collapseSidebar": "Seitenleiste einklappen",
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
     "buildPipeline": "Eine Pipeline erstellen",

@@ -2,6 +2,11 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 
 // Signed-in identity + per-user actions, shown in the sidebar when auth is enabled.
+//
+// `collapsed` renders the avatar-only rail variant (the sidebar's collapsed state); the
+// dropdown is unchanged, so "My setup" / sign-out stay reachable from the rail.
+withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+
 const auth = useAuthStore()
 const ui = useUiStore()
 const { t } = useI18n()
@@ -30,7 +35,9 @@ const items = computed<DropdownMenuItem[][]>(() => [
   <UDropdownMenu v-if="auth.user" :items="items" :content="{ side: 'top', align: 'start' }">
     <button
       type="button"
+      :title="collapsed ? auth.user.name || auth.user.login : undefined"
       class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
+      :class="collapsed ? 'justify-center' : ''"
     >
       <UAvatar
         :src="auth.user.avatarUrl ?? undefined"
@@ -38,13 +45,13 @@ const items = computed<DropdownMenuItem[][]>(() => [
         size="xs"
         icon="i-lucide-user"
       />
-      <div class="min-w-0 flex-1">
+      <div v-if="!collapsed" class="min-w-0 flex-1">
         <div class="truncate text-xs font-medium text-white">
           {{ auth.user.name || auth.user.login }}
         </div>
         <div class="truncate text-[10px] text-slate-500">@{{ auth.user.login }}</div>
       </div>
-      <UIcon name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-slate-500" />
+      <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-slate-500" />
     </button>
   </UDropdownMenu>
 </template>

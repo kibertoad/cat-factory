@@ -4,10 +4,16 @@ import type {
   InlineObservabilityContext,
   LlmGenerationEvent,
   LlmTraceSink,
+  Logger,
   ModelProvider,
   ModelRef,
 } from '@cat-factory/kernel'
-import { catFactoryObservability, readInlineObservabilityContext } from '@cat-factory/kernel'
+import {
+  catFactoryObservability,
+  noopLogger,
+  readInlineObservabilityContext,
+  runBestEffort,
+} from '@cat-factory/kernel'
 
 // Re-exported so existing `@cat-factory/agents` consumers keep importing the inline
 // observability tag from here; the canonical, dependency-free definition lives in the
@@ -32,23 +38,56 @@ export type { InlineObservabilityContext }
 // throws into the call.
 
 /** Read token counts defensively across the AI SDK's flat (v2) and nested (v3) usage shapes. */
-function readUsage(usage: unknown): { prompt: number; completion: number; total: number } {
+/**
+ * Read the SDK's usage into the four orthogonal classes the trace sink carries: `prompt` is
+ * FRESH input only, with the two cache classes beside it, so
+ * `prompt + cacheRead + cacheWrite` is the total input.
+ *
+ * The v3 shape already breaks the input down (`{ total, noCache, cacheRead, cacheWrite }`),
+ * so the split is read straight off it rather than re-derived; `noCache` is preferred over
+ * `total − read − write` because it is what the provider itself reported, and the subtraction
+ * is only the fallback for a model that fills `total` but not `noCache`. The v2/flat shape
+ * carries no cache breakdown at all, so both classes are 0 and the flat prompt count is
+ * already the whole (uncached) input.
+ */
+function readUsage(usage: unknown): {
+  prompt: number
+  cacheRead: number
+  cacheWrite: number
+  completion: number
+  total: number
+} {
   const u = usage as Record<string, unknown> | undefined
-  if (!u) return { prompt: 0, completion: 0, total: 0 }
+  if (!u) return { prompt: 0, cacheRead: 0, cacheWrite: 0, completion: 0, total: 0 }
   const inputTokens = u.inputTokens
   const outputTokens = u.outputTokens
-  // v3: nested { total, … }
+  const num = (value: unknown): number => (typeof value === 'number' ? value : 0)
+  // v3: nested { total, noCache, cacheRead, cacheWrite }
   if (inputTokens && typeof inputTokens === 'object') {
-    const prompt = Number((inputTokens as { total?: number }).total ?? 0)
+    const input = inputTokens as {
+      total?: number
+      noCache?: number
+      cacheRead?: number
+      cacheWrite?: number
+    }
+    const cacheRead = num(input.cacheRead)
+    const cacheWrite = num(input.cacheWrite)
+    const prompt =
+      typeof input.noCache === 'number'
+        ? input.noCache
+        : Math.max(0, num(input.total) - cacheRead - cacheWrite)
     const completion = Number((outputTokens as { total?: number })?.total ?? 0)
-    const total = typeof u.totalTokens === 'number' ? u.totalTokens : prompt + completion
-    return { prompt, completion, total }
+    const total =
+      typeof u.totalTokens === 'number'
+        ? u.totalTokens
+        : prompt + cacheRead + cacheWrite + completion
+    return { prompt, cacheRead, cacheWrite, completion, total }
   }
-  // v2 / legacy flat
+  // v2 / legacy flat: no cache breakdown reported.
   const prompt = Number((inputTokens as number) ?? (u.promptTokens as number) ?? 0)
   const completion = Number((outputTokens as number) ?? (u.completionTokens as number) ?? 0)
   const total = typeof u.totalTokens === 'number' ? u.totalTokens : prompt + completion
-  return { prompt, completion, total }
+  return { prompt, cacheRead: 0, cacheWrite: 0, completion, total }
 }
 
 /** Extract the assistant text from a generate result, across result shapes. */
@@ -79,6 +118,7 @@ export class InstrumentedModelProvider implements ModelProvider {
   private readonly traceSink: LlmTraceSink
   private readonly recordPrompts: boolean
   private readonly now: () => number
+  private readonly log: Logger
 
   constructor(deps: {
     inner: ModelProvider
@@ -87,11 +127,14 @@ export class InstrumentedModelProvider implements ModelProvider {
     recordPrompts?: boolean
     /** Injectable clock (tests); defaults to `Date.now`. */
     now?: () => number
+    /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
+    logger?: Logger
   }) {
     this.inner = deps.inner
     this.traceSink = deps.traceSink
     this.recordPrompts = deps.recordPrompts ?? true
     this.now = deps.now ?? (() => Date.now())
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'inlineLlmTrace' })
   }
 
   resolve(ref: ModelRef): LanguageModel {
@@ -144,6 +187,8 @@ export class InstrumentedModelProvider implements ModelProvider {
       startedAt,
       endedAt,
       promptTokens: usage.prompt,
+      cacheReadTokens: usage.cacheRead,
+      cacheWriteTokens: usage.cacheWrite,
       completionTokens: usage.completion,
       totalTokens: usage.total,
       finishReason: ok ? readFinishReason(result) : null,
@@ -152,13 +197,15 @@ export class InstrumentedModelProvider implements ModelProvider {
       input: this.recordPrompts ? safeJson((params as { prompt?: unknown })?.prompt) : '',
       output: this.recordPrompts && ok ? readOutputText(result) : '',
     }
-    // Best-effort and fully isolated: the sink itself swallows + logs, but guard the
-    // synchronous build/dispatch too so instrumentation can never break the LLM call.
-    try {
-      void Promise.resolve(this.traceSink.recordGeneration(event)).catch(() => {})
-    } catch {
-      // ignored
-    }
+    // Best-effort and fully isolated — instrumentation must never break the LLM call.
+    // `runBestEffort` covers the synchronous build/dispatch throw as well as the rejection,
+    // which is what the `try` around the old `.catch(() => {})` was there for.
+    void runBestEffort(
+      this.log,
+      'traceSink.recordGeneration',
+      () => this.traceSink.recordGeneration(event),
+      { workspaceId: event.workspaceId, executionId: event.executionId, source: 'inline' },
+    )
   }
 }
 

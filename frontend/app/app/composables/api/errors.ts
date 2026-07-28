@@ -54,6 +54,22 @@ export function apiErrorEnvelope(error: unknown): ApiErrorEnvelope | undefined {
   return envelopeOf(e?.body) ?? envelopeOf(e?.data)
 }
 
+/**
+ * The backend's machine-readable `error.details.reason` code, when it sent one.
+ *
+ * This is the client half of the "backend strings" contract (see CLAUDE.md): a localizable
+ * server condition emits a stable code and the SPA maps it to a message key, with the raw
+ * prose `message` as the untranslated last resort. Callers compare the result against a union
+ * imported from `@cat-factory/contracts`, so a renamed code fails the typecheck instead of
+ * silently falling through to the generic wording.
+ */
+export function apiErrorReason(error: unknown): string | null {
+  const details = apiErrorEnvelope(error)?.details
+  if (!details || typeof details !== 'object') return null
+  const reason = (details as Record<string, unknown>).reason
+  return typeof reason === 'string' ? reason : null
+}
+
 /** The HTTP status of a thrown API error, when present (contract client or `$fetch`). */
 export function apiErrorStatus(error: unknown): number | undefined {
   const e = error as { statusCode?: unknown; status?: unknown }

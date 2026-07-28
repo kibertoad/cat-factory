@@ -1,5 +1,106 @@
 # @cat-factory/worker
 
+## 0.112.3
+
+### Patch Changes
+
+- 5abcb9e: Drain the remaining silent promise drops in the backend and stop them regrowing. Every
+  `.catch(() => {})` in `backend/packages` and `backend/runtimes` now goes through
+  `runBestEffort`, so a swallowed failure leaves one `warn` naming the operation with its cause
+  attached, and `scripts/check-silent-catch.mjs` fails CI on a new one (a drop that genuinely needs
+  no report annotates itself with `// silent-catch-ok: <reason>`). The guard counts every spelling
+  of an empty handler, including a body holding only a comment — which caught two further drops:
+  the mothership event relay (`HttpMachineEventClient.publish`, which additionally now treats a
+  REFUSED publish as a failure rather than a delivery, so an expired machine token stops reading as
+  success) and the web-search query recorder.
+
+  `RepoOpContext` gains a required `logger`, which closes the spec-promotion hole: a tester run that
+  verified requirements but promoted none used to be indistinguishable from one that had nothing to
+  promote. `RunDispatcher`, `DeployerStepController` and `InitiativeLoopService` gain the logger they
+  previously had no way to report through — so an issue-writeback drop, a leaked provisioning lease
+  and a permanently-failing initiative tick are all visible now. `ExecutionWorkflow` binds its run
+  correlation once with `logger.child` and scrubs its poll-failure causes with `redactSecrets`.
+
+- Updated dependencies [c47eb66]
+- Updated dependencies [5abcb9e]
+  - @cat-factory/integrations@0.106.0
+  - @cat-factory/contracts@0.181.0
+  - @cat-factory/kernel@0.174.0
+  - @cat-factory/server@0.164.0
+  - @cat-factory/agents@0.78.0
+  - @cat-factory/orchestration@0.154.0
+  - @cat-factory/eks@0.1.155
+  - @cat-factory/consensus@0.12.3
+  - @cat-factory/gates@0.8.2
+  - @cat-factory/gitlab@0.13.22
+  - @cat-factory/observability-otel@0.3.2
+  - @cat-factory/prompt-fragments@0.15.4
+  - @cat-factory/spend@0.12.103
+  - @cat-factory/caching@0.11.2
+  - @cat-factory/observability-langfuse@0.8.2
+  - @cat-factory/provider-cloudflare@0.7.308
+
+## 0.112.2
+
+### Patch Changes
+
+- bead6df: Stop two ways a run could sit wedged with nothing left to move it.
+
+  A self-hosted runner pool that lost a job now says so. A poll that 404s (or 410s), and a scheduler
+  status that names a reclaimed runner (`evicted` / `preempted` / `oomkilled` / `node_lost` / …), are
+  read as the RUNNER going away rather than the job failing, so the step is re-dispatched instead of
+  burning the run's whole ~70-minute poll budget and dying `timeout`. A job-level failure vocabulary
+  (`error` / `cancelled` / `timeout` / …) and a success vocabulary (`completed` / `succeeded` / …)
+  likewise end the poll loop honestly; a status word that matches nothing still keeps the driver
+  waiting, since wrongly killing a live run is the worse mistake. A pool is asked to route stickily
+  by job id, so an eviction recovery now dispatches under a FRESH id (as the deploy path already
+  did) — reusing it would have routed the retry back to the job whose runner just died, making the
+  recovery a no-op for pool-backed runs.
+
+  A manifest that defines no `release` template — or no status path — reports the gap on its
+  connection test in Settings, and logs it once at registration. Each gap crosses the wire as a
+  code, so the SPA renders translated copy rather than backend prose.
+
+  The merge-review and pipeline-complete notifications are now raised BEFORE the block flips to
+  `pr_ready`. Raising second meant that if the card failed to raise, the run failed but the task was
+  already sitting in `pr_ready` with an empty inbox: a PR-ready task with no review action and
+  nothing to re-drive it.
+
+  Breaking for anyone importing them directly: `runnersLogic.mapJobState` is replaced by
+  `runnersLogic.classifyJobStatus`, which returns `{ state, evicted? }`;
+  `runnersLogic.manifestWarnings` and `RunnerBackendProvider.warnings` return
+  `{ code, message }` objects rather than strings. The `(container evicted or crashed)` wording every
+  transport had copied is now kernel's `CONTAINER_EVICTION_ERROR`.
+
+- Updated dependencies [bead6df]
+  - @cat-factory/integrations@0.105.0
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+  - @cat-factory/orchestration@0.153.1
+  - @cat-factory/server@0.163.2
+  - @cat-factory/eks@0.1.154
+  - @cat-factory/agents@0.77.1
+  - @cat-factory/consensus@0.12.2
+  - @cat-factory/gates@0.8.1
+  - @cat-factory/gitlab@0.13.21
+  - @cat-factory/observability-otel@0.3.1
+  - @cat-factory/prompt-fragments@0.15.3
+  - @cat-factory/spend@0.12.102
+  - @cat-factory/caching@0.11.1
+  - @cat-factory/observability-langfuse@0.8.1
+  - @cat-factory/provider-cloudflare@0.7.307
+
+## 0.112.1
+
+### Patch Changes
+
+- Updated dependencies [a04f609]
+  - @cat-factory/agents@0.77.0
+  - @cat-factory/orchestration@0.153.0
+  - @cat-factory/consensus@0.12.1
+  - @cat-factory/provider-cloudflare@0.7.306
+  - @cat-factory/server@0.163.1
+
 ## 0.112.0
 
 ### Minor Changes

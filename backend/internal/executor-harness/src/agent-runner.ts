@@ -800,7 +800,11 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
 export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
-  let usage: { inputTokens: number; outputTokens: number } | undefined
+  // The running CUMULATIVE total, kept in its reported (inclusive) form plus the cached share
+  // it contains. `PiRunOutcome.usage` needs the inclusive figure — it is the key-rotation
+  // weight — while the fallback call metric below needs the split, so both are derived from
+  // this one value rather than one being reconstructed from the other.
+  let cumulative: CodexCumulativeUsage | undefined
 
   // Codex reads its credentials from $CODEX_HOME/auth.json with file-backed
   // storage. CRITICAL: this home must live OUTSIDE the cloned checkout (`opts.cwd`)
@@ -875,7 +879,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     const progress = codexPlanProgress(event)
     if (progress && opts.onProgress) opts.onProgress(progress)
     const turnUsage = codexUsage(event)
-    if (turnUsage) usage = turnUsage
+    if (turnUsage) cumulative = turnUsage
     // A `token_count` event closes a model turn: pair its per-turn usage with the
     // assistant text seen since the previous turn as one telemetry call.
     const perTurn = codexLastTurnUsage(event)
@@ -889,7 +893,8 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           responseText: redactBody(pendingText, secrets),
           reasoningText: '',
           inputTokens: perTurn.inputTokens,
-          cachedInputTokens: perTurn.cachedInputTokens,
+          cacheReadTokens: perTurn.cacheReadTokens,
+          cacheWriteTokens: perTurn.cacheWriteTokens,
           outputTokens: perTurn.outputTokens,
           finishReason: null,
         },
@@ -925,7 +930,11 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
 
     // Fallback for a CLI/version that never emits per-turn `last_token_usage`: record a
     // single call from the cumulative total + final text so the run is still observable.
-    if (calls.length === 0 && (usage || summary)) {
+    // The cumulative total is inclusive of its cached share exactly as a per-turn one is, so
+    // it is split the same way rather than being filed wholesale as fresh — which would report
+    // a cache-heavy run as if nothing had been cached, the one reading this telemetry exists
+    // to rule out.
+    if (calls.length === 0 && (cumulative || summary)) {
       publishCallMetric(
         calls,
         {
@@ -934,14 +943,23 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           messageCount: messages.length,
           responseText: redactBody(summary, secrets),
           reasoningText: '',
-          inputTokens: usage?.inputTokens ?? 0,
-          cachedInputTokens: 0,
-          outputTokens: usage?.outputTokens ?? 0,
+          inputTokens: Math.max(
+            0,
+            (cumulative?.inputTokens ?? 0) - (cumulative?.cachedInputTokens ?? 0),
+          ),
+          cacheReadTokens: cumulative?.cachedInputTokens ?? 0,
+          // Codex reports no separate cache-WRITE class; 0 rather than guessed.
+          cacheWriteTokens: 0,
+          outputTokens: cumulative?.outputTokens ?? 0,
           finishReason: null,
         },
         opts.onCallMetric,
       )
     }
+    // The outcome's usage is the key-rotation WEIGHT, so it keeps the inclusive input count.
+    const usage = cumulative
+      ? { inputTokens: cumulative.inputTokens, outputTokens: cumulative.outputTokens }
+      : undefined
     return {
       summary,
       stats,
@@ -1013,18 +1031,27 @@ function codexPlanProgress(event: Record<string, unknown>): TodoProgress | undef
 }
 
 /**
+ * Codex's running cumulative usage, kept in the form the CLI reports it: `inputTokens` is the
+ * TOTAL prompt count (OpenAI semantics) with `cachedInputTokens` a SUBSET already inside it,
+ * never a bucket to add on top. The cached share is carried rather than discarded so a
+ * consumer that needs the fresh figure can subtract it at the point of use, instead of the
+ * only two readings of this number being "inclusive" and "lost".
+ */
+interface CodexCumulativeUsage {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+}
+
+/**
  * Best-effort: pull token usage out of a Codex usage event. Codex `exec --json`
  * reports a running CUMULATIVE total on `token_count` events under
  * `info.total_token_usage` (it also carries the per-turn `last_token_usage`); older /
  * other shapes put it on `usage` / `info.usage` directly. We read the cumulative
  * total when present so the caller can simply overwrite (not sum) — summing
  * cumulative totals across events would multiply-count. Checked most-likely first.
- * `input_tokens` is the TOTAL prompt count (OpenAI semantics: `cached_input_tokens`
- * is a subset already inside it), so it is NOT summed with the cached share.
  */
-function codexUsage(
-  event: Record<string, unknown>,
-): { inputTokens: number; outputTokens: number } | undefined {
+function codexUsage(event: Record<string, unknown>): CodexCumulativeUsage | undefined {
   const info = isObject(event.info) ? (event.info as Record<string, unknown>) : undefined
   const raw =
     (info && isObject(info.total_token_usage) ? info.total_token_usage : undefined) ??
@@ -1035,20 +1062,28 @@ function codexUsage(
   const input = numberOf(raw.input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, outputTokens: output }
+  return {
+    inputTokens: input,
+    cachedInputTokens: numberOf(raw.cached_input_tokens),
+    outputTokens: output,
+  }
 }
 
 /**
  * Per-TURN Codex token usage off a `token_count` event's `info.last_token_usage` (the
  * delta for the turn just completed, as opposed to `codexUsage`'s cumulative total).
- * `input_tokens` is the total prompt count for the turn and already INCLUDES the cached
- * share (OpenAI semantics), so `cachedInputTokens` is surfaced as the subset it is —
- * NOT added on top (adding it would double-count every cached token).
+ *
+ * OpenAI semantics: `input_tokens` is the turn's WHOLE prompt count and already INCLUDES
+ * the cached share, so the fresh figure is the difference. Clamped at 0 because the two
+ * counts come off the same event and a vendor inconsistency must not mint a negative token
+ * count. Codex reports no separate cache-WRITE class, so that class is 0 here rather than
+ * guessed.
  */
 function codexLastTurnUsage(event: Record<string, unknown>):
   | {
       inputTokens: number
-      cachedInputTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
       outputTokens: number
     }
   | undefined {
@@ -1059,7 +1094,12 @@ function codexLastTurnUsage(event: Record<string, unknown>):
   const cached = numberOf(raw.cached_input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }
+  return {
+    inputTokens: Math.max(0, input - cached),
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+    outputTokens: output,
+  }
 }
 
 /** Dispatch to the configured subscription harness runner. */

@@ -158,7 +158,8 @@ export function executionController(): Hono<AppEnv> {
           totals: {
             calls: 0,
             promptTokens: 0,
-            cachedPromptTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
             cacheHitRate: null,
             completionTokens: 0,
             upstreamMs: 0,

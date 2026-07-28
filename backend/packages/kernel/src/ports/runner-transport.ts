@@ -44,6 +44,17 @@ export type RunnerJobProgress = StepSubtasks
 export type ContainerEvictionKind = 'crash' | 'transient'
 
 /**
+ * The one-line `error` a transport reports beside `evicted` when the job's container/runner is
+ * simply GONE — the poll found no such job. Owned here rather than copied per transport because
+ * it is a CONTRACT, not a message: orchestration's dispatch-time `isContainerEvictionError`
+ * matches the `evicted or crashed` substring to route a view-less throw to a fresh-container
+ * retry, so a transport that drifts from this wording silently loses that recovery. A transport
+ * with something more specific to say prefixes it (`Runner pool poll → 404: …`) rather than
+ * replacing it.
+ */
+export const CONTAINER_EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+
+/**
  * One forward-looking item the Coder streamed (a loose end / side-task / question), as the
  * harness reports it on a poll (drain-on-read). Structurally the harness's `FollowUpLine` /
  * the contracts' `StreamedFollowUp`; kept as a local shape so this port stays schema-free.
@@ -72,8 +83,12 @@ export interface HarnessCallMetric {
   messageCount: number
   responseText: string
   reasoningText: string
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   inputTokens: number
-  cachedInputTokens: number
+  /** Input tokens served from the vendor's prompt cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the vendor's cache (0 where the CLI reports no write class). */
+  cacheWriteTokens: number
   outputTokens: number
   finishReason: string | null
   /**

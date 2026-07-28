@@ -32,6 +32,9 @@ const NO_GATES: NavGates = {
   infrastructureAvailable: false,
   accountsEnabled: false,
   isAccountAdmin: false,
+  // The permission axis is what these cases vary; keep the interface tier at `advanced`
+  // so a dropped item is unambiguously an RBAC/availability drop, not a tier drop.
+  advancedMode: true,
 }
 
 const ALL_GATES: NavGates = {
@@ -43,6 +46,7 @@ const ALL_GATES: NavGates = {
   infrastructureAvailable: true,
   accountsEnabled: true,
   isAccountAdmin: true,
+  advancedMode: true,
 }
 
 const slots = (): AppSlots => ({
@@ -83,6 +87,58 @@ describe('navSlotFilter', () => {
   it('passes everything through when no gates service is wired (dev-open parity)', () => {
     const kept = ids(navSlotFilter(slots(), {}))
     expect(kept.sort()).toEqual(NAV_CONTRIBUTIONS.map((i) => i.id).sort())
+  })
+
+  it('drops every advanced destination in basic interface mode', () => {
+    const gates: NavGates = { ...ALL_GATES, advancedMode: false }
+    const kept = ids(navSlotFilter(slots(), { gates }))
+    const basicOnly = NAV_CONTRIBUTIONS.filter((i) => !i.advanced).map((i) => i.id)
+    expect(kept.sort()).toEqual(basicOnly.sort())
+    // The everyday surface survives...
+    expect(kept).toContain('add-from-repo')
+    expect(kept).toContain('integrations-hub')
+    expect(kept).toContain('workspace-settings')
+    expect(kept).toContain('model-config')
+    // ...and the authoring / operator surfaces don't.
+    expect(kept).not.toContain('build-pipeline')
+    expect(kept).not.toContain('fragments')
+    expect(kept).not.toContain('sandbox')
+    expect(kept).not.toContain('operator-dashboard')
+  })
+
+  it('keeps the tier switch itself reachable in basic mode', () => {
+    // Basic is the shipped default, so this palette entry is how a user who never finds the
+    // (icon-only, in the basic rail) sidebar switcher gets to the advanced half at all. Marking
+    // it `advanced` would hide the way back from exactly the tier that needs it.
+    const uiModeItem = NAV_CONTRIBUTIONS.find((i) => i.id === 'ui-mode')
+    expect(uiModeItem?.advanced).toBeUndefined()
+    expect(uiModeItem?.gate).toBeUndefined()
+
+    const gates: NavGates = { ...NO_GATES, advancedMode: false }
+    expect(ids(navSlotFilter(slots(), { gates }))).toContain('ui-mode')
+  })
+
+  it('keeps the tier and the permission axes independent — both must pass', () => {
+    // `build-pipeline` is advanced AND needs board.write: neither axis alone reveals it.
+    const advancedOnly: NavGates = { ...NO_GATES, advancedMode: true }
+    expect(ids(navSlotFilter(slots(), { gates: advancedOnly }))).not.toContain('build-pipeline')
+
+    const permissionOnly: NavGates = { ...NO_GATES, canWriteBoard: true, advancedMode: false }
+    expect(ids(navSlotFilter(slots(), { gates: permissionOnly }))).not.toContain('build-pipeline')
+
+    const both: NavGates = { ...NO_GATES, canWriteBoard: true, advancedMode: true }
+    expect(ids(navSlotFilter(slots(), { gates: both }))).toContain('build-pipeline')
+  })
+
+  it('leaves at least one sidebar destination in every basic-mode section it keeps', () => {
+    // A section whose every item is advanced is dropped wholesale upstream (groupSidebar drops
+    // empties), which is intended — but a basic-mode sidebar with NO destinations at all would
+    // be a broken shell, so pin that the everyday surface is non-empty.
+    const gates: NavGates = { ...ALL_GATES, advancedMode: false }
+    const kept = (navSlotFilter(slots(), { gates }) as AppSlots).nav
+    const groups = groupSidebar(kept)
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) expect(group.items.length).toBeGreaterThan(0)
   })
 })
 
@@ -172,7 +228,8 @@ describe('nav grouping helpers', () => {
 
   it('groupCommands preserves the pre-slice-1 workspace-group order', () => {
     const workspace = groupCommands(NAV_CONTRIBUTIONS).find((g) => g.group === 'workspace')
-    // Same order the old CommandBar pushed them in (parity, not a reorder).
+    // Same order the old CommandBar pushed them in (parity, not a reorder), with genuinely
+    // new entries appended after it rather than interleaved.
     expect(workspace?.items.map((ci) => ci.item.id)).toEqual([
       'fragments',
       'merge-thresholds',
@@ -182,6 +239,7 @@ describe('nav grouping helpers', () => {
       'local-models',
       'sandbox',
       'keyboard-shortcuts',
+      'ui-mode',
     ])
   })
 

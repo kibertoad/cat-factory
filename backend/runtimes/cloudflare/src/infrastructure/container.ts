@@ -494,6 +494,7 @@ function buildResolveTransport(deps: {
         info: 'cat-factory:runners',
       }),
       clock,
+      logger,
       runnerBackendRegistry,
       ...(urlPolicy ? { urlPolicy } : {}),
       runnerPoolProvider:

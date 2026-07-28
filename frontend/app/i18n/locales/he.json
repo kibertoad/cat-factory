@@ -23,6 +23,14 @@
       "dismiss": "בטל"
     }
   },
+  "uiMode": {
+    "switcher": "ממשק",
+    "basic": "בסיסי",
+    "advanced": "מתקדם",
+    "basicHint": "רק הכלים היומיומיים. עברו למתקדם כדי לראות הכול.",
+    "advancedHint": "כל האזורים וכל אפשרויות ההרצה.",
+    "pinned": "נקבע על ידי פריסה זו"
+  },
   "common": {
     "loading": "טוען…",
     "save": "שמור",
@@ -95,6 +103,8 @@
     "menu": "תפריט ניווט",
     "openMenu": "פתח תפריט",
     "closeMenu": "סגור תפריט",
+    "expandSidebar": "הרחבת סרגל הצד",
+    "collapseSidebar": "כיווץ סרגל הצד",
     "commandBar": "חפש או הרץ פקודה…",
     "create": "יצירה",
     "buildPipeline": "בנה צינור",
@@ -1358,13 +1368,23 @@
       "transportOverhead": "תקורת תעבורה",
       "modelExecution": "הרצת מודל",
       "truncated": "{count} נקטע | {count} נקטעו",
-      "cached": "{tokens} במטמון"
+      "inputTokensHint": "סך טוקני הקלט / הפלט. הקלט סופר גם טוקנים מהמטמון: הם עדיין תופסים את חלון ההקשר, בדיוק כפי שמד ההקשר של Claude Code סופר אותם.",
+      "fresh": "{tokens} חדשים",
+      "freshHint": "קלט שעובד מאפס, ללא שום חלק שהוגש מהמטמון",
+      "cacheRead": "{tokens} נקראו מהמטמון",
+      "cacheReadHint": "טוקני קלט שהוגשו ממטמון הספק (כ-0.1 ממחיר קלט חדש)",
+      "cacheWrite": "{tokens} נכתבו למטמון",
+      "cacheWriteHint": "טוקני קלט שנכתבו למטמון הספק (פי 1.25 עד 2 ממחיר קלט חדש)"
     },
     "metricsBar": {
       "calls": "{count} קריאה | {count} קריאות",
-      "promptCompletionTokens": "טוקני פרומפט / השלמה חדשים (ללא מטמון)",
-      "cachedTokens": "({tokens} במטמון)",
-      "cachedTokensHint": "טוקני פרומפט שהוגשו ממטמון הספק",
+      "inputCompletionTokens": "סך טוקני הקלט / הפלט. הקלט סופר גם טוקנים מהמטמון: הם עדיין תופסים את חלון ההקשר, בדיוק כפי שמד ההקשר של Claude Code סופר אותם.",
+      "fresh": "{tokens} חדשים",
+      "freshHint": "קלט שעובד מאפס, ללא שום חלק שהוגש מהמטמון",
+      "cacheRead": "{tokens} נקראו מהמטמון",
+      "cacheReadHint": "טוקני קלט שהוגשו ממטמון הספק (כ-0.1 ממחיר קלט חדש)",
+      "cacheWrite": "{tokens} נכתבו למטמון",
+      "cacheWriteHint": "טוקני קלט שנכתבו למטמון הספק (פי 1.25 עד 2 ממחיר קלט חדש)",
       "errors": "{count} שגיאה | {count} שגיאות",
       "warnings": "{count} אזהרה | {count} אזהרות",
       "outputLimit": "מגבלת פלט",
@@ -1374,7 +1394,7 @@
       "modelExecution": "הרצת מודל"
     },
     "call": {
-      "tokensTitle": "{prompt} טוקני פרומפט / {completion} טוקני השלמה",
+      "tokensTitle": "{input} טוקני קלט ({fresh} מהם חדשים) / {completion} טוקני פלט",
       "outputUsedVsLimit": "פלט בשימוש לעומת המגבלה",
       "transportVsExecution": "תקורת תעבורה / הרצת מודל",
       "error": "שגיאה",
@@ -1384,7 +1404,9 @@
       "streamed": "הוזרם",
       "buffered": "באגירה",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} טוקני פרומפט במטמון",
+      "fresh": "{tokens} חדשים",
+      "cacheRead": "{tokens} נקראו מהמטמון",
+      "cacheWrite": "{tokens} נכתבו למטמון",
       "total": "סך הכל {duration}",
       "prompt": "פרומפט",
       "promptPrefixOmitted": "(הודעות חדשות בלבד: {count} מוקדמות יותר הושמטו)",
@@ -1940,7 +1962,8 @@
         "localModels": "המריצים המקומיים שלי",
         "sandbox": "פתח ארגז חול",
         "shortcuts": "קיצורי מקלדת",
-        "bugHunt": "ציד באגים"
+        "bugHunt": "ציד באגים",
+        "toggleUiMode": "החלפת מצב ממשק"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1961,7 +1984,8 @@
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
         "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
         "shortcuts": "קיצורים מקלדת מקשים עזרה",
-        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות"
+        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות",
+        "toggleUiMode": "ממשק מצב בסיסי מתקדם הצגה הסתרה"
       }
     },
     "integrationsHub": {
@@ -2397,7 +2421,12 @@
       "test": {
         "button": "בדוק חיבור",
         "ok": "החיבור תקין",
-        "failed": "החיבור נכשל"
+        "failed": "החיבור נכשל",
+        "warningsTitle": "פערים בתצורה הזו",
+        "warnings": {
+          "runner_manifest_no_release": "אין תבנית שחרור: ביטול הרצה לא יכול להודיע למאגר להפסיק את המשימה שלו, ולכן משימה יתומה תופסת את הראנר שלה עד שהמאגר משחרר אותה בעצמו.",
+          "runner_manifest_no_status_path": "אין נתיב סטטוס: כל תשאול נקרא כאילו המשימה עדיין רצה, ולכן משימה יכולה להסתיים רק לאחר ניצול כל תקציב התשאול של ההרצה."
+        }
       },
       "toast": {
         "saved": "{title} נשמר",
@@ -3547,10 +3576,11 @@
       "searchPlaceholder": "חפש ניושנים או הדבק URL/מפתח…",
       "refPlaceholder": "הדבק URL או מפתח של ניושן…",
       "searchFailed": "החיפוש נכשל: {error}",
+      "searchNeedsRepo": "השירות הזה עדיין אינו מקושר למאגר, ולכן אין במה לחפש. קשרו אותו למאגר, או הדביקו כתובת URL של ניושן כדי לצרף אחד ישירות.",
       "imported": "מיובא",
       "attachByReference": "צרף {ref} לפי הפניה",
-      "noMatches": "אין ניושנים תואמים.",
-      "emptySearchable": "חפש לפי כותרת, או בחר ניושן מיובא.",
+      "noMatches": "אין ניושנים תואמים במאגר של השירות הזה. הדביקו כתובת URL של ניושן כדי לצרף ניושן ממקום אחר.",
+      "emptySearchable": "חפשו לפי כותרת במאגר של השירות הזה, או בחרו ניושן מיובא.",
       "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו.",
       "sourceLabel": "מקור",
       "noSource": "בחר מקור",
@@ -3966,6 +3996,7 @@
     "title": "סקירת דרישות",
     "iteration": "איטרציה {current} / {max}",
     "intro": "סוקר AI בחן את הדרישות שנאספו עבור ה{level} הזה — התיאור שלו בתוספת כל ה-PRD והאישוז המקושרים — והעלה את הממצאים שלהלן. {answer} את הרלוונטיים ו{dismiss} את שאינם רלוונטיים, ולאחר מכן שלב אותם; הסוקר סוקר מחדש עד שהדרישות ברורות.",
+    "scopeNote": "שלב זה עוסק בדרישות מוצר ועסקים בלבד: מה התוכנה צריכה לעשות ואילו כללים חלים עליה. החלטות טכניות כמו בחירת טכנולוגיה, ארכיטקטורה ומבני נתונים נקבעות בהמשך בשלבי הארכיטקט והחוקר, שעובדים מול קוד המקור.",
     "levelFallback": "פריט",
     "answerVerb": "ענה על",
     "dismissVerb": "בטל",

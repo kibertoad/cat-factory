@@ -1185,7 +1185,20 @@ export interface InlineResult {
   text: string
   /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
   finishReason?: 'stop' | 'length'
-  usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * The job's token usage with the input side split into its three ORTHOGONAL classes:
+   * `inputTokens` is FRESH input only, so the total input is
+   * `inputTokens + cacheReadTokens + cacheWriteTokens`. Folded from the per-call metrics below,
+   * which is the only channel that knows the split; a CLI that streamed none falls back to the
+   * coarse total with both cache classes 0 — honest, since on that shape nothing is known to
+   * have been cached.
+   */
+  usage?: {
+    inputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+    outputTokens: number
+  }
   /** Per-model-call telemetry lifted from the CLI stream (recorded into `llm_call_metrics`). */
   callMetrics?: HarnessCallMetric[]
   /** A structured failure marks a job-level failure even on a clean HTTP exit (see JobResultBase). */

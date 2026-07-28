@@ -2,11 +2,14 @@ import {
   type Clock,
   type IdGenerator,
   DEFAULT_WORKSPACE_SETTINGS,
+  noopLogger,
   readCachedWorkspaceSettings,
   redactSecrets,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type {
   GroupCacheHandle,
+  Logger,
   HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
@@ -53,6 +56,11 @@ export interface LlmObservabilityServiceDependencies {
    * avoids a DB read per call. Absent ⇒ read live.
    */
   workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * Where the trace-sink fan-out below reports a drop. Absent ⇒ `noopLogger`, which is what a
+   * unit test constructing this service standalone gets.
+   */
+  logger?: Logger
 }
 
 /**
@@ -98,8 +106,12 @@ export interface RecordLlmCallInput {
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   promptTokens: number
-  cachedPromptTokens: number
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the provider's cache. */
+  cacheWriteTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null
@@ -133,6 +145,7 @@ export class LlmObservabilityService {
   private readonly traceSink?: LlmTraceSink
   private readonly workspaceSettings?: WorkspaceSettingsRepository
   private readonly workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  private readonly log: Logger
 
   constructor({
     llmCallMetricRepository,
@@ -142,6 +155,7 @@ export class LlmObservabilityService {
     traceSink,
     workspaceSettingsRepository,
     workspaceSettingsCache,
+    logger,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
@@ -150,6 +164,7 @@ export class LlmObservabilityService {
     this.traceSink = traceSink
     this.workspaceSettings = workspaceSettingsRepository
     this.workspaceSettingsCache = workspaceSettingsCache
+    this.log = (logger ?? noopLogger).child({ service: 'llmObservability' })
   }
 
   /**
@@ -216,11 +231,15 @@ export class LlmObservabilityService {
     // dispatched without awaiting (like the inline feeder) so the sink's network round
     // trip never extends the metering path, and isolated so a sink failure can't break
     // local recording. The sink itself swallows + logs and bounds its own request.
-    if (this.traceSink) {
+    const traceSink = this.traceSink
+    if (traceSink) {
       const endedAt = metric.createdAt
-      try {
-        void Promise.resolve(
-          this.traceSink.recordGeneration({
+      // One `runBestEffort` covers both halves of what used to be a `try` wrapping a
+      // `.catch(() => {})`: it swallows a SYNCHRONOUS throw from the sink as well as a
+      // rejected fan-out, and names whichever one happened.
+      void runBestEffort(this.log, 'traceSink.recordGeneration', () =>
+        Promise.resolve(
+          traceSink.recordGeneration({
             workspaceId: input.workspaceId,
             executionId: input.executionId,
             agentKind: input.agentKind,
@@ -229,6 +248,8 @@ export class LlmObservabilityService {
             startedAt: Math.max(0, endedAt - input.upstreamMs),
             endedAt,
             promptTokens: input.promptTokens,
+            cacheReadTokens: input.cacheReadTokens,
+            cacheWriteTokens: input.cacheWriteTokens,
             completionTokens: input.completionTokens,
             totalTokens: input.totalTokens,
             finishReason: input.finishReason,
@@ -239,10 +260,8 @@ export class LlmObservabilityService {
             // (a thinking model that spent its budget reasoning) so the trace isn't blank.
             output: recordBodies ? input.responseText || input.reasoningText : '',
           }),
-        ).catch(() => {})
-      } catch {
-        // Swallowed: the sink itself logs; observability never breaks the proxy.
-      }
+        ),
+      )
     }
   }
 
@@ -362,9 +381,11 @@ export function makeHarnessCallRecorder(
         toolCount: 0,
         requestMaxTokens: null,
         promptTokens: call.inputTokens,
-        cachedPromptTokens: call.cachedInputTokens,
+        cacheReadTokens: call.cacheReadTokens,
+        cacheWriteTokens: call.cacheWriteTokens,
         completionTokens: call.outputTokens,
-        totalTokens: call.inputTokens + call.outputTokens,
+        totalTokens:
+          call.inputTokens + call.cacheReadTokens + call.cacheWriteTokens + call.outputTokens,
         finishReason: call.finishReason,
         totalMs: 0,
         upstreamMs: 0,

@@ -564,6 +564,7 @@ export function createRunnersModule(deps: CoreDependencies): RunnersModule | und
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    logger: deps.logger,
     runnerBackendRegistry: deps.runnerBackendRegistry ?? defaultRunnerBackendRegistry(),
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),
@@ -1148,6 +1149,7 @@ export function createSharedStacksModule(
     // Re-run a stack's declared machine-prerequisite checks at bring-up start. Present only where
     // the host-probe seam is wired (the local facade — same runtime binding as `composeRuntime`).
     ...(preflightService ? { runPreflights: (refs) => preflightService.run(refs) } : {}),
+    logger: deps.logger,
   })
   return { service }
 }

@@ -17,6 +17,9 @@
 // realtime consumers). The INBOUND half (the local node subscribing to org events raised on the
 // mothership / by peer laptops) is a distinct, runtime-shaped follow-up — see the tracker.
 
+import { runBestEffort } from '@cat-factory/kernel'
+import { logger } from '../observability/logger.js'
+
 /**
  * One real-time event relayed from a mothership-mode node to the mothership. `payload` is the
  * exact JSON text frame a subscribed browser receives (a serialized `WorkspaceEvent`, produced by
@@ -72,7 +75,8 @@ export interface MachineEventClient {
  * fixed token OR a per-request provider, so a token cached after boot by the mothership login flow is
  * picked up without a restart). Fire-and-forget: the returned promise is consumed internally and any
  * error is swallowed — the event was already delivered to the node's own browsers, and the mothership
- * reconciles on reconnect if this drops.
+ * reconciles on reconnect if this drops. Swallowed, but reported: a relay broken for EVERY event has
+ * no other symptom, so each drop leaves one `warn` naming the cause.
  */
 export class HttpMachineEventClient implements MachineEventClient {
   constructor(
@@ -90,18 +94,32 @@ export class HttpMachineEventClient implements MachineEventClient {
     // No token yet (a node booted before the mothership login) ⇒ skip the round-trip entirely; the
     // event still reached this node's local browsers. Avoids a guaranteed-403 POST per event.
     if (!token) return
-    void fetchImpl(`${this.opts.baseUrl.replace(/\/$/, '')}/internal/events/publish`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        workspaceId: event.workspaceId,
-        payload: event.payload,
-        ...(event.originConnectionId ? { originConnectionId: event.originConnectionId } : {}),
-      }),
-    }).catch(() => {
-      // Best-effort: a publish failure must never break the state transition that produced the
-      // event. The local hub already delivered to this node's browsers; the mothership reconciles
-      // its own clients on reconnect if this drops.
-    })
+    // Best-effort: a publish failure must never break the state transition that produced the
+    // event. The local hub already delivered to this node's browsers; the mothership reconciles
+    // its own clients on reconnect if this drops. But a relay that is broken for every event —
+    // an expired machine token, a mothership that moved — has NO other symptom than remote
+    // clients quietly missing updates, so the drop says so.
+    void runBestEffort(
+      logger,
+      'machineEvents.publish',
+      async () => {
+        const response = await fetchImpl(
+          `${this.opts.baseUrl.replace(/\/$/, '')}/internal/events/publish`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              workspaceId: event.workspaceId,
+              payload: event.payload,
+              ...(event.originConnectionId ? { originConnectionId: event.originConnectionId } : {}),
+            }),
+          },
+        )
+        // A rejected POST resolves — a 401/403 from a stale machine token is the LIKELIEST way
+        // this relay breaks, and it would otherwise be indistinguishable from a delivered event.
+        if (!response.ok) throw new Error(`mothership relay refused the event (${response.status})`)
+      },
+      { workspaceId: event.workspaceId },
+    )
   }
 }

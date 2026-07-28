@@ -23,6 +23,14 @@
       "dismiss": "Fermer"
     }
   },
+  "uiMode": {
+    "switcher": "Interface",
+    "basic": "Basique",
+    "advanced": "Avancée",
+    "basicHint": "Uniquement les outils du quotidien. Passez en mode avancé pour tout afficher.",
+    "advancedHint": "Toutes les sections et toutes les options d’exécution.",
+    "pinned": "Défini par ce déploiement"
+  },
   "common": {
     "loading": "Chargement…",
     "save": "Enregistrer",
@@ -95,6 +103,8 @@
     "menu": "Menu de navigation",
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
+    "expandSidebar": "Développer la barre latérale",
+    "collapseSidebar": "Réduire la barre latérale",
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
     "buildPipeline": "Créer un pipeline",
@@ -1358,13 +1368,23 @@
       "transportOverhead": "Surcoût de transport",
       "modelExecution": "Exécution du modèle",
       "truncated": "{count} tronqué | {count} tronqués",
-      "cached": "{tokens} en cache"
+      "inputTokensHint": "Total des tokens d'entrée / de sortie. L'entree compte aussi les tokens en cache : ils occupent toujours la fenêtre de contexte, exactement comme les compte la jauge de contexte de Claude Code.",
+      "fresh": "{tokens} frais",
+      "freshHint": "Entrée traitée de zero, sans rien servi depuis le cache",
+      "cacheRead": "{tokens} lus depuis le cache",
+      "cacheReadHint": "Tokens d'entrée servis depuis le cache du fournisseur (environ 0,1 fois le prix d'une entrée fraîche)",
+      "cacheWrite": "{tokens} écrits dans le cache",
+      "cacheWriteHint": "Tokens d'entrée écrits dans le cache du fournisseur (1,25 à 2 fois le prix d'une entrée fraîche)"
     },
     "metricsBar": {
       "calls": "{count} appel | {count} appels",
-      "promptCompletionTokens": "Tokens frais (non mis en cache) de prompt / complétion",
-      "cachedTokens": "({tokens} en cache)",
-      "cachedTokensHint": "Tokens de prompt servis depuis le cache du fournisseur",
+      "inputCompletionTokens": "Total des tokens d'entrée / de sortie. L'entree compte aussi les tokens en cache : ils occupent toujours la fenêtre de contexte, exactement comme les compte la jauge de contexte de Claude Code.",
+      "fresh": "{tokens} frais",
+      "freshHint": "Entrée traitée de zero, sans rien servi depuis le cache",
+      "cacheRead": "{tokens} lus depuis le cache",
+      "cacheReadHint": "Tokens d'entrée servis depuis le cache du fournisseur (environ 0,1 fois le prix d'une entrée fraîche)",
+      "cacheWrite": "{tokens} écrits dans le cache",
+      "cacheWriteHint": "Tokens d'entrée écrits dans le cache du fournisseur (1,25 à 2 fois le prix d'une entrée fraîche)",
       "errors": "{count} erreur | {count} erreurs",
       "warnings": "{count} avertissement | {count} avertissements",
       "outputLimit": "Limite de sortie",
@@ -1374,7 +1394,7 @@
       "modelExecution": "Exécution du modèle"
     },
     "call": {
-      "tokensTitle": "{prompt} tokens de prompt / {completion} de complétion",
+      "tokensTitle": "{input} tokens d'entrée (dont {fresh} frais) / {completion} tokens de sortie",
       "outputUsedVsLimit": "Sortie utilisée vs limite",
       "transportVsExecution": "Surcoût de transport / exécution du modèle",
       "error": "erreur",
@@ -1384,7 +1404,9 @@
       "streamed": "en streaming",
       "buffered": "en mémoire tampon",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} prompt en cache",
+      "fresh": "{tokens} frais",
+      "cacheRead": "{tokens} lus depuis le cache",
+      "cacheWrite": "{tokens} écrits dans le cache",
       "total": "total {duration}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nouveaux messages uniquement : {count} antérieurs omis)",
@@ -1940,7 +1962,8 @@
         "localModels": "Mes exécuteurs locaux",
         "sandbox": "Ouvrir le bac à sable",
         "shortcuts": "Raccourcis clavier",
-        "bugHunt": "Chasse aux bugs"
+        "bugHunt": "Chasse aux bugs",
+        "toggleUiMode": "Changer le mode d'interface"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -1961,7 +1984,8 @@
         "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
         "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer",
         "shortcuts": "raccourcis clavier touches aide",
-        "bugHunt": "bug chasse tri backlog tickets non assignés"
+        "bugHunt": "bug chasse tri backlog tickets non assignés",
+        "toggleUiMode": "interface mode simple avancé afficher masquer"
       }
     },
     "integrationsHub": {
@@ -2202,7 +2226,12 @@
       "test": {
         "button": "Tester la connexion",
         "ok": "Connexion réussie",
-        "failed": "Échec de la connexion"
+        "failed": "Échec de la connexion",
+        "warningsTitle": "Lacunes dans cette configuration",
+        "warnings": {
+          "runner_manifest_no_release": "Aucun modèle de release : annuler une exécution ne permet pas de demander au pool d'arrêter son job, donc un job orphelin occupe son runner jusqu'à ce que le pool le récupère de lui-même.",
+          "runner_manifest_no_status_path": "Aucun chemin de statut : chaque interrogation est lue comme toujours en cours, donc un job ne peut se terminer qu'en épuisant le budget d'interrogation de l'exécution."
+        }
       },
       "toast": {
         "saved": "{title} enregistré",
@@ -3536,10 +3565,11 @@
       "searchPlaceholder": "Rechercher des tickets ou coller une URL/clé…",
       "refPlaceholder": "Coller l'URL ou la clé d'un ticket…",
       "searchFailed": "Échec de la recherche : {error}",
+      "searchNeedsRepo": "Ce service n'est encore lié à aucun dépôt, il n'y a donc rien à rechercher. Liez-le à un dépôt ou collez l'URL d'un ticket pour en joindre un directement.",
       "imported": "importé",
       "attachByReference": "Joindre {ref} par référence",
-      "noMatches": "Aucun ticket correspondant.",
-      "emptySearchable": "Recherchez par titre ou choisissez un ticket importé.",
+      "noMatches": "Aucun ticket correspondant dans le dépôt de ce service. Collez l'URL d'un ticket pour en joindre un provenant d'ailleurs.",
+      "emptySearchable": "Recherchez par titre dans le dépôt de ce service ou choisissez un ticket importé.",
       "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre.",
       "sourceLabel": "Source",
       "noSource": "Choisir une source",
@@ -3955,6 +3985,7 @@
     "title": "Revue des exigences",
     "iteration": "Itération {current} / {max}",
     "intro": "Un relecteur IA a inspecté les exigences collectées de cet {level} — sa description ainsi que les PRD et tickets liés — et a soulevé les observations ci-dessous. {answer} celles qui sont pertinentes et {dismiss} les autres, puis incorporez-les ; le relecteur relit jusqu'à ce que les exigences soient claires.",
+    "scopeNote": "Cette étape couvre uniquement les exigences produit et métier : ce que le logiciel doit faire et les règles qui le régissent. Les décisions techniques comme le choix des technologies, l'architecture et les structures de données sont tranchées plus tard par les étapes Architecte et Chercheur, qui disposent du code source.",
     "levelFallback": "élément",
     "answerVerb": "Répondez à",
     "dismissVerb": "écartez",

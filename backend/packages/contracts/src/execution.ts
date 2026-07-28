@@ -502,16 +502,24 @@ export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
 export const stepMetricsSchema = v.object({
   /** Number of model calls recorded for this step. */
   calls: v.number(),
-  /** Sum of prompt (input) tokens across the step's calls. */
+  /**
+   * Sum of FRESH (uncached) input tokens across the step's calls — exclusive of both
+   * cache classes, so the step's total input is
+   * `promptTokens + cacheReadTokens + cacheWriteTokens`.
+   */
   promptTokens: v.number(),
   /**
-   * Sum of prompt tokens served from the provider's prefix cache. A subset of
-   * promptTokens on OpenAI/DeepSeek, but on Anthropic cache reads are reported
-   * separately from input tokens, so this can exceed promptTokens. 0 on a cache-less
-   * flavour (Workers AI); the metrics bar shows the cached split when present. Absent ⇒
+   * Sum of input tokens served from the provider's prefix cache (~0.1× base input).
+   * 0 on a cache-less flavour (Workers AI). Absent ⇒ unknown (older snapshot).
+   */
+  cacheReadTokens: v.optional(v.number()),
+  /**
+   * Sum of input tokens written INTO the cache (1.25–2× base input, i.e. dearer than
+   * fresh). Kept apart from the reads because a repair loop that keeps re-writing the
+   * cache and one that only re-reads it look identical once they are summed. Absent ⇒
    * unknown (older snapshot).
    */
-  cachedPromptTokens: v.optional(v.number()),
+  cacheWriteTokens: v.optional(v.number()),
   /** Sum of completion (output) tokens across the step's calls. */
   completionTokens: v.number(),
   /** Largest single completion the model produced (closest approach to the limit). */

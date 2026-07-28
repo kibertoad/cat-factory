@@ -92,6 +92,9 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0(@ai-sdk/anthropic@4.0.21(zod@4.4.3))(@ai-sdk/openai@4.0.20(zod@4.4.3))(@ai-sdk/provider@4.0.3)(ai@7.0.37(zod@4.4.3))
     devDependencies:
+      '@cat-factory/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1

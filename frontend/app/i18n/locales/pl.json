@@ -23,6 +23,14 @@
       "dismiss": "Odrzuć"
     }
   },
+  "uiMode": {
+    "switcher": "Interfejs",
+    "basic": "Podstawowy",
+    "advanced": "Zaawansowany",
+    "basicHint": "Tylko codzienne narzędzia. Przełącz na zaawansowany, aby zobaczyć wszystko.",
+    "advancedHint": "Wszystkie sekcje i wszystkie opcje uruchamiania.",
+    "pinned": "Ustawione przez to wdrożenie"
+  },
   "common": {
     "loading": "Ładowanie…",
     "save": "Zapisz",
@@ -95,6 +103,8 @@
     "menu": "Menu nawigacji",
     "openMenu": "Otwórz menu",
     "closeMenu": "Zamknij menu",
+    "expandSidebar": "Rozwiń panel boczny",
+    "collapseSidebar": "Zwiń panel boczny",
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
     "buildPipeline": "Zbuduj potok",
@@ -1358,13 +1368,23 @@
       "transportOverhead": "Narzut transportu",
       "modelExecution": "Wykonanie modelu",
       "truncated": "{count} obcięte | {count} obcięte | {count} obciętych",
-      "cached": "{tokens} z pamięci podręcznej"
+      "inputTokensHint": "Łączna liczba tokenów wejścia / wyjscia. Wejście liczy takze tokeny z pamięci podręcznej: nadal zajmują okno kontekstu, dokładnie tak, jak liczy je wskaźnik kontekstu w Claude Code.",
+      "fresh": "{tokens} świeżych",
+      "freshHint": "Wejście przetworzone od zera, bez żadnej części obsłużonej z pamięci podręcznej",
+      "cacheRead": "{tokens} odczytane z pamięci podręcznej",
+      "cacheReadHint": "Tokeny wejściowe obsłużone z pamięci podręcznej dostawcy (około 0,1 ceny świeżego wejścia)",
+      "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
+      "cacheWriteHint": "Tokeny wejściowe zapisane do pamięci podręcznej dostawcy (od 1,25 do 2 razy cena świeżego wejścia)"
     },
     "metricsBar": {
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
-      "promptCompletionTokens": "Świeże (niebuforowane) tokeny promptu / dopełnienia",
-      "cachedTokens": "({tokens} z pamięci podręcznej)",
-      "cachedTokensHint": "Tokeny promptu obsłużone z pamięci podręcznej dostawcy",
+      "inputCompletionTokens": "Łączna liczba tokenów wejścia / wyjscia. Wejście liczy takze tokeny z pamięci podręcznej: nadal zajmują okno kontekstu, dokładnie tak, jak liczy je wskaźnik kontekstu w Claude Code.",
+      "fresh": "{tokens} świeżych",
+      "freshHint": "Wejście przetworzone od zera, bez żadnej części obsłużonej z pamięci podręcznej",
+      "cacheRead": "{tokens} odczytane z pamięci podręcznej",
+      "cacheReadHint": "Tokeny wejściowe obsłużone z pamięci podręcznej dostawcy (około 0,1 ceny świeżego wejścia)",
+      "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
+      "cacheWriteHint": "Tokeny wejściowe zapisane do pamięci podręcznej dostawcy (od 1,25 do 2 razy cena świeżego wejścia)",
       "errors": "{count} błąd | {count} błędy | {count} błędów",
       "warnings": "{count} ostrzeżenie | {count} ostrzeżenia | {count} ostrzeżeń",
       "outputLimit": "Limit wyjścia",
@@ -1374,7 +1394,7 @@
       "modelExecution": "Wykonanie modelu"
     },
     "call": {
-      "tokensTitle": "{prompt} tokenów promptu / {completion} tokenów dopełnienia",
+      "tokensTitle": "{input} tokenów wejścia (w tym {fresh} świeżych) / {completion} tokenów wyjścia",
       "outputUsedVsLimit": "Użyte wyjście a limit",
       "transportVsExecution": "Narzut transportu / wykonanie modelu",
       "error": "błąd",
@@ -1384,7 +1404,9 @@
       "streamed": "strumieniowane",
       "buffered": "buforowane",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} promptu w pamięci podręcznej",
+      "fresh": "{tokens} świeżych",
+      "cacheRead": "{tokens} odczytane z pamięci podręcznej",
+      "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
       "total": "łącznie {duration}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(tylko nowe wiadomości: {count} wcześniejszych pominięto)",
@@ -1940,7 +1962,8 @@
         "localModels": "Moje lokalne silniki",
         "sandbox": "Otwórz piaskownicę",
         "shortcuts": "Skróty klawiszowe",
-        "bugHunt": "Polowanie na błędy"
+        "bugHunt": "Polowanie na błędy",
+        "toggleUiMode": "Zmień tryb interfejsu"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -1961,7 +1984,8 @@
         "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
         "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
         "shortcuts": "skróty klawiatura klawisze pomoc",
-        "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane"
+        "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
+        "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj"
       }
     },
     "integrationsHub": {
@@ -2202,7 +2226,12 @@
       "test": {
         "button": "Przetestuj połączenie",
         "ok": "Połączenie poprawne",
-        "failed": "Połączenie nieudane"
+        "failed": "Połączenie nieudane",
+        "warningsTitle": "Braki w tej konfiguracji",
+        "warnings": {
+          "runner_manifest_no_release": "Brak szablonu release: anulowanie przebiegu nie może przekazać puli, że ma zatrzymać zadanie, więc osierocone zadanie zajmuje swojego runnera, dopóki pula sama go nie odzyska.",
+          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu."
+        }
       },
       "toast": {
         "saved": "Zapisano: {title}",
@@ -3536,10 +3565,11 @@
       "searchPlaceholder": "Szukaj zgłoszeń lub wklej adres URL/klucz…",
       "refPlaceholder": "Wklej adres URL lub klucz zgłoszenia…",
       "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "searchNeedsRepo": "Ta usługa nie jest jeszcze powiązana z repozytorium, więc nie ma czego przeszukiwać. Powiąż ją z repozytorium lub wklej adres URL zgłoszenia, aby dołączyć je bezpośrednio.",
       "imported": "zaimportowane",
       "attachByReference": "Dołącz {ref} przez odniesienie",
-      "noMatches": "Brak pasujących zgłoszeń.",
-      "emptySearchable": "Szukaj według tytułu lub wybierz zaimportowane zgłoszenie.",
+      "noMatches": "Brak pasujących zgłoszeń w repozytorium tej usługi. Wklej adres URL zgłoszenia, aby dołączyć je z innego miejsca.",
+      "emptySearchable": "Szukaj według tytułu w repozytorium tej usługi lub wybierz zaimportowane zgłoszenie.",
       "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć.",
       "sourceLabel": "Źródło",
       "noSource": "Wybierz źródło",
@@ -3955,6 +3985,7 @@
     "title": "Przegląd wymagań",
     "iteration": "Iteracja {current} / {max}",
     "intro": "Recenzent AI przeanalizował zebrane wymagania tego elementu ({level}) — jego opis oraz powiązane dokumenty PRD i zgłoszenia — i zgłosił poniższe uwagi. {answer} na istotne i {dismiss} nieistotne, a następnie włącz je; recenzent powtarza przegląd, aż wymagania będą jasne.",
+    "scopeNote": "Ten etap obejmuje wyłącznie wymagania produktowe i biznesowe: co oprogramowanie ma robić i jakie reguły nim rządzą. Decyzje techniczne, takie jak wybór technologii, architektura i struktury danych, zapadają później w krokach Architekt i Badacz, które mają dostęp do kodu.",
     "levelFallback": "element",
     "answerVerb": "Odpowiedz",
     "dismissVerb": "odrzuć",

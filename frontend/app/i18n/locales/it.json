@@ -298,7 +298,12 @@
       "test": {
         "button": "Testa la connessione",
         "ok": "Connessione OK",
-        "failed": "Connessione fallita"
+        "failed": "Connessione fallita",
+        "warningsTitle": "Lacune in questa configurazione",
+        "warnings": {
+          "runner_manifest_no_release": "Nessun template di release: annullare un'esecuzione non può dire al pool di fermare il suo job, quindi un job orfano tiene occupato il suo runner finché il pool non lo recupera da solo.",
+          "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione."
+        }
       },
       "toast": {
         "saved": "{title} salvato",
@@ -1992,7 +1997,8 @@
         "localModels": "I miei runner locali",
         "sandbox": "Apri Sandbox",
         "shortcuts": "Scorciatoie da tastiera",
-        "bugHunt": "Caccia ai bug"
+        "bugHunt": "Caccia ai bug",
+        "toggleUiMode": "Cambia modalità interfaccia"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2013,7 +2019,8 @@
         "localModels": "modello locale runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt modello test esperimento giudice fixture benchmark valuta",
         "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
-        "bugHunt": "bug caccia triage backlog ticket non assegnati"
+        "bugHunt": "bug caccia triage backlog ticket non assegnati",
+        "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi"
       }
     },
     "shortcuts": {
@@ -2899,13 +2906,23 @@
       "transportOverhead": "Overhead di trasporto",
       "modelExecution": "Esecuzione del modello",
       "truncated": "{count} troncata | {count} troncate",
-      "cached": "{tokens} in cache"
+      "inputTokensHint": "Token totali di input / output. L'input conta anche i token in cache: occupano comunque la finestra di contesto, esattamente come li conta l'indicatore di contesto di Claude Code.",
+      "fresh": "{tokens} freschi",
+      "freshHint": "Input elaborato da zero, senza nulla servito dalla cache",
+      "cacheRead": "{tokens} letti dalla cache",
+      "cacheReadHint": "Token di input serviti dalla cache del provider (circa 0,1 volte il prezzo dell'input fresco)",
+      "cacheWrite": "{tokens} scritti nella cache",
+      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)"
     },
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
-      "promptCompletionTokens": "Token freschi (non in cache) di prompt / completion",
-      "cachedTokens": "({tokens} in cache)",
-      "cachedTokensHint": "Token di prompt serviti dalla cache del provider",
+      "inputCompletionTokens": "Token totali di input / output. L'input conta anche i token in cache: occupano comunque la finestra di contesto, esattamente come li conta l'indicatore di contesto di Claude Code.",
+      "fresh": "{tokens} freschi",
+      "freshHint": "Input elaborato da zero, senza nulla servito dalla cache",
+      "cacheRead": "{tokens} letti dalla cache",
+      "cacheReadHint": "Token di input serviti dalla cache del provider (circa 0,1 volte il prezzo dell'input fresco)",
+      "cacheWrite": "{tokens} scritti nella cache",
+      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)",
       "errors": "{count} errore | {count} errori",
       "warnings": "{count} avviso | {count} avvisi",
       "outputLimit": "Limite di output",
@@ -2915,7 +2932,7 @@
       "modelExecution": "Esecuzione del modello"
     },
     "call": {
-      "tokensTitle": "{prompt} token di prompt / {completion} di completion",
+      "tokensTitle": "{input} token di input (di cui {fresh} freschi) / {completion} token di output",
       "outputUsedVsLimit": "Output usato vs limite",
       "transportVsExecution": "Overhead di trasporto / esecuzione del modello",
       "error": "errore",
@@ -2925,7 +2942,9 @@
       "streamed": "in streaming",
       "buffered": "bufferizzato",
       "maxTokens": "max_tokens {value}",
-      "promptCached": "{cached}/{prompt} prompt in cache",
+      "fresh": "{tokens} freschi",
+      "cacheRead": "{tokens} letti dalla cache",
+      "cacheWrite": "{tokens} scritti nella cache",
       "total": "totale {duration}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(solo nuovi messaggi: {count} precedenti omessi)",
@@ -3242,10 +3261,11 @@
       "searchPlaceholder": "Cerca issue o incolla un URL/chiave…",
       "refPlaceholder": "Incolla l'URL o la chiave di una issue…",
       "searchFailed": "Ricerca non riuscita: {error}",
+      "searchNeedsRepo": "Questo servizio non è ancora collegato a un repository, quindi non c'è nulla in cui cercare. Collegalo a un repository oppure incolla l'URL di una issue per allegarla direttamente.",
       "imported": "importata",
       "attachByReference": "Allega {ref} per riferimento",
-      "noMatches": "Nessuna issue corrispondente.",
-      "emptySearchable": "Cerca per titolo, oppure scegli una issue importata.",
+      "noMatches": "Nessuna issue corrispondente nel repository di questo servizio. Incolla l'URL di una issue per allegarne una da altrove.",
+      "emptySearchable": "Cerca per titolo nel repository di questo servizio, oppure scegli una issue importata.",
       "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla.",
       "sourceLabel": "Fonte",
       "noSource": "Scegli una fonte",
@@ -3551,6 +3571,7 @@
     "title": "Revisione dei requisiti",
     "iteration": "Iterazione {current} / {max}",
     "intro": "Un revisore AI ha esaminato i requisiti raccolti di questo {level} — la sua descrizione piu eventuali PRD e issue del tracker collegati — e ha sollevato i rilievi qui sotto. {answer} quelli pertinenti e {dismiss} quelli irrilevanti, poi incorporali; il revisore rivede di nuovo finche i requisiti non sono chiari.",
+    "scopeNote": "Questa fase copre solo i requisiti di prodotto e di business: che cosa il software deve fare e quali regole lo governano. Le decisioni tecniche come la scelta della tecnologia, l'architettura e le strutture dati vengono prese più avanti negli step Architetto e Ricercatore, che lavorano con il codice a disposizione.",
     "levelFallback": "elemento",
     "answerVerb": "Rispondi a",
     "dismissVerb": "ignora",
@@ -4201,6 +4222,14 @@
       "dismiss": "Ignora"
     }
   },
+  "uiMode": {
+    "switcher": "Interfaccia",
+    "basic": "Base",
+    "advanced": "Avanzata",
+    "basicHint": "Solo gli strumenti di uso quotidiano. Passa ad Avanzata per vedere tutto.",
+    "advancedHint": "Tutte le sezioni e tutte le opzioni di esecuzione.",
+    "pinned": "Impostato da questo deployment"
+  },
   "common": {
     "loading": "Caricamento…",
     "save": "Salva",
@@ -4273,6 +4302,8 @@
     "menu": "Menu di navigazione",
     "openMenu": "Apri il menu",
     "closeMenu": "Chiudi il menu",
+    "expandSidebar": "Espandi la barra laterale",
+    "collapseSidebar": "Comprimi la barra laterale",
     "commandBar": "Cerca o esegui un comando…",
     "create": "Crea",
     "buildPipeline": "Crea una pipeline",
