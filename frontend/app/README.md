@@ -56,9 +56,10 @@ over the WebSocket. How that sync works is written up in
 ## Interface modes (basic / advanced)
 
 The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday
-surface: the power-user nav destinations are hidden and the run/pipeline options that only
-exist to override a workspace-level default are left at that default. `advanced` shows
-everything. The tier resolves in a fixed order, first match wins:
+surface: the run/pipeline options that only exist to override a workspace-level default are
+left at that default, and the nav is trimmed to the destinations that are the **only route**
+to their capability. `advanced` shows everything. The tier resolves in a fixed order, first
+match wins:
 
 1. **`NUXT_PUBLIC_UI_MODE`** (`basic` | `advanced`) — the deployment pin. Like
    `NUXT_PUBLIC_API_BASE` it is baked in at **build** time (`ssr: false`), and while it is
@@ -81,7 +82,15 @@ hoc where it can be avoided:
 - **A nav destination** declares `advanced: true` in `app/modular/nav-contributions.ts`. The
   shared `navSlotFilter` drops it in basic mode across all three shells (sidebar, command
   palette, toolbar), independently of its RBAC `gate` — both must pass. A consumer module's
-  own contributions take the same flag.
+  own contributions take the same flag. The bar for setting it is **route count, not how
+  advanced the surface feels**: hiding the only way to reach a capability removes the
+  capability from the tier, while hiding a shortcut into a surface a basic destination also
+  opens removes nothing. So the flag belongs on a surface that sits beside the delivery path
+  (Sandbox, Kaizen), on a palette shortcut into a Workspace-settings tab, or on a knob the
+  Integrations hub already offers — and never on a sole route (the pipeline builder, the
+  fragment library, the infrastructure/PREnv windows, the operator + reports views).
+  `nav-contributions.spec.ts` pins the advanced set against a table of each item's
+  alternative route, so promoting one forces that claim to be written down.
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. Hide, never
   disable, and only ever hide an OVERRIDE: what remains must be exactly the default the hidden
   field would have shown, so a basic-mode user never gets different behaviour from an advanced
