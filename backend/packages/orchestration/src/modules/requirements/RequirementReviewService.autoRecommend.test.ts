@@ -46,6 +46,7 @@ function reviewOf(items: RequirementReviewItem[]): RequirementReview {
     model: 'cloudflare:test',
     iteration: 1,
     maxIterations: 6,
+    rev: 0,
     createdAt: NOW,
     updatedAt: NOW,
     incorporatedRequirements: null,
@@ -62,7 +63,16 @@ function makeService(review: RequirementReview) {
     upsert: vi.fn(async (_ws: string, r: RequirementReview) => {
       store.review = r
     }),
-    deleteByBlock: vi.fn(async () => {}),
+    // The service's read-modify-writes ride the rev-guarded conditional write; this fake is
+    // single-writer, so the CAS always lands (and bumps `rev` like the real stores do).
+    compareAndSwap: vi.fn(async (_ws: string, r: RequirementReview) => {
+      r.rev = (r.rev ?? 0) + 1
+      store.review = r
+      return true
+    }),
+    replaceForBlock: vi.fn(async (_ws: string, r: RequirementReview) => {
+      store.review = r
+    }),
   }
   const notificationService = { raise: vi.fn(async () => {}) }
   const svc = new RequirementReviewService({

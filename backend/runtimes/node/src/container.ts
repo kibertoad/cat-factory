@@ -80,7 +80,7 @@ import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
-import type { LocalEventSink } from './realtime.js'
+import type { LocalEventSink, RealtimeRoomWatcher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -421,6 +421,14 @@ export interface NodeContainerOptions {
    * falls back to the no-op publisher (no live push), exactly as before.
    */
   realtimeSink?: LocalEventSink
+  /**
+   * The room-observability side of the SAME realtime transport `realtimeSink` writes to (a
+   * {@link NodeRealtimeHub} satisfies both). Supplied only where something needs to react to a
+   * workspace gaining/losing its first/last local subscriber — today just mothership mode, whose
+   * inbound subscriber opens one upstream stream per watched workspace. A standard Node boot
+   * leaves it unset and nothing observes rooms.
+   */
+  realtimeRooms?: RealtimeRoomWatcher
   /**
    * Extra notification delivery channels composed alongside the ones this facade builds (in-app +
    * Slack). The local facade contributes its mothership `RemoteNotificationChannel` here, so a

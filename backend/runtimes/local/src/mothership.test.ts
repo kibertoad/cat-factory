@@ -588,10 +588,12 @@ describe('composeMothership realtime upstream adapter', () => {
       expect(seen).toHaveLength(1)
       expect(seen[0]!.url).toBe('https://m.test/internal/events/publish')
       expect(seen[0]!.auth).toBe('Bearer env-tok')
+      // The tab's cid is deliberately NOT forwarded — see the dedicated echo-suppression test
+      // below; the wire carries THIS NODE's stable id so the mothership skips our own subscription.
       expect(seen[0]!.body).toEqual({
         workspaceId: 'ws_1',
         payload: '{"type":"board","reason":"x","at":1}',
-        originConnectionId: 'cid_3',
+        originConnectionId: expect.stringMatching(/^mothership-node-/),
       })
     } finally {
       composed.close()
@@ -647,6 +649,64 @@ describe('composeMothership realtime upstream adapter', () => {
       container.machineEventRelay!.ingest({ workspaceId: 'ws_1', payload: '{}' }),
     ).not.toThrow()
     await container.onShutdown?.()
+  })
+
+  it('stamps the NODE connection id on every upstream publish, replacing the originating tab cid', () => {
+    // The outbound leg's echo-suppression contract. The mothership's fan-out skips the socket
+    // whose `?cid=` matches `originConnectionId` — and the socket that must be skipped is THIS
+    // node's inbound subscription, not some tab the mothership has never seen. Passing the tab id
+    // through would mean every event this laptop produced came straight back down and reached its
+    // own browsers twice.
+    const posted: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      posted.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      composed.realtimeAdapter.publish({
+        workspaceId: 'ws_1',
+        payload: '{}',
+        originConnectionId: 'a-browser-tab',
+      })
+      const sent = posted[0] as { originConnectionId?: string }
+      expect(sent.originConnectionId).not.toBe('a-browser-tab')
+      // The two legs must agree, so the id is the same one the subscriber connects with.
+      expect(sent.originConnectionId).toMatch(/^mothership-node-/)
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('binds the inbound event subscriber to the injected realtime rooms (and only in mothership mode)', () => {
+    // The INBOUND leg is demand-driven: it opens an upstream stream per workspace someone is
+    // watching HERE, which it learns from the hub's room transitions. Assert the wiring itself
+    // (that `buildLocalContainer` attached to the injected watcher) rather than the connect, so
+    // this stays a pure unit test.
+    const watchers: number[] = []
+    const rooms = {
+      watchRooms: () => {
+        watchers.push(1)
+        return () => {}
+      },
+    }
+    const env = BASE_ENV({
+      ENVIRONMENT: 'test',
+      AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+      ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+      HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+      LOCAL_MOTHERSHIP_URL: 'https://m.test',
+      LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+    })
+    const container = buildLocalContainer({
+      env,
+      realtimeSink: new NodeRealtimeHub(),
+      realtimeRooms: rooms,
+    })
+    expect(watchers).toHaveLength(1)
+    return container.onShutdown?.()
   })
 })
 

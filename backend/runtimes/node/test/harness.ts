@@ -440,6 +440,7 @@ export function makeConformanceApp(
     seedReadyReview,
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
+    requirementReviewRepository: () => new DrizzleRequirementReviewRepository(db),
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),

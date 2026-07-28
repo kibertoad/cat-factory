@@ -27,6 +27,7 @@ function review(over: Partial<FakeReview> = {}): FakeReview {
     model: 'fake:model',
     iteration: 1,
     maxIterations: 6,
+    rev: 0,
     createdAt: 0,
     updatedAt: 0,
     ...over,

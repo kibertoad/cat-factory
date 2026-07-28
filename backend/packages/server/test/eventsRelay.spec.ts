@@ -23,10 +23,28 @@ const OTHER_ACCOUNT = 'acc_2'
 const ACCOUNT_BY_WORKSPACE: Record<string, string> = { ws_1: ACCOUNT, ws_other: OTHER_ACCOUNT }
 
 function makeApp(
-  opts: { relay?: boolean; repositories?: boolean; ingested?: RelayedRealtimeEvent[] } = {},
+  opts: {
+    relay?: boolean
+    repositories?: boolean
+    ingested?: RelayedRealtimeEvent[]
+    /** Requests the shared subscribe route handed to the facade's realtime gateway. */
+    upgrades?: Array<{ workspaceId: string; url: string }>
+    /** `false` ⇒ the gateway reports real-time is not enabled in this deployment (501). */
+    realtimeEnabled?: boolean
+  } = {},
 ) {
   const ingested = opts.ingested ?? []
   const container = {
+    gateways: {
+      realtime: {
+        upgrade: async (workspaceId: string, request: Request) => {
+          opts.upgrades?.push({ workspaceId, url: request.url })
+          // A real facade answers 101 with a live socket; `Response` can't model that in Node, so
+          // the stub returns a marker the controller must pass through untouched.
+          return opts.realtimeEnabled === false ? null : new Response('upgraded', { status: 200 })
+        },
+      },
+    },
     ...(opts.relay === false
       ? {}
       : {
@@ -195,6 +213,101 @@ describe('POST /internal/events/publish', () => {
     app.onError(handleError)
     const res = await publish(app, await machineToken(), EVENT)
     expect(res.status).toBe(200)
+  })
+})
+
+// The INBOUND leg (`GET /internal/events/subscribe/:workspaceId`): a mothership-mode node holds a
+// long-lived machine-authed subscription so org activity raised elsewhere reaches the laptop's SPA.
+// It reuses the SAME per-workspace realtime transport the browser stream does, so what's asserted
+// here is the gate around it: the machine-token pin (checked before the handshake is even shaped),
+// the account-scope 404, the 503 on a facade that can't scope, and that an authorised handshake
+// reaches the gateway with the workspace + the node's `?cid=` intact.
+function subscribe(
+  app: Hono<AppEnv>,
+  token: string | undefined,
+  workspaceId: string,
+  opts: { upgrade?: boolean; cid?: string } = {},
+) {
+  const cid = opts.cid ? `?cid=${encodeURIComponent(opts.cid)}` : ''
+  return app.fetch(
+    new Request(`http://x/internal/events/subscribe/${encodeURIComponent(workspaceId)}${cid}`, {
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(opts.upgrade === false ? {} : { Upgrade: 'websocket' }),
+      },
+    }),
+  )
+}
+
+describe('GET /internal/events/subscribe/:workspaceId', () => {
+  it('hands an in-scope handshake to the realtime gateway with the node cid intact', async () => {
+    const upgrades: Array<{ workspaceId: string; url: string }> = []
+    const res = await subscribe(makeApp({ upgrades }), await machineToken(), 'ws_1', {
+      cid: 'mothership-node-abc',
+    })
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('upgraded')
+    expect(upgrades).toHaveLength(1)
+    expect(upgrades[0]!.workspaceId).toBe('ws_1')
+    // The `?cid=` must survive to the transport: it is what the fan-out's echo suppression keys
+    // off, and the outbound publish stamps the same id as `originConnectionId`.
+    expect(upgrades[0]!.url).toContain('cid=mothership-node-abc')
+  })
+
+  it('rejects a missing / non-machine / expired / wrong-secret token (403) before anything else', async () => {
+    const upgrades: Array<{ workspaceId: string; url: string }> = []
+    const app = makeApp({ upgrades })
+    expect((await subscribe(app, undefined, 'ws_1')).status).toBe(403)
+    const session = await new HmacSigner(SECRET).sign({
+      id: 'usr_1',
+      login: 'dev',
+      name: 'Dev',
+      avatarUrl: null,
+      aud: TOKEN_AUDIENCE.session,
+      exp: Date.now() + 60_000,
+    })
+    expect((await subscribe(app, session, 'ws_1')).status).toBe(403)
+    expect(
+      (await subscribe(app, await machineToken([ACCOUNT], { ttlMs: -60_000 }), 'ws_1')).status,
+    ).toBe(403)
+    const forged = (
+      await mintMachineToken('another-secret-9876543210', {
+        userId: 'usr_1',
+        accountIds: [ACCOUNT],
+      })
+    ).token
+    expect((await subscribe(app, forged, 'ws_1')).status).toBe(403)
+    // Nothing ever reached the transport.
+    expect(upgrades).toHaveLength(0)
+  })
+
+  it('403s (not 503) on a non-mothership facade, so availability is not probeable', async () => {
+    const bare = makeApp({ repositories: false })
+    expect((await subscribe(bare, undefined, 'ws_1')).status).toBe(403)
+    // WITH a valid token the same facade admits it cannot serve the subscription.
+    expect((await subscribe(bare, await machineToken(), 'ws_1')).status).toBe(503)
+  })
+
+  it('refuses an out-of-scope or unknown workspace as a uniform 404 (no existence leak)', async () => {
+    const upgrades: Array<{ workspaceId: string; url: string }> = []
+    const app = makeApp({ upgrades })
+    const token = await machineToken()
+    expect((await subscribe(app, token, 'ws_other')).status).toBe(404)
+    expect((await subscribe(app, token, 'ws_nope')).status).toBe(404)
+    expect(upgrades).toHaveLength(0)
+  })
+
+  it('426s a non-upgrade request, but only AFTER the token check', async () => {
+    expect(
+      (await subscribe(makeApp(), await machineToken(), 'ws_1', { upgrade: false })).status,
+    ).toBe(426)
+    // No token ⇒ still 403: the handshake shape is not probeable.
+    expect((await subscribe(makeApp(), undefined, 'ws_1', { upgrade: false })).status).toBe(403)
+  })
+
+  it('501s when the facade wires no real-time transport', async () => {
+    const res = await subscribe(makeApp({ realtimeEnabled: false }), await machineToken(), 'ws_1')
+    expect(res.status).toBe(501)
   })
 })
 

@@ -5284,11 +5284,12 @@
       },
       "reviewingChunks": {
         "title": "Revisione dei blocchi…",
-        "hint": "La suddivisione è terminata. Ogni blocco viene esaminato uno alla volta e le osservazioni vengono raccolte."
+        "hint": "La suddivisione è terminata. Il revisore esamina i blocchi a piccoli gruppi e raccoglie le osservazioni man mano che ciascuno rientra."
       },
       "chunks": "{completed} di {total} sezioni esaminate",
       "inProgress": "{count} in corso",
       "activeHeading": "In revisione ora",
+      "activeIdle": "Al momento nessun blocco è in corso. Il revisore sta avviando il gruppo successivo.",
       "chunksHeading": "Blocchi",
       "chunkStatus": {
         "completed": "Esaminato",

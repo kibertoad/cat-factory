@@ -1,6 +1,6 @@
 # ADR 0027: PR-review observability, follow-up — D2.1 and D3 don't work for the parallel-subagent shape
 
-- **Status:** Accepted — both confirmed defects fixed (see the **Landed** note under each fix)
+- **Status:** Accepted — every confirmed defect (A–D) fixed (see the **Landed** note under each fix)
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/executor-harness`, `@cat-factory/agents`, `@cat-factory/orchestration`)
 - **Relates to:** ADR 0026 (marks D2.1/D3/D4 "landed"), ADR 0023 (PR deep review)
@@ -110,6 +110,49 @@ Both progress signals were matching tool names the CLI does not emit. The CLI sh
 Note the failure mode: call telemetry looked healthy throughout, because it derives from the `assistant` events' `usage` envelopes and the subagent transcript tailer, both of which are tool-name-agnostic. Only the two name-matched signals went dark, which is why this survived Defect B's fix unnoticed.
 
 **Landed.** `createSliceTracker` matches both `Agent` and the legacy `Task`. The plan side moved to a dedicated `progress.ts`, which reads `TodoWrite` **and** `TaskCreate`/`TaskUpdate` — the latter needs the tool RESULTS too, since `TaskCreate`'s input carries no id (the CLI mints it, returned as `TaskCreateOutput` / the rendered `"Task #N created successfully: …"` result string). `pickProgress` reconciles all three views. Both vocabularies remain live in the shipped schema, so the harness reads both rather than betting on one, and every matcher degrades to "no signal from this source" rather than throwing — the tool vocabulary is not a stable contract, and a future rename must cost signal, not the run.
+
+### Defect D — the reconciliation was an either/or, so the rendered slice list COLLAPSED
+
+**Found 2026-07-28**, operator-reported. Defect B's and C's fixes had landed and the deep-review
+window did show a live slice list, but it behaved backwards: while the review was planning, every
+slice was listed; the moment the FIRST subagent came back, all the other slices vanished, and they
+then reappeared one at a time as each was picked up. With the queued rows gone, the window's two
+lists ("Reviewing now" and the full chunk list) held the same one or two rows, and whenever nothing
+was in flight the callout disappeared entirely and the window looked like it had lost a list.
+
+### Root cause
+
+`pickProgress` treats the parent plan and the slice tracker as competing answers to the same
+question and returns the further-along one. They are not competing answers; they are two halves of
+one. The plan is the INVENTORY — it names every slice, and it is the ONLY place a not-yet-dispatched
+slice is named at all — while the dispatch view is the live STATUS, and it knows nothing about a
+slice until the `Agent` call that starts it. So `completed: 1` on the dispatch view beats a plan
+sitting at `completed: 0`, the picker switches views, and `total` drops from the plan's size to the
+number dispatched so far. Every queued slice is dropped from the render along with it.
+
+Defect B's fix is not wrong, it is half-applied: preferring the dispatch view was the right answer
+for the COUNTS (the plan really is stale) and the wrong one for the ITEMS.
+
+**Landed.** `mergeProgress` folds the dispatch statuses onto the plan's inventory instead of
+choosing between them: paired by normalised slice name (exact, then containment), then positionally
+into the leftover pending entries in dispatch order, with an unpairable dispatch APPENDED rather
+than dropped. So the list can only grow, a status can only advance, and the counts still come from
+whichever half actually moved. `pickProgress` survives for what it is genuinely good at — resolving
+the two plan VOCABULARIES, where a run really does use one or the other. The pr-reviewer prompt now
+also names each dispatch after its task entry, so the pairing is deterministic by construction
+rather than by heuristic, and marks each entry in progress on dispatch / completed on return.
+
+Two things travelled with the fix, both of which the collapse had been masking:
+
+- **The fan-out is now bounded to 5 concurrent slice subagents** (`MAX_PARALLEL_SLICE_SUBAGENTS`).
+  It was unbounded, and a large PR slices into dozens: each is a concurrent conversation on the same
+  account, so a full-width wave buys provider rate-limiting rather than speed, and every slice's
+  findings land in one burst at the end. This is a prompt-level budget — the CLI owns tool dispatch,
+  so the harness can observe the in-flight count but cannot refuse a call. An over-wide wave is a
+  prompt-adherence problem, not a broken guard.
+- **The "Reviewing now" callout stays mounted for the whole reviewing phase**, showing an idle line
+  when nothing is in flight. With a bounded window there are real moments between two waves when
+  nothing is running, and unmounting the callout there reads as a broken UI rather than as a state.
 
 ## Consequences
 

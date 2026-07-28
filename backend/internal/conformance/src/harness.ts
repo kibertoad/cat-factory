@@ -26,6 +26,7 @@ import type {
   LlmCallActivity,
   NotificationRepository,
   PrVerificationReportPublisher,
+  RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -209,6 +210,14 @@ export interface ConformanceApp {
    * refused, not clobbering) identically on D1 and Postgres.
    */
   executionRepository(): ExecutionRepository
+  /**
+   * The facade's requirements-review store, so the suite can assert the review surface's own
+   * optimistic-concurrency contract — a stale `compareAndSwap` refused rather than clobbering a
+   * concurrent editor's answer, and `replaceForBlock` leaving exactly ONE live review per block
+   * — identically on D1 and Postgres. Reviews are produced by a real reviewer LLM the harnesses
+   * don't have, so (like the document role-link probe) this is exercised through the repository.
+   */
+  requirementReviewRepository(): RequirementReviewRepository
   /**
    * The facade's kind-spanning `agent_runs` view over its real store, so the suite can assert
    * the stale-run sweeper's read primitives behave identically on D1 and Postgres: `listStale`

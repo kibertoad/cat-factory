@@ -5284,11 +5284,12 @@
       },
       "reviewingChunks": {
         "title": "Abschnitte werden geprüft…",
-        "hint": "Die Zerlegung ist abgeschlossen. Jeder Abschnitt wird nacheinander geprüft und die Ergebnisse werden gesammelt."
+        "hint": "Die Zerlegung ist abgeschlossen. Der Prüfer arbeitet die Abschnitte in kleinen Gruppen ab und sammelt die Ergebnisse, sobald ein Abschnitt zurückkommt."
       },
       "chunks": "{completed} von {total} Abschnitten geprüft",
       "inProgress": "{count} in Bearbeitung",
       "activeHeading": "Wird jetzt geprüft",
+      "activeIdle": "Derzeit wird kein Abschnitt geprüft. Der Prüfer startet gerade die nächste Gruppe.",
       "chunksHeading": "Abschnitte",
       "chunkStatus": {
         "completed": "Geprüft",

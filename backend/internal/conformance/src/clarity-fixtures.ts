@@ -17,6 +17,7 @@ export function makeIncorporatedClarityReview(blockId: string, report: string): 
     clarifiedReport: report,
     iteration: 1,
     maxIterations: 3,
+    rev: 0,
     createdAt: 1,
     updatedAt: 2,
   }

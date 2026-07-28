@@ -18,7 +18,13 @@ import type {
   WorkspaceEvent,
 } from '@cat-factory/contracts'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import { type AuthConfig, authorizeWsUpgrade } from '@cat-factory/server'
+import {
+  type AccountOfWorkspace,
+  type AuthConfig,
+  MACHINE_EVENTS_SUBSCRIBE_PATTERN,
+  authorizeMachineSubscribe,
+  authorizeWsUpgrade,
+} from '@cat-factory/server'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // The Node service's real-time transport — the analogue of the Worker's per-workspace
@@ -60,6 +66,28 @@ export interface LocalEventSink {
 }
 
 /**
+ * Notified as a workspace's subscriber room transitions between empty and non-empty. Exists for
+ * mothership mode: a local node must hold an UPSTREAM subscription to the mothership for each
+ * workspace someone is actually watching, and this is the signal for when to open and release one
+ * (see `@cat-factory/local-server`'s `MothershipEventSubscriber`).
+ *
+ * Demand-driven rather than "subscribe to everything at boot" because the node has no list of the
+ * org's workspaces without asking, and an idle laptop should hold no upstream sockets at all.
+ */
+export interface RealtimeRoomListener {
+  /** A workspace gained its FIRST subscriber. */
+  roomOpened(workspaceId: string): void
+  /** A workspace lost its LAST subscriber. */
+  roomClosed(workspaceId: string): void
+}
+
+/** The narrow seam a {@link RealtimeRoomListener} attaches to (implemented by {@link NodeRealtimeHub}). */
+export interface RealtimeRoomWatcher {
+  /** Register a listener; returns a detach function. At most one listener is supported. */
+  watchRooms(listener: RealtimeRoomListener): () => void
+}
+
+/**
  * Per-workspace subscriber registry. Every browser subscribed to a workspace's stream
  * converges here, so a published event fans out to all of them. In-memory and
  * single-process: the Node service runs as one process (unlike the Worker's globally
@@ -69,11 +97,41 @@ export interface LocalEventSink {
  * one node reaches browsers connected to another — see `propagator.ts`. Single-node / local
  * mode needs none of that: the bare hub IS the sink.
  */
-export class NodeRealtimeHub implements LocalEventSink {
+export class NodeRealtimeHub implements LocalEventSink, RealtimeRoomWatcher {
   private readonly rooms = new Map<string, Set<WebSocket>>()
   // The `?cid=` each socket connected with — used to skip echoing a board mutation back to
   // the connection that caused it (the Node analogue of the DO's serialized attachment).
   private readonly connectionIds = new WeakMap<WebSocket, string>()
+  private roomListener: RealtimeRoomListener | null = null
+
+  /**
+   * Observe room open/close transitions (see {@link RealtimeRoomWatcher}). Best-effort in the one
+   * direction that matters: a listener that throws must never break a subscribe/unsubscribe, since
+   * the socket lifecycle is the transport's core job and the listener is an optional
+   * mothership-mode add-on.
+   *
+   * At most ONE listener, and a second registration THROWS rather than replacing the first: silent
+   * replacement would leave the displaced observer believing it is still watching (a mothership
+   * node that never learns a room opened holds no upstream stream and the board just stays frozen),
+   * which is precisely the class of quiet breakage this seam exists to serve.
+   */
+  watchRooms(listener: RealtimeRoomListener): () => void {
+    if (this.roomListener) {
+      throw new Error('NodeRealtimeHub already has a room listener; detach before re-registering')
+    }
+    this.roomListener = listener
+    return () => {
+      if (this.roomListener === listener) this.roomListener = null
+    }
+  }
+
+  private notifyRoom(event: 'roomOpened' | 'roomClosed', workspaceId: string): void {
+    try {
+      this.roomListener?.[event](workspaceId)
+    } catch {
+      // See watchRooms: the listener is an add-on, the socket lifecycle is not.
+    }
+  }
 
   /** Add a socket to a workspace's room; it is reaped on close/error. */
   subscribe(workspaceId: string, socket: WebSocket, connectionId?: string | null): void {
@@ -82,7 +140,9 @@ export class NodeRealtimeHub implements LocalEventSink {
       room = new Set()
       this.rooms.set(workspaceId, room)
     }
+    const wasEmpty = room.size === 0
     room.add(socket)
+    if (wasEmpty) this.notifyRoom('roomOpened', workspaceId)
     if (connectionId) this.connectionIds.set(socket, connectionId)
     const drop = () => this.unsubscribe(workspaceId, socket)
     socket.on('close', drop)
@@ -93,7 +153,10 @@ export class NodeRealtimeHub implements LocalEventSink {
     const room = this.rooms.get(workspaceId)
     if (!room) return
     room.delete(socket)
-    if (room.size === 0) this.rooms.delete(workspaceId)
+    if (room.size === 0) {
+      this.rooms.delete(workspaceId)
+      this.notifyRoom('roomClosed', workspaceId)
+    }
   }
 
   /**
@@ -226,47 +289,133 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 const HEARTBEAT_INTERVAL_MS = 30_000
 
 /**
+ * Status-line reasons for a refused machine subscription. Keyed by the exact statuses
+ * {@link authorizeMachineSubscribe} can return, so a new verdict status fails `tsc` here rather
+ * than writing `undefined` into a raw HTTP status line. `503` is unreachable on THIS runtime (see
+ * {@link MachineSubscribeDeps}) but is kept so the map stays total over the verdict union — a
+ * `Partial` here would trade the compile-time guarantee for a runtime `undefined`.
+ */
+const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
+  403: 'Forbidden',
+  404: 'Not Found',
+  503: 'Service Unavailable',
+}
+
+/**
+ * What a Node deployment acting as a MOTHERSHIP needs in order to serve the machine-authed
+ * inbound event subscription (`GET /internal/events/subscribe/:ws`) — the workspace → account
+ * resolver the scope binding is built on.
+ *
+ * **Absent ⇒ the route is not served at all on this runtime**, and the handshake falls through to
+ * the upgrade listener's generic `404`. That differs on purpose from the shared controller (which
+ * a Cloudflare mothership reaches), where the same missing capability answers `503` to an
+ * authenticated caller: the controller is mounted unconditionally and must distinguish "no such
+ * route" from "this facade can't scope you", while here an unwired deployment genuinely has no
+ * such WebSocket route. Both agree on the part that matters — an unauthenticated caller learns
+ * nothing either way.
+ *
+ * Note this is supplied only by the real Node facade's `start()`. A mothership-MODE local node is
+ * a machine-API CLIENT, not a server: its account store lives upstream and its session secret is
+ * its own, so serving the route there would be meaningless.
+ */
+export interface MachineSubscribeDeps {
+  accountOf: AccountOfWorkspace
+}
+
+/**
  * Attach the real-time WebSocket transport to a running Node HTTP server: accept
  * `GET /workspaces/:ws/events` upgrades (authorising the `?ticket=` exactly like the
  * shared EventsController), register each socket into the {@link NodeRealtimeHub}, and
  * run a heartbeat that terminates dead connections. Returns a stop function that clears
  * the heartbeat and closes the WS server (call it on graceful shutdown).
+ *
+ * When `machineSubscribe` is supplied it ALSO accepts the mothership-mode machine subscription
+ * (`GET /internal/events/subscribe/:ws`), authorised by the shared `authorizeMachineSubscribe`
+ * rather than a browser `?ticket=`. Both handshakes land in the same hub room, so a subscribed
+ * node receives exactly what a browser on that workspace does — see the initiative doc. The
+ * upgrade is handled here (not in the shared `eventsRelayController`) for the same reason the
+ * browser stream is: `@hono/node-server` cannot upgrade from a Hono `Response`, so the request
+ * never reaches the controller on this runtime.
  */
 export function attachRealtime(
   server: UpgradableServer,
   hub: NodeRealtimeHub,
   auth: AuthConfig,
   log: RealtimeLogger,
+  machineSubscribe?: MachineSubscribeDeps,
 ): () => void {
   const wss = new WebSocketServer({ noServer: true })
 
+  /** Complete an authorised handshake: join the hub room and hand the socket to the heartbeat. */
+  const accept = (
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    workspaceId: string,
+    cid: string | null,
+  ) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      hub.subscribe(workspaceId, ws, cid)
+      wss.emit('connection', ws, request)
+    })
+  }
+
+  /** Reject a handshake with a bare status line (there is no Response object at this layer). */
+  const reject = (socket: Duplex, status: number, reason: string) => {
+    socket.write(`HTTP/1.1 ${status} ${reason}\r\n\r\n`)
+    socket.destroy()
+  }
+
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://localhost')
+    // The tab's stable connection id (see the SPA's `utils/connectionId.ts`) — or, on the machine
+    // route, the subscribing NODE's stable id — so the hub can skip echoing a mutation back to the
+    // connection that caused it.
+    const cid = url.searchParams.get('cid')
+
+    // Mothership-mode inbound subscription. Checked before the browser route because the two
+    // patterns are disjoint; a deployment that isn't a mothership simply never matches (the
+    // request falls through to the 404 below).
+    const machineMatch = machineSubscribe
+      ? MACHINE_EVENTS_SUBSCRIBE_PATTERN.exec(url.pathname)
+      : null
+    if (machineMatch && machineSubscribe) {
+      const workspaceId = decodeURIComponent(machineMatch[1]!)
+      void authorizeMachineSubscribe({
+        auth,
+        token: request.headers.authorization,
+        workspaceId,
+        accountOf: machineSubscribe.accountOf,
+      }).then((verdict) => {
+        if (!verdict.ok) {
+          reject(socket, verdict.status, MACHINE_REJECT_REASON[verdict.status])
+          return
+        }
+        accept(request, socket, head, workspaceId, cid)
+      })
+      return
+    }
+
     const match = WS_EVENTS_PATH.exec(url.pathname)
     // Not our route: refuse rather than leave the socket dangling. (Node mode has no
     // other WebSocket endpoints.)
     if (!match) {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
-      socket.destroy()
+      reject(socket, 404, 'Not Found')
       return
     }
     const workspaceId = decodeURIComponent(match[1]!)
     const ticket = url.searchParams.get('ticket') ?? undefined
-    // The tab's stable connection id (see the SPA's `utils/connectionId.ts`), so the hub can
-    // skip echoing a board mutation back to the connection that caused it.
-    const cid = url.searchParams.get('cid')
 
     void authorizeWsUpgrade(auth, ticket, workspaceId).then((verdict) => {
       if (!verdict.ok) {
-        const reason = verdict.status === 401 ? 'Unauthorized' : 'Service Unavailable'
-        socket.write(`HTTP/1.1 ${verdict.status} ${reason}\r\n\r\n`)
-        socket.destroy()
+        reject(
+          socket,
+          verdict.status,
+          verdict.status === 401 ? 'Unauthorized' : 'Service Unavailable',
+        )
         return
       }
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        hub.subscribe(workspaceId, ws, cid)
-        wss.emit('connection', ws, request)
-      })
+      accept(request, socket, head, workspaceId, cid)
     })
   })
 

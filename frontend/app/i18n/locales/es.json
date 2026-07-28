@@ -5272,11 +5272,12 @@
       },
       "reviewingChunks": {
         "title": "Revisando los fragmentos…",
-        "hint": "La división ha terminado. Revisando cada fragmento de uno en uno y recopilando los hallazgos."
+        "hint": "La división ha terminado. El revisor examina los fragmentos en grupos pequeños y recopila los hallazgos a medida que cada uno vuelve."
       },
       "chunks": "{completed} de {total} fragmentos revisados",
       "inProgress": "{count} en curso",
       "activeHeading": "Revisando ahora",
+      "activeIdle": "Ahora mismo no hay ningún fragmento en curso. El revisor está iniciando el siguiente grupo.",
       "chunksHeading": "Fragmentos",
       "chunkStatus": {
         "completed": "Revisado",

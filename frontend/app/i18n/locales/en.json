@@ -5431,11 +5431,12 @@
       },
       "reviewingChunks": {
         "title": "Reviewing the chunks…",
-        "hint": "Slicing is done. Working through each chunk one at a time and collecting findings."
+        "hint": "Slicing is done. The reviewer works through the chunks a few at a time and collects findings as each one comes back."
       },
       "chunks": "{completed} of {total} chunks reviewed",
       "inProgress": "{count} in progress",
       "activeHeading": "Reviewing now",
+      "activeIdle": "No chunk is in flight right now. The reviewer is starting the next batch.",
       "chunksHeading": "Chunks",
       "chunkStatus": {
         "completed": "Reviewed",

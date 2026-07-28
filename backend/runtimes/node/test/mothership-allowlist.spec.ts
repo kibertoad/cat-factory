@@ -161,10 +161,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // provider key rides a SEALED `apiKeyCipher` blob, so no plaintext crosses the machine API).
   // `upsert`/`softDelete` (connect/disconnect) are admin-gated → stay mothership-internal.
   emailConnectionRepository: { upsert: 'admin', softDelete: 'admin' },
-  // `countActiveInternal` (the public API's initiative-start concurrency backstop, a
-  // workspace-scoped SQL COUNT) is org/durable and REMOTE-eligible, but proxying the public-API
-  // path is a later mothership slice, so it stays pending until then, like `listByService`.
-  blockRepository: { listByService: 'pending', countActiveInternal: 'pending' },
+  // `countActiveInternal` (the public API's initiative-start concurrency backstop) is now
+  // allow-listed, completing the headless surface whose paginated reads were already remote.
+  // The single-service `listByService` has no live consumer (board composition goes through the
+  // batched `listByServices`), so exposing it would be dead surface — it stays pending until
+  // something actually calls it.
+  blockRepository: { listByService: 'pending' },
   pipelineRepository: {},
   executionRepository: { listByService: 'pending', listStale: 'sweeper' },
   // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/
@@ -268,18 +270,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   workspaceMountRepository: {
     // `listByWorkspace`/`countByServiceIds`/`get`/`upsert`/`update`/`remove` are allow-listed (the
-    // shared-service mount management surface). The real-time fan-out reads
-    // (`listByService`/`listWorkspaceIdsMountingBlock`), the frame-deletion batch cleanup
-    // (`removeByServices`), and the board-delete cascade's batched mount read
-    // (`listByServiceIds`, used by `planSharedServiceRehome`) stay off the SPA path —
-    // mothership-internal / a later slice.
+    // shared-service mount management surface), and `listWorkspaceIdsMountingBlock` now joins them
+    // — the real-time fan-out calls it on EVERY publish, so it was never optional. The unbatched
+    // `listByService` has no remaining consumer on that path; the frame-deletion batch cleanup
+    // (`removeByServices`) and the board-delete cascade's batched read (`listByServiceIds`, used by
+    // `planSharedServiceRehome`) stay off because their surrounding flows — service CRUD and
+    // workspace delete — are themselves still mothership-internal.
     listByService: 'pending',
     listByServiceIds: 'pending',
-    listWorkspaceIdsMountingBlock: 'pending',
     removeByServices: 'pending',
   },
-  // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
-  // deleteByBlock — the pre-review-run drop — completes it with the advanced-review slice).
+  // The whole requirement-review repo is remote (getByBlock/get/upsert were exposed earlier; the
+  // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
+  // replaceForBlock that starts a fresh review run complete it).
   requirementReviewRepository: {},
   // `listByWorkspace`/`listByExecution` are now allow-listed (the Kaizen screen's grading-history
   // + per-run status reads); `getByStep`/`upsert` were already remote (the run-path grade). The
@@ -295,7 +298,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   kaizenVerifiedComboRepository: { upsert: 'pending' },
   // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
   // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
-  // get/upsert/deleteBy* for clarity + brainstorm (getByBlock/getByBlockStage were already exposed).
+  // get/upsert/compareAndSwap/replaceFor* for clarity + brainstorm (getByBlock/getByBlockStage
+  // were already exposed).
   consensusSessionRepository: {},
   clarityReviewRepository: {},
   brainstormSessionRepository: {},

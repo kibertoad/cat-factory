@@ -133,6 +133,46 @@ gracefully". Land both runtimes AND a conformance assertion in the same change, 
 (a Cloudflare-Container-only execution path), never for runtime-neutral domain behaviour that
 merely needs a repository wired.
 
+## Every new feature ships MOTHERSHIP-READY from its first implementation
+
+Mothership mode ([`docs/initiatives/mothership-mode.md`](./docs/initiatives/mothership-mode.md)) is
+a third deployment shape, not an optional add-on: the local node runs the engine with **no main
+database**, reaching every org/durable repository over the `/internal/persistence` machine RPC. So a
+feature that works only against a direct `db` handle is **incomplete**, exactly as a Cloudflare-only
+feature is. Retrofitting is what the slice-by-slice `pending` backlog in the tracker IS — do not add
+to it.
+
+This applies to every feature, not only ones that feel "org-scoped": the classification below has
+exactly three outcomes, and **"it doesn't apply to mothership mode" is not one of them**.
+
+- **New repository method → decide its bucket IN THE SAME PR**, and make the decision real:
+  - **`remote`** (the default for org/durable state) — add it to `REMOTE_PERSISTENCE_METHODS`
+    (`backend/packages/server/src/persistence/rpc-allowlist.ts`) with a correct scope rule, plus a round-trip
+    AND a cross-account-refusal test in `packages/server/test/persistenceRpc.spec.ts`. If no
+    existing rule binds your arguments, add a rule — never widen an existing one to fit.
+  - **`local-sqlite`** (a per-user/per-deployment credential or local-runner knob) — implement the
+    `node:sqlite` repo per the tracker's bucket pattern and thread the `NodeContainerOptions`
+    override, so the feature is ON in mothership mode rather than silently off for lack of a `db`.
+  - **`excluded`** (admin-gated, a sweeper, or otherwise mothership-internal) — say so in the drift
+    guard's classification map with the reason. `pending` is a _migration_ state, not a landing pad
+    for new work.
+- **New service reading a repo directly off `options.db`** must route through `pickRepoSource`, or
+  it is a `TypeError` the moment the node boots without Postgres.
+- **A new cross-cutting concern is its own `/internal/*` endpoint**, mounted on BOTH facades behind
+  the machine-token audience pin and account scope — never a new hole in the persistence proxy. Copy
+  the notification-delivery / events-relay shape.
+- **A new secret must state which key seals it.** A repo that returns its credential SEALED can go
+  remote; one that decrypts INSIDE the repo cannot, because the mothership's `ENCRYPTION_KEY` never
+  reaches a laptop. Design for the sealed shape rather than discovering the block later.
+- **Assert it, don't assume it.** The `[mothership]` conformance config and
+  `runtimes/node/test/mothership-allowlist.spec.ts` are the guards; a feature on the board-load or
+  run path that they don't exercise is untested in this deployment shape.
+
+The failure mode this rule exists to prevent is silent: an un-routed method doesn't fail at build or
+review, it fails on a developer's laptop at runtime — sometimes as a dead panel, sometimes (when the
+call sits on a hot path such as the real-time fan-out) as a rejected engine publish that takes the
+run down with it.
+
 ## No N+1 repository access
 
 **Calling a single-row repository method inside a loop (`for`, `.map`, `Promise.all`) over a list
@@ -641,6 +681,29 @@ the pure `disposeReview` decides auto-pass / awaiting / exceeded. Downstream,
 rejects a length-truncated document rather than persisting a silently-incomplete spec. Persistence
 is `requirement_reviews`, mirrored D1 ⇄ Drizzle, asserted by conformance. Pass-through when the
 reviewer model isn't wired.
+
+**A review row is ONE JSON blob, so every mutation is rev-guarded — never a blind `upsert`.** The
+three iterative-review stores (requirements / clarity / brainstorm) carry a `rev` and a
+`compareAndSwap`; `IterativeReviewService.mutateReview` loads, applies the mutation, CASes, and on
+a lost race RELOADS and RE-APPLIES on the winner's snapshot. A whole-row write from a stale read
+would drop whatever a second writer settled meanwhile — and since incorporation refuses to run
+while any finding is `open`, a lost dismissal wedges the loop on a phantom open item. Two
+consequences for new code: a mutation passed to `mutateReview` must be idempotent (it can run
+several times, so notifications/dispatches go AFTER it resolves, on the returned review), and a
+fresh review run is published with the atomic `replaceForBlock` / `replaceForBlockStage`, never a
+`delete` followed by an `upsert` — the pair can interleave into two live reviews for one block.
+Giving up after the bounded retries throws `ReviewContendedError`, which is a 409 for an HTTP
+caller AND the durable driver's re-drive signal in `advanceInstance` (the incorporation cycle's
+mutation carries paid-for LLM output, so failing the run there would discard it).
+
+**"One live row per block" is a UNIQUE INDEX, never a transaction around delete-then-insert.**
+`replaceForBlock` is a single conflict-targeted upsert against
+`(workspace_id, block_id[, stage])`. Wrapping a DELETE and an INSERT in a transaction does NOT
+give this: at Postgres' default READ COMMITTED a DELETE takes no predicate lock, so two concurrent
+publishers both delete nothing and both insert. SQLite serializes writers, so the same code is
+accidentally safe on D1 — which is exactly the trap, since the sequential conformance test passes
+on both. Assert an invariant like this with CONCURRENT writers, and enforce it with a constraint;
+a constraint-adding migration heals pre-existing duplicates first (D1 `0066` ⇄ Drizzle).
 
 **Headless callers drive the SAME loop** over `/api/v1/runs/:runId/decisions`
 (`PublicDecisionController`), delegating to the same service methods, gated on the `decide` rung of
