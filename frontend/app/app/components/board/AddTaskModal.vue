@@ -27,7 +27,7 @@ import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
-import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
+import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 
@@ -334,33 +334,13 @@ const riskPolicyId = ref('')
 const modelPresetId = ref('')
 const pipelineId = ref('')
 
+// The "pick nothing" row names the default policy it resolves to; the picker's detail pane
+// explains what that policy does, so the row itself stays a bare name.
 const defaultPresetLabel = computed(() =>
   riskPolicies.defaultPreset
-    ? t('board.addTask.defaultPreset', {
-        name: riskPolicies.defaultPreset.name,
-        thresholds: riskPolicySummary(riskPolicies.defaultPreset),
-      })
+    ? t('board.addTask.defaultPreset', { name: riskPolicies.defaultPreset.name })
     : t('board.addTask.workspaceDefault'),
 )
-const presetMenu = computed(() => [
-  [
-    {
-      label: defaultPresetLabel.value,
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (riskPolicyId.value = ''),
-    },
-    ...riskPolicies.presets.map((p) => ({
-      label: riskPolicyOptionLabel(p),
-      icon: 'i-lucide-git-merge',
-      onSelect: () => (riskPolicyId.value = p.id),
-    })),
-  ],
-])
-const selectedPresetLabel = computed(() => {
-  if (!riskPolicyId.value) return defaultPresetLabel.value
-  const picked = riskPolicies.presets.find((p) => p.id === riskPolicyId.value)
-  return picked ? riskPolicyOptionLabel(picked) : t('board.addTask.workspaceDefault')
-})
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
 const defaultModelPresetLabel = computed(() =>
@@ -1146,18 +1126,13 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
 
             <!-- A review task merges nothing, so its risk (merge) policy is meaningless — omit it. -->
             <UFormField v-if="!isReview" :label="t('board.addTask.mergePolicy')">
-              <UDropdownMenu :items="presetMenu" class="w-full">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  size="sm"
-                  icon="i-lucide-git-merge"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  {{ selectedPresetLabel }}
-                </UButton>
-              </UDropdownMenu>
+              <RiskPolicyPicker
+                :model-value="riskPolicyId"
+                :options="riskPolicies.presets"
+                :none-label="defaultPresetLabel"
+                trigger-class="w-full justify-between"
+                @update:model-value="riskPolicyId = $event"
+              />
             </UFormField>
 
             <UFormField :label="t('board.addTask.modelPreset')">

@@ -1,21 +1,27 @@
 import type { RiskPolicy } from '~/types/merge'
 
 /**
- * A compact one-line summary of a merge preset's auto-merge ceilings + CI-fix budget,
- * suitable for a dropdown option label so the user sees each preset's actual thresholds
- * (not just its name) while choosing one. Percentages are the stored 0..1 ratios
- * rendered as whole percents.
+ * The three axes a `merger` agent scores a pull request on, each carrying an auto-merge
+ * ceiling on a risk policy. Presentation order is risk → impact → complexity: what the PR
+ * could break first, then how far it reaches, then how hard it was to write.
  */
-export function riskPolicySummary(p: RiskPolicy): string {
-  // Auto-merge disabled: the thresholds don't apply, every PR goes to human review.
-  if (!p.autoMergeEnabled) return `manual review only · ${p.ciMaxAttempts} CI fixes`
-  const pct = (n: number) => `${Math.round(n * 100)}%`
-  return `cx ≤${pct(p.maxComplexity)} · risk ≤${pct(p.maxRisk)} · impact ≤${pct(
-    p.maxImpact,
-  )} · ${p.ciMaxAttempts} CI fixes`
+export type RiskPolicyAxis = 'risk' | 'impact' | 'complexity'
+
+/** One axis of a policy, with the ceiling a score must stay at or below to auto-merge. */
+export interface RiskPolicyCeiling {
+  axis: RiskPolicyAxis
+  /** The stored 0..1 ratio. Render it through the `percent` number format, never raw. */
+  max: number
 }
 
-/** The preset name followed by its thresholds, for a single-line dropdown option. */
-export function riskPolicyOptionLabel(p: RiskPolicy): string {
-  return `${p.name} — ${riskPolicySummary(p)}`
+/**
+ * A policy's auto-merge ceilings, one entry per axis in presentation order, so every
+ * surface that explains a policy groups the three axes the same way.
+ */
+export function riskPolicyCeilings(p: RiskPolicy): RiskPolicyCeiling[] {
+  return [
+    { axis: 'risk', max: p.maxRisk },
+    { axis: 'impact', max: p.maxImpact },
+    { axis: 'complexity', max: p.maxComplexity },
+  ]
 }

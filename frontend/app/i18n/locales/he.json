@@ -269,7 +269,7 @@
       "chooseAtRunTime": "בחר בזמן הריצה",
       "mergePolicy": "מדיניות סיכון",
       "workspaceDefault": "ברירת מחדל של סביבת העבודה",
-      "defaultPreset": "ברירת מחדל ({name}) — {thresholds}",
+      "defaultPreset": "ברירת מחדל ({name})",
       "defaultModelPreset": "ברירת מחדל ({name})",
       "modelPreset": "הגדרה קבועה של מודל",
       "bestPractices": "מומלצות עבודה",
@@ -1003,7 +1003,6 @@
       "unassigned": "לא משויך",
       "workspaceDefault": "ברירת מחדל של מרחב העבודה",
       "workspaceDefaultParen": "(ברירת מחדל של מרחב העבודה)",
-      "defaultPresetThresholds": "ברירת מחדל ({name}): {thresholds}",
       "defaultPreset": "ברירת מחדל ({name})",
       "noDefault": "אין ברירת מחדל",
       "inheritWorkspace": "ירש ממרחב העבודה",
@@ -1020,7 +1019,8 @@
       "pipelineEmpty": "אין ברירת מחדל. בחר פייפליין כשאתה מריץ משימה זו.",
       "pipelineHint": "הפייפליין שכפתור ההרצה מפעיל כברירת מחדל: רצף שלבי הסוכנים (למשל אפיון, קוד, בדיקות, מיזוג) שמורץ עבור משימה זו.",
       "mergePolicy": "מדיניות סיכון",
-      "riskPolicyDetail": "{name}: מיזוג אוטומטי כאשר מורכבות ≤ {complexity}, סיכון ≤ {risk}, השפעה ≤ {impact}; עד {attempts} ניסיונות תיקון CI.",
+      "riskPolicyDetail": "{name}: ממזג ללא סקירה אנושית כאשר סיכון ≤ {risk}, השפעה ≤ {impact} ומורכבות ≤ {complexity}; עד {attempts} ניסיונות תיקון CI.",
+      "riskPolicyManual": "{name}: לעולם לא ממזג מעצמו, ולכן כל בקשת משיכה ממתינה לסקירה אנושית; עד {attempts} ניסיונות תיקון CI.",
       "riskPolicyEmpty": "לא הוגדרה מדיניות סיכון. הממזג מעלה התראת סקירה עבור כל PR.",
       "mergePolicyHint": "קובע מתי בקשת משיכה שהושלמה ממוזגת אוטומטית במקום להמתין לסקירה אנושית, וכמה ניסיונות תיקון CI מקבלת הרצה.",
       "modelPreset": "תבנית מודל",
@@ -5019,6 +5019,25 @@
       "toast": {
         "reseedFailed": "לא ניתן לזרוע מחדש את מדיניות הסיכון"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "חלה מפני שהמשימה הזו לא בוחרת מדיניות משלה.",
+      "noneHint": "לא הוגדרה מדיניות סיכון. כל בקשת משיכה ממתינה לסקירה אנושית."
+    },
+    "preview": {
+      "defaultBadge": "ברירת מחדל",
+      "autoMergeHeading": "ספי מיזוג אוטומטי",
+      "axis": {
+        "risk": "סיכון",
+        "impact": "השפעה",
+        "complexity": "מורכבות"
+      },
+      "ceiling": "עד {value}",
+      "autoMergeExplainer": "כאשר ה-CI ירוק, סוכן המיזוג מנקד את בקשת המשיכה בשלושת הצירים האלה. אם כל ניקוד נמצא בתקרה שלו או מתחתיה, בקשת המשיכה ממוזגת מעצמה ומדלגת על סקירה אנושית; ניקוד גבוה יותר שולח אותה לאדם.",
+      "manualHeading": "סקירה ידנית בלבד",
+      "manualExplainer": "מדיניות זו לעולם אינה ממזגת מעצמה, ולכן כל בקשת משיכה ממתינה לסקירה אנושית ללא קשר לניקוד.",
+      "ciHeading": "תיקוני CI",
+      "ciAttempts": "ההרצה רשאית לנסות פעם {count} להחזיר CI אדום למצב ירוק לפני שהיא מוותרת. | ההרצה רשאית לנסות {count} פעמים להחזיר CI אדום למצב ירוק לפני שהיא מוותרת."
     }
   },
   "modelPreset": {
