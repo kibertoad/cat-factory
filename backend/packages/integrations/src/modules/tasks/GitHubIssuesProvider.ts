@@ -113,18 +113,20 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
   }
 
   /**
-   * Search issues visible to *this workspace's* GitHub App installation. The
-   * installation token only sees its own account's repos, so scoping to the
-   * workspace's installation keeps results from leaking across tenants — a
-   * deployment may host many installations, but a workspace owns exactly one.
-   * Credentials are unused (the App authenticates), matching `fetchTask`.
+   * Search issues in ONE repository: the one linked to the service frame the search runs
+   * from. `scope` is therefore REQUIRED, and a call without it is refused rather than
+   * widened — GitHub's `/search/issues` carries no scope of its own, so an unscoped query
+   * returns whatever the credential can reach, which for a PAT-backed deployment is every
+   * public repository on GitHub. Credentials are unused (the App/PAT authenticates
+   * out-of-band), matching `fetchTask`.
    *
-   * When a `scope` is supplied (the search runs from a service linked to a repo)
-   * the query is narrowed to `repo:owner/name` so hits never leak in from sibling
-   * repos, AND input that names one specific issue — a pasted issue URL or a bare
-   * issue number against the scoped repo — is resolved to that exact issue and
-   * surfaced FIRST, rather than fuzzy-matched. A miss on the exact lookup (e.g. a
-   * number with no such issue) falls through to the text search instead of failing.
+   * Within the scope, input that names one specific issue — a pasted issue URL, the
+   * `owner/repo#n` shorthand, or a bare issue number — is resolved to that exact issue and
+   * surfaced FIRST rather than fuzzy-matched. A reference naming ANOTHER repository is not
+   * resolved here at all (see `detectExactGitHubIssueRef`): it stays linkable as an explicit
+   * reference through the import path, but it is never dressed up as a search hit. A miss on
+   * the exact lookup (e.g. a number with no such issue) falls through to the text search
+   * instead of failing.
    */
   async search(
     _credentials: TaskCredentials,
@@ -132,6 +134,13 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     workspaceId: string,
     scope?: TaskSearchRepoScope,
   ): Promise<TaskSearchResult[]> {
+    if (!scope) {
+      throw new ValidationError(
+        'A GitHub issue search must be scoped to a repository. Run it from a service frame ' +
+          'linked to a repo, or paste the issue URL to link one directly.',
+        { reason: 'repo_scope_required' },
+      )
+    }
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
     const out: TaskSearchResult[] = []
@@ -148,12 +157,13 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       }
     }
 
-    const searchText = githubIssuesLogic.buildGitHubIssueSearchQuery(query, scope)
-    const hits = searchText
-      ? await this.deps.githubClient
-          .searchIssues(installation.installationId, searchText, 20)
-          .catch(() => [])
-      : []
+    const hits = await this.deps.githubClient
+      .searchIssues(
+        installation.installationId,
+        githubIssuesLogic.buildGitHubIssueSearchQuery(query, scope),
+        20,
+      )
+      .catch(() => [])
     for (const hit of hits) {
       const externalId = githubIssuesLogic.githubIssueExternalId(hit)
       if (seen.has(externalId)) continue

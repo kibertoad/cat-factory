@@ -105,8 +105,12 @@ describe('githubIssueUrl', () => {
 describe('buildGitHubIssueSearchQuery', () => {
   const scope = { owner: 'kibertoad', repo: 'simple-service' }
 
-  it('returns the bare query when there is no repo scope', () => {
-    expect(buildGitHubIssueSearchQuery('login bug')).toBe('login bug')
+  it('refuses a scope that is not a plain owner/repo slug', () => {
+    // `repo:` is unquotable, so a slug smuggling a second qualifier would widen the very
+    // scope this function exists to enforce — the same guard the intake board gets.
+    expect(() =>
+      buildGitHubIssueSearchQuery('bug', { owner: 'octo', repo: 'app org:other' }),
+    ).toThrow(/owner\/repo/)
   })
 
   it('prefixes a repo: qualifier when scoped, keeping hits in-repo', () => {
@@ -124,22 +128,36 @@ describe('buildGitHubIssueSearchQuery', () => {
 describe('detectExactGitHubIssueRef', () => {
   const scope = { owner: 'kibertoad', repo: 'simple-service' }
 
-  it('resolves a pasted issue URL to its own repo (scope does not override it)', () => {
+  it('resolves a pasted issue URL that names the scoped repo', () => {
     expect(
       detectExactGitHubIssueRef('https://github.com/kibertoad/simple-service/issues/11', scope),
     ).toBe('kibertoad/simple-service#11')
-    expect(detectExactGitHubIssueRef('https://github.com/octo/other/issues/3', scope)).toBe(
-      'octo/other#3',
+    expect(detectExactGitHubIssueRef('kibertoad/simple-service#11', scope)).toBe(
+      'kibertoad/simple-service#11',
     )
+  })
+
+  it('matches the scoped repo case-insensitively, as GitHub does', () => {
+    // Repo names are case-preserving but case-insensitive for lookup, so a paste from the
+    // address bar must not be rejected over casing.
+    expect(
+      detectExactGitHubIssueRef('https://github.com/Kibertoad/Simple-Service/issues/11', scope),
+    ).toBe('Kibertoad/Simple-Service#11')
+  })
+
+  it('does NOT resolve a reference to another repository', () => {
+    // The whole point of the scope: a search only ever offers the service's own issues, so a
+    // stray paste can't make another repo's issue look like a hit the search found. Linking
+    // it is still possible — as an explicit reference, through the import path.
+    expect(detectExactGitHubIssueRef('https://github.com/octo/other/issues/3', scope)).toBeNull()
+    expect(detectExactGitHubIssueRef('octo/other#3', scope)).toBeNull()
+    // Same owner, different repo — a sibling repo is just as out of scope as a stranger's.
+    expect(detectExactGitHubIssueRef('kibertoad/other-service#3', scope)).toBeNull()
   })
 
   it('resolves a bare issue number against the scoped repo', () => {
     expect(detectExactGitHubIssueRef('11', scope)).toBe('kibertoad/simple-service#11')
     expect(detectExactGitHubIssueRef('  42 ', scope)).toBe('kibertoad/simple-service#42')
-  })
-
-  it('does not treat a bare number as an exact ref without a scope', () => {
-    expect(detectExactGitHubIssueRef('11')).toBeNull()
   })
 
   it('returns null for free-text search phrases', () => {
@@ -169,8 +187,18 @@ describe('buildGitHubIntakeQuery', () => {
   })
 
   it('drops embedded quotes from qualifier values', () => {
-    expect(buildGitHubIntakeQuery({ board: {}, labels: ['a"b'], limit: 5 })).toBe(
-      'is:open label:"ab"',
+    expect(
+      buildGitHubIntakeQuery({ board: { githubRepo: 'octo/app' }, labels: ['a"b'], limit: 5 }),
+    ).toBe('repo:octo/app is:open label:"ab"')
+  })
+
+  it('refuses a query with no repository at all, rather than scanning everything', () => {
+    // Intake does not merely display its hit: it imports the issue and starts a pipeline on
+    // it. A boardless GitHub search returns whatever the credential can reach — under a PAT,
+    // every public repository — so a schedule stored without a repo must fail loudly.
+    expect(() => buildGitHubIntakeQuery({ board: {}, limit: 5 })).toThrow(/no repository/)
+    expect(() => buildGitHubIntakeQuery({ board: { githubRepo: '  ' }, limit: 5 })).toThrow(
+      /no repository/,
     )
   })
 

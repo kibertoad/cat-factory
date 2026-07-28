@@ -166,6 +166,7 @@ async function doSpawnEpic() {
              the source selector is always shown so it's clear which tracker is in use. -->
         <UFormField :label="t('tasks.import.searchIssues')">
           <ContextIssuePicker
+            v-if="containerId"
             v-model:source="source"
             :scope-block-id="containerId"
             always-show-source

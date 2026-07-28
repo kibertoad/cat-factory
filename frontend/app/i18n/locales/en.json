@@ -3640,10 +3640,11 @@
       "searchPlaceholder": "Search issues or paste a URL/key…",
       "refPlaceholder": "Paste an issue URL or key…",
       "searchFailed": "Search failed: {error}",
+      "searchNeedsRepo": "This service isn't linked to a repository yet, so there's nothing to search. Link it to a repo, or paste an issue URL to attach one directly.",
       "imported": "imported",
       "attachByReference": "Attach {ref} by reference",
-      "noMatches": "No matching issues.",
-      "emptySearchable": "Search by title, or pick an imported issue.",
+      "noMatches": "No matching issues in this service's repository. Paste an issue URL to attach one from elsewhere.",
+      "emptySearchable": "Search this service's repository by title, or pick an imported issue.",
       "emptyRefOnly": "Paste an issue URL or key to attach it."
     },
     "contextIssues": {

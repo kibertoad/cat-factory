@@ -3547,10 +3547,11 @@
       "searchPlaceholder": "課題を検索、または URL/キーを貼り付け…",
       "refPlaceholder": "課題の URL またはキーを貼り付け…",
       "searchFailed": "検索に失敗しました: {error}",
+      "searchNeedsRepo": "このサービスはまだリポジトリに紐付けられていないため、検索する対象がありません。リポジトリに紐付けるか、課題の URL を貼り付けて直接添付してください。",
       "imported": "インポート済み",
       "attachByReference": "{ref} を参照で添付",
-      "noMatches": "一致する課題がありません。",
-      "emptySearchable": "タイトルで検索するか、インポート済みの課題を選択してください。",
+      "noMatches": "このサービスのリポジトリに一致する課題はありません。他のリポジトリの課題を添付するには URL を貼り付けてください。",
+      "emptySearchable": "このサービスのリポジトリをタイトルで検索するか、インポート済みの課題を選択してください。",
       "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。"
     },
     "contextIssues": {

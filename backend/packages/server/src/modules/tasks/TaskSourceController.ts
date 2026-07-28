@@ -55,18 +55,20 @@ function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
 /**
  * Resolve the repo a GitHub-issue search runs against from its originating block
  * (a service frame or a task/module under one). A service is always created from
- * (or with) a repo, so a GitHub search scoped to a block REQUIRES the link — if it
- * can't be resolved we refuse the search rather than silently widening it to the
- * whole installation (the task couldn't run against an unlinked service anyway).
- * Repo-less sources (Jira) and the unscoped "import an issue" surface (no blockId)
- * skip this entirely.
+ * (or with) a repo, so a GitHub search REQUIRES the link — if it can't be resolved
+ * we refuse the search rather than silently widening it (the task couldn't run
+ * against an unlinked service anyway, and an unscoped GitHub search reaches every
+ * repository the deployment's credential can see — under a PAT, all of public
+ * GitHub). `blockId` is required by the contract, so there is no unscoped surface
+ * left to skip; repo-less sources (Jira, Linear) have nothing to narrow and pass
+ * through with no scope.
  */
 async function resolveSearchScope<E extends AppEnv>(
   c: Context<E>,
   source: TaskSourceKind,
-  blockId: string | undefined,
+  blockId: string,
 ): Promise<TaskSearchRepoScope | undefined> {
-  if (!blockId || source !== 'github') return undefined
+  if (source !== 'github') return undefined
   const resolve = c.get('container').resolveRepoTarget
   let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
   try {
@@ -80,8 +82,11 @@ async function resolveSearchScope<E extends AppEnv>(
     target = null
   }
   if (!target) {
+    // A machine-readable reason so the SPA can render a localized message; the prose is the
+    // untranslated last resort (CLAUDE.md "Backend strings").
     throw new ValidationError(
       'This service is not linked to a GitHub repository. Link it to a repo before creating tasks from issues.',
+      { reason: 'repo_not_linked' },
     )
   }
   return { owner: target.owner, repo: target.name }

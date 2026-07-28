@@ -3241,10 +3241,11 @@
       "searchPlaceholder": "Issues durchsuchen oder eine URL/einen Schlüssel einfügen…",
       "refPlaceholder": "Eine Issue-URL oder einen -Schlüssel einfügen…",
       "searchFailed": "Suche fehlgeschlagen: {error}",
+      "searchNeedsRepo": "Dieser Service ist noch mit keinem Repository verknüpft, es gibt also nichts zu durchsuchen. Verknüpfen Sie ihn mit einem Repository oder fügen Sie eine Issue-URL ein, um ein Issue direkt anzuhängen.",
       "imported": "importiert",
       "attachByReference": "{ref} per Referenz anhängen",
-      "noMatches": "Keine passenden Issues.",
-      "emptySearchable": "Nach Titel suchen oder ein importiertes Issue auswählen.",
+      "noMatches": "Keine passenden Issues im Repository dieses Service. Fügen Sie eine Issue-URL ein, um eines von anderswo anzuhängen.",
+      "emptySearchable": "Durchsuchen Sie das Repository dieses Service nach Titel oder wählen Sie ein importiertes Issue aus.",
       "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen."
     },
     "contextIssues": {

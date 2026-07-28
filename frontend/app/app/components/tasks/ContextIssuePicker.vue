@@ -6,7 +6,13 @@
 // It only *stages* a choice: the caller collects PendingContext items and links
 // them once the block exists (see useContextLinking). A search hit / pasted ref
 // carries `needsImport: true` so it's fetched + persisted before linking.
+//
+// Search results are always confined to ONE repository (`scopeBlockId`'s service).
+// An issue in another repo is reachable only by pasting its URL, which the explicit
+// "attach by reference" row below imports directly — it never comes back as a hit,
+// so what the search offers is exactly what the service owns.
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
@@ -14,10 +20,13 @@ const props = defineProps<{
   chosenKeys?: string[]
   /**
    * The block the picker is attaching context to (a service frame or a task/module
-   * under one). Scopes a GitHub search to that service's linked repo, so hits stay
-   * in-repo and a pasted URL / bare issue number resolves to the exact issue.
+   * under one). REQUIRED: it is what scopes a GitHub search to that service's linked
+   * repo, so hits stay in-repo and a bare issue number resolves to the exact issue.
+   * A search with no scope reaches every repository the deployment's credential can
+   * see (under a PAT, all of public GitHub), so there is no unscoped mode — a caller
+   * that has no block yet must not render the picker.
    */
-  scopeBlockId?: string
+  scopeBlockId: string
   /**
    * Controlled source: when provided the parent owns the selected tracker (via
    * `v-model:source`); omitted, the picker manages it internally (the add-task case).
@@ -109,10 +118,24 @@ async function runSearch() {
     results.value = await tasks.search(source.value, q, props.scopeBlockId)
   } catch (e) {
     results.value = []
-    searchError.value = e instanceof Error ? e.message : String(e)
+    // "This service has no repo" is the one failure with an action attached, so it gets its
+    // own localized copy off the backend's machine-readable reason rather than the raw
+    // message (CLAUDE.md "Backend strings"). Anything else keeps the generic wording.
+    searchError.value =
+      errorReasonOf(e) === 'repo_not_linked'
+        ? t('tasks.picker.searchNeedsRepo')
+        : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
   } finally {
     searching.value = false
   }
+}
+
+/** The backend's `error.details.reason` code, when it sent one. */
+function errorReasonOf(error: unknown): string | null {
+  const details = apiErrorEnvelope(error)?.details
+  if (!details || typeof details !== 'object') return null
+  const reason = (details as Record<string, unknown>).reason
+  return typeof reason === 'string' ? reason : null
 }
 
 const icon = computed(() => descriptor.value?.icon ?? 'i-lucide-square-check')
@@ -245,7 +268,7 @@ onMounted(() => {
     />
 
     <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      {{ t('tasks.picker.searchFailed', { error: searchError }) }}
+      {{ searchError }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">

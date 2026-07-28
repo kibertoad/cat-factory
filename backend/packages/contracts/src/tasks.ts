@@ -305,14 +305,15 @@ export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
 export const searchTasksSchema = v.object({
   query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   /**
-   * The board block the search runs from (a service frame or one of its
-   * tasks/modules). For a repo-backed source (GitHub Issues) this scopes the
-   * search to that service's linked repository — so hits never leak in from
-   * sibling repos, a pasted issue URL resolves to that exact issue, and a bare
-   * issue number resolves against the service's repo. Omitted for an unscoped
-   * workspace-wide search (the standalone "import an issue" surface).
+   * The board block the search runs from (a service frame or one of its tasks/modules).
+   * REQUIRED: for a repo-backed source (GitHub Issues) it is what scopes the search to that
+   * service's linked repository, so hits never leak in from other repos and a bare issue
+   * number resolves against the service's repo. There is deliberately no unscoped mode —
+   * an unscoped GitHub issue search reaches every repository the deployment's credential can
+   * see, which for a PAT is all of public GitHub. Repo-less sources (Jira, Linear) still
+   * receive it and simply have nothing to narrow.
    */
-  blockId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+  blockId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type SearchTasksInput = v.InferOutput<typeof searchTasksSchema>
 
