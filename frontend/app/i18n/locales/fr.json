@@ -269,7 +269,7 @@
       "chooseAtRunTime": "Choisir au lancement",
       "mergePolicy": "Politique de risque",
       "workspaceDefault": "Valeur par défaut de l’espace",
-      "defaultPreset": "Par défaut ({name}) : {thresholds}",
+      "defaultPreset": "Par défaut ({name})",
       "defaultModelPreset": "Par défaut ({name})",
       "modelPreset": "Préréglage de modèle",
       "bestPractices": "Bonnes pratiques",
@@ -1003,8 +1003,8 @@
       "unassigned": "Non assigné",
       "workspaceDefault": "Valeur par défaut de l'espace de travail",
       "workspaceDefaultParen": "(valeur par défaut de l'espace de travail)",
-      "defaultPresetThresholds": "Par défaut ({name}) : {thresholds}",
-      "defaultPreset": "Par défaut ({name})",
+      "defaultRiskPolicy": "Par défaut ({name})",
+      "defaultModelPreset": "Par défaut ({name})",
       "noDefault": "Aucune valeur par défaut",
       "inheritWorkspace": "Hériter de l'espace de travail",
       "on": "Activé",
@@ -1020,7 +1020,8 @@
       "pipelineEmpty": "Aucune valeur par défaut. Choisissez un pipeline lorsque vous exécutez cette tâche.",
       "pipelineHint": "Le pipeline que le bouton Exécuter démarre par défaut : la séquence d'étapes d'agent (par exemple spécification, code, test, fusion) exécutée pour cette tâche.",
       "mergePolicy": "Politique de risque",
-      "riskPolicyDetail": "{name} : fusion automatique lorsque la complexité ≤ {complexity}, le risque ≤ {risk}, l'impact ≤ {impact} ; jusqu'à {attempts} tentatives de correction CI.",
+      "riskPolicyDetail": "{name} : fusionne sans revue humaine lorsque le risque ≤ {risk}, l'impact ≤ {impact} et la complexité ≤ {complexity} ; jusqu'à {attempts} tentatives de correction CI.",
+      "riskPolicyManual": "{name} : ne fusionne jamais de lui-même, chaque pull request attend donc une revue humaine ; jusqu'à {attempts} tentatives de correction CI.",
       "riskPolicyEmpty": "Aucune politique de risque configurée. Le fusionneur déclenche une notification de revue pour chaque PR.",
       "mergePolicyHint": "Décide quand une pull request terminée est fusionnée automatiquement au lieu d'attendre une revue humaine, et combien de tentatives de correction de CI une exécution obtient.",
       "modelPreset": "Preset de modèle",
@@ -2213,7 +2214,12 @@
       "test": {
         "button": "Tester la connexion",
         "ok": "Connexion réussie",
-        "failed": "Échec de la connexion"
+        "failed": "Échec de la connexion",
+        "warningsTitle": "Lacunes dans cette configuration",
+        "warnings": {
+          "runner_manifest_no_release": "Aucun modèle de release : annuler une exécution ne permet pas de demander au pool d'arrêter son job, donc un job orphelin occupe son runner jusqu'à ce que le pool le récupère de lui-même.",
+          "runner_manifest_no_status_path": "Aucun chemin de statut : chaque interrogation est lue comme toujours en cours, donc un job ne peut se terminer qu'en épuisant le budget d'interrogation de l'exécution."
+        }
       },
       "toast": {
         "saved": "{title} enregistré",
@@ -3966,6 +3972,7 @@
     "title": "Revue des exigences",
     "iteration": "Itération {current} / {max}",
     "intro": "Un relecteur IA a inspecté les exigences collectées de cet {level} — sa description ainsi que les PRD et tickets liés — et a soulevé les observations ci-dessous. {answer} celles qui sont pertinentes et {dismiss} les autres, puis incorporez-les ; le relecteur relit jusqu'à ce que les exigences soient claires.",
+    "scopeNote": "Cette étape couvre uniquement les exigences produit et métier : ce que le logiciel doit faire et les règles qui le régissent. Les décisions techniques comme le choix des technologies, l'architecture et les structures de données sont tranchées plus tard par les étapes Architecte et Chercheur, qui disposent du code source.",
     "levelFallback": "élément",
     "answerVerb": "Répondez à",
     "dismissVerb": "écartez",
@@ -5031,6 +5038,25 @@
       "toast": {
         "reseedFailed": "Impossible de régénérer la politique de risque"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Appliquée parce que cette tâche ne choisit aucune politique.",
+      "noneHint": "Aucune politique de risque configurée. Chaque pull request attend une revue humaine."
+    },
+    "preview": {
+      "defaultBadge": "Par défaut",
+      "autoMergeHeading": "Seuils de fusion automatique",
+      "axis": {
+        "risk": "Risque",
+        "impact": "Impact",
+        "complexity": "Complexité"
+      },
+      "ceiling": "inférieur ou égal à {value}",
+      "autoMergeExplainer": "Une fois la CI au vert, l'agent fusionneur note la pull request sur ces trois axes. Si chaque note reste sous son plafond, la pull request fusionne toute seule et saute la revue humaine ; au-dessus, elle part vers une personne.",
+      "manualHeading": "Revue manuelle uniquement",
+      "manualExplainer": "Cette politique ne fusionne jamais d'elle-même : chaque pull request attend une revue humaine, quelles que soient les notes.",
+      "ciHeading": "Corrections CI",
+      "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner."
     }
   },
   "modelPreset": {

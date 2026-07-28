@@ -129,6 +129,7 @@ export function buildNodeResolveTransport(
       info: RUNNERS_CIPHER_INFO,
     }),
     clock,
+    logger,
     runnerBackendRegistry,
     ...(urlPolicy ? { urlPolicy } : {}),
     runnerPoolProvider:

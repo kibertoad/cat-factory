@@ -101,6 +101,8 @@ export type {
   ProviderConfigField,
   ProviderDescriptor,
   ConnectionTestResult,
+  ConnectionWarning,
+  ConnectionWarningCode,
   // Per-user secret (generic, kind-discriminated) shapes.
   UserSecretKind,
   UserSecretStatus,

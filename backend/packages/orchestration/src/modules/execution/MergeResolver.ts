@@ -225,7 +225,19 @@ export class MergeResolver {
     ...(ctx.recordId ? { mergeTrackRecordId: ctx.recordId } : {}),
   })
 
-  /** Flip the block to `pr_ready` and raise the merge-review notification. */
+  /**
+   * Raise the merge-review notification, THEN flip the block to `pr_ready`.
+   *
+   * The order is load-bearing. The card is the only actionable prompt this outcome produces —
+   * nothing re-drives a review, and the sweepers never see a non-`running` run — while the
+   * block status is merely how the board paints the task. Flipping first meant a raise that
+   * threw left a `pr_ready` block with no inbox card: a task that LOOKS finished-and-waiting,
+   * masking the failed run behind it. Raising first inverts the surviving failure into the
+   * honest one — the run fails, the block stays where it was, and the failure is visible on the
+   * board (retryable) rather than dressed up as a PR awaiting review. The new failure window
+   * this opens (card raised, flip failed) costs nothing on a replay: `NotificationService.raise`
+   * de-dupes the open card on (workspace, block, type), so the re-drive reuses the same row.
+   */
   private async raiseReviewAndBlock(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -233,11 +245,11 @@ export class MergeResolver {
     assessment: MergeAssessment | null,
     track: { changeClass: ChangeClass; recordId?: string },
   ): Promise<void> {
+    await this.raiseMergeReview(workspaceId, instance, block, assessment, track)
     await this.deps.blockRepository.update(workspaceId, block.id, {
       status: 'pr_ready',
       progress: 1,
     })
-    await this.raiseMergeReview(workspaceId, instance, block, assessment, track)
   }
 
   /** Raise a `merge_review` notification carrying the agent's assessment + the PR. */

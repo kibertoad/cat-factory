@@ -40,6 +40,30 @@ describe('dispatchEpochFor', () => {
     ).toBe(2)
   })
 
+  it('counts an eviction recovery, so the retry never re-uses the dead job id', () => {
+    // A pool is told to keep routing sticky by job id, so reusing it after an eviction routes
+    // the recovery straight back to the job whose runner just died instead of onto a fresh
+    // member — making the eviction budget a no-op exactly where it was added to help.
+    expect(dispatchEpochFor(step({ evictionRecoveries: 1 }))).toBe(1)
+    expect(dispatchEpochFor(step({ transientEvictionRecoveries: 3 }))).toBe(3)
+    expect(dispatchEpochFor(step({ evictionRecoveries: 1, transientEvictionRecoveries: 2 }))).toBe(
+      3,
+    )
+  })
+
+  it('sums the loop round and the eviction recoveries so two rounds can never collide', () => {
+    // Both components only ever increase, so every re-dispatch after any increment mints a
+    // strictly larger epoch. A tester round that lost a container must not land on the id its
+    // own previous round already completed under.
+    const evictedFirstRound = step({
+      test: { phase: 'testing', attempts: 0, maxAttempts: 10 },
+      evictionRecoveries: 1,
+    })
+    const secondRound = step({ test: { phase: 'fixing', attempts: 1, maxAttempts: 10 } })
+    expect(dispatchEpochFor(evictedFirstRound)).toBe(1)
+    expect(dispatchEpochFor({ ...secondRound, evictionRecoveries: 1 } as PipelineStep)).toBe(2)
+  })
+
   it('prefers the tester counter when both are present, and treats attempts 0 as 0 (not a fallthrough)', () => {
     // `??` must not fall through on a real 0 — a first-round tester step is epoch 0, never the gate count.
     expect(

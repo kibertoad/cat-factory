@@ -1,5 +1,6 @@
 import {
   type ConnectionTestResult,
+  CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
   type KubernetesRunnerConfig,
   type RunnerDispatchKind,
@@ -45,8 +46,9 @@ import {
 // the proxy means the pod vanished (deleted/crashed/evicted). A poll returns it alongside the
 // structured `RunnerJobView.evicted: 'crash'` field (the primary signal); this string stays the
 // fallback older consumers match, and it is ALSO the readiness-throw marker in `waitForPodReady`
-// below (a dispatch-time throw carries no view, so it rides the string channel only).
-const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+// below (a dispatch-time throw carries no view, so it rides the string channel only). The
+// wording is kernel's (`CONTAINER_EVICTION_ERROR`) because it is a cross-transport contract.
+const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000

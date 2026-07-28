@@ -384,6 +384,55 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.detail).toBe('Phase timings: clone=2s, agent=600s.')
   })
 
+  for (const status of [404, 410]) {
+    it(`reports a job the scheduler no longer knows (${status}) as an EVICTION, not a poll fault`, async () => {
+      // A pool member dying mid-job leaves the scheduler 404ing (or 410ing) its id. Without this
+      // mapping the throw counts against the engine's poll-failure tolerance and the run dies
+      // `timeout` without ever trying a fresh member; the structured `evicted` field is what
+      // engages the engine's re-dispatch recovery.
+      capture('/api/jobs/job-7', 'GET', { message: 'no such job' }, status)
+      const provider = new HttpRunnerPoolProvider()
+      const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+      expect(view.state).toBe('failed')
+      expect(view.evicted).toBe('crash')
+      expect(view.error).toContain('container evicted or crashed')
+      // The status LEADS, and the scheduler's own account rides `detail`: a 404 also covers a
+      // mistyped poll path and a scheduler that 404s an unauthorized read, and an operator
+      // handed a bare "container evicted or crashed" has nothing to act on. The detail carries
+      // the provider's fix-it remedy (its error message), which names where to correct it.
+      expect(view.error).toContain(`Runner pool poll → ${status}`)
+      expect(view.detail).toContain('Settings')
+    })
+  }
+
+  it('still throws on a non-404 poll fault (a broken scheduler is not an eviction)', async () => {
+    // A 500 says the SCHEDULER is unwell, not that the job is gone: re-dispatching onto a
+    // fresh member would be wrong, so it stays a throw for the poll-failure tolerance to bound.
+    capture('/api/jobs/job-7', 'GET', { message: 'upstream exploded' }, 500)
+    const provider = new HttpRunnerPoolProvider()
+    await expect(
+      provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' }),
+    ).rejects.toBeInstanceOf(RunnerPoolApiError)
+  })
+
+  it('tags a reclaimed-runner status as an eviction so a fresh member is tried', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'preempted' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
+    // No `errorPath` value in the response, so the provider explains the loss itself.
+    expect(view.error).toContain('preempted')
+  })
+
+  it('leaves `evicted` unset on an ordinary job failure', async () => {
+    capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'tests failed' })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBeUndefined()
+  })
+
   it('leaves failureCause/detail unset when the manifest does not map them (older pool)', async () => {
     capture('/api/jobs/job-7', 'GET', { state: 'errored', error: 'boom' })
     const provider = new HttpRunnerPoolProvider()

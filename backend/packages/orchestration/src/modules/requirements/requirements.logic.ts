@@ -104,7 +104,18 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
     '  ]',
     '}',
     '',
-    'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
+    'Every item must be a PRODUCT / BUSINESS question — user-visible behaviour, business ' +
+      'rules and their edge cases, actors and permissions, the meaning of business data, ' +
+      'scope boundaries, or a business-level quality expectation stated as an outcome. Do ' +
+      'NOT raise technical design questions: technology / framework / library choice, ' +
+      'architecture or component decomposition, API, endpoint, schema or data-model shape, ' +
+      'algorithms, caching, performance techniques, infrastructure and deployment, or coding ' +
+      'and test approach. The Architect and Researcher steps own those and settle them later ' +
+      'with the codebase and the technical specification in hand. Before raising an item, ' +
+      'apply the test: could a product owner who does not read code answer it from business ' +
+      'knowledge alone? If not, leave it out entirely — do not downgrade its severity to ' +
+      'squeeze it in. ' +
+      'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
       'ambiguity that would block correct implementation, `medium` for one that risks ' +
       'rework or a wrong assumption, and `low` for a minor clarification or nice-to-have. ' +
       'Set `autoAnswerable` on EVERY item: true only when a confident answer follows from ' +
@@ -112,7 +123,9 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
       'false when it needs a real business / product / domain decision or missing information ' +
       '(when unsure, false). ' +
       'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
-      'are genuinely complete and unambiguous, return an empty items array. Output JSON only.',
+      'are complete and unambiguous at the product level, or the work is purely technical ' +
+      'and changes no user-visible behaviour or business rule, return an empty items array. ' +
+      'Output JSON only.',
   ].join('\n')
 }
 
@@ -227,8 +240,11 @@ export function buildReworkPrompt(
   }
   lines.push(
     'Rewrite the requirements as a single self-contained Markdown document in the standard ' +
-      'structure described in your instructions, folding in every answer above. Output the ' +
-      'revised requirements only.',
+      'structure described in your instructions, folding in every answer above. Keep it at ' +
+      'the product / business level: what the software must do and the rules that govern it, ' +
+      'never how it will be built. The Architect step designs that afterwards, using this ' +
+      'document as its input — so a technical decision you write in here pre-empts a step ' +
+      'that knows the codebase and you do not. Output the revised requirements only.',
   )
   return lines.join('\n')
 }
@@ -308,6 +324,11 @@ export function buildRecommendationPrompt(
     )
   }
   lines.push(
+    '',
+    'Each recommendation must be a product / business decision the owner can accept or reject ' +
+      '— a behaviour, rule, limit or scope boundary — not a technical design. Treat the ' +
+      'technical material above as a constraint on what you recommend, not as something to ' +
+      'recommend; the Architect step owns the design.',
     '',
     'Return ONLY the JSON object described in your instructions (one entry per itemId above).',
   )

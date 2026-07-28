@@ -135,11 +135,36 @@ export const providerDescriptorSchema = v.object({
 })
 export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
 
+/**
+ * A non-fatal gap in an otherwise-valid provider config: the connection works, but something
+ * it never declared costs a recovery or cleanup path that only shows itself during an
+ * incident. Machine-readable, because the backend does not localize prose — the SPA maps the
+ * `code` to its own copy and keeps `message` only as the untranslated last resort.
+ */
+export const connectionWarningCodeSchema = v.picklist([
+  'runner_manifest_no_release',
+  'runner_manifest_no_status_path',
+])
+export type ConnectionWarningCode = v.InferOutput<typeof connectionWarningCodeSchema>
+
+export const connectionWarningSchema = v.object({
+  code: connectionWarningCodeSchema,
+  /** The backend's own English account of the gap, also written to the deployment log. */
+  message: v.string(),
+})
+export type ConnectionWarning = v.InferOutput<typeof connectionWarningSchema>
+
 /** The outcome of a provider connection test (never throws to the client). */
 export const connectionTestResultSchema = v.object({
   ok: v.boolean(),
   /** Human-readable detail — a success hint or the failure reason. */
   message: v.optional(v.string()),
+  /**
+   * Gaps in the config being tested. Independent of `ok`: a warned config still connects, and
+   * the test is the one moment the operator is looking at this backend, so it is where they
+   * find out. Absent/empty ⇒ nothing to report.
+   */
+  warnings: v.optional(v.array(connectionWarningSchema)),
 })
 export type ConnectionTestResult = v.InferOutput<typeof connectionTestResultSchema>
 

@@ -1,4 +1,5 @@
 import {
+  CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
   type RunnerDispatchKind,
   type RunnerJobRef,
@@ -16,7 +17,7 @@ import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 // "(transient infrastructure eviction)" wording is now DESCRIPTIVE context only, no longer
 // regex-classified by any consumer (error-message coverage I5). The Cloudflare-specific
 // "rollout ⇒ transient" mapping lives here, in the facade; the engine stays runtime-neutral.
-const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (transient infrastructure eviction)`
 
 // The default runner transport: a per-RUN Cloudflare Container. One Durable Object

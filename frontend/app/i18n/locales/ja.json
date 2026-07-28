@@ -269,7 +269,7 @@
       "chooseAtRunTime": "実行時に選択",
       "mergePolicy": "リスクポリシー",
       "workspaceDefault": "ワークスペースの既定",
-      "defaultPreset": "既定（{name}）— {thresholds}",
+      "defaultPreset": "既定（{name}）",
       "defaultModelPreset": "既定（{name}）",
       "modelPreset": "モデルプリセット",
       "bestPractices": "ベストプラクティス",
@@ -1003,8 +1003,8 @@
       "unassigned": "未割り当て",
       "workspaceDefault": "ワークスペースの既定",
       "workspaceDefaultParen": "(ワークスペースの既定)",
-      "defaultPresetThresholds": "既定 ({name}): {thresholds}",
-      "defaultPreset": "既定 ({name})",
+      "defaultRiskPolicy": "既定 ({name})",
+      "defaultModelPreset": "既定 ({name})",
       "noDefault": "既定なし",
       "inheritWorkspace": "ワークスペースを継承",
       "on": "オン",
@@ -1020,7 +1020,8 @@
       "pipelineEmpty": "既定なし。このタスクを実行するときにパイプラインを選択してください。",
       "pipelineHint": "実行ボタンが既定で開始するパイプライン: このタスクのために実行されるエージェントステップの並び (例: 仕様、コード、テスト、マージ)。",
       "mergePolicy": "リスクポリシー",
-      "riskPolicyDetail": "{name}: 複雑度 ≤ {complexity}、リスク ≤ {risk}、影響度 ≤ {impact} のとき自動マージ。CI 修正は最大 {attempts} 回まで。",
+      "riskPolicyDetail": "{name}: リスク ≤ {risk}、影響度 ≤ {impact}、複雑度 ≤ {complexity} のとき人のレビューなしでマージ。CI 修正は最大 {attempts} 回まで。",
+      "riskPolicyManual": "{name}: 自動ではマージせず、すべてのプルリクエストが人のレビューを待ちます。CI 修正は最大 {attempts} 回まで。",
       "riskPolicyEmpty": "リスクポリシーが設定されていません。マージャーはすべての PR についてレビュー通知を発行します。",
       "mergePolicyHint": "完成したプルリクエストを人のレビューを待たずに自動マージする条件と、実行が得られる CI 修正の試行回数を決めます。",
       "modelPreset": "モデルプリセット",
@@ -2409,7 +2410,12 @@
       "test": {
         "button": "接続をテスト",
         "ok": "接続 OK",
-        "failed": "接続に失敗しました"
+        "failed": "接続に失敗しました",
+        "warningsTitle": "この設定の不足点",
+        "warnings": {
+          "runner_manifest_no_release": "release テンプレートがありません。実行をキャンセルしてもプールにジョブの停止を伝えられないため、取り残されたジョブはプールが自分で回収するまでランナーを占有し続けます。",
+          "runner_manifest_no_status_path": "ステータスパスがありません。ポーリングは常に実行中と解釈されるため、ジョブは実行のポーリング上限を使い切ることでしか終了できません。"
+        }
       },
       "toast": {
         "saved": "{title} を保存しました",
@@ -3978,6 +3984,7 @@
     "title": "要件レビュー",
     "iteration": "イテレーション {current} / {max}",
     "intro": "AI レビュアーがこの {level} の収集された要件(説明とリンクされた PRD やトラッカーの課題)を検査し、以下の所見を挙げました。関連するものに{answer}し、無関係なものを{dismiss}してから取り込んでください。レビュアーは要件が明確になるまで再レビューします。",
+    "scopeNote": "この段階では製品要件とビジネス要件のみを扱います。つまり、ソフトウェアが何をすべきか、どのようなルールに従うかです。技術選定、アーキテクチャ、データ構造といった技術的な決定は、コードベースを参照できるアーキテクトとリサーチャーのステップで後から行われます。",
     "levelFallback": "項目",
     "answerVerb": "回答",
     "dismissVerb": "却下",
@@ -5043,6 +5050,25 @@
       "toast": {
         "reseedFailed": "リスクポリシーを再シードできませんでした"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "このタスクが独自のポリシーを選んでいないため、これが適用されます。",
+      "noneHint": "リスクポリシーが設定されていません。すべてのプルリクエストは人のレビューを待ちます。"
+    },
+    "preview": {
+      "defaultBadge": "既定",
+      "autoMergeHeading": "自動マージのしきい値",
+      "axis": {
+        "risk": "リスク",
+        "impact": "影響度",
+        "complexity": "複雑度"
+      },
+      "ceiling": "{value} 以下",
+      "autoMergeExplainer": "CI が green になると、マージャーエージェントがプルリクエストをこの 3 軸で採点します。すべての点数が上限以下なら、プルリクエストは人のレビューを飛ばして自動でマージされます。1 つでも上限を超えると、人に回されます。",
+      "manualHeading": "手動レビューのみ",
+      "manualExplainer": "このポリシーは自動でマージしないため、点数にかかわらずすべてのプルリクエストが人のレビューを待ちます。",
+      "ciHeading": "CI 修正",
+      "ciAttempts": "実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。 | 実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。"
     }
   },
   "modelPreset": {

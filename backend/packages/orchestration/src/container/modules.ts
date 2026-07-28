@@ -564,6 +564,7 @@ export function createRunnersModule(deps: CoreDependencies): RunnersModule | und
     workspaceRepository: deps.workspaceRepository,
     secretCipher: runnerSecretCipher,
     clock: deps.clock,
+    logger: deps.logger,
     runnerBackendRegistry: deps.runnerBackendRegistry ?? defaultRunnerBackendRegistry(),
     ...(deps.runnerPoolProvider ? { runnerPoolProvider: deps.runnerPoolProvider } : {}),
     ...(deps.runnerUrlSafetyPolicy ? { urlPolicy: deps.runnerUrlSafetyPolicy } : {}),

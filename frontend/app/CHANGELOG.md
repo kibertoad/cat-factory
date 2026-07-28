@@ -1,5 +1,93 @@
 # @cat-factory/app
 
+## 0.167.1
+
+### Patch Changes
+
+- bead6df: Stop two ways a run could sit wedged with nothing left to move it.
+
+  A self-hosted runner pool that lost a job now says so. A poll that 404s (or 410s), and a scheduler
+  status that names a reclaimed runner (`evicted` / `preempted` / `oomkilled` / `node_lost` / …), are
+  read as the RUNNER going away rather than the job failing, so the step is re-dispatched instead of
+  burning the run's whole ~70-minute poll budget and dying `timeout`. A job-level failure vocabulary
+  (`error` / `cancelled` / `timeout` / …) and a success vocabulary (`completed` / `succeeded` / …)
+  likewise end the poll loop honestly; a status word that matches nothing still keeps the driver
+  waiting, since wrongly killing a live run is the worse mistake. A pool is asked to route stickily
+  by job id, so an eviction recovery now dispatches under a FRESH id (as the deploy path already
+  did) — reusing it would have routed the retry back to the job whose runner just died, making the
+  recovery a no-op for pool-backed runs.
+
+  A manifest that defines no `release` template — or no status path — reports the gap on its
+  connection test in Settings, and logs it once at registration. Each gap crosses the wire as a
+  code, so the SPA renders translated copy rather than backend prose.
+
+  The merge-review and pipeline-complete notifications are now raised BEFORE the block flips to
+  `pr_ready`. Raising second meant that if the card failed to raise, the run failed but the task was
+  already sitting in `pr_ready` with an empty inbox: a PR-ready task with no review action and
+  nothing to re-drive it.
+
+  Breaking for anyone importing them directly: `runnersLogic.mapJobState` is replaced by
+  `runnersLogic.classifyJobStatus`, which returns `{ state, evicted? }`;
+  `runnersLogic.manifestWarnings` and `RunnerBackendProvider.warnings` return
+  `{ code, message }` objects rather than strings. The `(container evicted or crashed)` wording every
+  transport had copied is now kernel's `CONTAINER_EVICTION_ERROR`.
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+
+## 0.167.0
+
+### Minor Changes
+
+- a04f609: Make the requirements-review product-scope boundary visible to both graders and humans.
+
+  The `requirement-review` rubric now carries a `Product scope discipline` dimension (weight 2).
+  Without it neither the Sandbox judge nor `cat-bench` could see the change that confined the stage
+  to the product / business layer: a well-written, well-calibrated _technical_ finding scored fine on
+  every existing axis, since `signal_noise` grades volume rather than layer. `gap_coverage` is
+  narrowed to product-level gaps for the same reason.
+
+  The two hand-kept copies of the rubrics (`@cat-factory/sandbox` and the benchmark harness) are now
+  pinned equal by a conformity test, since a dimension added to one and not the other fails nothing
+  on its own and just makes the two surfaces' scores quietly incomparable.
+
+  The requirements-review window gains a `requirements.scopeNote` line explaining that the stage
+  covers product and business requirements only and that technical decisions are settled later by the
+  Architect and Researcher steps. Without it the absence of technical questions reads as the reviewer
+  having missed something.
+
+## 0.166.0
+
+### Minor Changes
+
+- e8244ff: Give the Risk policy chooser the same master-detail treatment the pipeline chooser has. Each option
+  line now shows only the policy name; hovering it reveals what the policy actually does — the risk,
+  impact and complexity ceilings grouped together under a heading that says they are the thresholds
+  for merging automatically, without a human review — plus the CI-fix budget. The old one-line label
+  crammed all four numbers into every row behind abbreviations ("cx ≤60%"), which is now gone.
+
+  The "workspace default" row previews the default policy rather than a generic hint, since that is
+  what a task picking nothing is actually governed by — as does a task whose chosen policy has since
+  been deleted from the library, which is likewise governed by the default. A policy with auto-merge
+  switched off no longer quotes ceilings that can never apply, on the option preview or the
+  inspector's summary line.
+
+  The detail pane follows keyboard focus as well as the pointer, so moving the numbers off the option
+  line doesn't put them out of reach of anyone driving the list from the keyboard.
+
+  The risk-policy settings editor now lists its score ceilings — and the fork-decision floors below
+  them — in the same risk → impact → complexity order as the picker and the inspector, instead of its
+  own complexity-first one. All three read one exported axis order.
+
+  **Breaking (pre-1.0, no shims):** `inspector.runSettings.defaultPresetThresholds` is removed and
+  `board.addTask.defaultPreset` no longer takes a `{thresholds}` placeholder; a deployment overriding
+  either key in its own locale files must drop the placeholder. `inspector.runSettings.defaultPreset`
+  is split into `defaultRiskPolicy` and `defaultModelPreset` — it labelled both subjects from one
+  string, which no gendered language can do correctly (Polish needs "Domyślna zasada" but "Domyślny
+  preset"); a deployment overriding it must override the two new keys instead. The
+  `~/utils/riskPolicy` helpers `riskPolicySummary` / `riskPolicyOptionLabel` are replaced by
+  `riskPolicyCeilings`.
+
 ## 0.165.0
 
 ### Minor Changes

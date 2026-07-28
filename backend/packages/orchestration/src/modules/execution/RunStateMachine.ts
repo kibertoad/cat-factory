@@ -504,8 +504,16 @@ export class RunStateMachine {
     }
 
     // No merger in this pipeline: complete but unmerged — ask a human to confirm.
-    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
+    // The card is raised BEFORE the block flips, for the same reason as `MergeResolver`'s
+    // review path: the card is the only actionable prompt (nothing re-drives a confirm-and-merge
+    // and the sweepers never see a settled run), so a raise that throws must not leave behind a
+    // `pr_ready` block that looks finished-and-waiting with an empty inbox. The flip is
+    // deliberately OUTSIDE the raise helper (which no-ops when no notification service is
+    // wired): a deployment running without notifications must still finish its blocks.
+    // Re-raising on a driver replay is safe — `NotificationService.raise` de-dupes the open
+    // card on (workspace, block, type) — so this ordering costs no duplicate inbox entry.
     await this.raisePipelineComplete(workspaceId, instance, block)
+    await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
   }
 
   private async raisePipelineComplete(

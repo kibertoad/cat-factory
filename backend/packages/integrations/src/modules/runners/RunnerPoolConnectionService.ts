@@ -1,4 +1,5 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
@@ -50,6 +51,8 @@ export interface RunnerPoolConnectionServiceDependencies {
   runnerPoolProvider?: RunnerPoolProvider
   /** The app-owned registry resolving a stored backend `kind` to its provider. */
   runnerBackendRegistry: RunnerBackendRegistry
+  /** Optional so the service stays unit-testable standalone; every facade wires the real one. */
+  logger?: Logger
 }
 
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
@@ -60,7 +63,11 @@ export interface ResolvedRunnerBackend {
 }
 
 export class RunnerPoolConnectionService {
-  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** The per-call context a backend provider needs to build/test a transport. */
   private context(resolveSecret: (key: string) => string | undefined) {
@@ -117,6 +124,19 @@ export class RunnerPoolConnectionService {
       deletedAt: null,
     }
     await this.deps.runnerPoolConnectionRepository.upsert(record)
+    // Each gap the provider reports costs a recovery/cleanup path that is otherwise invisible
+    // until an incident (a release-less manifest leaks a runner on every cancelled run). Log it
+    // at REGISTRATION rather than per dispatch, where `resolve()` would re-emit the same line
+    // for every job. This is the deployment-operator's copy; the person who pasted the config
+    // sees the same gaps on their connection test, which is the surface they are looking at.
+    for (const warning of provider.warnings?.(config) ?? []) {
+      this.log.warn(`Runner backend registered with a gap: ${warning.message}`, {
+        workspaceId,
+        kind: config.kind,
+        providerId: meta.providerId,
+        warning: warning.code,
+      })
+    }
     return this.toConnection(record, Object.keys(input.secrets))
   }
 
@@ -217,20 +237,31 @@ export class RunnerPoolConnectionService {
     }
   }
 
-  /** Probe a candidate backend connection before saving (nothing is persisted). */
+  /**
+   * Probe a candidate backend connection before saving (nothing is persisted), and report the
+   * config's non-fatal gaps alongside the probe.
+   *
+   * The gaps ride the test rather than a surface of their own because this is the one moment
+   * the operator is looking at THIS config, and they are the same person who can fix it. They
+   * are independent of `ok`: a manifest with no `release` template connects perfectly well and
+   * still leaks a runner on every cancelled run.
+   */
   async testConnection(
     workspaceId: string,
     input: TestRunnerPoolConnectionInput,
   ): Promise<ConnectionTestResult> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     if (!input.config) return { ok: true, message: 'Nothing to test.' }
-    const provider = this.provider(input.config.kind)
-    provider.assertConfigSafe(input.config, this.safetyOptions())
+    const config = input.config
+    const provider = this.provider(config.kind)
+    provider.assertConfigSafe(config, this.safetyOptions())
     const secrets = input.secrets ?? {}
-    return provider.testConnection(
-      input.config,
+    const result = await provider.testConnection(
+      config,
       this.context((key) => secrets[key]),
     )
+    const warnings = provider.warnings?.(config) ?? []
+    return warnings.length ? { ...result, warnings } : result
   }
 
   /** The workspace's current connection (safe metadata), or null. */
