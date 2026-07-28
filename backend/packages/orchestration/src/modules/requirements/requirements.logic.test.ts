@@ -131,6 +131,32 @@ describe('buildReviewPrompt', () => {
     })
     expect(prompt).toContain('autoAnswerable')
   })
+
+  // The scope boundary is stated in the system prompt, but the user prompt is what lands LAST
+  // in the model's context and carries the output contract, so it restates the boundary there —
+  // including the escape hatch a model reaches for otherwise: keeping a technical question by
+  // downgrading its severity.
+  it('confines findings to the product / business layer and names who owns the rest', () => {
+    const prompt = buildReviewPrompt({
+      block: { title: 'T', type: 'service', description: 'do a thing' },
+      docs: [],
+      tasks: [],
+    })
+    expect(prompt).toContain('Every item must be a PRODUCT / BUSINESS question')
+    expect(prompt).toContain('Do NOT raise technical design questions')
+    expect(prompt).toContain('The Architect and Researcher steps own those')
+    expect(prompt).toContain('do not downgrade its severity to squeeze it in')
+  })
+
+  it('accepts an empty result for purely technical work', () => {
+    const prompt = buildReviewPrompt({
+      block: { title: 'T', type: 'service', description: 'do a thing' },
+      docs: [],
+      tasks: [],
+    })
+    expect(prompt).toContain('the work is purely technical')
+    expect(prompt).toContain('return an empty items array')
+  })
 })
 
 describe('coerceReviewItems', () => {

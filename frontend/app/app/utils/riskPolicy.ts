@@ -1,21 +1,42 @@
 import type { RiskPolicy } from '~/types/merge'
 
 /**
- * A compact one-line summary of a merge preset's auto-merge ceilings + CI-fix budget,
- * suitable for a dropdown option label so the user sees each preset's actual thresholds
- * (not just its name) while choosing one. Percentages are the stored 0..1 ratios
- * rendered as whole percents.
+ * The three axes a `merger` agent scores a pull request on. Presentation order is
+ * risk → impact → complexity: what the PR could break first, then how far it reaches, then
+ * how hard it was to write.
+ *
+ * This array IS the order — every surface that shows the three axes iterates it rather than
+ * hard-coding a sequence, so the picker's preview, the inspector's summary line and the
+ * settings editor cannot drift into three different orders (which is exactly what they had).
  */
-export function riskPolicySummary(p: RiskPolicy): string {
-  // Auto-merge disabled: the thresholds don't apply, every PR goes to human review.
-  if (!p.autoMergeEnabled) return `manual review only · ${p.ciMaxAttempts} CI fixes`
-  const pct = (n: number) => `${Math.round(n * 100)}%`
-  return `cx ≤${pct(p.maxComplexity)} · risk ≤${pct(p.maxRisk)} · impact ≤${pct(
-    p.maxImpact,
-  )} · ${p.ciMaxAttempts} CI fixes`
+export const RISK_POLICY_AXES = ['risk', 'impact', 'complexity'] as const
+
+export type RiskPolicyAxis = (typeof RISK_POLICY_AXES)[number]
+
+/**
+ * Which `RiskPolicy` field carries each axis's auto-merge ceiling. Exhaustive over the axis
+ * union, so adding an axis fails the typecheck here rather than silently rendering two.
+ */
+export const RISK_POLICY_CEILING_FIELD: Record<
+  RiskPolicyAxis,
+  'maxRisk' | 'maxImpact' | 'maxComplexity'
+> = {
+  risk: 'maxRisk',
+  impact: 'maxImpact',
+  complexity: 'maxComplexity',
 }
 
-/** The preset name followed by its thresholds, for a single-line dropdown option. */
-export function riskPolicyOptionLabel(p: RiskPolicy): string {
-  return `${p.name} — ${riskPolicySummary(p)}`
+/** One axis of a policy, with the ceiling a score must stay at or below to auto-merge. */
+export interface RiskPolicyCeiling {
+  axis: RiskPolicyAxis
+  /** The stored 0..1 ratio. Render it through the `percent` number format, never raw. */
+  max: number
+}
+
+/**
+ * A policy's auto-merge ceilings, one entry per axis in presentation order, so every
+ * surface that explains a policy groups the three axes the same way.
+ */
+export function riskPolicyCeilings(p: RiskPolicy): RiskPolicyCeiling[] {
+  return RISK_POLICY_AXES.map((axis) => ({ axis, max: p[RISK_POLICY_CEILING_FIELD[axis]] }))
 }

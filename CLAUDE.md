@@ -701,6 +701,17 @@ The FIRST step of the default pipelines, handled inline in the engine (not a con
 reviewer inspects a block's collected requirements and raises severity-tagged findings; the run
 parks and the dedicated window drives an iterative loop until convergence.
 
+**This stage settles the PRODUCT / BUSINESS layer ONLY** — what the software must do, the rules
+that govern it, and business-level quality expressed as an outcome. The technical layer belongs to
+the later `architect` and `researcher` steps, which refine it with the repository and the in-repo
+`tech-spec/` in hand. A technical finding here is not a bonus: it asks a product owner something
+they cannot answer and buries the questions only they can, which is what stalls the loop. The
+boundary is ONE shared `PRODUCT_SCOPE_BOUNDARY` block folded into all THREE prompts of the flow
+(`prompts/requirements.ts` — reviewer, incorporation editor, Requirement Writer) plus the matching
+user prompts in `requirements.logic.ts`, because it only holds if every agent honours it: an editor
+that writes a design into the incorporated document undoes a reviewer that stayed product-level.
+Editing any of them means bumping its number in `kinds/versions.ts`.
+
 1. Findings raised; the human answers or dismisses each.
 2. An incorporation companion folds answers into ONE standard-format document (status `merged`).
 3. Re-review runs against that document (`iteration++`): converges (`incorporated`, run advances),

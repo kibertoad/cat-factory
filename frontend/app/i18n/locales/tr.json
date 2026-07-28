@@ -269,7 +269,7 @@
       "chooseAtRunTime": "Çalıştırma sırasında seç",
       "mergePolicy": "Risk ilkesi",
       "workspaceDefault": "Çalışma alanı varsayılanı",
-      "defaultPreset": "Varsayılan ({name}) — {thresholds}",
+      "defaultPreset": "Varsayılan ({name})",
       "defaultModelPreset": "Varsayılan ({name})",
       "modelPreset": "Model ön ayarı",
       "bestPractices": "En iyi uygulamalar",
@@ -1003,8 +1003,8 @@
       "unassigned": "Atanmamış",
       "workspaceDefault": "Çalışma alanı varsayılanı",
       "workspaceDefaultParen": "(çalışma alanı varsayılanı)",
-      "defaultPresetThresholds": "Varsayılan ({name}): {thresholds}",
-      "defaultPreset": "Varsayılan ({name})",
+      "defaultRiskPolicy": "Varsayılan ({name})",
+      "defaultModelPreset": "Varsayılan ({name})",
       "noDefault": "Varsayılan yok",
       "inheritWorkspace": "Çalışma alanından devral",
       "on": "Açık",
@@ -1020,7 +1020,8 @@
       "pipelineEmpty": "Varsayılan yok. Bu görevi çalıştırırken bir pipeline seçin.",
       "pipelineHint": "Çalıştır düğmesinin varsayılan olarak başlattığı pipeline: bu görev için yürütülen ajan adımları dizisi (örneğin spesifikasyon, kod, test, birleştirme).",
       "mergePolicy": "Risk ilkesi",
-      "riskPolicyDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
+      "riskPolicyDetail": "{name}: risk ≤ {risk}, etki ≤ {impact} ve karmaşıklık ≤ {complexity} olduğunda insan incelemesi olmadan birleştirir; en fazla {attempts} CI düzeltme denemesi.",
+      "riskPolicyManual": "{name}: asla kendiliğinden birleştirmez, bu yüzden her pull request insan incelemesini bekler; en fazla {attempts} CI düzeltme denemesi.",
       "riskPolicyEmpty": "Yapılandırılmış risk ilkesi yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
       "mergePolicyHint": "Tamamlanan bir pull request'in insan incelemesi beklemeden ne zaman otomatik birleştirileceğini ve bir çalıştırmanın kaç CI düzeltme denemesi alacağını belirler.",
       "modelPreset": "Model ön ayarı",
@@ -3966,6 +3967,7 @@
     "title": "Gereksinim incelemesi",
     "iteration": "Yineleme {current} / {max}",
     "intro": "Bir AI incelemecisi bu {level} öğesinin toplanan gereksinimlerini — açıklamasını ve bağlı PRD'leri ile izleyici sorunlarını — inceledi ve aşağıdaki bulguları ortaya çıkardı. İlgili olanları {answer}, ilgisiz olanları {dismiss}, ardından bunları dahil edin; incelemeci, gereksinimler netleşene kadar yeniden inceler.",
+    "scopeNote": "Bu aşama yalnızca ürün ve iş gereksinimlerini kapsar: yazılımın ne yapması gerektiğini ve onu yöneten kuralları. Teknoloji seçimi, mimari ve veri yapıları gibi teknik kararlar daha sonra, kod tabanına erişimi olan Mimar ve Araştırmacı adımlarında verilir.",
     "levelFallback": "öğe",
     "answerVerb": "Yanıtlayın",
     "dismissVerb": "yok sayın",
@@ -5031,6 +5033,25 @@
       "toast": {
         "reseedFailed": "Risk ilkesi yeniden tohumlanamadı"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Bu görev kendine bir ilke seçmediği için uygulanır.",
+      "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler."
+    },
+    "preview": {
+      "defaultBadge": "Varsayılan",
+      "autoMergeHeading": "Otomatik birleştirme eşikleri",
+      "axis": {
+        "risk": "Risk",
+        "impact": "Etki",
+        "complexity": "Karmaşıklık"
+      },
+      "ceiling": "{value} ve altı",
+      "autoMergeExplainer": "CI yeşile döndüğünde birleştirici ajan pull request'i bu üç eksende puanlar. Her puan kendi tavanında veya altındaysa pull request kendiliğinden birleşir ve insan incelemesini atlar; tavanı aşan her puan onu bir kişiye yönlendirir.",
+      "manualHeading": "Yalnızca elle inceleme",
+      "manualExplainer": "Bu ilke asla kendiliğinden birleştirmez, bu yüzden puanı ne olursa olsun her pull request insan incelemesini bekler.",
+      "ciHeading": "CI düzeltmeleri",
+      "ciAttempts": "Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir. | Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir."
     }
   },
   "modelPreset": {

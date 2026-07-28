@@ -36,9 +36,12 @@ export interface VersionedPrompt {
 
 /** The currently-shipping version of each numbered prompt. */
 export const PROMPT_VERSIONS = {
-  'requirement-review': { id: 'requirement-review', version: 3, text: REVIEW_SYSTEM_PROMPT },
-  'requirement-rework': { id: 'requirement-rework', version: 2, text: REWORK_SYSTEM_PROMPT },
-  'requirement-writer': { id: 'requirement-writer', version: 2, text: WRITER_SYSTEM_PROMPT },
+  // v4 / v3 / v3: all three carry the shared `PRODUCT_SCOPE_BOUNDARY` — requirements review
+  // settles the product/business layer only, and the technical layer is the Architect's and
+  // Researcher's. Bumped together because the boundary only holds if all three honour it.
+  'requirement-review': { id: 'requirement-review', version: 4, text: REVIEW_SYSTEM_PROMPT },
+  'requirement-rework': { id: 'requirement-rework', version: 3, text: REWORK_SYSTEM_PROMPT },
+  'requirement-writer': { id: 'requirement-writer', version: 3, text: WRITER_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },
   'clarity-rework': { id: 'clarity-rework', version: 1, text: CLARITY_REWORK_SYSTEM_PROMPT },
   'requirements-brainstorm': {
