@@ -1,5 +1,13 @@
 # @cat-factory/gitlab
 
+## 0.13.18
+
+### Patch Changes
+
+- Updated dependencies [cf2779a]
+  - @cat-factory/contracts@0.177.0
+  - @cat-factory/kernel@0.170.0
+
 ## 0.13.17
 
 ### Patch Changes
