@@ -27,6 +27,8 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     model: 'claude',
     createdAt: 1000,
     streaming: false,
+    phase: 'agent',
+    turnIndex: 4,
     messageCount: 3,
     toolCount: 2,
     requestMaxTokens: 4096,
@@ -76,6 +78,23 @@ describe('SqliteLlmCallMetricRepository', () => {
     await store.llmCallMetricRepository.record(metric({ streaming: true, ok: false }))
     const [row] = await store.llmCallMetricRepository.listByExecution('ws_1', 'exec_1')
     expect(row).toEqual(metric({ streaming: true, ok: false }))
+  })
+
+  // The phase/turn axes specifically, because a column this store's DDL never grew is invisible:
+  // the recorders are best-effort, so a mothership-mode node would just report every call as
+  // unattributed while the other two runtimes group the same run by phase.
+  it('round-trips the phase axis, and keeps a proxy call’s absent turn index null', async () => {
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'c1', phase: 'validation-repair', turnIndex: 2 }))
+    // The unattributed slice ('') and a proxy row with no job-scoped counter: both are REAL
+    // values here, never a reason to drop or fake the row.
+    await repo.record(metric({ id: 'c2', createdAt: 2000, phase: '', turnIndex: null }))
+
+    const byId = new Map((await repo.listByExecution('ws_1', 'exec_1')).map((m) => [m.id, m]))
+    expect(byId.get('c1')?.phase).toBe('validation-repair')
+    expect(byId.get('c1')?.turnIndex).toBe(2)
+    expect(byId.get('c2')?.phase).toBe('')
+    expect(byId.get('c2')?.turnIndex).toBeNull()
   })
 
   it('lists newest first, honours the limit, and narrows by agent kind in SQL', async () => {

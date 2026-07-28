@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS llm_call_metrics (
   model TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   streaming INTEGER NOT NULL DEFAULT 0,
+  -- The phase/turn axes, mirroring D1 telemetry migration 0004. phase defaults to the empty
+  -- string (the unattributed slice is a REAL group in the rollup, never a dropped row) and
+  -- turn_index is nullable on purpose: it is the harness job-scoped seq, and the proxy path has
+  -- no such counter — a 0 would read as "the first turn" and sort every proxied call to the front.
+  phase TEXT NOT NULL DEFAULT '',
+  turn_index INTEGER,
   message_count INTEGER NOT NULL DEFAULT 0,
   tool_count INTEGER NOT NULL DEFAULT 0,
   request_max_tokens INTEGER,
@@ -175,6 +181,8 @@ interface MetricRow {
   model: string
   created_at: number
   streaming: number
+  phase: string
+  turn_index: number | null
   message_count: number
   tool_count: number
   request_max_tokens: number | null
@@ -207,6 +215,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     model: row.model,
     createdAt: row.created_at,
     streaming: row.streaming === 1,
+    phase: row.phase,
+    turnIndex: row.turn_index,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -245,12 +255,12 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
       .prepare(
         `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
-            streaming, message_count, tool_count, request_max_tokens,
+            streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
             prompt_tokens, cache_read_tokens, cache_write_tokens, completion_tokens,
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .run(
@@ -262,6 +272,8 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.model,
         metric.createdAt,
         metric.streaming ? 1 : 0,
+        metric.phase,
+        metric.turnIndex,
         metric.messageCount,
         metric.toolCount,
         metric.requestMaxTokens,
