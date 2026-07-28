@@ -1285,7 +1285,7 @@
     },
     "execution": {
       "title": "Ausführung",
-      "hint": "Der Live-Lauf der Pipeline dieser Aufgabe: jeder Agent-Schritt, sein Fortschritt und der resultierende Pull Request.",
+      "hint": "Der Live-Lauf der Pipeline: jeder Agent-Schritt, sein Fortschritt und der resultierende Pull Request.",
       "stage": {
         "incorporating": "Wird eingearbeitet…",
         "reviewing": "Wird erneut geprüft…",
@@ -1310,10 +1310,10 @@
       "stop": "Stoppen",
       "stopTooltip": "Den Lauf stoppen, aber behalten (lesbar und wiederholbar)",
       "reset": "Zurücksetzen",
-      "resetTooltip": "Diesen Lauf verwerfen und die Aufgabe auf geplant zurücksetzen",
+      "resetTooltip": "Diesen Lauf verwerfen und den Status auf geplant zurücksetzen",
       "resetConfirm": {
         "title": "Diesen Lauf verwerfen?",
-        "body": "Dies löscht den Lauf und setzt die Aufgabe auf geplant zurück. Dies kann nicht rückgängig gemacht werden.",
+        "body": "Dies löscht den Lauf und setzt den Status auf geplant zurück. Dies kann nicht rückgängig gemacht werden.",
         "confirm": "Lauf verwerfen"
       },
       "mergeConfirm": {
@@ -1648,6 +1648,7 @@
       "deleteRecurringPipeline": "Wiederkehrende Pipeline löschen",
       "deleteTask": "Aufgabe löschen",
       "deleteModule": "Modul löschen",
+      "deleteInitiative": "Initiative löschen",
       "deleteService": "Service löschen",
       "confirmDelete": {
         "task": {
@@ -1657,6 +1658,10 @@
         "module": {
           "title": "Dieses Modul löschen?",
           "body": "\"{name}\" und alles darin wird entfernt. Dies kann nicht rückgängig gemacht werden."
+        },
+        "initiative": {
+          "title": "Diese Initiative löschen?",
+          "body": "\"{name}\" und ihr Plan werden entfernt. Bereits erstellte Aufgaben bleiben auf dem Board. Dies kann nicht rückgängig gemacht werden."
         },
         "service": {
           "title": "Diesen Service löschen?",
@@ -4258,6 +4263,8 @@
       "unanswered": "Unbeantwortete Fragen: {count}",
       "proceed": "Jetzt planen",
       "proceedTitle": "Die restlichen Fragen überspringen und den Plan jetzt entwerfen",
+      "discard": "Lauf verwerfen",
+      "discardTitle": "Den blockierten Planungslauf verwerfen, um die Planung neu zu starten",
       "continue": "Antworten senden",
       "continueTitle": "Ihre Antworten senden; der Planer stellt möglicherweise Rückfragen"
     },

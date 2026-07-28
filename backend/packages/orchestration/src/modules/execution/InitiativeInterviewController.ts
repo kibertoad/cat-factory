@@ -19,8 +19,12 @@ import {
 // inherited) — but ENTITY-NATIVE: the questions / answers / synthesized brief live directly on the
 // `initiatives` entity (its `qa` + `interview` + goal/constraints/nonGoals fields) via
 // InitiativeService's CAS `mutate`, not in a parallel session table. The interviewer LLM lives in
-// InitiativeInterviewService. Because the initiative entity's own lifecycle isolates runs, this
-// gate needs no per-run reset hook (contrast the document interviewer).
+// InitiativeInterviewService.
+//
+// The entity OUTLIVES any one run (an initiative block is re-plannable), so this gate DOES need the
+// spine's per-run reset hook: without it a re-run resumes the previous run's round counter and its
+// still-pending questions, which is how a wedged planning run stayed wedged — a run that burned its
+// rounds force-converges on its very first pass, so re-running never asks the human anything again.
 // ---------------------------------------------------------------------------
 
 export interface InitiativeInterviewControllerDeps extends InterviewGateDeps {
@@ -37,6 +41,13 @@ function initiativeInterviewKind(
     agentKind: INITIATIVE_INTERVIEWER_AGENT_KIND,
     entityName: 'Initiative',
     enabled: () => !!interviewService?.enabled,
+    // Runs on every FRESH entry — including when no interviewer is wired — so a stale brief from an
+    // earlier wired run can't bleed into the analyst/planner. The answered + dismissed digest (the
+    // preset form's seeded exchanges among it) survives; only the round bookkeeping and the last
+    // run's unanswered questions go.
+    async resetForFreshRun(workspaceId, blockId) {
+      await initiativeService.resetInterview(workspaceId, blockId)
+    },
     async runPass(workspaceId, _instance, block, opts) {
       const initiative = interviewService
         ? await initiativeService.getByBlock(workspaceId, block.id)

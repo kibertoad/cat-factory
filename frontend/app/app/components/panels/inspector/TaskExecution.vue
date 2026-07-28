@@ -192,26 +192,11 @@ async function stopRun() {
     stopping.value = false
   }
 }
-const resetting = ref(false)
-async function resetRun() {
-  if (resetting.value) return
-  // Destructive: discards the run and returns the task to planned — gate it behind a confirm,
-  // matching the confirm-then-mutate contract the board delete path uses.
-  const ok = await confirm({
-    title: t('inspector.execution.resetConfirm.title'),
-    description: t('inspector.execution.resetConfirm.body'),
-    variant: 'destructive',
-    confirmLabel: t('inspector.execution.resetConfirm.confirm'),
-    icon: 'i-lucide-trash-2',
-  })
-  if (!ok) return
-  resetting.value = true
-  try {
-    await execution.cancel(props.block.id)
-  } finally {
-    resetting.value = false
-  }
-}
+// Destructive: discards the run and returns the block to planned, behind a confirm. Shared with
+// the initiative planning window (which offers the same escape hatch in place) so the two can't
+// drift on the prompt or on what "discard" means.
+const { resetting, resetRun: discardRun } = useRunReset()
+const resetRun = () => discardRun(props.block.id)
 
 /**
  * The reviewer-effort tag for this merge, preselected from evidence rather than starting blank: if
