@@ -245,6 +245,15 @@ export interface FakeAgentOptions {
    */
   ralphPassOnIteration?: number
   /**
+   * Ralph loop: the 1-based iteration from which the loop stops COMMITTING — it and every later
+   * iteration report the head the iteration BEFORE it left, the deterministic analogue of a
+   * harness whose agent produced no commit. The engine must then end the loop early (`stalled`)
+   * rather than spending the rest of its iteration budget; the guard needs two consecutive
+   * unchanged heads, so the loop stops one iteration after this. Absent ⇒ every iteration moves
+   * the head, so only the budget can end a never-passing loop.
+   */
+  ralphStalledFromIteration?: number
+  /**
    * The effort self-assessment every result carries (the deterministic analogue of the harness
    * reading the agent's `.cat-effort.json` sentinel file). Set it to assert the engine records
    * the report on the step — including on the kinds whose verdict drives run flow and therefore
@@ -652,6 +661,16 @@ export class FakeAgentExecutor implements AgentExecutor {
   private runRalphKind(context: AgentRunContext): AgentRunResult {
     const iteration = context.ralphValidation?.iteration ?? 1
     const passed = iteration >= (this.options.ralphPassOnIteration ?? 1)
+    // The work-branch head the harness reports the validation ran against. Distinct per
+    // iteration by default (the agent committed something). From `ralphStalledFromIteration` on
+    // it is pinned to what the iteration BEFORE it reported, so that iteration is itself the
+    // first one to commit nothing — and the engine's no-progress guard must fire one iteration
+    // later, when the second consecutive unchanged head arrives.
+    const stallFrom = this.options.ralphStalledFromIteration
+    const headSha =
+      stallFrom !== undefined && iteration >= stallFrom
+        ? `sha-iter-${stallFrom - 1}`
+        : `sha-iter-${iteration}`
     return {
       output: `[ralph] iteration ${iteration} — ${passed ? 'validation passed' : 'validation failed'}`,
       model: 'fake',
@@ -660,6 +679,7 @@ export class FakeAgentExecutor implements AgentExecutor {
         exitCode: passed ? 0 : 1,
         ...(passed ? {} : { validationOutputTail: 'fake: 1 check still failing' }),
         iteration,
+        headSha,
       },
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
       ...this.usageFields(),

@@ -14,7 +14,15 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { decideRalphNext, describeRalphVerdict, RALPH_AGENT_KIND } from './ralph.logic.js'
+import {
+  appendRalphAttempt,
+  decideRalphNext,
+  describeRalphVerdict,
+  lastRecordedHeadSha,
+  nextNoProgressStreak,
+  RALPH_AGENT_KIND,
+  RALPH_NO_PROGRESS_LIMIT,
+} from './ralph.logic.js'
 import { recordDispatchAttribution } from './step-fold.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
@@ -78,6 +86,14 @@ export class RalphController {
       }
     }
 
+    // Fold the no-progress streak BEFORE the log is appended, while the previous iteration's
+    // head is still the last recorded one — the whole comparison is "did the head move since
+    // the pass before this one".
+    step.ralph.noProgressStreak = nextNoProgressStreak(
+      step.ralph,
+      verdict,
+      lastRecordedHeadSha(step.ralph),
+    )
     // Count this finished iteration and record it in the inspectable history.
     step.ralph.attempts += 1
     step.ralph.phase = 'iterating'
@@ -107,8 +123,11 @@ export class RalphController {
       return this.dispatchIteration(workspaceId, instance, step, block, verdict)
     }
 
-    // Budget spent (or no async executor to iterate with): give up for human attention.
-    return this.failRalph(workspaceId, instance, step, block, verdict)
+    // Budget spent, the loop stalled, or no async executor to iterate with: give up for human
+    // attention. `stalled` is reported distinctly — "nothing changed for N iterations" is a
+    // different problem from "the budget was not enough", and only one of them is fixed by
+    // raising the budget.
+    return this.failRalph(workspaceId, instance, step, block, verdict, decision === 'stalled')
   }
 
   /**
@@ -179,14 +198,24 @@ export class RalphController {
       ...(verdict ? { exitCode: verdict.exitCode } : {}),
       ...(verdict?.validationOutputTail ? { outputTail: verdict.validationOutputTail } : {}),
       ...(output ? { summary: output } : {}),
+      ...(verdict?.headSha ? { headSha: verdict.headSha } : {}),
     }
-    step.ralph.attemptLog = [...(step.ralph.attemptLog ?? []), entry]
+    // Capped: the log rides the run's `detail` blob, re-serialized on every progress write.
+    const { attemptLog, droppedAttempts } = appendRalphAttempt(step.ralph, entry)
+    step.ralph.attemptLog = attemptLog
+    if (droppedAttempts > 0) step.ralph.droppedAttempts = droppedAttempts
   }
 
   /**
-   * Give up on a ralph loop whose completion command never passed within its budget. Records the
-   * outcome on the step (left un-`done`, like the CI/Tester gates), raises a human-actionable
-   * notification, and fails the run so the block lands `blocked` for a human to take over.
+   * Give up on a ralph loop that will not finish: its completion command never passed within the
+   * budget, or (`stalled`) it stopped making progress. Records the outcome on the step (left
+   * un-`done`, like the CI/Tester gates), raises a human-actionable notification, and fails the
+   * run so the block lands `blocked` for a human to take over.
+   *
+   * The two causes are reported in DIFFERENT words on purpose. A spent budget is a plausible
+   * "give it more room"; a stall means the agent committed nothing across
+   * {@link RALPH_NO_PROGRESS_LIMIT} consecutive iterations, so more room changes nothing and the
+   * task itself needs a look. Collapsing them into one message sends the human to the wrong fix.
    */
   private async failRalph(
     workspaceId: string,
@@ -194,20 +223,30 @@ export class RalphController {
     step: PipelineStep,
     block: Block | null,
     verdict: RalphVerdict | null,
+    stalled: boolean,
   ): Promise<AdvanceResult> {
     const attempts = step.ralph?.attempts ?? 0
     const detail = describeRalphVerdict(verdict)
-    step.output = `Ralph loop gave up after ${attempts} iteration(s): ${detail}`
+    const cause = stalled
+      ? `stopped making progress after ${attempts} iteration(s) (the last ${RALPH_NO_PROGRESS_LIMIT} left the branch unchanged)`
+      : `gave up after ${attempts} iteration(s)`
+    step.output = `Ralph loop ${cause}: ${detail}`
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     if (this.deps.notificationService && block) {
       await this.deps.notificationService.raise(workspaceId, {
         type: 'decision_required',
         blockId: block.id,
         executionId: instance.id,
-        title: `Ralph loop is still failing for "${block.title}"`,
-        body:
-          `The loop ran ${attempts} iteration(s) but the validation command never passed. ` +
-          `${detail} Take a look at the PR and retry the run once addressed.`,
+        title: stalled
+          ? `Ralph loop stopped making progress for "${block.title}"`
+          : `Ralph loop is still failing for "${block.title}"`,
+        body: stalled
+          ? `The loop ran ${attempts} iteration(s); the last ${RALPH_NO_PROGRESS_LIMIT} committed ` +
+            `nothing and the validation command still fails, so it stopped early rather than ` +
+            `spending the rest of its budget. ${detail} The task or the command likely needs a ` +
+            `change before a retry can help.`
+          : `The loop ran ${attempts} iteration(s) but the validation command never passed. ` +
+            `${detail} Take a look at the PR and retry the run once addressed.`,
         payload: {
           ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
           pipelineName: instance.pipelineName,
@@ -217,7 +256,9 @@ export class RalphController {
     return {
       kind: 'job_failed',
       failureKind: 'agent',
-      error: `Ralph loop did not pass its validation command after ${attempts} iteration(s). ${detail}`,
+      error: stalled
+        ? `Ralph loop stopped making progress after ${attempts} iteration(s) — the last ${RALPH_NO_PROGRESS_LIMIT} left the branch unchanged and the validation command still fails. ${detail}`
+        : `Ralph loop did not pass its validation command after ${attempts} iteration(s). ${detail}`,
       detail: step.output,
     }
   }

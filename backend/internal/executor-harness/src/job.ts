@@ -942,6 +942,12 @@ export interface AgentResult {
     exitCode: number
     validationOutputTail?: string
     iteration?: number
+    /**
+     * The work-branch HEAD the command was judged against. The engine compares it across
+     * consecutive failing iterations to end a loop that has stopped committing anything,
+     * instead of spending the rest of its budget re-learning that. Absent when unreadable.
+     */
+    headSha?: string
   }
   /**
    * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per

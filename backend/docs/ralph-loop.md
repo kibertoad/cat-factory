@@ -19,9 +19,9 @@ cat-factory's seams. The **community learnings** it bakes in:
   append-only progress log the agent maintains (`.cat-factory/ralph-progress.md`), so a
   fresh-context iteration reads what prior iterations tried. The previous iteration's
   validation output is also threaded forward as a prior output.
-- **Anti-runaway guardrails** — a max-iteration budget (default 10), plus the existing spend
-  gate. On exhaustion the loop hands off to a human (a `decision_required` notification), it
-  never loops forever.
+- **Anti-runaway guardrails** — a max-iteration budget (default 10), a **no-progress early
+  abort**, plus the existing spend gate. On either, the loop hands off to a human (a
+  `decision_required` notification); it never loops forever.
 - **The task description is the spec** — no design/spec phases; the loop works the task
   directly.
 
@@ -51,20 +51,50 @@ Flow (`RalphController` + the `ralph-verdict` `StepCompletionInterceptor` in `Ru
    checkout (bounded timeout + redacted output tail) and returns `{ validationPassed, exitCode,
 validationOutputTail }` on `RunnerJobResult.ralphVerdict` → `AgentRunResult.ralphVerdict`.
 3. The `ralph-verdict` interceptor calls `RalphController.resolveRalphResult`: it records the
-   iteration on `step.ralph` (attempts++, attempt log), then `decideRalphNext`:
+   iteration on `step.ralph` (attempts++, attempt log, no-progress streak), then
+   `decideRalphNext`:
    - **pass** → return null → the normal completion finishes + advances the run (the PR flows
      through the pipeline's ship tail).
+   - **stalled** → the loop has stopped making progress; give up early (see below).
    - **fail + budget left** → re-dispatch a fresh iteration (`dispatchIteration`), threading the
      failure output forward; the bumped `attempts` gives the new job a distinct dispatch epoch.
    - **budget spent** → raise a `decision_required` notification, leave the block `blocked`,
      fail the run for a human.
+
+### The no-progress early abort
+
+The iteration budget alone is a poor runaway guard: a loop whose agent commits nothing is
+provably not converging, and every further pass costs a full model run to re-learn that. So the
+harness stamps the work branch's HEAD onto the verdict (`headSha`) and the engine ends the loop
+after `RALPH_NO_PROGRESS_LIMIT` (2) consecutive FAILING iterations against an unchanged head.
+
+- **It fails open.** A verdict with no `headSha` — a self-hosted runner pool on an older harness
+  image, or a head that could not be read — RESETS the streak rather than extending it. A missed
+  stall costs a few iterations the budget still bounds; a false stall kills a loop that was
+  working the whole time.
+- **It is reported distinctly** from a spent budget, in the step output, the notification and
+  the run failure alike, because the two send a human to different fixes: "the budget was not
+  enough" invites raising it, "nothing changed for two iterations" says raising it will not help.
+  The SPA derives the same distinction from the loop having ended SHORT of its budget, so it
+  keeps no copy of the limit.
+
+### Re-running a ralph step
+
+`step.ralph` is the one piece of step state a re-run must neither drop nor keep. Its completion
+command is read at DISPATCH time (it is what puts the `validation` block on the job body), so a
+reset that drops the state leaves the re-run dispatching an ungated one-shot coding pass that
+reports no verdict — the loop silently stops existing. Keeping the state as-is is equally wrong:
+a spent `attempts` sends the re-run's very first verdict straight to `exhausted`. Both reset
+paths (`retry.logic.resetStep` for retry/restart-from-step, `StepGraph.resetStepForRerun` for a
+loop-back) therefore go through `restartRalphState`, which keeps the frozen config and zeroes
+the counters.
 
 `clone: 'pr-or-work'` opens the PR on iteration 1 and amends that same PR branch in place on
 every later iteration, so the loop accretes on one branch/PR.
 
 ## Where things live
 
-- **Contract**: `contracts/src/ralph.ts` — `ralphVerdictSchema` (harness verdict),
+- **Contract**: `contracts/src/ralph.ts` — `ralphVerdictSchema` (harness verdict, incl. `headSha`),
   `ralphStepStateSchema` (`step.ralph`), `ralphAttemptSchema`; `ralph` on `pipelineStepSchema`
   (rides the run's `detail` JSON blob — **no migration, no table**). `'ralph'` added to
   `taskTypeSchema` + `createTaskTypeSchema`. `AgentConfigDescriptor` gained `text`/`number`
@@ -77,10 +107,18 @@ every later iteration, so the loop accretes on one branch/PR.
   `toRunResult` forwards it (`server/src/agents/containerAgentResult.ts`); `jobBody` emits the
   `validation` block.
 - **Harness**: `executor-harness/src/coding-agent.ts` runs the command post-commit
-  (`runRalphValidation`), `job.ts` parses `validation` + carries `ralphVerdict`. Bumped the
-  harness version + the three runner-image pins.
+  (`runRalphValidation`), `job.ts` parses `validation` + carries `ralphVerdict`. The spawn goes
+  through `captured-command.ts`'s `runCapturedCommand` — the ONE seam every harness-run command
+  shares, which is also where the scrub-before-truncate ordering and the wire-tail bound live
+  (`RALPH_VALIDATION_TAIL_CHARS`, 4k, matching the two sibling phases; the tail rides the run's
+  `detail` blob, re-serialized on every progress write). The command is activity-SILENT and the
+  harness spawns it itself, so it feeds the inactivity watchdog on a 30s heartbeat — without
+  which `JOB_INACTIVITY_MS` (10 min), being tighter than the command's own 15-min watchdog,
+  aborts any slower validation as a wedge. Any source change here bumps the harness version +
+  the three runner-image pins.
 - **Engine**: `orchestration/src/modules/execution/ralph.logic.ts` (pure — `resolveRalphConfig`
-  / `seedRalphState` / `buildRalphValidation` / `decideRalphNext`), `RalphController.ts`, the
+  / `seedRalphState` / `restartRalphState` / `buildRalphValidation` / `nextNoProgressStreak` /
+  `decideRalphNext` / `appendRalphAttempt`), `RalphController.ts`, the
   `ralph-verdict` interceptor + `dispatchEpochFor` in `RunDispatcher` / `AgentContextBuilder`,
   and the seed + start-time "needs a validation command" guard in `ExecutionService`.
 - **Frontend**: the `ralph` task type in `AddTaskModal.vue` (auto-selects `pl_ralph`; the
@@ -106,8 +144,6 @@ execution. Output is bounded + secret-redacted before it leaves the container.
 - **CI-green as an alternative criterion** — the completion criterion is the in-container
   command; delegating to CI is a possible future alternative.
 - **A workspace-level default validation command** — per-task only for now.
-- **No-progress early-abort** — v1 relies on the iteration budget as the runaway guard; a
-  "head SHA didn't move" early abort (like the conflicts gate) is a possible refinement.
 - **Playwright e2e** — the loop is covered by the cross-runtime conformance suite + unit
   tests; a live-pushed-UI e2e spec is a follow-up (the result view already carries the
   `data-testid`s it would need).

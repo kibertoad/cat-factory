@@ -5573,6 +5573,7 @@
     "subtitle": "A persistent loop: work the task, run the validation command, and repeat until it passes.",
     "status": {
       "passed": "Passed",
+      "stalled": "Stalled",
       "gaveUp": "Gave up",
       "running": "Running",
       "failing": "Failing"
@@ -5581,7 +5582,9 @@
     "validationCommand": "Validation command",
     "lastOutput": "Latest validation (exit {exit})",
     "viewPr": "View pull request",
+    "stalledNote": "The loop stopped early: consecutive iterations left the branch unchanged and the validation command still fails, so it did not spend the rest of its budget. The task or the validation command likely needs a change before a retry can help.",
     "iterationsHeading": "Iterations",
+    "iterationsTruncated": "{count} earlier iteration is not shown (the history is capped). | {count} earlier iterations are not shown (the history is capped).",
     "iteration": "Iteration {number}",
     "iterationPassed": "validation passed",
     "iterationFailed": "exit {exit}",

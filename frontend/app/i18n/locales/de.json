@@ -5423,6 +5423,7 @@
     "subtitle": "Eine dauerhafte Schleife: Aufgabe bearbeiten, Validierungsbefehl ausführen und wiederholen, bis er erfolgreich ist.",
     "status": {
       "passed": "Bestanden",
+      "stalled": "Blockiert",
       "gaveUp": "Aufgegeben",
       "running": "Läuft",
       "failing": "Fehlgeschlagen"
@@ -5431,7 +5432,9 @@
     "validationCommand": "Validierungsbefehl",
     "lastOutput": "Letzte Validierung (Exit {exit})",
     "viewPr": "Pull Request ansehen",
+    "stalledNote": "Die Schleife wurde vorzeitig beendet: Aufeinanderfolgende Iterationen haben den Branch nicht verändert und der Validierungsbefehl schlägt weiterhin fehl, daher wurde das restliche Budget nicht verbraucht. Wahrscheinlich muss die Aufgabe oder der Validierungsbefehl geändert werden, bevor ein erneuter Versuch hilft.",
     "iterationsHeading": "Iterationen",
+    "iterationsTruncated": "{count} frühere Iteration wird nicht angezeigt (der Verlauf ist begrenzt). | {count} frühere Iterationen werden nicht angezeigt (der Verlauf ist begrenzt).",
     "iteration": "Iteration {number}",
     "iterationPassed": "Validierung bestanden",
     "iterationFailed": "Exit {exit}",

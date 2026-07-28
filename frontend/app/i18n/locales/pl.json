@@ -5411,6 +5411,7 @@
     "subtitle": "Trwała pętla: pracuj nad zadaniem, uruchom polecenie walidacji i powtarzaj, aż się powiedzie.",
     "status": {
       "passed": "Zaliczono",
+      "stalled": "Utknęła",
       "gaveUp": "Poddano się",
       "running": "Działa",
       "failing": "Niepowodzenie"
@@ -5419,7 +5420,9 @@
     "validationCommand": "Polecenie walidacji",
     "lastOutput": "Ostatnia walidacja (kod {exit})",
     "viewPr": "Zobacz pull request",
+    "stalledNote": "Pętla zatrzymała się przedwcześnie: kolejne iteracje nie zmieniły gałęzi, a polecenie walidacji nadal kończy się niepowodzeniem, więc nie zużyła reszty budżetu. Zanim ponowna próba cokolwiek da, prawdopodobnie trzeba zmienić zadanie lub polecenie walidacji.",
     "iterationsHeading": "Iteracje",
+    "iterationsTruncated": "Nie pokazano {count} wcześniejszej iteracji (historia jest ograniczona). | Nie pokazano {count} wcześniejszych iteracji (historia jest ograniczona).",
     "iteration": "Iteracja {number}",
     "iterationPassed": "walidacja zaliczona",
     "iterationFailed": "kod {exit}",

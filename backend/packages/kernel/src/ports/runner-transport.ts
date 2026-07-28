@@ -147,6 +147,13 @@ export interface RunnerJobResult {
     exitCode: number
     validationOutputTail?: string
     iteration?: number
+    /**
+     * The work-branch HEAD the completion command was judged against. The engine compares it
+     * across consecutive failing iterations to end a loop that has stopped committing anything.
+     * Absent for an older harness image, which the engine's check treats as "unknown", never as
+     * "unchanged".
+     */
+    headSha?: string
   }
   /**
    * A coding job's PRE-PR validation report: the outcome of running the service's configured

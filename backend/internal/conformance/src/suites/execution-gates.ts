@@ -751,5 +751,104 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       // A validation error (missing completion criterion) — refused, run never started.
       expect(start.status).toBe(422)
     })
+
+    it('ends a ralph loop early once it stops making progress, short of its budget', async () => {
+      // The fake stops committing from iteration 2 on (each later iteration reports the head
+      // iteration 1 left) while the validation keeps failing. The iteration budget is 8, but
+      // the loop must stop as soon as two consecutive iterations leave the branch unchanged —
+      // the budget alone is a poor runaway guard, since a stuck loop pays a full model run per
+      // pass to re-learn that it is stuck.
+      const app = harness.makeApp({
+        asyncKinds: ['ralph'],
+        ralphPassOnIteration: 99,
+        ralphStalledFromIteration: 2,
+        pullRequest: ralphPr,
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
+        title: 'Ralph stalled',
+        taskType: 'ralph',
+        agentConfig: {
+          'ralph.validationCommand': 'exit 1',
+          'ralph.maxIterations': '8',
+        },
+      })
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Ralph only',
+        agentKinds: ['ralph'],
+      })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+
+      const failed = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const step = failed.steps.find((s) => s.agentKind === 'ralph')!
+      expect(failed.status).toBe('failed')
+      // Iterations 2 and 3 both committed nothing ⇒ stop at 3, well short of the budget of 8.
+      expect(step.ralph?.attempts).toBe(3)
+      expect(step.ralph?.noProgressStreak).toBe(2)
+      // Reported as a stall, not as a spent budget — raising the budget would not help.
+      expect(failed.failure?.message ?? '').toMatch(/stopped making progress/i)
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      expect(snap.blocks.find((b) => b.id === task.body.id)?.status).toBe('blocked')
+    })
+
+    it('re-arms the loop when a ralph run is retried, rather than degrading to one shot', async () => {
+      // A retry rebuilds each resumed step from scratch, which used to DROP `step.ralph`. A
+      // ralph step with no loop state dispatches with no completion command at all, so the
+      // harness runs a plain coding pass, returns no verdict and the loop interceptor never
+      // fires — the step silently finishes as an ungated one-shot coder. The retry must instead
+      // re-seed the loop from its frozen config, with the counters back at zero.
+      const app = harness.makeApp({
+        asyncKinds: ['ralph'],
+        ralphPassOnIteration: 99,
+        pullRequest: ralphPr,
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
+        title: 'Ralph retried',
+        taskType: 'ralph',
+        agentConfig: {
+          'ralph.validationCommand': 'exit 1',
+          'ralph.maxIterations': '2',
+        },
+      })
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Ralph only',
+        agentKinds: ['ralph'],
+      })
+      await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      const failed = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+      expect(failed.status).toBe('failed')
+
+      const retried = await app.call<{ kind: string; run: ExecutionInstance }>(
+        'POST',
+        `/workspaces/${wsId}/agent-runs/${failed.id}/retry`,
+      )
+      expect(retried.status).toBe(201)
+      // The re-armed step carries the SAME frozen config with the counters zeroed, so the
+      // dispatch still folds a completion command in.
+      const armed = retried.body.run.steps.find((s) => s.agentKind === 'ralph')!
+      expect(armed.ralph?.validationCommand).toBe('exit 1')
+      expect(armed.ralph?.maxIterations).toBe(2)
+      expect(armed.ralph?.attempts).toBe(0)
+
+      // Driven to completion the retry loops its full budget again and fails as a ralph loop —
+      // it does not quietly finish after a single ungated pass.
+      const after = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const step = after.steps.find((s) => s.agentKind === 'ralph')!
+      expect(after.status).toBe('failed')
+      expect(step.state).not.toBe('done')
+      expect(step.ralph?.attempts).toBe(2)
+    })
   })
 }

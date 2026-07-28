@@ -36,20 +36,33 @@ const meta = computed(() => agentKindMeta('ralph'))
 
 // Iterations, newest-first for the timeline.
 const attempts = computed(() => [...(ralph.value?.attemptLog ?? [])].reverse())
+// How many earlier iterations the backend's log cap dropped (0 when the history is complete).
+const droppedAttempts = computed(() => ralph.value?.droppedAttempts ?? 0)
 
 /**
  * The display status, rolled up from the persisted loop state + the run status:
  *  - `passed`  — the step finished (the validation command exited 0);
- *  - `gave-up` — the run failed here (the iteration budget was spent);
+ *  - `stalled` — the run failed here BEFORE the budget ran out, because consecutive iterations
+ *                stopped changing the branch;
+ *  - `gave-up` — the run failed here with the iteration budget spent;
  *  - `running` — an iteration is in flight;
  *  - `failing` — the last validation failed and another iteration is about to run.
+ *
+ * The stall is derived from "ended short of the budget" rather than from the streak count, so
+ * the view never has to keep a copy of the engine's no-progress limit in step with it. Telling
+ * the two apart matters: a loop that stopped at 3 of 20 reads as an unexplained give-up
+ * otherwise, and the fix for a stall (change the task or the command) is not the fix for a
+ * spent budget (give it more room).
  */
-type RalphDisplayStatus = 'passed' | 'gave-up' | 'running' | 'failing'
+type RalphDisplayStatus = 'passed' | 'stalled' | 'gave-up' | 'running' | 'failing'
 const status = computed<RalphDisplayStatus>(() => {
   const s = step.value
   if (!s) return 'running'
   if (s.state === 'done') return 'passed'
-  if (instance.value?.status === 'failed') return 'gave-up'
+  if (instance.value?.status === 'failed') {
+    const r = ralph.value
+    return r && r.attempts > 0 && r.attempts < r.maxIterations ? 'stalled' : 'gave-up'
+  }
   if (s.container?.status === 'starting' || s.container?.status === 'up') return 'running'
   return 'failing'
 })
@@ -70,6 +83,12 @@ const STATUS_META = computed<
     badge: 'success',
     icon: 'i-lucide-circle-check',
     text: 'text-emerald-300',
+  },
+  stalled: {
+    label: t('ralph.status.stalled'),
+    badge: 'error',
+    icon: 'i-lucide-circle-slash',
+    text: 'text-rose-300',
   },
   'gave-up': {
     label: t('ralph.status.gaveUp'),
@@ -162,11 +181,30 @@ const STATUS_META = computed<
             <UIcon name="i-lucide-external-link" class="h-3 w-3" />
           </a>
 
+          <!-- Why a loop that stopped short of its budget stopped: without this the count in
+               the sidebar (e.g. "3 of 20") reads as an unexplained abandonment. -->
+          <p
+            v-if="status === 'stalled'"
+            class="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-[12px] leading-relaxed text-rose-200"
+            data-testid="ralph-stalled-note"
+          >
+            {{ t('ralph.stalledNote') }}
+          </p>
+
           <!-- Iteration history: what each pass produced and whether its validation passed. -->
           <section v-if="attempts.length" class="mt-5">
             <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               {{ t('ralph.iterationsHeading') }}
             </h3>
+            <!-- The log is capped (it rides the run's detail blob); say so rather than letting a
+                 long loop's partial history read as if those iterations never ran. -->
+            <p
+              v-if="droppedAttempts"
+              class="mb-2 text-[11px] text-slate-500"
+              data-testid="ralph-iterations-truncated"
+            >
+              {{ t('ralph.iterationsTruncated', { count: droppedAttempts }, droppedAttempts) }}
+            </p>
             <ol class="space-y-2">
               <li
                 v-for="a in attempts"
