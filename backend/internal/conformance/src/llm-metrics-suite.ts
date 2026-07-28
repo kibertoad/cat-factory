@@ -610,6 +610,46 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(whole!.reasoning).toEqual({ text: 'thinking', totalChars: 8 })
     })
 
+    it('carries the phase and turn axes onto a page row and a point read', async () => {
+      // A page projects its own column list rather than reusing the export mapper, so a column
+      // added to `LlmCallMetric` reaches the page only if BOTH repos' page selects gain it. The
+      // failure mode is silent on the wire — a debugging caller sees every call unattributed —
+      // so the axes are pinned on the page shape, not just on `list`/`export`.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({
+          id: `${ws}-a`,
+          workspaceId: ws,
+          executionId: e1,
+          phase: 'validation-repair',
+          turnIndex: 7,
+        }),
+      )
+      // The unattributed slice and a turn-less channel: both are REAL values, never dropped rows.
+      await repo.record(
+        metric({
+          id: `${ws}-b`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 2,
+          phase: '',
+          turnIndex: null,
+        }),
+      )
+
+      const rows = await repo.listPage(ws, { executionId: e1, limit: 10, bodyChars: 0 })
+      const byId = new Map(rows.map((row) => [row.id, row]))
+      expect(byId.get(`${ws}-a`)!.phase).toBe('validation-repair')
+      expect(byId.get(`${ws}-a`)!.turnIndex).toBe(7)
+      expect(byId.get(`${ws}-b`)!.phase).toBe('')
+      expect(byId.get(`${ws}-b`)!.turnIndex).toBeNull()
+
+      const point = await repo.get(ws, `${ws}-a`)
+      expect(point!.phase).toBe('validation-repair')
+      expect(point!.turnIndex).toBe(7)
+    })
+
     it('narrows a page by agent kind and by outcome, in SQL', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

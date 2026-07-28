@@ -5,6 +5,7 @@
 '@cat-factory/server': minor
 '@cat-factory/node-server': minor
 '@cat-factory/worker': minor
+'@cat-factory/local-server': minor
 ---
 
 Add a read-only remote run-debugging API (`/api/v1/debug/*`) so an agent outside the browser can
@@ -23,6 +24,10 @@ reachable (every body slice now also states its `offset`); the call point read's
 parses the stored prompt delta into per-message rows with independent budgets; and the overview
 gains a `failure_outside_model_calls` signal pointing a failed-run-with-clean-calls investigation
 at tool execution, which records no calls of its own.
+
+All four bounded reads land in the local `node:sqlite` telemetry store too, so the surface works
+unchanged in mothership mode, where telemetry is local-first and these pages never cross the machine
+RPC (routing a page over a long run would be exactly the bulk read that bucket exists to forbid).
 
 Compatibility break: `ProvisioningLogQuery.before` (a bare `createdAt` keyset) is replaced by a
 composite `cursor: { createdAt, id }`, and the matching `?before=` query param is removed from

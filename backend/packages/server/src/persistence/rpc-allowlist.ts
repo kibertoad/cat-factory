@@ -522,18 +522,31 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     usageBreakdownForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     // Account/user budget-tier rollups (docs/initiatives/tiered-budgets.md), read on the spend
     // gate + the snapshot. Account-scoped and self-user-scoped respectively, mirroring the
-    // account read + the per-user settings read above. (Metered WRITEs — `record` — stay out of
-    // the allow-list like all high-volume telemetry writes.)
+    // account read + the per-user settings read above.
     totalsSinceForAccount: { scope: { kind: 'account', arg: 0 } },
     totalsSinceForUser: { scope: { kind: 'selfUser', arg: 0 } },
+    // The spend LEDGER WRITE. This is the one repository that looks like telemetry and is not:
+    // it is the org's BUDGET SAFEGUARD, and the three rollups above — which the spend gate reads
+    // REMOTELY before every run — sum exactly these rows. Keeping the write laptop-local (the
+    // rest of the telemetry bucket's home, PR 5) would make every local run invisible to the
+    // workspace/account/user budget it must answer to, so the gate would under-enforce until a
+    // batch sync caught up. One small row per metered call, no bodies.
+    //
+    // `usageRecord` — NOT the plain `workspaceField` rule — because the row carries the
+    // DENORMALIZED `accountId`/`userId` the account- and user-tier rollups read directly: bound
+    // on `workspaceId` alone, an in-scope node could stamp another account's id onto its rows and
+    // exhaust that account's budget (pausing its runs) without ever touching its workspaces. The
+    // rule pins both to what the caller already is.
+    record: { scope: { kind: 'usageRecord', arg: 0 } },
   },
-  // Telemetry is local-first by design (Phase 5), but two READS are on the synchronous run
-  // path before that batch-sync lands — the kaizen grading step summarises an execution's LLM
-  // calls. Until Phase 5 they resolve against the mothership's telemetry store. High-volume
-  // telemetry WRITES (`record`) stay out of the allow-list — they must never hit the RPC.
-  llmCallMetricRepository: {
-    summarizeByExecution: { scope: { kind: 'workspace', arg: 0 } },
-  },
+  // The rest of the telemetry bucket is LOCAL-FIRST (docs/initiatives/mothership-mode.md, PR 5):
+  // a mothership-mode node writes and reads its per-call LLM metrics, agent-context snapshots,
+  // performed web searches, provisioning log and modeled quota cycles in its own `node:sqlite`
+  // telemetry store, so NONE of those repositories is remotely callable. `summarizeByExecution`
+  // used to be the one exception — a run-path stopgap resolving against the MOTHERSHIP's
+  // telemetry store, which on a mothership-mode node is empty of that node's calls, so it could
+  // only ever report zeros; the local store now serves it, and the entry is gone rather than
+  // left as dead surface.
   // Kaizen grading (the merge lifecycle's quality step) reads its prior grade for a step before
   // (re-)grading and writes the result. Both are workspace-scoped on arg0; the sweeper methods
   // (`listPending`/`claim`) stay mothership-internal.
@@ -920,3 +933,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'account', arg: 0 } },
   },
 }
+
+/**
+ * The repositories a mothership-mode node serves from its OWN store instead of the RPC: the
+ * LOCAL-FIRST telemetry bucket (docs/initiatives/mothership-mode.md, product decision 5). They are
+ * written on the hot path of every LLM call, container dispatch, web search and provisioning
+ * attempt — a per-call network round trip there would be a tax on every run — and read back by the
+ * observability panel, the board's per-step rollups and the provisioning "View logs" surfaces,
+ * which want THIS machine's history.
+ *
+ * Declared HERE, beside the allow-list, because the two are complements and their failure modes are
+ * silent in opposite directions: the remote registry is TOTAL (every unnamed repository becomes a
+ * remote proxy), so a telemetry repository left off this list resolves to a proxy whose every call
+ * the allow-list answers with `unknown_method` — writes vanish into the best-effort recorders and
+ * reads come back empty, with nothing failing. Naming the bucket in one place lets the local
+ * facade's composition be TYPED by it (so it cannot half-wire) and the drift guard assert the two
+ * tables stay disjoint.
+ *
+ * Note the deliberate absence of `tokenUsageRepository`: the spend ledger has this bucket's write
+ * profile but is the org's budget SAFEGUARD, whose rollups the spend gate reads remotely — see its
+ * `record` entry above.
+ */
+export const LOCAL_FIRST_PERSISTENCE_REPOSITORIES = [
+  'llmCallMetricRepository',
+  'agentContextSnapshotRepository',
+  'agentSearchQueryRepository',
+  'provisioningLogRepository',
+  'subscriptionQuotaCycleRepository',
+] as const
+
+/** A repository name in {@link LOCAL_FIRST_PERSISTENCE_REPOSITORIES}. */
+export type LocalFirstPersistenceRepository = (typeof LOCAL_FIRST_PERSISTENCE_REPOSITORIES)[number]

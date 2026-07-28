@@ -231,7 +231,8 @@ stored character is reachable — a body larger than one window is read in stitc
 - Ports: kernel `llm-metrics.ts`, `agent-context.ts`, `agent-search-queries.ts`,
   `provisioning-log-repositories.ts`, and `ExecutionRepository.listRecent`
 - Stores: `D1*` under `backend/runtimes/cloudflare/src/infrastructure/repositories/` ⇄ Drizzle
-  under `backend/runtimes/node/src/repositories/drizzle/`
+  under `backend/runtimes/node/src/repositories/drizzle/` ⇄ the local `node:sqlite` telemetry
+  store, `backend/runtimes/local/src/sqlite/telemetryStore.ts` (mothership mode — see below)
 
 Cross-runtime parity is pinned twice: the per-store suites
 (`llm-metrics-suite`, `agent-context-suite`, `agent-search-queries-suite`,
@@ -246,5 +247,10 @@ surface that reports the sink as unavailable.
 
 The run index (`ExecutionRepository.listRecent`) is allow-listed on the machine RPC — runs are
 org/durable state and live on the mothership. The **telemetry** reads are not, and must not be:
-telemetry is local-first by design, so a mothership-mode node reads its own telemetry store. See
+telemetry is local-first by design, so a mothership-mode node serves every bounded page from its own
+`node:sqlite` telemetry store, which mirrors the D1 SQL down to the body slicing, the `?contains=`
+predicate and the match offsets. Routing a page over a long run through the persistence proxy is
+exactly the bulk read that bucket exists to forbid. Adding a read here therefore means adding it to
+THREE stores, and classifying it `telemetry` in the drift guard's map
+(`runtimes/node/test/mothership-allowlist.spec.ts`). See
 [`docs/initiatives/mothership-mode.md`](../../docs/initiatives/mothership-mode.md).

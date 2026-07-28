@@ -89,7 +89,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
  * themselves are added by {@link bodyColumns} so the SLICE can be bound to the caller's budget.
  */
 const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
-  created_at, streaming, message_count, tool_count, request_max_tokens, prompt_tokens,
+  created_at, streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
+  prompt_tokens,
   cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
   length(prompt_text)    AS prompt_chars,
@@ -202,6 +203,8 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     model: row.model,
     createdAt: row.created_at,
     streaming: row.streaming === 1,
+    phase: row.phase,
+    turnIndex: row.turn_index,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,

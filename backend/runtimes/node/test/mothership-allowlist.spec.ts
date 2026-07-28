@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { REMOTE_PERSISTENCE_METHODS } from '@cat-factory/server'
+import {
+  LOCAL_FIRST_PERSISTENCE_REPOSITORIES,
+  REMOTE_PERSISTENCE_METHODS,
+} from '@cat-factory/server'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
@@ -78,7 +81,10 @@ type Reason =
   | 'pending'
   // A per-USER credential/secret store kept on the laptop (`node:sqlite`), never the mothership.
   | 'local'
-  // High-volume / local-first telemetry that must never hit the per-call RPC (writes + bulk reads).
+  // High-volume / local-first telemetry: a mothership-mode node writes AND reads it in its own
+  // `node:sqlite` telemetry store (docs/initiatives/mothership-mode.md, PR 5), so neither the
+  // writes nor the reads ever hit the per-call RPC. NOT a backlog state — this is the bucket's
+  // permanent home, unlike `pending`.
   | 'telemetry'
   // Admin-gated mutation: the machine token scopes ACCOUNTS not ROLES, and the RPC bypasses the
   // service-layer `requireAdmin`, so exposing it would let any member self-promote. Mothership-only.
@@ -202,18 +208,26 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     activityByDimension: 'admin',
     spendTrend: 'admin',
   },
-  tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
-  // EVERY read on the three telemetry sinks is `telemetry`, never `pending`: telemetry is
-  // local-first by design (Phase 5), so in mothership mode a node reads its OWN telemetry store
-  // rather than the mothership's — there is nothing to proxy, for the SPA observability reads
-  // (`listByExecution`) exactly as for the remote debugging surface's bounded pages
-  // (`listPage`/`get`/`listIndex`/`countByExecution`). Routing any of them would be the exact
-  // shape the bucket exists to forbid, since a read over a long run is a bulk read of the
-  // heaviest columns in the system.
+  // The spend LEDGER is the one member of the telemetry family that is NOT local-first: it is the
+  // org's budget safeguard, and its three rollups are read remotely by the spend gate, so `record`
+  // is allow-listed (under the `usageRecord` rule, which pins the row's denormalized account/user
+  // to the caller). Only the deployment-wide sweeps stay mothership-internal.
+  tokenUsageRepository: { totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
+  // The three agent-observability sinks are local-first in mothership mode: written on the hot
+  // path of every LLM call / dispatch / web search, read back from the same local store by the
+  // observability panel and the board's per-step rollups. `summarizeByExecution` used to be a
+  // remote stopgap; against the MOTHERSHIP's telemetry store it could only ever report zeros for
+  // a laptop's own run, so it moved to the local store with the rest.
+  //
+  // That makes EVERY read on them `telemetry`, never `pending` — the remote debugging surface's
+  // bounded pages (`listPage`/`get`/`listIndex`/`countByExecution`) included. Routing those would
+  // be the exact shape the bucket exists to forbid, since a page over a long run is a bulk read of
+  // the heaviest columns in the system.
   llmCallMetricRepository: {
     record: 'telemetry',
     latestChainTip: 'telemetry',
     listByExecution: 'telemetry',
+    summarizeByExecution: 'telemetry',
     listPage: 'telemetry',
     get: 'telemetry',
     deleteOlderThan: 'sweeper',
@@ -236,7 +250,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the
   // windowed usage write + its scoped read are provider-mediated telemetry that never
   // crosses the per-call RPC (the B3 quota endpoint reads through the provider's `report`,
-  // not this repo directly); the retention prune is a sweeper op.
+  // not this repo directly); the retention prune is a sweeper op. Local by construction as
+  // well as by policy in mothership mode: BOTH scopes a cycle keys on (a pooled subscription
+  // token, a user's personal one) live in the laptop's own credential store.
   subscriptionQuotaCycleRepository: {
     recordUsage: 'telemetry',
     listByScopeVendor: 'telemetry',
@@ -355,11 +371,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // dispatch's frame read). Nothing sealed — the commands are operator-authored shell strings
   // that run inside the run's own container — so the plain record rides the machine API.
   validationConfigRepository: {},
+  // The provisioning event log is local-first too, and unusually literally so: in mothership mode
+  // the containers/environments it records are provisioned BY THIS NODE, so the rows describe local
+  // infrastructure and the panels that read them ("View logs") want exactly this machine's history.
+  // The debug surface's `countByExecution` reads that same local history.
   provisioningLogRepository: {
     append: 'telemetry',
-    // Same reasoning as the three sinks above: the provisioning log is a separate high-churn
-    // store that stays local, so neither the SPA's log drawer read nor the debug count ever
-    // crosses the machine API.
     list: 'telemetry',
     countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
@@ -716,6 +733,42 @@ describe('mothership persistence allow-list completeness', () => {
     expect(
       dead,
       `allow-list references methods that do not exist on the repository:\n${dead.join('\n')}`,
+    ).toEqual([])
+  })
+
+  // The local-first telemetry bucket and the remote allow-list are complements, and a repository
+  // that drifts into BOTH fails silently in mothership mode: the composition serves the local
+  // store, so the allow-listed remote surface is dead — the mothership's own (empty) telemetry
+  // would be what a hosted reader sees, while nothing errors. Assert the two stay disjoint, and
+  // that every method of a local-first repository really is classified as this bucket's own.
+  it('keeps the local-first telemetry bucket out of the remote allow-list', () => {
+    const leaked: string[] = []
+    const misclassified: string[] = []
+    for (const repo of LOCAL_FIRST_PERSISTENCE_REPOSITORIES) {
+      for (const method of Object.keys(REMOTE_PERSISTENCE_METHODS[repo] ?? {})) {
+        leaked.push(`${repo}.${method}`)
+      }
+      const reasons = NON_REMOTE[repo] ?? {}
+      for (const method of REFLECTED[repo] ?? []) {
+        // `sweeper` is legitimate here: the mothership still prunes ITS copy of the table from
+        // cron, and the local store's own prune is the local retention sweep, not an RPC call.
+        const reason: Reason | undefined = reasons[method]
+        if (reason !== 'telemetry' && reason !== 'sweeper') {
+          misclassified.push(`${repo}.${method} (${reason ?? 'unclassified'})`)
+        }
+      }
+    }
+    expect(
+      leaked,
+      'a LOCAL_FIRST_PERSISTENCE_REPOSITORIES repository is also in REMOTE_PERSISTENCE_METHODS — ' +
+        'a mothership-mode node serves it from its own store, so the remote entry is dead surface:\n' +
+        leaked.join('\n'),
+    ).toEqual([])
+    expect(
+      misclassified,
+      'every method of a local-first telemetry repository must be classified `telemetry` (served ' +
+        'by the local store) or `sweeper` (the mothership-internal prune):\n' +
+        misclassified.join('\n'),
     ).toEqual([])
   })
 

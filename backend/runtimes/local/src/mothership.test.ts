@@ -23,6 +23,7 @@ import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 const BASE_ENV = (over: Record<string, string | undefined>): NodeJS.ProcessEnv => ({
   LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
   LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+  LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
   LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
   LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   ...over,
@@ -179,6 +180,70 @@ describe('composeMothership', () => {
       const keys = await credentialStore.providerApiKeyRepository.listByScope('workspace', 'ws_1')
       expect(keys.map((k) => k.id)).toEqual(['key_1'])
       expect(seen).toHaveLength(1) // still just the one org read — credentials never left the laptop
+    } finally {
+      close()
+    }
+  })
+
+  it('serves the local-first telemetry bucket from the laptop, never over the RPC', async () => {
+    // Telemetry is written on the hot path of every LLM call / dispatch / provisioning attempt and
+    // read back by the observability panel + the board's per-step rollups. If it resolved to the
+    // remote registry, every write would come back `unknown_method` (swallowed by the best-effort
+    // recorders) and every read empty — with nothing failing. So assert BOTH halves: the data
+    // round-trips, and not one byte of it reached the wire.
+    let rpcCalls = 0
+    vi.stubGlobal('fetch', async () => {
+      rpcCalls += 1
+      return new Response(JSON.stringify({ ok: true, value: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const { repos, telemetryStore, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 't' }),
+    )
+    try {
+      await repos.provisioningLogRepository.append({
+        id: 'plog_1',
+        workspaceId: 'ws_1',
+        subsystem: 'container',
+        operation: 'dispatch',
+        targetId: 'job_1',
+        providerId: null,
+        blockId: null,
+        executionId: 'exec_1',
+        outcome: 'success',
+        error: null,
+        detail: null,
+        createdAt: 1000,
+      })
+      await repos.agentSearchQueryRepository.record({
+        id: 'q_1',
+        workspaceId: 'ws_1',
+        executionId: 'exec_1',
+        agentKind: 'researcher',
+        provider: null,
+        query: 'q',
+        resultCount: 1,
+        createdAt: 1000,
+      })
+
+      // Read back THROUGH the composed registry (what the engine holds)...
+      expect((await repos.provisioningLogRepository.list('ws_1')).map((r) => r.id)).toEqual([
+        'plog_1',
+      ])
+      expect(
+        (await repos.agentSearchQueryRepository.listByExecution('ws_1', 'exec_1')).map((q) => q.id),
+      ).toEqual(['q_1'])
+      // ...and confirm it is the SAME store the composition owns and prunes.
+      expect(
+        (await telemetryStore.provisioningLogRepository.list('ws_1')).map((r) => r.id),
+      ).toEqual(['plog_1'])
+      expect(rpcCalls).toBe(0)
+
+      // The org half of the registry is unaffected — it still goes to the mothership.
+      await repos.workspaceRepository.get('ws_1')
+      expect(rpcCalls).toBe(1)
     } finally {
       close()
     }
@@ -530,6 +595,7 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
     LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
+    LOCAL_MOTHERSHIP_TELEMETRY_DB: ':memory:',
     LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
     LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   }

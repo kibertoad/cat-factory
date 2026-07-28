@@ -1,6 +1,6 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; telemetry local-first; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
@@ -18,8 +18,8 @@
 >
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
 > status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
-> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry
-> no-ops a run makes over the remote (telemetry is local-first, Phase 5); and the document/task
+> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen no-ops a run
+> makes over the remote (telemetry itself is now local-first — see PR 5 below); and the document/task
 > connection integration (blocked on its decrypt-inside connection repos). (Subscription activation,
 > the prompt-fragment library, and the Slack settings surface are no longer among these — PR 3 gave
 > them, and the subscription-credential trio + local settings their real `local-sqlite` home; see the
@@ -358,6 +358,67 @@
   whose paginated reads (`listServiceTasks`, `executionRepository.listInternal`) were already remote:
   without the cap read a mothership-mode node refused every public-API run start.
 
+**Telemetry local-first (PR 5, first half)**
+
+- **The telemetry bucket now has a laptop home**, so a mothership-mode run finally produces the
+  observability it is supposed to. Before this, the five telemetry repositories resolved to the
+  remote registry, where none of their methods is (or should be) allow-listed: every write came back
+  `unknown_method` — swallowed by the best-effort recorders — and every read came back empty. The
+  developer's observability panel, per-step token rollups, web-search log and provisioning "View
+  logs" surfaces were all blank, and nothing anywhere failed. The new
+  `sqlite/telemetryStore.ts` (`telemetry.sqlite`, override `LOCAL_MOTHERSHIP_TELEMETRY_DB`) mirrors
+  the D1 telemetry/provisioning SQL for `llmCallMetric` / `agentContextSnapshot` /
+  `agentSearchQuery` / `provisioningLog` / `subscriptionQuotaCycle`, including the properties the
+  engine leans on: `record` is first-write-wins on a duplicate id (so the harness-call recorder's
+  deterministic id stays idempotent across the live drain, the terminal list and a driver replay,
+  without corrupting a stored prompt delta), `latestChainTip` skips `message_count = 0` subagent
+  calls, and the quota upsert accumulates-or-re-anchors in one statement. It also serves the remote
+  debugging surface's BOUNDED reads (`listPage` / `get` / `listIndex` / `countByExecution`, with the
+  body slicing, `?contains=` search and match offsets done in SQL exactly as on D1), so
+  `/api/v1/debug/*` works on a mothership-mode node without any of those pages crossing the machine
+  RPC — routing a page over a long run is precisely the bulk read this bucket exists to forbid.
+- **The composition seam is the registry, not the consumers.** `createRemoteRepositoryRegistry`
+  gained a `localFirst` map: any repository named there is served locally for the WHOLE registry, so
+  the recorders, the observability endpoints, the board's per-step rollups and the retention sweep
+  all resolve the local store with no per-consumer wiring. Membership is declared ONCE, server-side,
+  as `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (beside the allow-list — they are complements), and the
+  local composition is TYPED by it, so a telemetry repository added later cannot be half-wired: it
+  fails to compile rather than silently resolving a remote proxy. The drift guard additionally
+  asserts the two tables stay disjoint and that every method of a local-first repository is
+  classified `telemetry`/`sweeper`.
+- **`llmCallMetricRepository.summarizeByExecution` is REMOVED from the allow-list** rather than left
+  beside the local store. It was a run-path stopgap resolving against the MOTHERSHIP's telemetry
+  store — which holds none of a laptop's calls — so it could only ever report zeros for the run that
+  produced them.
+- **`tokenUsageRepository.record` goes the OTHER way: it is now allow-listed.** The spend ledger has
+  this bucket's write profile but is the org's budget SAFEGUARD, and its three rollups
+  (`totalsSinceForWorkspace`/`ForAccount`/`ForUser`) have long been read REMOTELY by the spend gate —
+  so a laptop-local ledger would leave every local run invisible to the budget it must answer to,
+  and the gate would under-enforce until a batch sync caught up. It rides a NEW scope rule,
+  **`usageRecord`**: bind on the row's `workspaceId` field like `workspaceField`, AND pin the two
+  DENORMALIZED rollup keys — `accountId` must be null or exactly the workspace's own owning account,
+  `userId` null or the token's user. Without that second half, a node legitimately scoped to one
+  account could write rows into its OWN workspace stamped with another account's id and exhaust that
+  account's budget (pausing its runs) without ever addressing a workspace it isn't entitled to.
+- **The prune is local too, and had to be.** Nothing else bounds the store: the mothership's cron
+  owns ITS tables, and the Node facade's retention sweeper runs from `start()`, which a
+  mothership-mode boot never calls — so `llm_call_metrics` (full per-call prompt + response bodies)
+  would grow forever on the developer's disk. `telemetryRetention.ts` prunes on the SAME
+  `RetentionConfig` windows the other two runtimes use, started by `buildLocalContainer` so it shares
+  the store's open → prune → close lifecycle. Its stop is AWAITED before the store closes, because
+  the immediate first pass is asynchronous and would otherwise die on "database is not open".
+- Tested in `sqlite/telemetryStore.test.ts` (D1-parity per repository), `telemetryRetention.test.ts`
+  (windows per table, disabled-window handling), `mothership.test.ts` (the bucket round-trips through
+  the composed registry with ZERO RPC calls, while the org half still goes to the mothership),
+  `packages/server/test/persistenceRpc.spec.ts` (the `usageRecord` rule: in-scope write, null
+  account/user, cross-account workspace, the two cross-stamping refusals, and `summarizeByExecution`
+  no longer callable), and the `[mothership]` conformance config, whose SUT now composes the same
+  in-memory telemetry store production composes.
+  **Still open in PR 5:** the UPSTREAM half — batch-ingesting a finished run's telemetry to the
+  mothership (`POST /internal/telemetry/ingest`) plus the read-through fallback for a run whose local
+  rows have been pruned. Until it lands, a mothership-mode run's telemetry is visible on the node
+  that produced it and not to hosted teammates, and it is gone once the retention window passes.
+
 **Login (PR 3)**
 
 - **Login-based machine-token minting** — the static `LOCAL_MOTHERSHIP_TOKEN` is replaced by a token
@@ -480,7 +541,9 @@ re-derive). It is a **local-facade-only differentiator** — no symmetry obligat
   `local-settings.sqlite`) so the credential store's "ONLY credentials" invariant holds — it is
   non-secret config, not a credential. Both open through the shared `db.ts` `openSqliteDb` (WAL +
   busy-timeout). The machine-token cache (`machineTokenStore.ts`) and the durable work queue
-  (`workQueue.ts`) are the other two local stores.
+  (`workQueue.ts`) are two more local stores; the local-first TELEMETRY store
+  (`telemetryStore.ts`, file `telemetry.sqlite`) is the fourth — see the telemetry bucket below,
+  which is a DIFFERENT model from this pattern.
 - **Implementing a repo.** `node:sqlite`'s `DatabaseSync` is SYNCHRONOUS + single-process, so a
   select-then-write is inherently atomic (no `FOR UPDATE` analogue needed) and the port's async
   methods just execute synchronously. **Mirror the `D1*` repository's SQL** — D1 IS SQLite, so the
@@ -511,15 +574,19 @@ undefined)`; off only when neither is present) — so the feature turns ON in mo
   `close()` (called from `onShutdown`). Each store's file path is `localDbPath(env.LOCAL_MOTHERSHIP_*_DB,
 '<name>.sqlite')` — an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
   **Tests that build a mothership container MUST set every `LOCAL_MOTHERSHIP_*_DB` to `:memory:`**
-  (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB`) or they write real files under `~/.cat-factory`.
+  (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB` and `LOCAL_MOTHERSHIP_TELEMETRY_DB`) or they write real
+  files under `~/.cat-factory`.
 - **Drift guard.** `runtimes/node/test/mothership-allowlist.spec.ts` reflects the DRIZZLE repos only,
   so a local-sqlite repo needs NO allow-list entry; a repo that also has a Drizzle impl is classified
   `local` in that guard's `NON_REMOTE` map (the subscription trio already is), and a local-ONLY repo
   (e.g. `localSettings`) isn't reflected at all. The `node:sqlite` classes are covered by unit tests
   (`credentialStore.test.ts` / `localSettingsStore.test.ts`) asserting parity with the D1/Drizzle SQL.
-- **NOT this pattern:** the telemetry repos (Phase 5) are `telemetry`-bucket, not `local-sqlite` —
-  they are local-FIRST + batch-synced-up + short-TTL-pruned, a different model, not a plain
-  laptop-only store.
+- **NOT this pattern:** the telemetry repos are `telemetry`-bucket, not `local-sqlite` — they are
+  local-FIRST + short-TTL-pruned + (once the second half of PR 5 lands) batch-synced-up, a different
+  model from a plain laptop-only store. They live in their own `telemetry.sqlite` store, are named
+  once in `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (which TYPES the composition), and reach their
+  consumers by being layered over the remote registry rather than through a `NodeContainerOptions`
+  seam — see `sqlite/telemetryStore.ts` + `telemetryRetention.ts`.
 
 ## Per-repository bucket checklist
 
@@ -620,16 +687,24 @@ never remotely invocable (mothership-internal cron).
 | durable execution work queue          | ✅ done | PR 1 (in-proc) → PR 2 (durable)   |
 | cached mothership machine token       | ✅ done | PR 3                              |
 
-**Telemetry (local-first + batch-synced-up — Phase 5, not yet built):**
+**Telemetry (local-first `node:sqlite` — PR 5; batch sync UP still to come):**
 
-| Port                               | Status  | Notes                                                                       |
-| ---------------------------------- | ------- | --------------------------------------------------------------------------- |
-| `llmCallMetricRepository`          | ◑ part  | `summarizeByExecution` remote stopgap (run path); writes telemetry, Phase 5 |
-| `agentContextSnapshotRepository`   | ⬜ todo | telemetry (Phase 5)                                                         |
-| `agentSearchQueryRepository`       | ⬜ todo | telemetry (Phase 5)                                                         |
-| `tokenUsageRepository`             | ◑ part  | budget-rollup reads remote; `record` telemetry, retention sweeper           |
-| `subscriptionQuotaCycleRepository` | ⬜ todo | telemetry (Phase 5)                                                         |
-| `provisioningLogRepository`        | ⬜ todo | `append` telemetry, `list` read pending, prune sweeper                      |
+| Port                               | Status  | Notes                                                                         |
+| ---------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| `llmCallMetricRepository`          | ✅ done | whole repo local (`summarizeByExecution` stopgap removed from the allow-list) |
+| `agentContextSnapshotRepository`   | ✅ done | whole repo local                                                              |
+| `agentSearchQueryRepository`       | ✅ done | whole repo local                                                              |
+| `subscriptionQuotaCycleRepository` | ✅ done | whole repo local (both scopes key on laptop-held credentials)                 |
+| `provisioningLogRepository`        | ✅ done | whole repo local (the node provisions the infra these rows describe)          |
+
+Batch-ingesting a FINISHED run's rows up to the mothership (so hosted teammates can read them, and
+they survive the local prune) is the remaining half of PR 5 — see "Cross-cutting delegation".
+
+`tokenUsageRepository` is deliberately NOT in this bucket:
+
+| Port                   | Status  | Notes                                                                   |
+| ---------------------- | ------- | ----------------------------------------------------------------------- |
+| `tokenUsageRepository` | ✅ done | budget SAFEGUARD, fully remote: rollup reads + `record` (`usageRecord`) |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
@@ -644,9 +719,10 @@ never remotely invocable (mothership-internal cron).
 
   > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
   > in BOTH directions, and notification DELIVERY delegation (below) are IMPLEMENTED. The remaining
-  > bullets below are the DESIGN for PR 4's email half / PR 5 and are **NOT yet in code** — no
-  > `/internal/email` or `/internal/telemetry` endpoint exists yet (a grep finds them only in this
-  > doc + ADR 0009). The five live `/internal/*` routes today are `POST /internal/persistence`,
+  > bullets below are the DESIGN for PR 4's email half / PR 5's UPSTREAM half and are **NOT yet in
+  > code** — no `/internal/email` or `/internal/telemetry` endpoint exists yet (a grep finds them
+  > only in this doc + ADR 0009). Telemetry CAPTURE is in code (local-first, PR 5); what is missing
+  > is the batch sync up. The five live `/internal/*` routes today are `POST /internal/persistence`,
   > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
   > `GET /internal/events/subscribe/:workspaceId`, and `POST /internal/notifications/deliver`.
 
@@ -686,9 +762,12 @@ never remotely invocable (mothership-internal cron).
   would ship an untriggerable path. Revisit when a later slice adds the role dimension to the token
   scope (unblocking the invite surface) or an email NOTIFICATION channel lands — at which point it
   is a direct copy of the notification-delivery shape above.
-- **Telemetry ingest (PR 5 — planned, not built).** Bulk `POST /internal/telemetry/ingest`
-  (append-only, excluded from the generic allow-list); finished-runs batch sweeper + short local-TTL
-  pruner + read-through.
+- **Telemetry ingest (PR 5, second half — planned, not built).** The local-first CAPTURE half has
+  landed (see "Landed so far"), including the short local-TTL pruner. What remains is the sync UP:
+  a bulk `POST /internal/telemetry/ingest` (append-only, excluded from the generic allow-list), a
+  finished-runs batch sweeper on the node, and read-through so a run whose local rows have been
+  pruned still renders from the mothership. Until then a mothership-mode run's telemetry is
+  readable on the node that produced it, and only there.
 
 ## Phased delivery
 
@@ -714,19 +793,20 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
    `AgentContextBuilder` sub-helper repos, then documents/tasks/environments/fragments/**slack**).
    STILL TODO: the sub-helper surfaces genuinely off the board-load + run path — the document/task
    CONNECTION repos (which decrypt inside, so their whole integration module stays off) and
-   environment PROVISION writes. (Telemetry repos stay local-first, Phase 5, degrading as best-effort
-   no-ops over the remote for now.)
+   environment PROVISION writes. (Telemetry repos are local-first — PR 5 gave them their own
+   `node:sqlite` store, layered over the remote registry, instead of the best-effort no-ops they
+   used to degrade to.)
 2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
    rule (`workspace` / `workspaceField` / `account` / `accountField` / `block` / `blockList` /
-   `serviceList` / `service` / `serviceMount` / `owner` / `ownerField` / `visibility` / `selfUser` /
-   `user` / `userList`). The
+   `serviceList` / `service` / `serviceMount` / `usageRecord` / `owner` / `ownerField` /
+   `visibility` / `selfUser` / `user` / `userList`). The
    boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
    and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices + the
    `pending` entries in the drift guard.
 3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
    round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry no-ops; the
+Residual items (provisioned-env secret decryption; best-effort kaizen no-ops; the
 document/task connection integration, blocked on the decrypt-inside connection repos) are NOT on the
 basic board-load + run path. (Subscription activation and the Slack settings surface are no longer
 residuals — PR 3 landed them; see "Landed so far".)
@@ -736,7 +816,9 @@ residuals — PR 3 landed them; see "Landed so far".)
   far"). Email delegation is deliberately deferred until it has a reachable consumer (see
   "Cross-cutting delegation"). **Remaining:** mothership-side delivery of a laptop-sealed Slack
   connection (rides the secrets-delegation slice).
-- **PR 5 — telemetry/logs local-first sync.**
+- **PR 5 — telemetry/logs local-first sync.** ◑ The local-first CAPTURE half (the `node:sqlite`
+  telemetry store, the registry composition seam, the spend-ledger split, the local prune) has
+  **landed** — see "Landed so far". **Remaining:** the batch sync UP + read-through fallback.
 - **PR 6 — UI labeling + hardening** (whitelisting admin, token rotation, rate-limiting, security
   review).
 

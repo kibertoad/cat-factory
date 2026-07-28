@@ -325,6 +325,8 @@ function llmPageColumns(bodyChars: number | undefined, offsetChars = 0, contains
     model: llmCallMetrics.model,
     created_at: llmCallMetrics.created_at,
     streaming: llmCallMetrics.streaming,
+    phase: llmCallMetrics.phase,
+    turn_index: llmCallMetrics.turn_index,
     message_count: llmCallMetrics.message_count,
     tool_count: llmCallMetrics.tool_count,
     request_max_tokens: llmCallMetrics.request_max_tokens,
@@ -365,6 +367,8 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     model: string
     created_at: number
     streaming: number
+    phase: string
+    turn_index: number | null
     message_count: number
     tool_count: number
     request_max_tokens: number | null
@@ -397,6 +401,8 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     model: r.model,
     createdAt: r.created_at,
     streaming: r.streaming === 1,
+    phase: r.phase,
+    turnIndex: r.turn_index,
     messageCount: r.message_count,
     toolCount: r.tool_count,
     requestMaxTokens: r.request_max_tokens,

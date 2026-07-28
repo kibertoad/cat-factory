@@ -37,6 +37,8 @@ function call(id: string, createdAt: number): LlmCallMetricPage {
     model: 'gpt',
     createdAt,
     streaming: false,
+    phase: 'agent',
+    turnIndex: null,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: null,

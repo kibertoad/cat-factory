@@ -255,6 +255,8 @@ describe('toDebugLlmCall', () => {
     model: 'gpt',
     createdAt: 5,
     streaming: true,
+    phase: 'agent',
+    turnIndex: null,
     messageCount: 12,
     toolCount: 3,
     requestMaxTokens: 1_000,

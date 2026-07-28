@@ -143,7 +143,7 @@ feature is. Retrofitting is what the slice-by-slice `pending` backlog in the tra
 to it.
 
 This applies to every feature, not only ones that feel "org-scoped": the classification below has
-exactly three outcomes, and **"it doesn't apply to mothership mode" is not one of them**.
+exactly four outcomes, and **"it doesn't apply to mothership mode" is not one of them**.
 
 - **New repository method → decide its bucket IN THE SAME PR**, and make the decision real:
   - **`remote`** (the default for org/durable state) — add it to `REMOTE_PERSISTENCE_METHODS`
@@ -153,6 +153,13 @@ exactly three outcomes, and **"it doesn't apply to mothership mode" is not one o
   - **`local-sqlite`** (a per-user/per-deployment credential or local-runner knob) — implement the
     `node:sqlite` repo per the tracker's bucket pattern and thread the `NodeContainerOptions`
     override, so the feature is ON in mothership mode rather than silently off for lack of a `db`.
+  - **`telemetry`** (append-heavy, hot-path, short-retention run observability) — implement the
+    `node:sqlite` repo in the local facade's `sqlite/telemetryStore.ts`, name it in
+    `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (`rpc-allowlist.ts` — this TYPES the composition, so
+    omitting it fails to compile), and give it a prune in `telemetryRetention.ts`. Do NOT also
+    allow-list it: the two tables are complements and the drift guard asserts they stay disjoint.
+    The test for whether state belongs here rather than `remote` is what READS it — the spend
+    ledger has this write profile but its rollups gate org budgets, so it is `remote`.
   - **`excluded`** (admin-gated, a sweeper, or otherwise mothership-internal) — say so in the drift
     guard's classification map with the reason. `pending` is a _migration_ state, not a landing pad
     for new work.
