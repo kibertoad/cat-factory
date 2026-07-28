@@ -285,17 +285,6 @@
       "bestPractices": "מומלצות עבודה",
       "bestPracticesHint": "הצמידו מקטעי מומלצות עבודה כדי שסוכני המשימה יפעלו לפיהם, בנוסף לסטנדרטים ברמת השירות.",
       "agentConfiguration": "תצורת סוכן",
-      "contextDocuments": "מסמכי הקשר",
-      "contextIssues": "אישיו הקשר",
-      "attach": "צרף",
-      "connectSource": "חבר מקור",
-      "connectSourceNamed": "חבר את {source}",
-      "done": "סיום",
-      "attachDocDisabledConnect": "חבר תחילה מקור מסמכים (אינטגרציות)",
-      "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",
-      "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
-      "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
-      "importsOnAdd": "מיובא בעת ההוספה",
       "noDocsHint": "צרף דרישה, RFC או PRD כדי שסוכנים יראו אותם בעת מימוש המשימה.",
       "noIssuesHint": "צרף אישיו ממערכת המעקב כדי שסוכנים יראו את תיאורו ותגובותיו בעת מימוש המשימה.",
       "plannedHint": "המשימה נוספת במצב מתוכנן. היא לא תרוץ עד שתתחיל עליה צינור — תוכל להמשיך לערוך אותה עד אז.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} פעילים",
       "noTasksYet": "אין עדיין משימות"
     }
+  },
+  "contextAttachments": {
+    "documents": "מסמכי הקשר",
+    "issues": "אישיו הקשר",
+    "attach": "צרף",
+    "done": "סיום",
+    "connectSource": "חבר מקור",
+    "connectSourceNamed": "חבר את {source}",
+    "attachDocDisabledConnect": "חבר תחילה מקור מסמכים (אינטגרציות)",
+    "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",
+    "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
+    "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
+    "importsOnAdd": "מיובא בעת ההוספה"
   },
   "errors": {
     "action": {
@@ -5141,7 +5143,10 @@
       "pathInvalid": "הזינו נתיב בתוך המאגר (ללא \"..\", נתיבים מוחלטים או קו נטוי הפוך).",
       "hint": "שום דבר לא רץ עדיין: לאחר היצירה, הריצו את צינור תכנון היוזמה על הבלוק. הוא מנתח את הקוד ומנסח את התוכנית הרב-שלבית לאישורכם.",
       "submit": "יצירת יוזמה",
-      "failedTitle": "לא ניתן היה ליצור את היוזמה"
+      "failedTitle": "לא ניתן היה ליצור את היוזמה",
+      "contextDocsHint": "צרף דרישה, RFC או PRD כדי שסוכני התכנון יקראו אותם בעת תיחום וגיבוש התוכנית.",
+      "contextIssuesHint": "צרף אישיו כדי שסוכני התכנון יראו את התיאור והתגובות שלו בעת גיבוש התוכנית.",
+      "linkFailed": "היוזמה נוצרה, אך {count} צרופה לא ניתנה לקישור | היוזמה נוצרה, אך {count} צרופות לא ניתנו לקישור"
     },
     "status": {
       "planning": "בתכנון",

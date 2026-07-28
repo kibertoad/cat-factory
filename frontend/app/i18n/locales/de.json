@@ -2332,17 +2332,6 @@
       "bestPractices": "Best Practices",
       "bestPracticesHint": "Best-Practice-Fragmente anheften, damit die Agenten dieser Aufgabe sie zusätzlich zu den Standards auf Service-Ebene befolgen.",
       "agentConfiguration": "Agent-Konfiguration",
-      "contextDocuments": "Kontextdokumente",
-      "contextIssues": "Kontext-Issues",
-      "attach": "Anhängen",
-      "connectSource": "Quelle verbinden",
-      "connectSourceNamed": "{source} verbinden",
-      "done": "Fertig",
-      "attachDocDisabledConnect": "Verbinden Sie zuerst eine Dokumentquelle (Integrationen)",
-      "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",
-      "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
-      "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
-      "importsOnAdd": "importiert beim Hinzufügen",
       "noDocsHint": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agenten es beim Implementieren dieser Aufgabe sehen.",
       "noIssuesHint": "Hängen Sie ein Tracker-Issue an, damit Agenten dessen Beschreibung und Kommentare beim Implementieren dieser Aufgabe sehen.",
       "plannedHint": "Die Aufgabe wird in einem geplanten Zustand hinzugefügt. Sie läuft erst, wenn Sie eine Pipeline darauf starten — Sie können sie bis dahin weiter bearbeiten.",
@@ -2507,6 +2496,19 @@
       "activeCount": "{count} aktiv",
       "noTasksYet": "Noch keine Aufgaben"
     }
+  },
+  "contextAttachments": {
+    "documents": "Kontextdokumente",
+    "issues": "Kontext-Issues",
+    "attach": "Anhängen",
+    "done": "Fertig",
+    "connectSource": "Quelle verbinden",
+    "connectSourceNamed": "{source} verbinden",
+    "attachDocDisabledConnect": "Verbinden Sie zuerst eine Dokumentquelle (Integrationen)",
+    "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",
+    "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
+    "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
+    "importsOnAdd": "importiert beim Hinzufügen"
   },
   "providers": {
     "presetMismatch": {
@@ -4128,7 +4130,10 @@
       "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
       "hint": "Es läuft noch nichts: Führen Sie nach dem Erstellen die Initiative-Planning-Pipeline auf dem Block aus. Sie analysiert die Codebasis und entwirft den mehrphasigen Plan zu Ihrer Freigabe.",
       "submit": "Initiative erstellen",
-      "failedTitle": "Die Initiative konnte nicht erstellt werden"
+      "failedTitle": "Die Initiative konnte nicht erstellt werden",
+      "contextDocsHint": "Hänge eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Abstecken und Entwerfen des Plans lesen.",
+      "contextIssuesHint": "Hänge ein Tracker-Issue an, damit die Planungsagenten beim Entwerfen des Plans seine Beschreibung und Kommentare sehen.",
+      "linkFailed": "Initiative erstellt, aber {count} Anhang konnte nicht verknüpft werden | Initiative erstellt, aber {count} Anhänge konnten nicht verknüpft werden"
     },
     "status": {
       "planning": "Planung",

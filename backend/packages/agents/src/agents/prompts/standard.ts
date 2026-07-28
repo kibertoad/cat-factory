@@ -350,6 +350,23 @@ export function linkedContextSection(
   opts: { materialized?: boolean } = {},
 ): string {
   const { contextDocs, contextTasks } = context.block
+  return renderLinkedContext(contextDocs, contextTasks, opts)
+}
+
+/**
+ * The rendering half of {@link linkedContextSection}, taking the resolved docs/issues
+ * directly instead of an {@link AgentRunContext}. Exists because the initiative-planning
+ * INTERVIEWER is an inline service that never passes through the context builder (it
+ * assembles its own prompt from the block + entity), yet must see the same attached
+ * requirements the analyst and planner do — otherwise it interrogates the stakeholder
+ * about facts the attached PRD already settles. Keeping one renderer means the two paths
+ * cannot drift in wording or in the {@link CONTEXT_BUDGET} caps.
+ */
+export function renderLinkedContext(
+  contextDocs: AgentRunContext['block']['contextDocs'],
+  contextTasks: AgentRunContext['block']['contextTasks'],
+  opts: { materialized?: boolean } = {},
+): string {
   if (!contextDocs?.length && !contextTasks?.length) return ''
 
   // Container kinds run with a checkout: list the linked items cheaply and point the

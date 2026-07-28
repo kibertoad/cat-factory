@@ -266,3 +266,133 @@ describe('InitiativeInterviewService — preset interviewer steering (T5)', () =
     expect(cap.prompt()).not.toContain('Initiative preset:')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Linked context (attached requirements / RFCs / PRDs / tracker issues).
+//
+// The interviewer is the FIRST planning step and the one that talks to the human, so it is the
+// step where a missing attachment hurts most: without it the stakeholder is interrogated about
+// exactly the facts the document they attached already settles. It is also the step the engine
+// CANNOT feed automatically — it is inline and assembles its own prompt, never passing through
+// `AgentContextBuilder` the way the analyst and planner that follow it do.
+// ---------------------------------------------------------------------------
+
+const PRD = {
+  title: 'Auth migration PRD',
+  url: 'https://example.test/prd',
+  excerpt: 'Move every service onto the new auth model.',
+  summary: 'Move every service onto the new auth model.',
+  body: 'Sessions must stay valid across the cutover; no forced re-login.',
+}
+
+const LINKED_ISSUE = {
+  key: 'ENG-42',
+  url: 'https://example.test/ENG-42',
+  title: 'Legacy tokens never expire',
+  status: 'open',
+  type: 'bug',
+  assignee: null,
+  priority: null,
+  labels: [],
+  description: 'Tokens minted before the rotation are accepted forever.',
+  comments: [],
+  summary: 'Tokens minted before the rotation are accepted forever.',
+}
+
+function serviceWithLinkedContext(
+  model: MockLanguageModelV3,
+  docs: (typeof PRD)[],
+  tasks: (typeof LINKED_ISSUE)[],
+  seen: { workspaceId?: string; blockId?: string; description?: string } = {},
+) {
+  return new InitiativeInterviewService({
+    initiativePresetRegistry: presetRegistry,
+    modelProvider: { resolve: () => model } satisfies ModelProvider,
+    modelRef: { provider: 'fake', model: 'm' },
+    resolveLinkedContext: async (workspaceId, blockId, description) => {
+      seen.workspaceId = workspaceId
+      seen.blockId = blockId
+      seen.description = description
+      return { docs, tasks }
+    },
+  })
+}
+
+describe('InitiativeInterviewService linked context', () => {
+  beforeEach(() => {
+    presetRegistry = new InitiativePresetRegistry()
+  })
+
+  it('injects the attached bodies inline, having no checkout to materialise them into', async () => {
+    const cap = capturingModel()
+    await serviceWithLinkedContext(cap.model, [PRD], [LINKED_ISSUE]).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({}),
+      { finalize: false },
+    )
+    // The interviewer is an INLINE call, so it gets the bodies themselves — a `.cat-context/`
+    // pointer would name files that only a container run has on disk.
+    expect(cap.prompt()).toContain('Sessions must stay valid across the cutover')
+    expect(cap.prompt()).toContain('Tokens minted before the rotation are accepted forever.')
+    expect(cap.prompt()).not.toContain('.cat-context')
+  })
+
+  it('tells the interviewer not to re-ask what the attachments already settle', async () => {
+    const cap = capturingModel()
+    await serviceWithLinkedContext(cap.model, [PRD], []).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({}),
+      { finalize: false },
+    )
+    // Without this instruction the model reads an attachment as background and still asks the
+    // questions it answers — which is the interrogation attaching a PRD is meant to spare.
+    expect(cap.prompt()).toContain('ALREADY ANSWERED')
+  })
+
+  it('resolves against the block and its brief, so a ref named in prose resolves too', async () => {
+    const cap = capturingModel()
+    const seen: { workspaceId?: string; blockId?: string; description?: string } = {}
+    await serviceWithLinkedContext(cap.model, [], [], seen).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({}),
+      { finalize: false },
+    )
+    // The same three inputs `AgentContextBuilder` resolves with, so the interviewer can never see
+    // a different set of attachments than the analyst and planner that follow it.
+    expect(seen).toEqual({
+      workspaceId: 'ws_1',
+      blockId: BLOCK.id,
+      description: BLOCK.description,
+    })
+  })
+
+  it('grounds a recommended answer in the attachments', async () => {
+    const cap = capturingModel()
+    await serviceWithLinkedContext(cap.model, [PRD], []).recommendAnswer(
+      'ws_1',
+      BLOCK,
+      initiative({}),
+      'How should existing sessions be handled?',
+    )
+    expect(cap.prompt()).toContain('Sessions must stay valid across the cutover')
+  })
+
+  it('leaves both prompts unchanged when nothing is attached', async () => {
+    const withNone = capturingModel()
+    await serviceWithLinkedContext(withNone.model, [], []).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({}),
+      { finalize: false },
+    )
+    const unwired = capturingModel()
+    // No resolver at all — a deployment with the documents/tasks integrations switched off.
+    await makeService(unwired.model).runInterview('ws_1', BLOCK, initiative({}), {
+      finalize: false,
+    })
+    expect(withNone.prompt()).toBe(unwired.prompt())
+  })
+})

@@ -42,6 +42,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `JudgeContext` the two extension families are handed — built beside each other so neither can
   drift), `JudgeStepController` + `JudgeService` (the **judge** driver — rubric assessment vs the
   task's threshold, disposed as advance / park / bounce / fail — and its inline LLM assessor),
+  `linked-context.ts` (resolving a block's attached docs/issues UNION the refs its description
+  names — shared by `AgentContextBuilder` and the inline initiative interviewer, which builds its
+  own prompt and would otherwise see a different set of attachments than the analyst and planner
+  that follow it),
   plus `RunStateMachine`, `StepGraph`, the companion/review
   controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:

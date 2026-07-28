@@ -141,6 +141,7 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
+  renderLinkedContext,
   initiativePresetSection,
   CONTEXT_DIR,
 } from './agents/prompts/standard.js'

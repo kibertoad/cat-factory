@@ -24,8 +24,7 @@ import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
-import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
-import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
@@ -441,40 +440,6 @@ function setConfig(id: string, value: string) {
 // import flow), committed once the block exists (see add() → linkPending).
 const pendingContext = ref<PendingContext[]>([])
 
-// The Context documents / Context issues sections mirror the task inspector but are
-// always shown (ungated): when the relevant integration isn't connected the Attach
-// button becomes a "Connect a source" action instead. Connecting opens the source's
-// connect modal OVER this one (both are root-mounted with independent open flags), so
-// the user's in-progress task data is preserved rather than lost to a navigation away.
-const docsConnected = computed(() => documents.available && documents.anyConnected)
-const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
-
-// Sources the user could connect right now to unlock the picker, when none is connected
-// yet: for documents, every configured source without a live connection (GitHub docs are
-// already implicitly connected via the App, so they never appear here); for issues, every
-// configured tracker not yet available (a connected credentialed source, or the installed
-// GitHub App). The connect modals are the same ones the Integrations hub opens.
-const connectableDocSources = computed(() =>
-  documents.available ? documents.sources.filter((s) => !documents.isConnected(s.source)) : [],
-)
-const connectableIssueSources = computed(() =>
-  tasks.available ? tasks.sources.filter((s) => !s.available) : [],
-)
-const connectDocMenu = computed(() => [
-  connectableDocSources.value.map((s) => ({
-    label: s.label,
-    icon: s.icon,
-    onSelect: () => ui.openDocumentConnect(s.source),
-  })),
-])
-const connectIssueMenu = computed(() => [
-  connectableIssueSources.value.map((s) => ({
-    label: s.label,
-    icon: s.icon,
-    onSelect: () => ui.openTaskConnect(s.source),
-  })),
-])
-const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
 const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
 
 // Linked issues whose body is in hand, surfaced read-only above the description so the
@@ -532,24 +497,6 @@ async function resolvePendingIssueBodies() {
   }
 }
 
-function addPending(item: PendingContext) {
-  if (pendingContext.value.some((c) => contextKey(c) === contextKey(item))) return
-  pendingContext.value = [...pendingContext.value, item]
-}
-function removePending(item: PendingContext) {
-  pendingContext.value = pendingContext.value.filter((c) => contextKey(c) !== contextKey(item))
-}
-
-// Context documents and issues are both picked through an inline search picker
-// (ContextDocumentPicker / ContextIssuePicker) rather than a dropdown that opens a
-// second modal — stacked page-level modals don't interact here, which is why the
-// old "Import a page…" / "Import an issue…" entries appeared to open something but
-// nothing was clickable. The "Attach" button toggles the relevant picker open.
-const showDocPicker = ref(false)
-const chosenDocKeys = computed(() => pendingDocs.value.map(contextKey))
-const showIssuePicker = ref(false)
-const chosenIssueKeys = computed(() => pendingIssues.value.map(contextKey))
-
 // Reset the form whenever the modal opens for a (new) container, and refresh the
 // imported docs/issues so the quick-pick list is current.
 watch(open, (isOpen) => {
@@ -591,8 +538,6 @@ watch(open, (isOpen) => {
   pipelineId.value = DEFAULT_PIPELINE_FOR_TYPE[taskType.value] ?? ''
   agentConfigValues.value = {}
   pendingContext.value = []
-  showDocPicker.value = false
-  showIssuePicker.value = false
   // Seed from a prefill when opened from another surface (e.g. "create task from
   // issue" sets the title + stages the issue as linked context). Pipeline / preset
   // are intentionally left at their defaults so the user confirms them here.
@@ -1211,202 +1156,15 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             />
           </div>
 
-          <!-- Context documents (ungated; Attach disabled until a source is connected). -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.contextDocuments') }}
-              </span>
-              <UButton
-                v-if="docsConnected"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                :icon="showDocPicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="
-                  () => {
-                    showDocPicker = !showDocPicker
-                  }
-                "
-              >
-                {{ showDocPicker ? t('board.addTask.done') : t('board.addTask.attach') }}
-              </UButton>
-              <UDropdownMenu
-                v-else-if="connectableDocSources.length > 1"
-                :items="connectDocMenu"
-                :content="{ side: 'bottom', align: 'end' }"
-              >
-                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plug">
-                  {{ t('board.addTask.connectSource') }}
-                </UButton>
-              </UDropdownMenu>
-              <UButton
-                v-else-if="connectableDocSources.length === 1"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-plug"
-                @click="ui.openDocumentConnect(connectableDocSources[0]!.source)"
-              >
-                {{
-                  t('board.addTask.connectSourceNamed', { source: connectableDocSources[0]!.label })
-                }}
-              </UButton>
-              <UButton
-                v-else
-                color="neutral"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-plus"
-                disabled
-                :title="
-                  documents.available
-                    ? t('board.addTask.attachDocDisabledConnect')
-                    : t('board.addTask.attachDocDisabledEnable')
-                "
-              >
-                {{ t('board.addTask.attach') }}
-              </UButton>
-            </div>
-            <ContextDocumentPicker
-              v-if="showDocPicker && docsConnected"
-              :chosen-keys="chosenDocKeys"
-              @pick="addPending"
-            />
-            <div v-if="pendingDocs.length" class="space-y-1">
-              <div
-                v-for="item in pendingDocs"
-                :key="contextKey(item)"
-                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-              >
-                <UIcon
-                  :name="item.icon ?? 'i-lucide-file-text'"
-                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                />
-                <span class="truncate">{{ item.title }}</span>
-                <UBadge
-                  v-if="item.needsImport"
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  class="ms-1 shrink-0"
-                >
-                  {{ t('board.addTask.importsOnAdd') }}
-                </UBadge>
-                <button
-                  type="button"
-                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-                  @click="removePending(item)"
-                >
-                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.noDocsHint') }}
-            </p>
-          </div>
-
-          <!-- Context issues (ungated; Attach disabled until a tracker is connected). -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.contextIssues') }}
-              </span>
-              <UButton
-                v-if="issuesConnected"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                :icon="showIssuePicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="
-                  () => {
-                    showIssuePicker = !showIssuePicker
-                  }
-                "
-              >
-                {{ showIssuePicker ? t('board.addTask.done') : t('board.addTask.attach') }}
-              </UButton>
-              <UDropdownMenu
-                v-else-if="connectableIssueSources.length > 1"
-                :items="connectIssueMenu"
-                :content="{ side: 'bottom', align: 'end' }"
-              >
-                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plug">
-                  {{ t('board.addTask.connectSource') }}
-                </UButton>
-              </UDropdownMenu>
-              <UButton
-                v-else-if="connectableIssueSources.length === 1"
-                color="neutral"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-plug"
-                @click="ui.openTaskConnect(connectableIssueSources[0]!.source)"
-              >
-                {{
-                  t('board.addTask.connectSourceNamed', {
-                    source: connectableIssueSources[0]!.label,
-                  })
-                }}
-              </UButton>
-              <UButton
-                v-else
-                color="neutral"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-plus"
-                disabled
-                :title="
-                  tasks.available
-                    ? t('board.addTask.attachIssueDisabledConnect')
-                    : t('board.addTask.attachIssueDisabledEnable')
-                "
-              >
-                {{ t('board.addTask.attach') }}
-              </UButton>
-            </div>
-            <!-- The container is what scopes the issue search to a repo, so the picker is
-                 only rendered once we have one (the modal is open, so we always do). -->
-            <ContextIssuePicker
-              v-if="showIssuePicker && issuesConnected && ui.addTaskContainerId"
-              :chosen-keys="chosenIssueKeys"
-              :scope-block-id="ui.addTaskContainerId"
-              @pick="addPending"
-            />
-            <div v-if="pendingIssues.length" class="space-y-1">
-              <div
-                v-for="item in pendingIssues"
-                :key="contextKey(item)"
-                class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-              >
-                <UIcon
-                  :name="item.icon ?? 'i-lucide-square-check'"
-                  class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                />
-                <span class="truncate">{{ item.title }}</span>
-                <UBadge
-                  v-if="item.needsImport"
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  class="ms-1 shrink-0"
-                >
-                  {{ t('board.addTask.importsOnAdd') }}
-                </UBadge>
-                <button
-                  type="button"
-                  class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-                  @click="removePending(item)"
-                >
-                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.noIssuesHint') }}
-            </p>
-          </div>
+          <!-- Context documents + issues, staged here and linked once the task exists.
+               Shared with the initiative create modal (ContextAttachmentFields). -->
+          <ContextAttachmentFields
+            v-if="ui.addTaskContainerId"
+            v-model="pendingContext"
+            :scope-block-id="ui.addTaskContainerId"
+            :docs-hint="t('board.addTask.noDocsHint')"
+            :issues-hint="t('board.addTask.noIssuesHint')"
+          />
 
           <p class="text-[11px] text-slate-500">
             {{ t('board.addTask.plannedHint') }}
