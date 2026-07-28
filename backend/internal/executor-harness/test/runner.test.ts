@@ -158,6 +158,49 @@ describe('JobRegistry', () => {
     expect(emitted.map((c) => c.seq)).toEqual([0, 1, 2])
   })
 
+  it('stamps the phase a call was emitted in, so a repair round is attributable', async () => {
+    // The token-burn instrument's phase axis (docs/initiatives/token-burn-instrumentation.md).
+    // The handlers mark `validation-repair` around each repair pass, so the registry — which
+    // owns the live phase — is where a call learns which slice of the run spent it. Stamped at
+    // EMIT time, never at drain time: the poll that carries a call can land long after the
+    // phase moved on, and by then every turn would file under whatever came last.
+    const mkCall = (responseText: string): HarnessCallMetric => ({
+      promptText: '[]',
+      messageCount: 1,
+      responseText,
+      reasoningText: '',
+      inputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 5,
+      finishReason: 'end_turn',
+    })
+    const emitted: HarnessCallMetric[] = []
+    let phaseDuringRepair = ''
+    const registry = new JobRegistry<TestJob, TestResult>(
+      limits,
+      async (_job, opts: RunOptions) => {
+        opts.onPhase?.('agent')
+        const first = mkCall('first')
+        emitted.push(first)
+        opts.onCallMetric?.(first)
+        opts.onPhase?.('validation-repair')
+        // The read side of the same marker: what the Pi path puts on the proxy URL.
+        phaseDuringRepair = opts.currentPhase?.() ?? ''
+        const repair = mkCall('repair')
+        emitted.push(repair)
+        opts.onCallMetric?.(repair)
+        opts.onPhase?.('agent')
+        return { summary: 's' }
+      },
+    )
+    registry.start('exec-1', job())
+    await tick()
+
+    expect(emitted.map((c) => c.phase)).toEqual(['agent', 'validation-repair'])
+    expect(phaseDuringRepair).toBe('validation-repair')
+  })
+
   it('records a thrown fault as failed with the `agent` cause', async () => {
     const registry = new JobRegistry(limits, async () => {
       throw new Error('boom')

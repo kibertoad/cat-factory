@@ -3,6 +3,7 @@ import {
   type IdGenerator,
   DEFAULT_WORKSPACE_SETTINGS,
   noopLogger,
+  normalizeCallPhase,
   readCachedWorkspaceSettings,
   redactSecrets,
   runBestEffort,
@@ -103,6 +104,18 @@ export interface RecordLlmCallInput {
   provider: string
   model: string
   streaming: boolean
+  /**
+   * Which slice of the run spent this call (`agent` / `validation-repair` / …), as reported by
+   * the producer that owns the phase boundary. Normalised here through {@link normalizeCallPhase}
+   * — the label reaches this service over HTTP on both producing paths (a proxy request path, a
+   * runner pool's JSON), so neither may write the grouping key unchecked. Absent ⇒ `''`.
+   */
+  phase?: string
+  /**
+   * The call's 0-based ordinal in its job's telemetry sequence, when the producing channel has
+   * one (the harness's job-scoped `seq`). Absent/undefined ⇒ null.
+   */
+  turnIndex?: number | null
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
@@ -215,6 +228,8 @@ export class LlmObservabilityService {
       // rather than being spread in as `undefined`.
       id: input.id ?? this.idGenerator.next('llm'),
       overheadMs,
+      phase: normalizeCallPhase(input.phase),
+      turnIndex: input.turnIndex ?? null,
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
@@ -369,14 +384,21 @@ export function makeHarnessCallRecorder(
 ): (input: HarnessCallsRecordInput) => Promise<void> {
   return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
     for (const [index, call] of calls.entries()) {
+      // `seq` is BOTH the row-id key and the turn ordinal, so they cannot drift apart: a
+      // rollup ordering a phase's calls by turn sees exactly the sequence the ids encode.
+      const turnIndex = call.seq ?? index
       await service.record({
-        ...(jobId ? { id: `${jobId}-hc-${call.seq ?? index}` } : {}),
+        ...(jobId ? { id: `${jobId}-hc-${turnIndex}` } : {}),
         workspaceId,
         executionId,
         agentKind,
         provider,
         model: call.model ?? model,
         streaming: true,
+        // Absent on an older harness image (no phase marker at all), which normalises to the
+        // unattributed slice rather than being guessed at from the agent kind.
+        ...(call.phase !== undefined ? { phase: call.phase } : {}),
+        turnIndex,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,

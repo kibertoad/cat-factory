@@ -37,6 +37,12 @@ else imports its **ports** and domain types from here.
   board snapshot (`WorkspaceService.composeBoard`) and every frame-returning `BoardService`
   mutation project through it — a response that skips it hands the SPA coordinates no board shows
   the frame at, and the SPA upserts them.
+- `domain/llm-phase.ts` — `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
+  **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
+  free-form and comes from producers the platform does not fully author (a proxy request path, a
+  runner pool's JSON), so every path normalises here before it becomes a grouping key; an
+  unrecognisable one becomes the unattributed `''` slice rather than a group of its own. See
+  `docs/initiatives/token-burn-instrumentation.md`.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

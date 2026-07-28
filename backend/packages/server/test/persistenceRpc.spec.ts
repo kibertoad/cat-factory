@@ -300,8 +300,12 @@ function makeRegistry(): {
       getRef: async (ws: string, id: string) => ({ ws, id, kind: 'execution' }),
       listStale: async () => [],
     },
+    // The spend ledger. `record(row)` is the one telemetry-shaped WRITE that is remote (the budget
+    // gate reads its rollups remotely, so a laptop-local ledger would under-enforce); it echoes the
+    // row so an accepted call proves which one reached the store.
     tokenUsageRepository: {
       totalsSinceForWorkspace: async (ws: string, _since: number) => ({ ws }),
+      record: async (row: unknown) => row,
     },
     requirementReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
@@ -456,6 +460,12 @@ function makeRegistry(): {
     slackMemberMappingRepository: {
       getByAccount: async (accountId: string) => [{ accountId }],
       upsert: async () => undefined,
+    },
+    // Wired but deliberately OFF the allow-list now that telemetry is local-first: a
+    // mothership-mode node summarises its OWN local store, and the mothership's copy holds none
+    // of that node's calls, so a remote summarize could only ever report zeros.
+    llmCallMetricRepository: {
+      summarizeByExecution: async () => [],
     },
   } as unknown as PersistenceRegistry
 
@@ -2216,5 +2226,92 @@ describe('Slack integration management surface', () => {
     await expect(remoteRegistry().slackConnectionRepository!.getByTeam!('T123')).rejects.toThrow(
       /not callable/,
     )
+  })
+})
+
+describe('spend ledger write surface (usageRecord-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT], userId = USER) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({ registry, ...resolvers, scope: { accountIds, userId } })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  const usage = (over: Record<string, unknown> = {}) => ({
+    id: 'usage_1',
+    workspaceId: 'ws_in',
+    accountId: ACCOUNT,
+    userId: USER,
+    executionId: 'exec_1',
+    agentKind: 'coder',
+    provider: 'anthropic',
+    model: 'claude',
+    inputTokens: 10,
+    outputTokens: 5,
+    costEstimate: 0.01,
+    billing: 'metered',
+    vendor: null,
+    createdAt: 1000,
+    ...over,
+  })
+
+  it('forwards a metered row for an in-scope workspace', async () => {
+    await expect(remoteRegistry().tokenUsageRepository!.record!(usage())).resolves.toMatchObject({
+      workspaceId: 'ws_in',
+      accountId: ACCOUNT,
+    })
+  })
+
+  it('accepts a row whose denormalized account/user are unresolved (null)', async () => {
+    // The recorder legitimately writes nulls when a run has no resolvable account or initiator, so
+    // the rule must admit them rather than force the node to guess an id.
+    await expect(
+      remoteRegistry().tokenUsageRepository!.record!(usage({ accountId: null, userId: null })),
+    ).resolves.toBeDefined()
+  })
+
+  it('rejects a row targeting an out-of-scope workspace (404, no leak)', async () => {
+    await expect(
+      remoteRegistry().tokenUsageRepository!.record!(
+        usage({ workspaceId: 'ws_out', accountId: OTHER_ACCOUNT }),
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The reason this rule exists rather than plain `workspaceField`: the account- and user-tier
+  // budget rollups read the DENORMALIZED columns directly, so a row written into the caller's own
+  // workspace but STAMPED with someone else's id would inflate a budget the caller has no
+  // entitlement to — pausing that account's (or that teammate's) runs.
+  it("refuses to stamp another account's id on a row in the caller's own workspace", async () => {
+    await expect(
+      remoteRegistry().tokenUsageRepository!.record!(usage({ accountId: OTHER_ACCOUNT })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('refuses to attribute a row to another user', async () => {
+    await expect(
+      remoteRegistry().tokenUsageRepository!.record!(usage({ userId: 'usr_someone_else' })),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects a non-object / workspace-less row (404, no crash)', async () => {
+    await expect(remoteRegistry().tokenUsageRepository!.record!('not-a-row')).rejects.toMatchObject(
+      {
+        code: 'not_found',
+      },
+    )
+    await expect(
+      remoteRegistry().tokenUsageRepository!.record!({ accountId: ACCOUNT }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The local-first telemetry bucket's complement: with the store on the laptop, the old remote
+  // summarize stopgap is gone rather than left as dead surface.
+  it('no longer exposes llmCallMetricRepository.summarizeByExecution (local-first telemetry)', async () => {
+    await expect(
+      remoteRegistry().llmCallMetricRepository!.summarizeByExecution!('ws_in', 'exec_1'),
+    ).rejects.toThrow(/not callable/)
   })
 })
