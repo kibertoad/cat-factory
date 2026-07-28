@@ -111,15 +111,57 @@ conformance suite):
 
 ## Per-slice checklist
 
-| #   | Slice                      | Scope                                                                                                            | Status     | PR  |
-| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | --- |
-| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ⬜ blocked |     |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo    |     |
-| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo    |     |
-| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo    |     |
+| #   | Slice                      | Scope                                                                                                             | Status     | PR  |
+| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- | --- |
+| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; leave subagent turns to the transcript watcher | ✅ done    |     |
+| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                 | ⬜ blocked |     |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers)  | ⬜ todo    |     |
+| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless                | ⬜ todo    |     |
+| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever               | ⬜ todo    |     |
+| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                      | ⬜ todo    |     |
+
+### Slice 0 — what the instrument was actually reporting (2026-07-28)
+
+Found while taking the `pr-review-turn-reduction` Slice 3 measurement on run `exec_a4972d30`. The
+surface reported **575 rows / 39.4M input tokens** where the run made **~228 calls / ~16.3M**, so
+every conclusion drawn from it was inflated ~2.4×. Two independent defects, both now fixed in
+`agent-runner.ts` + `claude-call-aggregator.ts`:
+
+1. **A row per content BLOCK, not per call.** Claude Code's `stream-json` emits one `assistant`
+   envelope per content block of a response, each repeating that response's `usage`; the runner
+   recorded one metric per envelope. A turn answering with text and five parallel tool calls was
+   counted six times. Proof in the data: six consecutive rows all at `prompt_tokens = 49,661`
+   covering one `ToolSearch` and five `TaskCreate` calls — consecutive real calls cannot share an
+   input count, because each adds the previous tool result.
+2. **Subagent turns counted twice.** The CLI streams a dispatched subagent's turns onto the
+   parent's stdout tagged with `parent_tool_use_id`, and the same turns are written to the
+   `subagents/*.jsonl` transcripts the watcher reads. Nothing filtered the tagged events, so both
+   channels recorded them: 56 distinct `(prompt_tokens, completion_tokens)` pairs appeared in both.
+   The runner's message reconstruction spliced them in too, so `promptText` interleaved several
+   conversations and matched no request that was ever sent — visible as the parent's
+   `prompt_tokens` dropping 51,429 → 19,430 at a dispatch and snapping back to 57,935 when the
+   `Agent` result landed.
+
+The `assembleClaudeOutcome` invariant ("the two sources are disjoint") holds for the aggregate
+`usage`, which comes from the terminal `result` event and covers only the parent loop. It never
+held for `callMetrics`.
+
+**Slice 5 (the residual).** Stream-sourced rows carry the output count as of the message start, not
+the total: across that run every parent-channel row reported ~14 output tokens, and every
+substantial count came from a transcript row. With Slice 0 in, subagent calls are transcript-sourced
+and correct, and the run total stays right (the `result` event), so what is left is the per-call
+output split for the PARENT's own turns. Fixing it means deciding which source owns per-call usage
+— most likely joining the stream's prompt side to the parent session transcript's usage side on
+`message.id`, which is a real restructuring of the two-source split rather than a patch.
 
 ## Conventions / gotchas carried between iterations
 
+- **An envelope is not a call, and a channel is not a source of truth.** Both Slice 0 defects were
+  the same mistake: treating whatever the CLI happened to emit as one unit of spend. Before adding
+  a producer to `llm_call_metrics`, establish what makes a row unique (`message.id`, here) and
+  which channel owns it. A cross-check that catches this early: distinct `prompt_tokens` values
+  should be close to the row count, since a real call's prompt is strictly larger than its
+  predecessor's.
 - **Cache reads are NOT free and NOT cosmetic.** They occupy the context window and count toward
   Claude Code's own gauge. Any framing that discounts them because the dollar cost is low is
   measuring the wrong thing — the quota/latency/volume cost is what this tracker exists to measure.

@@ -191,6 +191,153 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
     ])
   })
 
+  it('counts a block-split response as ONE call, not one per content block', async () => {
+    // The CLI emits one envelope per content block, each repeating that response's usage.
+    // Recording per envelope is what turned ~230 real calls into 575 rows and 16.3M input
+    // tokens into 39.4M on the measured pr-review run.
+    const usage = { input_tokens: 40, cache_read_input_tokens: 49_621, output_tokens: 5 }
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          model: 'claude-opus-5',
+          usage,
+          content: [{ type: 'text', text: 'Planning' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          model: 'claude-opus-5',
+          usage,
+          content: [{ type: 'tool_use', name: 'TaskCreate', input: {} }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', content: 'ok' }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          model: 'claude-opus-5',
+          stop_reason: 'tool_use',
+          usage: { ...usage, output_tokens: 316 },
+          content: [{ type: 'tool_use', name: 'TaskCreate', input: {} }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', content: 'ok' }] },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        usage: { input_tokens: 49_661, output_tokens: 316 },
+      }),
+    ])
+
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.inputTokens).toBe(49_661)
+    // The final block carries the real output count; the earlier ones carry a partial.
+    expect(calls[0]!.outputTokens).toBe(316)
+    expect(calls[0]!.finishReason).toBe('tool_use')
+    expect(calls[0]!.responseText).toBe('Planning')
+    // Three tool calls in one turn is still ONE turn on the reconstructed transcript, followed
+    // by its results — the shape the model was actually sent.
+    expect(JSON.parse(calls[0]!.promptText).map((m: { role: string }) => m.role)).toEqual([
+      'system',
+      'user',
+    ])
+    expect(outcome.stats.toolCalls).toBe(2)
+  })
+
+  it('leaves a subagent’s turns to the transcript watcher instead of counting them twice', async () => {
+    // Subagent turns ride the parent's stdout tagged with the dispatch that spawned them, AND
+    // land in `subagents/*.jsonl`. Recording both channels double-counted every subagent call
+    // and spliced a second conversation into the parent's prompt chain.
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          model: 'claude-opus-5',
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 100, output_tokens: 10 },
+          content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        parent_tool_use_id: 'toolu_01',
+        message: {
+          id: 'msg_sub',
+          model: 'claude-opus-5',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 19_430, output_tokens: 400 },
+          content: [{ type: 'text', text: 'slice findings' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        parent_tool_use_id: 'toolu_01',
+        message: { content: [{ type: 'tool_result', content: 'subagent tool output' }] },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_2',
+          model: 'claude-opus-5',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 200, output_tokens: 20 },
+          content: [{ type: 'text', text: 'aggregated' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        usage: { input_tokens: 300, output_tokens: 30 },
+      }),
+    ])
+
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    expect(calls.map((c) => c.inputTokens)).toEqual([100, 200])
+    // The parent's chain holds its own dispatch and the Agent's result, never the subagent's
+    // internal turns — otherwise `promptText` describes a request that was never sent.
+    expect(JSON.parse(calls[1]!.promptText).map((m: { role: string }) => m.role)).toEqual([
+      'system',
+      'user',
+      'assistant',
+      'tool',
+    ])
+    expect(calls[1]!.promptText).toContain('the Agent result')
+    expect(calls[1]!.promptText).not.toContain('subagent tool output')
+  })
+
   it('streams every costed call live, with the same objects the terminal list carries', async () => {
     // The point of the live channel: a run killed mid-flight never returns a result, so
     // telemetry batched to the end reports nothing for a run that spent real tokens.

@@ -2,13 +2,8 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import {
-  claudeAssistantContent,
-  claudeCallUsage,
-  isObject,
-  numberOf,
-  redactBody,
-} from './claude-stream.js'
+import { isObject, numberOf, redactBody } from './claude-stream.js'
+import { createClaudeStreamTelemetry, isSubagentEvent } from './claude-call-aggregator.js'
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
@@ -358,29 +353,35 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   }
 
   // Reconstruct the full per-call request/response bodies for telemetry from the
-  // stream. `--output-format stream-json --verbose` emits each turn as a near-verbatim
-  // Anthropic Messages envelope, so `assistant` events carry the complete response
-  // (text + tool_use blocks + usage), and `user` events carry the tool_result blocks
-  // fed back — together the growing prompt transcript. We seed it with the inputs the
-  // harness supplies (they never appear in the stream): the system + first user message
-  // when the prompt rides argv, or a single folded user turn when it doesn't — so the
-  // reconstruction never shows a system turn that was never sent. Bodies are
-  // credential-scrubbed (they can echo the leased token).
+  // stream. `--output-format stream-json --verbose` emits a near-verbatim Anthropic
+  // Messages envelope per response CONTENT BLOCK (not per call), so the aggregator below
+  // folds the envelopes sharing a `message.id` back into one call and buffers that call's
+  // `user` tool_result turns — together the growing prompt transcript, in the shape the
+  // model was actually sent. We seed it with the inputs the harness supplies (they never
+  // appear in the stream): the system + first user message when the prompt rides argv, or
+  // a single folded user turn when it doesn't — so the reconstruction never shows a system
+  // turn that was never sent. Bodies are credential-scrubbed (they can echo the leased token).
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
-  const messages: Array<{ role: string; content: unknown }> = folded
-    ? [{ role: 'user', content: prompt }]
-    : [
-        { role: 'system', content: opts.systemPrompt },
-        { role: 'user', content: opts.userPrompt },
-      ]
   const calls: HarnessCallMetric[] = []
   // Streams each call as the CLI yields it, EXCEPT one whose tokens `attributeCumulativeUsage`
   // may still rewrite below (a published call must be final — see the publisher).
   const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
+  const telemetry = createClaudeStreamTelemetry({
+    seed: folded
+      ? [{ role: 'user', content: prompt }]
+      : [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userPrompt },
+        ],
+    secrets,
+    stats,
+    publish: (metric) => publisher.publish(metric),
+  })
 
   // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
-  // sources. The parent's subagent dispatches + their terminal tool_results DO appear on this
-  // stream (only a subagent's intermediate turns don't), so `sliceTracker` derives per-slice
+  // sources. The parent's subagent dispatches + their terminal tool_results appear on this
+  // stream (as do the subagents' own turns, tagged — see `isSubagentEvent`), so `sliceTracker`
+  // derives per-slice
   // progress for the parallel shape; the parent's own plan (the sequential shape) is tracked
   // by `planTracker` + `lastTodo`. `pickProgress` picks whichever is further along on each
   // update, so neither masks the other — the pr-reviewer prompt writes its plan ONCE and never
@@ -439,12 +440,17 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
+    // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them, and
+    // the watcher records the same turns off `subagents/*.jsonl`. The watcher is the channel that
+    // owns them (it reads the settled transcript, so its usage and stop reason are the final ones),
+    // so the parent loop's telemetry and message chain skip them — see `isSubagentEvent`. Progress
+    // and guard signals below still see every event: a subagent grinding on errors should trip the
+    // guard exactly as the parent would.
+    const subagent = isSubagentEvent(event)
     if (type === 'assistant' && isObject(event.message)) {
       const message = event.message as Record<string, unknown>
       const content = Array.isArray(message.content) ? message.content : []
-      const { text, reasoning, toolUses } = claudeAssistantContent(content)
-      stats.assistantChars += text.length
-      stats.toolCalls += toolUses
+      if (!subagent) telemetry.onAssistant(message)
       for (const block of content) {
         if (!isObject(block) || block.type !== 'tool_use') continue
         // Remember each call's name against its id so the guard can pair it with the
@@ -460,22 +466,6 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       sliceTracker.onAssistant(content)
       planTracker.onAssistant(content)
       emitProgress()
-      // Record this call BEFORE appending its turn: the prompt is the history that
-      // produced this response. The append-only array keeps each call's prompt a strict
-      // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
-      const u = claudeCallUsage(message.usage)
-      publisher.publish({
-        ...(typeof message.model === 'string' ? { model: message.model } : {}),
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(text, secrets),
-        reasoningText: redactBody(reasoning, secrets),
-        inputTokens: u.inputTokens,
-        cachedInputTokens: u.cachedInputTokens,
-        outputTokens: u.outputTokens,
-        finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
-      })
-      messages.push({ role: 'assistant', content })
     } else if (type === 'user' && isObject(event.message)) {
       // tool_result blocks the harness fed back to the model — part of the next prompt.
       const content = (event.message as Record<string, unknown>).content
@@ -486,7 +476,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)
-        messages.push({ role: 'tool', content })
+        if (!subagent) telemetry.onToolResult(content)
       }
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
@@ -585,6 +575,8 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
+    // The stream has ended, so the last call has no successor envelope to complete it.
+    telemetry.flush()
     return await assembleClaudeOutcome({
       summary,
       stats,
@@ -599,6 +591,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
     // it attached, since that is usually the only evidence of what the CLI was doing when it was
     // killed. Byte-for-byte the shape `runPi` fails with.
+    // The stream ended abnormally (guard trip, watchdog kill, CLI crash). Complete the call in
+    // flight anyway: a killed run never returns an outcome, so the live channel is the ONLY
+    // record of what it spent, and dropping its last turn is what the streaming exists to avoid.
+    telemetry.flush()
     if (guardReason) {
       const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
       throw new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason)

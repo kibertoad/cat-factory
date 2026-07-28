@@ -347,6 +347,56 @@ describe('standards as context files', () => {
     expect(out).toContain('Do NOT paraphrase')
   })
 
+  /** A standard past the section-map threshold, with `sections` headings and padded bodies. */
+  const bigFragment = (id: string, sections: number) => ({
+    id,
+    title: id,
+    body: Array.from(
+      { length: sections },
+      (_, i) => `## Section ${i}\n\n${`${'padding text '.repeat(6)}\n`.repeat(40)}`,
+    ).join('\n'),
+  })
+
+  it('gives a large standard a section map whose line ranges land on its headings', () => {
+    // Reading a 40 KB standard whole is what a slice then re-sends on all of its turns. The map
+    // is what lets the parent route a slice to the part that applies.
+    const big = bigFragment('perf', 4)
+    const out = renderStandardsIndex([big])
+    expect(out).toContain('Section 0 — lines ')
+
+    // The ranges must be resolvable against the FILE the agent opens, not the raw body.
+    const lines = renderStandardContext(big).split('\n')
+    const [, from, to] = /Section 2 — lines (\d+)-(\d+)/.exec(out) ?? []
+    expect(lines[Number(from) - 1]).toBe('## Section 2')
+    // The range ends where the next section begins, so it carries that section and no other.
+    expect(lines.slice(Number(from) - 1, Number(to)).join('\n')).not.toContain('## Section 3')
+  })
+
+  it('leaves a small standard mapless — probing it costs more than reading it', () => {
+    const out = renderStandardsIndex([fragment('tiny', 'Tiny')])
+    expect(out).toContain('**Tiny**')
+    expect(out).not.toContain('lines ')
+    expect(out).not.toContain('read the sections that apply')
+  })
+
+  it('ignores headings inside fenced code, which are examples and not sections', () => {
+    const withFence = {
+      id: 'fenced',
+      title: 'Fenced',
+      body: `## Real\n\n${`${'x'.repeat(60)}\n`.repeat(80)}\n\`\`\`md\n## Not A Section\n\`\`\`\n${`${'y'.repeat(60)}\n`.repeat(80)}`,
+    }
+    const out = renderStandardsIndex([withFence])
+    expect(out).toContain('Real — lines ')
+    expect(out).not.toContain('Not A Section')
+  })
+
+  it('caps the section map, so a heavily-subdivided standard cannot become the cost itself', () => {
+    const out = renderStandardsIndex([bigFragment('many', 30)])
+    expect(out).toContain('Section 15 — lines ')
+    expect(out).not.toContain('Section 16 — lines ')
+    expect(out).toContain('…and 14 more section(s)')
+  })
+
   it('writes an index plus one file per resolved fragment', async () => {
     const result = await prReviewerStandardsPreOp({
       repo: {} as unknown as RepoFiles,

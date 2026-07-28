@@ -76,6 +76,9 @@ later turn. A large file read early costs many times what it looks like. So:
   body read only the range you need (\`git show origin/pr-head:<path> | sed -n '120,260p'\`),
   or grep with context (\`grep -n -C5 <pattern>\`).
 - NEVER re-read something you already read — it is still in your context.
+- This applies to the standards too. A standard is reference material, not something to load
+  "in case": read only the sections that bear on what you are judging, using the line ranges in
+  \`.cat-context/standards.md\`.
 - Do NOT read a slice's files yourself before delegating that slice. Whoever reviews the slice
   should be the one to read it, exactly once.
 - Prefer \`--stat\` / \`--name-status\` to a full patch when you only need the shape.
@@ -86,16 +89,31 @@ later turn. A large file read early costs many times what it looks like. So:
  * How to fan the slices out. Each subagent starts with a FRESH context, which is exactly why
  * parallel slices are cheaper than one sequential pass — the slice's reading never accumulates
  * onto the parent's transcript. The parent's job is to stay small: plan, dispatch, aggregate.
+ *
+ * The two rules with teeth here — dispatch every slice in ONE turn, and give each slice a turn
+ * budget — come from a measured 26-minute review of a 14-file / 286-line PR. Its first slice ran
+ * ~70 turns ALONE before the other three were dispatched, and slices with 16 and 59 changed lines
+ * each pulled 21–28k tokens of standards and then ran 40+ turns carrying them, reaching a 119k
+ * context. Cost is turns × context, so an unbounded slice on a tiny diff is the whole overrun.
  */
 const SLICE_DISPATCH_GUIDANCE = `
-Review the slices by dispatching ONE subagent per slice (in parallel). Each subagent gets a
-fresh context, so the files it reads never land on yours — this is the single biggest reason a
-large review stays affordable. In each subagent's prompt:
+Review the slices by dispatching ONE subagent per slice. Each subagent gets a fresh context, so
+the files it reads never land on yours — this is the single biggest reason a large review stays
+affordable. Dispatch ALL of them in a SINGLE turn (parallel tool calls in one response), not one
+at a time: a slice you dispatch after the previous one returns runs on wall-clock you did not need
+to spend, and every turn you take between dispatches is re-sent for the rest of the review. In
+each subagent's prompt:
 - Name the slice's files and the base/head refs, and tell it to read the diffs ITSELF.
-- Name which \`.cat-context/standard-*.md\` files apply and tell it to READ them. Do not
-  paraphrase a standard into the prompt — a summary is not the standard.
+- Name which \`.cat-context/standard-*.md\` files apply — ONLY those. A standard that does not
+  bear on the slice's files costs the slice its full size on every one of that slice's turns.
+  Where \`.cat-context/standards.md\` lists a standard with a SECTION MAP, name the sections that
+  apply and pass their line ranges so the subagent reads those ranges rather than the whole file.
+  Do not paraphrase a standard into the prompt — a summary is not the standard.
 - Tell it to check \`.cat-context/pr-existing-comments.md\` for its OWN paths only
   (\`grep -n -A2 "^### <path>" …\`) and skip anything already raised there.
+- Give it an explicit TURN BUDGET scaled to the slice: roughly one turn per 10 changed lines,
+  floor 8, ceiling 40. Tell it to report what it has when the budget runs out rather than keep
+  digging, and to say which files it could not fully inspect.
 - Pass the same context discipline above.
 - Ask for findings as JSON (path, line on the PR head, side, severity, category, title, detail,
   suggestedFix) and nothing else.
@@ -119,9 +137,10 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'If `origin/pr-head` is absent (the fetch was skipped), fall back to reviewing from ' +
   '`.cat-context/pr-diff.md` and note any file you could not fully inspect.\n' +
   'The best-practice standards this review is judged against are in `.cat-context/standards.md` ' +
-  '(an index) plus one `.cat-context/standard-<id>.md` file per standard. Do NOT read them all ' +
-  'yourself — route each to the slice reviewers it applies to, and read one directly only when ' +
-  'you need it for the aggregation pass.\n' +
+  '(an index, with a section map and line ranges for any standard too big to read whole) plus ' +
+  'one `.cat-context/standard-<id>.md` file per standard. Do NOT read them all yourself — route ' +
+  'each to the slice reviewers it applies to, and read one directly only when you need it for ' +
+  'the aggregation pass, then only the sections you need.\n' +
   'This PR may ALREADY carry review comments — from an earlier review round, from human reviewers, ' +
   'or from other bots. When any exist they are in `.cat-context/pr-existing-comments.md`, grouped ' +
   'by file. Treat those findings as already-known: do NOT re-report an issue an existing comment ' +

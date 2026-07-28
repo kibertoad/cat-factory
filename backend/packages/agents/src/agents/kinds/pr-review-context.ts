@@ -432,6 +432,65 @@ export function renderStandardContext(fragment: ComposableFragment): string {
   )
 }
 
+/**
+ * Above this rendered size a standard is worth reading by SECTION rather than whole. Set from
+ * the measured run: its four C# standards were 21–43 KB each, and a slice reviewing 16 changed
+ * lines loaded two of them in full (~21k tokens) and then re-sent that on each of its ~40 turns.
+ * Under the threshold the section map is noise — reading the file whole is cheaper than probing.
+ */
+const STANDARD_SECTION_MAP_MIN_BYTES = 8 * 1024
+
+/** How many sections to list per standard before the map costs more than it saves. */
+const MAX_LISTED_SECTIONS = 16
+
+/**
+ * The markdown sections of a rendered standard, with the line range each occupies IN THAT FILE —
+ * so a slice reviewer can `sed -n '<from>,<to>p'` the part that applies to it instead of reading
+ * the whole standard into a context it then re-sends every turn.
+ *
+ * Ranges are computed against the rendered file (not the raw fragment body) because that is what
+ * the agent opens; an off-by-a-preamble range would send it to the wrong lines.
+ */
+function standardSections(rendered: string): { title: string; from: number; to: number }[] {
+  const lines = rendered.split('\n')
+  const found: { title: string; from: number }[] = []
+  let fenced = false
+  for (const [index, line] of lines.entries()) {
+    if (line.startsWith('```')) fenced = !fenced
+    if (fenced) continue
+    // Only `##`/`###` — `#` is the title the renderer wrote, and deeper levels multiply the map
+    // faster than they help route.
+    const heading = /^(#{2,3})\s+(.+?)\s*$/.exec(line)
+    if (heading) found.push({ title: heading[2]!, from: index + 1 })
+  }
+  return found.map((section, i) => ({
+    title: section.title,
+    from: section.from,
+    to: found[i + 1] ? found[i + 1]!.from - 1 : lines.length,
+  }))
+}
+
+/** One index entry: where the standard lives, how big it is, and how to read only part of it. */
+function renderStandardsIndexEntry(fragment: ComposableFragment): string {
+  const rendered = renderStandardContext(fragment)
+  const bytes = Buffer.byteLength(rendered, 'utf8')
+  const path = `\`.cat-context/${standardsContextFileName(fragment.id)}\``
+  const head = `- **${fragment.title?.trim() || fragment.id}** (\`${fragment.id}\`) — ${path}, ${Math.round(bytes / 1024)} KB`
+  if (bytes < STANDARD_SECTION_MAP_MIN_BYTES) return head
+  const sections = standardSections(rendered)
+  if (!sections.length) return head
+  const listed = sections.slice(0, MAX_LISTED_SECTIONS)
+  const rest =
+    sections.length > listed.length
+      ? `\n  - …and ${sections.length - listed.length} more section(s) — \`grep -n '^#' <file>\` for the full map`
+      : ''
+  return (
+    `${head}. Large: read the sections that apply, not the whole file —\n` +
+    listed.map((s) => `  - ${s.title} — lines ${s.from}-${s.to}`).join('\n') +
+    rest
+  )
+}
+
 /** Render the index that tells the reviewer which standards exist and where each one is. */
 export function renderStandardsIndex(fragments: ComposableFragment[]): string {
   return (
@@ -441,12 +500,10 @@ export function renderStandardsIndex(fragments: ComposableFragment[]): string {
     'When you dispatch a slice reviewer, name the standards that apply to that slice and tell it ' +
     'to READ those files itself. Do NOT paraphrase a standard into the subagent’s prompt: a ' +
     'summary is not the standard, and `fragmentAdherence` ratings must come from the real text.\n\n' +
-    fragments
-      .map(
-        (f) =>
-          `- **${f.title?.trim() || f.id}** (\`${f.id}\`) — \`.cat-context/${standardsContextFileName(f.id)}\``,
-      )
-      .join('\n') +
+    'A standard listed with a section map is too big to read whole for one slice. Name the ' +
+    'SECTIONS that apply and pass their line ranges, so the subagent reads those ranges ' +
+    "(`sed -n '<from>,<to>p' <file>`) — still the real text, a fraction of the carry.\n\n" +
+    fragments.map(renderStandardsIndexEntry).join('\n') +
     '\n'
   )
 }
