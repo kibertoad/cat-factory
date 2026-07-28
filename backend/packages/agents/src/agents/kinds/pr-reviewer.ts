@@ -83,14 +83,38 @@ later turn. A large file read early costs many times what it looks like. So:
   too big: split it and dispatch the parts separately.`
 
 /**
+ * The most slice subagents the reviewer may keep in flight at once.
+ *
+ * The fan-out is unbounded otherwise, and a large PR slices into dozens: every one of them is a
+ * concurrent model conversation against the same account, so an uncapped wave is what turns a
+ * review into provider rate-limiting (each 429 costs a retry, and the parent sits idle through
+ * it) and lands every slice's findings back in one burst at the end. A window of
+ * {@link MAX_PARALLEL_SLICE_SUBAGENTS} keeps the review saturated while its slices return
+ * steadily, which is also what makes the live per-slice progress readable rather than a
+ * single 0% → 100% jump.
+ *
+ * This is a PROMPT-level budget: the CLI owns tool dispatch, so the harness can observe the
+ * in-flight count (`SliceTracker`) but cannot refuse a call. Treat an over-wide wave as a prompt
+ * adherence problem, not a broken guard.
+ */
+export const MAX_PARALLEL_SLICE_SUBAGENTS = 5
+
+/**
  * How to fan the slices out. Each subagent starts with a FRESH context, which is exactly why
  * parallel slices are cheaper than one sequential pass — the slice's reading never accumulates
  * onto the parent's transcript. The parent's job is to stay small: plan, dispatch, aggregate.
  */
 const SLICE_DISPATCH_GUIDANCE = `
-Review the slices by dispatching ONE subagent per slice (in parallel). Each subagent gets a
-fresh context, so the files it reads never land on yours — this is the single biggest reason a
-large review stays affordable. In each subagent's prompt:
+Review the slices by dispatching ONE subagent per slice. Each subagent gets a fresh context, so
+the files it reads never land on yours — this is the single biggest reason a large review stays
+affordable. Run them in parallel, but keep AT MOST ${MAX_PARALLEL_SLICE_SUBAGENTS} in flight at
+once: dispatch the first ${MAX_PARALLEL_SLICE_SUBAGENTS}, and each time one returns, dispatch the
+next queued slice. Do not fan every slice out in one wave — a wider wave gets rate-limited rather
+than finishing sooner. As you go, mark a slice's task entry in progress when you dispatch it and
+completed when its subagent returns; that is what the user watches the review by.
+Describe each dispatch as \`Review <slice short name> slice\`, reusing the SAME short name as that
+slice's task entry — the two are matched by name to show one row per slice.
+In each subagent's prompt:
 - Name the slice's files and the base/head refs, and tell it to read the diffs ITSELF.
 - Name which \`.cat-context/standard-*.md\` files apply and tell it to READ them. Do not
   paraphrase a standard into the prompt — a summary is not the standard.

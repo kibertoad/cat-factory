@@ -5224,11 +5224,12 @@
       },
       "reviewingChunks": {
         "title": "Przeglądanie fragmentów…",
-        "hint": "Podział zakończony. Przeglądanie każdego fragmentu po kolei i zbieranie uwag."
+        "hint": "Podział zakończony. Recenzent przegląda fragmenty w małych grupach i zbiera uwagi w miarę ich powrotu."
       },
       "chunks": "Sprawdzono {completed} z {total} fragmentów",
       "inProgress": "{count} w toku",
       "activeHeading": "Przeglądane teraz",
+      "activeIdle": "Żaden fragment nie jest teraz przeglądany. Recenzent uruchamia kolejną grupę.",
       "chunksHeading": "Fragmenty",
       "chunkStatus": {
         "completed": "Sprawdzony",

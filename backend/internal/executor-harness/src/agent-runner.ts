@@ -25,6 +25,7 @@ import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
   createTaskPlanTracker,
+  mergeProgress,
   normalizeStatus,
   pickProgress,
   toProgress,
@@ -378,24 +379,25 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // may still rewrite below (a published call must be final — see the publisher).
   const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
 
-  // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
-  // sources. The parent's subagent dispatches + their terminal tool_results DO appear on this
-  // stream (only a subagent's intermediate turns don't), so `sliceTracker` derives per-slice
-  // progress for the parallel shape; the parent's own plan (the sequential shape) is tracked
-  // by `planTracker` + `lastTodo`. `pickProgress` picks whichever is further along on each
-  // update, so neither masks the other — the pr-reviewer prompt writes its plan ONCE and never
-  // marks it done, which used to gate the slice signal off and pin progress at 0%.
+  // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from the two views the run
+  // produces of the SAME slicing. The parent's subagent dispatches + their terminal tool_results
+  // DO appear on this stream (only a subagent's intermediate turns don't), so `sliceTracker`
+  // knows which slices are in flight and which have returned; the parent's own plan (tracked by
+  // `planTracker` + `lastTodo`) is the only place a not-yet-dispatched slice is named at all.
   //
   // The plan arrives in one of two tool vocabularies depending on the bundled CLI build:
   // `TodoWrite` (whole-list snapshots, tracked in `lastTodo`) or the incremental
   // `TaskCreate`/`TaskUpdate` pair (tracked by `planTracker`, which needs the tool RESULTS too
-  // because the task id is minted there). Both are read — see ./progress.ts.
+  // because the task id is minted there). Both are read, and `pickProgress` resolves that
+  // either/or; the plan then MERGES with the dispatch view (`mergeProgress`) rather than
+  // competing with it — picking the further-along view collapsed the list to the dispatched
+  // slices alone the moment the first subagent returned. See ./progress.ts.
   const sliceTracker = createSliceTracker()
   const planTracker = createTaskPlanTracker()
   let lastTodo: TodoProgress | undefined
   const emitProgress = (): void => {
     if (!opts.onProgress) return
-    const progress = pickProgress(
+    const progress = mergeProgress(
       pickProgress(lastTodo, planTracker.progress()),
       sliceTracker.progress(),
     )

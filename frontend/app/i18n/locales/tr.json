@@ -5236,11 +5236,12 @@
       },
       "reviewingChunks": {
         "title": "Parçalar inceleniyor…",
-        "hint": "Bölme tamamlandı. Her parça tek tek inceleniyor ve bulgular toplanıyor."
+        "hint": "Bölme tamamlandı. İnceleyici parçaları küçük gruplar hâlinde inceliyor ve her biri döndükçe bulguları topluyor."
       },
       "chunks": "{total} bölümden {completed} tanesi incelendi",
       "inProgress": "{count} devam ediyor",
       "activeHeading": "Şimdi inceleniyor",
+      "activeIdle": "Şu anda incelenen bir parça yok. İnceleyici bir sonraki grubu başlatıyor.",
       "chunksHeading": "Parçalar",
       "chunkStatus": {
         "completed": "İncelendi",
