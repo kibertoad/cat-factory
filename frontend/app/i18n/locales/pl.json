@@ -285,17 +285,6 @@
       "bestPractices": "Dobre praktyki",
       "bestPracticesHint": "Przypnij fragmenty dobrych praktyk, aby agenci tego zadania stosowali je oprócz standardów na poziomie usługi.",
       "agentConfiguration": "Konfiguracja agenta",
-      "contextDocuments": "Dokumenty kontekstu",
-      "contextIssues": "Zgłoszenia kontekstu",
-      "attach": "Dołącz",
-      "connectSource": "Połącz źródło",
-      "connectSourceNamed": "Połącz {source}",
-      "done": "Gotowe",
-      "attachDocDisabledConnect": "Najpierw połącz źródło dokumentów (Integracje)",
-      "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
-      "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
-      "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
-      "importsOnAdd": "importowane przy dodaniu",
       "noDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "noIssuesHint": "Dołącz zgłoszenie z systemu, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
       "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u; do tego czasu możesz je edytować.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} aktywnych",
       "noTasksYet": "Brak zadań"
     }
+  },
+  "contextAttachments": {
+    "documents": "Dokumenty kontekstu",
+    "issues": "Zgłoszenia kontekstu",
+    "attach": "Dołącz",
+    "done": "Gotowe",
+    "connectSource": "Połącz źródło",
+    "connectSourceNamed": "Połącz {source}",
+    "attachDocDisabledConnect": "Najpierw połącz źródło dokumentów (Integracje)",
+    "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
+    "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
+    "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
+    "importsOnAdd": "importowane przy dodaniu"
   },
   "errors": {
     "action": {
@@ -5117,7 +5119,10 @@
       "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
       "hint": "Nic jeszcze nie jest uruchamiane: po utworzeniu uruchom na bloku pipeline planowania inicjatywy. Analizuje on kod i przygotowuje wielofazowy plan do zatwierdzenia.",
       "submit": "Utworz inicjatywe",
-      "failedTitle": "Nie udalo sie utworzyc inicjatywy"
+      "failedTitle": "Nie udalo sie utworzyc inicjatywy",
+      "contextDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci planowania przeczytali je podczas określania zakresu i tworzenia planu.",
+      "contextIssuesHint": "Dołącz zgłoszenie, aby agenci planowania zobaczyli jego opis i komentarze podczas tworzenia planu.",
+      "linkFailed": "Inicjatywa utworzona, ale nie udało się powiązać {count} załącznika | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników"
     },
     "status": {
       "planning": "Planowanie",

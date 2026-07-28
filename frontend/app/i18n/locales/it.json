@@ -2332,17 +2332,6 @@
       "bestPractices": "Best practice",
       "bestPracticesHint": "Fissa i frammenti di best practice affinché gli agenti di questa attività li seguano, oltre agli standard a livello di servizio.",
       "agentConfiguration": "Configurazione dell'agente",
-      "contextDocuments": "Documenti di contesto",
-      "contextIssues": "Issue di contesto",
-      "attach": "Allega",
-      "connectSource": "Collega una fonte",
-      "connectSourceNamed": "Collega {source}",
-      "done": "Fatto",
-      "attachDocDisabledConnect": "Connetti prima una sorgente di documenti (Integrazioni)",
-      "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
-      "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
-      "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
-      "importsOnAdd": "importa all'aggiunta",
       "noDocsHint": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono mentre implementano questa attività.",
       "noIssuesHint": "Allega un'issue del tracker così gli agenti vedono la sua descrizione e i commenti mentre implementano questa attività.",
       "plannedHint": "L'attività viene aggiunta in stato pianificato. Non verrà eseguita finché non avvii una pipeline su di essa — puoi continuare a modificarla fino ad allora.",
@@ -2507,6 +2496,19 @@
       "activeCount": "{count} attive",
       "noTasksYet": "Ancora nessuna attività"
     }
+  },
+  "contextAttachments": {
+    "documents": "Documenti di contesto",
+    "issues": "Issue di contesto",
+    "attach": "Allega",
+    "done": "Fatto",
+    "connectSource": "Collega una fonte",
+    "connectSourceNamed": "Collega {source}",
+    "attachDocDisabledConnect": "Connetti prima una sorgente di documenti (Integrazioni)",
+    "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
+    "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
+    "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
+    "importsOnAdd": "importa all'aggiunta"
   },
   "providers": {
     "presetMismatch": {
@@ -4115,7 +4117,10 @@
       "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate).",
       "hint": "Non viene eseguito ancora nulla: dopo la creazione, esegui la pipeline di Pianificazione dell'iniziativa sul blocco. Analizza il codebase e redige il piano multi-fase per la tua approvazione.",
       "submit": "Crea iniziativa",
-      "failedTitle": "Impossibile creare l'iniziativa"
+      "failedTitle": "Impossibile creare l'iniziativa",
+      "contextDocsHint": "Allega un requisito, una RFC o un PRD così gli agenti di pianificazione lo leggono mentre delimitano e redigono il piano.",
+      "contextIssuesHint": "Allega una issue così gli agenti di pianificazione ne vedono descrizione e commenti mentre redigono il piano.",
+      "linkFailed": "Iniziativa creata, ma {count} allegato non è stato collegato | Iniziativa creata, ma {count} allegati non sono stati collegati"
     },
     "status": {
       "planning": "Pianificazione",

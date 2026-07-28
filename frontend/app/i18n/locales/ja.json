@@ -285,17 +285,6 @@
       "bestPractices": "ベストプラクティス",
       "bestPracticesHint": "サービスレベルの標準に加えて、このタスクのエージェントが従うようにベストプラクティスのフラグメントを固定します。",
       "agentConfiguration": "エージェント設定",
-      "contextDocuments": "コンテキストドキュメント",
-      "contextIssues": "コンテキスト issue",
-      "attach": "添付",
-      "connectSource": "ソースを接続",
-      "connectSourceNamed": "{source} を接続",
-      "done": "完了",
-      "attachDocDisabledConnect": "まずドキュメントソースを接続してください（連携）",
-      "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
-      "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
-      "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
-      "importsOnAdd": "追加時にインポート",
       "noDocsHint": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
       "noIssuesHint": "トラッカーの issue を添付すると、このタスクの実装中にエージェントがその説明やコメントを参照できます。",
       "plannedHint": "タスクは計画済みの状態で追加されます。パイプラインを開始するまで実行されず、それまでは編集を続けられます。",
@@ -460,6 +449,19 @@
       "activeCount": "{count} 件アクティブ",
       "noTasksYet": "タスクはまだありません"
     }
+  },
+  "contextAttachments": {
+    "documents": "コンテキストドキュメント",
+    "issues": "コンテキスト issue",
+    "attach": "添付",
+    "done": "完了",
+    "connectSource": "ソースを接続",
+    "connectSourceNamed": "{source} を接続",
+    "attachDocDisabledConnect": "まずドキュメントソースを接続してください（連携）",
+    "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
+    "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
+    "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
+    "importsOnAdd": "追加時にインポート"
   },
   "errors": {
     "action": {
@@ -5129,7 +5131,10 @@
       "pathInvalid": "リポジトリ内のパスを入力してください（\"..\"、絶対パス、バックスラッシュは使用できません）。",
       "hint": "この時点では何も実行されません。作成後、このブロックでイニシアチブ計画パイプラインを実行してください。コードベースを分析し、承認用の複数フェーズ計画を起草します。",
       "submit": "イニシアチブを作成",
-      "failedTitle": "イニシアチブを作成できませんでした"
+      "failedTitle": "イニシアチブを作成できませんでした",
+      "contextDocsHint": "要件・RFC・PRD を添付すると、計画エージェントが範囲の確定と計画の作成の際にそれを読みます。",
+      "contextIssuesHint": "issue を添付すると、計画エージェントが計画を作成する際にその説明とコメントを参照します。",
+      "linkFailed": "イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした | イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした"
     },
     "status": {
       "planning": "計画中",
