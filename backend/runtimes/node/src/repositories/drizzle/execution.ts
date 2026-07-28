@@ -30,6 +30,7 @@ import type {
   ScheduleTemplate,
   StaleAgentRun,
 } from '@cat-factory/kernel'
+import { LIVE_EXECUTION_STATUSES } from '@cat-factory/kernel'
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { ExecutionRow } from '@cat-factory/server'
 import {
@@ -146,6 +147,10 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
   ) {}
 
   private readonly isExecution = eq(agentRuns.kind, 'execution')
+  // The live-run predicate, shared by the `listLive` projection and the admission-control
+  // capacity COUNT so the two cannot drift. `insertLive` deliberately keeps its literals: those
+  // mirror the frozen index predicate (see LIVE_EXECUTION_STATUSES).
+  private readonly isLive = inArray(agentRuns.status, [...LIVE_EXECUTION_STATUSES])
 
   async listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]> {
     const rows = await this.db
@@ -169,13 +174,7 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     const rows = await this.db
       .select({ id: agentRuns.id, blockId: agentRuns.block_id, status: agentRuns.status })
       .from(agentRuns)
-      .where(
-        and(
-          eq(agentRuns.workspace_id, workspaceId),
-          this.isExecution,
-          inArray(agentRuns.status, ['running', 'blocked', 'paused']),
-        ),
-      )
+      .where(and(eq(agentRuns.workspace_id, workspaceId), this.isExecution, this.isLive))
     return rows.map((r) => ({
       id: r.id,
       blockId: r.blockId ?? '',
@@ -185,18 +184,11 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
 
   async countActiveByWorkspace(workspaceId: string): Promise<number> {
     // Admission-control capacity read: the COUNT is pushed into SQL (never rows reduced in JS),
-    // over the SAME live predicate as `listLive` and served by the same
-    // idx_agent_runs_ws_kind_status (workspace_id, kind, status) index. Mirrors the D1 repo.
+    // over the same live predicate and index as `listLive` above. Mirrors the D1 repo.
     const [row] = await this.db
       .select({ n: sql<number>`count(*)::int` })
       .from(agentRuns)
-      .where(
-        and(
-          eq(agentRuns.workspace_id, workspaceId),
-          this.isExecution,
-          inArray(agentRuns.status, ['running', 'blocked', 'paused']),
-        ),
-      )
+      .where(and(eq(agentRuns.workspace_id, workspaceId), this.isExecution, this.isLive))
     return row?.n ?? 0
   }
 
