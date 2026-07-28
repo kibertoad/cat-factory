@@ -43,12 +43,16 @@ prompt in layers. Knowing the layers tells you what to leave OUT of your own tex
      `kind: 'architect'` leaves the architect track's prompt in place (your `systemPrompt`
      is ignored); what DOES attach to a built-in kind is capabilities and traits — see
      "Extending built-in kinds" below. Pick a fresh id for a new role.
-   - An UNREGISTERED, non-built-in kind falls back to a generic one-line role, so a typo'd
-     kind id in a pipeline doesn't crash — it just runs a bland agent. Boot validation
-     catches the typo when the facade supplies `knownAgentKinds`.
-2. **Surface-driven directives.** The read-only guardrail and `FINAL_ANSWER_IN_REPLY`
-   are appended automatically from `agent.surface` (the table is in
+   - An UNREGISTERED, non-built-in kind falls back to a generic role line (the standard
+     final-answer directive still appends), so a typo'd kind id in a pipeline doesn't
+     crash — it just runs a bland agent. Boot validation catches the typo when the facade
+     supplies `knownAgentKinds`.
+2. **Surface-driven directives.** For a registered kind, the read-only guardrail and
+   `FINAL_ANSWER_IN_REPLY` are appended automatically off `agent.surface` (the table is in
    [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md#prompt--resultview-wiring)).
+   Precisely: the guardrail fires for the `container-explore` surface (plus a hard-coded
+   set of built-in read-only kind ids), and the final-answer auto-append applies only when
+   the base prompt came from the registry — the built-in tracks manage their own.
    **Never paste either directive into your own prompt** — you would double-apply it, and
    your copy would not track future platform wording.
 3. **Trait guidance.** Every trait the kind carries that defines `guidance` contributes a
@@ -186,10 +190,14 @@ Authoring guidance, distilled from the `org-security-review` example:
   merge unrelated procedures into one skill to save a registration — the CLI loads a
   skill whole.
 
-Ordering and dedup, when several sources declare skills for one dispatch: the kind's OWN
-`skills` come first (a kind controls the order its playbooks apply in), then any
-`assignSkills` additions, then a step's picked skill (`stepOptions.skillId`) — all
-deduplicated by id.
+Ordering and dedup, when several sources declare skills for one dispatch: at the REF
+level the kind's OWN `skills` come first, then any `assignSkills` additions, then — on
+the built-in `skill` kind ONLY — the step's picked skill (`stepOptions.skillId`; a
+step-level pick on any other kind contributes nothing). All are deduplicated by id. One
+caveat on the RESOLVED order (`run-skills.ts`): every bundled skill materialises before
+any `{ catalogSkillId }` ref, so declaration order is only preserved among refs of the
+same form — a kind mixing bundled and catalog refs should not rely on its listed order
+across the two.
 
 ## Tool servers — authoring the MCP definition
 
@@ -266,8 +274,9 @@ extend its role without forking:
 - `assignTraits(kind, [...])` — extra trait markers.
 
 All three are additive and dedup against the kind's own declarations; assigned skills
-come AFTER the kind's own, so a built-in's ordering is preserved. There is no
-"unassign" — narrowing a built-in kind means defining your own kind instead.
+come AFTER the kind's own at the ref level, so a built-in's ordering is preserved (the
+bundled-before-catalog caveat in "Skills" above applies to the resolved order). There is
+no "unassign" — narrowing a built-in kind means defining your own kind instead.
 
 ## Behaviour knobs beyond the prompt
 
@@ -294,8 +303,9 @@ Order matters inside your `register*` entry point:
 3. `pipelineRegistry.register` — the pipelines that chain the kinds.
 
 Boot validation (`validateRegistrationsOnce`, see the ergonomics doc) then cross-checks:
-an unresolved skill/tool id or malformed MCP server id is a startup ERROR; an insecure
-HTTP tool-server URL is refused at registration (`insecure_tool_server_url`); skills or
+an unresolved skill/tool id, a malformed MCP server id, or an insecure HTTP tool-server
+URL (`insecure_tool_server_url`, re-checked at the container job boundary — the
+`register*` calls themselves validate nothing) is a startup ERROR; skills or
 tool servers on a non-container kind warn (`skills_without_container` /
 `tool_servers_without_container`) because only a container dispatch can install or wire
 them. A dispatch that still meets an unknown id (registration raced past validation)
