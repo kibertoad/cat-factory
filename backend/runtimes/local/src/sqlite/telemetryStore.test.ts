@@ -27,8 +27,6 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     model: 'claude',
     createdAt: 1000,
     streaming: false,
-    phase: 'validation-repair',
-    turnIndex: 3,
     messageCount: 3,
     toolCount: 2,
     requestMaxTokens: 4096,
@@ -49,6 +47,8 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     promptHash: 'hash-1',
     responseText: 'done',
     reasoningText: '',
+    phase: 'build',
+    turnIndex: 4,
     ...overrides,
   }
 }
@@ -80,14 +80,15 @@ describe('SqliteLlmCallMetricRepository', () => {
     expect(row).toEqual(metric({ streaming: true, ok: false }))
   })
 
-  it('keeps a proxy call unattributed rather than defaulting it to the first turn', async () => {
-    // The proxy path has no job-scoped counter, so `turnIndex` is null and `phase` is the empty
-    // slice. A 0 restored here would sort every proxied call to the front of its phase, so the
-    // null has to survive the column rather than being coerced on the way back out.
-    await store.llmCallMetricRepository.record(metric({ phase: '', turnIndex: null }))
-    const [row] = await store.llmCallMetricRepository.listByExecution('ws_1', 'exec_1')
-    expect(row?.phase).toBe('')
+  // The phase/turn axes are only useful if this store keeps them apart the way the D1 schema
+  // does. A null `turnIndex` is the proxy path, which has no job-scoped counter — persisting it
+  // as 0 would read as "the first turn" and sort every proxied call to the front of its phase.
+  it('keeps a null turn index null rather than collapsing it to zero', async () => {
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'call_proxy', phase: '', turnIndex: null }))
+    const [row] = await repo.listByExecution('ws_1', 'exec_1')
     expect(row?.turnIndex).toBeNull()
+    expect(row?.phase).toBe('')
   })
 
   it('lists newest first, honours the limit, and narrows by agent kind in SQL', async () => {

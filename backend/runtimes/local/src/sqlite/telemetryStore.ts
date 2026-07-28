@@ -69,12 +69,6 @@ CREATE TABLE IF NOT EXISTS llm_call_metrics (
   model TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   streaming INTEGER NOT NULL DEFAULT 0,
-  -- The phase/turn axes, mirroring the D1 + Drizzle columns: phase defaults to the empty
-  -- string (the unattributed slice is a REAL group in the rollup, never a dropped row) and
-  -- turn_index is nullable, because the proxy path has no job-scoped counter and a 0 there
-  -- would read as the first turn, sorting every proxied call to the front of its phase.
-  phase TEXT NOT NULL DEFAULT '',
-  turn_index INTEGER,
   message_count INTEGER NOT NULL DEFAULT 0,
   tool_count INTEGER NOT NULL DEFAULT 0,
   request_max_tokens INTEGER,
@@ -94,7 +88,13 @@ CREATE TABLE IF NOT EXISTS llm_call_metrics (
   prompt_prefix_count INTEGER NOT NULL DEFAULT 0,
   prompt_hash TEXT NOT NULL DEFAULT '',
   response_text TEXT NOT NULL DEFAULT '',
-  reasoning_text TEXT NOT NULL DEFAULT ''
+  reasoning_text TEXT NOT NULL DEFAULT '',
+  -- The phase/turn axes, mirroring D1 telemetry migration 0004 including its nullability: phase
+  -- defaults to '' so an older harness image's rows are a REAL rollup group rather than dropped,
+  -- and turn_index stays NULLABLE because the proxy path has no job-scoped counter -- a 0 there
+  -- would read as "the first turn" and sort every proxied call to the front of its phase.
+  phase TEXT NOT NULL DEFAULT '',
+  turn_index INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_llm_call_metrics_execution
   ON llm_call_metrics (workspace_id, execution_id, created_at);
@@ -181,8 +181,6 @@ interface MetricRow {
   model: string
   created_at: number
   streaming: number
-  phase: string
-  turn_index: number | null
   message_count: number
   tool_count: number
   request_max_tokens: number | null
@@ -203,6 +201,8 @@ interface MetricRow {
   prompt_hash: string
   response_text: string
   reasoning_text: string
+  phase: string
+  turn_index: number | null
 }
 
 function rowToMetric(row: MetricRow): LlmCallMetric {
@@ -215,8 +215,6 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     model: row.model,
     createdAt: row.created_at,
     streaming: row.streaming === 1,
-    phase: row.phase,
-    turnIndex: row.turn_index,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -237,6 +235,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     promptHash: row.prompt_hash,
     responseText: row.response_text,
     reasoningText: row.reasoning_text,
+    phase: row.phase,
+    turnIndex: row.turn_index,
   }
 }
 
@@ -255,11 +255,12 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
       .prepare(
         `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
-            streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
+            streaming, message_count, tool_count, request_max_tokens,
             prompt_tokens, cache_read_tokens, cache_write_tokens, completion_tokens,
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
-            prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
+            prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text,
+            phase, turn_index)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
@@ -272,8 +273,6 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.model,
         metric.createdAt,
         metric.streaming ? 1 : 0,
-        metric.phase,
-        metric.turnIndex,
         metric.messageCount,
         metric.toolCount,
         metric.requestMaxTokens,
@@ -294,6 +293,8 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.promptHash,
         metric.responseText,
         metric.reasoningText,
+        metric.phase,
+        metric.turnIndex,
       )
   }
 

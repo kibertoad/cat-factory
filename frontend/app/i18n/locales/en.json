@@ -1006,7 +1006,7 @@
     },
     "execution": {
       "title": "Execution",
-      "hint": "The live run of this task's pipeline: each agent step, its progress, and the resulting pull request.",
+      "hint": "The live pipeline run: each agent step, its progress, and the resulting pull request.",
       "stage": {
         "incorporating": "Incorporating…",
         "reviewing": "Re-reviewing…",
@@ -1031,10 +1031,10 @@
       "stop": "Stop",
       "stopTooltip": "Stop the run but keep it (readable and retryable)",
       "reset": "Reset",
-      "resetTooltip": "Discard this run and reset the task to planned",
+      "resetTooltip": "Discard this run and reset the status to planned",
       "resetConfirm": {
         "title": "Discard this run?",
-        "body": "This deletes the run and returns the task to planned. This can't be undone.",
+        "body": "This deletes the run and resets the status to planned. This can't be undone.",
         "confirm": "Discard run"
       },
       "mergeConfirm": {
@@ -1369,6 +1369,7 @@
       "deleteRecurringPipeline": "Delete recurring pipeline",
       "deleteTask": "Delete task",
       "deleteModule": "Delete module",
+      "deleteInitiative": "Delete initiative",
       "deleteService": "Delete service",
       "confirmDelete": {
         "task": {
@@ -1378,6 +1379,10 @@
         "module": {
           "title": "Delete this module?",
           "body": "\"{name}\" and everything inside it will be removed. This can't be undone."
+        },
+        "initiative": {
+          "title": "Delete this initiative?",
+          "body": "\"{name}\" and its plan will be removed. Tasks it already created stay on the board. This can't be undone."
         },
         "service": {
           "title": "Delete this service?",
@@ -5380,6 +5385,8 @@
       "unanswered": "Unanswered questions: {count}",
       "proceed": "Plan now",
       "proceedTitle": "Skip the remaining questions and draft the plan now",
+      "discard": "Discard run",
+      "discardTitle": "Discard the stalled planning run so you can start planning again",
       "continue": "Submit answers",
       "continueTitle": "Send your answers; the planner may ask follow-up questions"
     },
