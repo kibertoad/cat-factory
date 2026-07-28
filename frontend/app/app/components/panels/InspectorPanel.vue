@@ -13,7 +13,6 @@ const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
@@ -450,33 +449,9 @@ const showOriginalDescription = ref(false)
         >
           {{ block!.pullRequest!.branch }}
         </UButton>
-        <UButton
-          v-if="tasks.available"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-ticket"
-          @click="ui.openTaskImport()"
-        >
-          {{
-            tasks.anyOffered
-              ? t('panels.inspector.importIssue')
-              : t('panels.inspector.connectTracker')
-          }}
-        </UButton>
-        <!-- Hunt this service's tracker board for a bug worth picking up. Scoped to the
-             selected container, so an adopted candidate lands here rather than wherever the
-             board's first frame happens to be. -->
-        <UButton
-          v-if="isContainer && tasks.anyOffered"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-radar"
-          @click="ui.openBugHunt(null, block!.id)"
-        >
-          {{ t('panels.inspector.huntBugs') }}
-        </UButton>
+        <!-- Tracker entry points (import an issue, hunt bugs) live on the service frame's
+             header, where they are already scoped to a frame — the inspector doesn't
+             duplicate them. -->
         <UButton
           v-if="isContainer && documents.available && documents.anyConnected"
           color="neutral"

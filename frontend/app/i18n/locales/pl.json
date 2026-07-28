@@ -394,6 +394,7 @@
       "dragToResize": "Przeciągnij, aby zmienić rozmiar",
       "addFirstTask": "Dodaj pierwsze zadanie",
       "createInitiativeTitle": "Utworz inicjatywe",
+      "huntBugsTitle": "Poluj na błędy",
       "accessDenied": {
         "title": "Brak uprawnień",
         "hint": "Nie masz dostępu do repozytorium powiązanego z tą usługą."
@@ -631,12 +632,12 @@
   "inspector": {
     "detectRepoUnresolved": "Repozytorium tego bloku nie znajduje się wśród połączonych repozytoriów GitHub, więc nie można go odczytać. Połącz lub zsynchronizuj GitHub dla tego repozytorium, a następnie spróbuj ponownie.",
     "container": {
-      "title": "Zawartość",
-      "hint": "Moduły i zadania wewnątrz tego bloku. Kliknij pozycję, aby zaznaczyć ją na tablicy.",
-      "modules": "Moduły ({count})",
+      "modulesTitle": "Moduły",
+      "modulesHint": "Moduły wewnątrz tej usługi. Kliknij moduł, aby zaznaczyć go na tablicy.",
       "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
-      "allTasks": "Wszystkie zadania ({count})",
-      "tasks": "Zadania ({count})",
+      "tasksTitle": "Zadania",
+      "allTasksTitle": "Wszystkie zadania",
+      "tasksHint": "Zadania wewnątrz tego bloku. Kliknij zadanie, aby zaznaczyć je na tablicy.",
       "addTask": "Dodaj zadanie",
       "noTasks": "Brak zadań. Dodaj jedno, aby rozpocząć pracę.",
       "servicesHint": "Usługi są długowieczne i nie kończą się. Praca odbywa się w ich zadaniach i modułach."
@@ -1318,8 +1319,6 @@
       "lastIncorporatedRequirements": "Ostatnie włączone wymagania",
       "priorDocHint": "Z poprzedniej recenzji. Użyj go jako bazy: edytuj opis powyżej i prześlij ponownie.",
       "bootstrapping": "Inicjowanie…",
-      "importIssue": "Importuj zgłoszenie",
-      "connectTracker": "Połącz tracker",
       "spawnFromDocument": "Utwórz z dokumentu",
       "viewRequirements": "Wyświetl wymagania",
       "reRun": "Uruchom ponownie",
@@ -1353,8 +1352,7 @@
         "title": "Zarchiwizować tę usługę?",
         "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
       },
-      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}",
-      "huntBugs": "Poluj na błędy"
+      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}"
     }
   },
   "observability": {

@@ -394,6 +394,7 @@
       "dragToResize": "ドラッグしてサイズ変更",
       "addFirstTask": "最初のタスクを追加",
       "createInitiativeTitle": "イニシアチブを作成",
+      "huntBugsTitle": "バグをハント",
       "accessDenied": {
         "title": "アクセスが拒否されました",
         "hint": "このサービスの基盤となるリポジトリにアクセスする権限がありません。"
@@ -631,12 +632,12 @@
   "inspector": {
     "detectRepoUnresolved": "このブロックのリポジトリは接続済みの GitHub リポジトリに含まれていないため、読み取れません。GitHub を接続または同期してから、もう一度お試しください。",
     "container": {
-      "title": "内容",
-      "hint": "このブロック内のモジュールとタスク。エントリをクリックするとボード上で選択されます。",
-      "modules": "モジュール ({count})",
+      "modulesTitle": "モジュール",
+      "modulesHint": "このサービス内のモジュール。クリックするとボード上で選択されます。",
       "taskCount": "{count} 件のタスク | {count} 件のタスク",
-      "allTasks": "すべてのタスク ({count})",
-      "tasks": "タスク ({count})",
+      "tasksTitle": "タスク",
+      "allTasksTitle": "すべてのタスク",
+      "tasksHint": "このブロック内のタスク。クリックするとボード上で選択されます。",
       "addTask": "タスクを追加",
       "noTasks": "タスクはまだありません。追加して作業を始めましょう。",
       "servicesHint": "サービスは長期間存続し、完了しません。作業はそのタスクとモジュールで行われます。"
@@ -1318,8 +1319,6 @@
       "lastIncorporatedRequirements": "最後に取り込まれた要件",
       "priorDocHint": "前回のレビューより。これをベースに、上の説明を編集して再送信してください。",
       "bootstrapping": "ブートストラップ中…",
-      "importIssue": "Issue をインポート",
-      "connectTracker": "トラッカーを接続",
       "spawnFromDocument": "ドキュメントから生成",
       "viewRequirements": "要件を表示",
       "reRun": "再実行",
@@ -1353,8 +1352,7 @@
         "title": "このサービスをアーカイブしますか？",
         "body": "「{name}」とそのタスクはボードから非表示になります。いつでも復元できます。"
       },
-      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}",
-      "huntBugs": "バグをハント"
+      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}"
     }
   },
   "observability": {
