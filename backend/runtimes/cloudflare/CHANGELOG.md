@@ -1,5 +1,54 @@
 # @cat-factory/worker
 
+## 0.115.1
+
+### Patch Changes
+
+- 9d965c9: Make linking living fragments from GitHub work from a pasted URL end to end, and explain the
+  link button whenever it is inert.
+
+  Three field-reported failures on one surface, fixed together:
+
+  - **Pasting a full GitHub URL into the repo picker found nothing** ("no repositories found
+    for <url>"): the picker's realtime search feeds the provider's tokenized name search, which a
+    URL never matches. Contracts gains a pure `parseRepoWebUrl` (GitHub `tree`/`blob`/`raw` and
+    GitLab `/-/` shapes, subgroups included), and `GitHubSyncService.listAvailableRepos` now
+    collapses a pasted URL to its `owner/name` slug AND resolves that slug with a direct
+    `getRepo` point-read merged ahead of the search results — a reachable repo resolves even when
+    the provider's search misses it.
+  - **Bulk-import by directory URL**: the Documents tab takes a pasted GitHub file or folder URL,
+    resolves the repo by slug (no search dependency), opens the tree browser at that folder, and
+    the browser's multi-file mode gains per-file checkboxes plus a select-all row — so a whole
+    directory of documents can be checked and linked as living fragments in one action.
+  - **"Link as living fragment" disabled with no explanation**: the button now states, beside it,
+    exactly what is missing (no source chosen / no repository / no files ticked / empty ref).
+  - **Account-tier repo sources failed with "No GitHub installation is available for this
+    scope"** even when the repo was browsable: the account-scope resolver matched only
+    `installation.accountId`, which is null for a per-workspace PAT connect and a GitHub account
+    id for local PAT mode's synthetic rows. The shared `createTierInstallationResolvers`
+    (`@cat-factory/agents`, wired by both facades for fragments AND skills) now falls back
+    through the account's own boards, via the new `WorkspaceRepository.listByAccount` (D1 ⇄
+    Drizzle, conformance-asserted, and proxied in mothership mode under the `account` scope rule).
+
+- Updated dependencies [9d965c9]
+- Updated dependencies [8a9f311]
+  - @cat-factory/contracts@0.185.0
+  - @cat-factory/kernel@0.178.0
+  - @cat-factory/agents@0.81.0
+  - @cat-factory/integrations@0.107.3
+  - @cat-factory/server@0.166.2
+  - @cat-factory/orchestration@0.158.0
+  - @cat-factory/consensus@0.12.7
+  - @cat-factory/eks@0.1.159
+  - @cat-factory/gates@0.8.6
+  - @cat-factory/gitlab@0.13.26
+  - @cat-factory/observability-otel@0.4.3
+  - @cat-factory/prompt-fragments@0.15.8
+  - @cat-factory/spend@0.12.107
+  - @cat-factory/caching@0.11.6
+  - @cat-factory/observability-langfuse@0.9.3
+  - @cat-factory/provider-cloudflare@0.7.312
+
 ## 0.115.0
 
 ### Minor Changes
