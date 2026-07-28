@@ -60,6 +60,14 @@ watch(
 )
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
+const isInitiative = computed(() => level.value === 'initiative')
+/**
+ * Blocks whose inspector carries a pipeline RUN — a task, and an initiative (whose planning
+ * pipeline is an ordinary run of ordinary agent steps). Both get the execution panel and the
+ * Focus view; what differs is only how the run is STARTED (a task picks any pipeline, an
+ * initiative may only run its planning one, so it keeps its own "Run planning" control).
+ */
+const hasRuns = computed(() => isTask.value || isInitiative.value)
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -104,7 +112,10 @@ const runBlockedReason = computed(() => {
 const canRun = computed(() => runnable.value && access.canExecuteRuns.value)
 
 // The delete control names what it removes, so selecting a task and deleting it
-// reads as "Delete task" rather than ambiguously removing the whole service.
+// reads as "Delete task" rather than ambiguously removing the whole service. An
+// initiative is its own level (it hangs off a frame like a module does), so it must
+// name ITSELF — offering to "delete service" there describes the wrong blast radius
+// entirely: the frame and every other thing under it survive.
 const deleteLabel = computed(() =>
   schedule.value
     ? t('panels.inspector.deleteRecurringPipeline')
@@ -112,7 +123,9 @@ const deleteLabel = computed(() =>
       ? t('panels.inspector.deleteTask')
       : level.value === 'module'
         ? t('panels.inspector.deleteModule')
-        : t('panels.inspector.deleteService'),
+        : isInitiative.value
+          ? t('panels.inspector.deleteInitiative')
+          : t('panels.inspector.deleteService'),
 )
 
 // A task is "started" once a pipeline has been launched on it (it has an
@@ -543,11 +556,12 @@ const showOriginalDescription = ref(false)
           </UButton>
         </UDropdownMenu>
         <UButton
-          v-if="isTask"
+          v-if="hasRuns"
           color="neutral"
           variant="soft"
           size="sm"
           icon="i-lucide-maximize-2"
+          data-testid="inspector-focus"
           @click="ui.focus(block.id)"
         >
           {{ t('panels.inspector.focus') }}

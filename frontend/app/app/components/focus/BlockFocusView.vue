@@ -5,6 +5,7 @@ import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -43,6 +44,20 @@ function runPipeline(id: string) {
   const pipeline = pipelines.getPipeline(id)
   if (pipeline && block.value) void execution.start(block.value.id, pipeline)
 }
+
+/**
+ * An initiative block accepts exactly ONE pipeline — its preset's planning pipeline — and the
+ * engine refuses every other, so it gets the same single "Run planning" control the board card and
+ * the inspector offer rather than a picker whose every other row would be rejected on click. Same
+ * composable as those two surfaces, so which pipeline it starts can't drift across the three.
+ */
+const isInitiative = computed(() => block.value?.level === 'initiative')
+const {
+  planningPipeline,
+  running: planningRunning,
+  starting: planningStarting,
+  runPlanning,
+} = useInitiativePlanning(() => block.value?.id ?? '')
 
 function close() {
   ui.focus(null)
@@ -99,9 +114,28 @@ function openApprovalFor(approvalId: string) {
         {{ statusMeta.label }}
       </UBadge>
       <div class="ms-auto flex items-center gap-2">
+        <!-- An initiative has one legal pipeline, so it gets the button, not the picker. -->
+        <UButton
+          v-if="isInitiative"
+          color="primary"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-play"
+          :loading="planningStarting || planningRunning"
+          :disabled="!planningPipeline || planningRunning || planningStarting"
+          data-testid="focus-run-planning"
+          @click="runPlanning"
+        >
+          {{ t('initiative.inspector.runPlanning') }}
+        </UButton>
         <!-- The rich picker rather than a list of names: the run starts the moment a row is
              clicked, so the preview is the only chance to see which agents it will run. -->
-        <PipelinePicker model-value="" :options="runOptions" @update:model-value="runPipeline">
+        <PipelinePicker
+          v-else
+          model-value=""
+          :options="runOptions"
+          @update:model-value="runPipeline"
+        >
           <template #trigger>
             <UButton
               color="primary"
