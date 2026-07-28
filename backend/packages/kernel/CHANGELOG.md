@@ -1,5 +1,77 @@
 # @cat-factory/kernel
 
+## 0.176.0
+
+### Minor Changes
+
+- 65b87c1: Agent kinds can now declare CAPABILITIES: the skills they apply (procedural playbooks — bundled in
+  the deployment's own package, or referenced from the account's repo-synced catalog) and the tool
+  servers they may call (MCP, stdio or HTTP). Both are registered on the same app-owned
+  `AgentKindRegistry` and referenced by id from any number of kinds, or attached to a BUILT-IN kind
+  with `assignSkills` / `assignToolServers`. Tool-server credentials are declared by name and
+  resolved at dispatch through the new kernel `ToolSecretResolver` port (both facades wire the
+  deployment-environment resolver by default), so a value never reaches a prompt or the run's
+  telemetry snapshot. See `backend/docs/adr/0029-agent-kind-capabilities.md`.
+
+  BREAKING (pre-1.0, no migration): `AgentRunContext.skill` is now `skills` (an array),
+  `PipelineStep.skillVersion` is now `skillVersions`, and the harness job body's `skill` field is now
+  `skills` alongside the new `mcpServers`.
+
+  OPERATORS — self-hosted runner pools must be moved to the `1.67.0` harness image. A pool still
+  running an older image parses the job body with the old singular `skill` field, so the new
+  `skills` array is dropped on the floor. On Pi/codex that degrades quietly (their prompt still
+  carries the folded-in instructions), but a leased-credential claude-code run is told in its prompt
+  that the skill "is installed for this step" while nothing was installed — a blind run rather than a
+  failed one. `mcpServers` is dropped the same way, which surfaces as an agent that was promised
+  tools it does not have.
+
+  SECURITY NOTE for a deployment that installs agent packages it did not author: a tool-server
+  definition names both the credential it wants and the endpoint it talks to, and the default
+  `createEnvToolSecretResolver` will resolve any key off the deployment environment. On the Worker
+  that is a real widening (`env` is not otherwise ambient to a registration). Pass
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` to confine it.
+
+- df48cb0: Close five gaps in the Ralph loop, of which two silently changed what a run actually did.
+
+  A re-run un-looped the step. `retry.logic.resetStep` rebuilds a step from an explicit field list
+  and so DROPPED `step.ralph`. Unlike `step.test` — seeded lazily when the tester's report arrives
+  — the loop state is needed BEFORE the dispatch: it is what puts the `validation` block on the job
+  body. So a retried or restarted ralph run dispatched a plain coding pass, got no verdict back,
+  never fired the `ralph-verdict` interceptor, and finished as an ungated one-shot coder. The
+  loop-back reset (`StepGraph.resetStepForRerun`) had the mirror-image bug: it preserved the state
+  with `attempts` still at the spent budget, so the re-run's first verdict went straight to
+  `exhausted`. Both now go through the pure `restartRalphState` — frozen config kept, counters
+  zeroed.
+
+  The validation command starved the inactivity watchdog. `JOB_INACTIVITY_MS` (10 min) is tighter
+  than the command's own watchdog (15 min), and a harness-spawned command emits no activity of its
+  own, so any validation past ten minutes aborted the iteration as a wedge and made the 15-minute
+  watchdog unreachable at stock settings. It now heartbeats at 30s like the two sibling harness-run
+  phases.
+
+  `runRalphValidation` was a third copy of what `captured-command.ts` exists to prevent, and had
+  drifted in both ways that seam guards: it scrubbed secrets AFTER the rolling truncation with no
+  margin (a credential straddling the cut lost its `KEY=` prefix and survived redaction as an
+  unrecognised partial — on a tail that reaches the step, the notification and the SPA), and it
+  published the full 16k in-container capture where both siblings bound the wire tail. It now runs
+  through `runCapturedCommand` at a 4k report budget.
+
+  The loop also gains the no-progress early abort the design had deferred: the harness stamps the
+  work branch's HEAD onto the verdict, and two consecutive failing iterations against an unchanged
+  head end the loop instead of burning the rest of the budget. It fails open on an unknown head (an
+  older harness image never trips it) and is reported distinctly from a spent budget, since only one
+  of the two is fixed by raising the budget. Finally, the per-iteration attempt log — which rides
+  the run `detail` blob re-serialized on every progress write — is capped, with the dropped count
+  recorded and surfaced rather than silently truncated.
+
+  Image-affecting: bumps the runner image to 1.67.0.
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/contracts@0.183.0
+
 ## 0.175.0
 
 ### Minor Changes
