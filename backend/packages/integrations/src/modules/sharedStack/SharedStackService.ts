@@ -383,7 +383,8 @@ export class SharedStackService {
   async teardown(workspaceId: string, id: string): Promise<SharedStack> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const stack = assertFound(await this.stacks.get(workspaceId, id), 'SharedStack', id)
-    if (!this.runtime) {
+    const runtime = this.runtime
+    if (!runtime) {
       throw new ValidationError(
         'Tearing a shared stack down requires the local Docker runtime (unavailable on this deployment).',
       )
@@ -395,12 +396,12 @@ export class SharedStackService {
       this.log,
       'sharedStack.composeDown',
       () =>
-        this.runtime!.compose(['-p', project, 'down', '-v', '--remove-orphans'], {
+        runtime.compose(['-p', project, 'down', '-v', '--remove-orphans'], {
           timeoutMs: SHORT_TIMEOUT_MS,
         }),
       { workspaceId, stackId: id, project },
     )
-    await this.runtime.cleanupProject?.(project)
+    await runtime.cleanupProject?.(project)
     return this.persist(workspaceId, stack, { status: 'stopped', lastError: null })
   }
 

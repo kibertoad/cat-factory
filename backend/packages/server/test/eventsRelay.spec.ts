@@ -360,4 +360,23 @@ describe('HttpMachineEventClient (client side)', () => {
     expect(() => client.publish({ workspaceId: 'ws_1', payload: EVENT.payload })).not.toThrow()
     await new Promise((r) => setTimeout(r, 0))
   })
+
+  // A REFUSED publish resolves, so without the status check it is indistinguishable from a
+  // delivered one — and a stale machine token is the likeliest way this relay breaks. It must
+  // still be swallowed: the check turns a silent success into a reported drop, not into a throw
+  // out of a fire-and-forget call on the engine's event path.
+  it('treats a refused publish as a failure without throwing', async () => {
+    let calls = 0
+    const fetchImpl: typeof fetch = async () => {
+      calls++
+      return new Response('forbidden', { status: 403 })
+    }
+    const client = new HttpMachineEventClient({
+      baseUrl: 'http://mothership.test',
+      token: () => 'stale',
+      fetchImpl,
+    })
+    expect(() => client.publish({ workspaceId: 'ws_1', payload: EVENT.payload })).not.toThrow()
+    await expect.poll(() => calls).toBe(1)
+  })
 })

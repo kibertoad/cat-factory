@@ -227,14 +227,15 @@ export class LlmObservabilityService {
     // dispatched without awaiting (like the inline feeder) so the sink's network round
     // trip never extends the metering path, and isolated so a sink failure can't break
     // local recording. The sink itself swallows + logs and bounds its own request.
-    if (this.traceSink) {
+    const traceSink = this.traceSink
+    if (traceSink) {
       const endedAt = metric.createdAt
       // One `runBestEffort` covers both halves of what used to be a `try` wrapping a
       // `.catch(() => {})`: it swallows a SYNCHRONOUS throw from the sink as well as a
       // rejected fan-out, and names whichever one happened.
       void runBestEffort(this.log, 'traceSink.recordGeneration', () =>
         Promise.resolve(
-          this.traceSink!.recordGeneration({
+          traceSink.recordGeneration({
             workspaceId: input.workspaceId,
             executionId: input.executionId,
             agentKind: input.agentKind,

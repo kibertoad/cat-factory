@@ -624,7 +624,8 @@ export class InitiativeLoopService {
     reason: 'item_blocked' | 'complete' | 'checkpoint',
     phase?: InitiativePhase,
   ): Promise<void> {
-    if (!this.deps.notificationService) return
+    const notifications = this.deps.notificationService
+    if (!notifications) return
     const items = initiative.items ?? []
     const blocked = items.filter((i) => i.status === 'blocked')
     const input =
@@ -649,7 +650,7 @@ export class InitiativeLoopService {
       this.log,
       'initiative.notify',
       () =>
-        this.deps.notificationService!.raise(workspaceId, {
+        notifications.raise(workspaceId, {
           type: 'initiative',
           blockId: initiative.blockId,
           executionId: null,

@@ -22,7 +22,8 @@ import {
   renderSpecFeatureFiles,
   renderSpecFiles,
 } from './render.js'
-import { readServiceSpec } from './readServiceSpec.js'
+import pMap from 'p-map'
+import { READ_CONCURRENCY, readServiceSpec } from './readServiceSpec.js'
 
 // ---------------------------------------------------------------------------
 // BUILT-IN post-ops: the deterministic render + commit of the in-repo `blueprints/`
@@ -338,11 +339,20 @@ async function resolveSafePromotion(
   baseline: Map<string, string>,
   promoted: readonly string[],
 ): Promise<SafePromotion> {
-  const committed = new Map<string, string | null>()
-  for (const f of canonical) {
-    const existing = await ctx.repo.getFile(f.path, ctx.branch)
-    committed.set(f.path, existing?.content ?? null)
-  }
+  // Bounded-parallel, at the same cap `readServiceSpec` reads the tree with: one round trip per
+  // canonical file, sequentially, made promotion's latency scale with the size of the spec — on a
+  // step that runs at the back of every tester pipeline. The bound is what keeps this from
+  // becoming a burst GitHub reads as secondary-rate-limit abuse.
+  const committed = new Map<string, string | null>(
+    await pMap(
+      canonical,
+      async (f) => {
+        const existing = await ctx.repo.getFile(f.path, ctx.branch)
+        return [f.path, existing?.content ?? null] as const
+      },
+      { concurrency: READ_CONCURRENCY },
+    ),
+  )
   const safeShards = new Set<string>()
   for (const f of canonical) {
     if (!isGroupShard(f.path)) continue

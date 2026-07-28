@@ -8,11 +8,10 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { redactSecrets } from '@cat-factory/kernel'
+import { redactSecrets, runBestEffort } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
-import { runBestEffort } from '@cat-factory/kernel'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,

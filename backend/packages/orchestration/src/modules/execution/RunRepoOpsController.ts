@@ -313,11 +313,12 @@ export class RunRepoOpsController {
     const priorBlock = await this.blockRepository.get(workspaceId, blockId)
     if (priorBlock?.pullRequest?.url === pullRequest.url) return
     await this.blockRepository.update(workspaceId, blockId, { pullRequest })
-    if (this.issueWriteback && priorBlock) {
+    const writeback = this.issueWriteback
+    if (writeback && priorBlock) {
       await runBestEffort(
         this.log,
         'writeback.onPullRequestOpened',
-        () => this.issueWriteback!.onPullRequestOpened(workspaceId, priorBlock, pullRequest),
+        () => writeback.onPullRequestOpened(workspaceId, priorBlock, pullRequest),
         { workspaceId, blockId, source: 'postOp' },
       )
     }

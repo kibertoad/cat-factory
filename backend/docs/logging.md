@@ -121,6 +121,21 @@ rarely what identifies the failure. Pass one explicitly at a site that needs it.
 only because oxlint ships no `no-restricted-syntax` — the same reason `check-file-size.mjs` exists
 beside `max-lines`.
 
+**Every spelling of an empty handler counts**, not just the canonical one: arrow or `function`,
+typed param or not, and — the one worth knowing about — a body holding nothing but a comment.
+`.catch(() => { /* ignored */ })` is caught, because otherwise the escape hatch below is optional
+in practice: an author can document a swallow inline and never state a reason. What the guard
+cannot see is an empty NAMED handler (`.catch(noop)`); whether a function is empty is not a
+question a text scan can answer, and guessing would make the guard unpredictable.
+
+The detection lives in `scripts/silent-catch.mjs` with fixtures in `silent-catch.test.mjs`
+(`node --test 'scripts/*.test.mjs'`, also a CI step). It works by MASKING every comment and string
+literal before matching, rather than matching first and asking "was that a comment?" afterwards —
+the earlier heuristic version read the `//` in a URL as the start of a comment, so
+`fetch('https://…').catch(() => {})` switched the guard off on the very line it was meant to catch.
+If you change the detector, add the case to those fixtures: a guard that regresses silently is
+worse than no guard, because it reports green either way.
+
 Not every silent drop is a bug. When the failure genuinely needs no report — the classic case is a
 rejection some other path has already observed and reported — keep the idiom and say why on the
 line(s) above it:

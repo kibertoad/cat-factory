@@ -13,6 +13,13 @@
 // (checked against oxlint 1.75) — the same reason `check-file-size.mjs` exists beside
 // `max-lines`. Pure node, no install, runs in the always-on `repo-guards` CI job.
 //
+// This file is the WALKER only. The detection — which spellings of an empty handler count, and
+// how a comment or string literal is told apart from code — lives in `silent-catch.mjs`, with
+// fixtures in `silent-catch.test.mjs` (`node --test 'scripts/*.test.mjs'`). That split is not
+// ceremony: a guard nothing tests is a guard that is trusted without evidence, and the first
+// version of this one had a hole in the exact shape of the idiom it bans (a `//` inside a string
+// on the same line switched it off).
+//
 // SCOPE — deliberately narrower than "all source", and the gap is tracked, not forgotten:
 //   - `backend/packages/**` + `backend/runtimes/**`, non-test only. These are the packages the
 //     kernel `Logger` port reaches, so every site here has a mechanical fix.
@@ -25,6 +32,12 @@
 //     sink exists.
 //   - A BARE `catch {}` is not checked here. There are ~110 in scope, most of them documented
 //     deliberate swallows, and draining them is its own slice (1.2d) rather than a drive-by.
+//
+// What DOES count is every spelling of an empty `.catch` handler — arrow or `function`, typed
+// param or not, and a body holding only a comment. That last one matters most: it is how the
+// idiom grows back, because it lets an author document a swallow without the stated reason the
+// escape hatch demands. `.catch(noop)` is out of reach by design — whether a named function is
+// empty is not a question a text scan can answer, and guessing makes a guard unpredictable.
 //
 // ESCAPE HATCH: a genuinely-correct silent drop keeps the idiom and states why, on the line
 // before it:
@@ -41,6 +54,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { findSilentCatches } from './silent-catch.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -48,19 +62,6 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SCAN_ROOTS = ['backend/packages', 'backend/runtimes']
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', 'drizzle', 'migrations'])
-
-/**
- * The banned idiom: a `.catch` whose handler body is empty, however it is spelled —
- * `() => {}`, `(e) => {}`, `async () => {}`, or with the arrow broken across lines. Written as
- * one regex rather than a parse because the shape is fixed and this runs on every PR.
- */
-const SILENT_CATCH = /\.catch\(\s*(?:async\s*)?\(?\s*[\w$]*\s*\)?\s*=>\s*\{\s*\}\s*\)/g
-
-/** An opt-out marker with a stated reason, e.g. `// silent-catch-ok: <why>`. */
-const ALLOW_MARKER = /\/\/\s*silent-catch-ok:\s*\S/
-
-/** The kernel helper itself documents the idiom it replaces; its prose is not a violation. */
-const EXEMPT_FILES = new Set(['backend/packages/kernel/src/shared/best-effort.ts'])
 
 function isTestPath(rel) {
   return (
@@ -88,46 +89,14 @@ function* sourceFiles(dirAbs) {
   }
 }
 
-/**
- * Whether a match is inside a comment — the docs in this repo quote the banned idiom when
- * explaining why it was replaced, and a guard that flags its own rationale is unusable.
- * Line comments are checked by prefix; block comments by whether the nearest fence before the
- * match is an opener.
- */
-function inComment(src, index, lineStart) {
-  if (src.slice(lineStart, index).includes('//')) return true
-  const before = src.slice(0, index)
-  return before.lastIndexOf('/*') > before.lastIndexOf('*/')
-}
-
-/**
- * Whether the CONTIGUOUS `//` comment block directly above the drop carries the opt-out marker.
- * A block rather than a single line, so a reason that needs two lines to be a real sentence still
- * counts; a blank line or any code ends the block, so the marker can't be inherited from afar.
- * `linesBefore` is every line preceding the drop's own line.
- */
-function isAnnotated(linesBefore) {
-  for (let i = linesBefore.length - 2; i >= 0; i--) {
-    const line = linesBefore[i]?.trim() ?? ''
-    if (!line.startsWith('//')) return false
-    if (ALLOW_MARKER.test(line)) return true
-  }
-  return false
-}
-
 const failures = []
 
 for (const root of SCAN_ROOTS) {
   for (const abs of sourceFiles(join(repoRoot, root))) {
     const rel = relative(repoRoot, abs).replaceAll('\\', '/')
-    if (isTestPath(rel) || EXEMPT_FILES.has(rel)) continue
-    const src = readFileSync(abs, 'utf8')
-    for (const match of src.matchAll(SILENT_CATCH)) {
-      const lineStart = src.lastIndexOf('\n', match.index) + 1
-      if (inComment(src, match.index, lineStart)) continue
-      const before = src.slice(0, lineStart).split('\n')
-      if (isAnnotated(before)) continue
-      failures.push(`${rel}:${before.length}`)
+    if (isTestPath(rel)) continue
+    for (const line of findSilentCatches(readFileSync(abs, 'utf8'))) {
+      failures.push(`${rel}:${line}`)
     }
   }
 }

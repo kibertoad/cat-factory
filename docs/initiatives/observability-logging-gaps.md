@@ -407,6 +407,20 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   SCRIPT, not the oxlint rule 1.2c specified: oxlint (1.75) ships no `no-restricted-syntax`, so
   the rule as written could not be authored. The repo already has this shape —
   `check-file-size.mjs` exists beside oxlint's `max-lines` for the same reason.
+  - **Detection MASKS comments and string literals before matching** (`scripts/silent-catch.mjs`,
+    fixtures in `silent-catch.test.mjs`, run by `node --test` in the same CI job). The first cut
+    matched raw source and then asked whether the hit was in a comment, using a prefix heuristic —
+    which read the `//` inside a URL as a comment opener, so `fetch('https://…').catch(() => {})`
+    turned the guard off on precisely the line it exists to catch. Masking answers the question
+    structurally instead of guessing, and the fixtures exist because a guard that regresses
+    silently still reports green.
+  - **Every spelling of an empty handler counts** — arrow or `function`, typed param or not, and a
+    body holding only a comment. That last one is the important one: without it an author can
+    document a swallow inline and never state a reason, which makes the escape hatch optional.
+    Widening it immediately turned up two drops the narrow pattern had missed
+    (`HttpMachineEventClient.publish`, the web-search query recorder), both now converted.
+    `.catch(noop)` stays out of reach by design: whether a named function is empty is not a
+    question a text scan can answer, and guessing makes a guard unpredictable.
 - **The guard's scope is narrower than "non-test source", deliberately, and the gap is tracked:**
   - The **harnesses** (executor + deploy) are excluded, because a source change there bumps the
     published runner image — this initiative's own rule batches all harness work into slice 5.5.
@@ -451,6 +465,16 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 - **Requiring a new context field is cheap and finds real holes.** Making `RepoOpContext.logger`
   required cost ~40 one-line test edits and nothing else, because every production construction
   site is in one file.
+- **A guard's own blind spots are worth more attention than its findings.** Both extra drops this
+  slice converted were found by WIDENING the detector, not by reading code — and the widening was
+  prompted by asking what shapes the pattern could not express, not by a failure. Do the same for
+  1.2d: the bare-`catch {}` sweep is a text scan too, and `catch (e) { /* fine */ }` will be its
+  equivalent hole.
+- **Bind the narrowed value to a local before a `runBestEffort` closure.** TypeScript drops
+  property narrowing across a callback boundary, so `() => this.maybe!.thing()` is the shape that
+  falls out naturally — an assertion resting on a guard several lines up, which nothing rechecks
+  when that condition later grows a branch. `const x = this.maybe; if (x) …` costs one line and
+  keeps the typechecker responsible for it.
 
 ### Phase 2 — Error identity survives the trip
 

@@ -1678,17 +1678,17 @@ export class RunDispatcher {
     // retry that re-reports the same PR must not re-comment (the tracker comment is not
     // idempotent). Gated inside the provider by the workspace setting + per-task
     // override; fire-and-forget so a tracker outage never fails the run.
-    if (
-      this.issueWriteback &&
-      priorBlock &&
-      result.pullRequest &&
-      priorBlock.pullRequest?.url !== result.pullRequest.url
-    ) {
+    // Bound to locals before the closure: TypeScript drops property narrowing across a callback
+    // boundary, so reading them off `this`/`result` inside would need `!` — an assertion that is
+    // true today only because of a guard three lines up, and that nothing rechecks if this
+    // condition later gains a branch.
+    const writeback = this.issueWriteback
+    const pullRequest = result.pullRequest
+    if (writeback && priorBlock && pullRequest && priorBlock.pullRequest?.url !== pullRequest.url) {
       await runBestEffort(
         this.log,
         'writeback.onPullRequestOpened',
-        () =>
-          this.issueWriteback!.onPullRequestOpened(workspaceId, priorBlock, result.pullRequest!),
+        () => writeback.onPullRequestOpened(workspaceId, priorBlock, pullRequest),
         { workspaceId, executionId: instance.id, blockId: priorBlock.id },
       )
     }
@@ -1831,12 +1831,13 @@ export class RunDispatcher {
     // Best-effort: claim the issue where it was filed (in-progress mark + "taken by cat-factory"
     // comment). Fire-and-forget — a tracker hiccup must never fail the run, mirroring the PR
     // open/merge writeback hooks; and unlike them this is NOT gated on the writeback settings.
-    if (this.issueWriteback) {
+    const writeback = this.issueWriteback
+    if (writeback) {
       await runBestEffort(
         this.log,
         'writeback.onIssuePickedUp',
         () =>
-          this.issueWriteback!.onIssuePickedUp(
+          writeback.onIssuePickedUp(
             workspaceId,
             block.id,
             pickup.inProgressLabel ? { inProgressLabel: pickup.inProgressLabel } : {},

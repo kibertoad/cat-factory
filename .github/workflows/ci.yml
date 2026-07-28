@@ -317,6 +317,14 @@ jobs:
       # Bans `.catch(() => {})` in backend non-test source — a swallowed failure with no log and
       # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
       # the evidence; a genuinely-silent drop annotates itself. Pure node; no install.
+      #
+      # The detector's own fixtures run first: this guard is the only thing stopping the idiom
+      # regrowing, so a silent regression in ITS logic (the first version had one) would disarm
+      # the guard while still reporting green. `node --test` is the built-in runner, so the
+      # install-free property of this job holds.
+      - name: Test the silent-drop detector
+        run: node --test 'scripts/*.test.mjs'
+
       - name: Guard silent promise drops
         run: node scripts/check-silent-catch.mjs
 

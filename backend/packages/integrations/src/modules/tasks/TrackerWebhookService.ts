@@ -241,12 +241,13 @@ export class TrackerWebhookService {
       await markers.settle(key, { status: 'applied' }, this.now())
       // Commit the state, THEN talk to the tracker: a failed ack must never look like a failed
       // reply, and the answer is already durable by the time this runs.
-      if (this.deps.issueWriteback) {
+      const writeback = this.deps.issueWriteback
+      if (writeback) {
         await runBestEffort(
           this.log,
           'writeback.postReviewReplyAck',
           () =>
-            this.deps.issueWriteback!.postReviewReplyAck(
+            writeback.postReviewReplyAck(
               workspaceId,
               { source: event.source, externalId: event.externalId },
               ack,

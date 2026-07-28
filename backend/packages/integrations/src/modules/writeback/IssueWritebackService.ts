@@ -134,9 +134,13 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
     const body = `🔧 A pull request was opened for this issue: ${pr.url}`
-    await this.forEachIssue('writeback.onPullRequestOpened', workspaceId, issues, async (issue) => {
-      await this.comment(workspaceId, issue, body)
-    })
+    await this.forEachIssue(
+      { label: 'writeback.onPullRequestOpened', workspaceId },
+      issues,
+      async (issue) => {
+        await this.comment(workspaceId, issue, body)
+      },
+    )
   }
 
   async onPullRequestMerged(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
@@ -149,10 +153,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
     const body = `✅ The pull request was merged and this issue is resolved: ${pr.url}`
-    await this.forEachIssue('writeback.onPullRequestMerged', workspaceId, issues, async (issue) => {
-      await this.comment(workspaceId, issue, body)
-      await this.resolve(workspaceId, issue)
-    })
+    await this.forEachIssue(
+      { label: 'writeback.onPullRequestMerged', workspaceId },
+      issues,
+      async (issue) => {
+        await this.comment(workspaceId, issue, body)
+        await this.resolve(workspaceId, issue)
+      },
+    )
   }
 
   async onIssuePickedUp(
@@ -168,10 +176,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const body = info.runUrl
       ? `🤖 Taken by cat-factory — this issue is being worked autonomously: ${info.runUrl}`
       : '🤖 Taken by cat-factory — this issue is being worked autonomously.'
-    await this.forEachIssue('writeback.onIssuePickedUp', workspaceId, issues, async (issue) => {
-      await this.comment(workspaceId, issue, body)
-      await this.markInProgress(workspaceId, issue, info.inProgressLabel)
-    })
+    await this.forEachIssue(
+      { label: 'writeback.onIssuePickedUp', workspaceId },
+      issues,
+      async (issue) => {
+        await this.comment(workspaceId, issue, body)
+        await this.markInProgress(workspaceId, issue, info.inProgressLabel)
+      },
+    )
   }
 
   async postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void> {
@@ -188,9 +200,13 @@ export class IssueWritebackService implements IssueWritebackProvider {
       '',
       ...asked.map((q) => `- ${q}`),
     ].join('\n')
-    await this.forEachIssue('writeback.postQuestions', workspaceId, issues, async (issue) => {
-      await this.comment(workspaceId, issue, body)
-    })
+    await this.forEachIssue(
+      { label: 'writeback.postQuestions', workspaceId },
+      issues,
+      async (issue) => {
+        await this.comment(workspaceId, issue, body)
+      },
+    )
   }
 
   async postReviewQuestions(
@@ -315,15 +331,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
    * appear.
    */
   private async forEachIssue(
-    label: string,
-    workspaceId: string,
+    op: { label: string; workspaceId: string },
     issues: TaskRecord[],
     fn: (issue: TaskRecord) => Promise<void>,
   ): Promise<void> {
     await Promise.all(
       issues.map((issue) =>
-        runBestEffort(this.log, label, () => fn(issue), {
-          workspaceId,
+        runBestEffort(this.log, op.label, () => fn(issue), {
+          workspaceId: op.workspaceId,
           source: issue.source,
           externalId: issue.externalId,
         }),
@@ -462,7 +477,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   /**
    * Issue a Linear GraphQL request for the workspace's connection. Returns the
    * validated `data` (or null when Linear isn't configured). Throws on a GraphQL /
-   * HTTP error so the per-issue `.catch` in {@link forEachIssue} swallows it.
+   * HTTP error so the per-issue isolation in {@link forEachIssue} reports and swallows it.
    */
   private async linearRequest(
     workspaceId: string,
@@ -506,7 +521,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   /**
    * Issue a Jira REST v3 request for the workspace's connection. Returns the parsed
    * JSON body (or null on an empty/204 response). Throws on a non-OK status so the
-   * per-issue `.catch` in {@link forEachIssue} swallows it.
+   * per-issue isolation in {@link forEachIssue} reports and swallows it.
    */
   private async jiraRequest(
     workspaceId: string,

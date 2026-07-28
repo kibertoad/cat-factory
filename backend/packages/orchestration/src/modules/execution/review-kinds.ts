@@ -299,13 +299,14 @@ async function echoClarityQuestions(
   blockId: string,
   review: ClarityReview,
 ): Promise<void> {
-  if (!deps.issueWriteback || review.status === 'incorporated') return
+  const writeback = deps.issueWriteback
+  if (!writeback || review.status === 'incorporated') return
   const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
   if (questions.length === 0) return
   await runBestEffort(
     deps.logger ?? noopLogger,
     'writeback.postClarityQuestions',
-    () => deps.issueWriteback!.postQuestions(workspaceId, blockId, questions),
+    () => writeback.postQuestions(workspaceId, blockId, questions),
     { workspaceId, blockId, questionCount: questions.length },
   )
 }
