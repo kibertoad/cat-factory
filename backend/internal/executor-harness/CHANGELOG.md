@@ -1,5 +1,11 @@
 # @cat-factory/executor-harness
 
+## 1.64.4
+
+### Patch Changes
+
+- 3260f2d: Record one `llm_call_metrics` row per model call instead of per stream envelope, and bound what a pr-review slice carries.
+
 ## 1.64.2
 
 ### Patch Changes
