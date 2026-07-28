@@ -40,9 +40,15 @@ import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './
 // `projects` root and DISCOVERS the `subagents/` dir by walking (see
 // {@link findSubagentTranscripts}).
 //
-// Both degrade gracefully: the CLI's subagent transcript layout is not a stable contract,
-// so a missing directory, an unreadable file, or an unparseable line is swallowed and the
-// harness falls back to today's parent-stream-only behaviour.
+// Both degrade gracefully in the sense that a missing directory, an unreadable file, or an
+// unparseable line is swallowed rather than failing the run — the CLI's subagent transcript layout
+// is not a stable contract. But note what that costs SINCE the per-call fold landed: the parent
+// loop's telemetry now filters the subagent turns the CLI tags onto its stdout (they were being
+// counted twice and spliced into the parent's message chain), so when this watcher is wired and
+// yields nothing, the run's subagent calls are recorded by NEITHER channel. `runClaudeCode` warns
+// on exactly that shape, and an `ambientAuth` run — which has no config home to watch, so no
+// watcher — keeps recording them off the parent stream instead
+// (`createSubagentStreamTelemetry`). Do not "simplify" that fallback away.
 
 // ---------------------------------------------------------------------------
 // Slice / progress tracking off the PARENT stream (D2.1)

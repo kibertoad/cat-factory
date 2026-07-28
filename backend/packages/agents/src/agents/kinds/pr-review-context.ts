@@ -432,8 +432,99 @@ export function renderStandardContext(fragment: ComposableFragment): string {
   )
 }
 
+/**
+ * Above this rendered size a standard is worth reading by SECTION rather than whole. Set from
+ * the measured run: its four C# standards were 21–43 KB each, and a slice reviewing 16 changed
+ * lines loaded two of them in full (~21k tokens) and then re-sent that on each of its ~40 turns.
+ * Under the threshold the section map is noise — reading the file whole is cheaper than probing.
+ */
+const STANDARD_SECTION_MAP_MIN_BYTES = 8 * 1024
+
+/** How many sections to list per standard before the map costs more than it saves. */
+const MAX_LISTED_SECTIONS = 16
+
+/**
+ * The markdown sections of a rendered standard, with the line range each occupies IN THAT FILE —
+ * so a slice reviewer can `sed -n '<from>,<to>p'` the part that applies to it instead of reading
+ * the whole standard into a context it then re-sends every turn.
+ *
+ * Ranges are computed against the rendered file (not the raw fragment body) because that is what
+ * the agent opens; an off-by-a-preamble range would send it to the wrong lines.
+ */
+function standardSections(rendered: string): { title: string; from: number; to: number }[] {
+  // A `\n`-terminated render splits to a trailing empty element, which is not a line of the file;
+  // counting it would put the last section's range one past the end.
+  const lines = rendered.replace(/\n$/, '').split('\n')
+  const found: { title: string; from: number }[] = []
+  let fenced = false
+  for (const [index, line] of lines.entries()) {
+    if (line.startsWith('```')) fenced = !fenced
+    if (fenced) continue
+    // Only `##`/`###` — `#` is the title the renderer wrote, and deeper levels multiply the map
+    // faster than they help route.
+    const heading = /^(#{2,3})\s+(.+?)\s*$/.exec(line)
+    if (heading) found.push({ title: heading[2]!, from: index + 1 })
+  }
+  return found.map((section, i) => ({
+    title: section.title,
+    from: section.from,
+    to: found[i + 1] ? found[i + 1]!.from - 1 : lines.length,
+  }))
+}
+
+/**
+ * The rendered size of a standard, in bytes.
+ *
+ * `TextEncoder` rather than `Buffer.byteLength`: this package is runtime-neutral and also runs on
+ * the Worker, where `Buffer` exists only by grace of the `nodejs_compat` flag.
+ */
+function renderedBytes(rendered: string): number {
+  return new TextEncoder().encode(rendered).length
+}
+
+/** One index entry: where the standard lives, how big it is, and how to read only part of it. */
+function renderStandardsIndexEntry(fragment: ComposableFragment): string {
+  const rendered = renderStandardContext(fragment)
+  const bytes = renderedBytes(rendered)
+  const path = `\`.cat-context/${standardsContextFileName(fragment.id)}\``
+  // Rounded UP, and never below 1: a standard reported as "0 KB" reads as empty rather than small.
+  const kb = Math.max(1, Math.ceil(bytes / 1024))
+  const head = `- **${fragment.title?.trim() || fragment.id}** (\`${fragment.id}\`) — ${path}, ${kb} KB`
+  if (bytes < STANDARD_SECTION_MAP_MIN_BYTES) return `${head}.`
+  const sections = standardSections(rendered)
+  if (!sections.length) return `${head}.`
+  const listed = sections.slice(0, MAX_LISTED_SECTIONS)
+  // The hint matches what `standardSections` itself scans for (`##`/`###`, not `#`), so following
+  // it yields the same map this list was truncated from rather than a different one.
+  const rest =
+    sections.length > listed.length
+      ? `\n  - …and ${sections.length - listed.length} more section(s) — \`grep -n '^##' <file>\` for the full map`
+      : ''
+  return (
+    `${head}. Large: read the sections that apply, not the whole file —\n` +
+    listed.map((s) => `  - ${s.title} — lines ${s.from}-${s.to}`).join('\n') +
+    rest
+  )
+}
+
+/** Whether a fragment is big enough that {@link renderStandardsIndexEntry} gives it a section map. */
+function hasSectionMap(fragment: ComposableFragment): boolean {
+  const rendered = renderStandardContext(fragment)
+  return (
+    renderedBytes(rendered) >= STANDARD_SECTION_MAP_MIN_BYTES &&
+    standardSections(rendered).length > 0
+  )
+}
+
 /** Render the index that tells the reviewer which standards exist and where each one is. */
 export function renderStandardsIndex(fragments: ComposableFragment[]): string {
+  // Only explain section maps when at least one entry HAS one. Otherwise the reviewer is told to
+  // pass line ranges it will not find, which reads as an instruction it failed to follow.
+  const sectionMapGuidance = fragments.some(hasSectionMap)
+    ? 'A standard listed with a section map is too big to read whole for one slice. Name the ' +
+      'SECTIONS that apply and pass their line ranges, so the subagent reads those ranges ' +
+      "(`sed -n '<from>,<to>p' <file>`) — still the real text, a fraction of the carry.\n\n"
+    : ''
   return (
     '# Best-practice standards for this review\n\n' +
     'These are the standards this review is judged against. Each is a SEPARATE file so a slice ' +
@@ -441,12 +532,8 @@ export function renderStandardsIndex(fragments: ComposableFragment[]): string {
     'When you dispatch a slice reviewer, name the standards that apply to that slice and tell it ' +
     'to READ those files itself. Do NOT paraphrase a standard into the subagent’s prompt: a ' +
     'summary is not the standard, and `fragmentAdherence` ratings must come from the real text.\n\n' +
-    fragments
-      .map(
-        (f) =>
-          `- **${f.title?.trim() || f.id}** (\`${f.id}\`) — \`.cat-context/${standardsContextFileName(f.id)}\``,
-      )
-      .join('\n') +
+    sectionMapGuidance +
+    fragments.map(renderStandardsIndexEntry).join('\n') +
     '\n'
   )
 }

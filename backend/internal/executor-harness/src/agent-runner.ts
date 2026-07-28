@@ -2,13 +2,8 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import {
-  claudeAssistantContent,
-  claudeCallUsage,
-  isObject,
-  numberOf,
-  redactBody,
-} from './claude-stream.js'
+import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
+import { createClaudeRunTelemetry, subagentDispatchId } from './claude-call-aggregator.js'
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
@@ -359,31 +354,40 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   }
 
   // Reconstruct the full per-call request/response bodies for telemetry from the
-  // stream. `--output-format stream-json --verbose` emits each turn as a near-verbatim
-  // Anthropic Messages envelope, so `assistant` events carry the complete response
-  // (text + tool_use blocks + usage), and `user` events carry the tool_result blocks
-  // fed back — together the growing prompt transcript. We seed it with the inputs the
-  // harness supplies (they never appear in the stream): the system + first user message
-  // when the prompt rides argv, or a single folded user turn when it doesn't — so the
-  // reconstruction never shows a system turn that was never sent. Bodies are
-  // credential-scrubbed (they can echo the leased token).
+  // stream. `--output-format stream-json --verbose` emits a near-verbatim Anthropic
+  // Messages envelope per response CONTENT BLOCK (not per call), so the aggregator below
+  // folds the envelopes sharing a `message.id` back into one call and buffers that call's
+  // `user` tool_result turns — together the growing prompt transcript, in the shape the
+  // model was actually sent. We seed it with the inputs the harness supplies (they never
+  // appear in the stream): the system + first user message when the prompt rides argv, or
+  // a single folded user turn when it doesn't — so the reconstruction never shows a system
+  // turn that was never sent. Bodies are credential-scrubbed (they can echo the leased token).
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
-  const messages: Array<{ role: string; content: unknown }> = folded
-    ? [{ role: 'user', content: prompt }]
-    : [
-        { role: 'system', content: opts.systemPrompt },
-        { role: 'user', content: opts.userPrompt },
-      ]
   const calls: HarnessCallMetric[] = []
   // Streams each call as the CLI yields it, EXCEPT one whose tokens `attributeCumulativeUsage`
   // may still rewrite below (a published call must be final — see the publisher).
   const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
+  // `watcherOwnsSubagents` tracks the `startSubagentWatcher` wiring below: it is started only when
+  // the CLI has an isolated config home to watch, which an `ambientAuth` run does not have. The
+  // telemetry routes the CLI's tagged subagent turns accordingly — see `createClaudeRunTelemetry`.
+  const telemetry = createClaudeRunTelemetry({
+    seed: folded
+      ? [{ role: 'user', content: prompt }]
+      : [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userPrompt },
+        ],
+    secrets,
+    watcherOwnsSubagents: !opts.ambientAuth,
+    publish: (metric) => publisher.publish(metric),
+  })
 
   // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from the two views the run
   // produces of the SAME slicing. The parent's subagent dispatches + their terminal tool_results
-  // DO appear on this stream (only a subagent's intermediate turns don't), so `sliceTracker`
-  // knows which slices are in flight and which have returned; the parent's own plan (tracked by
-  // `planTracker` + `lastTodo`) is the only place a not-yet-dispatched slice is named at all.
+  // appear on this stream (as do the subagents' own intermediate turns, tagged with the dispatch
+  // that spawned them — see `isSubagentEvent`), so `sliceTracker` knows which slices are in flight
+  // and which have returned; the parent's own plan (tracked by `planTracker` + `lastTodo`) is the
+  // only place a not-yet-dispatched slice is named at all.
   //
   // The plan arrives in one of two tool vocabularies depending on the bundled CLI build:
   // `TodoWrite` (whole-list snapshots, tracked in `lastTodo`) or the incremental
@@ -441,12 +445,19 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
+    // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them;
+    // `telemetry` routes them off the parent's chain (and decides who bills them). Progress, slice
+    // tracking, the guard and `stats` below deliberately see EVERY event: a subagent grinding on
+    // errors should trip the guard exactly as the parent would, and whether the agent acted at all
+    // does not depend on which channel billed it.
+    const dispatchId = subagentDispatchId(event)
     if (type === 'assistant' && isObject(event.message)) {
       const message = event.message as Record<string, unknown>
       const content = Array.isArray(message.content) ? message.content : []
-      const { text, reasoning, toolUses } = claudeAssistantContent(content)
+      const { text, toolUses } = claudeAssistantContent(content)
       stats.assistantChars += text.length
       stats.toolCalls += toolUses
+      telemetry.onAssistant(dispatchId, message)
       for (const block of content) {
         if (!isObject(block) || block.type !== 'tool_use') continue
         // Remember each call's name against its id so the guard can pair it with the
@@ -462,22 +473,6 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       sliceTracker.onAssistant(content)
       planTracker.onAssistant(content)
       emitProgress()
-      // Record this call BEFORE appending its turn: the prompt is the history that
-      // produced this response. The append-only array keeps each call's prompt a strict
-      // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
-      const u = claudeCallUsage(message.usage)
-      publisher.publish({
-        ...(typeof message.model === 'string' ? { model: message.model } : {}),
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(text, secrets),
-        reasoningText: redactBody(reasoning, secrets),
-        inputTokens: u.inputTokens,
-        cachedInputTokens: u.cachedInputTokens,
-        outputTokens: u.outputTokens,
-        finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
-      })
-      messages.push({ role: 'assistant', content })
     } else if (type === 'user' && isObject(event.message)) {
       // tool_result blocks the harness fed back to the model — part of the next prompt.
       const content = (event.message as Record<string, unknown>).content
@@ -488,7 +483,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)
-        messages.push({ role: 'tool', content })
+        telemetry.onToolResult(dispatchId, content)
       }
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
@@ -587,6 +582,8 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
+    // The stream has ended, so the last call has no successor envelope to complete it.
+    telemetry.flush()
     return await assembleClaudeOutcome({
       summary,
       stats,
@@ -595,8 +592,16 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       publisher,
       usage,
       subagents,
+      expectSubagentCalls: telemetry.expectsWatcherCalls(),
+      ...(opts.log ? { log: opts.log } : {}),
     })
   } catch (err) {
+    // The stream ended abnormally (guard trip, watchdog kill, CLI crash). Complete the call in
+    // flight anyway, and release whatever the publisher was withholding: a killed run never
+    // returns an outcome, so the live channel is the ONLY record of what it spent, and dropping
+    // its last turn is what the streaming exists to avoid.
+    telemetry.flush()
+    publisher.flush()
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
     // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
     // it attached, since that is usually the only evidence of what the CLI was doing when it was
@@ -655,6 +660,10 @@ function buildClaudeEnv(
  * terminal `result` event's cumulative) covers ONLY the parent loop, and the subagent tokens live
  * exclusively in the per-session `subagents/*.jsonl` transcripts the watcher reads. Extracted from
  * {@link runClaudeCode} verbatim to keep its cyclomatic complexity down.
+ *
+ * The invariant is about the aggregate `usage` only. `calls` was NEVER disjoint from the watcher's
+ * on its own: the CLI streams a subagent's turns onto the parent's stdout as well, so the parent
+ * loop's telemetry must filter them (`subagentDispatchId`) for this concatenation to hold.
  */
 async function assembleClaudeOutcome(args: {
   summary: string
@@ -665,6 +674,14 @@ async function assembleClaudeOutcome(args: {
   publisher: CallMetricPublisher
   usage: { inputTokens: number; outputTokens: number } | undefined
   subagents: ReturnType<typeof startSubagentWatcher> | undefined
+  /**
+   * The parent stream carried subagent turns AND the watcher was the channel meant to record them.
+   * A watcher that then yields nothing means the run lost its subagent rows entirely — the CLI's
+   * transcript layout is not a stable contract (ADR 0027 Defect A moved it once already), so say
+   * so rather than under-reporting the spend in silence.
+   */
+  expectSubagentCalls: boolean
+  log?: Logger
 }): Promise<PiRunOutcome> {
   const { summary, stats, stderrTail, calls, publisher, usage, subagents } = args
   // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
@@ -679,6 +696,12 @@ async function assembleClaudeOutcome(args: {
   await subagents?.stop()
   const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
   const subCalls = subagents?.calls() ?? []
+  if (args.expectSubagentCalls && !subCalls.length) {
+    args.log?.warn(
+      'subagent turns were streamed but the transcript watcher captured no calls; their token ' +
+        'spend is missing from this run’s telemetry (check the CLI’s subagents/*.jsonl layout)',
+    )
+  }
   const mergedCalls = [...calls, ...subCalls]
   const mergedUsage =
     usage || subUsage.inputTokens || subUsage.outputTokens

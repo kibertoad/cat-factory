@@ -111,12 +111,43 @@ image bump**, and is runtime-symmetric (the shared `ContainerAgentExecutor` + th
 
 ## Per-slice checklist
 
-| #   | Slice                      | Scope                                                                                                                                                   | Status  | PR  |
-| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | Diff up front              | `RepoFiles.listChangedFiles?` + forward; `RepoOpResult.contextFiles`/`AgentRunContext.injectedContextFiles` bridge; pr-reviewer preOp + prompt; tests   | ✅ done |     |
-| 2   | Cut what each turn carries | `standardsDelivery: 'context-files'` + standards preOp; manifest-first `pr-diff.md` + `planSlices`; comments grouped by file; context-discipline prompt | ✅ done |     |
-| 3   | Measure the reduction      | Re-run a representative review; compare turns + fresh/cache split against the baseline table above                                                      | ⬜ todo |     |
-| 4   | Honest cost estimate       | Cache dimensions on `AgentTokenUsage` + cache multipliers in `estimateCost`; fix the empty `token_usage.model` fallthrough                              | ⬜ todo |     |
+| #   | Slice                              | Scope                                                                                                                                                   | Status     | PR                                                   |
+| --- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------- |
+| 1   | Diff up front                      | `RepoFiles.listChangedFiles?` + forward; `RepoOpResult.contextFiles`/`AgentRunContext.injectedContextFiles` bridge; pr-reviewer preOp + prompt; tests   | ✅ done    |                                                      |
+| 2   | Cut what each turn carries         | `standardsDelivery: 'context-files'` + standards preOp; manifest-first `pr-diff.md` + `planSlices`; comments grouped by file; context-discipline prompt | ✅ done    |                                                      |
+| 3   | Measure the reduction              | Re-run a representative review; compare turns + fresh/cache split against the baseline table above                                                      | 🟡 partial | measured below; the instrument had to be fixed first |
+| 4   | Honest cost estimate               | Cache dimensions on `AgentTokenUsage` + cache multipliers in `estimateCost`; fix the empty `token_usage.model` fallthrough                              | ⬜ todo    |                                                      |
+| 5   | Bound what a slice carries         | Section map + line ranges in `standards.md`; standards named per slice; per-slice turn budget; fill the fan-out window in one response                  | ✅ done    | #1430                                                |
+| 6   | Select standards by change profile | Route a task's standards by the PR's changed-file profile rather than the repo's language                                                               | ⬜ todo    |                                                      |
+
+### Measurement (2026-07-28, run `exec_a4972d30`, 14-file / 286-line PR)
+
+Slice 3's first re-run, on a SMALL PR (the baseline above was ~450 files). It did not confirm a
+reduction. It found that the instrument reads high, and that per-slice carry is now the cost.
+
+Raw `llm_call_metrics` reported **575 rows / 39.4M input tokens** for a 26-minute review. Deduped
+by distinct `(prompt_tokens, completion_tokens)` the run is **~228 calls / 16.3M**, so the surface
+read **~2.4× high** — the instrument defects are recorded in
+[`token-burn-instrumentation`](./token-burn-instrumentation.md) and fixed alongside this slice.
+Even at 16.3M that is an enormous spend for 286 changed lines, and the composition says why:
+
+- Four C# standards totalling **117 KB (~30k tokens)** were attached to a Serilog wiring change,
+  **5× the size of the whole diff** (`pr-diff.md` was 23.8 KB, patches inline).
+- Slice subagents loaded them WHOLE. One reviewing 59 changed lines read three standards (100 KB,
+  ~28k tokens); one reviewing **16** changed lines read two (74 KB, ~21k tokens);
+  `standard-idiomatic-csharp.md` entered three separate contexts in full. Each read is re-sent on
+  every later turn of that agent, so ~21k tokens across ~40 turns is ~840k on its own. Across the
+  four subagents this is the largest identifiable slice of the run.
+- The largest single context reached **119k tokens**, for a 3-file slice.
+- Fan-out was half-sequential: slice 1 was dispatched alone and ran ~70 turns to completion before
+  slices 2–4 went out (those three did run concurrently). Note this is NOT the concurrency cap
+  (`MAX_PARALLEL_SLICE_SUBAGENTS`, added since the measurement) doing its job — the cap bounds the
+  window, and the defect was failing to FILL it. The guidance now says both.
+
+Slice 2 moved the standards off the parent, which was right, and the cost moved with them. Slice 5
+bounds what a slice may carry; slice 6 is the remaining lever, because nothing today narrows WHICH
+standards a review gets — a security and a performance standard rode along on a logging refactor
+and bought nothing.
 
 ## Conventions / gotchas carried between iterations
 
@@ -141,6 +172,22 @@ image bump**, and is runtime-symmetric (the shared `ContainerAgentExecutor` + th
 - **Never let the parent paraphrase a standard.** A summary in a subagent prompt is not the
   standard, and `fragmentAdherence` ratings derived from it are not grounded. Route subagents to
   the `.cat-context/standard-<id>.md` files and have them read the text.
+- **"Read the standard" is not the same as "read the whole standard".** The ban on paraphrasing
+  is what pushed slices to `cat` 40 KB files, which is the same carry problem one level down.
+  Ranges keep the text real: `standards.md` maps each large standard's sections to line ranges, so
+  a slice reads the sections that apply. Anything added here that a subagent must read verbatim
+  needs the same treatment, or it becomes the next per-turn tax.
+- **An unbounded slice on a small diff is the failure mode.** `ProgressGuard` only trips on
+  pathological non-progress, so a slice productively grinding through a 16-line change for 40 turns
+  never trips anything. The dispatch guidance carries an explicit per-slice turn budget scaled to
+  changed lines; it is the only brake on that path.
+- **Bounding the WINDOW and filling it are different rules, and the prompt needs both.** They read
+  as opposites — "at most 5 in flight" against "dispatch them in one response" — and successive
+  slices have each rewritten this one block, so a later edit is liable to drop whichever it reads
+  as the contradiction. It is not one: the cap stops a wide wave buying rate-limiting, and the
+  single-response rule stops the reviewer serialising inside the cap. `pr-reviewer.test.ts` pins
+  both, along with the `Review <slice short name> slice` description contract — none of the three
+  has a runtime guard, because the CLI owns tool dispatch and the harness can only observe it.
 - **`context-files` delivery has TWO halves that must agree.** Suppressing the fold
   (`composeBlockSystemPrompt`) is only safe once the files were actually written. So: (1) the
   reviewer's adherence guidance must point at `.cat-context/standards.md`, NOT "folded into this
