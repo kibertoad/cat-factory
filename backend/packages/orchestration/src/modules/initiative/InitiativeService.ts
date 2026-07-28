@@ -34,6 +34,7 @@ import {
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyInterviewReset,
   applyItemEdit,
   applyPlanDraft,
   applyPolicyEdit,
@@ -394,6 +395,15 @@ export class InitiativeService {
     return this.mutate(workspaceId, blockId, (current) =>
       applyInterviewQuestions(current, questions, () => this.deps.idGenerator.next('iqa')),
     )
+  }
+
+  /**
+   * Drop a prior planning run's interview state so a FRESH run interviews from scratch (the
+   * gate's `resetForFreshRun` hook). Keeps the answered + dismissed digest, clears the round
+   * bookkeeping and any still-pending questions. Idempotent: nothing to clear ⇒ no write.
+   */
+  async resetInterview(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, applyInterviewReset)
   }
 
   /** Record the human's answer to one pending question (no run resume; the controller does that). */

@@ -1,6 +1,10 @@
 import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
 import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
-import { checkOwnerPairScope, checkServiceMountScope } from './rpc-scope.logic.js'
+import {
+  checkOwnerPairScope,
+  checkServiceMountScope,
+  checkUsageRecordScope,
+} from './rpc-scope.logic.js'
 
 // The mothership-mode persistence RPC wire protocol.
 //
@@ -145,6 +149,14 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
  *                       `upsert(record)` whose owner is a property, not positional args). Binds on
  *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
+ *   - `usageRecord`   — `args[arg]` is a `TokenUsageRecord` (the spend ledger's `record`). Binds on
+ *                       the row's `workspaceId` FIELD like `workspaceField`, AND ADDITIONALLY pins
+ *                       the two DENORMALIZED rollup keys the account- and user-tier budget reads
+ *                       index on: `accountId` must be null or exactly the workspace's own owning
+ *                       account, and `userId` must be null or the token's user. Without that, a node
+ *                       legitimately scoped to one account could stamp ANOTHER account's (or
+ *                       teammate's) id onto its ledger rows and exhaust their budget — pausing their
+ *                       runs — without touching any workspace it isn't entitled to.
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -161,6 +173,7 @@ export type ScopeRule =
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'usageRecord'; arg: number }
   | { kind: 'owner'; kindArg: number; idArg: number }
   | { kind: 'ownerField'; arg: number }
 
@@ -511,6 +524,7 @@ async function checkEntityCallScope(
         | 'service'
         | 'serviceList'
         | 'serviceMount'
+        | 'usageRecord'
         | 'owner'
         | 'ownerField'
     }
@@ -562,6 +576,11 @@ async function checkEntityCallScope(
     case 'serviceMount': {
       const denialForMount = await checkServiceMountScope(args[rule.arg], opts, inScope, denied)
       if (denialForMount) return denialForMount
+      break
+    }
+    case 'usageRecord': {
+      const denialForUsage = await checkUsageRecordScope(args[rule.arg], opts, inScope, denied)
+      if (denialForUsage) return denialForUsage
       break
     }
     case 'owner': {

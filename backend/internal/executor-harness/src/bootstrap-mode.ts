@@ -65,6 +65,7 @@ export async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<Age
           subscriptionBaseUrl: job.subscriptionBaseUrl,
           ambientAuth: job.ambientAuth,
           proxyBaseUrl: job.proxyBaseUrl,
+          proxyPhasePath: job.proxyPhasePath,
           sessionToken: job.sessionToken,
           guardLimits: job.guardLimits,
           ...agentCapabilities(job),

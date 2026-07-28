@@ -66,6 +66,15 @@ export interface RunOptions {
    * per-phase wall-clock is logged on completion. Free-form; unknown phases just show verbatim.
    */
   onPhase?: (phase: string) => void
+  /**
+   * The phase most recently marked via {@link onPhase} — the read side of the same marker, for
+   * work that has to TELL the backend which phase it is in rather than merely record it. Today
+   * that is the Pi path, whose calls are metered server-side by the LLM proxy: the harness tags
+   * the proxy URL with this so a repair round's spend is attributable
+   * (`docs/initiatives/token-burn-instrumentation.md`). Absent ⇒ no phase is carried and those
+   * calls land in the backend's unattributed slice.
+   */
+  currentPhase?: () => string
   /** A per-job child logger carrying the run's correlation fields (jobId, repo, branch, …). */
   log?: Logger
   /**
@@ -468,9 +477,17 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
           // instance for its terminal result, so both channels carry the same `seq` and the
           // backend mints one stable row id per call.
           call.seq = entry.callMetricSeq++
+          // …and the phase the job is in RIGHT NOW, which is what spent the call: the handlers
+          // mark `validation-repair` / `reproduction-repair` around each repair pass, so a
+          // looped run's telemetry says which loop the tokens went to instead of filing every
+          // turn under one undifferentiated "agent"
+          // (`docs/initiatives/token-burn-instrumentation.md`). Stamped at EMIT time, not at
+          // drain time: a poll can land long after the phase moved on.
+          call.phase = phase
           entry.callMetricBuffer.push(call)
         },
         onPhase: (next) => markPhase(next),
+        currentPhase: () => phase,
         log: jobLog,
       })
       markPhase('done')

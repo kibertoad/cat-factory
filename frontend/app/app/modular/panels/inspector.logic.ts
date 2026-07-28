@@ -74,6 +74,14 @@ export interface InspectorPanelSpec {
 
 const isTask = (b: Block) => b.level === 'task'
 const isFrame = (b: Block) => b.level === 'frame'
+/**
+ * A block whose inspector carries a pipeline RUN. An initiative's planning pipeline is an
+ * ordinary run of ordinary agent steps (interviewer → analyst → planner → committer), so it
+ * gets the same execution panel a task does — step list, live phases, step-detail drill-down,
+ * and the Stop / Discard-run controls that are the only way to unwedge a stalled planning run.
+ * Before this it had no run surface at all, which is why a stuck plan was a dead end.
+ */
+const hasRuns = (b: Block) => isTask(b) || b.level === 'initiative'
 /** frame OR module — the "container" panels. */
 const isContainer = (b: Block) => b.level === 'frame' || b.level === 'module'
 /**
@@ -106,7 +114,8 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   { id: 'task-context-docs', order: 10, when: isTask },
   { id: 'task-context-issues', order: 20, when: isTask },
   { id: 'recurring-schedule', order: 30, when: isTask },
-  { id: 'task-execution', order: 40, when: isTask },
+  // Shared with the initiative body — the panel renders a RUN, and an initiative has one.
+  { id: 'task-execution', order: 40, when: hasRuns },
   { id: 'task-estimate', order: 50, when: isTask },
   { id: 'task-dependencies', order: 60, when: isTask },
   { id: 'task-run-settings', order: 70, when: isTask },
@@ -124,5 +133,8 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   // test-infra and release-health panels above it.
   { id: 'service-validation-checks', order: 180, when: isDeployableFrame },
   { id: 'epic-children', order: 200, when: (b) => b.level === 'epic' },
-  { id: 'initiative-inspector', order: 210, when: (b) => b.level === 'initiative' },
+  // Ordered BEFORE the shared execution panel (40) so an initiative reads the way a task does:
+  // its own identity + controls first, the run detail under them. Levels never overlap, so this
+  // number only ever competes with the task ids the initiative body doesn't render.
+  { id: 'initiative-inspector', order: 35, when: (b) => b.level === 'initiative' },
 ]
