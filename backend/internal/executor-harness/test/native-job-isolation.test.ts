@@ -107,13 +107,13 @@ process.stdin.on('end', () => {
 
   const base = { cwd: '', model: 'claude-opus-4-8', systemPrompt: 'sys', userPrompt: 'do it' }
 
-  it("does not write a repo's skill into the developer's ~/.claude on an ambient run", async () => {
+  it("does not write a run's skill into the developer's ~/.claude on an ambient run", async () => {
     const home = await stubTempHome()
     await envDumpingCli()
 
-    await runClaudeCode({ ...base, cwd, ambientAuth: true, skill })
+    await runClaudeCode({ ...base, cwd, ambientAuth: true, skills: [skill] })
 
-    // Installing here would persist a repo's skill in their personal setup after the run, and
+    // Installing here would persist a run's skill in their personal setup after the run, and
     // two concurrent jobs with same-named skills from different repos would clobber each other.
     await expect(stat(join(home, '.claude', 'skills', 'repo-linter'))).rejects.toThrow()
   })

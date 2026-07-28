@@ -228,6 +228,7 @@ import {
   GitHubDocQualityProvider,
   GitHubPrReportPublisher,
   GitHubPullRequestReviewProvider,
+  createEnvToolSecretResolver,
 } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
@@ -1328,6 +1329,11 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
+    // Resolve the credentials a registered kind's TOOL SERVER (MCP) declared, off the Worker's own
+    // configured vars. A deployment needing per-workspace credentials replaces this with its own
+    // `ToolSecretResolver`; the rest of the dispatch path is unchanged either way.
+    resolveToolSecrets: createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+    logger,
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
     // grouped under the run trace — the same sink the LLM proxy fans generations to.

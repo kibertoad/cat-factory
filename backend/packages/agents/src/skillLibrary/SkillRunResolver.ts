@@ -1,7 +1,8 @@
 import type {
   AccountSkillRecord,
-  AgentRunContext,
   GitHubClient,
+  ResolvedSkill,
+  ResolvedSkillResource,
   SkillSourceRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -12,8 +13,8 @@ import type { ResolveSkillInstallationId } from './SkillSourceService.js'
 
 /** The resolved skill (the `AgentRunContext.skill` payload) + the per-run version pin. */
 export interface ResolvedSkillForRun {
-  /** Folded onto `AgentRunContext.skill` by the engine and rendered harness-aware by the executor. */
-  skill: NonNullable<AgentRunContext['skill']>
+  /** Folded onto `AgentRunContext.skills` by the engine and rendered harness-aware by the executor. */
+  skill: ResolvedSkill
   /** Pinned onto the run step (`PipelineStep.skillVersion`) so the run records exactly what ran. */
   version: { skillId: string; commit: string | null; sha: string }
 }
@@ -82,6 +83,7 @@ export class SkillRunResolver {
     return {
       skill: {
         skillId: record.skillId,
+        origin: 'catalog',
         name: record.name,
         description: record.description,
         instructions: record.instructions,
@@ -131,9 +133,7 @@ export class SkillRunResolver {
    * failure mode (missing source/installation, oversized/binary/unreadable file, GitHub error)
    * degrades to a resource with no `body`, which the executor references by repo path instead.
    */
-  private async resolveResources(
-    record: AccountSkillRecord,
-  ): Promise<NonNullable<AgentRunContext['skill']>['resources']> {
+  private async resolveResources(record: AccountSkillRecord): Promise<ResolvedSkillResource[]> {
     if (record.resources.length === 0) return []
     const skillDir = dirOf(record.sourcePath)
     // Reference-only projection (no bodies) — the graceful fallback when we can't fetch.
@@ -147,7 +147,7 @@ export class SkillRunResolver {
 
     const ref = { owner: source.repoOwner, repo: source.repoName }
     const gitRef = record.pinnedCommit ?? source.gitRef
-    const out: NonNullable<AgentRunContext['skill']>['resources'] = []
+    const out: ResolvedSkillResource[] = []
     let total = 0
     for (const resource of record.resources) {
       const relPath = relTo(skillDir, resource.path)

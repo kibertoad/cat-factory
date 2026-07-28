@@ -12,6 +12,16 @@ import {
   type ReproductionReport,
   type ReproductionSpec,
 } from './reproduction-proof.js'
+import {
+  parseMcpServerSpecs,
+  parseSkillSpecs,
+  type McpServerSpec,
+  type SkillResourceSpec,
+  type SkillSpec,
+} from './agent-capabilities.js'
+
+// Re-exported so the job body stays the one import site for a harness handler describing a job.
+export type { McpServerSpec, SkillResourceSpec, SkillSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -632,26 +642,6 @@ export interface ContextFileSpec {
   content: string
 }
 
-/** One materialisable resource file of a skill (repo-sourced Claude Skills). */
-export interface SkillResourceSpec {
-  /** Path within the skill directory, e.g. `templates/report.md` (subdirs preserved, no traversal). */
-  relPath: string
-  content: string
-}
-
-/**
- * A repo-sourced Claude Skill to make available for a `skill` step. Materialised HARNESS-AWARE:
- * `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resources) for the claude-code CLI to load
- * natively, or `.cat-context/skill/<relPath>` for the Pi/codex checkout (their prompt carries the
- * instructions). A dedicated top-level body field (like `packageRegistries`), never a context file.
- */
-export interface SkillSpec {
-  name: string
-  description: string
-  instructions: string
-  resources: SkillResourceSpec[]
-}
-
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -739,11 +729,20 @@ export interface AgentJob extends HarnessAuthFields {
    */
   packageRegistries?: PackageRegistrySpec[]
   /**
-   * A repo-sourced Claude Skill to make available for a `skill` step (see {@link SkillSpec}).
-   * Materialised harness-aware before the run: natively into `CLAUDE_CONFIG_DIR/skills/<name>/`
-   * for claude-code, or `.cat-context/skill/<relPath>` for Pi/codex. Absent ⇒ no skill installed.
+   * The skills to make available for this run (see {@link SkillSpec}) — a `skill` step's picked
+   * skill and/or the playbooks the running agent kind declares. Materialised harness-aware before
+   * the run: natively into `CLAUDE_CONFIG_DIR/skills/<name>/` for claude-code, or
+   * `.cat-context/skill/<name>/<relPath>` for Pi/codex. Absent ⇒ no skills installed.
    */
-  skill?: SkillSpec
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the agent CLI for this run (see {@link McpServerSpec}). The
+   * backend has already dropped anything this harness cannot serve, so every entry here is
+   * expected to work. SECRET-BEARING (`env`/`headers` carry resolved credentials), so the config
+   * files written from it live outside the checkout and are never logged. Absent ⇒ the CLI's
+   * built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
   /**
    * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
    * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
@@ -1029,71 +1028,6 @@ function parseContextFiles(value: unknown): ContextFileSpec[] {
   return files
 }
 
-/**
- * Sanitize a skill resource's relative path: keep the subdirectory structure (so
- * `templates/report.md` materialises nested) but reject anything that could escape the skill
- * directory — absolute paths, `..` traversal, backslashes, empty/dot segments. Returns undefined
- * for an unsafe path (the resource is then dropped).
- */
-function sanitizeSkillRelPath(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const segments = value.replace(/\\/g, '/').split('/')
-  const clean: string[] = []
-  for (const seg of segments) {
-    if (seg === '' || seg === '.') continue
-    if (seg === '..') return undefined
-    // Same character class as a context-file name, per segment.
-    const c = seg.replace(/[^A-Za-z0-9._-]/g, '')
-    if (!c || c === '.' || c === '..' || c.startsWith('.')) return undefined
-    clean.push(c)
-  }
-  return clean.length ? clean.join('/') : undefined
-}
-
-/**
- * Fallback native-skill directory name when the authored name has no id-safe characters (e.g. a
- * purely non-ASCII skill name). The name is only a path segment / manifest label, so a safe
- * default keeps the skill installable rather than dropping it — which, on the claude-code path,
- * would leave the prompt pointing at a skill that was never installed (a blind run).
- */
-const FALLBACK_SKILL_NAME = 'skill'
-
-/** A skill's own directory name, sanitized to a safe single path segment (undefined if empty). */
-function sanitizeSkillName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
-  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
-  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
-  return cleaned
-}
-
-/** Validate the optional `skill` field, or undefined when absent/malformed. */
-function parseSkillSpec(value: unknown): SkillSpec | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
-  const o = value as Record<string, unknown>
-  const instructions = typeof o.instructions === 'string' ? o.instructions : undefined
-  // No instructions ⇒ there is nothing to run — drop the skill (the prompt still carries the
-  // folded-in directive on the Pi/codex path). An unsafe/empty NAME only affects the install
-  // directory, so fall back to a safe default rather than dropping the whole skill.
-  if (!instructions) return undefined
-  const name = sanitizeSkillName(o.name) ?? FALLBACK_SKILL_NAME
-  const description = typeof o.description === 'string' ? o.description : ''
-  const resources: SkillResourceSpec[] = []
-  if (Array.isArray(o.resources)) {
-    const used = new Set<string>()
-    for (const entry of o.resources) {
-      if (typeof entry !== 'object' || entry === null) continue
-      const e = entry as Record<string, unknown>
-      const relPath = sanitizeSkillRelPath(e.relPath)
-      if (!relPath || used.has(relPath)) continue
-      if (typeof e.content !== 'string') continue
-      used.add(relPath)
-      resources.push({ relPath, content: e.content })
-    }
-  }
-  return { name, description, instructions, resources }
-}
-
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
 function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
@@ -1322,7 +1256,8 @@ export function parseAgentJob(input: unknown): AgentJob {
     bootstrap: parseAgentBootstrapSpec(o.bootstrap),
     contextFiles: parseContextFiles(o.contextFiles),
     packageRegistries: parsePackageRegistries(o.packageRegistries),
-    skill: parseSkillSpec(o.skill),
+    skills: parseSkillSpecs(o.skills),
+    mcpServers: parseMcpServerSpecs(o.mcpServers),
     testSecrets: parseTestSecrets(o.testSecrets),
     guardLimits: parseGuardLimits(o.guardLimits),
     validation: parseValidationSpec(o.validation),
@@ -1361,7 +1296,8 @@ interface ParsedAgentJobParts {
   bootstrap: ReturnType<typeof parseAgentBootstrapSpec>
   contextFiles: ReturnType<typeof parseContextFiles>
   packageRegistries: ReturnType<typeof parsePackageRegistries>
-  skill: ReturnType<typeof parseSkillSpec>
+  skills: ReturnType<typeof parseSkillSpecs>
+  mcpServers: ReturnType<typeof parseMcpServerSpecs>
   testSecrets: ReturnType<typeof parseTestSecrets>
   guardLimits: ReturnType<typeof parseGuardLimits>
   validation: ReturnType<typeof parseValidationSpec>
@@ -1415,7 +1351,8 @@ function assembleAgentJob(
     bootstrap,
     contextFiles,
     packageRegistries,
-    skill,
+    skills,
+    mcpServers,
     testSecrets,
     guardLimits,
     validation,
@@ -1439,7 +1376,8 @@ function assembleAgentJob(
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
-    ...(skill ? { skill } : {}),
+    ...(skills ? { skills } : {}),
+    ...(mcpServers ? { mcpServers } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(pr ? { pr } : {}),

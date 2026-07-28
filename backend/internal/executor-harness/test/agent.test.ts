@@ -735,24 +735,26 @@ describe('ralphUnsupportedOnMultiRepo', () => {
   })
 })
 
-describe('parseAgentJob — skill', () => {
+describe('parseAgentJob — skills', () => {
   it('parses a skill (name/description/instructions + resources) and preserves sub-paths', () => {
     const job = parseAgentJob({
       ...base,
       mode: 'coding',
-      skill: {
-        name: 'bug-triage',
-        description: 'Triage a bug',
-        instructions: 'Reproduce, then classify.',
-        resources: [
-          { relPath: 'templates/report.md', content: '# report' },
-          { relPath: 'checklist.md', content: '- item' },
-        ],
-      },
+      skills: [
+        {
+          name: 'bug-triage',
+          description: 'Triage a bug',
+          instructions: 'Reproduce, then classify.',
+          resources: [
+            { relPath: 'templates/report.md', content: '# report' },
+            { relPath: 'checklist.md', content: '- item' },
+          ],
+        },
+      ],
     })
-    expect(job.skill?.name).toBe('bug-triage')
-    expect(job.skill?.instructions).toContain('Reproduce')
-    expect(job.skill?.resources.map((r) => r.relPath)).toEqual([
+    expect(job.skills?.[0]?.name).toBe('bug-triage')
+    expect(job.skills?.[0]?.instructions).toContain('Reproduce')
+    expect(job.skills?.[0]?.resources.map((r) => r.relPath)).toEqual([
       'templates/report.md',
       'checklist.md',
     ])
@@ -762,18 +764,20 @@ describe('parseAgentJob — skill', () => {
     const job = parseAgentJob({
       ...base,
       mode: 'coding',
-      skill: {
-        name: 'x',
-        description: 'd',
-        instructions: 'i',
-        resources: [
-          { relPath: '../../etc/passwd', content: 'nope' }, // traversal → dropped
-          { relPath: '/abs/path.md', content: 'yes' }, // leading slash stripped → kept, safe
-          { relPath: 'ok/file.md', content: 'yes' },
-        ],
-      },
+      skills: [
+        {
+          name: 'x',
+          description: 'd',
+          instructions: 'i',
+          resources: [
+            { relPath: '../../etc/passwd', content: 'nope' }, // traversal → dropped
+            { relPath: '/abs/path.md', content: 'yes' }, // leading slash stripped → kept, safe
+            { relPath: 'ok/file.md', content: 'yes' },
+          ],
+        },
+      ],
     })
-    expect(job.skill?.resources.map((r) => r.relPath)).toEqual(['abs/path.md', 'ok/file.md'])
+    expect(job.skills?.[0]?.resources.map((r) => r.relPath)).toEqual(['abs/path.md', 'ok/file.md'])
   })
 
   it('falls back to a safe name when the authored name sanitises to nothing', () => {
@@ -783,19 +787,85 @@ describe('parseAgentJob — skill', () => {
     const job = parseAgentJob({
       ...base,
       mode: 'coding',
-      skill: { name: '..', description: 'd', instructions: 'i', resources: [] },
+      skills: [{ name: '..', description: 'd', instructions: 'i', resources: [] }],
     })
-    expect(job.skill?.name).toBe('skill')
-    expect(job.skill?.instructions).toBe('i')
+    expect(job.skills?.[0]?.name).toBe('skill')
+    expect(job.skills?.[0]?.instructions).toBe('i')
   })
 
   it('drops a skill with no instructions (nothing to run)', () => {
     expect(
-      parseAgentJob({ ...base, mode: 'coding', skill: { name: 'x', description: 'd' } }).skill,
+      parseAgentJob({ ...base, mode: 'coding', skills: [{ name: 'x', description: 'd' }] }).skills,
     ).toBeUndefined()
   })
 
-  it('leaves skill undefined when absent', () => {
-    expect(parseAgentJob({ ...base, mode: 'coding' }).skill).toBeUndefined()
+  it('drops a second skill claiming a name already taken', () => {
+    // Two skills sharing a directory name would overwrite each other's SKILL.md, leaving the agent
+    // pointed at whichever landed last — so the first wins rather than the two silently mixing.
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skills: [
+        { name: 'dup', description: 'first', instructions: 'a', resources: [] },
+        { name: 'dup', description: 'second', instructions: 'b', resources: [] },
+      ],
+    })
+    expect(job.skills?.map((s) => s.description)).toEqual(['first'])
+  })
+
+  it('leaves skills undefined when absent', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).skills).toBeUndefined()
+  })
+})
+
+describe('parseAgentJob — mcpServers', () => {
+  it('parses a stdio server with args + env and an http server with headers', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      mcpServers: [
+        {
+          id: 'issues',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', 'issue-mcp'],
+          env: { ISSUE_TOKEN: 'tok', BAD: 3 },
+          allowedTools: ['search_issues'],
+        },
+        {
+          id: 'docs',
+          transport: 'http',
+          url: 'https://mcp.example.com/sse',
+          headers: { Authorization: 'Bearer tok' },
+        },
+      ],
+    })
+    expect(job.mcpServers?.map((s) => s.id)).toEqual(['issues', 'docs'])
+    // A non-string env value is dropped rather than stringified into the server's environment.
+    expect(job.mcpServers?.[0]?.env).toEqual({ ISSUE_TOKEN: 'tok' })
+    expect(job.mcpServers?.[0]?.allowedTools).toEqual(['search_issues'])
+    expect(job.mcpServers?.[1]?.url).toBe('https://mcp.example.com/sse')
+  })
+
+  it('drops entries that cannot be served: bad id, no command, non-http url, duplicate id', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      mcpServers: [
+        // The id becomes a tool-name fragment AND a TOML table key, so an unsafe one would
+        // produce an unmatchable allow-list entry or a malformed Codex config.
+        { id: 'Bad Id', transport: 'stdio', command: 'x' },
+        { id: 'nocmd', transport: 'stdio' },
+        { id: 'file', transport: 'http', url: 'file:///etc/passwd' },
+        { id: 'ok', transport: 'stdio', command: 'x' },
+        { id: 'ok', transport: 'stdio', command: 'y' },
+      ],
+    })
+    expect(job.mcpServers?.map((s) => s.id)).toEqual(['ok'])
+    expect(job.mcpServers?.[0]?.command).toBe('x')
+  })
+
+  it('leaves mcpServers undefined when absent', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).mcpServers).toBeUndefined()
   })
 })

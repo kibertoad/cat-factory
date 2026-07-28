@@ -287,6 +287,79 @@ describe('validateRegistrations', () => {
     ).toBe(true)
   })
 
+  it('errors on a skill / tool-server id with no registration', () => {
+    // The failure this catches is invisible at run time: the agent simply works without the
+    // playbook or the tool it was supposed to have, and the output is merely worse.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      skills: ['never-registered'],
+      toolServers: ['also-never-registered'],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.some((p) => p.code === 'unknown_bundled_skill')).toBe(true)
+    expect(problems.some((p) => p.code === 'unknown_tool_server')).toBe(true)
+  })
+
+  it('errors on a malformed MCP server id', () => {
+    // The id becomes part of the tool names the CLI exposes AND a Codex TOML key, so a bad one
+    // fails deep inside the CLI, far from the registration that caused it.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [{ id: 'Bad Id', transport: { kind: 'stdio', command: 'x' } }],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
+        (p) => p.code === 'invalid_tool_server_id',
+      ),
+    ).toBe(true)
+  })
+
+  it('warns (not errors) when tool servers are declared on a non-container kind', () => {
+    // An inline LLM step has no agent CLI to wire them into, so they can never take effect — but a
+    // deployment may declare them ahead of moving the kind onto a container surface.
+    registry.register({
+      kind: 'inline-auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'inline' },
+      toolServers: [{ id: 'issues', transport: { kind: 'stdio', command: 'x' } }],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.find((p) => p.code === 'tool_servers_without_container')?.severity).toBe('warn')
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
+  })
+
+  it('accepts registered + inline capabilities on a container kind', () => {
+    registry.registerSkill({
+      id: 'house-review',
+      name: 'house-review',
+      description: 'd',
+      instructions: 'i',
+    })
+    registry.registerToolServer({ id: 'issues', transport: { kind: 'stdio', command: 'x' } })
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      skills: ['house-review', { catalogSkillId: 'src:s:triage' }],
+      toolServers: ['issues', { id: 'docs', transport: { kind: 'http', url: 'https://x/mcp' } }],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toEqual([])
+  })
+
   it('errors on an unknown resultView (no silent prose fallback)', () => {
     registry.register({
       kind: 'auditor',

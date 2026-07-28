@@ -1,6 +1,7 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import type {
+  AgentRunContext,
   Block,
   Pipeline,
   RepoFiles,
@@ -388,6 +389,55 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         // The post-op committed onto the apriori working branch, NOT `cat-factory/task_login`.
         expect(commits).toHaveLength(1)
         expect(commits[0]?.branch).toBe('feature/spike')
+      })
+    })
+
+    describe('registered kind capabilities (skills)', () => {
+      // A registered kind can declare the SKILLS it applies — a bundled playbook shipped in the
+      // deployment's own code, or a reference to the account's repo-synced catalog. This asserts
+      // the injected registry's declaration reaches the DISPATCHED run context on every runtime:
+      // the engine resolves it, so a facade that threads the registry into the HTTP layer but not
+      // into the engine fails here rather than shipping an agent that silently works without its
+      // playbook. The fake executor stands in for `ContainerAgentExecutor`, whose job body the
+      // context is rendered into.
+      it('a kind’s bundled skill reaches the dispatched run context', async () => {
+        const contexts: AgentRunContext[] = []
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.registerSkill({
+          id: 'conformance-playbook',
+          name: 'conformance-playbook',
+          description: 'How this org audits.',
+          instructions: 'Start from the diff.',
+          resources: [{ relPath: 'rubric.md', content: '# rubric' }],
+        })
+        agentKindRegistry.register({
+          kind: 'conformance-auditor',
+          systemPrompt: 'You audit the service for compliance.',
+          agent: { surface: 'container-explore' },
+          skills: ['conformance-playbook'],
+        })
+
+        const app = harness.makeApp({ onContext: (c) => contexts.push(c) }, { agentKindRegistry })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Compliance audit',
+          agentKinds: ['conformance-auditor'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const executions = await app.drive(wsId)
+
+        const dispatched = contexts.find((c) => c.agentKind === 'conformance-auditor')
+        expect(dispatched?.skills?.map((s) => s.skillId)).toEqual(['conformance-playbook'])
+        // A bundled skill's resources always carry their bodies (nothing was fetched), and its
+        // version is the deployment's — so it is never pinned onto the step.
+        expect(dispatched?.skills?.[0]?.origin).toBe('bundled')
+        expect(dispatched?.skills?.[0]?.resources[0]?.body).toBe('# rubric')
+        const exec = executions.find((e) => e.blockId === 'task_login')
+        expect(exec?.steps[0]?.skillVersions).toBeUndefined()
       })
     })
 

@@ -88,6 +88,14 @@ export {
 } from './agents/ContainerAgentExecutor.js'
 export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
+// Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
+// deployment-environment credential resolver both facades wire by default.
+export {
+  type McpServerJobSpec,
+  type ResolvedToolServers,
+  createEnvToolSecretResolver,
+  resolveToolServers,
+} from './agents/toolServers.js'
 export {
   createScopedModelProviderResolver,
   wrapResolverWithLimiter,

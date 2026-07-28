@@ -16,8 +16,11 @@ import type {
   Initiative,
   InitiativePresetRegistry,
   InitiativeRepository,
+  Logger,
   PipelineStep,
   RequirementReviewRepository,
+  ResolvedSkill,
+  SkillVersionPin,
   TaskRecord,
   TaskRepository,
   TestSecretRef,
@@ -28,14 +31,12 @@ import {
   buildExcerpt,
   CONTEXT_BUDGET,
   resolveServiceFrameBlock,
-  ValidationError,
 } from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
-  SKILL_AGENT_KIND,
   hasTrait,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -53,6 +54,7 @@ import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
+import { resolveRunSkills } from './run-skills.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -146,10 +148,7 @@ export interface SkillResolver {
   resolveForRun(
     workspaceId: string,
     skillId: string,
-  ): Promise<{
-    skill: NonNullable<AgentRunContext['skill']>
-    version: { skillId: string; commit: string | null; sha: string }
-  }>
+  ): Promise<{ skill: ResolvedSkill; version: SkillVersionPin }>
 }
 
 /**
@@ -232,6 +231,12 @@ export interface AgentContextBuilderDeps {
    * configured. A skill step dispatched with this UNWIRED fails loudly (see {@link SkillResolver}).
    */
   skillResolver?: SkillResolver
+  /**
+   * Optional: the run logger, used to report a capability that was declared but skipped (an
+   * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
+   * those degradations are silent, which is why every facade wires it.
+   */
+  logger?: Logger
 }
 
 /**
@@ -317,11 +322,12 @@ export class AgentContextBuilder {
       architectureDirection,
       resolved,
       docAuthoring,
-      // A `skill` step's picked skill (stepOptions.skillId), resolved to its instructions +
-      // resource bodies at the pinned commit and pinned onto the step. Gated on the skill kind,
-      // so every other run skips it entirely (no extra read). Throws when a skill was picked but
-      // the resolver is unwired — a skill step must never run against nothing.
-      skill,
+      // The skills this dispatch applies: the running KIND's declared playbooks (bundled with the
+      // deployment's package or referenced from the account catalog) plus a `skill` step's own
+      // picked skill, each catalog one pinned onto the step. A kind that declares none and a step
+      // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
+      // resolve — a step asked to apply a skill must never run against nothing.
+      runSkills,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -341,7 +347,7 @@ export class AgentContextBuilder {
       // the wave — single-threaded, no other resolver touches the step).
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
-      this.resolveSkillForStep(workspaceId, agentKind, step),
+      this.resolveSkillsForStep(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -403,10 +409,10 @@ export class AgentContextBuilder {
       // by the optional consensus executor, which decides — possibly gated on the
       // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
       ...(step.consensus ? { consensus: step.consensus } : {}),
-      // The resolved skill for a `skill` step — its instructions + resource bodies, rendered
-      // harness-aware by the container executor. Pinned onto the step (skillVersion) inside the
-      // resolver. Absent for every non-skill step.
-      ...(skill ? { skill } : {}),
+      // The resolved skills for this dispatch — instructions + resource bodies, rendered
+      // harness-aware by the container executor. Catalog versions are pinned onto the step
+      // (skillVersions) inside the resolver. Absent when the run applies no skills.
+      ...(runSkills.skills.length ? { skills: runSkills.skills } : {}),
       block: this.buildBlockPayload({
         block,
         description,
@@ -1017,32 +1023,25 @@ export class AgentContextBuilder {
   }
 
   /**
-   * Resolve a `skill` step's picked skill (`stepOptions.skillId`) for this dispatch: fetch its
-   * instructions + resource bodies at the pinned commit and PIN the version onto the step
-   * (`step.skillVersion`), so the run records exactly which skill (and at which commit/blob) ran.
-   * Gated on the effective dispatched kind being the skill kind, so every other run returns null
-   * with no work. Returns null for a skill step that somehow carries no `skillId` (pipeline-save
-   * validation rejects that case, so it only arises on a legacy/malformed step). THROWS a
-   * {@link ValidationError} when a skill WAS picked but no resolver is wired — a skill step must
-   * fail loudly rather than run against nothing. A resource-fetch failure inside the resolver
-   * degrades to a body-less reference (never throws), so a transient GitHub blip can't wedge a run.
+   * Resolve the skills this dispatch applies — the agent KIND's declared playbooks plus a `skill`
+   * step's own picked skill — and PIN each catalog skill's version onto the step
+   * (`step.skillVersions`), so the run records exactly which skills (and at which commit/blob)
+   * ran. Delegates to {@link resolveRunSkills}, which owns the precedence, the dedup and the
+   * per-source failure policy; a kind with no declarations and a step with no pick costs nothing.
    */
-  private async resolveSkillForStep(
+  private resolveSkillsForStep(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
-  ): Promise<AgentRunContext['skill'] | null> {
-    if (agentKind !== SKILL_AGENT_KIND) return null
-    const skillId = step.stepOptions?.skillId?.trim()
-    if (!skillId) return null
-    if (!this.deps.skillResolver) {
-      throw new ValidationError(
-        `This pipeline step runs the skill '${skillId}', but the skill library is not configured for this deployment.`,
-      )
-    }
-    const { skill, version } = await this.deps.skillResolver.resolveForRun(workspaceId, skillId)
-    step.skillVersion = version
-    return skill
+  ): Promise<{ skills: ResolvedSkill[]; versions: SkillVersionPin[] }> {
+    return resolveRunSkills({
+      workspaceId,
+      agentKind,
+      step,
+      agentKindRegistry: this.deps.agentKindRegistry,
+      ...(this.deps.skillResolver ? { skillResolver: this.deps.skillResolver } : {}),
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    })
   }
 
   /**

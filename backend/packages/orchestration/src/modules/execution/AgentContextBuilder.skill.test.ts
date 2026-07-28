@@ -4,12 +4,15 @@ import { InitiativePresetRegistry, ValidationError } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import { defaultAgentKindRegistry, SKILL_AGENT_KIND } from '@cat-factory/agents'
 
-// The `skill` step resolves its picked skill (`stepOptions.skillId`) via the optional
-// `skillResolver`. Unlike the fragment resolver (absent ⇒ static pool), a skill step dispatched
-// with the resolver UNWIRED is a hard ValidationError — a skill step running against nothing is a
-// silent wrong run. These pin: the resolver populates `context.skill` + pins `step.skillVersion`;
-// a missing resolver throws; a skill step with no `skillId` (legacy/malformed) returns no skill;
-// and a non-skill step never touches the resolver.
+// A dispatch's skills come from two places: the `skill` step's own pick (`stepOptions.skillId`)
+// and the running agent KIND's declared playbooks (bundled in code, or referenced from the
+// account catalog). Both resolve through the optional `skillResolver` for catalog entries; unlike
+// the fragment resolver (absent ⇒ static pool), a REQUIRED skill with the resolver UNWIRED is a
+// hard ValidationError — a step asked to apply a skill and running against nothing is a silent
+// wrong run. These pin: the resolver populates `context.skills` + pins `step.skillVersions`; a
+// missing resolver throws; a skill step with no `skillId` (legacy/malformed) resolves nothing; a
+// non-skill step never touches the resolver; a kind's BUNDLED skill needs no resolver at all; and
+// an `optional` catalog skill degrades rather than failing the run.
 
 function step(over: Partial<PipelineStep> = {}): PipelineStep {
   return {
@@ -43,6 +46,7 @@ const TASK = {
 const RESOLVED = {
   skill: {
     skillId: 'src:s:triage',
+    origin: 'catalog' as const,
     name: 'triage',
     description: 'Triage a bug',
     instructions: '1. Reproduce',
@@ -64,12 +68,12 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
 }
 
 describe('AgentContextBuilder skill resolution', () => {
-  it('resolves the picked skill and pins step.skillVersion', async () => {
+  it('resolves the picked skill and pins step.skillVersions', async () => {
     const s = step({ stepOptions: { skillId: 'src:s:triage' } })
     const builder = makeBuilder({ skillResolver: { resolveForRun: async () => RESOLVED } })
     const context = await builder.buildContext('ws1', instance([s]), s, true, TASK)
-    expect(context.skill).toEqual(RESOLVED.skill)
-    expect(s.skillVersion).toEqual(RESOLVED.version)
+    expect(context.skills).toEqual([RESOLVED.skill])
+    expect(s.skillVersions).toEqual([RESOLVED.version])
   })
 
   it('throws a ValidationError when a skill was picked but no resolver is wired', async () => {
@@ -82,8 +86,8 @@ describe('AgentContextBuilder skill resolution', () => {
   it('resolves no skill for a skill step that carries no skillId (legacy/malformed)', async () => {
     const s = step({ stepOptions: {} })
     const context = await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
-    expect(context.skill).toBeUndefined()
-    expect(s.skillVersion).toBeUndefined()
+    expect(context.skills).toBeUndefined()
+    expect(s.skillVersions).toBeUndefined()
   })
 
   it('never touches the resolver for a non-skill step', async () => {
@@ -95,7 +99,103 @@ describe('AgentContextBuilder skill resolution', () => {
         },
       },
     }).buildContext('ws1', instance([s]), s, true, TASK)
-    expect(context.skill).toBeUndefined()
-    expect(s.skillVersion).toBeUndefined()
+    expect(context.skills).toBeUndefined()
+    expect(s.skillVersions).toBeUndefined()
+  })
+
+  it('applies a kind’s BUNDLED skill with no resolver wired, and pins no version for it', async () => {
+    // A bundled skill ships in the deployment's own code, so it needs no skill library, no GitHub
+    // connection and no catalog — which is what lets a custom agent package carry its own playbook.
+    const registry = defaultAgentKindRegistry()
+    registry.registerSkill({
+      id: 'house-review',
+      name: 'house-review',
+      description: 'The house review playbook',
+      instructions: 'Check the seams first.',
+    })
+    registry.register({
+      kind: 'org-reviewer',
+      systemPrompt: 'You review.',
+      skills: ['house-review'],
+      agent: { surface: 'container-explore' },
+    })
+    const s = step({ agentKind: 'org-reviewer' })
+    const context = await makeBuilder({ agentKindRegistry: registry }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+    )
+    expect(context.skills?.map((sk) => sk.skillId)).toEqual(['house-review'])
+    expect(context.skills?.[0]?.origin).toBe('bundled')
+    // A bundled skill's version IS the deployment's, so there is nothing to pin.
+    expect(s.skillVersions).toBeUndefined()
+  })
+
+  it('a kind’s REQUIRED catalog skill fails the dispatch when it cannot resolve', async () => {
+    const registry = defaultAgentKindRegistry()
+    registry.register({
+      kind: 'org-reviewer',
+      systemPrompt: 'You review.',
+      skills: [{ catalogSkillId: 'src:s:triage' }],
+      agent: { surface: 'container-explore' },
+    })
+    const s = step({ agentKind: 'org-reviewer' })
+    await expect(
+      makeBuilder({ agentKindRegistry: registry }).buildContext(
+        'ws1',
+        instance([s]),
+        s,
+        true,
+        TASK,
+      ),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('an OPTIONAL catalog skill degrades to no skill instead of failing the run', async () => {
+    const registry = defaultAgentKindRegistry()
+    registry.register({
+      kind: 'org-reviewer',
+      systemPrompt: 'You review.',
+      skills: [{ catalogSkillId: 'src:s:triage', optional: true }],
+      agent: { surface: 'container-explore' },
+    })
+    const s = step({ agentKind: 'org-reviewer' })
+    // Both failure modes degrade: no resolver wired at all, and a resolver that throws.
+    const unwired = await makeBuilder({ agentKindRegistry: registry }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+    )
+    expect(unwired.skills).toBeUndefined()
+    const broken = await makeBuilder({
+      agentKindRegistry: registry,
+      skillResolver: {
+        resolveForRun: async () => {
+          throw new Error('skill was removed upstream')
+        },
+      },
+    }).buildContext('ws1', instance([step({ agentKind: 'org-reviewer' })]), s, true, TASK)
+    expect(broken.skills).toBeUndefined()
+  })
+
+  it('dedups a step pick the kind already declares, keeping the kind’s order', async () => {
+    const registry = defaultAgentKindRegistry()
+    registry.registerSkill({
+      id: 'house-review',
+      name: 'house-review',
+      description: 'The house review playbook',
+      instructions: 'Check the seams first.',
+    })
+    registry.assignSkills(SKILL_AGENT_KIND, ['house-review'])
+    const s = step({ stepOptions: { skillId: 'src:s:triage' } })
+    const context = await makeBuilder({
+      agentKindRegistry: registry,
+      skillResolver: { resolveForRun: async () => RESOLVED },
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.skills?.map((sk) => sk.skillId)).toEqual(['house-review', 'src:s:triage'])
   })
 })

@@ -14,6 +14,13 @@ import {
   type PiRunStats,
   type TodoProgress,
 } from './pi.js'
+import {
+  claudeAllowedToolPatterns,
+  codexMcpConfigToml,
+  writeClaudeMcpConfig,
+  type McpServerSpec,
+  type SkillSpec,
+} from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
@@ -76,18 +83,19 @@ export interface SubscriptionRunOptions {
    */
   ambientAuth?: boolean
   /**
-   * A repo-sourced Claude Skill to install natively before launch (repo-sourced Claude Skills,
-   * slice 2). The claude-code runner writes it to `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md`
-   * (+ resource files) so the CLI loads it — but ONLY when it owns an isolated config home, i.e.
-   * NOT under `ambientAuth`. The codex runner ignores it outright. Every case that skips the
-   * native install reads the checkout's `.cat-context/skill/`, materialised by the caller.
+   * The skills to install natively before launch. The claude-code runner writes each to
+   * `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resource files) so the CLI loads them — but ONLY
+   * when it owns an isolated config home, i.e. NOT under `ambientAuth`. The codex runner ignores
+   * them outright. Every case that skips the native install reads the checkout's
+   * `.cat-context/skill/<name>/`, materialised by the caller.
    */
-  skill?: {
-    name: string
-    description: string
-    instructions: string
-    resources: { relPath: string; content: string }[]
-  }
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the CLI for this run. Written to a PER-RUN config the CLI is
+   * pointed at — never a HOME-global one, which a second concurrent job would clobber and which
+   * carries this job's credentials. Absent ⇒ the CLI's built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
    * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
@@ -320,10 +328,7 @@ export function carryClaudeSystemPrompt(
  * would make the CLI fail to parse the frontmatter and silently skip the skill. A JSON string is a
  * valid YAML double-quoted scalar, so quoting makes the manifest robust to arbitrary text.
  */
-async function writeNativeSkill(
-  skillsRoot: string,
-  skill: NonNullable<SubscriptionRunOptions['skill']>,
-): Promise<void> {
+async function writeNativeSkill(skillsRoot: string, skill: SkillSpec): Promise<void> {
   const dir = join(skillsRoot, skill.name)
   await mkdir(dir, { recursive: true })
   const name = JSON.stringify(skill.name)
@@ -334,6 +339,45 @@ async function writeNativeSkill(
     const dest = join(dir, resource.relPath)
     await mkdir(dirname(dest), { recursive: true })
     await writeFile(dest, resource.content, 'utf8')
+  }
+}
+
+/**
+ * Prepare the Claude Code CLI's MCP wiring for one run: write the servers to a PER-RUN config and
+ * return the argv that points the CLI at it, plus the cleanup for a directory we had to mint.
+ *
+ * Two decisions live here. `--strict-mcp-config` makes that file the ONLY source of servers, so an
+ * ambient run on a developer's own machine can never silently hand the agent their personal ones.
+ * And `--allowedTools` is passed ONLY when a server actually narrows its tools: sending it at all
+ * switches the CLI into allow-list mode for EVERY tool, which would strip the agent of its built-in
+ * file/bash tools and leave it unable to do the work.
+ *
+ * The config carries this job's resolved credentials, so it goes in the isolated config home when
+ * we own one and a throwaway per-JOB directory otherwise — never the checkout (it would land in a
+ * commit) and never a shared HOME path (a concurrent job would clobber it).
+ */
+async function setUpClaudeMcp(
+  servers: McpServerSpec[] | undefined,
+  configHome: string | undefined,
+): Promise<{ args: string[]; cleanup: () => Promise<void> }> {
+  const noop = { args: [], cleanup: async () => {} }
+  if (!servers?.length) return noop
+  const home = configHome ?? (await mkdtemp(join(tmpdir(), 'cf-claude-mcp-')))
+  const owned = home === configHome ? undefined : home
+  const cleanup = async (): Promise<void> => {
+    if (owned) await rm(owned, { recursive: true, force: true }).catch(() => {})
+  }
+  const configPath = await writeClaudeMcpConfig(home, servers)
+  if (!configPath) return { args: [], cleanup }
+  const allowedTools = claudeAllowedToolPatterns(servers)
+  return {
+    args: [
+      '--mcp-config',
+      configPath,
+      '--strict-mcp-config',
+      ...(allowedTools?.length ? ['--allowedTools', allowedTools.join(',')] : []),
+    ],
+    cleanup,
   }
 }
 
@@ -518,16 +562,22 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
   }
 
-  // Repo-sourced Claude Skill (slice 2): install it as a native skill under the config dir's
-  // `skills/<name>/` so the CLI discovers and can invoke it. ONLY into the isolated per-run config
-  // home — never the developer's own `~/.claude` (ambient/native mode), where it would persist in
-  // their personal setup after the run and two concurrent jobs carrying same-named skills from
-  // different repos would clobber each other. An ambient run reads the skill from the checkout
-  // instead (`.cat-context/skill/`, materialised by the caller). Best-effort: a write failure must
-  // not wedge the run — the prompt still names the skill.
-  if (opts.skill && configHome) {
-    await writeNativeSkill(join(configHome, 'skills'), opts.skill).catch(() => {})
+  // Skills: install each as a native skill under the config dir's `skills/<name>/` so the CLI
+  // discovers and can invoke it. ONLY into the isolated per-run config home — never the
+  // developer's own `~/.claude` (ambient/native mode), where it would persist in their personal
+  // setup after the run and two concurrent jobs carrying same-named skills would clobber each
+  // other. An ambient run reads the skills from the checkout instead (`.cat-context/skill/<name>/`,
+  // materialised by the caller). Best-effort: a write failure must not wedge the run — the prompt
+  // still names the skills.
+  if (configHome) {
+    for (const skill of opts.skills ?? []) {
+      await writeNativeSkill(join(configHome, 'skills'), skill).catch(() => {})
+    }
   }
+
+  // Tool servers (MCP): the CLI is pointed at a per-run config rather than discovering an ambient
+  // one. See `setUpClaudeMcp` for why that matters and what has to be cleaned up afterwards.
+  const mcp = await setUpClaudeMcp(opts.mcpServers, configHome)
 
   const env = buildClaudeEnv(opts, configHome)
 
@@ -572,6 +622,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           'bypassPermissions',
           '--model',
           opts.model,
+          ...mcp.args,
           ...appendArgs,
         ],
       },
@@ -613,6 +664,8 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     throw err
   } finally {
     await subagents?.stop()
+    // The ambient-mode MCP config dir (credential-bearing) never outlives the run.
+    await mcp.cleanup()
     if (configHome) {
       // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
       // home is deleted — the credential lives at the home root, never in `projects/`, so this
@@ -775,7 +828,17 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   const codexHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-codex-'))
   if (codexHome) {
     await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken!, { mode: 0o600 })
-    await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
+    // Tool servers (MCP) ride the SAME per-run config.toml, so they are scoped to this job and
+    // torn down with the home. Under AMBIENT auth there is no per-run home — and writing servers
+    // into the developer's own `~/.codex/config.toml` would outlive the run and race a concurrent
+    // job — so an ambient codex run gets no MCP servers; the backend states them as unavailable
+    // the same way it does for a harness with no MCP client at all.
+    const mcpToml = opts.mcpServers?.length ? codexMcpConfigToml(opts.mcpServers) : ''
+    await writeFile(
+      join(codexHome, 'config.toml'),
+      `cli_auth_credentials_store = "file"\n${mcpToml ? `\n${mcpToml}` : ''}`,
+      { encoding: 'utf8', mode: 0o600 },
+    )
   }
 
   // Codex has no system-prompt flag, so fold the composed role + best-practice

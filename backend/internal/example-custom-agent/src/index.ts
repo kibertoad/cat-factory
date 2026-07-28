@@ -1,8 +1,13 @@
-import type { AgentKindDefinition, AgentKindRegistry } from '@cat-factory/agents'
+import type {
+  AgentKindDefinition,
+  AgentKindRegistry,
+  BundledSkillDefinition,
+} from '@cat-factory/agents'
 import { defineStructuredOutput } from '@cat-factory/agents'
 import type {
   GateProbe,
   GateRegistry,
+  McpServerDefinition,
   InitiativePresetRegistration,
   InitiativePresetRegistry,
   JudgeRegistry,
@@ -58,6 +63,80 @@ export {
   detectStackDeployProvider,
   registerExampleStackDeployProvider,
 } from './stack-deploy.js'
+
+// ---------------------------------------------------------------------------
+// A WORKED EXAMPLE of agent CAPABILITIES: a bundled skill and a tool server (MCP).
+//
+// Both are registered on the SAME injected `AgentKindRegistry` and referenced by id from any
+// number of kinds — the skill/tool analogue of registering the kinds themselves.
+// ---------------------------------------------------------------------------
+
+/** The id the org's security-review playbook is registered under. */
+export const SECURITY_REVIEW_SKILL_ID = 'org-security-review'
+
+/**
+ * A BUNDLED skill: the org's procedural playbook, shipped in this package's own code. Unlike a
+ * repo-synced catalog skill it needs no skill library, no GitHub connection and no sync — a
+ * deployment that installs this package has the playbook. The claude-code harness installs it as
+ * a native Claude skill (so the CLI can invoke it on its own judgement); every other harness gets
+ * its instructions folded into the prompt and its resources on disk.
+ */
+const securityReviewSkill: BundledSkillDefinition = {
+  id: SECURITY_REVIEW_SKILL_ID,
+  name: 'org-security-review',
+  description:
+    'The org security-review playbook: what to check, in what order, and how to rate it.',
+  instructions: [
+    '# Org security review',
+    '',
+    '1. Start from the diff, not the whole repo — the change is what you are rating.',
+    '2. Check, in order: authentication boundaries, authorization checks, input validation at the',
+    '   trust boundary, secret handling, and dependency changes.',
+    '3. Rate each finding against `severity.md`, and never invent a finding to have something to',
+    '   report — an empty findings list on a clean change is the correct answer.',
+  ].join('\n'),
+  resources: [
+    {
+      relPath: 'severity.md',
+      content: [
+        '# Severity rubric',
+        '',
+        '- **critical** — exploitable remotely with no credentials.',
+        '- **high** — exploitable by an authenticated user outside their own scope.',
+        '- **medium** — needs an unusual precondition, or leaks non-credential data.',
+        '- **low** — defence-in-depth only.',
+      ].join('\n'),
+    },
+  ],
+}
+
+/** The id the org's advisory-database tool server is registered under. */
+export const ADVISORY_TOOL_SERVER_ID = 'org-advisories'
+
+/**
+ * A TOOL SERVER (MCP): the org's vulnerability-advisory lookup, run as a child process inside the
+ * run container. Its credential is declared BY NAME only — the platform resolves the value at
+ * dispatch (off the deployment environment by default) straight into the job body, so it never
+ * reaches a prompt or the run's telemetry snapshot.
+ *
+ * `guidance` is not decoration: an agent handed a tool it was not told the purpose of tends not to
+ * use it. `allowedTools` narrows what the agent may call — the server also exposes write verbs
+ * this read-only auditor has no business calling.
+ */
+const advisoryToolServer: McpServerDefinition = {
+  id: ADVISORY_TOOL_SERVER_ID,
+  label: 'Org advisory database',
+  guidance:
+    'Look up a dependency in the org advisory database before judging whether a version bump is ' +
+    'risky, instead of reasoning from the version number alone.',
+  transport: {
+    kind: 'stdio',
+    command: 'npx',
+    args: ['-y', '@example-org/advisories-mcp'],
+  },
+  allowedTools: ['lookup_advisory', 'search_advisories'],
+  secretKeys: [{ key: 'ORG_ADVISORY_TOKEN' }],
+}
 
 export const ORG_REVIEWER_KIND = 'org-reviewer'
 export const SECURITY_AUDITOR_KIND = 'security-auditor'
@@ -328,6 +407,12 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       clone: { branch: 'pr' },
     },
     structuredOutput: securityAssessment,
+    // The kind's CAPABILITIES: the org playbook it always applies, and the advisory lookup it may
+    // call. Both are references to the definitions registered below — several kinds can share
+    // them, and a deployment can repoint the tool server at its own endpoint by re-registering
+    // the id without touching this package.
+    skills: [SECURITY_REVIEW_SKILL_ID],
+    toolServers: [ADVISORY_TOOL_SERVER_ID],
     postOps: [renderReportPostOp],
     presentation: {
       label: 'Security Auditor',
@@ -789,6 +874,10 @@ export function registerExampleCustomAgents(
   pipelineRegistry: PipelineRegistry,
   judgeRegistry: JudgeRegistry,
 ): void {
+  // Capability definitions FIRST: a kind referencing an id registered later would be reported as
+  // an unresolved reference by the boot-time `validateRegistrations` check.
+  registry.registerSkill(securityReviewSkill)
+  registry.registerToolServer(advisoryToolServer)
   registry.registerAll(EXAMPLE_AGENT_KINDS)
   pipelineRegistry.register({
     id: ORG_AUDIT_PIPELINE_ID,

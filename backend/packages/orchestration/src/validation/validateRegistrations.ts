@@ -5,6 +5,7 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  isValidMcpServerId,
   seedPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
@@ -163,6 +164,75 @@ export function collectRegistrationProblems(
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
 
+  // 6. Agent capabilities: the skills + tool servers each kind declares.
+  problems.push(...checkAgentCapabilities(agentKinds, registry))
+
+  return problems
+}
+
+/**
+ * Section 6 of {@link collectRegistrationProblems}: a kind's declared capabilities must be
+ * REACHABLE and COHERENT. Three checks, all of which otherwise fail invisibly at run time — the
+ * agent just quietly works without the playbook or the tool it was supposed to have:
+ *
+ * - an id with no registration (a typo, or a `registerSkill` call that never ran) is an ERROR;
+ * - a malformed MCP server id is an ERROR, because it becomes both a tool-name fragment and a
+ *   Codex TOML table key, so the CLI fails on it far from the registration that caused it;
+ * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
+ *   into, so they can never take effect. A warning rather than an error because a deployment may
+ *   deliberately declare them ahead of moving the kind onto a container surface.
+ */
+function checkAgentCapabilities(
+  agentKinds: ReturnType<AgentKindRegistry['all']>,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const def of agentKinds) {
+    for (const id of registry.skillsFor(def.kind).unknown) {
+      problems.push({
+        severity: 'error',
+        code: 'unknown_bundled_skill',
+        message:
+          `Agent kind "${def.kind}" declares skill "${id}", which is not registered. Call ` +
+          `registry.registerSkill({ id: '${id}', … }) before registering the kind, declare the ` +
+          `skill inline, or use { catalogSkillId } for a repo-synced skill.`,
+      })
+    }
+    const tools = registry.toolServersFor(def.kind)
+    for (const id of tools.unknown) {
+      problems.push({
+        severity: 'error',
+        code: 'unknown_tool_server',
+        message:
+          `Agent kind "${def.kind}" declares tool server "${id}", which is not registered. Call ` +
+          `registry.registerToolServer({ id: '${id}', … }) before registering the kind, or ` +
+          `declare the server inline.`,
+      })
+    }
+    for (const server of tools.servers) {
+      if (!isValidMcpServerId(server.id)) {
+        problems.push({
+          severity: 'error',
+          code: 'invalid_tool_server_id',
+          message:
+            `Tool server "${server.id}" (on agent kind "${def.kind}") has an invalid id. It ` +
+            `becomes part of the tool names the CLI exposes (mcp__<id>__<tool>) and a Codex ` +
+            `config key, so it must match [a-z0-9][a-z0-9_-]*.`,
+        })
+      }
+    }
+    if (tools.servers.length && !registry.requiresContainer(def.kind)) {
+      problems.push({
+        severity: 'warn',
+        code: 'tool_servers_without_container',
+        message:
+          `Agent kind "${def.kind}" declares tool servers but does not run in a container — an ` +
+          `inline LLM step has no agent CLI to wire them into, so they will never be available. ` +
+          `Give the kind a container surface (agent.surface: 'container-explore' / ` +
+          `'container-coding') or drop the tool servers.`,
+      })
+    }
+  }
   return problems
 }
 

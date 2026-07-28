@@ -36,7 +36,7 @@ import {
   refreshFromBaseIfClean,
   unmergedPaths,
 } from '../src/git.js'
-import { producedRepoContent } from '../src/agent.js'
+import { producedRepoContent } from '../src/bootstrap-mode.js'
 import { checkoutHasBlueprints } from '../src/pi-workspace.js'
 import { stubTempHome } from './helpers.js'
 

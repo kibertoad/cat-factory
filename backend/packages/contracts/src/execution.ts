@@ -886,19 +886,24 @@ export const pipelineStepSchema = v.object({
    */
   effortReport: v.optional(agentEffortReportSchema),
   /**
-   * The repo-sourced Claude Skill this step was PINNED to at dispatch (a `skill` step; see
-   * `docs/initiatives/repo-skills.md`). Recorded so a run executes a stable version of the
-   * skill even if its source resyncs mid-run, and so a later investigation knows exactly
-   * which skill (and at which commit / manifest blob) ran. `commit` is the source dir's head
-   * commit the resources were fetched at (null if the skill was never synced to a commit);
-   * `sha` is the `SKILL.md` blob sha. Absent for every non-`skill` step.
+   * The repo-sourced Claude Skills this step was PINNED to at dispatch — the step's own picked
+   * skill (a `skill` step) AND any CATALOG skills the running agent kind declared (see
+   * `backend/docs/custom-agents.md` → agent capabilities). Recorded so a run executes a stable
+   * version of each skill even if its source resyncs mid-run, and so a later investigation knows
+   * exactly which skills (and at which commit / manifest blob) ran. `commit` is the source dir's
+   * head commit the resources were fetched at (null if the skill was never synced to a commit);
+   * `sha` is the `SKILL.md` blob sha. A BUNDLED skill (shipped in the deployment's own code) has
+   * no pin — its version is the deployment's — so it never appears here. Absent when the step ran
+   * no catalog skill.
    */
-  skillVersion: v.optional(
-    v.object({
-      skillId: v.string(),
-      commit: v.nullable(v.string()),
-      sha: v.string(),
-    }),
+  skillVersions: v.optional(
+    v.array(
+      v.object({
+        skillId: v.string(),
+        commit: v.nullable(v.string()),
+        sha: v.string(),
+      }),
+    ),
   ),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by

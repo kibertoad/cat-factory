@@ -253,29 +253,37 @@ export async function materializeContextFiles(
   }
 }
 
-/** Subdirectory of {@link CONTEXT_DIR} where a repo-sourced skill's resources are materialised. */
+/** Subdirectory of {@link CONTEXT_DIR} where a skill's resources are materialised, per skill. */
 export const SKILL_CONTEXT_SUBDIR = 'skill'
 
 /**
- * Materialise a repo-sourced skill's RESOURCE files under `.cat-context/skill/` in the checkout
- * (repo-sourced Claude Skills, slice 2) — the path for every run that does NOT get a native
- * install: Pi, codex, and ambient claude-code (no isolated `CLAUDE_CONFIG_DIR` to install into).
- * Their agents read the checkout, and the skill's instructions are folded into their prompt by the
- * backend (`renderSkillForHarness`, which keys off ambient auth as well as the harness). Resource sub-paths were sanitized at the job boundary (no traversal), so nested
- * dirs are created as needed. Kept out of the agent's commits via the same `.cat-context/` git
- * exclude entry. A skill with no resource bodies is a no-op.
+ * Materialise the run's skills' RESOURCE files under `.cat-context/skill/<name>/` in the checkout
+ * — the path for every run that does NOT get a native install: Pi, codex, and ambient claude-code
+ * (no isolated `CLAUDE_CONFIG_DIR` to install into). Their agents read the checkout, and the
+ * skills' instructions are folded into their prompt by the backend (`renderSkillsForHarness`,
+ * which keys off ambient auth as well as the harness).
+ *
+ * Each skill gets its OWN subdirectory: several skills can apply to one run (a step's pick plus
+ * the kind's declared playbooks), and a flat directory would let two skills' `templates/report.md`
+ * overwrite each other — silently handing the agent the wrong template. The names were sanitized
+ * to a single safe path segment at the job boundary, as were the resource sub-paths (no
+ * traversal), so nested dirs are created as needed. Kept out of the agent's commits via the same
+ * `.cat-context/` git exclude entry. Skills with no resource bodies are a no-op.
  */
 export async function materializeSkillResources(
   cwd: string,
-  skill: { resources: { relPath: string; content: string }[] },
+  skills: { name: string; resources: { relPath: string; content: string }[] }[],
 ): Promise<void> {
-  if (!skill.resources.length) return
-  const dir = join(cwd, CONTEXT_DIR, SKILL_CONTEXT_SUBDIR)
-  await mkdir(dir, { recursive: true })
-  for (const r of skill.resources) {
-    const dest = join(dir, r.relPath)
-    await mkdir(dirname(dest), { recursive: true })
-    await writeFile(dest, r.content, 'utf8')
+  const withResources = skills.filter((s) => s.resources.length)
+  if (!withResources.length) return
+  for (const skill of withResources) {
+    const dir = join(cwd, CONTEXT_DIR, SKILL_CONTEXT_SUBDIR, skill.name)
+    await mkdir(dir, { recursive: true })
+    for (const r of skill.resources) {
+      const dest = join(dir, r.relPath)
+      await mkdir(dirname(dest), { recursive: true })
+      await writeFile(dest, r.content, 'utf8')
+    }
   }
   const gitRoot = await findGitRoot(cwd)
   if (!gitRoot) return
