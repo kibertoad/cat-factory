@@ -56,6 +56,7 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
+  createEnvToolSecretResolver,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -395,6 +396,11 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
+    // Resolve the credentials a registered kind's TOOL SERVER (MCP) declared, off the node's own
+    // environment. A deployment needing per-workspace credentials replaces this with its own
+    // `ToolSecretResolver`; the rest of the dispatch path is unchanged either way.
+    resolveToolSecrets: createEnvToolSecretResolver(process.env),
+    logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
     // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒

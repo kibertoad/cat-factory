@@ -11,10 +11,18 @@
     `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding agent writes to
     `.cat-pr-description.md`, which the harness lifts onto the PR it opens) — in
     `prompts/shared.ts`), `runtime/` (`runRepoOps` — the custom-agent pre/post-op runner).
+    `kinds/capabilities.ts` holds the agent-CAPABILITY declaration vocabulary — the skill and
+    tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
+    them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server
+    prompt section (available servers + the ones this run could NOT wire). See ADR 0029.
 - `providers/` — the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy).
 - `fragmentLibrary/` — the prompt-fragment library plumbing.
+- `skillLibrary/` — the repo-sourced Claude Skills catalog + sync (ADR 0024) and
+  `SkillRunResolver`, which resolves ONE catalog skill (instructions + resource bodies at its
+  pinned commit) for a dispatch. A BUNDLED skill needs none of this — it is deployment code,
+  registered on `AgentKindRegistry.registerSkill`.
 - `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts, plus the
   built-in post-ops (`builtin.ts`: `blueprintPostOp`, `specPostOp`, and `specPromotionPostOp` —
   the tester-driven `aspirational` → `established` promotion of the in-repo spec) and

@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec, SkillSpec } from './job.js'
+import type { RepoSpec } from './job.js'
+import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
 import { log } from './logger.js'
 import {
@@ -206,12 +207,20 @@ export interface AgentRunSpec {
    */
   contextFiles?: ContextFileInfo[]
   /**
-   * A repo-sourced Claude Skill to make available for this run (slice 2). Installed HARNESS-AWARE:
-   * the claude-code runner writes it natively into the config dir's `skills/`; for Pi/codex the
-   * resource files are materialised under `.cat-context/skill/` (their prompt already carries the
-   * folded-in instructions). Absent ⇒ no skill.
+   * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
+   * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them
+   * natively into the config dir's `skills/`; for Pi/codex the resource files are materialised
+   * under `.cat-context/skill/<name>/` (their prompt already carries the folded-in instructions).
+   * Absent ⇒ no skills.
    */
-  skill?: SkillSpec
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the agent CLI. Served by the subscription harnesses only —
+   * Pi has no MCP client, and the BACKEND is what decides that (it drops an unservable server and
+   * tells the agent so), which is why this path simply forwards whatever it is given rather than
+   * re-deciding. Absent ⇒ the CLI's built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
   /**
    * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
    * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
@@ -268,14 +277,14 @@ export async function runAgentInWorkspace(
   // harness paths; kept out of the agent's commits via a local git exclude entry.
   const contextFiles = spec.contextFiles ?? []
   await materializeContextFiles(spec.dir, contextFiles)
-  // Repo-sourced skill (slice 2): claude-code installs it natively into its ISOLATED config dir,
-  // so it reads from there. Everything else reads the checkout, so materialise the skill's
-  // resources under `.cat-context/skill/` (its instructions are folded into the prompt by the
-  // backend) — Pi, codex, and AMBIENT claude-code, which has no isolated config dir to install
-  // into (the runner refuses to write a repo's skill into the developer's own `~/.claude`; see
-  // `runClaudeCode`). A resource-free skill is a no-op here.
-  if (spec.skill && !installsSkillNatively(spec)) {
-    await materializeSkillResources(spec.dir, spec.skill)
+  // Skills: claude-code installs them natively into its ISOLATED config dir, so it reads from
+  // there. Everything else reads the checkout, so materialise each skill's resources under
+  // `.cat-context/skill/<name>/` (their instructions are folded into the prompt by the backend) —
+  // Pi, codex, and AMBIENT claude-code, which has no isolated config dir to install into (the
+  // runner refuses to write a skill into the developer's own `~/.claude`; see `runClaudeCode`).
+  // Resource-free skills are a no-op here.
+  if (spec.skills?.length && !installsSkillNatively(spec)) {
+    await materializeSkillResources(spec.dir, spec.skills)
   }
 
   // Subscription harnesses (Claude Code / Codex) authenticate with the leased
@@ -296,7 +305,8 @@ export async function runAgentInWorkspace(
       ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
       ...(spec.ambientAuth ? { ambientAuth: true } : {}),
-      ...(spec.skill ? { skill: spec.skill } : {}),
+      ...(spec.skills?.length ? { skills: spec.skills } : {}),
+      ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
       ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
       signal: opts.signal,
       // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
@@ -367,12 +377,12 @@ export async function runAgentInWorkspace(
 }
 
 /**
- * Whether the claude-code runner will install this run's repo-sourced skill natively (into the
- * CLI's config dir) rather than the caller materialising it into the checkout. True ONLY for a
+ * Whether the claude-code runner will install this run's skills natively (into the CLI's config
+ * dir) rather than the caller materialising them into the checkout. True ONLY for a
  * leased-credential claude-code run, which gets a throwaway per-run config home. An AMBIENT run
- * uses the developer's own `~/.claude`, which the runner will not write a repo's skill into —
- * it would outlive the run in their personal setup, and two concurrent jobs carrying same-named
- * skills from different repos would overwrite each other's.
+ * uses the developer's own `~/.claude`, which the runner will not write a skill into — it would
+ * outlive the run in their personal setup, and two concurrent jobs carrying same-named skills
+ * would overwrite each other's.
  */
 export function installsSkillNatively(
   spec: Pick<AgentRunSpec, 'harness' | 'ambientAuth'>,

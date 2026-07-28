@@ -3,8 +3,11 @@ import type {
   AgentKind,
   AgentRunContext,
   AgentStepSpec,
+  McpServerDefinition,
   RepoOp,
 } from '@cat-factory/kernel'
+import type { AgentKindSkillRef, AgentKindToolRef, BundledSkillDefinition } from './capabilities.js'
+import { normalizeSkillRefs, normalizeToolRefs } from './capabilities.js'
 import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait, AgentTraitDefinition } from './traits.js'
 import { STANDARD_TRAIT_DEFINITIONS } from './traits.js'
@@ -145,6 +148,30 @@ export interface AgentKindDefinition {
    */
   postOps?: RepoOp[]
   /**
+   * Skills this kind applies on every run — its procedural playbooks. Each ref is a bundled
+   * skill registered on this registry (by id), an inline bundled skill (shipped with the kind),
+   * or a `{ catalogSkillId }` reference to an account-tier repo-synced skill. The engine resolves
+   * them at dispatch onto `AgentRunContext.skills`, and the container executor installs them
+   * harness-aware — natively for claude-code, into `.cat-context/skill/` for Pi/codex.
+   *
+   * Distinct from the built-in `skill` KIND, which runs ONE skill picked per step
+   * (`stepOptions.skillId`): this is a kind saying "my work is always done this way". A step
+   * that picks a skill on a kind that also declares some runs both (deduplicated by id).
+   * Omitted ⇒ the kind applies no skills of its own.
+   */
+  skills?: AgentKindSkillRef[]
+  /**
+   * Tool servers (MCP) this kind may call — a registered server id or an inline
+   * {@link McpServerDefinition}. The engine resolves them at dispatch onto
+   * `AgentRunContext.toolServers`, the executor threads their configuration (and any resolved
+   * credentials) into the job body, and the harness wires them into the agent CLI.
+   *
+   * A server the running harness cannot serve (Pi has no MCP client) or whose required
+   * credential does not resolve is DROPPED and stated in the prompt, never silently missing.
+   * Omitted ⇒ the kind gets the harness's built-in tools only.
+   */
+  toolServers?: AgentKindToolRef[]
+  /**
    * Frontend display metadata (label / icon / colour / category / result view). The
    * server serialises this into the workspace snapshot so a registered kind becomes a
    * first-class palette block instead of the generic fallback. Omitted ⇒ the SPA renders
@@ -187,6 +214,17 @@ export class AgentKindRegistry {
   // Distinct from a kind's STANDARD_AGENT_TRAITS and a registered kind's own `traits`: this
   // seam adds traits to a kind WITHOUT redefining its prompt. Unioned in `traitsFor`.
   private readonly assignedTraits = new Map<AgentKind, Set<AgentTrait>>()
+  // CAPABILITY definitions shared across kinds: bundled skills (id → the SKILL.md payload the
+  // deployment ships in code) and tool servers (id → the MCP server definition). They live here
+  // for the same reason traits do — a skill and a tool server are capabilities OF agent kinds,
+  // so the whole vocabulary stays on one injectable seam rather than two parallel module `Map`s.
+  private readonly bundledSkills = new Map<string, BundledSkillDefinition>()
+  private readonly toolServerDefinitions = new Map<string, McpServerDefinition>()
+  // Capability ASSIGNMENTS to EXISTING kinds — the skills/tool-servers analogue of
+  // `assignedTraits`. This is how a deployment gives a BUILT-IN kind (`coder`, `pr-reviewer`)
+  // its house playbook or its issue-tracker MCP server without redefining the kind's prompt.
+  private readonly assignedSkills = new Map<AgentKind, AgentKindSkillRef[]>()
+  private readonly assignedToolServers = new Map<AgentKind, AgentKindToolRef[]>()
 
   constructor() {
     for (const definition of STANDARD_TRAIT_DEFINITIONS) {
@@ -337,10 +375,99 @@ export class AgentKindRegistry {
   assignedTraitsFor(kind: AgentKind): ReadonlySet<AgentTrait> {
     return this.assignedTraits.get(kind) ?? EMPTY_TRAIT_SET
   }
+
+  /**
+   * Register a bundled skill — a `SKILL.md` payload the deployment ships in code — so any number
+   * of kinds can reference it by id. A later registration of the same id replaces the earlier one.
+   */
+  registerSkill(definition: BundledSkillDefinition): void {
+    this.bundledSkills.set(definition.id, definition)
+  }
+
+  /** Register several bundled skills at once. */
+  registerSkills(definitions: Iterable<BundledSkillDefinition>): void {
+    for (const definition of definitions) this.registerSkill(definition)
+  }
+
+  /** A registered bundled skill, or undefined when the id is unknown. */
+  bundledSkill(id: string): BundledSkillDefinition | undefined {
+    return this.bundledSkills.get(id)
+  }
+
+  /**
+   * Register a tool server (MCP) so any number of kinds can reference it by id. A later
+   * registration of the same id replaces the earlier one — which is also how a deployment
+   * REPOINTS a server an installed package registered (e.g. at its own internal endpoint)
+   * without forking the package.
+   */
+  registerToolServer(definition: McpServerDefinition): void {
+    this.toolServerDefinitions.set(definition.id, definition)
+  }
+
+  /** Register several tool servers at once. */
+  registerToolServers(definitions: Iterable<McpServerDefinition>): void {
+    for (const definition of definitions) this.registerToolServer(definition)
+  }
+
+  /** A registered tool server, or undefined when the id is unknown. */
+  toolServerDefinition(id: string): McpServerDefinition | undefined {
+    return this.toolServerDefinitions.get(id)
+  }
+
+  /**
+   * Give an EXISTING kind extra skills — additive, so a deployment attaches its house playbook to
+   * a built-in kind (`coder`, `pr-reviewer`) without redefining it. Deduplicated with the kind's
+   * own declarations at resolution time.
+   */
+  assignSkills(kind: AgentKind, refs: Iterable<AgentKindSkillRef>): void {
+    this.assignedSkills.set(kind, [...(this.assignedSkills.get(kind) ?? []), ...refs])
+  }
+
+  /** Give an EXISTING kind extra tool servers — the {@link assignSkills} analogue. */
+  assignToolServers(kind: AgentKind, refs: Iterable<AgentKindToolRef>): void {
+    this.assignedToolServers.set(kind, [...(this.assignedToolServers.get(kind) ?? []), ...refs])
+  }
+
+  /**
+   * Every skill declared for a kind — its own `skills` plus any assigned to it — normalised into
+   * the bundled/catalog split the engine resolves, with unknown registered ids reported rather
+   * than thrown on (boot validation turns those into a startup error; a dispatch drops them).
+   * A kind's OWN declarations come first, so it controls the order its playbooks are applied in.
+   */
+  skillsFor(kind: AgentKind): ReturnType<typeof normalizeSkillRefs> {
+    const own = this.registry.get(kind)?.skills ?? []
+    const assigned = this.assignedSkills.get(kind) ?? []
+    if (own.length === 0 && assigned.length === 0) return EMPTY_SKILL_REFS
+    return normalizeSkillRefs([...own, ...assigned], (id) => this.bundledSkills.get(id))
+  }
+
+  /**
+   * Every tool server declared for a kind — its own `toolServers` plus any assigned to it —
+   * resolved to definitions and deduplicated by server id. Unknown registered ids are reported,
+   * not thrown on (see {@link skillsFor}).
+   */
+  toolServersFor(kind: AgentKind): ReturnType<typeof normalizeToolRefs> {
+    const own = this.registry.get(kind)?.toolServers ?? []
+    const assigned = this.assignedToolServers.get(kind) ?? []
+    if (own.length === 0 && assigned.length === 0) return EMPTY_TOOL_REFS
+    return normalizeToolRefs([...own, ...assigned], (id) => this.toolServerDefinitions.get(id))
+  }
 }
 
 /** Shared empty set so `assignedTraitsFor` allocates nothing on the common no-assignment path. */
 const EMPTY_TRAIT_SET: ReadonlySet<AgentTrait> = new Set<AgentTrait>()
+
+// Shared empty results so the no-capability path (every built-in kind, on every dispatch)
+// allocates nothing. Frozen because they are handed to callers.
+const EMPTY_SKILL_REFS = Object.freeze({
+  bundled: Object.freeze([]) as never[],
+  catalog: Object.freeze([]) as never[],
+  unknown: Object.freeze([]) as never[],
+})
+const EMPTY_TOOL_REFS = Object.freeze({
+  servers: Object.freeze([]) as never[],
+  unknown: Object.freeze([]) as never[],
+})
 
 /**
  * A fresh registry pre-loaded with the built-in agent kinds. This is the single place the

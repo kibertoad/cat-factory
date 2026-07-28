@@ -3,9 +3,18 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
-import { renderMergerMultiRepoSection, renderMultiRepoWorkspaceSection } from './jobBody.js'
+import { DOC_WRITER_KIND, READ_ONLY_AGENT_KINDS } from '@cat-factory/agents'
+import type { McpServerJobSpec } from './toolServers.js'
+import { aprioriReferenceBranches } from '@cat-factory/contracts'
+import {
+  renderMergerMultiRepoSection,
+  renderMultiRepoWorkspaceSection,
+  renderReferenceBranchesSection,
+  renderReferenceReposSection,
+} from './jobBody.js'
 import type { RepoCheckout } from './resolveRepoTarget.js'
 import type {
   ContainerAgentExecutorDependencies,
@@ -81,13 +90,14 @@ export function buildCommonBody(
     packageRegistries: JobPackageRegistrySpec[]
     repoSpec: Record<string, unknown>
     contextFiles: { path: string; title: string; url: string; content: string }[]
-    skillBody?: unknown
+    skillsBody?: unknown[]
+    mcpServers?: McpServerJobSpec[]
     guardLimits?: unknown
   },
   deps: ContainerAgentExecutorDependencies,
 ): Record<string, unknown> {
   const { jobId, model, auth, ghToken, packageRegistries, repoSpec, contextFiles } = args
-  const { skillBody, guardLimits } = args
+  const { skillsBody, mcpServers, guardLimits } = args
   // The UI tester uploads its captured screenshots back to the backend from inside the
   // container. It reuses the SAME container session token it already carries for the LLM
   // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
@@ -108,11 +118,15 @@ export function buildCommonBody(
     repo: repoSpec,
     ...(deps.githubApiBase ? { githubApiBase: deps.githubApiBase } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
-    // The resolved skill always travels as this dedicated top-level field (never a context
-    // file). The claude-code harness materialises it into ~/.claude/skills/<name>/ natively;
-    // Pi/codex materialise the same field's resources under `.cat-context/skill/` and receive
-    // the instructions folded into the prompt (skillSection) instead.
-    ...(skillBody ? { skill: skillBody } : {}),
+    // The resolved skills always travel as this dedicated top-level field (never context
+    // files). The claude-code harness installs each into CLAUDE_CONFIG_DIR/skills/<name>/
+    // natively; Pi/codex materialise the same field's resources under `.cat-context/skill/<name>/`
+    // and receive the instructions folded into the prompt (skillSection) instead.
+    ...(skillsBody?.length ? { skills: skillsBody } : {}),
+    // Tool servers (MCP) the running kind declared, with their transports and any resolved
+    // credentials. Also a dedicated top-level field the agent-context snapshot allow-list omits —
+    // the prompt-facing (non-secret) projection rides `context.toolServers` instead.
+    ...(mcpServers?.length ? { mcpServers } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }
@@ -317,5 +331,144 @@ export async function resolveMergerCombinedDiff(
         baseBranch: l.target.baseBranch,
       })),
     ]),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// READ-ONLY reference inputs: the repos and branches a task attaches as prior art the agent may
+// READ but never write. Moved here from `ContainerAgentExecutor` with the rest of the auxiliary-
+// checkout cluster (pure code motion) — the two are the same concern the multi-repo fan-out and
+// merger-sibling resolution already live here for, and the executor stays a dispatch/poll
+// orchestrator within its size budget.
+// ---------------------------------------------------------------------------
+
+/**
+ * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
+ * checkouts the agent may read (to reuse existing solutions) but never write to. Deliberately
+ * a SEPARATE gate from {@link MULTI_REPO_FANOUT_BUILTIN_KINDS}: reference repos are not involved
+ * services (never writable, no branch/PR, don't need to be board services), so they must not be
+ * folded into the fan-out path. Only the document writer reads them today.
+ */
+const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
+
+/**
+ * The read-only bug-triage kind excluded from the reference-branch consumers below: it clones the
+ * REPORTED PR/commit as its subject, so an unrelated prior-art reference branch is noise for it.
+ */
+const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
+
+/**
+ * The kinds that consume a task's read-only apriori REFERENCE branches (the apriori-branches
+ * reference mode) — the branches are fetched into the primary checkout's `origin/<b>` refs so the
+ * agent can inspect a spike/prototype/prior-art branch it must never commit to. The consumers are
+ * the kinds that read/plan/author against the primary repo — the implementer (`coder`), the
+ * spec-writer, the doc-writer, and the read-only design/analysis kinds (`architect` / `analysis`).
+ * Deliberately EXCLUDES the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
+ * merger): they already carry the work in the PR branch they clone, so a reference branch is noise
+ * — and folding it in would spend prompt tokens and a fetch on a branch they will not use.
+ *
+ * The design/analysis members are DERIVED from the authoritative {@link READ_ONLY_AGENT_KINDS}
+ * (minus `bug-investigator`) rather than re-listed as literals, so a newly-registered read-only
+ * design kind is picked up here automatically without a second hard-coded list to keep in step.
+ */
+const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
+  IMPLEMENTER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
+  DOC_WRITER_KIND,
+  ...[...READ_ONLY_AGENT_KINDS].filter((k) => k !== BUG_INVESTIGATOR_AGENT_KIND),
+])
+
+/**
+ * Read-only reference repos (document-authoring tasks): the doc-writer clones each attached repo
+ * as a READ-ONLY sibling checkout it may read but never writes to. The spec carries NO branch/PR
+ * fields, so it is structurally unpushable; the harness clones it at its own default branch and
+ * skips it in the push phase. Auth reuses the run's already-resolved `ghToken` (the run
+ * initiator's own token when they have one, per `mintInstallationToken`), so no extra token mint.
+ * A reference repo may be outside the workspace projection, so its clone identity comes straight
+ * from the persisted attachment. Provider-neutral: the clone URL + provider come from
+ * `resolveRepoOrigin` (the same deployment-level seam the primary rides), so a GitLab deployment
+ * clones from GitLab. Extracted from {@link resolveAuxiliaryRepos} to keep it under the ceiling.
+ */
+export function resolveReferenceRepos(
+  context: AgentRunContext,
+  repo: RepoTarget,
+  deps: ContainerAgentExecutorDependencies,
+): { referenceRepos?: { repo: Record<string, unknown> }[]; referenceReposSection?: string } {
+  const attachedReferenceRepos = context.referenceRepos ?? []
+  if (attachedReferenceRepos.length === 0 || !REFERENCE_REPO_KINDS.has(context.agentKind)) {
+    return {}
+  }
+  const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
+  // Dedup against the primary and each other by the harness's sibling-checkout key
+  // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
+  // claiming the same directory would make the second `git clone` fail into a non-empty dir.
+  // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
+  // primary checkout), and duplicate attachments collapse to one.
+  const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
+  const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
+  const targets: RepoTarget[] = []
+  for (const r of attachedReferenceRepos) {
+    const key = siblingKey(r.owner, r.name)
+    if (seen.has(key)) continue
+    seen.add(key)
+    targets.push({
+      installationId: r.connectionId ?? repo.installationId,
+      // A reference repo already carries the id it was attached by; the neutral
+      // `VcsRepoRef.repoId` vocabulary is the stringified form.
+      repoId: String(r.repoId),
+      owner: r.owner,
+      name: r.name,
+      baseBranch: r.defaultBranch,
+    })
+  }
+  if (targets.length === 0) {
+    return {}
+  }
+  return {
+    referenceRepos: targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) })),
+    referenceReposSection: renderReferenceReposSection(repo, targets),
+  }
+}
+
+/**
+ * Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
+ * of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike the
+ * reference REPOS above, these are not sibling checkouts — they ride the primary clone as
+ * `origin/<b>` refs the harness fetches before the agent runs (see the harness
+ * `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
+ * architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
+ * branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a reference
+ * is garnish, so a stale/typo'd one is silently omitted rather than failing the run. When probing
+ * isn't wired (tests / no GitHub) every named branch is forwarded and the harness fetch is
+ * best-effort. A run that already carries a PR still reads reference branches (they are context,
+ * independent of the work branch). Extracted from {@link resolveAuxiliaryRepos} for the ceiling.
+ */
+export async function resolveReferenceBranches(
+  context: AgentRunContext,
+  args: { repo: RepoTarget; workBranch: string; multiRepo: boolean },
+  deps: ContainerAgentExecutorDependencies,
+): Promise<{ referenceBranches?: string[]; referenceBranchesSection?: string }> {
+  const { repo, workBranch, multiRepo } = args
+  if (!REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
+    return {}
+  }
+  const named = aprioriReferenceBranches(context.aprioriBranches)
+  // Drop any that collide with the resolved work branch (a reference and the working branch are
+  // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
+  const candidates = named.filter((b) => b !== workBranch)
+  let present: string[]
+  if (deps.ensureWorkBranch) {
+    const probe = deps.ensureWorkBranch
+    const existence = await Promise.all(candidates.map((b) => probe(repo, b, { create: false })))
+    present = candidates.filter((_b, i) => existence[i])
+  } else {
+    present = candidates
+  }
+  if (present.length === 0) {
+    return {}
+  }
+  return {
+    referenceBranches: present,
+    referenceBranchesSection: renderReferenceBranchesSection(present, { multiRepo }),
   }
 }

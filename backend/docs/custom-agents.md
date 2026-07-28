@@ -95,6 +95,7 @@ pipelineRegistry.register({
 | `preOps?` / `postOps?`                                | `RepoOp[]` — deterministic backend hooks over `RepoFiles`.                                                                                                                                                                                                                                                                                                                  |
 | `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`resultView`.                                                                                                                                                                                                                                                                                                                    |
 | `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                     |
+| `skills?` / `toolServers?`                            | The procedural playbooks the kind applies and the MCP tool servers it may call — see "Capabilities: skills and tools" below.                                                                                                                                                                                                                                                |
 | `standardsDelivery?`                                  | `'prompt'` (default) folds a `code-aware`/`doc-aware` kind's resolved standards into its system prompt; `'context-files'` skips that fold — the kind's own preOp MUST write them as `.cat-context/standard-<id>.md` files (see `pr-reviewer`). Right for a kind that DELEGATES review to subagents, so the delegating agent isn't charged for every standard on every turn. |
 
 **`standardsDelivery: 'context-files'`** is for a kind that fans work out to subagents. Because an
@@ -107,6 +108,112 @@ hooks) the engine falls back to folding, so the standards are never lost through
 
 A `container-*` surface implies the container requirement automatically
 (`registeredKindRequiresContainer`), so `requiresContainer` need not be set alongside it.
+
+## Capabilities: skills and tools
+
+Beyond its prompt, a kind declares WHAT IT KNOWS (skills — procedural playbooks) and WHAT IT CAN
+REACH (tool servers — MCP). Design record: [ADR 0029](./adr/0029-agent-kind-capabilities.md).
+
+```ts
+// Reusable definitions register on the SAME injected registry, then any number of kinds
+// reference them by id. Register these BEFORE the kinds that name them — boot validation
+// reports an unresolved reference as a startup error.
+agentKindRegistry.registerSkill({
+  id: 'org-security-review',
+  name: 'org-security-review',
+  description: 'The org security-review playbook.',
+  instructions: '1. Start from the diff…', // the SKILL.md body
+  resources: [{ relPath: 'severity.md', content: '# Severity rubric…' }],
+})
+
+agentKindRegistry.registerToolServer({
+  id: 'org-advisories',
+  label: 'Org advisory database',
+  // Not decoration: an agent handed a tool it wasn't told the purpose of tends not to use it.
+  guidance: 'Look up a dependency here before judging whether a version bump is risky.',
+  transport: { kind: 'stdio', command: 'npx', args: ['-y', '@example-org/advisories-mcp'] },
+  allowedTools: ['lookup_advisory'], // omit ⇒ every tool the server exposes
+  secretKeys: [{ key: 'ORG_ADVISORY_TOKEN' }], // by NAME; the value is resolved at dispatch
+})
+
+agentKindRegistry.register({
+  kind: 'security-auditor',
+  systemPrompt: '…',
+  agent: { surface: 'container-explore' },
+  skills: ['org-security-review'],
+  toolServers: ['org-advisories'],
+})
+
+// Attach either to a BUILT-IN kind without redefining it — the `assignTraits` analogue.
+agentKindRegistry.assignSkills('coder', ['org-security-review'])
+agentKindRegistry.assignToolServers('pr-reviewer', ['org-advisories'])
+```
+
+### Skills
+
+A skill ref takes three forms, all resolving to the same payload so nothing downstream branches on
+where it came from:
+
+| Form                            | Meaning                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `'my-skill'`                    | A **bundled** skill registered with `registerSkill`.                                             |
+| `{ id, name, description, … }`  | A bundled skill declared **inline** (one kind's own playbook).                                   |
+| `{ catalogSkillId, optional? }` | An account-tier **repo-synced** skill (ADR 0024), resolved through the engine's `skillResolver`. |
+
+A **bundled** skill ships in the deployment's own code: no skill library, no GitHub connection, no
+sync — installing the package installs the playbook. A **catalog** skill is tenant-authored content
+and needs the library configured; it is a hard dispatch failure when it cannot resolve, unless the
+ref declares `optional: true` (which is how a kind says "apply the house playbook if this deployment
+has one"). A catalog skill's version is pinned per run onto `step.skillVersions`; a bundled one has
+no pin, because its version is the deployment's.
+
+This is distinct from the built-in `skill` KIND, which runs ONE skill picked per step
+(`stepOptions.skillId`). A kind that declares skills and a step that picks one run both, deduped by
+id, with the kind's own first.
+
+The harness installs them **harness-aware**: natively under `CLAUDE_CONFIG_DIR/skills/<name>/` for
+claude-code (the CLI loads them and invokes them on its own judgement), or
+`.cat-context/skill/<name>/` plus the full instructions folded into the prompt for Pi/codex and for
+an AMBIENT claude-code run (which has no isolated config home to install into).
+
+### Tool servers (MCP)
+
+A tool server is `stdio` (a child process in the run container) or `http` (a remote endpoint). Its
+credentials are declared BY NAME and resolved at dispatch by the facade-wired kernel
+`ToolSecretResolver`; both facades wire `createEnvToolSecretResolver`, which reads each key off the
+deployment's own environment. A deployment needing PER-WORKSPACE credentials implements the port
+itself — nothing else in the dispatch path changes. A secret value never reaches
+`AgentRunContext`, a prompt, or the telemetry snapshot: it rides the job body's dedicated
+`mcpServers` field, exactly like the tester's `testSecrets`.
+
+Rules worth knowing before declaring one:
+
+- **A dropped server is STATED, never silent.** A server the harness cannot serve (Pi has no MCP
+  client; an ambient Codex run has no per-run config home) or whose required credential did not
+  resolve is reported to the agent as unavailable in the prompt's tool-server section. Silence
+  would let the agent plan around a tool that was never there and discover the gap mid-run.
+- **A required credential that does not resolve DROPS the server** — `required` defaults to true,
+  because a tool whose first call 401s is worse than one the agent was told it does not have.
+- **Codex is stdio-only.** An `http` server is skipped in its config; declare
+  `harnesses: ['claude-code']` on such a server so the drop is reported rather than invisible.
+- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
+  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
+  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
+- **Tool servers need a container surface.** An inline LLM step has no agent CLI to wire them into;
+  boot validation warns about that combination. The same warning covers `skills`, for the same
+  reason.
+- **`allowedTools` is SCOPING, not a security boundary.** It is always stated in the prompt, and
+  additionally passed to claude-code's `--allowedTools` — but whether that CLI list gates depends
+  on the run's permission mode, and Codex cannot express a per-tool restriction at all. If an agent
+  kind must never reach a server's other tools, do not wire that server for that kind.
+- **Mind what `secretKeys` can reach.** The default resolver reads any key off the deployment
+  environment, and a definition also names the endpoint the value is sent to. If a deployment
+  installs agent packages it did not author, wire
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` and keep the credentials behind an
+  `MCP_…` prefix. See ADR 0029 → Consequences.
+
+The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
+`org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
 
 ### How the engine runs the hooks
 
@@ -224,7 +331,9 @@ registers:
 - **`org-reviewer`** — an `inline` policy reviewer (no repo, no container).
 - **`security-auditor`** — a `container-explore` structured auditor whose `postOp` renders
   `compliance/REPORT.md` from the agent's JSON and commits it via `RepoFiles`, presenting
-  through `generic-structured`.
+  through `generic-structured`. It also declares both CAPABILITIES: a bundled
+  `org-security-review` skill (the org playbook, shipped in the package's own code) and an
+  `org-advisories` MCP tool server whose credential is resolved at dispatch.
 - **`org-researcher`** — a `container-coding` structured researcher (the producing kind of the
   `preset_org_research` initiative preset) that returns a `GO`/`GO_WITH_CAVEATS`/`NO_GO` verdict
   and whose `postOp` renders the canonical feasibility report onto the PR branch it opened. It is

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdir, mkdtemp, opendir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type {
@@ -20,17 +20,14 @@ import {
   conflictDiff,
   fetchPullRequestHead,
   fetchReferenceBranches,
-  hasAgentChanges,
   headCommit,
   mergeBranch,
   prepareExistingCheckout,
   pushBranch,
-  reinitAndPush,
   unmergedPaths,
 } from './git.js'
 import { inferVcsProvider, openPullRequest } from './vcs-api.js'
 import type { PiRunStats, RunDiagnostics } from './pi.js'
-import type { EffortReport } from './effort.js'
 import { applyPrDescription } from './pr-description.js'
 import {
   makeDirClaimer,
@@ -39,6 +36,8 @@ import {
   runMultiRepoCoding,
 } from './coding-agent.js'
 import { validationFailureMessage } from './validation-checks.js'
+import { agentCapabilities, mergeEffort } from './agent-shared.js'
+import { runBootstrap } from './bootstrap-mode.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -311,15 +310,6 @@ async function cloneServiceCheckout(
     signal,
   })
   return deriveWorkDir(dir, job.repo.serviceDirectory)
-}
-
-/**
- * Fold an agent's effort self-assessment (lifted from its sentinel file by `runAgentInWorkspace`)
- * onto its final result. Every container mode routes its result through this so the report reaches
- * the backend uniformly. A run that wrote no report passes through unchanged.
- */
-function mergeEffort(result: AgentResult, effortReport: EffortReport | undefined): AgentResult {
-  return effortReport ? { ...result, effortReport } : result
 }
 
 /** Run one generic agent job end to end, dispatching on `mode`. */
@@ -608,6 +598,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             webSearchProxy: job.webSearch,
             contextFiles: job.contextFiles,
             guardLimits: job.guardLimits,
+            ...agentCapabilities(job),
           },
           agentOpts,
         )
@@ -836,6 +827,7 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
         webSearchProxy: job.webSearch,
         ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
         guardLimits: job.guardLimits,
+        ...agentCapabilities(job),
         multiRepo: true,
       },
       opts,
@@ -954,8 +946,8 @@ function buildSingleRepoCodingSpec(
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
     ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
-    // Repo-sourced skill (slice 2): installed harness-aware by runAgentInWorkspace.
-    ...(job.skill ? { skill: job.skill } : {}),
+    // Skills + tool servers: installed/wired harness-aware by runAgentInWorkspace.
+    ...agentCapabilities(job),
     // Ralph loop: run the completion command after the agent commits and report its verdict.
     ...(job.validation
       ? {
@@ -1228,6 +1220,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
           sessionToken: job.sessionToken,
           contextFiles: job.contextFiles,
           guardLimits: job.guardLimits,
+          ...agentCapabilities(job),
         },
         opts,
       )
@@ -1325,156 +1318,6 @@ function unresolvedReason(
     `The agent did not resolve all merge conflicts ` +
     `(${unresolved.length} file(s) still conflicted: ${sample}).${cause}` +
     agentOutputTail(stderrTail)
-  )
-}
-
-/**
- * Repo-bootstrap coding flow (the bootstrapper): with a reference architecture, clone it →
- * the agent adapts it in place per the instructions; without one (`fromScratch`), start from
- * an empty directory → the agent scaffolds the new service. Either way the result's history
- * is reset to a single commit and force-pushed to the SEPARATE, pre-created target repo's
- * default branch. Diverges from the ordinary coding flow in pushing to a different repo with
- * a reinitialised history rather than a work branch + PR on the cloned repo.
- */
-async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
-  const { signal } = opts
-  const boot = job.bootstrap!
-  const fromScratch = boot.fromScratch === true
-  const logger = (opts.log ?? log).child({ target: `${boot.target.owner}/${boot.target.name}` })
-  return withWorkspace('boot', async (dir) => {
-    if (!fromScratch) {
-      opts.onPhase?.('clone')
-      logger.info('agent(bootstrap): cloning reference architecture', {
-        reference: `${job.repo.owner}/${job.repo.name}`,
-      })
-      await cloneRepo({
-        repo: { ...job.repo, baseBranch: job.branch },
-        ghToken: job.ghToken,
-        dir,
-        signal,
-      })
-    } else {
-      logger.info('agent(bootstrap): scaffolding from scratch (no reference)')
-    }
-
-    opts.onPhase?.('agent')
-    logger.info('agent(bootstrap): running agent')
-    const { summary, stats, stderrTail, usage, callMetrics, effortReport } =
-      await runAgentInWorkspace(
-        {
-          dir,
-          systemPrompt: job.systemPrompt,
-          userPrompt: job.userPrompt,
-          model: job.model,
-          harness: job.harness,
-          subscriptionToken: job.subscriptionToken,
-          subscriptionBaseUrl: job.subscriptionBaseUrl,
-          ambientAuth: job.ambientAuth,
-          proxyBaseUrl: job.proxyBaseUrl,
-          sessionToken: job.sessionToken,
-          guardLimits: job.guardLimits,
-        },
-        opts,
-      )
-
-    // Guard against a no-op run: Pi can exit cleanly having done nothing (e.g. it never
-    // reached the model), and a force-push would then publish an empty tree — leaving the
-    // run "succeeded" but the repo bare. Fail with a structured error (carrying what the
-    // agent did) instead of pushing nothing.
-    if (!(await producedRepoContent(dir, !fromScratch, signal))) {
-      const error = bootstrapNoOpReason(!fromScratch, stats, summary, stderrTail)
-      logger.error('agent(bootstrap): agent produced no content, refusing to push', { ...stats })
-      return mergeEffort(
-        {
-          summary,
-          stats,
-          error,
-          failureCause: 'agent',
-          ...(usage ? { usage } : {}),
-          ...(callMetrics ? { callMetrics } : {}),
-        },
-        effortReport,
-      )
-    }
-
-    opts.onPhase?.('push')
-    logger.info('agent(bootstrap): pushing bootstrapped contents', { ...stats })
-    // Bootstrap always resets history to one commit + force-pushes (the fresh history
-    // shares no ancestor with whatever boilerplate the new repo was created with).
-    await reinitAndPush({
-      dir,
-      target: boot.target,
-      ghToken: job.ghToken,
-      message: fromScratch
-        ? 'Bootstrap new repository'
-        : `Bootstrap from ${job.repo.owner}/${job.repo.name}`,
-    })
-    logger.info('agent(bootstrap): complete', { defaultBranch: boot.target.defaultBranch })
-    return mergeEffort(
-      {
-        defaultBranch: boot.target.defaultBranch,
-        summary,
-        stats,
-        ...(usage ? { usage } : {}),
-        ...(callMetrics ? { callMetrics } : {}),
-      },
-      effortReport,
-    )
-  })
-}
-
-/**
- * Whether the bootstrapper actually produced repository content, so a no-op run (the agent
- * never reached the model / never wrote anything) is failed rather than force-pushed as an
- * empty repo. With a reference architecture, "produced content" means the agent changed the
- * clone; scaffolding from scratch, it means at least one file now exists in the working
- * directory. (The harness writes its prompt context to Pi's global `~/.pi/agent/AGENTS.md`,
- * never into `dir`, so nothing here needs to be filtered out as harness boilerplate.)
- */
-export async function producedRepoContent(
-  dir: string,
-  hasReference: boolean,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  if (hasReference) return hasAgentChanges(dir, signal)
-  return containsAnyFile(dir)
-}
-
-/**
- * Whether `dir` contains at least one regular file anywhere in its tree, walking
- * depth-first and stopping at the FIRST file found — so the cost is bounded by how
- * quickly a file turns up (a scaffold almost always writes a root-level file), not by
- * the size of the produced tree (a full recursive `readdir` would materialise every
- * entry before the check).
- */
-async function containsAnyFile(dir: string): Promise<boolean> {
-  const handle = await opendir(dir)
-  try {
-    for await (const entry of handle) {
-      if (entry.isFile()) return true
-      if (entry.isDirectory() && (await containsAnyFile(join(dir, entry.name)))) return true
-    }
-  } catch {
-    // A directory that vanished mid-walk has nothing to contribute.
-  }
-  return false
-}
-
-/** Human-readable bootstrap no-op reason, embedding what the agent did so the cause is visible. */
-function bootstrapNoOpReason(
-  hasReference: boolean,
-  stats: PiRunStats,
-  summary: string,
-  stderrTail: string | undefined,
-): string {
-  const what = hasReference
-    ? 'made no changes to the reference architecture'
-    : 'scaffolded no files'
-  const cause = agentNeverActed(stats) ? NEVER_ACTED_CAUSE : ''
-  return (
-    `the bootstrapper agent ${what} ` +
-    `(tool calls: ${stats.toolCalls}, assistant output: ${stats.assistantChars} chars).${cause}` +
-    agentOutputTail(stderrTail, summary)
   )
 }
 

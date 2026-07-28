@@ -4,6 +4,7 @@ import {
   bugFixGuidanceFor,
   composeBlockSystemPrompt,
   EFFORT_REPORT_GUIDANCE,
+  toolServersSection,
   FOLLOW_UP_GUIDANCE,
   PR_DESCRIPTION_GUIDANCE,
   isContainerBackedCompanion,
@@ -108,10 +109,11 @@ export interface KindBodyParts {
    */
   referenceBranchesSection?: string
   /**
-   * The backend-rendered skill directive for a `skill` step (repo-sourced Claude Skills, slice 2),
-   * appended to the kind's system prompt. For the claude-code harness it is a short pointer to the
-   * natively-installed skill; for Pi/codex it carries the folded-in instructions + a pointer to the
-   * skill's `.cat-context/skill/*` resources. Absent for every non-skill step.
+   * The backend-rendered skill directive for a dispatch that applies skills — a `skill` step's
+   * pick and/or the running kind's declared playbooks — appended to the kind's system prompt. For
+   * the claude-code harness it is a short pointer to the natively-installed skills; for Pi/codex it
+   * carries the folded-in instructions + a pointer to each skill's `.cat-context/skill/<name>/`
+   * resources. Absent when the dispatch applies no skills.
    */
   skillSection?: string
 }
@@ -159,12 +161,18 @@ export function buildKindBody(
   // is a no-op everywhere else.
   const bugFix = bugFixGuidanceFor(context)
   const withBugFix = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
-  // A `skill` step folds its picked skill's directive (harness-aware — a native-skill pointer for
-  // claude-code, the full instructions for Pi/codex) into the system prompt. Present only on a
-  // skill step whose skill resolved; a no-op for every other kind.
-  const roleSystemPrompt = parts.skillSection
-    ? `${withBugFix}\n\n${parts.skillSection}`
-    : withBugFix
+  // A dispatch that applies skills folds their directive (harness-aware — a native-skill pointer
+  // for claude-code, the full instructions for Pi/codex) into the system prompt. Present on a
+  // `skill` step whose pick resolved AND on any kind that declares skills of its own; a no-op
+  // for every other kind.
+  const withSkills = parts.skillSection ? `${withBugFix}\n\n${parts.skillSection}` : withBugFix
+  // The tool servers (MCP) wired for this dispatch, plus any the run could not wire. Appended
+  // here — the single container-dispatch chokepoint, exactly like the effort-report guidance —
+  // so it reaches EVERY container kind including a registered kind with its own `userPrompt`
+  // builder, which would otherwise bypass any user-prompt fold. Empty for a kind that declares
+  // no tool servers, so every built-in run's prompt is byte-for-byte unchanged.
+  const tools = toolServersSection(context)
+  const roleSystemPrompt = tools ? `${withSkills}\n\n${tools}` : withSkills
 
   // A registered (custom or migrated) kind that declares an `agent` step dispatches
   // through the generic, manifest-driven `agent` harness kind — no per-kind case here.

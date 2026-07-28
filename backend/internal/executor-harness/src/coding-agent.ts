@@ -11,6 +11,7 @@ import type {
   ReferenceRepoSpec,
   RepoSpec,
   SkillSpec,
+  McpServerSpec,
 } from './job.js'
 import {
   branchAheadOfBase,
@@ -140,12 +141,18 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    */
   reproduction?: ReproductionSpec
   /**
-   * A repo-sourced Claude Skill to make available for this run (a `skill` step, slice 2). Threaded
-   * into {@link runAgentInWorkspace}, which installs it harness-aware: natively under the ISOLATED
-   * `CLAUDE_CONFIG_DIR` for a leased-credential claude-code run, `.cat-context/skill/` for everything
-   * else (Pi, codex, and ambient claude-code, which has no isolated config dir). Absent ⇒ no skill.
+   * The skills to make available for this run — a `skill` step's pick and/or the running kind's
+   * declared playbooks. Threaded into {@link runAgentInWorkspace}, which installs them
+   * harness-aware: natively under the ISOLATED `CLAUDE_CONFIG_DIR` for a leased-credential
+   * claude-code run, `.cat-context/skill/<name>/` for everything else (Pi, codex, and ambient
+   * claude-code, which has no isolated config dir). Absent ⇒ no skills.
    */
-  skill?: SkillSpec
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the agent CLI for this run. Forwarded verbatim — the backend
+   * has already dropped anything this harness cannot serve. Absent ⇒ built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -350,7 +357,8 @@ export async function runCodingAgent(
             webToolsGuidance: spec.webToolsGuidance,
             webSearchProxy: spec.webSearchProxy,
             guardLimits: spec.guardLimits,
-            ...(spec.skill ? { skill: spec.skill } : {}),
+            ...(spec.skills?.length ? { skills: spec.skills } : {}),
+            ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
           },
           opts,
         )
@@ -1030,6 +1038,10 @@ export async function runMultiRepoCoding(
           webSearchProxy: job.webSearch,
           guardLimits: job.guardLimits,
           ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
+          // Skills + tool servers apply to a multi-repo run exactly as to a single-repo one: they
+          // are properties of the AGENT KIND, not of the checkout layout.
+          ...(job.skills?.length ? { skills: job.skills } : {}),
+          ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
           multiRepo: true,
         },
         opts,
