@@ -4007,6 +4007,11 @@
     "recommendationRequested": "התבקשה המלצה — סקור את ההצעה שלהלן.",
     "recommendedDefault": "ברירת מחדל מומלצת: השאר אותה, ערוך אותה או דחה את הממצא.",
     "needsYourInput": "דורש את הקלט שלך",
+    "group": {
+      "action": "דורש את תגובתך",
+      "waiting": "ממתין להצעות",
+      "settled": "טופלו"
+    },
     "mode": {
       "answer": "ענה",
       "dismiss": "דחה",

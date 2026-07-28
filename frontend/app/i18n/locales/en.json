@@ -4145,6 +4145,11 @@
     "recommendationRequested": "Recommendation requested — review the suggestion below.",
     "recommendedDefault": "Recommended default — keep it, edit it, or dismiss the finding.",
     "needsYourInput": "Needs your input",
+    "group": {
+      "action": "Needs your reaction",
+      "waiting": "Waiting on suggestions",
+      "settled": "Handled"
+    },
     "mode": {
       "answer": "Answer",
       "dismiss": "Dismiss",

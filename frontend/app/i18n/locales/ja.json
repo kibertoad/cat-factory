@@ -4008,6 +4008,11 @@
     "recommendationRequested": "推奨をリクエストしました。下記の提案を確認してください。",
     "recommendedDefault": "推奨される既定値です。そのまま使うか、編集するか、指摘を破棄してください。",
     "needsYourInput": "あなたの入力が必要です",
+    "group": {
+      "action": "対応が必要",
+      "waiting": "提案を待機中",
+      "settled": "対応済み"
+    },
     "mode": {
       "answer": "回答する",
       "dismiss": "破棄",
