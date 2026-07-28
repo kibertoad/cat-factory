@@ -38,23 +38,56 @@ export type { InlineObservabilityContext }
 // throws into the call.
 
 /** Read token counts defensively across the AI SDK's flat (v2) and nested (v3) usage shapes. */
-function readUsage(usage: unknown): { prompt: number; completion: number; total: number } {
+/**
+ * Read the SDK's usage into the four orthogonal classes the trace sink carries: `prompt` is
+ * FRESH input only, with the two cache classes beside it, so
+ * `prompt + cacheRead + cacheWrite` is the total input.
+ *
+ * The v3 shape already breaks the input down (`{ total, noCache, cacheRead, cacheWrite }`),
+ * so the split is read straight off it rather than re-derived; `noCache` is preferred over
+ * `total − read − write` because it is what the provider itself reported, and the subtraction
+ * is only the fallback for a model that fills `total` but not `noCache`. The v2/flat shape
+ * carries no cache breakdown at all, so both classes are 0 and the flat prompt count is
+ * already the whole (uncached) input.
+ */
+function readUsage(usage: unknown): {
+  prompt: number
+  cacheRead: number
+  cacheWrite: number
+  completion: number
+  total: number
+} {
   const u = usage as Record<string, unknown> | undefined
-  if (!u) return { prompt: 0, completion: 0, total: 0 }
+  if (!u) return { prompt: 0, cacheRead: 0, cacheWrite: 0, completion: 0, total: 0 }
   const inputTokens = u.inputTokens
   const outputTokens = u.outputTokens
-  // v3: nested { total, … }
+  const num = (value: unknown): number => (typeof value === 'number' ? value : 0)
+  // v3: nested { total, noCache, cacheRead, cacheWrite }
   if (inputTokens && typeof inputTokens === 'object') {
-    const prompt = Number((inputTokens as { total?: number }).total ?? 0)
+    const input = inputTokens as {
+      total?: number
+      noCache?: number
+      cacheRead?: number
+      cacheWrite?: number
+    }
+    const cacheRead = num(input.cacheRead)
+    const cacheWrite = num(input.cacheWrite)
+    const prompt =
+      typeof input.noCache === 'number'
+        ? input.noCache
+        : Math.max(0, num(input.total) - cacheRead - cacheWrite)
     const completion = Number((outputTokens as { total?: number })?.total ?? 0)
-    const total = typeof u.totalTokens === 'number' ? u.totalTokens : prompt + completion
-    return { prompt, completion, total }
+    const total =
+      typeof u.totalTokens === 'number'
+        ? u.totalTokens
+        : prompt + cacheRead + cacheWrite + completion
+    return { prompt, cacheRead, cacheWrite, completion, total }
   }
-  // v2 / legacy flat
+  // v2 / legacy flat: no cache breakdown reported.
   const prompt = Number((inputTokens as number) ?? (u.promptTokens as number) ?? 0)
   const completion = Number((outputTokens as number) ?? (u.completionTokens as number) ?? 0)
   const total = typeof u.totalTokens === 'number' ? u.totalTokens : prompt + completion
-  return { prompt, completion, total }
+  return { prompt, cacheRead: 0, cacheWrite: 0, completion, total }
 }
 
 /** Extract the assistant text from a generate result, across result shapes. */
@@ -154,6 +187,8 @@ export class InstrumentedModelProvider implements ModelProvider {
       startedAt,
       endedAt,
       promptTokens: usage.prompt,
+      cacheReadTokens: usage.cacheRead,
+      cacheWriteTokens: usage.cacheWrite,
       completionTokens: usage.completion,
       totalTokens: usage.total,
       finishReason: ok ? readFinishReason(result) : null,

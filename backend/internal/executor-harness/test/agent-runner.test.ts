@@ -164,11 +164,14 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
     const calls = outcome.callMetrics ?? []
     expect(calls).toHaveLength(2)
 
-    // First call: prompt is the seeded [system, user]; tokens fold cache into input.
+    // First call: prompt is the seeded [system, user]. Anthropic reports the three input
+    // classes separately and `input_tokens` is already exclusive of both, so they map across
+    // unchanged rather than being folded into one count.
     expect(calls[0]!.model).toBe('claude-opus-4-8')
     expect(calls[0]!.responseText).toBe('Reading the repo')
-    expect(calls[0]!.inputTokens).toBe(150)
-    expect(calls[0]!.cachedInputTokens).toBe(50)
+    expect(calls[0]!.inputTokens).toBe(100)
+    expect(calls[0]!.cacheReadTokens).toBe(50)
+    expect(calls[0]!.cacheWriteTokens).toBe(0)
     expect(calls[0]!.outputTokens).toBe(20)
     expect(calls[0]!.finishReason).toBe('tool_use')
     expect(calls[0]!.messageCount).toBe(2)
@@ -250,7 +253,12 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
 
     const calls = outcome.callMetrics ?? []
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.inputTokens).toBe(49_661)
+    // Counted ONCE, and with the input side kept in its three orthogonal classes: this turn is
+    // 99.9% cache reads, which a single summed count could not have told apart from 49,661
+    // fresh tokens.
+    expect(calls[0]!.inputTokens).toBe(40)
+    expect(calls[0]!.cacheReadTokens).toBe(49_621)
+    expect(calls[0]!.cacheWriteTokens).toBe(0)
     // The final block carries the real output count; the earlier ones carry a partial.
     expect(calls[0]!.outputTokens).toBe(316)
     expect(calls[0]!.finishReason).toBe('tool_use')
@@ -657,10 +665,12 @@ describe.skipIf(!unix)('runCodex telemetry', () => {
 
     expect(calls[0]!.model).toBe('gpt-5.5-codex')
     expect(calls[0]!.responseText).toBe('Working on it')
-    // Codex `input_tokens` is the total prompt count and already includes the cached
-    // share, so it is recorded as-is (100), with cached surfaced separately (10).
-    expect(calls[0]!.inputTokens).toBe(100)
-    expect(calls[0]!.cachedInputTokens).toBe(10)
+    // Codex `input_tokens` is the WHOLE prompt count and already includes the cached share
+    // (OpenAI semantics), so the fresh figure is the difference: 100 - 10 = 90. Codex reports
+    // no separate cache-write class.
+    expect(calls[0]!.inputTokens).toBe(90)
+    expect(calls[0]!.cacheReadTokens).toBe(10)
+    expect(calls[0]!.cacheWriteTokens).toBe(0)
     expect(calls[0]!.outputTokens).toBe(20)
     expect(calls[0]!.messageCount).toBe(1)
 

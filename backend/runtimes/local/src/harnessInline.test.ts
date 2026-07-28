@@ -186,7 +186,7 @@ describe('runnerForVendor', () => {
   }
 
   describe('claude', () => {
-    it('parses the JSON result, flags/system + prompt over stdin, and sums usage', async () => {
+    it('parses the JSON result, flags/system + prompt over stdin, and splits usage by class', async () => {
       const { exec, calls } = fakeExec(
         JSON.stringify({
           subtype: 'success',
@@ -196,7 +196,15 @@ describe('runnerForVendor', () => {
       )
       const result = await runnerForVendor('claude', exec)(req)
       expect(result.text).toBe('REVIEW OK')
-      expect(result.usage).toEqual({ inputTokens: 15, outputTokens: 3 })
+      // The three input classes stay APART: this is the only place a local deployment's inline
+      // steps are observable, and one summed count cannot say whether a run rode a warm cache
+      // (~0.1x base input) or re-wrote it (1.25-2x).
+      expect(result.usage).toEqual({
+        inputTokens: 10,
+        cacheReadTokens: 5,
+        cacheWriteTokens: 0,
+        outputTokens: 3,
+      })
       expect(calls[0]!.command).toBe('claude')
       expect(calls[0]!.args).toContain('--append-system-prompt')
       expect(calls[0]!.args).toContain('You are a reviewer.')

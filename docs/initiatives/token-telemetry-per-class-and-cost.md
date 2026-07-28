@@ -1,6 +1,6 @@
 # Initiative: per-class token telemetry + cost surfacing
 
-**Status:** in progress (Slice 1) · **Owner:** core · **Started:** 2026-07-20
+**Status:** in progress (Slice 2) · **Owner:** core · **Started:** 2026-07-20
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -97,7 +97,7 @@ runtimes symmetric"):
 
 | #   | Slice            | Scope                                                                                                                                             | Status  | PR  |
 | --- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | Read/write split | The full change set above: contracts + kernel ports + HarnessCallMetric + population sites + both telemetry DBs + rollup + frontend + conformance | ⬜ todo |     |
+| 1   | Read/write split | The full change set above: contracts + kernel ports + HarnessCallMetric + population sites + both telemetry DBs + rollup + frontend + conformance | ✅ done |     |
 | 2   | Cost surfacing   | `ModelPrice` cache tiers; per-call/step cost compute; observability-panel cost headline; subscription = illustrative                              | ⬜ todo |     |
 
 ## Conventions / gotchas carried between iterations
@@ -108,12 +108,66 @@ runtimes symmetric"):
 - **`promptTokens` is fresh-only after Slice 1.** Every population site MUST subtract the cache
   classes (OpenAI) or read the separate field (Anthropic). A site that forgets re-introduces the
   double-count. The conformance harness-recorder test pins the mapping.
-- **Anthropic reports all three; don't re-lump them.** The current `claudeCallUsage` sums
-  read+write — that is the bug. Carry them apart.
-- **`harnessInline.ts` currently drops cache accounting** (no `callMetrics`, coarse usage only).
-  Slice 1 must extend it too or the local native inline path stays blind.
+- **Anthropic reports all three; don't re-lump them.** `claudeCallUsage` used to sum read+write —
+  that was the bug. It now carries them apart, and so must anything new that reads that usage.
+- **Both inline paths carry the split** as of Slice 1: the local native CLI runner
+  (`harnessInline.ts`, which previously summed the buckets into one figure) and the container
+  `inline` job (whose `InlineResult.usage` folds the split out of its per-call metrics). A new
+  inline runner that reports one lumped input count leaves that path blind again.
 - **Telemetry ≠ spend ledger.** `llm_call_metrics` (3-day, per-run) is separate from the durable
   `token_usage` ledger (`SpendService`, ~395-day, with cost). This initiative touches ONLY the
   telemetry surface. Cost here is display-time estimation, not the billed spend gate.
 - **Backwards-compat is a non-goal.** Drop `cached_prompt_tokens` cleanly rather than dual-writing;
   the 3-day retention window makes the break invisible within days.
+
+### Carried out of Slice 1
+
+- **A COARSE run total and a per-call metric answer different questions; never unify them.** The
+  harness's `PiRunOutcome.usage` is the usage-aware key-rotation weight, so it must keep summing
+  every billed input bucket, while `callMetrics` keeps the classes apart. Two sites had to sum the
+  classes back explicitly after the split (`subagents.ts`'s accumulator, the Langfuse `usage.input`),
+  and `inline.ts` had to fold the split OUT of the per-call metrics rather than off the coarse total.
+  A site that quietly inherits the wrong one under-weights the rotation window (invisible until a key
+  is throttled) or under-reports spend to an operator's dashboard.
+- **`cacheHitRate` needs no clamp any more, and the clamp was the tell.** It existed only because the
+  old denominator (`promptTokens`) did not contain the cache reads on the Anthropic shape. With the
+  classes orthogonal the denominator is the whole input and the ratio is a genuine share. If a future
+  derived ratio needs a clamp to stay in range, that is evidence its terms are not orthogonal — fix
+  the terms, not the ratio.
+- **Only Anthropic reports a cache-WRITE class.** OpenAI/DeepSeek report reads only, so `write` is 0
+  there — never inferred. Guessing one would report spend at 1.25-2x base input that never happened.
+- **ONE function reads a usage payload into all three classes** (`readInputTokenClasses`), never a
+  read-the-classes helper the caller pairs by hand with a subtract-them one. The first cut had two,
+  and the shape rule ("subtract on OpenAI/DeepSeek, don't on Anthropic") then lived in prose beside
+  them rather than in the code: the proxy subtracted unconditionally and was correct only because
+  the exclusive shape happened to leave `prompt_tokens` absent. A rule a caller can get wrong will
+  eventually be got wrong.
+- **The two cache classes are read INDEPENDENTLY of each other.** Detecting a read must never
+  short-circuit the write, because the shapes are not mutually exclusive: an OpenAI-compatible
+  gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under the OpenAI field AND
+  `cache_creation_input_tokens` beside it. A read-first `if` chain zeroes the write on the ONLY
+  path that reports it — the dearest class, silently, on the feature built to expose it.
+- **On the inclusive shape, every class the payload reports is a partition of `prompt_tokens`**, so
+  both come off. That keeps the total we record equal to the vendor's own prompt count rather than
+  minting input it never billed, whichever way a gateway folds its write class.
+- **A count crossing a version boundary is coerced LENIENTLY** (`coerceCallMetrics`). A runner pool
+  runs whatever harness image its workspace pinned, so requiring a field a newer image added fails
+  every entry and drops that pool's telemetry wholesale — the run reports zero model calls instead
+  of "cache breakdown unknown". Strictness belongs on the fields whose absence makes a row
+  meaningless, not on an additive one whose absence IS the older image's honest answer.
+- **The AI SDK v3 usage shape already carries the split** (`inputTokens: { total, noCache, cacheRead,
+cacheWrite }`), so the inline path reads it straight off rather than re-deriving; `noCache` is
+  preferred over `total − read − write` because it is what the provider itself reported.
+- **The frontend now derives nothing except the TOTAL.** `freshPromptTokens` (the SPA heuristic) is
+  deleted, not reimplemented — the whole point of the slice is that the split arrives correct from
+  the source. The one surviving helper is `totalInputTokens` (fresh + read + write), and it exists
+  for the rule below.
+- **The headline "↑" is the TOTAL, never the fresh figure.** Splitting the classes is about making
+  COST readable; it must not be allowed to make VOLUME unreadable. The surface previously led with
+  fresh on the stated grounds that the raw sum "reads as a blow-up" — which is exactly the framing
+  [`token-burn-instrumentation`](./token-burn-instrumentation.md) exists to reject, and it rendered
+  a ~31M-token run as 685 tokens. A cached token occupies the context window like any other, and
+  Claude Code's own gauge counts the same buckets, so the headline sums all three and the classes
+  render as the breakdown beneath it. `frontend/app/app/utils/observability.spec.ts` pins this.
+  Any new token surface follows the same shape: **total in the headline, classes in the
+  breakdown.**

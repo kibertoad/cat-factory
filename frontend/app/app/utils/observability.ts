@@ -12,31 +12,28 @@ export function formatTokens(n: number): string {
 }
 
 /**
- * FRESH (uncached) prompt tokens: the input tokens actually processed this call/rollup after
- * excluding the prefix served from the provider's cache. A long agentic run re-sends its whole
- * growing transcript every turn, so on the "inclusive" shape the raw `promptTokens` sum is
- * dominated by cache reads (often >99%) — showing THAT as "tokens burned" reads as a blow-up
- * when almost nothing fresh was processed. This surfaces the fresh figure alongside cached.
+ * TOTAL input tokens: fresh + cache read + cache write. This is the headline "↑" figure on
+ * every LLM surface, and it deliberately COUNTS THE CACHED CLASSES.
  *
- * `cachedPromptTokens` has PROVIDER-DEPENDENT semantics (see the field docs on `stepMetricsSchema`
- * / `llmCallMetricSchema`), so we can't blindly subtract:
- *  - Inclusive shape (OpenAI/DeepSeek, and the subscription-CLI harness, which folds cache into
- *    `promptTokens`): cached is a SUBSET of prompt ⇒ fresh = prompt − cached.
- *  - Separate shape (Anthropic via the LLM proxy): cache reads are reported SEPARATELY and
- *    `promptTokens` is ALREADY fresh-only, so cached can EXCEED prompt. Subtracting there would
- *    wrongly collapse a real fresh input to 0 — when cached ≥ prompt, `promptTokens` itself IS
- *    the fresh figure.
+ * That is the like-for-like measure of Claude Code's own context gauge, which sums exactly these
+ * buckets because a cached token still physically occupies the context window. Leading with the
+ * fresh figure instead (what this surface used to do, on the grounds that the raw sum "reads as a
+ * blow-up") discounts cache reads because their DOLLAR cost is low — but the quota, latency and
+ * context-window cost is the whole thing an autonomous run burns, and hiding it is what let a
+ * ~31M-token run look like a 685-token one. See
+ * `docs/initiatives/token-burn-instrumentation.md`.
  *
- * NOTE: with only these two aggregates we cannot distinguish the separate shape while cached is
- * still ≤ prompt (there the subtraction under-counts fresh by the cache-read amount). A fully
- * exact split needs the wire contract to carry cache-read vs cache-write distinctly at the
- * source; this heuristic fixes the dominant (cached ≫ prompt) case and never returns negative.
+ * The three classes are still rendered as the breakdown beneath it, because they are priced an
+ * order of magnitude apart in opposite directions — this makes the volume honest WITHOUT making
+ * the cost unreadable. The two fields are optional on an older snapshot, where absent reads as 0
+ * and the total degrades to the fresh count.
  */
-export function freshPromptTokens(promptTokens: number, cachedPromptTokens: number): number {
-  // Separate shape: promptTokens is already fresh-only (cache reads counted separately).
-  if (cachedPromptTokens > promptTokens) return promptTokens
-  // Inclusive shape: cached is a subset of prompt.
-  return promptTokens - cachedPromptTokens
+export function totalInputTokens(m: {
+  promptTokens: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+}): number {
+  return m.promptTokens + (m.cacheReadTokens ?? 0) + (m.cacheWriteTokens ?? 0)
 }
 
 /** Compact duration: 850 → "850ms", 1500 → "1.5s", 90_000 → "1m 30s". */

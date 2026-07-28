@@ -54,10 +54,43 @@ export async function handleInline(job: InlineJob, opts: RunOptions): Promise<In
     return {
       text: outcome.summary,
       finishReason: deriveFinishReason(outcome.callMetrics),
-      ...(outcome.usage ? { usage: outcome.usage } : {}),
+      ...(outcome.usage ? { usage: inlineUsage(outcome.usage, outcome.callMetrics) } : {}),
       ...(outcome.callMetrics ? { callMetrics: outcome.callMetrics } : {}),
     }
   } finally {
     await rm(cwd, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+/**
+ * Split the run's coarse usage into the three orthogonal input classes an {@link InlineResult}
+ * carries. `outcome.usage` is the ROTATION-window weight — every billed input bucket summed —
+ * so the split has to come from the per-call metrics, the only channel that kept the classes
+ * apart. Fresh input is likewise taken from the calls rather than derived by subtraction, so a
+ * CLI whose per-call and cumulative counts disagree can never produce a negative class.
+ *
+ * With no per-call telemetry (an older CLI build that streams nothing) the coarse total is
+ * reported as fresh with both cache classes 0. That is the honest reading: nothing is KNOWN to
+ * have been cached, and inventing a split would be worse than admitting the channel is silent.
+ */
+function inlineUsage(
+  usage: { inputTokens: number; outputTokens: number },
+  calls: HarnessCallMetric[] | undefined,
+): NonNullable<InlineResult['usage']> {
+  if (!calls?.length) {
+    return {
+      inputTokens: usage.inputTokens,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: usage.outputTokens,
+    }
+  }
+  const sum = (pick: (call: HarnessCallMetric) => number): number =>
+    calls.reduce((total, call) => total + pick(call), 0)
+  return {
+    inputTokens: sum((call) => call.inputTokens),
+    cacheReadTokens: sum((call) => call.cacheReadTokens),
+    cacheWriteTokens: sum((call) => call.cacheWriteTokens),
+    outputTokens: usage.outputTokens,
   }
 }

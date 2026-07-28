@@ -83,8 +83,12 @@ export interface HarnessCallMetric {
   messageCount: number
   responseText: string
   reasoningText: string
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   inputTokens: number
-  cachedInputTokens: number
+  /** Input tokens served from the vendor's prompt cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the vendor's cache (0 where the CLI reports no write class). */
+  cacheWriteTokens: number
   outputTokens: number
   finishReason: string | null
   /**

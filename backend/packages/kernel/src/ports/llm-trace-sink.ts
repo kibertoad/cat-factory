@@ -34,7 +34,12 @@ export interface LlmGenerationEvent {
   startedAt: number
   /** Epoch ms the call completed. */
   endedAt: number
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   promptTokens: number
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the provider's cache. */
+  cacheWriteTokens: number
   completionTokens: number
   totalTokens: number
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | …), or null. */

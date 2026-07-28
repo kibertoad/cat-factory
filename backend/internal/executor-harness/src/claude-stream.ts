@@ -59,19 +59,27 @@ export function claudeAssistantContent(content: unknown[]): {
 
 /**
  * Per-CALL token usage off a Claude `assistant` message's `usage` (this turn only, not
- * the cumulative `result` total). `inputTokens` counts every billed input bucket (fresh
- * + both cache buckets); `cachedInputTokens` is the cache share, surfaced separately.
+ * the cumulative `result` total).
+ *
+ * Anthropic reports all three input classes SEPARATELY and `input_tokens` is already
+ * exclusive of both caches, so the three fields here are orthogonal and additive:
+ * total input = `inputTokens + cacheReadTokens + cacheWriteTokens`. Do NOT re-lump the
+ * reads and the writes — a cache write costs 1.25–2× base input while a read costs ~0.1×,
+ * so a turn that keeps invalidating the prefix and one that rides a warm cache are
+ * indistinguishable once they are summed.
  */
 export function claudeCallUsage(raw: unknown): {
   inputTokens: number
-  cachedInputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
   outputTokens: number
 } {
-  if (!isObject(raw)) return { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
-  const cached = numberOf(raw.cache_read_input_tokens) + numberOf(raw.cache_creation_input_tokens)
+  if (!isObject(raw))
+    return { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }
   return {
-    inputTokens: numberOf(raw.input_tokens) + cached,
-    cachedInputTokens: cached,
+    inputTokens: numberOf(raw.input_tokens),
+    cacheReadTokens: numberOf(raw.cache_read_input_tokens),
+    cacheWriteTokens: numberOf(raw.cache_creation_input_tokens),
     outputTokens: numberOf(raw.output_tokens),
   }
 }

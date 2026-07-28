@@ -120,7 +120,8 @@ describe('JobRegistry', () => {
       responseText,
       reasoningText: '',
       inputTokens: 10,
-      cachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       outputTokens: 5,
       finishReason: 'end_turn',
     })

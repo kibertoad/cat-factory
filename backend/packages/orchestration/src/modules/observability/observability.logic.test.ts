@@ -24,7 +24,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     toolCount: 1,
     requestMaxTokens: 1000,
     promptTokens: 100,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -94,7 +95,8 @@ describe('buildLlmMetricsExport', () => {
         id: 'a',
         agentKind: 'coder',
         promptTokens: 200,
-        cachedPromptTokens: 50,
+        cacheReadTokens: 150,
+        cacheWriteTokens: 50,
         completionTokens: 50,
         requestMaxTokens: 1000,
         upstreamMs: 100,
@@ -104,7 +106,8 @@ describe('buildLlmMetricsExport', () => {
         id: 'b',
         agentKind: 'coder',
         promptTokens: 200,
-        cachedPromptTokens: 150,
+        cacheReadTokens: 400,
+        cacheWriteTokens: 50,
         completionTokens: 990,
         requestMaxTokens: 1000,
         finishReason: 'length',
@@ -144,10 +147,14 @@ describe('buildLlmMetricsExport', () => {
     expect(coder.outputHeadroomRatio).toBe(0.99)
     expect(coder.truncatedCalls).toBe(1)
     expect(coder.warnings).toBe(1)
-    // 200 cached / 400 prompt tokens across the two coder calls = 0.5
-    expect(coder.cachedPromptTokens).toBe(200)
-    expect(coder.cacheHitRate).toBeCloseTo(0.5, 5)
-    expect(out.totals.cachedPromptTokens).toBe(200)
+    // The two cache classes stay APART in the rollup — summing them would make a run that
+    // re-writes its prefix every turn read identically to one riding a warm cache.
+    expect(coder.cacheReadTokens).toBe(550)
+    expect(coder.cacheWriteTokens).toBe(100)
+    // (550 read + 100 write) / (400 fresh + 550 read + 100 write) across the two coder calls.
+    expect(coder.cacheHitRate).toBeCloseTo(650 / 1050, 5)
+    expect(out.totals.cacheReadTokens).toBe(550)
+    expect(out.totals.cacheWriteTokens).toBe(100)
 
     const reviewer = out.insights.find((i) => i.agentKind === 'reviewer')!
     expect(reviewer.errors).toBe(1)

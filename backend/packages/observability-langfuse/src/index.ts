@@ -109,7 +109,10 @@ export class LangfuseTraceSink implements LlmTraceSink {
       endTime: iso(event.endedAt),
       model: event.model,
       usage: {
-        input: event.promptTokens,
+        // Langfuse's `input` is the whole input side, so the three orthogonal classes are
+        // summed back for it; the split rides the metadata below, where a cache-read-dominated
+        // generation is still distinguishable from a fresh one.
+        input: event.promptTokens + event.cacheReadTokens + event.cacheWriteTokens,
         output: event.completionTokens,
         total: event.totalTokens,
         unit: 'TOKENS',
@@ -119,6 +122,9 @@ export class LangfuseTraceSink implements LlmTraceSink {
         provider: event.provider,
         agentKind: event.agentKind,
         finishReason: event.finishReason,
+        freshInputTokens: event.promptTokens,
+        cacheReadTokens: event.cacheReadTokens,
+        cacheWriteTokens: event.cacheWriteTokens,
         workspaceId: event.workspaceId,
       },
     }

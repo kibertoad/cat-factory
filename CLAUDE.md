@@ -1209,6 +1209,29 @@ error handling — and the phased plan to close them — are tracked in
     chain, and those interleave with the parent's now that telemetry streams; a tip nothing can
     chain onto loses delta compression on exactly the subagent-heavy runs where it matters.
 
+  **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input,
+  with `cacheReadTokens` + `cacheWriteTokens` beside it, so total input is their sum. They are
+  priced ~1x / ~0.1x / 1.25-2x base input respectively — a cache WRITE costs more than fresh —
+  so any producer summing them makes a loop that keeps invalidating its prefix read exactly like
+  one riding a warm cache. A new producer normalises to fresh at the source through the SINGLE
+  `readInputTokenClasses`, never a read-the-classes helper paired by hand with a subtract-them
+  one: it subtracts where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex)
+  and leaves the already-exclusive field alone where it reports them apart (Anthropic), and
+  **reads the two cache classes INDEPENDENTLY** — an OpenAI-shaped gateway fronting Anthropic
+  (`litellm`, OpenRouter) reports a read field AND a write field on one payload, so detecting one
+  must never suppress the other. Only Anthropic reports a write class — 0
+  elsewhere, never guessed. A count that survives a wire boundary is read LENIENTLY on the way in
+  (`coerceCallMetrics`): a runner pool runs whatever harness image its workspace pinned, so
+  requiring a field a new image added would drop that pool's telemetry wholesale instead of
+  losing the one class the old image never measured. Distinct from the harness's
+  `PiRunOutcome.usage`, which is the
+  key-rotation WEIGHT and deliberately keeps summing every billed bucket. **On every SPA surface the
+  headline `↑` is the TOTAL of the three (`totalInputTokens`), with the classes as the breakdown** —
+  the like-for-like of Claude Code's context gauge, which counts the same buckets. Splitting the
+  classes makes COST readable; leading with the fresh figure would make VOLUME unreadable, and did
+  (a ~31M-token run rendered as 685). Design + the gotchas:
+  [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
+
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
   (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list

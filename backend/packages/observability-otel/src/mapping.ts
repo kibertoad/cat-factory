@@ -27,6 +27,8 @@ export const ATTR = {
   system: 'gen_ai.system',
   requestModel: 'gen_ai.request.model',
   inputTokens: 'gen_ai.usage.input_tokens',
+  cacheReadTokens: 'gen_ai.usage.cache_read_input_tokens',
+  cacheWriteTokens: 'gen_ai.usage.cache_creation_input_tokens',
   outputTokens: 'gen_ai.usage.output_tokens',
   finishReasons: 'gen_ai.response.finish_reasons',
   tokenType: 'gen_ai.token.type',
@@ -171,7 +173,12 @@ function generationDimensions(event: LlmGenerationEvent): AttributeMap {
 export function mapGeneration(event: LlmGenerationEvent): MappedSpan {
   const attributes: AttributeMap = {
     ...generationDimensions(event),
+    // The three input classes stay APART on the span: they are priced ~0.1× / 1.25–2× / 1×
+    // base input respectively, so a consumer that sums them loses the only signal that says
+    // whether a long run is riding a warm cache or re-writing it every turn.
     [ATTR.inputTokens]: event.promptTokens,
+    [ATTR.cacheReadTokens]: event.cacheReadTokens,
+    [ATTR.cacheWriteTokens]: event.cacheWriteTokens,
     [ATTR.outputTokens]: event.completionTokens,
   }
   if (event.finishReason) attributes[ATTR.finishReasons] = [event.finishReason]
@@ -213,6 +220,8 @@ export function mapGenerationMetrics(event: LlmGenerationEvent): MappedMetrics {
   return {
     tokenUsage: [
       { value: event.promptTokens, attributes: { ...dims, [ATTR.tokenType]: 'input' } },
+      { value: event.cacheReadTokens, attributes: { ...dims, [ATTR.tokenType]: 'cache_read' } },
+      { value: event.cacheWriteTokens, attributes: { ...dims, [ATTR.tokenType]: 'cache_write' } },
       { value: event.completionTokens, attributes: { ...dims, [ATTR.tokenType]: 'output' } },
     ],
     durationSeconds: Math.max(0, event.endedAt - event.startedAt) / 1000,

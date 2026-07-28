@@ -106,8 +106,12 @@ export interface RecordLlmCallInput {
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   promptTokens: number
-  cachedPromptTokens: number
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: number
+  /** Input tokens written into the provider's cache. */
+  cacheWriteTokens: number
   completionTokens: number
   totalTokens: number
   finishReason: string | null
@@ -244,6 +248,8 @@ export class LlmObservabilityService {
             startedAt: Math.max(0, endedAt - input.upstreamMs),
             endedAt,
             promptTokens: input.promptTokens,
+            cacheReadTokens: input.cacheReadTokens,
+            cacheWriteTokens: input.cacheWriteTokens,
             completionTokens: input.completionTokens,
             totalTokens: input.totalTokens,
             finishReason: input.finishReason,
@@ -375,9 +381,11 @@ export function makeHarnessCallRecorder(
         toolCount: 0,
         requestMaxTokens: null,
         promptTokens: call.inputTokens,
-        cachedPromptTokens: call.cachedInputTokens,
+        cacheReadTokens: call.cacheReadTokens,
+        cacheWriteTokens: call.cacheWriteTokens,
         completionTokens: call.outputTokens,
-        totalTokens: call.inputTokens + call.outputTokens,
+        totalTokens:
+          call.inputTokens + call.cacheReadTokens + call.cacheWriteTokens + call.outputTokens,
         finishReason: call.finishReason,
         totalMs: 0,
         upstreamMs: 0,

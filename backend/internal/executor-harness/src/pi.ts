@@ -509,8 +509,21 @@ export interface HarnessCallMetric {
   responseText: string
   /** The reasoning/thinking trace, as a plain string (`''` when none). */
   reasoningText: string
+  /**
+   * FRESH (uncached) input tokens: exclusive of BOTH cache classes below, so the three
+   * are orthogonal and additive. Every producer normalises to this — reading the already
+   * exclusive field where the vendor reports the classes apart (Anthropic), subtracting
+   * the cached share where the vendor reports an inclusive prompt count (Codex/OpenAI).
+   */
   inputTokens: number
-  cachedInputTokens: number
+  /** Input tokens served from the vendor's prompt cache (~0.1× base input). */
+  cacheReadTokens: number
+  /**
+   * Input tokens written INTO the vendor's cache (1.25–2× base input — dearer than fresh),
+   * kept apart from the reads so a loop that keeps re-writing the prefix is distinguishable
+   * from one riding a warm cache. 0 where the CLI reports no separate write class.
+   */
+  cacheWriteTokens: number
   outputTokens: number
   /** The provider finish/stop reason when the CLI reports one (else null). */
   finishReason: string | null

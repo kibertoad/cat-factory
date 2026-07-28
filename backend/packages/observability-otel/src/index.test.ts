@@ -40,8 +40,12 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     startedAt: 1_000,
     endedAt: 1_500,
     promptTokens: 100,
+    cacheReadTokens: 900,
+    cacheWriteTokens: 40,
     completionTokens: 40,
-    totalTokens: 140,
+    // 100 fresh + 900 cache read + 40 cache write + 40 output: the classes are orthogonal,
+    // so a fixture keeping the pre-split 140 would describe a call that cannot exist.
+    totalTokens: 1_080,
     finishReason: 'stop',
     ok: true,
     errorMessage: null,
@@ -147,7 +151,8 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
         Number(p.asInt),
       ]),
     )
-    expect(byType).toEqual({ input: 100, output: 40 })
+    // One data point per input CLASS (fresh / cache read / cache write) plus output.
+    expect(byType).toEqual({ input: 100, cache_read: 900, cache_write: 40, output: 40 })
     // The workspace id is on the SPAN (high cardinality is fine there)…
     expect(spanAttrs['cat_factory.workspace_id']).toBe('ws1')
     // …but MUST NOT be on the metric data points: workspace id is unbounded, so carrying it
