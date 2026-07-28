@@ -17,13 +17,14 @@ import type {
   RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
-import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import { describeError, type ExecutionEventPublisher, type Logger } from '@cat-factory/kernel'
 import {
   type AccountOfWorkspace,
   type AuthConfig,
   MACHINE_EVENTS_SUBSCRIBE_PATTERN,
   authorizeMachineSubscribe,
   authorizeWsUpgrade,
+  logger,
 } from '@cat-factory/server'
 import { WebSocket, WebSocketServer } from 'ws'
 
@@ -35,12 +36,6 @@ import { WebSocket, WebSocketServer } from 'ws'
 // `@hono/node-ws` (whose `upgradeWebSocket` middleware can't compose with the shared,
 // Response-returning EventsController): `@hono/node-server` doesn't upgrade on its own,
 // so we attach a `ws` server to the HTTP server's `upgrade` event in {@link attachRealtime}.
-
-/** The minimal logger shape this module needs (a pino logger satisfies it). */
-interface RealtimeLogger {
-  info(obj: object, msg?: string): void
-  warn(obj: object, msg?: string): void
-}
 
 /** The subset of a Node HTTP/HTTP2 server we attach the upgrade listener to. */
 interface UpgradableServer {
@@ -195,6 +190,12 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
   // unchanged.
   constructor(private readonly sink: LocalEventSink) {}
 
+  /**
+   * Publishes stay best-effort, but no longer SILENT — see the Worker twin
+   * (`DurableObjectEventPublisher`) for the reasoning and the identical `warn` level.
+   */
+  private readonly log = logger.child({ publisher: 'node-hub' })
+
   async executionChanged(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -278,9 +279,12 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
   ): void {
     try {
       this.sink.broadcast(workspaceId, JSON.stringify(event), originConnectionId)
-    } catch {
-      // No subscribers / serialisation hiccup — the DB write is authoritative and the
-      // client's reconnect-resync covers any missed event.
+    } catch (error) {
+      this.log.warn('realtime publish failed; browsers may be stale until they resync', {
+        workspaceId,
+        eventType: event.type,
+        ...describeError(error),
+      })
     }
   }
 }
@@ -341,7 +345,7 @@ export function attachRealtime(
   server: UpgradableServer,
   hub: NodeRealtimeHub,
   auth: AuthConfig,
-  log: RealtimeLogger,
+  log: Logger,
   machineSubscribe?: MachineSubscribeDeps,
 ): () => void {
   const wss = new WebSocketServer({ noServer: true })
@@ -443,7 +447,7 @@ export function attachRealtime(
   // Don't let the heartbeat timer keep the process alive on shutdown.
   heartbeat.unref?.()
 
-  log.info({}, 'real-time WebSocket transport attached (/workspaces/:ws/events)')
+  log.info('real-time WebSocket transport attached (/workspaces/:ws/events)', {})
 
   return () => {
     clearInterval(heartbeat)

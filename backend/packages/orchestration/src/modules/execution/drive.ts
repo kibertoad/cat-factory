@@ -1,4 +1,4 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import { describeError, noopLogger, type AgentFailureKind, type Logger } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { ExecutionService } from './ExecutionService.js'
 
@@ -11,11 +11,6 @@ export interface DriveConfig {
   ciMaxPolls: number
 }
 
-/** Minimal structured logger the driver needs (pino is structurally compatible). */
-export interface DriveLogger {
-  info(obj: unknown, msg?: string): void
-}
-
 /** Runtime seams the driver loop needs; both have inert defaults. */
 export interface DriveOptions {
   /**
@@ -26,7 +21,7 @@ export interface DriveOptions {
    */
   sleep?: (ms: number) => Promise<void>
   /** Where to log lifecycle breadcrumbs. Defaults to a no-op. */
-  log?: DriveLogger
+  log?: Logger
 }
 
 /** What a drive ended on, so the runner can schedule follow-up work (a decision timeout). */
@@ -44,7 +39,6 @@ export interface DriveOutcome {
 }
 
 const instantSleep = (): Promise<void> => Promise.resolve()
-const noopLogger: DriveLogger = { info() {} }
 
 /**
  * Drive one run to a standstill. The runtime-neutral driver loop: it contains NO
@@ -69,7 +63,10 @@ export async function driveExecution(
   opts: DriveOptions = {},
 ): Promise<DriveOutcome> {
   const sleep = opts.sleep ?? instantSleep
-  const log = opts.log ?? noopLogger
+  // Bind the run's correlation ids ONCE, so every line the driver emits — including the
+  // poll-failure warnings below, which fire deep inside `pollUntil` — is greppable by run
+  // without each call site re-spreading them.
+  const log = (opts.log ?? noopLogger).child({ workspaceId, executionId })
   const fail = (
     message: string,
     kind: AgentFailureKind = 'agent',
@@ -105,10 +102,19 @@ export async function driveExecution(
       let result: AdvanceResult
       try {
         result = await poll()
-      } catch {
+      } catch (error) {
+        // A bare `catch` used to discard the cause, so a run killed by three unreadable polls
+        // reported "status was unreadable (3 polls)" with the actual reason (DNS, TLS, a 502)
+        // existing NOWHERE on Node/local — the Cloudflare twin has always appended it.
         readFailures += 1
+        const cause = describeError(error)
+        log.warn('run poll failed', { ...cause, label, readFailures })
         if (readFailures >= cfg.jobPollFailureTolerance) {
-          await fail(`${label} status was unreadable (${readFailures} polls)`, 'timeout')
+          await fail(
+            `${label} status was unreadable (${readFailures} polls)` +
+              (cause.err ? ` (last error: ${String(cause.err)})` : ''),
+            'timeout',
+          )
           return null
         }
         continue
@@ -206,10 +212,8 @@ export async function driveExecution(
     // done / noop / paused: stop. awaiting_decision: park (resumed on signalDecision).
     if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return {}
     if (result.kind === 'awaiting_decision') {
-      log.info(
-        { workspaceId, executionId, decisionId: result.decisionId },
-        'run parked on decision',
-      )
+      // `workspaceId`/`executionId` ride the bound child logger, so only the decision is new.
+      log.info('run parked on decision', { decisionId: result.decisionId })
       return { parkedDecisionId: result.decisionId }
     }
     // 'continue': loop and advance the next step.

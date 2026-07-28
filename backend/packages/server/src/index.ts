@@ -2,7 +2,17 @@
 // facade. This first slice hosts the cross-cutting primitives (logging, request
 // helpers, validation envelope, error mapping, CORS policy); the controllers,
 // middleware and the Hono app factory move here in subsequent steps.
-export { logger, type Logger } from './observability/logger.js'
+export {
+  createPinoLogger,
+  logger,
+  noopLogger,
+  getLogLevel,
+  parseLogLevel,
+  setLogLevel,
+  type LogFields,
+  type LogLevel,
+  type Logger,
+} from './observability/logger.js'
 export {
   type AppEnv,
   type GitHubTokenDelegation,
@@ -32,7 +42,7 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
-export { sweepPlatformHealth, type PlatformHealthSweepLogger } from './runtime/platformHealth.js'
+export { sweepPlatformHealth } from './runtime/platformHealth.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
@@ -193,7 +203,6 @@ export {
   computeKeyFingerprint,
   checkKeyFingerprint,
   type KeyFingerprintCheck,
-  type KeyFingerprintLogger,
 } from './crypto/keyFingerprint.js'
 // ADR 0026 D6.2 — the runtime-neutral drift sweep over the sealed-secret inventory.
 export { sweepKeyDrift, hasKeyDrift, type KeyDriftReport } from './crypto/keyDriftSweep.js'

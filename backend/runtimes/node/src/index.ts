@@ -12,6 +12,9 @@ export {
   start,
   type CreateServerOptions,
 } from './server.js'
+// Process-level failure guards (unhandled rejection / uncaught exception), shared with the
+// local facade so both Node-hosted deployments crash-report the same way.
+export { installProcessFailureGuards } from './processGuards.js'
 // Real-time WebSocket transport pieces, re-exported so the local facade's mothership boot
 // (which does NOT call `start()`, since there is no Postgres/pg-boss) can stand up the same
 // per-workspace hub + `ws` upgrade listener the standard Node boot does.
@@ -32,7 +35,6 @@ export {
   buildRealtimePropagator,
   type RealtimeMessage,
   type WebSocketPropagator,
-  type PropagatorLogger,
 } from './propagator.js'
 export {
   RedisWebSocketPropagator,

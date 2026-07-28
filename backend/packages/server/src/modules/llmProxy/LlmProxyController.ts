@@ -3,7 +3,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
-import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
+import { type ApiKeyProvider, contextWindowFor, runBestEffort } from '@cat-factory/kernel'
 import { openAiCompatibleBaseUrlError } from '../../agents/providerErrors.js'
 import {
   type ContainerSession,
@@ -182,7 +182,7 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
     return await inProcess
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    log.error({ err: message }, 'llm proxy: in-process call failed')
+    log.error('llm proxy: in-process call failed', { err: message })
     observe({
       usage: null,
       finishReason: null,
@@ -292,7 +292,7 @@ async function resolveUpstreamTarget(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    log.error({ err: message }, 'llm proxy: no API key configured for provider')
+    log.error('llm proxy: no API key configured for provider', { err: message })
     observe({
       usage: null,
       finishReason: null,
@@ -348,7 +348,7 @@ async function relayUpstream(
       upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      log.error({ err: message }, 'llm proxy: local runner request blocked')
+      log.error('llm proxy: local runner request blocked', { err: message })
       observe({
         usage: null,
         finishReason: null,
@@ -366,7 +366,7 @@ async function relayUpstream(
 
   // Non-2xx: pass the upstream error straight back, nothing to meter.
   if (!upstreamRes.ok || !upstreamRes.body) {
-    log.error({ status: upstreamRes.status }, 'llm proxy: upstream returned non-2xx')
+    log.error('llm proxy: upstream returned non-2xx', { status: upstreamRes.status })
     observe({
       usage: null,
       finishReason: null,
@@ -448,14 +448,14 @@ export function llmProxyController(): Hono<AppEnv> {
       } = c.get('container')
       const secret = config.auth.sessionSecret
       if (!secret) {
-        logger.error({ scope: 'llmProxy' }, 'llm proxy: session secret not configured')
+        logger.error('llm proxy: session secret not configured', { scope: 'llmProxy' })
         return c.json({ error: { message: 'LLM proxy is not configured' } }, 503)
       }
 
       const sessions = new ContainerSessionService({ secret })
       const session = await sessions.verify(bearer(c.req.header('authorization')))
       if (!session) {
-        logger.warn({ scope: 'llmProxy' }, 'llm proxy: invalid or expired session token')
+        logger.warn('llm proxy: invalid or expired session token', { scope: 'llmProxy' })
         return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
       }
 
@@ -496,7 +496,7 @@ export function llmProxyController(): Hono<AppEnv> {
         provider: session.provider,
         model: session.model,
       })
-      log.info({ streaming, toolCount }, 'llm proxy: forwarding chat completion')
+      log.info('llm proxy: forwarding chat completion', { streaming, toolCount })
 
       const waitUntil = makeWaitUntil(c)
 
@@ -588,10 +588,9 @@ export function llmProxyController(): Hono<AppEnv> {
             })
             // Observability must never break the proxy.
             .catch((err) =>
-              log.warn(
-                { err: err instanceof Error ? err.message : String(err) },
-                'llm proxy: failed to record metric',
-              ),
+              log.warn('llm proxy: failed to record metric', {
+                err: err instanceof Error ? err.message : String(err),
+              }),
             ),
         )
       }
@@ -604,10 +603,11 @@ export function llmProxyController(): Hono<AppEnv> {
           userId: session.userId,
         })
       ) {
-        logger.warn(
-          { scope: 'llmProxy', workspaceId: session.workspaceId, executionId: session.executionId },
-          'llm proxy: spend budget exhausted — refusing call',
-        )
+        logger.warn('llm proxy: spend budget exhausted — refusing call', {
+          scope: 'llmProxy',
+          workspaceId: session.workspaceId,
+          executionId: session.executionId,
+        })
         observe({
           usage: null,
           finishReason: null,
@@ -634,7 +634,12 @@ export function llmProxyController(): Hono<AppEnv> {
         const outputTokens = usage.completion_tokens ?? 0
         // Fold usage into the leased key's rotation counters (best-effort, off the meter).
         if (leasedApiKeyId && apiKeys) {
-          void apiKeys.recordUsage(leasedApiKeyId, { inputTokens, outputTokens }).catch(() => {})
+          void runBestEffort(
+            log,
+            'apiKeys.recordUsage',
+            () => apiKeys.recordUsage(leasedApiKeyId!, { inputTokens, outputTokens }),
+            { apiKeyId: leasedApiKeyId },
+          )
         }
         return spendService.record({
           workspaceId: session.workspaceId,

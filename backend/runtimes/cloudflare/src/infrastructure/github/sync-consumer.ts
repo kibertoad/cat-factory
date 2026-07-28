@@ -1,4 +1,4 @@
-import { type Clock, NotFoundError } from '@cat-factory/kernel'
+import { type Clock, NotFoundError, describeError } from '@cat-factory/kernel'
 import type { MessageBatch } from '@cloudflare/workers-types'
 import { reconcileStaleRepos as reconcileStaleReposCore } from '@cat-factory/server'
 import type { Container } from '../container'
@@ -56,7 +56,14 @@ export async function handleGitHubSyncBatch(
     try {
       await applyGitHubSyncMessage(container, message.body)
       message.ack()
-    } catch {
+    } catch (error) {
+      // Retrying blind used to be the whole handling: a permanently-failing delivery burned its
+      // retries with no evidence it ever arrived. Copied from the tracker-sync sibling below.
+      logger.warn('github sync message failed; retrying', {
+        messageKind: message.body.kind,
+        attempts: message.attempts,
+        ...describeError(error),
+      })
       message.retry()
     }
   }
@@ -127,15 +134,13 @@ export async function handleTrackerSyncBatch(
       await service.handle(message.body.workspaceId, message.body.event)
       message.ack()
     } catch (error) {
-      logger.warn(
-        {
-          workspaceId: message.body.workspaceId,
-          source: message.body.event.source,
-          kind: message.body.event.kind,
-          err: error instanceof Error ? error.message : String(error),
-        },
-        'tracker webhook message failed; retrying',
-      )
+      logger.warn('tracker webhook message failed; retrying', {
+        workspaceId: message.body.workspaceId,
+        source: message.body.event.source,
+        kind: message.body.event.kind,
+        attempts: message.attempts,
+        ...describeError(error),
+      })
       message.retry()
     }
   }

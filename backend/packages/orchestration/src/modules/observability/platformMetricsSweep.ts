@@ -1,4 +1,5 @@
 import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
+import type { Logger } from '@cat-factory/kernel'
 
 // Runtime-neutral sweep that publishes the deployment-level (platform-operator)
 // observability aggregates to an external metrics sink (today the OpenTelemetry OTLP
@@ -41,11 +42,6 @@ export interface PlatformMetricsSink {
   export(snapshot: PlatformObservability, dims: { accountId: string }): Promise<void>
 }
 
-/** Minimal structured logger (pino-compatible); optional. */
-export interface PlatformMetricsSweepLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 export interface PlatformMetricsSweepDeps {
   /** The accounts to export, resolved once per sweep (deduplicated by the caller). */
   listAccountIds: () => Promise<string[]>
@@ -58,7 +54,7 @@ export interface PlatformMetricsSweepDeps {
   sink: PlatformMetricsSink
   /** The trailing window each snapshot aggregates over. */
   window: PlatformObservabilityWindow
-  logger?: PlatformMetricsSweepLogger
+  logger?: Logger
 }
 
 /**
@@ -71,10 +67,10 @@ export async function sweepPlatformMetrics(deps: PlatformMetricsSweepDeps): Prom
   try {
     accountIds = await deps.listAccountIds()
   } catch (err) {
-    deps.logger?.warn(
-      { scope: 'platform-metrics', err: err instanceof Error ? err.message : String(err) },
-      'platform-metrics: failed to list accounts',
-    )
+    deps.logger?.warn('platform-metrics: failed to list accounts', {
+      scope: 'platform-metrics',
+      err: err instanceof Error ? err.message : String(err),
+    })
     return 0
   }
 
@@ -85,14 +81,11 @@ export async function sweepPlatformMetrics(deps: PlatformMetricsSweepDeps): Prom
       await deps.sink.export(snapshot, { accountId })
       exported += 1
     } catch (err) {
-      deps.logger?.warn(
-        {
-          scope: 'platform-metrics',
-          accountId,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        'platform-metrics: failed to export account',
-      )
+      deps.logger?.warn('platform-metrics: failed to export account', {
+        scope: 'platform-metrics',
+        accountId,
+        err: err instanceof Error ? err.message : String(err),
+      })
     }
   }
   return exported

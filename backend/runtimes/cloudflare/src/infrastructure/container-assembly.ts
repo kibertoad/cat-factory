@@ -225,6 +225,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
   } = registries
 
   return {
+    // The structured logger every domain service emits through. Must be wired on BOTH facades
+    // or the Worker's engine silently falls back to `noopLogger` — which would put exactly the
+    // best-effort paths this logger exists to surface back in the dark on the deployed runtime.
+    logger,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

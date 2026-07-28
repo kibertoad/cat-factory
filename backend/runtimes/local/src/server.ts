@@ -9,12 +9,20 @@ import {
   NodeRealtimeHub,
   backfillEnvironmentHandlerSeeds,
   createApp,
+  installProcessFailureGuards,
   serveAppWithRealtime,
   serveMisconfigured,
   start,
   startBootClock,
 } from '@cat-factory/node-server'
-import { DOCS, ENV_VARS_ANCHORS, isConfigValidationError, logger } from '@cat-factory/server'
+import {
+  DOCS,
+  ENV_VARS_ANCHORS,
+  isConfigValidationError,
+  logger,
+  parseLogLevel,
+  setLogLevel,
+} from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -112,6 +120,11 @@ export async function startLocal(
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
+  // Same first move as the Node facade's `start`: verbosity, then the process-level guards.
+  // The mothership path never reaches `start()`, so arming them here (not only there) is what
+  // makes both local topologies crash-report identically.
+  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  installProcessFailureGuards(logger)
   try {
     return await bootLocal(options, env)
   } catch (err) {
@@ -190,7 +203,7 @@ async function bootLocal(
   }
   bootClock.mark('patProbe')
   const preflight = bootClock.summary()
-  logger.info(preflight, `local mode: preflights done in ${preflight.totalMs} ms`)
+  logger.info(`local mode: preflights done in ${preflight.totalMs} ms`, preflight)
 
   if (localized.AUTH_DEV_OPEN !== 'false' && !env.HOST?.trim()) {
     logger.warn(
@@ -285,8 +298,8 @@ async function startLocalMothership(
     seedEnvironmentHandlers,
   } = extensions
   logger.info(
-    { mothership: env.LOCAL_MOTHERSHIP_URL },
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
+    { mothership: env.LOCAL_MOTHERSHIP_URL },
   )
   // Shared with the engine's event publisher (wired inside the container) and the HTTP
   // server's WebSocket upgrade listener below, exactly as the Node `start()` does. Local
@@ -311,7 +324,7 @@ async function startLocalMothership(
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
-    onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+    onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 
   // Backfill the deployment's declared environment-handler seeds onto every existing workspace —
@@ -337,7 +350,7 @@ async function startLocalMothership(
   const shutdown = async (signal: string) => {
     if (shuttingDown) return
     shuttingDown = true
-    logger.info({ signal }, 'shutting down cat-factory local (mothership) server')
+    logger.info('shutting down cat-factory local (mothership) server', { signal })
     stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     // Release the local credential SQLite handle (mothership mode owns it).
@@ -363,28 +376,25 @@ async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
   const rejectedRuntime = unrecognizedRuntimeId(localized)
   if (rejectedRuntime !== undefined) {
     logger.warn(
+      `local mode: LOCAL_CONTAINER_RUNTIME='${rejectedRuntime}' is not a recognised runtime ` +
+        `(accepted: ${RUNTIME_IDS.join(', ')}) — falling back to 'docker'. See ` +
+        `${DOCS.envVars(ENV_VARS_ANCHORS.localMode)}.`,
       {
         rejected: rejectedRuntime,
         accepted: RUNTIME_IDS,
         fallback: 'docker',
         docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.localMode),
       },
-      `local mode: LOCAL_CONTAINER_RUNTIME='${rejectedRuntime}' is not a recognised runtime ` +
-        `(accepted: ${RUNTIME_IDS.join(', ')}) — falling back to 'docker'. See ` +
-        `${DOCS.envVars(ENV_VARS_ANCHORS.localMode)}.`,
     )
   }
   const adapter = createRuntimeAdapter(localized)
-  logger.info(
-    {
-      runtime: resolveRuntimeId(localized),
-      binary: adapter.binary,
-      localDind: adapter.capabilities.localDind,
-      hostAlias: adapter.hostAlias,
-      publicUrl: localized.PUBLIC_URL,
-    },
-    'local mode: container runtime selected',
-  )
+  logger.info('local mode: container runtime selected', {
+    runtime: resolveRuntimeId(localized),
+    binary: adapter.binary,
+    localDind: adapter.capabilities.localDind,
+    hostAlias: adapter.hostAlias,
+    publicUrl: localized.PUBLIC_URL,
+  })
   if (!adapter.capabilities.localDind) {
     logger.info(
       `local mode: the '${resolveRuntimeId(localized)}' runtime cannot run the Tester's local ` +
@@ -397,10 +407,10 @@ async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
     await execFileAsync(adapter.binary, ['--version'], { timeout: 10_000 })
   } catch (err) {
     logger.warn(
-      { err: err instanceof Error ? err.message : String(err), binary: adapter.binary },
       `local mode: container CLI '${adapter.binary}' is not runnable — repo-operating agent ` +
         `steps will fail until it is installed and on PATH (or set LOCAL_DOCKER_BINARY / ` +
         `LOCAL_CONTAINER_RUNTIME).`,
+      { err: err instanceof Error ? err.message : String(err), binary: adapter.binary },
     )
   }
 }

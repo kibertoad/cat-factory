@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import { PLATFORM_ATTR, PLATFORM_METRIC } from './mapping.js'
 import { PlatformMetricsOtelExporter } from './platform.js'
+import { createRecordingLogger } from '@cat-factory/kernel'
 
 // The platform-metrics exporter POSTs OTLP/JSON gauges to the collector over its injectable
 // `fetchImpl`. We inject a capturing stub so the assertions are deterministic and independent
@@ -229,14 +230,14 @@ describe('PlatformMetricsOtelExporter (fetch OTLP gauges)', () => {
     const fetchImpl = (async () => {
       throw new Error('down')
     }) as unknown as typeof fetch
-    const warn = vi.fn()
+    const logger = createRecordingLogger()
     const exporter = new PlatformMetricsOtelExporter({
       endpoint: COLLECTOR,
-      logger: { warn },
+      logger,
       fetchImpl,
     })
 
     await expect(exporter.export(snapshot(), { accountId: 'acc-1' })).resolves.toBeUndefined()
-    expect(warn).toHaveBeenCalled()
+    expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
   })
 })

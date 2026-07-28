@@ -1,5 +1,6 @@
 import type { KeyFingerprintStore } from '@cat-factory/kernel'
-import { describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
 import { checkKeyFingerprint, computeKeyFingerprint } from './keyFingerprint.js'
 import { base64url } from './encoding.js'
 
@@ -20,8 +21,12 @@ function fakeStore(initial: string | null = null): KeyFingerprintStore & { value
 }
 
 function silentLogger() {
-  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  return createRecordingLogger()
 }
+
+/** Lines the recorder captured at one level. */
+const at = (logger: ReturnType<typeof createRecordingLogger>, level: string) =>
+  logger.lines.filter((l) => l.level === level)
 
 describe('computeKeyFingerprint', () => {
   it('is deterministic and short (8 bytes → base64url)', async () => {
@@ -49,8 +54,8 @@ describe('checkKeyFingerprint', () => {
     const result = await checkKeyFingerprint({ store, masterKeyBase64: KEY_A, logger })
     expect(result.status).toBe('first-seen')
     expect(store.value).toBe(await computeKeyFingerprint(KEY_A))
-    expect(logger.info).toHaveBeenCalled()
-    expect(logger.error).not.toHaveBeenCalled()
+    expect(at(logger, 'info').length).toBeGreaterThan(0)
+    expect(at(logger, 'error')).toHaveLength(0)
   })
 
   it('reports a match when the key is unchanged', async () => {
@@ -58,7 +63,7 @@ describe('checkKeyFingerprint', () => {
     const logger = silentLogger()
     const result = await checkKeyFingerprint({ store, masterKeyBase64: KEY_A, logger })
     expect(result.status).toBe('match')
-    expect(logger.error).not.toHaveBeenCalled()
+    expect(at(logger, 'error')).toHaveLength(0)
   })
 
   it('reports drift and does NOT overwrite the stored fingerprint when the key changed', async () => {
@@ -68,6 +73,6 @@ describe('checkKeyFingerprint', () => {
     const result = await checkKeyFingerprint({ store, masterKeyBase64: KEY_B, logger })
     expect(result).toMatchObject({ status: 'drift', stored })
     expect(store.value).toBe(stored) // never clobbered — the drift signal is preserved
-    expect(logger.error).toHaveBeenCalledOnce()
+    expect(at(logger, 'error')).toHaveLength(1)
   })
 })

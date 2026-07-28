@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { noopLogger } from '@cat-factory/kernel'
 import { type DriveConfig, NodeRealtimeHub } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
@@ -326,7 +327,7 @@ const RUNNER_OPTS: SqliteWorkRunnerOptions = {
   concurrency: 10,
 }
 
-const silentLog = { info: () => {}, error: () => {}, warn: () => {} } as never
+const silentLog = noopLogger
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 // Track runners/queues so their (unref'd) timers + handles are released after each test.

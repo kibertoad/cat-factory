@@ -41,9 +41,9 @@ function logMisconfiguredOnce(problems: ConfigProblem[]): void {
   if (loggedMisconfigs.has(signature)) return
   loggedMisconfigs.add(signature)
   logger.error(
-    { problems: problems.map((p) => p.key) },
     'Cloudflare Worker is MISCONFIGURED — serving the fallback error backend so the SPA can ' +
       'explain what to fix. Add the missing binding(s)/var(s) to wrangler.toml.',
+    { problems: problems.map((p) => p.key) },
   )
 }
 

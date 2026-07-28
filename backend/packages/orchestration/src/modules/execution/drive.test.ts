@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import { type DriveConfig, driveExecution } from './drive.js'
 
@@ -25,13 +26,15 @@ const DONE: AdvanceResult = { kind: 'done' }
  */
 function harness(script: {
   advance: AdvanceResult[]
-  pollJob?: AdvanceResult[]
+  /** A queued `Error` is THROWN by the poll (a status read that failed), not returned. */
+  pollJob?: (AdvanceResult | Error)[]
   pollGate?: AdvanceResult[]
 }) {
   const events: string[] = []
-  const shift = (queue: AdvanceResult[] | undefined, label: string): AdvanceResult => {
+  const shift = (queue: (AdvanceResult | Error)[] | undefined, label: string): AdvanceResult => {
     const next = queue?.shift()
     if (!next) throw new Error(`unexpected ${label} call`)
+    if (next instanceof Error) throw next
     return next
   }
   const exec = {
@@ -90,6 +93,49 @@ describe('driveExecution poll cadence', () => {
     await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events.filter((e) => e === 'pollJob')).toHaveLength(CFG.jobMaxPolls)
     expect(h.events.filter((e) => e.startsWith('sleep:'))).toHaveLength(CFG.jobMaxPolls - 1)
+    expect(h.events.at(-1)).toBe(
+      'fail:timeout:Implementation job did not settle within its polling budget',
+    )
+  })
+})
+
+describe('driveExecution poll-failure cause recovery', () => {
+  it('carries the last read error into the terminal message and warns per attempt', async () => {
+    // A bare `catch` used to discard the cause entirely: the run died as "status was
+    // unreadable (3 polls)" with the actual reason (DNS, TLS, a 502) existing nowhere on
+    // Node/local, while the Cloudflare twin had always appended it.
+    const log = createRecordingLogger()
+    const h = harness({
+      advance: [AWAITING_JOB],
+      pollJob: [new Error('fetch failed: ECONNREFUSED'), new Error('502'), new Error('502')],
+    })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep, log })
+
+    expect(h.events.at(-1)).toBe(
+      'fail:timeout:Implementation job status was unreadable (3 polls) (last error: 502)',
+    )
+    const warnings = log.lines.filter((l) => l.level === 'warn')
+    expect(warnings).toHaveLength(3)
+    expect(warnings[0]).toMatchObject({
+      msg: 'run poll failed',
+      // The run's ids are bound once via `child`, so every driver line is greppable by run.
+      fields: {
+        workspaceId: 'ws',
+        executionId: 'ex',
+        readFailures: 1,
+        err: 'fetch failed: ECONNREFUSED',
+      },
+    })
+  })
+
+  it('clears the remembered cause once a poll succeeds', async () => {
+    // Otherwise a run that recovered mid-poll and later timed out for an unrelated reason
+    // would be blamed on a transient read failure minutes earlier.
+    const h = harness({
+      advance: [AWAITING_JOB],
+      pollJob: [new Error('transient'), AWAITING_JOB, AWAITING_JOB, AWAITING_JOB, AWAITING_JOB],
+    })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events.at(-1)).toBe(
       'fail:timeout:Implementation job did not settle within its polling budget',
     )

@@ -2,6 +2,7 @@ import type {
   BlockRepository,
   Clock,
   ExecutionInstance,
+  Logger,
   PrReportIssue,
   PrVerificationReportPublisher,
   ResolveRunRepoContext,
@@ -13,11 +14,6 @@ import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { readServiceSpec } from '@cat-factory/agents'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 import { isTesterKind } from './ci.logic.js'
-
-/** Minimal structured logger (pino-compatible); optional, like every other best-effort path. */
-export interface PrReportLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
 
 /**
  * The engine collaborator that keeps a run's **verification report** on its pull request.
@@ -74,7 +70,7 @@ export interface PrVerificationReportControllerDeps {
    * one part of the run that is DESIGNED to fail silently, so without a log a revoked token or
    * a rejected body leaves no trace anywhere — the report simply stops appearing.
    */
-  logger?: PrReportLogger
+  logger?: Logger
 }
 
 export class PrVerificationReportController {
@@ -146,10 +142,12 @@ export class PrVerificationReportController {
     } catch (error) {
       // A PR-report write is bookkeeping. A provider outage, a revoked token, or a PR someone
       // closed underneath the run must never turn a green run red.
-      this.deps.logger?.warn(
-        { err: error, executionId: instance.id, blockId: instance.blockId, workspaceId },
-        'Failed to publish the PR verification report',
-      )
+      this.deps.logger?.warn('Failed to publish the PR verification report', {
+        err: error,
+        executionId: instance.id,
+        blockId: instance.blockId,
+        workspaceId,
+      })
     }
   }
 

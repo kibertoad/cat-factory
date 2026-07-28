@@ -1008,10 +1008,10 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
     // Best-effort delivery still surfaces failures (revoked token, missing channel
     // invite) through the structured logger so a broken route is diagnosable.
     onError: (error, ctx) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), ...ctx },
-        'slack notification delivery failed',
-      ),
+      logger.warn('slack notification delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
 }
 
@@ -1044,10 +1044,10 @@ function buildNotificationWebhookSupportForWorker(
     // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
     // through the structured logger so a broken receiver is diagnosable.
     onError: (error, ctx) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), ...ctx },
-        'notification webhook delivery failed',
-      ),
+      logger.warn('notification webhook delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
 }
 
@@ -1758,9 +1758,9 @@ export function selectEnvConfigRepairer(deps: {
   const model = resolveAgentConfig(config.agents.routing, 'coder').ref
   if (!isProxyableProvider(model.provider)) {
     logger.warn(
-      { provider: model.provider },
       'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
         'the agent config-repair fallback is disabled.',
+      { provider: model.provider },
     )
     return undefined
   }

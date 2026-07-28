@@ -156,7 +156,14 @@ export interface NodeCoreDepsBundle {
  * literal (later spreads still override earlier ones).
  */
 export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDependencies {
-  return { ...buildNodeStoreDeps(bundle), ...buildNodeServiceDeps(bundle) }
+  return {
+    // The structured logger every domain service emits through. Wired at the TOP level (not
+    // buried in one of the builders) because its Worker twin sits in the same position — the
+    // pair is a facade-parity obligation, not an optional integration.
+    logger,
+    ...buildNodeStoreDeps(bundle),
+    ...buildNodeServiceDeps(bundle),
+  }
 }
 
 /**
@@ -602,7 +609,6 @@ function selectNodeEmailInvitationDeps(
     passwordResetTokenRepository: repos.passwordResetTokenRepository,
     resolveSystemEmailSender: buildSystemEmailSender(config),
     appBaseUrl: config.email.appBaseUrl || undefined,
-    logger,
   }
   if (config.email.enabled && config.email.encryptionKey) {
     deps.emailConnectionRepository = repos.emailConnectionRepository

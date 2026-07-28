@@ -6,6 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import { GitHubDocsProvider } from './GitHubDocsProvider.js'
+import { noopLogger } from '@cat-factory/kernel'
 
 // GitHubDocsProvider rides the workspace's installed GitHub App/PAT — it stores no
 // per-workspace credential. The security-critical property is that a read is scoped to
@@ -67,7 +68,7 @@ function makeProvider(opts: {
   const provider = new GitHubDocsProvider({
     githubClient: githubClient as GitHubClient,
     installations: installations as GitHubInstallationRepository,
-    logger: { warn: (obj, msg) => warnings.push({ obj, msg }) },
+    logger: { ...noopLogger, warn: (msg, fields) => warnings.push({ obj: fields ?? {}, msg }) },
   })
   return { provider, calls, warnings }
 }

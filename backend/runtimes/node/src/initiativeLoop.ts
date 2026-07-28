@@ -52,7 +52,7 @@ export function startInitiativeLoopSweeper(
     tick: async () => {
       const { spawned, completed } = await initiatives.loop.runDue(clock.now())
       if (spawned > 0 || completed > 0) {
-        log.info({ spawned, completed }, 'ticked initiative loop')
+        log.info('ticked initiative loop', { spawned, completed })
       }
     },
   })

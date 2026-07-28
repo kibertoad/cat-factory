@@ -29,7 +29,7 @@ export function startEnvironmentSweeper(
     failureMessage: 'environment TTL sweep failed',
     tick: async () => {
       const torn = await environments.teardownService.sweepExpired(clock.now())
-      if (torn > 0) log.info({ torn }, 'tore down expired environments')
+      if (torn > 0) log.info('tore down expired environments', { torn })
     },
   })
 }

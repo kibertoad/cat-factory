@@ -1,6 +1,6 @@
-import { NotFoundError } from '@cat-factory/kernel'
+import { NotFoundError, noopLogger } from '@cat-factory/kernel'
 import type { GitHubModule } from '@cat-factory/orchestration'
-import type { Logger, ServerContainer } from '@cat-factory/server'
+import type { ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss } from 'pg-boss'
 import { describe, expect, it, vi } from 'vitest'
 import { createNodeGateways } from '../src/gateways.js'
@@ -17,11 +17,7 @@ import {
 // worker applies each job kind to the SAME GitHubSyncService/WebhookService the inline path
 // used — the Node analogue of the Worker's GITHUB_SYNC_QUEUE consumer + GitHubBackfillWorkflow.
 
-const noopLog = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-} as unknown as Logger
+const noopLog = noopLogger
 
 /** A fake pg-boss capturing every `send` and the handler registered via `work`. */
 function fakeBoss() {
@@ -204,7 +200,7 @@ describe('startGitHubSyncWorker', () => {
       syncService: {},
     } as unknown as GitHubModule
     const error = vi.fn()
-    const log = { info: () => {}, warn: () => {}, error } as unknown as Logger
+    const log = { ...noopLogger, error }
     await startGitHubSyncWorker(boss, { github } as unknown as ServerContainer, log)
 
     await expect(run({ kind: 'webhook', eventName: 'push', payload: {} })).rejects.toThrow('boom')

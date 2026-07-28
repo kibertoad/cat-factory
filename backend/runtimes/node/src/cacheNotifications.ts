@@ -1,6 +1,6 @@
 import type { GroupCacheNotifications, GroupNotificationPairFactory } from '@cat-factory/caching'
 import { missingIoredisProblem } from '@cat-factory/server'
-import type { PropagatorLogger } from './propagator.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // The Redis-backed cache-invalidation notification wiring (caching initiative,
 // docs/initiatives/caching-layer.md). Mirrors `redisPropagator.ts`: gated on
@@ -114,7 +114,7 @@ export interface CacheNotificationsOptions {
  */
 export async function buildCacheNotifications(
   env: NodeJS.ProcessEnv,
-  log: PropagatorLogger,
+  log: Logger,
   options: CacheNotificationsOptions = {},
 ): Promise<GroupNotificationPairFactory | undefined> {
   const redisUrl = env.REDIS_URL?.trim()
@@ -129,10 +129,10 @@ export async function buildCacheNotifications(
       return (url: string, role: CacheRedisRole): CacheRedisClient => {
         const client = new Redis(url, CLIENT_OPTIONS[role])
         client.on('error', (err: unknown) =>
-          log.warn(
-            { role, err: err instanceof Error ? err.message : String(err) },
-            'cache redis connection error (ioredis will retry)',
-          ),
+          log.warn('cache redis connection error (ioredis will retry)', {
+            role,
+            err: err instanceof Error ? err.message : String(err),
+          }),
         )
         return client
       }
@@ -140,7 +140,7 @@ export async function buildCacheNotifications(
 
   return <T>(cacheName: string): GroupCacheNotifications<T> => {
     const channel = `${prefix}:${cacheName}`
-    log.info({ channel }, 'cache: distributed invalidation enabled (redis)')
+    log.info('cache: distributed invalidation enabled (redis)', { channel })
     return createGroupNotificationPair<T>({
       channel,
       // Two dedicated connections per cache: one publishes, one subscribes (a

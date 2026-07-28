@@ -1,10 +1,10 @@
 import {
   type SealedSecretInventory,
+  type Logger,
   type SealedSecretRef,
   type SecretCipher,
   isSecretDecryptError,
 } from '@cat-factory/kernel'
-import type { KeyFingerprintLogger } from './keyFingerprint.js'
 
 // ADR 0026 D6.2 — the runtime-neutral drift sweep. It attempts to decrypt every sealed secret
 // the {@link SealedSecretInventory} reports and buckets the outcome into the three cases the
@@ -46,7 +46,7 @@ export function hasKeyDrift(report: KeyDriftReport): boolean {
 export async function sweepKeyDrift(deps: {
   inventory: SealedSecretInventory
   cipherFor: (info: string) => SecretCipher
-  logger?: KeyFingerprintLogger
+  logger?: Logger
 }): Promise<KeyDriftReport> {
   const { inventory, cipherFor, logger } = deps
   const ciphers = new Map<string, SecretCipher>()

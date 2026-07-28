@@ -67,7 +67,6 @@ export {
 export {
   driveExecution,
   type DriveConfig,
-  type DriveLogger,
   type DriveOptions,
   type DriveOutcome,
 } from './modules/execution/drive.js'
@@ -232,7 +231,6 @@ export {
   distinctAccountIds,
   type PlatformMetricsSink,
   type PlatformMetricsSweepDeps,
-  type PlatformMetricsSweepLogger,
 } from './modules/observability/platformMetricsSweep.js'
 export {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,

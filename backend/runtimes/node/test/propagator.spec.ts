@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { noopLogger } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   LayeredEventPropagator,
@@ -15,7 +16,7 @@ import type { RedisClient } from '../src/redisPropagator.js'
 // adapters, no re-publish loop) with a recording fake adapter, and the Redis adapter's wire
 // envelope + own-echo suppression against an in-memory bus — no Redis server needed.
 
-const silentLog = { info: () => {}, warn: () => {} }
+const silentLog = noopLogger
 
 /** A fake cross-node adapter that records what it published and can inject a peer event. */
 class RecordingPropagator implements WebSocketPropagator {

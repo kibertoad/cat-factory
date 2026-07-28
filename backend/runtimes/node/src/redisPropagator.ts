@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { missingIoredisProblem } from '@cat-factory/server'
-import type { PropagatorLogger, RealtimeMessage, WebSocketPropagator } from './propagator.js'
+import type { Logger } from '@cat-factory/kernel'
+import type { RealtimeMessage, WebSocketPropagator } from './propagator.js'
 
 // The Redis adapter for cross-node real-time propagation (see `propagator.ts`). Modelled on
 // the two-connection pub/sub pattern (a dedicated publisher + a dedicated subscriber, since a
@@ -76,7 +77,7 @@ export interface RedisWebSocketPropagatorOptions {
    * even when every replica is given the same value — see the constructor.
    */
   nodeId?: string
-  log: PropagatorLogger
+  log: Logger
   /**
    * Connect a fresh Redis client for the given role. Defaults to constructing an `ioredis`
    * client from `url` (dynamically imported) with role-specific resilience options and an
@@ -96,7 +97,7 @@ export class RedisWebSocketPropagator implements WebSocketPropagator {
   private readonly url: string
   private readonly channel: string
   private readonly nodeId: string
-  private readonly log: PropagatorLogger
+  private readonly log: Logger
   private readonly connect: (url: string, role: RedisRole) => Promise<RedisClient>
   private pub?: RedisClient
   private sub?: RedisClient
@@ -141,8 +142,8 @@ export class RedisWebSocketPropagator implements WebSocketPropagator {
     // so a publish while the bus is down rejects here rather than buffering without bound.
     void this.pub.publish(this.channel, JSON.stringify(envelope)).catch((err) => {
       this.log.warn(
-        { err: err instanceof Error ? err.message : String(err) },
         'real-time redis publish failed (event delivered locally; peers reconcile on reconnect)',
+        { err: err instanceof Error ? err.message : String(err) },
       )
     })
   }
@@ -193,10 +194,10 @@ export class RedisWebSocketPropagator implements WebSocketPropagator {
   }
 
   private onConnectionError(role: string, err: unknown): void {
-    this.log.warn(
-      { role, err: err instanceof Error ? err.message : String(err) },
-      'real-time redis connection error (ioredis will retry)',
-    )
+    this.log.warn('real-time redis connection error (ioredis will retry)', {
+      role,
+      err: err instanceof Error ? err.message : String(err),
+    })
   }
 
   private parse(raw: string): RealtimeEnvelope | undefined {

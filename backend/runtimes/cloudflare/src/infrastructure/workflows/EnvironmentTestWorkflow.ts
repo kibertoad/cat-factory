@@ -70,8 +70,8 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
       } catch (error) {
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'env-test poll could not advance the run; treating as still running and retrying',
+          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
         )
         continue
       }
@@ -81,7 +81,7 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'env-test run failed')
+        log.warn('env-test run failed', { error: result.error })
         return
       }
       // still running — loop and advance again after the next durable sleep.

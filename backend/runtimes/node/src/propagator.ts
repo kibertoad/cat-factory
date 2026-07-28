@@ -1,5 +1,6 @@
 import type { LocalEventSink, NodeRealtimeHub } from './realtime.js'
 import { RedisWebSocketPropagator } from './redisPropagator.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // Cross-node real-time propagation.
 //
@@ -23,12 +24,6 @@ import { RedisWebSocketPropagator } from './redisPropagator.js'
 // `WorkspaceEventsHub` Durable Object — exactly one instance per workspace across the whole
 // deployment — so cross-node propagation is inherent to the platform. This is a genuine
 // Node-only concern, not a facade-parity gap.
-
-/** The minimal logger shape the propagator + its adapters need (a pino logger satisfies it). */
-export interface PropagatorLogger {
-  info(obj: object, msg?: string): void
-  warn(obj: object, msg?: string): void
-}
 
 /**
  * A pre-serialised workspace event queued for cross-node delivery. `payload` is the exact
@@ -103,12 +98,12 @@ export class LayeredEventPropagator implements LocalEventSink {
    * {@link broadcast}), so it is never re-published to the bus — that both prevents an infinite
    * loop and avoids double delivery.
    */
-  async start(log: PropagatorLogger): Promise<void> {
+  async start(log: Logger): Promise<void> {
     for (const adapter of this.adapters) {
       await adapter.start((message) =>
         this.hub.broadcast(message.workspaceId, message.payload, message.originConnectionId),
       )
-      log.info({ adapter: adapter.name }, 'real-time cross-node propagation adapter started')
+      log.info('real-time cross-node propagation adapter started', { adapter: adapter.name })
     }
   }
 
@@ -131,7 +126,7 @@ export class LayeredEventPropagator implements LocalEventSink {
 export function buildRealtimePropagator(
   hub: NodeRealtimeHub,
   env: NodeJS.ProcessEnv,
-  log: PropagatorLogger,
+  log: Logger,
 ): LayeredEventPropagator {
   const adapters: WebSocketPropagator[] = []
   const redisUrl = env.REDIS_URL?.trim()
@@ -145,10 +140,9 @@ export function buildRealtimePropagator(
         log,
       }),
     )
-    log.info(
-      { channel: channel ?? 'cat-factory:realtime' },
-      'real-time: cross-node WebSocket propagation enabled (redis)',
-    )
+    log.info('real-time: cross-node WebSocket propagation enabled (redis)', {
+      channel: channel ?? 'cat-factory:realtime',
+    })
   }
   return new LayeredEventPropagator(hub, adapters)
 }

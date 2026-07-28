@@ -35,7 +35,7 @@ export function startGitHubReconcileSweeper(
     failureMessage: 'github reconcile sweep failed',
     tick: async () => {
       const synced = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, log)
-      if (synced > 0) log.info({ synced }, 'reconciled stale github repo projections')
+      if (synced > 0) log.info('reconciled stale github repo projections', { synced })
     },
   })
 }

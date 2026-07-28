@@ -169,7 +169,7 @@ export function startRetentionSweeper(
     tick: async () => {
       const reclaimed = await sweepRetention(repos, retention, clock.now())
       if (Object.values(reclaimed).some((n) => n > 0)) {
-        log.info(reclaimed, 'retention sweep reclaimed rows')
+        log.info('retention sweep reclaimed rows', { ...reclaimed })
       }
     },
   })
@@ -208,7 +208,7 @@ export function startArtifactRetentionSweeper(
         now: clock.now(),
       })
       if (removed > 0)
-        log.info({ binaryArtifacts: removed }, 'artifact retention sweep reclaimed rows')
+        log.info('artifact retention sweep reclaimed rows', { binaryArtifacts: removed })
     },
   })
 }

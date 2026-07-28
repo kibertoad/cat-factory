@@ -212,17 +212,14 @@ export async function startExecutionWorker(
           // re-enqueues a fresh advance for the next poll cycle (no in-handler re-send: the
           // `exclusive` queue would suppress it while this job is still active).
           if (outcome.rearmedGate) {
-            log.info({ workspaceId, executionId }, 'human-review gate re-armed; awaiting sweep')
+            log.info('human-review gate re-armed; awaiting sweep', { workspaceId, executionId })
           }
         } catch (error) {
-          log.error(
-            {
-              workspaceId,
-              executionId,
-              err: error instanceof Error ? error.message : String(error),
-            },
-            'execution driver failed',
-          )
+          log.error('execution driver failed', {
+            workspaceId,
+            executionId,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error
         }
       }
@@ -326,15 +323,17 @@ export function startStaleRunSweeper(
       stillOrphaned.add(ref.id)
 
       if (state === 'orphaned' && jobId) {
-        log.warn(
-          { workspaceId: ref.workspaceId, runId: ref.id, kind: ref.kind, jobId },
-          'reclaiming orphaned advance job (dead worker) before re-drive',
-        )
+        log.warn('reclaiming orphaned advance job (dead worker) before re-drive', {
+          workspaceId: ref.workspaceId,
+          runId: ref.id,
+          kind: ref.kind,
+          jobId,
+        })
         await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
-          log.error(
-            { runId: ref.id, err: err instanceof Error ? err.message : String(err) },
-            'failed to reclaim orphaned advance job',
-          ),
+          log.error('failed to reclaim orphaned advance job', {
+            runId: ref.id,
+            err: err instanceof Error ? err.message : String(err),
+          }),
         )
       }
 
@@ -345,10 +344,11 @@ export function startStaleRunSweeper(
       // re-driven at least once below before it can ever be given up on.
       if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
         const mins = Math.round((now - ref.updatedAt) / 60_000)
-        log.warn(
-          { workspaceId: ref.workspaceId, executionId: ref.id, staleMinutes: mins },
-          'run stalled past hard deadline; recovery could not resume it; failing',
-        )
+        log.warn('run stalled past hard deadline; recovery could not resume it; failing', {
+          workspaceId: ref.workspaceId,
+          executionId: ref.id,
+          staleMinutes: mins,
+        })
         await container.executionService.failRun(
           ref.workspaceId,
           ref.id,
@@ -362,19 +362,19 @@ export function startStaleRunSweeper(
       }
 
       if (ref.kind === 'bootstrap') {
-        log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
+        log.warn('re-driving stale bootstrap', { workspaceId: ref.workspaceId, jobId: ref.id })
         await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
         continue
       }
       if (ref.kind === 'env-config-repair') {
-        log.warn(
-          { workspaceId: ref.workspaceId, jobId: ref.id },
-          're-driving stale env-config-repair',
-        )
+        log.warn('re-driving stale env-config-repair', {
+          workspaceId: ref.workspaceId,
+          jobId: ref.id,
+        })
         await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
         continue
       }
-      log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
+      log.warn('re-driving stale run', { workspaceId: ref.workspaceId, executionId: ref.id })
       advanceReenqueues.push(
         advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
       )
@@ -409,8 +409,8 @@ export function startStaleRunSweeper(
       }
       if (exhausted) continue
       log.info(
-        { workspaceId: ref.workspaceId, executionId: ref.id },
         're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
+        { workspaceId: ref.workspaceId, executionId: ref.id },
       )
       advanceReenqueues.push(
         advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
@@ -442,10 +442,9 @@ export function startStaleRunSweeper(
       // re-drives + spend-paused resumes), replacing N per-run `send` round-trips.
       if (advanceReenqueues.length > 0) await boss.insert(QUEUE, advanceReenqueues)
     } catch (error) {
-      log.error(
-        { err: error instanceof Error ? error.message : String(error) },
-        'stale-run sweep failed',
-      )
+      log.error('stale-run sweep failed', {
+        err: error instanceof Error ? error.message : String(error),
+      })
     }
   }
   // Boot reconcile: recover runs a crashed previous process orphaned right away, not after

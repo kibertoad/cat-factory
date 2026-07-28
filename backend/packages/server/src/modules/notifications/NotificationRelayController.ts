@@ -103,7 +103,7 @@ export function notificationRelayController(): Hono<AppEnv> {
       workspaceRepository.accountOf(body.workspaceId) as Promise<string | null | undefined>
     ).catch(() => undefined)) as string | null | undefined
     if (!accountId || !payload.scope.accountIds.includes(accountId)) {
-      log.warn({ workspaceId: body.workspaceId }, 'notification delegation: workspace out of scope')
+      log.warn('notification delegation: workspace out of scope', { workspaceId: body.workspaceId })
       return denied()
     }
 
@@ -116,14 +116,11 @@ export function notificationRelayController(): Hono<AppEnv> {
         body.notificationId,
       )) as Notification | null
     } catch (error) {
-      log.error(
-        {
-          workspaceId: body.workspaceId,
-          notificationId: body.notificationId,
-          err: error instanceof Error ? error.message : String(error),
-        },
-        'notification delegation: row read failed',
-      )
+      log.error('notification delegation: row read failed', {
+        workspaceId: body.workspaceId,
+        notificationId: body.notificationId,
+        err: error instanceof Error ? error.message : String(error),
+      })
       return c.json({ ok: false, error: { code: 'internal', message: 'Internal error' } }, 500)
     }
     if (!notification) return denied()
@@ -134,14 +131,11 @@ export function notificationRelayController(): Hono<AppEnv> {
     try {
       await delivery.deliver(body.workspaceId, notification)
     } catch (error) {
-      log.warn(
-        {
-          workspaceId: body.workspaceId,
-          notificationId: body.notificationId,
-          err: error instanceof Error ? error.message : String(error),
-        },
-        'notification delegation: delivery failed',
-      )
+      log.warn('notification delegation: delivery failed', {
+        workspaceId: body.workspaceId,
+        notificationId: body.notificationId,
+        err: error instanceof Error ? error.message : String(error),
+      })
     }
     return c.json({ ok: true })
   })

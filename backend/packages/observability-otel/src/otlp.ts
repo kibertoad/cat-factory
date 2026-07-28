@@ -1,4 +1,5 @@
 import type { AttributeMap, AttributeValue } from './mapping.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // Shared OTLP/HTTP JSON encoding + transport helpers used by BOTH fetch-based exporters
 // in this package — the per-call LLM trace/metric exporter (`./index`) and the periodic
@@ -8,11 +9,6 @@ import type { AttributeMap, AttributeValue } from './mapping.js'
 
 /** Hard ceiling on a single OTLP POST, so a hung collector can't tie up the caller. */
 const SEND_TIMEOUT_MS = 10_000
-
-/** Minimal structured logger (pino-compatible); optional. */
-export interface OtlpLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
 
 /** An OTLP `AnyValue` in the JSON encoding (string / int / double / string list). */
 export type AnyValue =
@@ -54,7 +50,7 @@ export async function postOtlp(opts: {
   endpoint: string
   headers: Record<string, string>
   payload: unknown
-  logger?: OtlpLogger
+  logger?: Logger
   timeoutMs?: number
 }): Promise<void> {
   try {
@@ -67,12 +63,12 @@ export async function postOtlp(opts: {
     // OTLP/HTTP returns 200 on full success and may return 200 with a partial-success body;
     // any non-2xx is a failure we only log — observability never breaks the caller.
     if (!res.ok) {
-      opts.logger?.warn({ scope: 'otel', status: res.status }, 'otel: OTLP endpoint rejected batch')
+      opts.logger?.warn('otel: OTLP endpoint rejected batch', { scope: 'otel', status: res.status })
     }
   } catch (err) {
-    opts.logger?.warn(
-      { scope: 'otel', err: err instanceof Error ? err.message : String(err) },
-      'otel: failed to POST OTLP batch',
-    )
+    opts.logger?.warn('otel: failed to POST OTLP batch', {
+      scope: 'otel',
+      err: err instanceof Error ? err.message : String(err),
+    })
   }
 }

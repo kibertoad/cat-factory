@@ -57,10 +57,11 @@ export class ContainerInstanceRegistry {
     try {
       await this.store.add({ containerKey, kind, workspaceId, startedAt: this.clock.now() })
     } catch (error) {
-      logger.warn(
-        { containerKey, kind, err: errMessage(error) },
-        'container-registry: failed to record live container (continuing)',
-      )
+      logger.warn('container-registry: failed to record live container (continuing)', {
+        containerKey,
+        kind,
+        err: errMessage(error),
+      })
     }
   }
 
@@ -87,24 +88,21 @@ export class ContainerInstanceRegistry {
     const stale = await this.store.listStartedBefore(epochMs)
     let reaped = 0
     for (const record of stale) {
-      logger.warn(
-        {
-          containerKey: record.containerKey,
-          kind: record.kind,
-          workspaceId: record.workspaceId,
-          ageMs: this.clock.now() - record.startedAt,
-        },
-        'container-reaper: killing leaked container past its max lifetime',
-      )
+      logger.warn('container-reaper: killing leaked container past its max lifetime', {
+        containerKey: record.containerKey,
+        kind: record.kind,
+        workspaceId: record.workspaceId,
+        ageMs: this.clock.now() - record.startedAt,
+      })
       try {
         await this.release(record.containerKey)
         reaped++
       } catch (error) {
         // Leave the row in place so the next pass retries this one.
-        logger.error(
-          { containerKey: record.containerKey, err: errMessage(error) },
-          'container-reaper: failed to kill leaked container (will retry next pass)',
-        )
+        logger.error('container-reaper: failed to kill leaked container (will retry next pass)', {
+          containerKey: record.containerKey,
+          err: errMessage(error),
+        })
       }
     }
     return { reaped }

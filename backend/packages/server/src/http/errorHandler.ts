@@ -56,16 +56,13 @@ export function handleError(error: unknown, c: Context): Response {
   }
   // Unexpected fault: log it with request context so it's traceable, but never
   // leak internals to the client.
-  logger.error(
-    {
-      err:
-        error instanceof Error
-          ? { message: error.message, stack: error.stack }
-          : { message: String(error) },
-      method: c.req.method,
-      path: new URL(c.req.url).pathname,
-    },
-    'unhandled request error',
-  )
+  logger.error('unhandled request error', {
+    err:
+      error instanceof Error
+        ? { message: error.message, stack: error.stack }
+        : { message: String(error) },
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+  })
   return c.json({ error: { code: 'internal', message: 'Internal server error' } }, 500)
 }

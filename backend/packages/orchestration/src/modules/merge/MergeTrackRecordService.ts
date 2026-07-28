@@ -11,9 +11,16 @@ import type {
   ReviewEffort,
   VcsProvider,
   WorkspaceRepository,
+  Logger,
 } from '@cat-factory/kernel'
 import { CHANGE_CLASSES, emptyMergeClassRollup } from '@cat-factory/contracts'
-import { assertFound, classifyChangedFiles, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  classifyChangedFiles,
+  describeError,
+  noopLogger,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 
 /** The repo identity a record carries, in the provider-neutral VCS vocabulary. */
 export interface MergeTrackRepoRef {
@@ -69,6 +76,13 @@ export interface MergeTrackRecordServiceDependencies {
    * per-class rule, so the merge policy falls back to the score thresholds untouched.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * Where this side channel reports its own failures. Every method below swallows by design —
+   * a track-record fault must never block a merge — which previously meant the whole feature
+   * could be dead in production (a revoked token, a missing table) while every merge looked
+   * healthy. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
 }
 
 /**
@@ -84,7 +98,11 @@ export interface MergeTrackRecordServiceDependencies {
  * Full design: `docs/initiatives/merge-track-record.md`.
  */
 export class MergeTrackRecordService {
-  constructor(private readonly deps: MergeTrackRecordServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: MergeTrackRecordServiceDependencies) {
+    this.log = (deps.logger ?? noopLogger).child({ service: 'mergeTrackRecord' })
+  }
 
   /**
    * Classify a block's pull request from the files it changed — ONE VCS call, then the pure
@@ -99,18 +117,31 @@ export class MergeTrackRecordService {
     const absent: RunClassification = { changeClass: 'unknown', fileCount: 0 }
     const prNumber = block.pullRequest?.number
     if (prNumber == null) return absent
+    // `repo` is DECLARED outside the try so the catch can still see it. The comment below
+    // always claimed the identity survived an unreadable file list — but while it was bound
+    // inside the try, a THROWING `listChangedFiles` (403 / 404 / rate limit: the common
+    // failure, not the rare one) fell through to a bare `absent` and lost it, so
+    // external-merge attribution by `(repoId, prNumber)` failed permanently for that record.
+    let repo: Pick<RunClassification, 'repoId' | 'provider'> | undefined
     try {
       const ctx = await this.deps.resolveRunRepoContext?.(workspaceId, block.id)
       if (!ctx) return absent
       // Capture the repo identity even when the changed-file list is unreadable: the class then
       // degrades to `unknown` (inert by design), but the record stays ATTRIBUTABLE, so a PR later
       // merged on the provider is still matched by `(repoId, prNumber)`.
-      const repo = { repoId: ctx.repoId, provider: ctx.provider ?? null }
+      repo = { repoId: ctx.repoId, provider: ctx.provider ?? null }
       const files = await ctx.repo.listChangedFiles?.(prNumber)
       if (!files) return { ...absent, ...repo }
       return { ...classifyChangedFiles(files.map((f) => f.path)), ...repo }
-    } catch {
-      return absent
+    } catch (error) {
+      this.log.warn('merge classification failed; recording an unclassified row', {
+        workspaceId,
+        blockId: block.id,
+        prNumber,
+        attributable: repo !== undefined,
+        ...describeError(error),
+      })
+      return { ...absent, ...repo }
     }
   }
 
@@ -153,7 +184,13 @@ export class MergeTrackRecordService {
         taggedAt: null,
       }
       return await this.deps.mergeTrackRecordRepository.insertIfAbsent(workspaceId, record)
-    } catch {
+    } catch (error) {
+      this.log.warn('merge track record write failed; the merge itself is unaffected', {
+        workspaceId,
+        executionId: input.executionId,
+        blockId: input.block.id,
+        ...describeError(error),
+      })
       return null
     }
   }
@@ -197,7 +234,13 @@ export class MergeTrackRecordService {
         ...tag,
       })
       return existing.id
-    } catch {
+    } catch (error) {
+      this.log.warn('merge track record resolve failed', {
+        workspaceId,
+        executionId,
+        decision,
+        ...describeError(error),
+      })
       return null
     }
   }
@@ -233,7 +276,13 @@ export class MergeTrackRecordService {
         resolvedAt: now,
       })
       return { ...existing, decision: 'external_merged', resolvedAt: now }
-    } catch {
+    } catch (error) {
+      this.log.warn('external merge attribution failed', {
+        workspaceId,
+        repoId,
+        prNumber,
+        ...describeError(error),
+      })
       return null
     }
   }

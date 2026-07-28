@@ -1,4 +1,6 @@
 import type { WorkflowSleepDuration } from 'cloudflare:workers'
+import { describeError } from '@cat-factory/kernel'
+import { logger } from '../observability/logger'
 
 /** Minimal slice of `WorkflowStep` this helper needs — just a durable sleep (testable with a fake). */
 export interface DurableSleeper {
@@ -38,6 +40,15 @@ export async function buildWorkflowRuntime<T>(
       return build()
     } catch (err) {
       lastErr = err
+      // The docstring above says a persistent failure "SHOULD fail loudly" — but until this
+      // line the only trace of the retries was in the Workflows console, so a deployment that
+      // recovered on attempt 3 looked identical to one that never stumbled.
+      logger.warn('workflow runtime build failed; retrying', {
+        label,
+        attempt: attempt + 1,
+        attempts,
+        ...describeError(err),
+      })
       if (attempt < attempts - 1) {
         await step.sleep(`${label}-build-retry-${attempt}`, BUILD_RETRY_DELAY)
       }

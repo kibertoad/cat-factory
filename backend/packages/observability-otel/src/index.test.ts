@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { LlmGenerationEvent } from '@cat-factory/kernel'
+import { describe, expect, it } from 'vitest'
+import { createRecordingLogger, type LlmGenerationEvent } from '@cat-factory/kernel'
 import { OtelTraceSink } from './index.js'
 
 // The fetch exporter POSTs OTLP/JSON to the collector over its injectable `fetchImpl`
@@ -231,10 +231,10 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     const fetchImpl = (async () => {
       throw new Error('down')
     }) as unknown as typeof fetch
-    const warn = vi.fn()
-    const sink = new OtelTraceSink({ endpoint: COLLECTOR, logger: { warn }, fetchImpl })
+    const logger = createRecordingLogger()
+    const sink = new OtelTraceSink({ endpoint: COLLECTOR, logger, fetchImpl })
 
     await expect(sink.recordGeneration(baseEvent())).resolves.toBeUndefined()
-    expect(warn).toHaveBeenCalled()
+    expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
   })
 })

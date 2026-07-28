@@ -10,6 +10,7 @@ import {
 import type {
   Block,
   ExecutionInstance,
+  Logger,
   Workspace,
   WorkspaceAccessRow,
   WorkspaceMount,
@@ -82,7 +83,7 @@ export interface WorkspaceServiceDependencies {
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /** Optional structural logger for best-effort diagnostics (e.g. a swallowed artifact purge). */
-  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  logger?: Logger
   /**
    * Late-bound (the seeder is built after this service in the container, so it's read at call
    * time — mirrors the `getSpendService` accessor AccountService uses) so `create` seeds the
@@ -105,7 +106,7 @@ export class WorkspaceService {
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
-  private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  private readonly logger?: Logger
   private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
 
   constructor({
@@ -492,8 +493,8 @@ export class WorkspaceService {
       // table). But a deleted board never returns to `listVisible`, so no sweep will retry — log
       // the residual leak (bytes + rows) so it's visible for an out-of-band reclaim, not silent.
       this.logger?.info(
-        { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
         'workspace-delete binary-artifact purge failed; artifacts retained for out-of-band reclaim',
+        { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
       )
     }
   }

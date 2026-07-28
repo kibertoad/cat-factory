@@ -81,6 +81,7 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
   LlmTraceSink,
+  Logger,
   MembershipRepository,
   MergeTrackRecordRepository,
   ModelPresetRepository,
@@ -200,15 +201,19 @@ export interface CoreDependencies {
    */
   appBaseUrl?: string
   /**
-   * Optional structural logger (the facade's pino logger) for best-effort diagnostics.
-   * `warn` is required alongside `info` because the paths that need it most are the ones
-   * designed to swallow their failures (the PR verification report) — a logger that can only
-   * report success is no use to them.
+   * The structured logger every domain service emits through (`backend/docs/logging.md`).
+   * A facade injects its pino-backed instance from `@cat-factory/server`; a test or harness
+   * that does not care passes `noopLogger` explicitly.
+   *
+   * REQUIRED, deliberately. It was optional first, and the Worker's dependency literal simply
+   * had no `logger` key — so on the deployed runtime every domain service fell back to
+   * `noopLogger`, putting exactly the best-effort paths this logger exists to surface back in
+   * the dark, with nothing failing to say so. An optional dep whose absence is silent and
+   * whose presence is a facade-parity obligation is the wrong shape: making it required turns
+   * that whole class of gap into a typecheck failure, the same guard the message-first
+   * signature gives the call sites.
    */
-  logger?: {
-    info(obj: Record<string, unknown>, msg?: string): void
-    warn(obj: Record<string, unknown>, msg?: string): void
-  }
+  logger: Logger
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository

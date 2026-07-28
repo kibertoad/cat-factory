@@ -90,15 +90,12 @@ export async function startTrackerSyncWorker(
         try {
           await service.handle(job.data.workspaceId, job.data.event)
         } catch (error) {
-          log.error(
-            {
-              workspaceId: job.data.workspaceId,
-              source: job.data.event.source,
-              kind: job.data.event.kind,
-              err: error instanceof Error ? error.message : String(error),
-            },
-            'tracker webhook job failed',
-          )
+          log.error('tracker webhook job failed', {
+            workspaceId: job.data.workspaceId,
+            source: job.data.event.source,
+            kind: job.data.event.kind,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

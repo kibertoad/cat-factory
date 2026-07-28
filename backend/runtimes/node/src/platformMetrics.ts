@@ -56,7 +56,7 @@ export function startPlatformMetricsSweeper(
         window: otel.platformMetrics.window,
         logger: log,
       })
-      if (exported > 0) log.info({ exported }, 'exported platform metrics')
+      if (exported > 0) log.info('exported platform metrics', { exported })
     },
   })
 }

@@ -8,6 +8,7 @@ import type {
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
+import { createRecordingLogger } from '@cat-factory/kernel'
 
 const BLOCK = {
   id: 'blk_1',
@@ -168,14 +169,14 @@ describe('PrVerificationReportController', () => {
         throw new Error('GitHub is down')
       },
     }
-    const warnings: string[] = []
+    const logger = createRecordingLogger()
     await expect(
       new PrVerificationReportController({
         ...makeDeps(BLOCK, failing),
-        logger: { warn: (_obj, msg) => warnings.push(msg ?? '') },
+        logger,
       }).publishForRun('ws_1', makeInstance()),
     ).resolves.toBeUndefined()
-    expect(warnings).toHaveLength(1)
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
   })
 
   it('builds the observability deep link from the configured app base URL', async () => {

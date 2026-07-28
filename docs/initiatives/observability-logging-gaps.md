@@ -1,6 +1,6 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** analysis complete, no slices started · **Owner:** core · **Started:** 2026-07-28
+**Status:** Phase 1 landed (1.1–1.5); Phases 2–6 open · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
 
@@ -55,6 +55,7 @@ Severity: **P1** = operators/users are blind to a failure class that occurs rout
 ### A. Logging infrastructure
 
 **A1 — No logger port in the kernel; the domain engine is silent by construction. (P1)**
+_(FIXED in Phase 1.1 — kept here as the record of what the port was for.)_
 `backend/packages/kernel/src/ports/` has ~90 port files and no logger. The only logger lives in
 `@cat-factory/server` (`src/observability/logger.ts`, pino-over-console), which the domain
 packages must not import. Consequence: `orchestration` (45k LOC), `integrations` (33k),
@@ -81,12 +82,16 @@ the `${executionId}-${agentKind}` naming convention (`ContainerAgentExecutor.ts:
 per-call instead of binding a child (`BootstrapWorkflow`/`EnvConfigRepairWorkflow` do it right).
 
 **A4 — `LOG_LEVEL` is inert; no debug tier exists. (P2)**
+_(Backend half FIXED in Phase 1.3; the harness logger still has no level filtering — see 5.5.)_
 `logger.ts:10` reads `(globalThis as { LOG_LEVEL?: string }).LOG_LEVEL ?? 'info'` — nothing ever
 assigns it (not `process.env`, not a wrangler var, absent from `.env.example`). The harness logger
 has no level filtering at all, and `logger.debug`/`log.debug` has **zero** call sites repo-wide,
 so there is no verbose tier to turn on during an incident.
 
 **A5 — Harness log fields bypass `redactSecrets`; the scrubber is triplicated. (P2)**
+_(Backend half addressed in Phase 1: `describeError` scrubs every error message it emits, and the
+convention is documented. The HARNESS logger is unchanged — it is image-bumping, so it batches
+into 5.5.)_
 The harness scrubs _captured output_ (`captured-command.ts:106`) but its logger emits every field
 verbatim (`executor-harness/src/logger.ts` — no redaction), including spawn-failure `err.message`
 and caller-supplied `logFields` for `sh -c` commands that can embed credentials
@@ -136,6 +141,7 @@ site — `DeployerStepController.ts:360`). Downstream, `AgentFailureCard.vue:52,
 branches can never fire. This is a live runtime-symmetry violation.
 
 **B4 — No process-level failure handlers on Node/local; pg-boss `error` can crash the process. (P1)**
+_(FIXED in Phase 1.5.)_
 Neither Node nor local registers `process.on('unhandledRejection'|'uncaughtException')` (only
 SIGTERM/SIGINT). `server.ts:550` registers `boss.on('stopped')` but **no `boss.on('error')`** —
 pg-boss emits `error` for maintenance faults, and an unhandled `'error'` event on an EventEmitter
@@ -172,6 +178,8 @@ cause-loss on Node/local. Both sweepers also run their whole pass in one `try`: 
 `pgBossRunner.ts:312-381`), logged as "sweep failed" with no run id.
 
 **B8 — `MergeTrackRecordService` drops the repo identity its own comment promises to keep. (P2)**
+_(FIXED in Phase 1.2 — `repo` is now bound outside the `try` and re-attached in the catch. 2.3 is
+therefore closed; the service also gained the logger it had no way to report through.)_
 `MergeTrackRecordService.ts:105-114`: the comment says the repo identity is captured even when
 the changed-file list is unreadable, but `repo` is bound _inside_ the `try` — a **throwing**
 `listChangedFiles` (403/404/rate-limit, the common case) returns bare `absent`, so external-merge
@@ -314,24 +322,85 @@ Every slice obeys the standing rules: runtime symmetry with a conformance assert
 behaviour is shared; harness changes are image-bumping and batch together; best-effort paths stay
 best-effort (a fix adds a log/counter, never a throw into the caller).
 
-### Phase 1 — Logging foundations (prerequisite for everything else)
+### Phase 1 — Logging foundations (prerequisite for everything else) — **LANDED**
 
-| #   | Step                                                                                                                                                                                                                                                                                                                                        | Fixes                                        | Sev |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | --- |
-| 1.1 | Add a `Logger` port to kernel (`ports/logging.ts`: 4 levels + `child`, the shape the harness already declares); thread it through `CoreDependencies` and the facade containers; wire the pino logger in all three facades. A `noopLogger` default keeps construction cheap.                                                                 | A1                                           | P1  |
-| 1.2 | Add `runBestEffort(label, fn, logger)` (kernel, beside the port) and convert the B1 table's sites to it — log-and-swallow, never rethrow. Give `MergeTrackRecordService` and the `RepoOp` ctx a logger dep.                                                                                                                                 | B1, D3, B8's sibling sites                   | P1  |
-| 1.3 | Wire `LOG_LEVEL` for real: read `process.env.LOG_LEVEL` (Node/local) and a wrangler var (Worker) into the pino level; add level filtering to the harness logger; document in `.env.example`.                                                                                                                                                | A4                                           | P2  |
-| 1.4 | One-line cause recoveries: bind + log the poll error in `drive.ts` and append `(last error: …)` to the failure message (copy `ExecutionWorkflow`); log the two silent CF queue consumers (copy `handleTrackerSyncBatch`); `log.warn` in both realtime publishers; log every `WorkflowsWorkRunner` swallow and `buildWorkflowRuntime` retry. | B7, B5 (logging half), D7, D6 (logging half) | P1  |
-| 1.5 | Process-level guards on Node/local: `process.on('unhandledRejection'/'uncaughtException')` (log structured, exit on uncaught), and `boss.on('error', log)`.                                                                                                                                                                                 | B4                                           | P1  |
+| #   | Step                                                                                                                                                                                                                                                                                                                                        | Fixes                                        | Sev | Status                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
+| 1.1 | Add a `Logger` port to kernel (`ports/logging.ts`: 4 levels + `child`, the shape the harness already declares); thread it through `CoreDependencies` and the facade containers; wire the pino logger in all three facades. A `noopLogger` default keeps construction cheap.                                                                 | A1                                           | P1  | ✅                                                                                       |
+| 1.2 | Add `runBestEffort(label, fn, logger)` (kernel, beside the port) and convert the B1 table's sites to it — log-and-swallow, never rethrow. Give `MergeTrackRecordService` and the `RepoOp` ctx a logger dep.                                                                                                                                 | B1, D3, B8's sibling sites                   | P1  | ◐ helper + the highest-value sites; the long tail and the `RepoOp` ctx remain (see 1.2b) |
+| 1.3 | Wire `LOG_LEVEL` for real: read `process.env.LOG_LEVEL` (Node/local) and a wrangler var (Worker) into the pino level; add level filtering to the harness logger; document in `.env.example`.                                                                                                                                                | A4                                           | P2  | ◐ backend done; the HARNESS half moves to 5.5 (image-bumping)                            |
+| 1.4 | One-line cause recoveries: bind + log the poll error in `drive.ts` and append `(last error: …)` to the failure message (copy `ExecutionWorkflow`); log the two silent CF queue consumers (copy `handleTrackerSyncBatch`); `log.warn` in both realtime publishers; log every `WorkflowsWorkRunner` swallow and `buildWorkflowRuntime` retry. | B7, B5 (logging half), D7, D6 (logging half) | P1  | ✅                                                                                       |
+| 1.5 | Process-level guards on Node/local: `process.on('unhandledRejection'/'uncaughtException')` (log structured, exit on uncaught), and `boss.on('error', log)`.                                                                                                                                                                                 | B4                                           | P1  | ✅                                                                                       |
+
+#### What Phase 1 actually shipped
+
+- **`kernel/src/ports/logging.ts`** — `Logger` (`debug`/`info`/`warn`/`error` as `(msg, fields?)`,
+  plus `child`), `noopLogger`, and `createRecordingLogger` (a recording fake, shipped rather than
+  duplicated per package, so a best-effort path's evidence is assertable everywhere).
+- **`kernel/src/shared/best-effort.ts`** — `runBestEffort(logger, label, fn, fields)` and
+  `describeError(error)` (message + constructor name, scrubbed through `redactSecrets`).
+- **`@cat-factory/server`'s `observability/logger.ts`** is now the ONLY place a logging library is
+  named: pino adapted onto the port, plus `createPinoLogger(destination?)`, `parseLogLevel` and
+  `setLogLevel`. The level gate lives in the adapter, NOT on the pino instance — pino children
+  snapshot their parent's level at creation, so a facade configuring `LOG_LEVEL` after module load
+  would otherwise miss every logger already derived.
+- **Every ad-hoc logger interface was retired** (the stopgap this initiative named): `PrReportLogger`,
+  `PlatformMetricsSweepLogger`, `GitHubDocsLogger`, `OtelLogger`, `OtlpLogger`, `LangfuseLogger`,
+  `ResetLogger`, `InfraSetupLogger`, `PlatformHealthSweepLogger`, `KeyFingerprintLogger`,
+  `GateWiringLogger`, `DriveLogger`, `PropagatorLogger`, `RealtimeLogger`, plus the inline
+  `{ warn(obj, msg?) }` shapes and the `log?: (event, msg) => void` callbacks on
+  `RecurringPipelineService` / `TrackerWebhookService`. Both pino→port bridges
+  (`node/src/keyFingerprint.ts`, the Worker's `keyFingerprintLogger`) were deleted — the shapes
+  now match, so a `logger.child({ … })` is the whole adaptation.
+- **~230 call sites migrated** from pino's `(fields, msg)` to the port's `(msg, fields)`. The
+  signature change makes an un-migrated site a typecheck failure, so coverage is complete by
+  construction.
+- **A facade-parity gap surfaced while wiring**: the Worker's `buildWorkerCoreDependencies` passed
+  no logger into `createCore` at all, so on the DEPLOYED runtime every domain service would have
+  silently fallen back to `noopLogger` — putting exactly the best-effort paths this initiative
+  exists to surface back in the dark. Both facades now wire it at the TOP of their dependency
+  literal, next to each other, so the pair reads as the obligation it is.
+- **Docs**: [`backend/docs/logging.md`](../../backend/docs/logging.md) (the patterns), a CLAUDE.md
+  convention section, `LOG_LEVEL` in `docs/environment-variables.md` and all three deployment
+  examples.
+
+#### Notes for the next implementer
+
+- **`runBestEffort` swallows a SYNCHRONOUS throw, `.catch(() => {})` does not.** A straight port of
+  the old idiom at a site whose function can throw before returning a promise is a small behaviour
+  change (for the better) — worth knowing when converting the tail.
+- **`layered-loader` keeps its own pino-shaped `Logger`.** `@cat-factory/caching` adapts ours onto
+  it in `asLayeredLoaderLogger`; that is the one place the two conventions meet, and it should stay
+  the only one.
+- **`CoreDependencies.logger` is REQUIRED.** It was optional at first, and that is exactly how the
+  Worker shipped with no `logger` key at all — an absent optional dep is silent by definition, and
+  this one's absence is a facade-parity gap that disables the whole initiative on one runtime.
+  Requiring it turns that class of bug into a typecheck failure, the same guard the message-first
+  signature gives the call sites; a harness passes `noopLogger` explicitly. A new SERVICE still
+  takes `logger?: Logger` and normalises once (`this.log = deps.logger ?? noopLogger`), so it can
+  be unit-tested standalone.
+- **Drive-by, unrelated to logging**: `backend/packages/caching/src/appCaches.test.ts` was failing
+  to typecheck on `main` (a `ResolvedCatalogEntry` fixture missing the `brief` field added by the
+  two-tier standards work). Fixed here because it blocked the repo-wide typecheck this change
+  needed. `backend/packages/observability-langfuse`'s undici-mocked tests fail in a proxied sandbox
+  both before and after; untouched.
+
+### Phase 1b — Finish the conversion (the tail Phase 1 deliberately left)
+
+| #    | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Fixes  | Sev |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
+| 1.2b | Convert the REMAINING `.catch(() => {})` sites to `runBestEffort` — the B1 table's `InitiativeLoopService` (6), `DeployerStepController` (2, leaked provisioning leases), `PublicApiController` (the half-created-run rollback), `RunDispatcher`/`review-kinds` issue-writeback hooks — and thread a logger into the `RepoOp` ctx so spec promotion stops being a silent no-op. Prefer a `grep -rn 'catch(() => {})'` sweep over a hand-list: the count moves. | B1, D3 | P1  |
+| 1.2c | Add a lint rule (oxlint `no-restricted-syntax`) banning `.catch(() => {})` and a bare `catch {}` in non-test source, so the tail can't regrow while it is being drained. Land it only AFTER 1.2b, or it fails the tree.                                                                                                                                                                                                                                        | B1     | P2  |
+| 1.4b | Bind a `child({ workspaceId, executionId })` in the remaining engine drivers that still pass ids inline per call (`ExecutionWorkflow` — `BootstrapWorkflow`/`EnvConfigRepairWorkflow` already do it right), so a run's Worker-side lines are greppable the way `driveExecution`'s now are.                                                                                                                                                                     | A3     | P2  |
 
 ### Phase 2 — Error identity survives the trip
 
-| #   | Step                                                                                                                                                                                                                                                                                                                                                                                            | Fixes             | Sev |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --- |
-| 2.1 | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes.                                                                                                       | B3                | P1  |
-| 2.2 | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2                | P1  |
-| 2.3 | Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify` so a throwing `listChangedFiles` still records `(repoId, prNumber)`.                                                                                                                                                                                                                                             | B8                | P2  |
-| 2.4 | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks.                                                                                                                                                                                                             | C2 (privacy half) | P1  |
+| #       | Step                                                                                                                                                                                                                                                                                                                                                                                            | Fixes             | Sev |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --- |
+| 2.1     | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes.                                                                                                       | B3                | P1  |
+| 2.2     | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2                | P1  |
+| ~~2.3~~ | ~~Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify`.~~ **Done in Phase 1.2** (the service needed a logger anyway, and the two changes are one file).                                                                                                                                                                                                               | B8                | P2  |
+| 2.4     | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks.                                                                                                                                                                                                             | C2 (privacy half) | P1  |
 
 ### Phase 3 — Correlation & request visibility
 
@@ -374,10 +443,11 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 
 ## Conventions & gotchas for implementers
 
-- **The logger port lands first.** Most B/D fixes in domain packages are blocked on 1.1; don't
-  work around it by importing `@cat-factory/server` into orchestration or by adding one-off
-  optional logger params (the `GitHubDocsProvider` shape is the stopgap being retired, not the
-  pattern to copy).
+- **The logger port has landed** (`kernel/src/ports/logging.ts`); the B/D fixes in domain packages
+  are no longer blocked. Take a `logger?: Logger` dependency and normalise once
+  (`this.log = deps.logger ?? noopLogger`); never import `@cat-factory/server` into a domain
+  package, and never declare a local logger interface — every one of those has been retired.
+  Patterns: [`backend/docs/logging.md`](../../backend/docs/logging.md).
 - **Best-effort stays best-effort.** Every fix to a swallow site adds a log line and/or counter;
   it must never let the failure propagate into the caller. The PR-verification-report rule
   ("observability must never break agent work") applies to all of it — including the new

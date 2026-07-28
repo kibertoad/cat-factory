@@ -1,4 +1,5 @@
 import { MACHINE_EVENTS_SUBSCRIBE_PATH, type Logger } from '@cat-factory/server'
+import { describeError } from '@cat-factory/kernel'
 import type {
   LocalEventSink,
   RealtimeRoomListener,
@@ -190,7 +191,7 @@ export class MothershipEventSubscriber {
       subscription.failures = 0
       this.markSeen(subscription)
       this.startHeartbeat(workspaceId, subscription, socket)
-      this.opts.log.info({ workspaceId }, 'mothership event subscription open')
+      this.opts.log.info('mothership event subscription open', { workspaceId })
     })
     socket.on('message', (data) => {
       this.markSeen(subscription)
@@ -246,10 +247,9 @@ export class MothershipEventSubscriber {
     this.clearHeartbeat(subscription)
     subscription.heartbeat = setInterval(() => {
       if (Date.now() - subscription.lastSeenAt > IDLE_DEADLINE_MS) {
-        this.opts.log.warn(
-          { workspaceId },
-          'mothership event subscription went silent; reconnecting',
-        )
+        this.opts.log.warn('mothership event subscription went silent; reconnecting', {
+          workspaceId,
+        })
         this.clearHeartbeat(subscription)
         try {
           socket.close()
@@ -284,14 +284,11 @@ export class MothershipEventSubscriber {
       subscription.failures % FAILURE_LOG_EVERY !== 0
     )
       return
-    this.opts.log.warn(
-      {
-        workspaceId,
-        attempts: subscription.failures,
-        err: error instanceof Error ? error.message : String(error),
-      },
-      'mothership event subscription failed',
-    )
+    this.opts.log.warn('mothership event subscription failed', {
+      workspaceId,
+      attempts: subscription.failures,
+      ...describeError(error),
+    })
   }
 
   private scheduleRetry(workspaceId: string, subscription: Subscription): void {

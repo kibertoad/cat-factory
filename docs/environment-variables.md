@@ -123,14 +123,15 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Storage & retention
 
-| Variable                           | Modes           | Default                    | Description                                                                                   |
-| ---------------------------------- | --------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
-| `ENCRYPTION_KEY`                   | CF, Node, Local | required for sealed stores | Base64 system key (>= 32 bytes) for sealed credentials.                                       |
-| `TOKEN_USAGE_RETENTION_DAYS`       | CF, Node        | `395`                      | Retention for the `token_usage` ledger.                                                       |
-| `LLM_CALL_METRICS_RETENTION_DAYS`  | CF, Node        | `3`                        | Retention for the LLM-call telemetry store.                                                   |
-| `GITHUB_RATE_LIMIT_RETENTION_DAYS` | CF, Node        | `7`                        | Retention for GitHub rate-limit rows.                                                         |
-| `GITHUB_COMMIT_RETENTION_DAYS`     | CF, Node        | `90`                       | Retention for commit-projection rows.                                                         |
-| `LLM_RECORD_PROMPTS`               | CF, Node        | `false`                    | Deployment switch that (with the per-workspace toggle) enables storing prompts/agent context. |
+| Variable                           | Modes           | Default                    | Description                                                                                                                                                                       |
+| ---------------------------------- | --------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY`                   | CF, Node, Local | required for sealed stores | Base64 system key (>= 32 bytes) for sealed credentials.                                                                                                                           |
+| `TOKEN_USAGE_RETENTION_DAYS`       | CF, Node        | `395`                      | Retention for the `token_usage` ledger.                                                                                                                                           |
+| `LLM_CALL_METRICS_RETENTION_DAYS`  | CF, Node        | `3`                        | Retention for the LLM-call telemetry store.                                                                                                                                       |
+| `GITHUB_RATE_LIMIT_RETENTION_DAYS` | CF, Node        | `7`                        | Retention for GitHub rate-limit rows.                                                                                                                                             |
+| `GITHUB_COMMIT_RETENTION_DAYS`     | CF, Node        | `90`                       | Retention for commit-projection rows.                                                                                                                                             |
+| `LLM_RECORD_PROMPTS`               | CF, Node        | `false`                    | Deployment switch that (with the per-workspace toggle) enables storing prompts/agent context.                                                                                     |
+| `LOG_LEVEL`                        | CF, Node, Local | `info`                     | Emit threshold for the structured logger: `debug`/`info`/`warn`/`error`. An unrecognised value falls back to `info`. See [`backend/docs/logging.md`](../backend/docs/logging.md). |
 
 ## Integrations & observability
 

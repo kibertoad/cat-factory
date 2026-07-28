@@ -34,7 +34,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `DeployerStepController` (the deployer provision fan-out + env projection),
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
-  human merges or declines), `GateStepController` + `GateHelperDispatcher` (the polling-gate
+  human merges or declines), `PostMergeBoardController` (the BOARD-shaped follow-up a merged task
+  triggers — materialising its assigned module and starting the dependents it was blocking; it
+  reads the board rather than execution state and is best-effort, which is what separated it from
+  the run state machine), `GateStepController` + `GateHelperDispatcher` (the polling-gate
   state machine and its escalation half) and `extension-contexts.ts` (the shared `GateContext` /
   `JudgeContext` the two extension families are handed — built beside each other so neither can
   drift), `JudgeStepController` + `JudgeService` (the **judge** driver — rubric assessment vs the

@@ -1111,6 +1111,9 @@ export function createMergeTrackRecordModule(
       // Reads the PR's changed-file list through the same run-repo seam the engine's pre/post-ops
       // use — provider-neutral, so classification works identically on a GitLab deployment.
       resolveRunRepoContext: deps.resolveRunRepoContext,
+      // The whole feature swallows its own failures, so without this a dead side channel is
+      // indistinguishable from a healthy one.
+      logger: deps.logger,
     }),
   }
 }
@@ -1403,7 +1406,7 @@ export function createTrackerWebhookModule(
     resolveRunId: (ws, blockId) =>
       deps.executionRepository.getByBlock(ws, blockId).then((run) => run?.id ?? null),
     clock: deps.clock,
-    ...(deps.logger ? { log: (event) => deps.logger!.info(event, 'tracker webhook') } : {}),
+    logger: deps.logger,
   })
   return { service }
 }
@@ -1438,9 +1441,7 @@ export function createRecurringModule(
     executionEventPublisher,
     // Gives `triggerForIssueEvent`'s per-schedule isolation somewhere to report to; without it a
     // webhook-fired schedule that consistently fails leaves no trace at all.
-    ...(deps.logger
-      ? { log: (event: Record<string, unknown>, msg: string) => deps.logger!.warn(event, msg) }
-      : {}),
+    logger: deps.logger,
   })
   return { service }
 }

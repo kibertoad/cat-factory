@@ -53,7 +53,11 @@ const LEGACY_ALLOWANCES = new Map([
   // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
   // its own module (re-exported, so no call site changed) when the PR-verification-report hook
   // needed headroom — ratcheted DOWN to lock the win in.
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2320],
+  // Then the two post-merge board follow-ups (`autoStartDependents` + `applyModuleAssignment`)
+  // moved to `PostMergeBoardController.ts` when the logging conversion pushed the file over —
+  // ratcheted DOWN again. They run AFTER the merge, read the board rather than execution state,
+  // and are best-effort, which is what separated them from the run state machine.
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2300],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so

@@ -1,4 +1,5 @@
 import type { Clock, IdGenerator } from './runtime.js'
+import type { Logger } from './logging.js'
 
 // ---------------------------------------------------------------------------
 // Binary-artifact storage: a runtime-neutral abstraction for storing opaque
@@ -205,7 +206,7 @@ export function createBinaryArtifactStore(deps: {
    * that residual leak would be silent. See {@link BinaryArtifactStore.deleteByWorkspace} for
    * why the workspace-delete path in particular has no auto-retry to fall back on.
    */
-  logger?: { warn(obj: Record<string, unknown>, msg?: string): void }
+  logger?: Logger
 }): BinaryArtifactStore {
   const { metadata, blob, idGenerator, clock, logger } = deps
   // Shared fail-safe reclaim for a batch of records (drives both `pruneOlderThan` and
@@ -239,8 +240,8 @@ export function createBinaryArtifactStore(deps: {
     // Fast path: every blob went, so a single range delete reclaims all the metadata.
     if (failed.size === 0) return bulkDelete()
     logger?.warn(
-      { workspaceId: records[0]?.workspaceId, failed: failed.size, total: records.length },
       'binary-artifact reclaim: some blob deletes failed; their metadata rows are retained (bytes not yet reclaimed)',
+      { workspaceId: records[0]?.workspaceId, failed: failed.size, total: records.length },
     )
     // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving the
     // failed pairs (row + blob) intact for a later reclaim.

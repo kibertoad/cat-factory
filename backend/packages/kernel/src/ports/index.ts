@@ -52,6 +52,14 @@ export type {
   WorkspaceMountRepository,
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
+export {
+  type LogFields,
+  type LogLevel,
+  type Logger,
+  type RecordedLogLine,
+  createRecordingLogger,
+  noopLogger,
+} from './logging.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { DocInterviewRepository } from './doc-interview-repositories.js'
 export type { InitiativeRepository } from './initiative-repositories.js'

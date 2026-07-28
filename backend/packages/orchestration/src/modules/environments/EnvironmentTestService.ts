@@ -6,6 +6,7 @@ import type {
   EnvironmentTestRun,
   ExecutionEventPublisher,
   IdGenerator,
+  Logger,
   ResolveRunRepoContext,
   RunnerJobRef,
   RunnerJobView,
@@ -108,10 +109,7 @@ export interface EnvironmentTestServiceDependencies {
    * `warn` per failure with the stage + message (+ stack when the cause is an `Error`). Absent ⇒
    * no logging (the run record is still written).
    */
-  logger?: {
-    info(obj: Record<string, unknown>, msg?: string): void
-    warn(obj: Record<string, unknown>, msg?: string): void
-  }
+  logger?: Logger
 }
 
 function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
@@ -582,16 +580,13 @@ export class EnvironmentTestService {
     // record + SPA aside). Carries the stage + message (which now includes any provider
     // field-level detail) and the stack when the cause is an `Error`, so an unexpected throw is
     // debuggable from the logs rather than just the terminal run row.
-    this.deps.logger?.warn(
-      {
-        workspaceId: record.workspaceId,
-        runId: record.id,
-        failedStage,
-        err: message,
-        ...(cause instanceof Error && cause.stack ? { stack: cause.stack } : {}),
-      },
-      'environment self-test failed',
-    )
+    this.deps.logger?.warn('environment self-test failed', {
+      workspaceId: record.workspaceId,
+      runId: record.id,
+      failedStage,
+      err: message,
+      ...(cause instanceof Error && cause.stack ? { stack: cause.stack } : {}),
+    })
     // Release any in-flight deploy job when provisioning never settled (a stop
     // mid-provision, a dispatch that threw or crashed before the stage patch landed):
     // best-effort abort of the deploy runner so a stopped test doesn't keep a container

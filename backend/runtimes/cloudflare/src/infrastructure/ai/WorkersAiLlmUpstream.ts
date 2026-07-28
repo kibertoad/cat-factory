@@ -134,21 +134,18 @@ async function runWorkersAi(args: WorkersAiArgs): Promise<Response> {
   const u = usageOf(usage)
   const oaToolCalls = toOpenAiToolCalls(toolCalls)
   const finishReason = toOpenAiFinish(rawFinish, oaToolCalls.length > 0)
-  log.info(
-    {
-      inputTokens: u.prompt_tokens,
-      outputTokens: u.completion_tokens,
-      textLength: text.length,
-      // A reasoning model can spend its whole output budget thinking and return empty
-      // text (the kimi-k2.7 empty-completion failure); log the reasoning size so that
-      // "N output tokens, 0 text" is no longer a black hole.
-      reasoningLength: reasoning.length,
-      toolCalls: oaToolCalls.length,
-      finishReason,
-      streaming,
-    },
-    'llm proxy: Workers AI completion ok',
-  )
+  log.info('llm proxy: Workers AI completion ok', {
+    inputTokens: u.prompt_tokens,
+    outputTokens: u.completion_tokens,
+    textLength: text.length,
+    // A reasoning model can spend its whole output budget thinking and return empty
+    // text (the kimi-k2.7 empty-completion failure); log the reasoning size so that
+    // "N output tokens, 0 text" is no longer a black hole.
+    reasoningLength: reasoning.length,
+    toolCalls: oaToolCalls.length,
+    finishReason,
+    streaming,
+  })
   await record(u)
   recordMetric?.({
     usage: u,
@@ -226,18 +223,15 @@ async function runCatalogModel(args: WorkersAiArgs): Promise<Response> {
     usage: u,
   } = parseCatalogCompletion(completion)
 
-  log.info(
-    {
-      inputTokens: u.prompt_tokens,
-      outputTokens: u.completion_tokens,
-      textLength: text.length,
-      reasoningLength: reasoning.length,
-      toolCalls: oaToolCalls.length,
-      finishReason,
-      streaming,
-    },
-    'llm proxy: AI-catalog completion ok',
-  )
+  log.info('llm proxy: AI-catalog completion ok', {
+    inputTokens: u.prompt_tokens,
+    outputTokens: u.completion_tokens,
+    textLength: text.length,
+    reasoningLength: reasoning.length,
+    toolCalls: oaToolCalls.length,
+    finishReason,
+    streaming,
+  })
   await record(u)
   recordMetric?.({
     usage: u,

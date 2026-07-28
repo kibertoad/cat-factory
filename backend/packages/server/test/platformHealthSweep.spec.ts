@@ -1,4 +1,5 @@
 import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ServerContainer } from '../src/http/env.js'
@@ -207,10 +208,10 @@ describe('sweepPlatformHealth', () => {
       if (accountId === 'acc-bad') throw new Error('boom')
       return inner(accountId)
     }
-    const warnings: unknown[] = []
-    const result = await sweepPlatformHealth(container, { warn: (o) => warnings.push(o) })
+    const logger = createRecordingLogger()
+    const result = await sweepPlatformHealth(container, logger)
     expect(result).toEqual({ raised: 1, cleared: 0 })
     expect(raises.map((r) => r.workspaceId)).toEqual(['ws-2'])
-    expect(warnings).toHaveLength(1)
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
   })
 })

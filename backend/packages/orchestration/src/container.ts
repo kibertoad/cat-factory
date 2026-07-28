@@ -1,5 +1,5 @@
 import type {} from '@cat-factory/kernel'
-import type { AppCaches } from '@cat-factory/kernel'
+import type { AppCaches, Logger } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
   createTesterQualityReviewer,
@@ -324,6 +324,13 @@ export interface CoreSpine {
    * account-settings update drops `accountModelPolicy`). Always present.
    */
   caches: AppCaches
+  /**
+   * The resolved structured logger (`backend/docs/logging.md`) — the facade's pino instance,
+   * or `noopLogger` when none was injected. Exposed so the shared controllers and the runtime
+   * sweepers log through the SAME instance the domain services do, instead of importing the
+   * module-level singleton and diverging on bound fields. Always present.
+   */
+  logger: Logger
 }
 
 /**
@@ -467,7 +474,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }
 
-export function createCore(dependencies: CoreDependencies): Core {
+export function createCore(injected: CoreDependencies): Core {
   const {
     agentKindRegistry,
     gateRegistry,
@@ -480,7 +487,12 @@ export function createCore(dependencies: CoreDependencies): Core {
     workRunner,
     executionEventPublisher,
     caches,
-  } = resolveCoreRuntime(dependencies)
+    logger,
+  } = resolveCoreRuntime(injected)
+  // `logger` is required on `CoreDependencies`, so `injected` already carries it; aliasing the
+  // bag here keeps the rest of this function reading against one name and makes it explicit that
+  // every service below is threaded the SAME resolved instance.
+  const dependencies: CoreDependencies = injected
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
@@ -708,6 +720,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // (unwired keys absent) — replacing the ~40 hand-written `...(x ? { x } : {})` return spreads.
   return {
     caches,
+    logger,
     workspaceService,
     accountService,
     userService,

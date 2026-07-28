@@ -7,7 +7,8 @@ import {
   mapPlatformMetrics,
   toUnixNano,
 } from './mapping.js'
-import { type KeyValue, type OtlpLogger, keyValues, postOtlp } from './otlp.js'
+import { type KeyValue, keyValues, postOtlp } from './otlp.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // A fetch-based OpenTelemetry exporter for the DEPLOYMENT-LEVEL (platform-operator)
 // observability aggregates — the dual of the per-run LLM exporter in `./index`. A periodic
@@ -35,7 +36,7 @@ export interface PlatformMetricsOtelExporterConfig {
   /** OTLP resource `service.name`; defaults to `cat-factory`. */
   serviceName?: string
   /** Optional logger for swallowed errors. */
-  logger?: OtlpLogger
+  logger?: Logger
   /** Injectable fetch (tests); defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
 }
@@ -59,7 +60,7 @@ export class PlatformMetricsOtelExporter {
   private readonly metricsEndpoint: string
   private readonly headers: Record<string, string>
   private readonly serviceName: string
-  private readonly logger?: OtlpLogger
+  private readonly logger?: Logger
   private readonly fetchImpl: typeof fetch
 
   constructor(config: PlatformMetricsOtelExporterConfig) {

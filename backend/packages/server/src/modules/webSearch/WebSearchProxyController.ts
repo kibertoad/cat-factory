@@ -39,7 +39,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
 
     const secret = config.auth.sessionSecret
     if (!secret) {
-      logger.error({ scope: 'webSearchProxy' }, 'web-search proxy: session secret not configured')
+      logger.error('web-search proxy: session secret not configured', { scope: 'webSearchProxy' })
       return c.json({ error: { message: 'Web search proxy is not configured' } }, 503)
     }
 
@@ -48,7 +48,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const sessions = new ContainerSessionService({ secret })
     const session = await sessions.verify(bearer(c.req.header('authorization')))
     if (!session) {
-      logger.warn({ scope: 'webSearchProxy' }, 'web-search proxy: invalid or expired session token')
+      logger.warn('web-search proxy: invalid or expired session token', { scope: 'webSearchProxy' })
       return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
     }
 
@@ -78,10 +78,10 @@ export function webSearchProxyController(): Hono<AppEnv> {
         userId: session.userId,
       })
     ) {
-      logger.warn(
-        { scope: 'webSearchProxy', workspaceId: session.workspaceId },
-        'web-search proxy: spend budget exhausted — refusing search',
-      )
+      logger.warn('web-search proxy: spend budget exhausted — refusing search', {
+        scope: 'webSearchProxy',
+        workspaceId: session.workspaceId,
+      })
       return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
     }
 
@@ -122,14 +122,14 @@ export function webSearchProxyController(): Hono<AppEnv> {
 
     try {
       const { results } = await upstream.search(query)
-      log.info({ resultCount: results.length }, 'web-search proxy: served search')
+      log.info('web-search proxy: served search', { resultCount: results.length })
       recordSearch(results.length)
       // Shape the response as SearXNG's `format=json` payload so the extension reads
       // `results[].{url,title,content}` unchanged.
       return c.json({ query, number_of_results: results.length, results })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      log.error({ err: message }, 'web-search proxy: upstream search failed')
+      log.error('web-search proxy: upstream search failed', { err: message })
       recordSearch(0)
       // SearXNG-shaped empty result on failure so the agent degrades gracefully
       // (no results) instead of the tool hard-erroring mid-run.

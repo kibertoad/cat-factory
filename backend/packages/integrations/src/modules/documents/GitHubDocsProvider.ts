@@ -1,13 +1,14 @@
 import {
   ConflictError,
-  ValidationError,
   type DocumentContent,
   type DocumentCredentials,
   type DocumentSearchResult,
   type DocumentSourceProvider,
   type GitHubClient,
   type GitHubInstallationRepository,
+  type Logger,
   type NormalizedConnection,
+  ValidationError,
 } from '@cat-factory/kernel'
 import { GITHUB_DOCS_DESCRIPTOR } from './github-docs.logic.js'
 import * as githubDocsLogic from './github-docs.logic.js'
@@ -23,11 +24,6 @@ import * as githubDocsLogic from './github-docs.logic.js'
 // round-tripping) lives in `@cat-factory/integrations`; this class is the thin
 // `GitHubClient` shell.
 
-/** Minimal structured logger (pino-shaped) for best-effort fetch diagnostics. */
-export interface GitHubDocsLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 export interface GitHubDocsProviderDependencies {
   githubClient: GitHubClient
   /** Resolves which installation owns a given repo owner (by account login). */
@@ -38,7 +34,7 @@ export interface GitHubDocsProviderDependencies {
    * report is diagnosable server-side — a domain error (409/422) is NOT otherwise
    * logged by the HTTP error handler (only unexpected 500s are).
    */
-  logger?: GitHubDocsLogger
+  logger?: Logger
 }
 
 export class GitHubDocsProvider implements DocumentSourceProvider {
@@ -233,20 +229,17 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
       rateLimited,
       underlying,
     })
-    this.deps.logger?.warn(
-      {
-        source: 'github',
-        workspaceId,
-        owner: id.owner,
-        repo: id.repo,
-        path: id.path,
-        status,
-        notFound,
-        rateLimited,
-        err: underlying,
-      },
-      'github doc fetch failed',
-    )
+    this.deps.logger?.warn('github doc fetch failed', {
+      source: 'github',
+      workspaceId,
+      owner: id.owner,
+      repo: id.repo,
+      path: id.path,
+      status,
+      notFound,
+      rateLimited,
+      err: underlying,
+    })
     return new ConflictError(message, undefined, {
       owner: id.owner,
       repo: id.repo,

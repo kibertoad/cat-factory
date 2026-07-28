@@ -275,10 +275,10 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
       hasRunnerBackend: !!resolveTransport,
     })
     logger.warn(
-      { missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking) },
       `container agent steps are DISABLED: missing ${missing.join(', ')}. Repo-operating steps ` +
         `(coder/mocker/tester/merger/…) will fail at dispatch until configured. See ` +
         `${DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking)}.`,
+      { missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking) },
     )
     return null
   }
@@ -292,10 +292,10 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Every other prerequisite is set but there is no GitHub token source, so the harness
     // could never clone/push. Name the fix (App creds) rather than disabling silently (A5).
     logger.warn(
-      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: DOCS.githubOperations() },
       `container agent steps are DISABLED: no GitHub token source — set GITHUB_APP_ID + ` +
         `GITHUB_APP_PRIVATE_KEY so the harness can mint a push/clone token. Repo-operating steps ` +
         `will fail at dispatch until configured. See ${DOCS.githubOperations()}.`,
+      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: DOCS.githubOperations() },
     )
     return null
   }
@@ -515,9 +515,9 @@ export function selectNodeEnvConfigRepairer(deps: {
   const model = resolveAgentConfig(deps.config.agents.routing, 'coder').ref
   if (!isProxyableProvider(model.provider)) {
     logger.warn(
-      { provider: model.provider },
       'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
         'the agent config-repair fallback is disabled.',
+      { provider: model.provider },
     )
     return undefined
   }

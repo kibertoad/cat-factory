@@ -5,6 +5,7 @@ import {
   platformHealthCardContent,
 } from '@cat-factory/orchestration'
 import type { ServerContainer } from '../http/env.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // Runtime-neutral platform-health ALERT sweep — the push counterpart to the operator dashboard
 // read, shared by both facades' periodic sweeps (the Worker's cron `scheduled` handler and the
@@ -22,11 +23,6 @@ import type { ServerContainer } from '../http/env.js'
 // per account: a failed summarize/raise for one account is logged and skipped, never aborting
 // the others — this sweep must not become the silent background failure it exists to catch.
 
-/** Minimal structured logger (pino-compatible); optional. */
-export interface PlatformHealthSweepLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 /**
  * Run one platform-health alert pass across every account. Returns the number of workspaces a
  * card was raised on and the number cleared. Enumerates accounts from the workspace projection
@@ -39,7 +35,7 @@ export interface PlatformHealthSweepLogger {
  */
 export async function sweepPlatformHealth(
   container: ServerContainer,
-  logger?: PlatformHealthSweepLogger,
+  logger?: Logger,
 ): Promise<{ raised: number; cleared: number }> {
   const cfg = container.config.platformAlerts
   const notifications = container.notifications
@@ -99,14 +95,11 @@ export async function sweepPlatformHealth(
         }
       }
     } catch (err) {
-      logger?.warn(
-        {
-          scope: 'platform-health',
-          accountId,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        'platform-health: failed to evaluate account',
-      )
+      logger?.warn('platform-health: failed to evaluate account', {
+        scope: 'platform-health',
+        accountId,
+        err: err instanceof Error ? err.message : String(err),
+      })
     }
   }
   return { raised, cleared }
