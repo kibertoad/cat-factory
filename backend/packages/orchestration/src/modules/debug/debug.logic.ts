@@ -185,6 +185,8 @@ export function toDebugLlmCall(call: LlmCallMetricPage, bodyOffset = 0): DebugLl
     errorMessage: call.errorMessage,
     finishReason: call.finishReason,
     streaming: call.streaming,
+    phase: call.phase,
+    turnIndex: call.turnIndex,
     messageCount: call.messageCount,
     toolCount: call.toolCount,
     requestMaxTokens: call.requestMaxTokens,

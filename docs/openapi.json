@@ -4687,6 +4687,9 @@
                     "overheadMs": {
                       "type": "number"
                     },
+                    "phase": {
+                      "type": "string"
+                    },
                     "prompt": {
                       "properties": {
                         "chars": {
@@ -4974,6 +4977,16 @@
                     "totalTokens": {
                       "type": "number"
                     },
+                    "turnIndex": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "upstreamMs": {
                       "type": "number"
                     }
@@ -4991,6 +5004,8 @@
                     "errorMessage",
                     "finishReason",
                     "streaming",
+                    "phase",
+                    "turnIndex",
                     "messageCount",
                     "toolCount",
                     "requestMaxTokens",
@@ -10522,6 +10537,15 @@
           },
           {
             "in": "query",
+            "name": "phase",
+            "required": false,
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "outcome",
             "required": false,
             "schema": {
@@ -12077,6 +12101,9 @@
                           "overheadMs": {
                             "type": "number"
                           },
+                          "phase": {
+                            "type": "string"
+                          },
                           "prompt": {
                             "properties": {
                               "chars": {
@@ -12364,6 +12391,16 @@
                           "totalTokens": {
                             "type": "number"
                           },
+                          "turnIndex": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "upstreamMs": {
                             "type": "number"
                           }
@@ -12381,6 +12418,8 @@
                           "errorMessage",
                           "finishReason",
                           "streaming",
+                          "phase",
+                          "turnIndex",
                           "messageCount",
                           "toolCount",
                           "requestMaxTokens",

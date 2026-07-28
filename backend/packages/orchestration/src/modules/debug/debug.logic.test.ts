@@ -290,6 +290,19 @@ describe('toDebugLlmCall', () => {
     expect(projected.messageCount).toBe(12)
     expect(projected.prompt).toMatchObject({ totalChars: 4_000, truncated: true })
   })
+
+  it('carries the phase and turn axes through, without inventing either', () => {
+    expect(toDebugLlmCall(call)).toMatchObject({ phase: 'agent', turnIndex: null })
+    expect(toDebugLlmCall({ ...call, phase: 'validation-repair', turnIndex: 7 })).toMatchObject({
+      phase: 'validation-repair',
+      turnIndex: 7,
+    })
+    // The unattributed slice stays '' rather than being dressed up as a named phase, and a
+    // turn-less channel stays null rather than being faked into "turn 0".
+    const unattributed = toDebugLlmCall({ ...call, phase: '', turnIndex: null })
+    expect(unattributed.phase).toBe('')
+    expect(unattributed.turnIndex).toBeNull()
+  })
 })
 
 describe('foldLlmRollup', () => {

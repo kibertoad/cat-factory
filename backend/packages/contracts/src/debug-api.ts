@@ -433,6 +433,26 @@ export const debugLlmCallSchema = v.object({
   errorMessage: v.nullable(v.string()),
   finishReason: v.nullable(v.string()),
   streaming: v.boolean(),
+  /**
+   * WHICH slice of the run spent this call: the agent's own edit loop (`agent`), a pre-PR
+   * validation repair round (`validation-repair`), a reproduction-proof repair round
+   * (`reproduction-repair`), … Stamped by whoever owns the loop boundary, never reconstructed
+   * from timestamps, which is why it is worth reading rather than inferring.
+   *
+   * `''` means the call could not be attributed — an older harness image, an inline call, or the
+   * un-phased proxy path. That is a REAL slice, not a gap: a run whose calls are all `''` was
+   * metered by something that has no phase concept, NOT one that spent nothing outside the agent.
+   */
+  phase: v.string(),
+  /**
+   * The call's ordinal within its job's telemetry sequence (0-based), so a phase's calls can be
+   * ordered by TURN rather than by wall clock.
+   *
+   * `null` where the producing channel has no turn concept — the LLM proxy sees one HTTP request
+   * at a time with no job-scoped counter. Deliberately not faked to 0, which would read as "the
+   * first turn" and sort every proxied call to the front of its phase.
+   */
+  turnIndex: v.nullable(v.number()),
   /** Messages in the FULL request (not just the delta below). */
   messageCount: v.number(),
   /** Tools offered to the model (0 ⇒ the agent could not edit anything). */
@@ -480,6 +500,16 @@ export type DebugLlmCall = v.InferOutput<typeof debugLlmCallSchema>
 export const listDebugLlmCallsQuerySchema = v.object({
   /** Narrow to one step kind's conversation (`coder`, `ci-fixer`, …), applied in SQL. */
   agentKind: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  /**
+   * Narrow to one PHASE's calls (`agent`, `validation-repair`, `reproduction-repair`, …), an
+   * exact match applied in SQL. This is how "what did the repair rounds cost" is answered in one
+   * request rather than by paging the run and grouping client-side.
+   *
+   * Unlike `agentKind` the EMPTY string is accepted and meaningful: it selects the unattributed
+   * slice (an older harness image, an inline call, the un-phased proxy path), which is otherwise
+   * unreachable as a query.
+   */
+  phase: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(120))),
   /** Narrow to failing or warning (truncated / filtered) calls only. */
   outcome: v.optional(debugCallOutcomeSchema),
   /**

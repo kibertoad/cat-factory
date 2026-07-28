@@ -362,6 +362,11 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       clauses.push('agent_kind = ?')
       binds.push(query.agentKind)
     }
+    // `!= null`, not a truthiness check: '' is the unattributed slice and a legitimate filter.
+    if (query.phase != null) {
+      clauses.push('phase = ?')
+      binds.push(query.phase)
+    }
     const outcome = outcomeClause(query.outcome)
     if (outcome) clauses.push(`(${outcome})`)
     if (query.contains != null) {

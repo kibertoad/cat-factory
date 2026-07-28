@@ -195,6 +195,8 @@ export class RunDebugService {
       limit: number
       cursor?: DebugCursor
       agentKind?: string
+      /** Narrow to one phase's calls; `''` selects the unattributed slice (applied in SQL). */
+      phase?: string
       outcome?: LlmCallOutcomeFilter
       order?: 'newest' | 'oldest'
       bodyChars: number
@@ -209,6 +211,7 @@ export class RunDebugService {
       limit: opts.limit + 1,
       cursor: opts.cursor,
       agentKind: opts.agentKind,
+      phase: opts.phase,
       outcome: opts.outcome,
       order: opts.order,
       bodyChars: opts.bodyChars,

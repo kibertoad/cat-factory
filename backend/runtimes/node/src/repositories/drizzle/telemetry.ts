@@ -554,6 +554,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       eq(llmCallMetrics.execution_id, query.executionId),
     ]
     if (query.agentKind != null) filters.push(eq(llmCallMetrics.agent_kind, query.agentKind))
+    // `!= null`, not a truthiness check: '' is the unattributed slice and a legitimate filter.
+    if (query.phase != null) filters.push(eq(llmCallMetrics.phase, query.phase))
     const outcome = llmOutcomeFilter(query.outcome)
     if (outcome) filters.push(outcome)
     if (query.contains != null) {

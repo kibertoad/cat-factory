@@ -154,6 +154,7 @@ export function publicDebugController(): Hono<AppEnv> {
       limit: query.limit ?? DEFAULT_CALL_PAGE,
       cursor: cursor.cursor,
       agentKind: query.agentKind,
+      phase: query.phase,
       outcome: query.outcome,
       order: query.order,
       bodyChars: query.bodyChars ?? 0,

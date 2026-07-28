@@ -237,6 +237,20 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       )
       expect(longTerm.status).toBe(400)
 
+      // The phase narrowing is wired through the controller too, INCLUDING the empty value: `''`
+      // selects the unattributed slice, so a facade (or a param reader) that treats it as absent
+      // would answer this with the whole run rather than one slice of it.
+      for (const phase of ['validation-repair', '']) {
+        const byPhase = await app.call<{ calls: unknown[] }>(
+          'GET',
+          `/api/v1/debug/runs/${runId}/llm-calls?phase=${encodeURIComponent(phase)}`,
+          undefined,
+          auth,
+        )
+        expect(byPhase.status).toBe(200)
+        expect(byPhase.body.calls).toEqual([])
+      }
+
       // The two FLAT point reads (addressed by the row's own id, not nested under the run) are
       // mounted and workspace-scoped too: an unknown id is a 404 through the real controller +
       // service, never a 500 or an empty 200. Their body/slicing semantics are pinned by the

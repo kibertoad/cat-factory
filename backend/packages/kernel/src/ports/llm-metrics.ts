@@ -238,6 +238,13 @@ export interface LlmCallPageQuery {
   /** Narrow to one step kind's conversation. */
   agentKind?: string
   /**
+   * Narrow to one PHASE's calls (see {@link LlmCallMetric.phase}) — an exact match, applied in
+   * SQL like {@link LlmCallPageQuery.agentKind}. `''` is a queryable value, not "no filter": it
+   * selects the unattributed slice, which is the only way to ask "what did the un-phased
+   * channels spend" without paging the whole run.
+   */
+  phase?: string
+  /**
    * Narrow to a single outcome class. `error` is `ok = 0`; `warning` is a successful call
    * whose finish reason is in {@link LLM_WARNING_FINISH_REASONS}; `ok` is the rest.
    */

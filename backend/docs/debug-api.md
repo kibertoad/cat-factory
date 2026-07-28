@@ -33,7 +33,10 @@ request is made.** Five consequences, each visible in the wire contracts
    applied as SQL `LIKE`, so locating a known marker across thousands of calls costs one request
    — paging every body through the caller's own context to grep it there would be the
    multi-hundred-megabyte dump re-entering through the side door. Matched rows report **where**
-   the match sits (`matchOffset`), which feeds the point read's window directly.
+   the match sits (`matchOffset`), which feeds the point read's window directly. Every other
+   narrowing (`?agentKind=`, `?phase=`, `?outcome=`) is SQL for the same reason: a filter applied
+   after the read has already paid for the rows it throws away, and it spends the page's `limit`
+   on them.
 4. **Truncation is reported, never silent, and every slice knows its place.** Every body is a
    `debugText`: `{ text, chars, offset, totalChars, truncated }`. A bare truncated string reads
    exactly like a short one, so a model would confidently report "the agent said nothing" from a
@@ -94,16 +97,16 @@ workspace is a `404`, indistinguishable from one that never existed.
 
 ## Endpoints
 
-| Method / path                                  | Returns                                                                                                         |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/debug/runs`                       | The workspace's runs, newest first. `?status=`, `?since=`, `?limit=`, `?cursor=`                                |
-| `GET /api/v1/debug/runs/:runId`                | The run's diagnostic **overview** (aggregates + signals)                                                        |
-| `GET /api/v1/debug/runs/:runId/llm-calls`      | Recorded model calls. `?agentKind=`, `?outcome=`, `?contains=`, `?order=`, `?bodyChars=`, `?limit=`, `?cursor=` |
-| `GET /api/v1/debug/llm-calls/:callId`          | One call, full bodies. `?bodyChars=`, `?bodyOffset=`, `?view=raw\|messages`                                     |
-| `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                       |
-| `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                |
-| `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                         |
-| `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                |
+| Method / path                                  | Returns                                                                                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/debug/runs`                       | The workspace's runs, newest first. `?status=`, `?since=`, `?limit=`, `?cursor=`                                           |
+| `GET /api/v1/debug/runs/:runId`                | The run's diagnostic **overview** (aggregates + signals)                                                                   |
+| `GET /api/v1/debug/runs/:runId/llm-calls`      | Recorded model calls. `?agentKind=`, `?phase=`, `?outcome=`, `?contains=`, `?order=`, `?bodyChars=`, `?limit=`, `?cursor=` |
+| `GET /api/v1/debug/llm-calls/:callId`          | One call, full bodies. `?bodyChars=`, `?bodyOffset=`, `?view=raw\|messages`                                                |
+| `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
+| `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
+| `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
+| `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that
@@ -177,6 +180,28 @@ GET /debug/llm-calls/:callId?bodyOffset=<matchOffset - 500>&bodyChars=2000
 reachable — the last tool result in a long delta and the end of a captured build log are exactly
 where causes sit. Every slice states the `offset` it starts at, so neighbouring windows stitch.
 
+### 3b. Attribute the spend (`?phase=`)
+
+Every call row carries `phase` — WHICH slice of the run paid for it: the agent's own edit loop
+(`agent`), a pre-PR validation repair round (`validation-repair`), a reproduction-proof repair
+round (`reproduction-repair`), … — plus `turnIndex`, its ordinal within that job's telemetry
+sequence. Both are stamped by whoever owns the loop boundary, so they are read rather than inferred;
+reconstructing either from wall-clock timestamps is the brittle guess they exist to replace.
+
+`?phase=validation-repair` narrows the page in SQL, which is what makes "the pipeline did work this
+task never needed" answerable in one request instead of by paging the whole run and grouping
+client-side.
+
+Two values behave in ways worth knowing before you read a number off this:
+
+- **`phase=` (empty) is a real query**, selecting the UNATTRIBUTED slice — an older harness image,
+  an inline call, or the un-phased proxy path. It is not "no filter". A run whose calls are all
+  unattributed was metered by a channel with no phase concept; it did **not** spend nothing outside
+  the agent loop.
+- **`turnIndex` is `null`**, not 0, wherever the producing channel has no turn concept (the LLM
+  proxy sees one HTTP request at a time with no job-scoped counter). A 0 there would read as "the
+  first turn" and sort every proxied call to the front of its phase.
+
 ### 4. Read the conversation
 
 `GET /debug/runs/:runId/llm-calls?agentKind=coder&order=oldest&bodyChars=2000` walks one agent
@@ -209,7 +234,10 @@ stored character is reachable — a body larger than one window is read in stitc
 - **A conversation is identified by `agentKind`, not by step.** The call rows carry no step
   index, so a step re-dispatched after an eviction — or repeated fixer attempts — interleaves
   into one "conversation". A chain restart is visible as `elidedLeadingMessages` dropping back to
-  0 partway through an `order=oldest` walk.
+  0 partway through an `order=oldest` walk, and `turnIndex` resetting is the same signal from the
+  other side (it is the harness's JOB-scoped counter, so a re-dispatch starts it over). Neither is
+  a step index: they mark the boundary without naming which attempt sits on either side of it, and
+  a proxied call reports `turnIndex: null` rather than participating in the sequence at all.
 - **Tool-execution errors are not rows.** The harness's tool loop runs inside the container; its
   failures reach this surface only as text inside prompt deltas. The
   `failure_outside_model_calls` signal and `?contains=` exist precisely to compensate; a
@@ -249,7 +277,7 @@ The run index (`ExecutionRepository.listRecent`) is allow-listed on the machine 
 org/durable state and live on the mothership. The **telemetry** reads are not, and must not be:
 telemetry is local-first by design, so a mothership-mode node serves every bounded page from its own
 `node:sqlite` telemetry store, which mirrors the D1 SQL down to the body slicing, the `?contains=`
-predicate and the match offsets. Routing a page over a long run through the persistence proxy is
+and `?phase=` predicates and the match offsets. Routing a page over a long run through the persistence proxy is
 exactly the bulk read that bucket exists to forbid. Adding a read here therefore means adding it to
 THREE stores, and classifying it `telemetry` in the drift guard's map
 (`runtimes/node/test/mothership-allowlist.spec.ts`). See

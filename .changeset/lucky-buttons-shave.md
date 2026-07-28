@@ -25,6 +25,15 @@ parses the stored prompt delta into per-message rows with independent budgets; a
 gains a `failure_outside_model_calls` signal pointing a failed-run-with-clean-calls investigation
 at tool execution, which records no calls of its own.
 
+Spend is attributable, not just countable: every call row carries the `phase` that spent it (the
+agent's own edit loop, a pre-PR validation repair round, a reproduction-proof repair round, …) and
+its `turnIndex` within that job, and `?phase=` narrows the page in SQL like `?agentKind=` does. So
+"the pipeline did work this task never needed" is one request rather than a client-side grouping over
+the whole run. The EMPTY phase is a queryable value, not "no filter" — it selects the unattributed
+slice (an older harness image, an inline call, the un-phased proxy path), which is otherwise
+unreachable; and `turnIndex` stays `null` rather than 0 where the producing channel has no turn
+concept, so a proxied call is never faked into "the first turn".
+
 All four bounded reads land in the local `node:sqlite` telemetry store too, so the surface works
 unchanged in mothership mode, where telemetry is local-first and these pages never cross the machine
 RPC (routing a page over a long run would be exactly the bulk read that bucket exists to forbid).

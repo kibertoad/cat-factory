@@ -238,6 +238,23 @@ describe('SqliteLlmCallMetricRepository', () => {
     expect(oks.map((r) => r.id)).not.toContain('c_err')
   })
 
+  it('narrows by phase in SQL, treating the empty phase as a queryable slice', async () => {
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'c_agent', phase: 'agent' }))
+    await repo.record(metric({ id: 'c_repair', createdAt: 900, phase: 'validation-repair' }))
+    await repo.record(metric({ id: 'c_none', createdAt: 800, phase: '' }))
+
+    const page = (phase: string) =>
+      repo
+        .listPage('ws_1', { executionId: 'exec_1', limit: 10, bodyChars: 0, phase })
+        .then((rows) => rows.map((r) => r.id))
+
+    expect(await page('validation-repair')).toEqual(['c_repair'])
+    // '' selects the unattributed slice; a truthiness check here would return the whole run.
+    expect(await page('')).toEqual(['c_none'])
+    expect(await page('nope')).toEqual([])
+  })
+
   it('walks a page by composite keyset in both directions', async () => {
     const repo = store.llmCallMetricRepository
     // A same-millisecond burst: the tie is the whole reason the keyset carries `id`.

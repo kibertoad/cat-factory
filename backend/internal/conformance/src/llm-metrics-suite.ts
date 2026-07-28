@@ -648,6 +648,29 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       const point = await repo.get(ws, `${ws}-a`)
       expect(point!.phase).toBe('validation-repair')
       expect(point!.turnIndex).toBe(7)
+
+      // Narrowing by phase happens in SQL, so a caller asking what the repair rounds cost spends
+      // its `limit` on those rows instead of paging the run and grouping afterwards.
+      const repairs = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        phase: 'validation-repair',
+      })
+      expect(repairs.map((row) => row.id)).toEqual([`${ws}-a`])
+      // '' is a QUERYABLE value, not "no filter" — the unattributed slice is otherwise
+      // unreachable, and a truthiness check in any store would silently return the whole run.
+      const unattributed = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        phase: '',
+      })
+      expect(unattributed.map((row) => row.id)).toEqual([`${ws}-b`])
+      // An unknown phase is an empty page, never a fallback to everything.
+      expect(
+        await repo.listPage(ws, { executionId: e1, limit: 10, bodyChars: 0, phase: 'nope' }),
+      ).toEqual([])
     })
 
     it('narrows a page by agent kind and by outcome, in SQL', async () => {
