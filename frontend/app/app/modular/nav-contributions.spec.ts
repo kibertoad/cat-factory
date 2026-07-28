@@ -99,11 +99,36 @@ describe('navSlotFilter', () => {
     expect(kept).toContain('integrations-hub')
     expect(kept).toContain('workspace-settings')
     expect(kept).toContain('model-config')
-    // ...and the authoring / operator surfaces don't.
-    expect(kept).not.toContain('build-pipeline')
-    expect(kept).not.toContain('fragments')
+    // ...and so does every destination that is the SOLE route to its capability, however deep
+    // it feels: authoring a flow, the standards library, the PREnv/runner plumbing, and the
+    // aggregate run-health / spend views.
+    expect(kept).toContain('build-pipeline')
+    expect(kept).toContain('fragments')
+    expect(kept).toContain('infrastructure')
+    expect(kept).toContain('environment-setup')
+    expect(kept).toContain('operator-dashboard')
+    expect(kept).toContain('reports')
+    // What drops is beside the delivery path (experimentation) or a shortcut into a surface
+    // basic mode already reaches another way.
     expect(kept).not.toContain('sandbox')
-    expect(kept).not.toContain('operator-dashboard')
+    expect(kept).not.toContain('kaizen')
+    expect(kept).not.toContain('merge-thresholds')
+  })
+
+  it('never makes an advanced item the only route to its capability', () => {
+    // The tier's governing rule (see the catalog comment): every advanced destination either
+    // sits beside the delivery path, or is a shortcut into a surface a basic destination also
+    // opens. Spelled out here as a table so promoting an item to `advanced` forces an explicit
+    // claim about how basic mode still reaches it, rather than a silent capability loss.
+    const ALTERNATIVE_ROUTE: Record<string, string> = {
+      sandbox: 'none needed - experimentation surface, not on the delivery path',
+      kaizen: 'none needed - self-grading history, not on the delivery path',
+      'merge-thresholds': 'workspace-settings -> Merge tab',
+      'service-fragment-defaults': 'workspace-settings -> Service best practices tab',
+      'local-models': 'integrations-hub -> Local runners',
+    }
+    const advanced = NAV_CONTRIBUTIONS.filter((i) => i.advanced).map((i) => i.id)
+    expect(advanced.sort()).toEqual(Object.keys(ALTERNATIVE_ROUTE).sort())
   })
 
   it('keeps the tier switch itself reachable in basic mode', () => {
@@ -119,15 +144,19 @@ describe('navSlotFilter', () => {
   })
 
   it('keeps the tier and the permission axes independent — both must pass', () => {
-    // `build-pipeline` is advanced AND needs board.write: neither axis alone reveals it.
+    // `sandbox` is advanced AND needs integrations.manage: neither axis alone reveals it.
     const advancedOnly: NavGates = { ...NO_GATES, advancedMode: true }
-    expect(ids(navSlotFilter(slots(), { gates: advancedOnly }))).not.toContain('build-pipeline')
+    expect(ids(navSlotFilter(slots(), { gates: advancedOnly }))).not.toContain('sandbox')
 
-    const permissionOnly: NavGates = { ...NO_GATES, canWriteBoard: true, advancedMode: false }
-    expect(ids(navSlotFilter(slots(), { gates: permissionOnly }))).not.toContain('build-pipeline')
+    const permissionOnly: NavGates = {
+      ...NO_GATES,
+      canManageIntegrations: true,
+      advancedMode: false,
+    }
+    expect(ids(navSlotFilter(slots(), { gates: permissionOnly }))).not.toContain('sandbox')
 
-    const both: NavGates = { ...NO_GATES, canWriteBoard: true, advancedMode: true }
-    expect(ids(navSlotFilter(slots(), { gates: both }))).toContain('build-pipeline')
+    const both: NavGates = { ...NO_GATES, canManageIntegrations: true, advancedMode: true }
+    expect(ids(navSlotFilter(slots(), { gates: both }))).toContain('sandbox')
   })
 
   it('leaves at least one sidebar destination in every basic-mode section it keeps', () => {
