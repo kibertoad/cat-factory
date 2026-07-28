@@ -3990,6 +3990,11 @@
     "recommendationRequested": "Recommandation demandée — consultez la suggestion ci-dessous.",
     "recommendedDefault": "Valeur recommandée par défaut : conservez-la, modifiez-la ou rejetez la constatation.",
     "needsYourInput": "Nécessite votre intervention",
+    "group": {
+      "action": "Nécessite votre réaction",
+      "waiting": "En attente de suggestions",
+      "settled": "Traitées"
+    },
     "mode": {
       "answer": "Répondre",
       "dismiss": "Ignorer",

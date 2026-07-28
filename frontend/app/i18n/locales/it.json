@@ -3586,6 +3586,11 @@
     "recommendationRequested": "Raccomandazione richiesta — rivedi il suggerimento qui sotto.",
     "recommendedDefault": "Valore predefinito consigliato: mantienilo, modificalo o ignora il rilievo.",
     "needsYourInput": "Richiede il tuo intervento",
+    "group": {
+      "action": "Richiede la tua reazione",
+      "waiting": "In attesa di suggerimenti",
+      "settled": "Gestiti"
+    },
     "mode": {
       "answer": "Rispondi",
       "dismiss": "Ignora",

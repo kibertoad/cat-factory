@@ -3586,6 +3586,11 @@
     "recommendationRequested": "Empfehlung angefordert — prüfen Sie den Vorschlag unten.",
     "recommendedDefault": "Empfohlene Vorgabe: behalten, bearbeiten oder die Feststellung verwerfen.",
     "needsYourInput": "Benötigt Ihre Eingabe",
+    "group": {
+      "action": "Benötigt Ihre Reaktion",
+      "waiting": "Warten auf Vorschläge",
+      "settled": "Erledigt"
+    },
     "mode": {
       "answer": "Beantworten",
       "dismiss": "Verwerfen",

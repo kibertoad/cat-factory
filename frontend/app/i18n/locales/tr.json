@@ -4002,6 +4002,11 @@
     "recommendationRequested": "Öneri istendi — aşağıdaki öneriyi inceleyin.",
     "recommendedDefault": "Önerilen varsayılan: koruyun, düzenleyin ya da bulguyu yok sayın.",
     "needsYourInput": "Sizin girdiniz gerekiyor",
+    "group": {
+      "action": "Tepkinizi bekliyor",
+      "waiting": "Öneriler bekleniyor",
+      "settled": "Ele alındı"
+    },
     "mode": {
       "answer": "Yanıtla",
       "dismiss": "Yok say",

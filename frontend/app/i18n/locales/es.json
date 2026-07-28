@@ -3990,6 +3990,11 @@
     "recommendationRequested": "Recomendación solicitada — revisa la sugerencia más abajo.",
     "recommendedDefault": "Valor recomendado por defecto: consérvalo, edítalo o descarta el hallazgo.",
     "needsYourInput": "Necesita tu intervención",
+    "group": {
+      "action": "Necesita tu reacción",
+      "waiting": "Esperando sugerencias",
+      "settled": "Gestionados"
+    },
     "mode": {
       "answer": "Responder",
       "dismiss": "Descartar",
