@@ -129,6 +129,25 @@ export class RunContendedError extends Error {
   }
 }
 
+/**
+ * A review's own optimistic-concurrency write gave up after its bounded retries — the sibling of
+ * {@link RunContendedError} for the iterative-review stores, whose mutations reload and re-apply
+ * on the winner's snapshot (`IterativeReviewService.mutateReview`).
+ *
+ * Unlike `RunContendedError` this IS a {@link ConflictError}, because both kinds of caller are
+ * real: an HTTP human action (answer / dismiss / accept a recommendation) wants the 409 and a
+ * retry, while the durable driver — which owns the two paths whose mutation carries paid-for LLM
+ * output (`incorporate`, `reReview`) — recognises it as a re-drive signal in `advanceInstance` and
+ * re-derives on fresh state instead of failing the run and discarding that work. No `reason` code:
+ * the SPA has no conflict-specific handling for it beyond "retry", which the message already says.
+ */
+export class ReviewContendedError extends ConflictError {
+  constructor(entityName: string, reviewId: string) {
+    super(`${entityName} '${reviewId}' is being modified concurrently; retry`)
+    this.name = new.target.name
+  }
+}
+
 /** Resolve a maybe-null lookup or throw a {@link NotFoundError}. */
 export function assertFound<T>(value: T | null | undefined, entity: string, id: string): T {
   if (value === null || value === undefined) throw new NotFoundError(entity, id)

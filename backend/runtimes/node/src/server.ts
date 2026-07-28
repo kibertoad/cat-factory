@@ -49,7 +49,7 @@ import { startPlatformHealthSweeper } from './platformHealth.js'
 import { buildRealtimePropagator } from './propagator.js'
 import { warnIfRedisUnreachableInBackground } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
-import { NodeRealtimeHub, attachRealtime } from './realtime.js'
+import { type MachineSubscribeDeps, NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
@@ -156,13 +156,26 @@ export function serveAppWithRealtime(opts: {
   env: NodeJS.ProcessEnv
   host?: string
   label: string
+  /**
+   * Supplied by a deployment that can act as a MOTHERSHIP, enabling the machine-authed inbound
+   * event subscription (`GET /internal/events/subscribe/:ws`). The local facade's mothership boot
+   * deliberately leaves it off — it is a machine-API client, not a server (see
+   * {@link MachineSubscribeDeps}).
+   */
+  machineSubscribe?: MachineSubscribeDeps
 }): { server: ReturnType<typeof serve>; stopRealtime: ReturnType<typeof attachRealtime> } {
   const { port, hostname } = resolveBind(opts.env, opts.host)
   const server = serve({ fetch: opts.app.fetch, port, ...(hostname ? { hostname } : {}) })
   // Accept the SPA's WebSocket event-stream upgrades on the same listener (the Worker uses a
   // per-workspace Durable Object; `@hono/node-server` doesn't upgrade on its own, so attach a
-  // `ws` server here).
-  const stopRealtime = attachRealtime(server, opts.realtimeHub, opts.auth, logger)
+  // `ws` server here). Same listener serves the mothership-mode machine subscription when wired.
+  const stopRealtime = attachRealtime(
+    server,
+    opts.realtimeHub,
+    opts.auth,
+    logger,
+    opts.machineSubscribe,
+  )
   logger.info(`${opts.label} listening`, { port, host: hostname ?? '0.0.0.0' })
   return { server, stopRealtime }
 }
@@ -304,6 +317,49 @@ export async function start(
     }
     throw err
   }
+}
+
+/**
+ * Bring up every pg-boss consumer as ONE parallel wave (app-startup initiative, item 2). Each is an
+ * independent `createQueue(name)` + `work(name)` on its OWN queue with no ordering dependency
+ * between them, so awaiting them serially cost ~10 back-to-back DB round trips on the boot path for
+ * no reason; the wave collapses that to ~2.
+ *
+ * Called AFTER `boss.start()` and BEFORE listen: the documented invariant is that an enqueued job
+ * always has a consumer (revisiting that ordering is item 11, not this slice). A parked run waits
+ * for a human indefinitely (no decision timeout); the escalating notification — not a killed run —
+ * signals a human is overdue.
+ *
+ * Extracted from {@link bootServer} to keep it within the function-size budget, alongside
+ * {@link startBackgroundSweepers}; the set + concurrency are unchanged.
+ */
+async function startDurableWorkers(
+  boss: PgBoss,
+  container: ServerContainer,
+  runtime: ReturnType<typeof executionRuntime>,
+): Promise<void> {
+  const opts = { concurrency: runtime.concurrency }
+  await Promise.all([
+    startExecutionWorker(boss, container, runtime.drive, logger, opts),
+    // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
+    // a no-op queue when the bootstrap module isn't wired.
+    startBootstrapWorker(boss, container, runtime.drive, logger, opts),
+    // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
+    // a no-op queue when the repair module isn't wired.
+    startEnvConfigRepairWorker(boss, container, runtime.drive, logger, opts),
+    // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
+    // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
+    startEnvTestWorker(boss, container, runtime.drive, logger, opts),
+    // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
+    // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
+    // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
+    startGitHubSyncWorker(boss, container, logger, opts),
+    // Async TRACKER ingest (the analogue of the Worker's TRACKER_SYNC_QUEUE consumer): drain the
+    // `tracker.sync` queue the webhook receiver enqueues onto, so a pushed issue event fires its
+    // intake schedule — and a ticket reply drives the parked review — out of band, while the
+    // tracker gets its prompt 2xx. A no-op queue when task sources aren't wired.
+    startTrackerSyncWorker(boss, container, logger, opts),
+  ])
 }
 
 /**
@@ -579,46 +635,7 @@ async function bootServer(
   })
 
   const runtime = executionRuntime(container.config, env)
-  // Bring up the five pg-boss consumers as ONE parallel wave (app-startup initiative, item 2).
-  // Each is an independent `createQueue(name)` + `work(name)` on its OWN queue with no ordering
-  // dependency between them, so awaiting them serially cost ~10 back-to-back DB round trips on the
-  // boot path for no reason; the wave collapses that to ~2. Kept AFTER `boss.start()` and BEFORE
-  // listen: the documented invariant is that an enqueued job always has a consumer (revisiting
-  // that ordering is item 11, not this slice). A parked run waits for a human indefinitely (no
-  // decision timeout); the escalating notification — not a killed run — signals a human is overdue.
-  await Promise.all([
-    startExecutionWorker(boss, container, runtime.drive, logger, {
-      concurrency: runtime.concurrency,
-    }),
-    // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
-    // a no-op queue when the bootstrap module isn't wired.
-    startBootstrapWorker(boss, container, runtime.drive, logger, {
-      concurrency: runtime.concurrency,
-    }),
-    // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
-    // a no-op queue when the repair module isn't wired.
-    startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
-      concurrency: runtime.concurrency,
-    }),
-    // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
-    // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
-    startEnvTestWorker(boss, container, runtime.drive, logger, {
-      concurrency: runtime.concurrency,
-    }),
-    // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
-    // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
-    // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
-    startGitHubSyncWorker(boss, container, logger, {
-      concurrency: runtime.concurrency,
-    }),
-    // Async TRACKER ingest (the analogue of the Worker's TRACKER_SYNC_QUEUE consumer): drain the
-    // `tracker.sync` queue the webhook receiver enqueues onto, so a pushed issue event fires its
-    // intake schedule — and a ticket reply drives the parked review — out of band, while the
-    // tracker gets its prompt 2xx. A no-op queue when task sources aren't wired.
-    startTrackerSyncWorker(boss, container, logger, {
-      concurrency: runtime.concurrency,
-    }),
-  ])
+  await startDurableWorkers(boss, container, runtime)
   bootClock.mark('workers')
   // Readiness probe for `/ready`: a live Postgres round-trip + the pg-boss flag, draining the
   // instant shutdown begins so a load balancer stops routing here while in-flight requests finish.
@@ -637,6 +654,13 @@ async function bootServer(
     env,
     host: options.host,
     label: 'cat-factory node server',
+    // Mothership-mode INBOUND real-time: a Node deployment can be a mothership, so accept the
+    // machine-authed per-workspace subscription on this listener too. The scope binding reads the
+    // deployment's OWN workspace store — the same resolver the persistence RPC and the upstream
+    // publish endpoint scope against.
+    machineSubscribe: {
+      accountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+    },
   })
   bootClock.mark('listen')
   // One structured line naming where the boot seconds went (app-startup initiative, item 1). The

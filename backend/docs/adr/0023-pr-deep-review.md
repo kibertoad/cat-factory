@@ -210,6 +210,14 @@ so a human curates the findings themselves — not just which to act on:
   `prReviewProgress.spec.ts`). The window itself also carries the shared `StepRunMeta` run-details
   block (elapsed / model / run id + the LLM call/token rollup), so the reviewer's run reads the same
   "which run / how did the model do" facts as the generic step detail and the gate/tester windows.
+- **The slice fan-out is bounded, and the live list is a MERGE of the plan and the dispatches.** The
+  reviewer keeps at most `MAX_PARALLEL_SLICE_SUBAGENTS` (5) slice subagents in flight and dispatches
+  the next queued slice as one returns; an unbounded wave buys provider rate-limiting rather than
+  speed. The harness folds the parent's task list (the inventory, and the only place a queued slice
+  is named) together with the subagent dispatches (the live status) rather than picking whichever
+  looks further along — picking made the rendered list collapse to the dispatched slices the moment
+  the first subagent returned. Both are recorded as Defect D in
+  [ADR 0027](./0027-pr-review-observability-followup.md).
 - **Same-repo, non-fork PRs only.** The reviewer clones the service's linked repo and fetches the
   PR head by number, and the Fixer pushes to that head branch — so the `fix` resolution requires a
   PR on the service's own repo the platform can push to. A cross-repo `prUrl` (a PR on a different

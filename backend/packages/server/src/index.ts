@@ -141,6 +141,17 @@ export {
   type RelayedRealtimeEvent,
   HttpMachineEventClient,
 } from './events/machineEvents.js'
+// The INBOUND half of mothership real-time: the shared authorisation for a node's long-lived
+// subscription to a workspace's stream. Exported because BOTH facades reach the handshake — the
+// Worker through the shared controller, Node from its HTTP-server `upgrade` listener.
+export {
+  type AccountOfWorkspace,
+  type MachineSubscribeAuth,
+  MACHINE_EVENTS_SUBSCRIBE_PATH,
+  MACHINE_EVENTS_SUBSCRIBE_PATTERN,
+  authorizeMachineSubscribe,
+  stripBearer,
+} from './events/machineSubscribe.js'
 // Mothership-mode notification DELIVERY delegation: the mothership re-reads a laptop-raised
 // notification row and delivers it through the org's external channels (its Slack token never
 // reaches the laptop); a mothership-mode local node plugs `RemoteNotificationChannel` into the

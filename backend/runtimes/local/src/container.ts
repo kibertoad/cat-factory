@@ -992,6 +992,15 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     }),
   )
 
+  // Real-time INBOUND (docs/initiatives/mothership-mode.md, PR 2): hold one machine-authed
+  // subscription to the mothership per workspace someone is watching here, so org activity raised
+  // by a hosted teammate (or relayed up by a peer laptop) animates this board too. Bound to the
+  // room transitions of the injected hub, and delivering into the BARE sink — never the layered
+  // propagator above, which would re-publish each inbound event straight back upstream.
+  if (mothership && options.realtimeSink && options.realtimeRooms) {
+    mothership.realtimeSubscriber.bind(options.realtimeSink, options.realtimeRooms)
+  }
+
   // Bind the in-process work runner to the now-built execution service, so `startRun` /
   // `signalDecision` drive runs in-process (mothership mode; no-op otherwise). The kind-spanning
   // agent-runs reader powers the storage-reconciliation backstop (re-drive a run still `running` in

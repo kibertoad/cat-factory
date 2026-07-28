@@ -5224,11 +5224,12 @@
       },
       "reviewingChunks": {
         "title": "Revue des sections…",
-        "hint": "Le découpage est terminé. Chaque section est examinée l'une après l'autre et les remarques sont rassemblées."
+        "hint": "Le découpage est terminé. Le relecteur traite les sections par petits groupes et rassemble les remarques au fur et à mesure des retours."
       },
       "chunks": "{completed} sur {total} sections examinées",
       "inProgress": "{count} en cours",
       "activeHeading": "Revue en cours",
+      "activeIdle": "Aucune section n'est en cours pour l'instant. Le relecteur lance le groupe suivant.",
       "chunksHeading": "Sections",
       "chunkStatus": {
         "completed": "Examinée",

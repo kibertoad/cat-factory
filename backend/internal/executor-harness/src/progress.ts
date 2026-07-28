@@ -1,9 +1,10 @@
 import { isObject } from './claude-stream.js'
-import type { TodoProgress } from './pi.js'
+import type { TodoItem, TodoProgress } from './pi.js'
 
-// The parent agent's own PLAN, as progress counts. This is one of the two redundant views a
-// pr-reviewer run produces (the other is the parallel-subagent dispatch view in
-// `subagents.ts`); {@link pickProgress} reconciles them.
+// The parent agent's own PLAN, as progress counts. This is one of the two views a pr-reviewer
+// run produces of the same slicing (the other is the parallel-subagent dispatch view in
+// `subagents.ts`). The plan is the INVENTORY, the dispatches are the live STATUS, and
+// {@link mergeProgress} folds them into the one list the board renders.
 //
 // The Claude Code CLI exposes the plan through TWO different tool vocabularies, and which one
 // a run uses depends on the CLI build, not on anything the harness controls:
@@ -207,17 +208,14 @@ export function createTaskPlanTracker(): TaskPlanTracker {
 }
 
 /**
- * Reconcile the redundant views of the same work into the one to surface (ADR 0027 Defect B).
- * A pr-reviewer run has BOTH a parent plan (`TodoWrite` or `TaskCreate`/`TaskUpdate`) and the
- * `SliceTracker`'s subagent-dispatch view. The sequential shape advances the plan; the parallel
- * shape advances ONLY the slice tracker (the reviewer writes its plan once and the parallel
- * subagents report in-flight/complete). Neither alone covers both shapes, and gating the slice
- * tracker off whenever a plan exists (the original behaviour) pinned parallel runs at 0%.
- *
- * So prefer whichever view is further along: more `completed`, then more `inProgress` (an
- * all-pending plan must not beat live in-flight slices), then more `total` (the richer view — a
- * plan can carry an extra "aggregate" entry), else the plan. Pure + total; returns whichever
+ * Reconcile the parent's TWO plan vocabularies (`TodoWrite` snapshots vs the incremental
+ * `TaskCreate`/`TaskUpdate` pair) into one plan. A run uses one or the other, so this is a
+ * genuine either/or: prefer whichever is further along — more `completed`, then more
+ * `inProgress`, then more `total` — else the `TodoWrite` view. Pure + total; returns whichever
  * single input is present when only one is.
+ *
+ * This is NOT how the plan reconciles with the parallel-subagent view — those describe the same
+ * slices from two angles and are MERGED, see {@link mergeProgress}.
  */
 export function pickProgress(
   todo: TodoProgress | undefined,
@@ -229,4 +227,130 @@ export function pickProgress(
   if (slice.inProgress !== todo.inProgress) return slice.inProgress > todo.inProgress ? slice : todo
   if (slice.total !== todo.total) return slice.total > todo.total ? slice : todo
   return todo
+}
+
+/** Status ordering, so a merge can only ever ADVANCE an entry, never walk it back. */
+const STATUS_RANK: Record<ReturnType<typeof normalizeStatus>, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+}
+
+/**
+ * Words that carry no identity in a slice label, so `Review identity/auth slice` (the subagent
+ * description) and `identity/auth` (the plan entry's subject) compare equal.
+ */
+const LABEL_FILLER = new Set([
+  'a',
+  'agent',
+  'an',
+  'and',
+  'chunk',
+  'chunks',
+  'for',
+  'of',
+  'pass',
+  'review',
+  'reviewing',
+  'slice',
+  'slices',
+  'subagent',
+  'the',
+])
+
+/**
+ * A slice label reduced to its identifying words, for pairing a plan entry with the subagent
+ * dispatched to review it. Case, punctuation and the boilerplate around the slice name all
+ * differ between the two vocabularies; the slice NAME does not.
+ */
+export function sliceLabelKey(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((w) => w.length > 0 && !LABEL_FILLER.has(w))
+    .join(' ')
+}
+
+interface MergeEntry {
+  label: string
+  status: ReturnType<typeof normalizeStatus>
+  key: string
+  /** A dispatched subagent has already been paired to this entry. */
+  paired: boolean
+}
+
+/** Advance an entry to the stronger of its current status and the dispatch's. */
+function advance(entry: MergeEntry, status: ReturnType<typeof normalizeStatus>): void {
+  if (STATUS_RANK[status] > STATUS_RANK[entry.status]) entry.status = status
+  entry.paired = true
+}
+
+/**
+ * MERGE the parent's plan with the `SliceTracker`'s subagent-dispatch view into the single list
+ * the board renders (ADR 0027 Defect B, corrected).
+ *
+ * The two are not competing answers, they are two halves of one: the plan is the INVENTORY (it
+ * names every slice, including the ones not dispatched yet, which is the only place a `pending`
+ * slice exists at all), and the dispatch view is the live STATUS (the plan advances only when
+ * the agent remembers to update it, which it does unreliably). Picking whichever looked "further
+ * along" — the previous behaviour — made the rendered list SHRINK the moment the first subagent
+ * returned: the dispatch view won on `completed`, and it only knows the slices dispatched so far,
+ * so every queued slice vanished from the window and reappeared one at a time as it was dispatched.
+ *
+ * Pairing is by normalised label ({@link sliceLabelKey}) — exact first, then containment — and
+ * finally positionally into the leftover pending entries, in dispatch order (the agent dispatches
+ * in plan order). A dispatch that pairs with nothing is APPENDED rather than dropped, so the list
+ * is at worst a union and can never lose a slice. Statuses only ever advance, so a plan entry the
+ * agent already marked done is not walked back by a re-dispatch.
+ *
+ * Pure + total. Falls back to {@link pickProgress} when either side carries counts but no items
+ * (nothing to merge onto).
+ */
+export function mergeProgress(
+  plan: TodoProgress | undefined,
+  slice: TodoProgress | undefined,
+): TodoProgress | undefined {
+  if (!plan) return slice
+  if (!slice) return plan
+  const planItems = plan.items ?? []
+  const sliceItems = slice.items ?? []
+  if (planItems.length === 0 || sliceItems.length === 0) return pickProgress(plan, slice)
+
+  const entries: MergeEntry[] = planItems.map((i) => ({
+    label: i.label,
+    status: normalizeStatus(i.status),
+    key: sliceLabelKey(i.label),
+    paired: false,
+  }))
+  const take = (match: (e: MergeEntry) => boolean): MergeEntry | undefined =>
+    entries.find((e) => !e.paired && match(e))
+
+  // Pass 1 — the same slice named the same way.
+  // Pass 2 — one label contains the other (a dispatch description often expands the plan's short
+  //          name). Length-guarded so a one-word residue can't match everything.
+  // Pass 3 — no words in common at all (renamed between planning and dispatch): absorb into the
+  //          still-untouched pending entries in dispatch order.
+  // Anything still unpaired is a slice the plan never mentioned, so it JOINS the list.
+  const matchers: ((key: string) => (e: MergeEntry) => boolean)[] = [
+    (key) => (e) => key.length > 0 && e.key === key,
+    (key) => (e) =>
+      key.length >= 3 && e.key.length >= 3 && (e.key.includes(key) || key.includes(e.key)),
+    () => (e) => e.status === 'pending',
+  ]
+  let unpaired: TodoItem[] = sliceItems
+  for (const matcher of matchers) {
+    const rest: TodoItem[] = []
+    for (const item of unpaired) {
+      const hit = take(matcher(sliceLabelKey(item.label)))
+      if (hit) advance(hit, normalizeStatus(item.status))
+      else rest.push(item)
+    }
+    unpaired = rest
+  }
+
+  return toProgress([
+    ...entries.map((e) => ({ label: e.label, status: e.status })),
+    ...unpaired.map((i) => ({ label: i.label, status: normalizeStatus(i.status) })),
+  ])
 }

@@ -1,5 +1,51 @@
 # @cat-factory/local-server
 
+## 0.81.1
+
+### Patch Changes
+
+- 9d8fe9b: Close the lost-update race on the iterative-review stores (race-condition audit 2.5).
+
+  A requirements / clarity / brainstorm review is ONE JSON blob holding every finding, and every mutation used to load it, edit one item and force-write the whole row back. Two writers inside that window — two people answering different findings, a dismissal landing inside the (slow) incorporation LLM call, the Requirement-Writer's fill pass racing a human accept — left only the last writer's edit. Because incorporation refuses to run while any finding is still `open`, a lost dismissal wedged the loop on a finding that was in fact settled.
+
+  - **`rev` + `compareAndSwap` on all three review stores** (D1 migration `0065` ⇄ Drizzle): the conditional write lands only while the stored revision still matches the one the caller read, and never inserts, so a review a fresh run replaced can't be resurrected.
+  - **Every read-modify-write routes through `mutateReview`** (load → apply → CAS, reloading and RE-APPLYING the mutation on the winner's snapshot when it loses), including the two paths that held a snapshot across an LLM call (`incorporate`, `reReview`) and all four recommendation paths.
+  - **`deleteByBlock` + `upsert` is replaced by an atomic `replaceForBlock` / `replaceForBlockStage`**, a single conflict-targeted upsert against a new UNIQUE index on `(workspace_id, block_id[, stage])` (D1 migration `0066` ⇄ Drizzle, healing pre-existing duplicates before constraining). Two review runs for one block could previously interleave their delete/insert pairs and leave TWO live reviews, so the window loaded one while the parked run's decision keyed to the other. The racy delete method is removed from the port (and the mothership persistence allow-list) so it can't be reintroduced.
+  - **A contended give-up throws `ReviewContendedError`** (new, a `ConflictError` subclass): a 409 for an HTTP caller, and a re-drive signal for the durable driver, whose incorporation cycle mutation carries the output of an LLM call the run has already paid for.
+
+  Compatibility break (pre-1.0, no shim): the `RequirementReviewRepository` / `ClarityReviewRepository` / `BrainstormSessionRepository` ports drop `deleteByBlock`/`deleteByBlockStage` and gain `compareAndSwap` + `replaceForBlock`/`replaceForBlockStage`; the review wire shapes gain `rev`. Existing rows read as `rev = 0`, which is exactly what the new column defaults to. Migration `0066` DELETES duplicate live reviews for a block (keeping the newest, the one `getByBlock` already returned) before adding the constraint — the superseded duplicates were unreachable.
+
+- Updated dependencies [15905ab]
+- Updated dependencies [9d8fe9b]
+  - @cat-factory/executor-harness@1.64.2
+  - @cat-factory/agents@0.75.1
+  - @cat-factory/contracts@0.178.0
+  - @cat-factory/kernel@0.171.0
+  - @cat-factory/orchestration@0.151.0
+  - @cat-factory/server@0.162.0
+  - @cat-factory/node-server@0.125.0
+  - @cat-factory/gitlab@0.13.19
+  - @cat-factory/integrations@0.103.3
+
+## 0.81.0
+
+### Minor Changes
+
+- 2ed7b50: Complete mothership-mode real-time in both directions, and fix the fan-out read that made every mothership-mode publish fail.
+
+  - **Inbound event subscription (`GET /internal/events/subscribe/:workspaceId`).** A mothership-mode node can now RECEIVE org activity, not just publish it — a hosted teammate's run, or a peer laptop's, animates the local board live instead of waiting for a manual refresh. The mothership side is not a new fan-out: the machine-authed handshake is handed to the SAME per-workspace realtime transport the browser stream uses (`gateways.realtime.upgrade`), so a subscribed node is just another socket in the workspace's room and the Cloudflare Durable Object needed no change. Authorisation is the shared `authorizeMachineSubscribe` (machine-audience pin first, then capability, then the workspace → account scope with a uniform 404), reached by the Worker through the shared controller and by Node from its HTTP-server `upgrade` listener — the same split, and the same reason, as the browser stream's `?ticket=`.
+  - **Demand-driven on the laptop.** `MothershipEventSubscriber` holds one upstream stream per workspace with at least one local subscriber, driven by a new room-transition seam on `NodeRealtimeHub`; an idle node holds none, and it never needs to enumerate the org's workspaces. Inbound events are broadcast to the bare hub (never back through the layered propagator, which would re-publish them upstream), and the node's stable `?cid=` is now stamped as the outbound publish's `originConnectionId` — replacing the originating tab's id, which means nothing on the mothership — so a node's own events are not fanned back down to it.
+  - **The subscription keeps itself honest.** Liveness is client-driven because the two mothership runtimes disagree about who provides it: a Node mothership pings at the protocol level and reaps a dead socket, while a Cloudflare mothership's hibernating Durable Object never pings — so a half-open socket there would never fire `close` and the workspace would stay dark indefinitely while the node still believed it was subscribed. The subscriber therefore heartbeats and drops a socket that has been silent past an idle deadline, treating any inbound frame (its `"ping"` auto-answered at the Cloudflare edge, or Node's own protocol ping) as proof of life. A refused handshake is now reported rather than swallowed, rate-limited so an unbounded retry stays visible without flooding, and the reconnect backoff is jittered so a fleet doesn't retry in lockstep after a mothership restart.
+  - **Fix: `workspaceMountRepository.listWorkspaceIdsMountingBlock` was not remotely callable.** `FanOutEventPublisher` calls it on EVERY engine event publish, and a mothership-mode node wires the same decorator, so the call came back `unknown_method`, the remote proxy threw, and the rejection propagated out of the run-state emit. It is now allow-listed under the `workspace` rule (it returns workspace ids only, and a service can only be mounted inside its own account). `blockRepository.countActiveInternal` is allow-listed alongside it, completing the headless public-API surface whose paginated reads were already remote.
+  - The persistence allow-list moved into its own module (`persistence/rpc-allowlist.ts`) — same exported name and import path, but the initiative's fast-growing surface no longer shares a file with the stable protocol.
+
+### Patch Changes
+
+- Updated dependencies [2ed7b50]
+  - @cat-factory/server@0.161.0
+  - @cat-factory/node-server@0.124.0
+  - @cat-factory/executor-harness@1.64.0
+
 ## 0.80.6
 
 ### Patch Changes

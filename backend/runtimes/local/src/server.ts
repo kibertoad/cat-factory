@@ -309,6 +309,9 @@ async function startLocalMothership(
   const container = buildLocalContainer({
     env,
     realtimeSink: realtimeHub,
+    // The same hub, as its room-observability side: mothership mode opens an upstream subscription
+    // per workspace someone is actually watching here (see `MothershipEventSubscriber`).
+    realtimeRooms: realtimeHub,
     agentKindRegistry,
     initiativePresetRegistry,
     backendRegistries,
