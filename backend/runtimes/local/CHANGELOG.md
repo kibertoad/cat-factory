@@ -1,5 +1,82 @@
 # @cat-factory/local-server
 
+## 0.85.0
+
+### Minor Changes
+
+- b75a08a: Stamp every `llm_call_metrics` row with the run PHASE that spent it and its TURN ordinal, so a
+  run's token burn can be attributed to the slice that caused it — the agent's own edit loop, a
+  pre-PR validation repair round, a reproduction-proof repair round — instead of piling into one
+  figure per agent kind (token-burn instrumentation, slice 2).
+
+  The phase comes from whoever owns the boundary, never from a downstream guess: the harness's job
+  registry stamps it on each streamed call as it is emitted, and the Pi path — whose calls are
+  metered server-side by the proxy — carries it on the URL Pi is pointed at
+  (`${proxyBaseUrl}/phase/<phase>`, rewritten per pass), since Pi makes those requests from a config
+  with no per-request header to set. The proxy therefore serves completions on a second, optional
+  phase-tagged path; the plain path is unchanged and its calls are recorded as unattributed.
+
+  The backend advertises that route on the job body (`proxyPhasePath`, the same shape as
+  `webSearch`) and the harness tags the URL only when told, so an image paired with an older backend
+  — a runner pool pins its own harness image, and `LOCAL_HARNESS_IMAGE` overrides the recommended
+  pin — falls back to the plain path instead of posting every model call to a 404.
+
+  `LlmCallMetric` gains `phase: string` (`''` = unattributed, a real slice of the rollup rather
+  than a dropped row) and `turnIndex: number | null` (the harness's job-scoped `seq`; NULL where the
+  producing channel has no turn concept, so a proxied call is never faked into "turn 0").
+  `HarnessCallMetric` gains an optional `phase`, read leniently off a runner pool's envelope.
+  Both telemetry stores gain the two columns (D1 `0004_llm_call_phase_turn` ⇄ a Drizzle migration);
+  existing rows keep the unattributed default and are not backfilled — the table is pruned to a
+  3-day window, so they churn out on their own.
+
+- 56128e2: Mothership mode: telemetry is now local-first, so a mothership-mode run finally produces the
+  observability it is supposed to.
+
+  Previously the five telemetry repositories resolved to the remote registry, where none of their
+  methods is (or should be) allow-listed: every write came back `unknown_method` — swallowed by the
+  best-effort recorders — and every read came back empty, so the observability panel, the per-step
+  token rollups, the web-search log and the provisioning "View logs" surfaces were blank on a
+  mothership-mode node with nothing failing anywhere.
+
+  A mothership-mode node now writes and reads its per-call LLM metrics, agent-context snapshots,
+  performed web searches, provisioning log and modeled subscription quota cycles in its own
+  `node:sqlite` telemetry store (`telemetry.sqlite`, override `LOCAL_MOTHERSHIP_TELEMETRY_DB`), and
+  prunes it to the deployment's configured retention windows. The bucket is composed into the
+  repository registry once (`createRemoteRepositoryRegistry`'s new `localFirst` map), so every
+  consumer resolves it with no per-consumer wiring.
+
+  Two boundary changes ride with it:
+
+  - `tokenUsageRepository.record` is now remotely callable, under a new `usageRecord` scope rule. The
+    spend ledger has the telemetry write profile but is the org's budget safeguard, and the spend gate
+    already reads its rollups remotely — a laptop-local ledger would leave local runs invisible to the
+    budget they must answer to. The rule pins the row's denormalized `accountId`/`userId` to the
+    caller, so a node cannot inflate another account's or teammate's budget.
+  - `llmCallMetricRepository.summarizeByExecution` is no longer remotely callable: it was a run-path
+    stopgap against the mothership's telemetry store, which holds none of a laptop's calls, so it
+    could only ever report zeros for the run that produced them.
+
+  Batch-ingesting a finished run's telemetry up to the mothership (so hosted teammates can read it,
+  and it survives the local prune) is the remaining half of this initiative slice.
+
+### Patch Changes
+
+- 3057db1: Carry the `phase` / `turnIndex` telemetry axes through the mothership-mode local sqlite store.
+  The axes and the store landed in separate PRs that were each green alone, so `main` was left
+  unable to build the local runtime.
+- Updated dependencies [b75a08a]
+- Updated dependencies [56128e2]
+- Updated dependencies [3057db1]
+  - @cat-factory/executor-harness@1.70.0
+  - @cat-factory/contracts@0.186.0
+  - @cat-factory/kernel@0.179.0
+  - @cat-factory/integrations@0.108.0
+  - @cat-factory/orchestration@0.159.0
+  - @cat-factory/server@0.167.0
+  - @cat-factory/node-server@0.130.0
+  - @cat-factory/agents@0.81.1
+  - @cat-factory/gitlab@0.13.27
+
 ## 0.84.2
 
 ### Patch Changes
