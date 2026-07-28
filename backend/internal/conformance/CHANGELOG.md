@@ -1,5 +1,19 @@
 # @cat-factory/conformance
 
+## 0.12.19
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/integrations@0.105.0
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+  - @cat-factory/orchestration@0.153.1
+  - @cat-factory/server@0.163.2
+  - @cat-factory/agents@0.77.1
+  - @cat-factory/gates@0.8.1
+  - @cat-factory/prompt-fragments@0.15.3
+
 ## 0.12.18
 
 ### Patch Changes
