@@ -27,7 +27,7 @@ const back = useIntegrationBack(open)
 
 // The tracker being browsed. Owned here (not the picker) so the epic action and the
 // ref-input placeholder share the same selected source; passed to the picker via
-// `v-model:source` with `always-show-source` so it's always visible + selectable.
+// `v-model:source`, whose selector always shows (and can add) the tracker in use.
 const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
 const importing = ref(false)
@@ -162,13 +162,11 @@ async function doSpawnEpic() {
              uses for context issues: search by title, pick an already-imported one,
              or paste a URL/key — choosing one opens the prefilled add-task form. The
              search is scoped to the chosen container's repo (so a GitHub search stays
-             in that service's repo and a pasted URL / bare number resolves there), and
-             the source selector is always shown so it's clear which tracker is in use. -->
+             in that service's repo and a pasted URL / bare number resolves there). -->
         <UFormField :label="t('tasks.import.searchIssues')">
           <ContextIssuePicker
             v-model:source="source"
             :scope-block-id="containerId"
-            always-show-source
             @pick="createFromPick"
           />
         </UFormField>

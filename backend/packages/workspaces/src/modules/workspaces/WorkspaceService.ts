@@ -1,5 +1,6 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
+  applyMountLayout,
   registerServiceForFrame,
   requireWorkspace,
   seedBlocks,
@@ -402,7 +403,7 @@ export class WorkspaceService {
     const byId = new Map(localBlocks.map((b) => [b.id, b]))
     const localIds = new Set(byId.keys())
     // The per-workspace layout override for each mounted service's frame.
-    const frameLayout = new Map<string, { x: number; y: number; w?: number; h?: number }>()
+    const frameLayout = new Map<string, WorkspaceMount>()
     // Resolve every mounted service in one batched query (not a `get` per mount).
     const services = await this.serviceRepository.listByIds(mounts.map((m) => m.serviceId))
     const frameOf = new Map(services.map((s) => [s.id, s.frameBlockId]))
@@ -410,11 +411,7 @@ export class WorkspaceService {
     for (const mount of mounts) {
       const frameBlockId = frameOf.get(mount.serviceId)
       if (!frameBlockId) continue
-      frameLayout.set(frameBlockId, {
-        x: mount.position.x,
-        y: mount.position.y,
-        ...(mount.size ? { w: mount.size.w, h: mount.size.h } : {}),
-      })
+      frameLayout.set(frameBlockId, mount)
       // Pull in the subtree only for services homed in ANOTHER workspace — a local service's
       // blocks are already in `localBlocks`.
       if (!localIds.has(frameBlockId)) foreignServiceIds.push(mount.serviceId)
@@ -424,13 +421,9 @@ export class WorkspaceService {
       if (!byId.has(b.id)) byId.set(b.id, b)
     }
 
-    return [...byId.values()].map((b) => {
-      const layout = frameLayout.get(b.id)
-      if (!layout) return b
-      const next: Block = { ...b, position: { x: layout.x, y: layout.y } }
-      if (layout.w !== undefined && layout.h !== undefined) next.size = { w: layout.w, h: layout.h }
-      return next
-    })
+    // The same projection every single-block mutation response goes through, so the snapshot and
+    // a mutation's authoritative block can never disagree about where a frame sits.
+    return [...byId.values()].map((b) => applyMountLayout(b, frameLayout.get(b.id)))
   }
 
   /**

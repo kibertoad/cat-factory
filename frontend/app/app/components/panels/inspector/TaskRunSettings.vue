@@ -3,9 +3,9 @@ import { computed, onMounted } from 'vue'
 import { connectionNeighborIds } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
-import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -76,25 +76,13 @@ function setAutoStartDependents(value: boolean) {
 // budget. None selected → the workspace default preset. (The old confidence-based
 // auto-merge threshold is gone; the `merger` step gates on this policy instead.)
 const selectedPreset = computed(() => riskPolicies.resolve(props.block.riskPolicyId))
-const presetMenu = computed(() => [
-  [
-    {
-      label: riskPolicies.defaultPreset
-        ? t('inspector.runSettings.defaultPresetThresholds', {
-            name: riskPolicies.defaultPreset.name,
-            thresholds: riskPolicySummary(riskPolicies.defaultPreset),
-          })
-        : t('inspector.runSettings.workspaceDefault'),
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => setPreset(''),
-    },
-    ...riskPolicies.presets.map((p) => ({
-      label: riskPolicyOptionLabel(p),
-      icon: 'i-lucide-git-merge',
-      onSelect: () => setPreset(p.id),
-    })),
-  ],
-])
+// The "pick nothing" row names the default policy it resolves to; the picker's detail pane
+// explains what that policy does, so the row itself stays a bare name.
+const defaultPresetLabel = computed(() =>
+  riskPolicies.defaultPreset
+    ? t('inspector.runSettings.defaultRiskPolicy', { name: riskPolicies.defaultPreset.name })
+    : t('inspector.runSettings.workspaceDefault'),
+)
 function setPreset(id: string) {
   board.updateBlock(props.block.id, { riskPolicyId: id })
 }
@@ -120,7 +108,7 @@ const modelPresetMenu = computed(() => [
   [
     {
       label: modelPresets.defaultPreset
-        ? t('inspector.runSettings.defaultPreset', { name: modelPresets.defaultPreset.name })
+        ? t('inspector.runSettings.defaultModelPreset', { name: modelPresets.defaultPreset.name })
         : t('inspector.runSettings.workspaceDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setModelPreset(''),
@@ -317,24 +305,44 @@ const technicalLabel = computed(() => {
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.mergePolicy') }}
         </span>
-        <UDropdownMenu :items="presetMenu">
-          <UButton
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-git-merge"
-            trailing-icon="i-lucide-chevron-down"
-          />
-        </UDropdownMenu>
+        <RiskPolicyPicker
+          :model-value="block.riskPolicyId ?? ''"
+          :options="riskPolicies.presets"
+          :default-policy="riskPolicies.defaultPreset"
+          :none-label="defaultPresetLabel"
+          @update:model-value="setPreset"
+        >
+          <template #trigger>
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-git-merge"
+              trailing-icon="i-lucide-chevron-down"
+            />
+          </template>
+        </RiskPolicyPicker>
       </div>
       <div v-if="selectedPreset" class="text-[11px] text-slate-400">
-        <i18n-t keypath="inspector.runSettings.riskPolicyDetail" tag="span" scope="global">
+        <i18n-t
+          v-if="selectedPreset.autoMergeEnabled"
+          keypath="inspector.runSettings.riskPolicyDetail"
+          tag="span"
+          scope="global"
+        >
           <template #name>
             <span class="text-slate-300">{{ selectedPreset.name }}</span>
           </template>
-          <template #complexity>{{ n(selectedPreset.maxComplexity, { key: 'percent' }) }}</template>
           <template #risk>{{ n(selectedPreset.maxRisk, { key: 'percent' }) }}</template>
           <template #impact>{{ n(selectedPreset.maxImpact, { key: 'percent' }) }}</template>
+          <template #complexity>{{ n(selectedPreset.maxComplexity, { key: 'percent' }) }}</template>
+          <template #attempts>{{ selectedPreset.ciMaxAttempts }}</template>
+        </i18n-t>
+        <!-- Auto-merge off: the ceilings never apply, so quoting them would misdescribe it. -->
+        <i18n-t v-else keypath="inspector.runSettings.riskPolicyManual" tag="span" scope="global">
+          <template #name>
+            <span class="text-slate-300">{{ selectedPreset.name }}</span>
+          </template>
           <template #attempts>{{ selectedPreset.ciMaxAttempts }}</template>
         </i18n-t>
         <span v-if="!block.riskPolicyId" class="text-slate-500">{{

@@ -110,7 +110,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   structure, dependencies, model + fragment picker, live execution, and linked
   docs/issues/scenarios. Decisions resolve via `DecisionModal`.
 - **Pipeline builder** (`components/pipeline`) — assemble/edit agent chains and
-  watch `PipelineProgress`.
+  watch `PipelineProgress`. `PipelinePicker` (+ its `PipelinePreview` pane) is the
+  single way a pipeline is chosen anywhere — add-task, run settings, the recurring
+  schedule, the focus view's Run menu — so every surface explains a pipeline by the
+  ordered steps it will run rather than by its name alone.
 - **Integrations** — modals/panels for `github` (the source-control panel, shared
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`

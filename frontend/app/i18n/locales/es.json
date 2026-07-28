@@ -279,7 +279,7 @@
       "chooseAtRunTime": "Elegir al ejecutar",
       "mergePolicy": "Política de riesgo",
       "workspaceDefault": "Predeterminado del espacio",
-      "defaultPreset": "Predeterminado ({name}): {thresholds}",
+      "defaultPreset": "Predeterminada ({name})",
       "defaultModelPreset": "Predeterminado ({name})",
       "modelPreset": "Preset de modelo",
       "bestPractices": "Buenas prácticas",
@@ -1013,8 +1013,8 @@
       "unassigned": "Sin asignar",
       "workspaceDefault": "Predeterminado del espacio de trabajo",
       "workspaceDefaultParen": "(predeterminado del espacio de trabajo)",
-      "defaultPresetThresholds": "Predeterminado ({name}): {thresholds}",
-      "defaultPreset": "Predeterminado ({name})",
+      "defaultRiskPolicy": "Predeterminada ({name})",
+      "defaultModelPreset": "Predeterminado ({name})",
       "noDefault": "Sin predeterminado",
       "inheritWorkspace": "Heredar del espacio de trabajo",
       "on": "Activado",
@@ -1030,7 +1030,8 @@
       "pipelineEmpty": "Sin predeterminado. Elige un pipeline cuando ejecutes esta tarea.",
       "pipelineHint": "El pipeline que el botón Ejecutar inicia por defecto: la secuencia de pasos de agente (por ejemplo especificación, código, pruebas, fusión) que se ejecuta para esta tarea.",
       "mergePolicy": "Política de riesgo",
-      "riskPolicyDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
+      "riskPolicyDetail": "{name}: se fusiona sin revisión humana cuando riesgo ≤ {risk}, impacto ≤ {impact} y complejidad ≤ {complexity}; hasta {attempts} intentos de corrección de CI.",
+      "riskPolicyManual": "{name}: nunca se fusiona por su cuenta, así que cada pull request espera una revisión humana; hasta {attempts} intentos de corrección de CI.",
       "riskPolicyEmpty": "No hay política de riesgo configurada. El fusionador genera una notificación de revisión para cada PR.",
       "mergePolicyHint": "Decide cuándo un pull request terminado se fusiona automáticamente en lugar de esperar una revisión humana, y cuántos intentos de arreglo de CI tiene una ejecución.",
       "modelPreset": "Preajuste de modelo",
@@ -3549,7 +3550,11 @@
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay incidencias coincidentes.",
       "emptySearchable": "Busca por título o elige una incidencia importada.",
-      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla."
+      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla.",
+      "sourceLabel": "Fuente",
+      "noSource": "Elige una fuente",
+      "connectSource": "Conectar {label}",
+      "enableSource": "Habilitar {label}"
     },
     "contextIssues": {
       "title": "Incidencias de contexto",
@@ -3662,10 +3667,12 @@
     },
     "preview": {
       "stepCount": "{count} paso | {count} pasos",
+      "gateCount": "{count} aprobación | {count} aprobaciones",
       "gated": "Aprobación humana después de este paso"
     },
     "picker": {
-      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea."
+      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea.",
+      "hoverHint": "Pasa el cursor por una pipeline para ver los pasos que ejecuta."
     },
     "builder": {
       "title": "Constructor de pipelines",
@@ -4000,6 +4007,11 @@
     "recommendationRequested": "Recomendación solicitada — revisa la sugerencia más abajo.",
     "recommendedDefault": "Valor recomendado por defecto: consérvalo, edítalo o descarta el hallazgo.",
     "needsYourInput": "Necesita tu intervención",
+    "group": {
+      "action": "Necesita tu reacción",
+      "waiting": "Esperando sugerencias",
+      "settled": "Gestionados"
+    },
     "mode": {
       "answer": "Responder",
       "dismiss": "Descartar",
@@ -5018,6 +5030,25 @@
       "toast": {
         "reseedFailed": "No se pudo regenerar la política de riesgo"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Se aplica porque esta tarea no elige una política propia.",
+      "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana."
+    },
+    "preview": {
+      "defaultBadge": "Predeterminada",
+      "autoMergeHeading": "Umbrales de fusión automática",
+      "axis": {
+        "risk": "Riesgo",
+        "impact": "Impacto",
+        "complexity": "Complejidad"
+      },
+      "ceiling": "igual o inferior a {value}",
+      "autoMergeExplainer": "Cuando CI está en verde, el agente fusionador puntúa el pull request en estos tres ejes. Si todas las puntuaciones quedan en su límite o por debajo, el pull request se fusiona solo y se salta la revisión humana; cualquier valor superior lo envía a una persona.",
+      "manualHeading": "Solo revisión manual",
+      "manualExplainer": "Esta política nunca fusiona por su cuenta, así que cada pull request espera una revisión humana sea cual sea su puntuación.",
+      "ciHeading": "Correcciones de CI",
+      "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse."
     }
   },
   "modelPreset": {
