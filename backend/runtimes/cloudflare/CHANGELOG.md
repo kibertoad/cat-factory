@@ -1,5 +1,57 @@
 # @cat-factory/worker
 
+## 0.115.0
+
+### Minor Changes
+
+- 58e06a2: Give a workspace a DEFAULT test-environment provisioning mechanism, suggested for every service
+  added afterwards, and prompt for it when a board has never chosen one.
+
+  Declaring a provision type per service (ADR 0007) is right, but it made the common case — a board
+  where every service provisions the same way — a per-service chore, and a service nobody got to
+  silently produced no test environment at all. `workspace_settings` gains
+  `defaultProvisionType` + `defaultProvisionManifestId` (D1 + Drizzle, with a conformance
+  assertion), and `BoardService` stamps them onto every newly created service frame via both
+  creation paths, alongside the existing default fragment selection.
+
+  The pair is nullable rather than defaulted, and the distinction is the feature: `null` means the
+  operator has never chosen — what the new `DefaultTestEnvBanner` nags about, which covers a
+  manually created board, the board the SPA creates implicitly on first launch, and an older board
+  predating the setting under one condition — while `infraless` is a real decision ("services stand
+  up no environment") that silences it. The banner carries a shareable `?settings=default-test-env`
+  deep link to the Infrastructure window's Test-environments tab, where the new section preselects
+  the first REGISTERED custom provider when the deployment shipped one and nothing is stored yet
+  (unsaved, and labelled as a suggestion until saved).
+
+  The seed is creation-time only: the engine still reads a service's own `provisioning`, so changing
+  the default never retroactively alters an existing service. `WorkspaceSettingsService.update`
+  refuses a `custom` default with no manifest id and clears a stale id when switching away, since a
+  `custom` service pinning nothing matches no `remote-custom` handler.
+
+  `BoardService`'s `reviewFrictionSettings` dependency is renamed to `workspaceSettings` (one reader
+  now feeds both the friction guard and the provisioning seed), and the frame-creation defaults move
+  into a `newServiceFrameDefaults` collaborator.
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+  - @cat-factory/kernel@0.177.0
+  - @cat-factory/orchestration@0.157.0
+  - @cat-factory/agents@0.80.1
+  - @cat-factory/consensus@0.12.6
+  - @cat-factory/eks@0.1.158
+  - @cat-factory/gates@0.8.5
+  - @cat-factory/gitlab@0.13.25
+  - @cat-factory/integrations@0.107.2
+  - @cat-factory/observability-otel@0.4.2
+  - @cat-factory/prompt-fragments@0.15.7
+  - @cat-factory/server@0.166.1
+  - @cat-factory/spend@0.12.106
+  - @cat-factory/caching@0.11.5
+  - @cat-factory/observability-langfuse@0.9.2
+  - @cat-factory/provider-cloudflare@0.7.311
+
 ## 0.114.0
 
 ### Minor Changes
