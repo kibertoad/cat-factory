@@ -153,13 +153,24 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  *    with accounts enabled).
  *  - one icon per destination across shells.
  *
- * `advanced: true` marks the power-user half, hidden in basic interface mode. The line
- * drawn here is "would a team shipping their first task open this?": connecting a repo or
- * an integration, picking models, and the workspace/account settings stay; AUTHORING the
- * machinery those defaults come from (the pipeline builder, the fragment library, merge
- * thresholds, service fragment defaults), the experimentation surfaces (sandbox, Kaizen),
- * the infrastructure/environment plumbing, per-user local models, and the operator-tier
- * dashboards do not.
+ * `advanced: true` marks the power-user half, hidden in basic interface mode. The line is
+ * drawn by ROUTE COUNT, not by how advanced a surface feels: hiding the only way to reach a
+ * capability removes the capability from the tier, while hiding a shortcut to a surface basic
+ * mode already reaches removes nothing. So an item is advanced only when both of these hold —
+ * it is not the sole route to its capability, and nothing on the delivery path needs it:
+ *
+ *  - `sandbox` / `kaizen` — experimentation and self-grading surfaces, beside the delivery
+ *    path rather than on it.
+ *  - `merge-thresholds` / `service-fragment-defaults` — palette shortcuts into Workspace
+ *    settings tabs (Merge, Service best practices), which basic mode reaches via
+ *    `workspace-settings`.
+ *  - `local-models` — a per-user endpoint knob the Integrations hub already offers.
+ *
+ * Everything else stays in basic BECAUSE it is a sole route: authoring a flow
+ * (`build-pipeline`), the standards/skills library (`fragments`, whose only other route is a
+ * button two levels into Workspace settings), the PREnv + runner plumbing (`infrastructure`,
+ * `environment-setup`), and the operator/cost views that are the only aggregate read of run
+ * health and spend (`operator-dashboard`, `reports`).
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
@@ -167,7 +178,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.buildPipeline',
     icon: 'i-lucide-workflow',
     surfaces: S('sidebar', 'command'),
-    advanced: true,
     gate: (g) => g.canWriteBoard,
     action: 'buildPipeline',
     testId: 'nav-build-pipeline',
@@ -253,7 +263,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.infrastructure',
     icon: 'i-lucide-server-cog',
     surfaces: S('sidebar'),
-    advanced: true,
     gate: (g) => g.infrastructureAvailable,
     action: 'infrastructure',
     testId: 'nav-infrastructure',
@@ -264,7 +273,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.environmentSetup',
     icon: 'i-lucide-flask-conical',
     surfaces: S('sidebar'),
-    advanced: true,
     gate: (g) => g.infrastructureAvailable,
     action: 'environmentSetup',
     testId: 'nav-environment-setup',
@@ -275,7 +283,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.contextFragments',
     icon: 'i-lucide-book-marked',
     surfaces: S('sidebar', 'command'),
-    advanced: true,
     gate: (g) => g.libraryAvailable && g.canManageSettings,
     action: 'fragmentLibrary',
     testId: 'nav-fragments',
@@ -381,7 +388,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.operatorDashboard',
     icon: 'i-lucide-gauge',
     surfaces: S('sidebar'),
-    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'operatorDashboard',
     testId: 'nav-operator-dashboard',
@@ -392,7 +398,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.reports',
     icon: 'i-lucide-chart-column',
     surfaces: S('sidebar'),
-    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'reports',
     testId: 'nav-reports',

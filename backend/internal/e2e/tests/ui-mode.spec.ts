@@ -7,9 +7,9 @@ import { createSeededWorkspace, openBoard, pinWorkspace, useAdvancedInterfaceMod
 // no reload (it rides the same reactive slot filter as an RBAC flip), and the collapsed rail
 // is lg-only so the compact drawer is never railed.
 //
-// `nav-build-pipeline` is the probe for the advanced tier and `nav-workspace-settings` for
-// the basic one: both are dev-open-visible in this deployment, so the only thing that moves
-// them is the tier.
+// `nav-kaizen` is the probe for the advanced tier and `nav-workspace-settings` for the basic
+// one: both are dev-open-visible in this deployment (Kaizen carries no RBAC gate at all), so
+// the only thing that moves them is the tier.
 test.describe('interface mode (basic / advanced)', () => {
   test('a board opens in basic mode: rail collapsed, advanced destinations hidden', async ({
     page,
@@ -24,9 +24,13 @@ test.describe('interface mode (basic / advanced)', () => {
     await expect(sidebar.getByText('Workspace settings')).toHaveCount(0)
     await expect(page.getByTestId('nav-workspace-settings')).toBeVisible()
     // The advanced half is absent from the DOM, not merely disabled.
-    await expect(page.getByTestId('nav-build-pipeline')).toHaveCount(0)
-    await expect(page.getByTestId('nav-fragments')).toHaveCount(0)
+    await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
     await expect(page.getByTestId('nav-sandbox')).toHaveCount(0)
+    // ...while the sole-route destinations stay, however deep they feel: basic hides
+    // shortcuts and side surfaces, never the only way to reach a capability. The pipeline
+    // builder is the probe (its `board.write` gate passes dev-open, unlike `nav-fragments`,
+    // whose availability gate depends on the library integration this server may not wire).
+    await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
   })
 
   test('the rail toggle expands and re-collapses the navbar', async ({ page, seededBoard }) => {
@@ -40,7 +44,7 @@ test.describe('interface mode (basic / advanced)', () => {
     await toggle.click()
     await expect(sidebar).toHaveAttribute('data-collapsed', 'false')
     await expect(sidebar.getByText('Workspace settings')).toBeVisible()
-    await expect(page.getByTestId('nav-build-pipeline')).toHaveCount(0)
+    await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
 
     await toggle.click()
     await expect(sidebar).toHaveAttribute('data-collapsed', 'true')
@@ -56,7 +60,7 @@ test.describe('interface mode (basic / advanced)', () => {
     await page.getByRole('menuitem', { name: 'Advanced' }).click()
 
     // No reload: the nav re-gates through the same reactive slot filter a permission flip uses.
-    await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
+    await expect(page.getByTestId('nav-kaizen')).toBeVisible()
     await expect(page.getByTestId('nav-sandbox')).toBeVisible()
     // Advanced's default is the expanded navbar, so the labels come back too.
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
@@ -64,7 +68,7 @@ test.describe('interface mode (basic / advanced)', () => {
     // ...and back: switching to basic hides them again, still without a reload.
     await page.getByTestId('ui-mode-switcher').click()
     await page.getByRole('menuitem', { name: 'Basic' }).click()
-    await expect(page.getByTestId('nav-build-pipeline')).toHaveCount(0)
+    await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
   })
 
@@ -81,7 +85,7 @@ test.describe('interface mode (basic / advanced)', () => {
     await page.reload()
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
     // Still basic: remembering the rail must not promote the tier.
-    await expect(page.getByTestId('nav-build-pipeline')).toHaveCount(0)
+    await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
   })
 
   test('the command palette can reach the tier switch from basic mode', async ({
@@ -96,7 +100,7 @@ test.describe('interface mode (basic / advanced)', () => {
     await expect(page.getByTestId('command-bar')).toBeVisible()
     await page.getByTestId('command-ui-mode').click()
 
-    await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
+    await expect(page.getByTestId('nav-kaizen')).toBeVisible()
   })
 
   test('a stored advanced choice survives a reload', async ({ page, request }) => {
@@ -106,7 +110,7 @@ test.describe('interface mode (basic / advanced)', () => {
     await useAdvancedInterfaceMode(page)
     await openBoard(page)
 
-    await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
+    await expect(page.getByTestId('nav-kaizen')).toBeVisible()
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
   })
 
