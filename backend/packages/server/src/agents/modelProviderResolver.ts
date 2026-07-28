@@ -4,6 +4,7 @@ import {
   type ModelResolver,
   type ProviderRegistry,
   type VendorConcurrencyLimiter,
+  type WorkspaceBodiesGate,
   anthropicResolver,
   limitModelProvider,
   openAiCompatibleResolver,
@@ -51,7 +52,18 @@ export interface ScopedModelProviderOptions {
     userId: string,
   ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
   /** Wrap the scoped provider so inline calls feed the trace sink (Langfuse). */
-  instrument?: { traceSink: LlmTraceSink; recordPrompts?: boolean }
+  instrument?: {
+    traceSink: LlmTraceSink
+    recordPrompts?: boolean
+    /**
+     * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies
+     * before they leave for the sink — build it with {@link createStoreAgentContextGate}.
+     * Required so a facade cannot instrument inline calls while silently honouring only
+     * the deployment switch, which is how an opted-out workspace's bodies reached
+     * Langfuse/OTel for months (observability-logging-gaps.md, C2).
+     */
+    workspaceBodiesEnabled: WorkspaceBodiesGate
+  }
 }
 
 export function createScopedModelProviderResolver(
@@ -102,6 +114,7 @@ export function createScopedModelProviderResolver(
           inner: composite,
           traceSink: opts.instrument.traceSink,
           recordPrompts: opts.instrument.recordPrompts,
+          workspaceBodiesEnabled: opts.instrument.workspaceBodiesEnabled,
           logger,
         })
       }

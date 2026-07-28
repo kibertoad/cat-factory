@@ -25,14 +25,16 @@ import type { Context } from 'hono'
 import * as v from 'valibot'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the initiatives module or send a 503, returning null when unconfigured. */
 function requireInitiatives<E extends AppEnv>(c: Context<E>): InitiativesModule | null {
   return c.get('container').initiatives ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Initiatives are not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Initiatives are not configured')
+}
 
 /**
  * Workspace-scoped initiative endpoints: create (the initiative-level board block +
@@ -47,27 +49,27 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, createInitiativeContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const created = await initiatives.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(created, 201)
   })
 
   buildHonoRoute(app, listInitiativesContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     return c.json(await initiatives.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, getInitiativeContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { initiativeId } = c.req.valid('param')
     return c.json(await initiatives.service.get(param(c, 'workspaceId'), initiativeId), 200)
   })
 
   buildHonoRoute(app, getInitiativeByBlockContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.getByBlock(param(c, 'workspaceId'), blockId), 200)
   })
@@ -113,7 +115,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, answerInitiativeQuestionContract, async (c) => {
     const planning = requirePlanning(c)
-    if (!planning) return unavailable(c)
+    if (!planning) return unavailable()
     const { blockId } = c.req.valid('param')
     const { questionId, answer } = c.req.valid('json')
     return c.json(await planning.answer(param(c, 'workspaceId'), blockId, questionId, answer), 200)
@@ -121,7 +123,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, setInitiativeQuestionStatusContract, async (c) => {
     const planning = requirePlanning(c)
-    if (!planning) return unavailable(c)
+    if (!planning) return unavailable()
     const { blockId } = c.req.valid('param')
     const { questionId, status } = c.req.valid('json')
     return c.json(
@@ -132,7 +134,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, recommendInitiativeAnswerContract, async (c) => {
     const planning = requirePlanning(c)
-    if (!planning) return unavailable(c)
+    if (!planning) return unavailable()
     const { blockId } = c.req.valid('param')
     const { questionId } = c.req.valid('json')
     return c.json(await planning.recommendAnswer(param(c, 'workspaceId'), blockId, questionId), 200)
@@ -140,14 +142,14 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, continueInitiativePlanningContract, async (c) => {
     const planning = requirePlanning(c)
-    if (!planning) return unavailable(c)
+    if (!planning) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await planning.continue(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, proceedInitiativePlanningContract, async (c) => {
     const planning = requirePlanning(c)
-    if (!planning) return unavailable(c)
+    if (!planning) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await planning.proceed(param(c, 'workspaceId'), blockId), 200)
   })
@@ -159,21 +161,21 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, pauseInitiativeContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.pause(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, resumeInitiativeContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.resume(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, cancelInitiativeContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.cancel(param(c, 'workspaceId'), blockId), 200)
   })
@@ -185,7 +187,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, promoteInitiativeFollowUpContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { initiativeId, followUpId } = c.req.valid('param')
     const updated = await initiatives.service.promoteFollowUp(
       param(c, 'workspaceId'),
@@ -198,7 +200,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, dismissInitiativeFollowUpContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { initiativeId, followUpId } = c.req.valid('param')
     const updated = await initiatives.service.dismissFollowUp(
       param(c, 'workspaceId'),
@@ -210,7 +212,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateInitiativeItemContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { initiativeId, itemId } = c.req.valid('param')
     const updated = await initiatives.service.updateItem(
       param(c, 'workspaceId'),
@@ -223,7 +225,7 @@ export function initiativeController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateInitiativePolicyContract, async (c) => {
     const initiatives = requireInitiatives(c)
-    if (!initiatives) return unavailable(c)
+    if (!initiatives) return unavailable()
     const { initiativeId } = c.req.valid('param')
     const updated = await initiatives.service.updatePolicy(
       param(c, 'workspaceId'),

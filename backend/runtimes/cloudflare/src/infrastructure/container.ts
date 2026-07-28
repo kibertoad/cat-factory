@@ -111,6 +111,7 @@ import {
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
   createScopedModelProviderResolver,
+  createStoreAgentContextGate,
   wrapResolverWithLimiter,
   ENV_HELP,
   configProblem,
@@ -304,7 +305,16 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     buildOtelSink(loadOtelConfig(env)),
   ])
   const instrument = traceSink
-    ? { traceSink, recordPrompts: loadObservabilityConfig(env).recordPrompts }
+    ? {
+        traceSink,
+        recordPrompts: loadObservabilityConfig(env).recordPrompts,
+        // The second half of the body gate: the workspace's own `storeAgentContext`
+        // opt-out, the same one the proxied path honours. No cache handle is passed
+        // because `workspaceSettings` is a pass-through in the isolate-safe profile.
+        workspaceBodiesEnabled: createStoreAgentContextGate({
+          repository: new D1WorkspaceSettingsRepository({ db }),
+        }),
+      }
     : undefined
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const scoped = createScopedModelProviderResolver({

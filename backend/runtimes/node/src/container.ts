@@ -1309,6 +1309,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     wrapModelProviderResolver: options.wrapModelProviderResolver,
     cloudflareModelsEnabled: options.cloudflareModelsEnabled,
     caches: options.caches,
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
   })
 
   // Persistence the container-execution path needs (built from the same db). The

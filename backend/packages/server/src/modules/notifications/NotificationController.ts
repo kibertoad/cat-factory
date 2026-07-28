@@ -11,14 +11,16 @@ import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
 import { notificationActEffect } from './notificationActions.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the notifications module or send a 503, returning null when unconfigured. */
 function requireNotifications<E extends AppEnv>(c: Context<E>): NotificationsModule | null {
   return c.get('container').notifications ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Notifications are not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Notifications are not configured')
+}
 
 /**
  * Human-actionable notifications. `act` performs the notification's typed
@@ -35,7 +37,7 @@ export function notificationController(): Hono<AppEnv> {
   // Open notifications for the board inbox (the snapshot also carries these).
   buildHonoRoute(app, listNotificationsContract, async (c) => {
     const notifications = requireNotifications(c)
-    if (!notifications) return unavailable(c)
+    if (!notifications) return unavailable()
     return c.json(await notifications.service.listOpen(param(c, 'workspaceId')), 200)
   })
 
@@ -48,7 +50,7 @@ export function notificationController(): Hono<AppEnv> {
   app.use('/notifications/:notificationId/act', optionalJsonBody)
   buildHonoRoute(app, actNotificationContract, async (c) => {
     const notifications = requireNotifications(c)
-    if (!notifications) return unavailable(c)
+    if (!notifications) return unavailable()
     const workspaceId = param(c, 'workspaceId')
     const id = c.req.valid('param').notificationId
     const container = c.get('container')
@@ -67,7 +69,7 @@ export function notificationController(): Hono<AppEnv> {
   // Dismiss a notification without acting on it.
   buildHonoRoute(app, dismissNotificationContract, async (c) => {
     const notifications = requireNotifications(c)
-    if (!notifications) return unavailable(c)
+    if (!notifications) return unavailable()
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const dismissed = await notifications.service.resolve(

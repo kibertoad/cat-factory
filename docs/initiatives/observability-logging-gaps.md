@@ -1,6 +1,6 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** Phases 1 + 1b landed; Phases 2–6 open · **Owner:** core · **Started:** 2026-07-28
+**Status:** Phases 1, 1b + 2 landed; Phases 3–6 open (plus 1.2d) · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
 
@@ -126,6 +126,8 @@ executor/deploy harnesses (17, batched into 5.5), the SPA (~40, blocked on 6.5's
 ~110 bare `catch {}` blocks this finding wrongly reported as absent — now slice 1.2d.)_
 
 **B2 — Half the wire error vocabulary can't carry `details.reason`. (P1)**
+_(FIXED in Phase 2.2. The count below is an undercount: there were 113 envelopes across 68
+files, all migrated.)_
 Only `not_found`/`validation`/`conflict`/`credential_required`/`forbidden` have `DomainError`
 classes. `unavailable` (503), `unauthorized` (401), `rate_limited` (429) and `internal` exist only
 as ~40 hand-rolled envelope literals (e.g. `ClarityReviewController.ts:24`,
@@ -137,6 +139,7 @@ internals leak: `LlmProxyController.ts:196` returns the raw upstream exception t
 (502). `AuthController.ts:790` hand-maps a `ConflictError` and drops its `reason`.
 
 **B3 — `AgentFailure.reason` is dropped by the Cloudflare driver on every path. (P1)**
+_(FIXED in Phase 2.1, along with the `job_evicted` `detail` the same helper also dropped.)_
 `ExecutionWorkflow.ts`'s local `failRun` helper omits `reason` from its signature, so `:232`
 discards `result.reason` even though the runtime-neutral `drive.ts:192-197` forwards it. The
 advance-throw path drops it on **both** runtimes (`drive.ts:131` doesn't call `getErrorReason`;
@@ -200,6 +203,8 @@ gate probes, container dispatches — and no W3C `traceparent` crosses the conta
 no end-to-end trace exists (also flagged in the code-quality review, item 8).
 
 **C2 — Inline LLM calls never reach `llm_call_metrics`, and bypass the workspace privacy gate. (P1)**
+_(The PRIVACY half is FIXED in Phase 2.4; the COVERAGE half — persisting inline calls to
+`llm_call_metrics` — remains, as slice 5.6.)_
 `InstrumentedModelProvider.emit` (`agents/src/providers/instrumented.ts:127-161`) calls only
 `traceSink.recordGeneration` — no repository write. Every inline site (judges, requirements
 writer, kaizen, fragment selector, fork chat, consensus — ~19 `catFactoryObservability(` sites)
@@ -476,14 +481,69 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   when that condition later grows a branch. `const x = this.maybe; if (x) …` costs one line and
   keeps the typechecker responsible for it.
 
-### Phase 2 — Error identity survives the trip
+### Phase 2 — Error identity survives the trip — **LANDED**
 
-| #       | Step                                                                                                                                                                                                                                                                                                                                                                                            | Fixes             | Sev |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --- |
-| 2.1     | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes.                                                                                                       | B3                | P1  |
-| 2.2     | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2                | P1  |
-| ~~2.3~~ | ~~Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify`.~~ **Done in Phase 1.2** (the service needed a logger anyway, and the two changes are one file).                                                                                                                                                                                                               | B8                | P2  |
-| 2.4     | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks.                                                                                                                                                                                                             | C2 (privacy half) | P1  |
+| #       | Step                                                                                                                                                                                                                                                                                                                                                                                            | Fixes             | Sev | Status |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --- | ------ |
+| 2.1     | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes.                                                                                                       | B3                | P1  | ✅     |
+| 2.2     | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2                | P1  | ✅     |
+| ~~2.3~~ | ~~Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify`.~~ **Done in Phase 1.2** (the service needed a logger anyway, and the two changes are one file).                                                                                                                                                                                                               | B8                | P2  | ✅     |
+| 2.4     | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks.                                                                                                                                                                                                             | C2 (privacy half) | P1  | ✅     |
+
+#### What Phase 2 actually shipped
+
+- **The Cloudflare driver's `failRun` gained `reason`** and now forwards it from `job_failed`
+  results; both drivers call `getErrorReason(error)` on the advance-THROW path. A second
+  parity gap surfaced while editing the same helper: the Worker's `job_evicted` branch passed
+  no `detail`, so the container post-mortem — the only surviving account of why a container
+  died — was dropped on the runtime where containers actually run.
+- **The wire vocabulary is complete**: `UnavailableError` (503) / `UnauthorizedError` (401) /
+  `RateLimitedError` (429) join the five existing `DomainError` classes, each carrying
+  `details.reason`, with `errorHandler`'s status map and the persistence-RPC status map
+  extended. The audit undercounted the hand-rolled envelopes — there were **113**, not ~40,
+  across **68 files**; all are migrated.
+- **The migration shape worth copying**: a controller-local
+  `const unavailable = (): never => { throw new UnavailableError(…) }`. Because `never` is
+  assignable to every declared response type, the ~90 `return unavailable(c)` call sites became
+  `return unavailable()` with no change to their surrounding control flow, so the diff is
+  mechanical rather than a per-handler rewrite.
+- **`LlmProxyController` + `WebSearchProxyController` envelopes all carry a `code`** now
+  (`upstream_unavailable` / `upstream_error` / `upstream_blocked` / `unavailable` /
+  `unauthorized` / `validation` / `payload_too_large` / `spend_exhausted`), and the in-process
+  call failure no longer echoes the raw SDK exception onto the wire — that text routinely
+  carries the request URL or an auth header, and this response leaves the deployment. The cause
+  is still logged and still recorded on the call metric, both of which scrub.
+- **The inline LLM path now runs the SAME double gate as the proxy path.** `LLM_RECORD_PROMPTS`
+  alone used to govern it, so a workspace with `storeAgentContext` off still shipped its inline
+  prompt/response bodies to Langfuse/OTel — a privacy bug, not a coverage gap. The gate is a
+  narrow predicate (`WorkspaceBodiesGate`) built by `createStoreAgentContextGate` in the shared
+  server layer, so both facades wire it from one place.
+
+#### Notes for the next implementer
+
+- **`AuthController`'s signup hand-map was removed, but the reset-password one was KEPT.**
+  They look identical and are not: signup flattening `ConflictError`/`ValidationError` onto one
+  400 discards the code a client needs ("email taken" vs "password too weak"), while reset
+  flattening `NotFound`/`Conflict`/`Validation` onto one message is deliberate — the distinct
+  causes are an ORACLE for whether a reset token exists. Read the surrounding comment before
+  "finishing" a flattening that looks like an oversight.
+- **A controller that throws needs the app it is mounted on to have `onError`.** Both facades
+  wire `app.onError(handleError)` at the root, so production was fine — but
+  `VcsWebhookController.test.ts` built a bare `new Hono()` and every refusal became a 500. A
+  controller unit test must mount the real handler now, not just the route.
+- **The `Record<PersistenceErrorCode, number>` in `persistence/rpc.ts` earns its keep.** Adding
+  three `DomainErrorCode` members failed `tsc` there until they were mapped, which is the only
+  reason the machine-RPC status mapping stayed in step with the HTTP one.
+- **`publicApiAuth.ts` / `PublicDecisionController`'s `fail` shapes were deliberately left
+  alone.** They are a typed sum type (`{ fail: { status, code, message } }`) chosen so contract
+  handlers stay typed against their declared response schemas — a different pattern from the
+  hand-rolled envelope, and they already carry a `code`.
+- **The inline body gate FAILS CLOSED but does not fail the export.** An unreadable settings row
+  is not consent, so bodies are withheld — while the numeric telemetry still ships, because
+  losing usage/timing for a store hiccup would trade a privacy bug for an observability one.
+- **`LlmFragmentSelector` was the one inline site tagging no `workspaceId`**, so no workspace
+  opt-out could ever apply to it. It had `context.workspaceId` in hand. When adding an inline
+  LLM call, tag the workspace — the gate is only as good as the attribution.
 
 ### Phase 3 — Correlation & request visibility
 

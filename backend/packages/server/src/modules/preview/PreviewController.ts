@@ -10,6 +10,7 @@ import type { PreviewModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /**
  * Resolve the preview module, gating on the runtime's `frontendPreview.supported` capability
@@ -23,16 +24,9 @@ function requirePreview<E extends AppEnv>(c: Context<E>): PreviewModule | null {
   return container.preview ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'Browsable frontend previews are not supported on this runtime',
-      },
-    },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Browsable frontend previews are not supported on this runtime')
+}
 
 /**
  * Browsable frontend preview (slice 5c): start / poll / stop a long-lived build+serve container
@@ -45,21 +39,21 @@ export function previewController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getPreviewContract, async (c) => {
     const preview = requirePreview(c)
-    if (!preview) return unavailable(c)
+    if (!preview) return unavailable()
     const frameId = c.req.valid('param').frameId
     return c.json(await preview.service.get(param(c, 'workspaceId'), frameId), 200)
   })
 
   buildHonoRoute(app, startPreviewContract, async (c) => {
     const preview = requirePreview(c)
-    if (!preview) return unavailable(c)
+    if (!preview) return unavailable()
     const frameId = c.req.valid('param').frameId
     return c.json(await preview.service.start(param(c, 'workspaceId'), frameId), 201)
   })
 
   buildHonoRoute(app, stopPreviewContract, async (c) => {
     const preview = requirePreview(c)
-    if (!preview) return unavailable(c)
+    if (!preview) return unavailable()
     const frameId = c.req.valid('param').frameId
     return c.json(await preview.service.stop(param(c, 'workspaceId'), frameId), 200)
   })

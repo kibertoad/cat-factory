@@ -176,7 +176,15 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
       errorMessage: `Provider '${session.provider}' is not available`,
       upstreamMs: 0,
     })
-    return c.json({ error: { message: `Provider '${session.provider}' is not available` } }, 502)
+    return c.json(
+      {
+        error: {
+          code: 'upstream_unavailable',
+          message: `Provider '${session.provider}' is not available`,
+        },
+      },
+      502,
+    )
   }
   try {
     return await inProcess
@@ -193,7 +201,12 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
       upstreamMs: Date.now() - dispatchAt,
     })
     return c.json(
-      { error: { message: `In-process call failed for model '${session.model}': ${message}` } },
+      {
+        error: {
+          code: 'upstream_error',
+          message: `In-process call failed for model '${session.model}': ${message}`,
+        },
+      },
       502,
     )
   }
@@ -235,7 +248,12 @@ async function resolveUpstreamTarget(
       })
       return {
         failure: c.json(
-          { error: { message: `No local runner '${session.provider}' configured for this run` } },
+          {
+            error: {
+              code: 'upstream_unavailable',
+              message: `No local runner '${session.provider}' configured for this run`,
+            },
+          },
           502,
         ),
       }
@@ -261,7 +279,17 @@ async function resolveUpstreamTarget(
       errorMessage: message,
       upstreamMs: 0,
     })
-    return { failure: c.json({ error: { message } }, 502) }
+    // The raw exception text from an upstream/SDK call is NOT wire-safe: a fetch or SDK
+    // error routinely echoes the request URL (with its query) or an auth header back in its
+    // own message, and this response crosses out of the deployment. The cause is already
+    // logged above and recorded on the call metric — both of which are scrubbed sinks the
+    // operator can read — so the wire gets the generic framing instead.
+    return {
+      failure: c.json(
+        { error: { code: 'upstream_error', message: 'Upstream provider request failed' } },
+        502,
+      ),
+    }
   }
   // Lease the API key for this provider from the DB-backed pool (workspace + owning account + the
   // run initiator), scoped from the signed session claims. Keys are no longer env-baked: an empty
@@ -277,7 +305,12 @@ async function resolveUpstreamTarget(
       errorMessage: 'API-key store is not configured',
       upstreamMs: 0,
     })
-    return { failure: c.json({ error: { message: 'API-key store is not configured' } }, 502) }
+    return {
+      failure: c.json(
+        { error: { code: 'unavailable', message: 'API-key store is not configured' } },
+        502,
+      ),
+    }
   }
   try {
     const leased = await apiKeys.lease(session.workspaceId, session.provider as ApiKeyProvider, {
@@ -304,7 +337,12 @@ async function resolveUpstreamTarget(
     })
     return {
       failure: c.json(
-        { error: { message: `No API key configured for provider '${session.provider}'` } },
+        {
+          error: {
+            code: 'unavailable',
+            message: `No API key configured for provider '${session.provider}'`,
+          },
+        },
         502,
       ),
     }
@@ -358,7 +396,7 @@ async function relayUpstream(
         errorMessage: message,
         upstreamMs: Date.now() - dispatchAt,
       })
-      return c.json({ error: { message } }, 502)
+      return c.json({ error: { code: 'upstream_blocked', message } }, 502)
     }
   } else {
     upstreamRes = await fetch(upstreamUrl, upstreamInit)
@@ -430,7 +468,11 @@ export function llmProxyController(): Hono<AppEnv> {
     '/v1/chat/completions',
     bodyLimit({
       maxSize: MAX_PROXY_BODY_BYTES,
-      onError: (c) => c.json({ error: { message: 'Request body exceeds size limit' } }, 413),
+      onError: (c) =>
+        c.json(
+          { error: { code: 'payload_too_large', message: 'Request body exceeds size limit' } },
+          413,
+        ),
     }),
     async (c) => {
       // Proxy-entry clock: everything from here to the upstream dispatch (and after the
@@ -449,14 +491,20 @@ export function llmProxyController(): Hono<AppEnv> {
       const secret = config.auth.sessionSecret
       if (!secret) {
         logger.error('llm proxy: session secret not configured', { scope: 'llmProxy' })
-        return c.json({ error: { message: 'LLM proxy is not configured' } }, 503)
+        return c.json(
+          { error: { code: 'unavailable', message: 'LLM proxy is not configured' } },
+          503,
+        )
       }
 
       const sessions = new ContainerSessionService({ secret })
       const session = await sessions.verify(bearer(c.req.header('authorization')))
       if (!session) {
         logger.warn('llm proxy: invalid or expired session token', { scope: 'llmProxy' })
-        return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+        return c.json(
+          { error: { code: 'unauthorized', message: 'Invalid or expired session token' } },
+          401,
+        )
       }
 
       // Parse + harden the request: lock the model to the session's, and ask for
@@ -466,7 +514,7 @@ export function llmProxyController(): Hono<AppEnv> {
       try {
         payload = (await c.req.json()) as Record<string, unknown>
       } catch {
-        return c.json({ error: { message: 'Invalid JSON body' } }, 400)
+        return c.json({ error: { code: 'validation', message: 'Invalid JSON body' } }, 400)
       }
       payload.model = session.model
 
@@ -622,7 +670,10 @@ export function llmProxyController(): Hono<AppEnv> {
           errorMessage: 'Spend budget exhausted',
           upstreamMs: 0,
         })
-        return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+        return c.json(
+          { error: { code: 'spend_exhausted', message: 'Spend budget exhausted' } },
+          402,
+        )
       }
 
       // Give container agents generous output room for in-process Workers AI models (a no-op
