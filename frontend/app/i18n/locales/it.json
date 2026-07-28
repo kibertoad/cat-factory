@@ -4189,6 +4189,14 @@
       "dismiss": "Ignora"
     }
   },
+  "uiMode": {
+    "switcher": "Interfaccia",
+    "basic": "Base",
+    "advanced": "Avanzata",
+    "basicHint": "Solo gli strumenti di uso quotidiano. Passa ad Avanzata per vedere tutto.",
+    "advancedHint": "Tutte le sezioni e tutte le opzioni di esecuzione.",
+    "pinned": "Impostato da questo deployment"
+  },
   "common": {
     "loading": "Caricamento…",
     "save": "Salva",
@@ -4261,6 +4269,8 @@
     "menu": "Menu di navigazione",
     "openMenu": "Apri il menu",
     "closeMenu": "Chiudi il menu",
+    "expandSidebar": "Espandi la barra laterale",
+    "collapseSidebar": "Comprimi la barra laterale",
     "commandBar": "Cerca o esegui un comando…",
     "create": "Crea",
     "buildPipeline": "Crea una pipeline",

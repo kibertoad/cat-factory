@@ -5,9 +5,15 @@
 // actions, repository management, integration management, the workspace-wide
 // context-fragment library, and workspace configuration (merge thresholds +
 // default models).
+//
+// Two orthogonal ways this panel shrinks. WHICH destinations exist is the interface
+// TIER (basic hides the `advanced` contributions, filtered upstream in `navSlotFilter`);
+// how much room they take is the COLLAPSE state (the icon-only rail). Basic mode starts
+// railed, but either can be changed independently from the footer switcher / the toggle.
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
+import UiModeSwitcher from '~/components/layout/UiModeSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 
@@ -33,6 +39,13 @@ const { sidebarGroups, invoke } = useNavContributions()
 // `isCompact` (< lg) is the breakpoint at which the navbar is an off-canvas drawer;
 // above it the aside is static and the drawer flag is inert.
 const { isCompact } = useViewport()
+
+// The collapsed RAIL: labels drop away and the aside narrows to its icons. Scoped to the
+// STATIC aside — an off-canvas drawer is already a deliberate, temporary reveal, so opening
+// it only to find a rail would be two taps for one destination. The tier decides the default
+// (basic starts collapsed), the user's toggle wins from there — see `stores/uiMode.ts`.
+const uiMode = useUiModeStore()
+const railed = computed(() => !isCompact.value && uiMode.navCollapsed)
 
 // The off-canvas drawer is a modal surface on compact viewports, so give it the
 // expected affordances:
@@ -135,48 +148,83 @@ watch(
     :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
     class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-slate-800 bg-slate-900/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
-    :class="
-      ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full lg:translate-x-0'
-    "
+    :class="[
+      ui.mobileNavOpen
+        ? 'translate-x-0'
+        : '-translate-x-full rtl:translate-x-full lg:translate-x-0',
+      // The rail is lg-only (see `railed`), so the narrow width is too — below lg the drawer
+      // keeps its full width whatever the collapse state says.
+      railed ? 'lg:w-14 lg:px-2' : '',
+    ]"
+    :data-collapsed="railed ? 'true' : 'false'"
   >
-    <BoardSwitcher />
+    <!-- Rail toggle. lg-only: below it the hamburger + backdrop already own showing and
+         hiding the whole navbar, and a second collapse control there would fight them. -->
+    <UButton
+      class="hidden shrink-0 lg:flex"
+      :class="railed ? 'justify-center' : 'justify-end'"
+      :icon="railed ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'"
+      color="neutral"
+      variant="ghost"
+      size="xs"
+      :aria-label="railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')"
+      :title="railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')"
+      :aria-expanded="!railed"
+      data-testid="sidebar-collapse-toggle"
+      @click="uiMode.toggleNav()"
+    />
+
+    <BoardSwitcher :collapsed="railed" />
 
     <div class="contents" @click="onNavAction">
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->
       <button
         type="button"
-        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-start text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
+        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 py-2 text-start text-sm text-slate-400 transition hover:border-slate-500 hover:bg-slate-800"
+        :class="railed ? 'justify-center px-0' : 'px-2.5'"
+        :aria-label="t('nav.commandBar')"
+        :title="railed ? t('nav.commandBar') : undefined"
         @click="ui.openCommandBar()"
       >
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
-        <span class="flex-1 truncate">{{ t('nav.commandBar') }}</span>
-        <UKbd value="⌘K" />
+        <span v-if="!railed" class="flex-1 truncate">{{ t('nav.commandBar') }}</span>
+        <UKbd v-if="!railed" value="⌘K" />
       </button>
 
       <!-- Sections + items come from the shared nav manifest, already gated by the
-         reactive slotFilter (docs/initiatives/modular-vue-adoption.md, slice 1). An
-         empty section is dropped upstream, so there is no per-section `v-if` here. -->
+         reactive slotFilter (docs/initiatives/modular-vue-adoption.md, slice 1) — which
+         also drops the `advanced` items in basic interface mode. An empty section is
+         dropped upstream, so there is no per-section `v-if` here.
+         In the rail the section HEADERS go (they'd wrap to nothing at 3.5rem) but the
+         separators stay, so the grouping is still legible as icon clusters. -->
       <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
-          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h2
+            v-if="!railed"
+            class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          >
             {{ t(section.labelKey) }}
           </h2>
           <div class="space-y-1.5">
             <UButton
               v-for="item in section.items"
               :key="item.id"
-              block
+              :block="!railed"
               color="primary"
               variant="soft"
               size="sm"
               :icon="item.icon"
-              class="justify-start"
+              :square="railed"
+              class="w-full"
+              :class="railed ? 'justify-center' : 'justify-start'"
+              :aria-label="railed ? t(item.labelKey) : undefined"
+              :title="railed ? t(item.labelKey) : undefined"
               :data-testid="item.testId"
               @click="invoke(item)"
             >
-              {{ t(item.labelKey) }}
+              <span v-if="!railed">{{ t(item.labelKey) }}</span>
             </UButton>
           </div>
         </section>
@@ -184,8 +232,9 @@ watch(
     </div>
 
     <div class="mt-auto space-y-2">
-      <LanguageSwitcher />
-      <UserMenu />
+      <UiModeSwitcher :collapsed="railed" />
+      <LanguageSwitcher :collapsed="railed" />
+      <UserMenu :collapsed="railed" />
     </div>
   </aside>
 </template>

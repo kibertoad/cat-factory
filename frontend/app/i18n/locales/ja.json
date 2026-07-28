@@ -23,6 +23,14 @@
       "dismiss": "閉じる"
     }
   },
+  "uiMode": {
+    "switcher": "インターフェース",
+    "basic": "基本",
+    "advanced": "詳細",
+    "basicHint": "日常的に使う機能のみ。すべて表示するには「詳細」に切り替えてください。",
+    "advancedHint": "すべての項目とすべての実行オプション。",
+    "pinned": "このデプロイで設定されています"
+  },
   "common": {
     "loading": "読み込み中…",
     "save": "保存",
@@ -95,6 +103,8 @@
     "menu": "ナビゲーションメニュー",
     "openMenu": "メニューを開く",
     "closeMenu": "メニューを閉じる",
+    "expandSidebar": "サイドバーを展開",
+    "collapseSidebar": "サイドバーを折りたたむ",
     "commandBar": "検索またはコマンドを実行…",
     "create": "作成",
     "buildPipeline": "パイプラインを構築",

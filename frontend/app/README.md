@@ -15,6 +15,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Key UI surfaces](#key-ui-surfaces)
 - [Develop & test](#develop--test)
 
@@ -52,6 +53,38 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+## Interface modes (basic / advanced)
+
+The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday
+surface: the power-user nav destinations are hidden and the run/pipeline options that only
+exist to override a workspace-level default are left at that default. `advanced` shows
+everything. The tier resolves in a fixed order, first match wins:
+
+1. **`NUXT_PUBLIC_UI_MODE`** (`basic` | `advanced`) — the deployment pin. Like
+   `NUXT_PUBLIC_API_BASE` it is baked in at **build** time (`ssr: false`), and while it is
+   set the in-app switcher is a read-only indicator, since a preference the resolver ignores
+   would be a lie. An unrecognised value is ignored rather than failing the boot.
+2. **The user's own choice**, persisted client-side (the `uiMode` store) and changed from the
+   switcher at the bottom of the sidebar.
+3. **`basic`.**
+
+The sidebar can independently be **collapsed to an icon rail** (the toggle at its top, lg+
+only — below `lg` the navbar is already an off-canvas drawer). Basic mode always _starts_
+railed; an advanced-mode user's rail choice is remembered.
+
+Two seams carry the tier, and a new feature should use them rather than reading the store ad
+hoc where it can be avoided:
+
+- **A nav destination** declares `advanced: true` in `app/modular/nav-contributions.ts`. The
+  shared `navSlotFilter` drops it in basic mode across all three shells (sidebar, command
+  palette, toolbar), independently of its RBAC `gate` — both must pass. A consumer module's
+  own contributions take the same flag.
+- **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. Hide, never
+  disable, and only ever hide an OVERRIDE: what remains must be exactly the default the hidden
+  field would have shown, so a basic-mode user never gets different behaviour from an advanced
+  one — only fewer choices. An input nothing else supplies (the pipeline, the apriori branches)
+  stays in both tiers however advanced it feels.
+
 ## Extending the layer (consumer modules)
 
 A deployment can contribute its own components — result windows, nav entries, inspector
@@ -69,8 +102,8 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
   `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`.
 - **Sidebar & chrome** (`components/layout`) — board/account switchers, palettes
-  entry points, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision
-  queue).
+  entry points, the language + [interface-mode](#interface-modes-basic--advanced)
+  switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
 - **Palettes** (`components/palettes`) — drag blocks, pipelines and agents onto
   the board.
 - **Inspector** (`components/panels` + `panels/inspector`) — per-block tabs:

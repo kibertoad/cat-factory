@@ -4189,6 +4189,14 @@
       "dismiss": "Schließen"
     }
   },
+  "uiMode": {
+    "switcher": "Oberfläche",
+    "basic": "Einfach",
+    "advanced": "Erweitert",
+    "basicHint": "Nur die alltäglichen Werkzeuge. Für alles auf „Erweitert“ umschalten.",
+    "advancedHint": "Alle Bereiche und alle Ausführungsoptionen.",
+    "pinned": "Von dieser Installation festgelegt"
+  },
   "common": {
     "loading": "Wird geladen…",
     "save": "Speichern",
@@ -4261,6 +4269,8 @@
     "menu": "Navigationsmenü",
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen",
+    "expandSidebar": "Seitenleiste ausklappen",
+    "collapseSidebar": "Seitenleiste einklappen",
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
     "buildPipeline": "Eine Pipeline erstellen",

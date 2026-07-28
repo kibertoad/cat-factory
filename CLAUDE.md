@@ -1407,6 +1407,31 @@ event left to restore it.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts`): drive two out-of-order
   refreshes and assert the fresher one wins.
 
+## Basic vs advanced interface mode (frontend)
+
+The SPA renders at one of two tiers: `basic` (the shipped default — the everyday surface) and
+`advanced` (everything). Resolution is `NUXT_PUBLIC_UI_MODE` → the user's persisted choice →
+`basic`, first match wins, in `stores/uiMode.ts` (which also owns the sidebar's collapsed rail:
+basic mode always STARTS railed). Full model:
+[`frontend/app/README.md`](./frontend/app/README.md#interface-modes-basic--advanced).
+
+**A new user-facing surface must decide its tier, and the answer is never "ignore this".**
+
+- **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
+  `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
+  RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
+  un-disentangleable in the specs (and a consumer item loses the declarative flag).
+- **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
+  disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
+  field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred
+  flag), so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an
+  input NOTHING else supplies stays in BOTH tiers however advanced it feels — the e2e suite caught
+  exactly this on the apriori-branch picker, which has no default to fall back to.
+- **The env pin makes the switcher READ-ONLY** (`envPinned`), and `setMode` refuses to write. A
+  persisted preference the resolver would then ignore is a lie to the user, not a fallback.
+- **An e2e spec whose subject is not the tier pins it** with `useAdvancedInterfaceMode(page)`
+  before `openBoard`; `ui-mode.spec.ts` owns the default + the switch.
+
 ## Internationalization (i18n)
 
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. The

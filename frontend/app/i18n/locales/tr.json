@@ -23,6 +23,14 @@
       "dismiss": "Kapat"
     }
   },
+  "uiMode": {
+    "switcher": "Arayüz",
+    "basic": "Temel",
+    "advanced": "Gelişmiş",
+    "basicHint": "Yalnızca günlük araçlar. Her şeyi görmek için Gelişmiş’e geçin.",
+    "advancedHint": "Tüm bölümler ve tüm çalıştırma seçenekleri.",
+    "pinned": "Bu dağıtım tarafından belirlendi"
+  },
   "common": {
     "loading": "Yükleniyor…",
     "save": "Kaydet",
@@ -95,6 +103,8 @@
     "menu": "Gezinme menüsü",
     "openMenu": "Menüyü aç",
     "closeMenu": "Menüyü kapat",
+    "expandSidebar": "Kenar çubuğunu genişlet",
+    "collapseSidebar": "Kenar çubuğunu daralt",
     "commandBar": "Arayın veya bir komut çalıştırın…",
     "create": "Oluştur",
     "buildPipeline": "Bir işlem hattı oluştur",

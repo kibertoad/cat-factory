@@ -23,6 +23,14 @@
       "dismiss": "Fermer"
     }
   },
+  "uiMode": {
+    "switcher": "Interface",
+    "basic": "Basique",
+    "advanced": "Avancée",
+    "basicHint": "Uniquement les outils du quotidien. Passez en mode avancé pour tout afficher.",
+    "advancedHint": "Toutes les sections et toutes les options d’exécution.",
+    "pinned": "Défini par ce déploiement"
+  },
   "common": {
     "loading": "Chargement…",
     "save": "Enregistrer",
@@ -95,6 +103,8 @@
     "menu": "Menu de navigation",
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
+    "expandSidebar": "Développer la barre latérale",
+    "collapseSidebar": "Réduire la barre latérale",
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
     "buildPipeline": "Créer un pipeline",

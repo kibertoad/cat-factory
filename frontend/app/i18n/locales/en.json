@@ -23,6 +23,17 @@
       "dismiss": "Dismiss"
     }
   },
+  "uiMode": {
+    "switcher": "Interface",
+    "@switcher": {
+      "description": "Label above the picker that chooses how much of the app is shown (Basic or Advanced). It names the app's user interface, NOT a programming interface."
+    },
+    "basic": "Basic",
+    "advanced": "Advanced",
+    "basicHint": "Everyday tools only. Switch to Advanced to see everything.",
+    "advancedHint": "Every destination and every run option.",
+    "pinned": "Set by this deployment"
+  },
   "common": {
     "loading": "Loading…",
     "save": "Save",
@@ -107,6 +118,8 @@
     "menu": "Navigation menu",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
     "commandBar": "Search or run a command…",
     "create": "Create",
     "buildPipeline": "Build a pipeline",

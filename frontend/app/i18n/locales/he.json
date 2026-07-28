@@ -23,6 +23,14 @@
       "dismiss": "בטל"
     }
   },
+  "uiMode": {
+    "switcher": "ממשק",
+    "basic": "בסיסי",
+    "advanced": "מתקדם",
+    "basicHint": "רק הכלים היומיומיים. עברו למתקדם כדי לראות הכול.",
+    "advancedHint": "כל האזורים וכל אפשרויות ההרצה.",
+    "pinned": "נקבע על ידי פריסה זו"
+  },
   "common": {
     "loading": "טוען…",
     "save": "שמור",
@@ -95,6 +103,8 @@
     "menu": "תפריט ניווט",
     "openMenu": "פתח תפריט",
     "closeMenu": "סגור תפריט",
+    "expandSidebar": "הרחבת סרגל הצד",
+    "collapseSidebar": "כיווץ סרגל הצד",
     "commandBar": "חפש או הרץ פקודה…",
     "create": "יצירה",
     "buildPipeline": "בנה צינור",

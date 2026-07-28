@@ -12,6 +12,7 @@ const NO_GATES: NavGates = {
   infrastructureAvailable: false,
   accountsEnabled: false,
   isAccountAdmin: false,
+  advancedMode: false,
 }
 
 describe('app modular registry', () => {

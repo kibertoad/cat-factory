@@ -18,6 +18,15 @@ const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
 const tracker = useTrackerStore()
 const ui = useUiStore()
+// Interface tier. Basic mode hides only what OVERRIDES something already decided elsewhere:
+// a workspace-level default (merge policy, model preset, tracker writeback) or an
+// engine-inferred value (the technical/business label). That bound is what makes hiding safe
+// — what's left is exactly the value the hidden field would have displayed, so a basic-mode
+// task behaves identically. Everything that carries an input NOTHING else supplies stays in
+// both tiers, however advanced it feels: the pipeline, the involved services, the apriori
+// branches, the responsible person, auto-start. The same split applies at creation time in
+// `AddTaskModal`.
+const uiMode = useUiModeStore()
 const { ready, unavailableInPreset } = useAiReadiness()
 const { t, n } = useI18n()
 
@@ -302,8 +311,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- merge policy preset -->
-    <div>
+    <!-- merge policy preset (advanced: overrides the workspace default) -->
+    <div v-if="uiMode.isAdvanced">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.mergePolicy') }}
@@ -340,8 +349,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- model preset -->
-    <div>
+    <!-- model preset (advanced: overrides the workspace default) -->
+    <div v-if="uiMode.isAdvanced">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.modelPreset') }}
@@ -414,8 +423,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- technical label (tri-state) -->
-    <div>
+    <!-- technical label (tri-state) — advanced: unset lets the engine infer it -->
+    <div v-if="uiMode.isAdvanced">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.taskKind') }}
@@ -490,8 +499,8 @@ const technicalLabel = computed(() => {
     <!-- reference repositories: read-only repos the doc-writer reads while drafting (doc tasks) -->
     <DocReferenceRepos v-if="block.taskType === 'document'" :block="block" />
 
-    <!-- issue-tracker writeback overrides -->
-    <div>
+    <!-- issue-tracker writeback overrides (advanced: overrides the workspace defaults) -->
+    <div v-if="uiMode.isAdvanced">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.issueWriteback') }}
