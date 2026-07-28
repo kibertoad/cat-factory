@@ -151,7 +151,7 @@ conformance suite):
 | --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ----- |
 | 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done | #1430 |
 | 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done |       |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done |       |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done | #1455 |
 | 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo |       |
 | 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
 | 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo |       |
