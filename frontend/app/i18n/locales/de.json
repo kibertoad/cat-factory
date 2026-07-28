@@ -1992,7 +1992,8 @@
         "localModels": "Meine lokalen Runner",
         "sandbox": "Sandbox öffnen",
         "shortcuts": "Tastenkürzel",
-        "bugHunt": "Fehlerjagd"
+        "bugHunt": "Fehlerjagd",
+        "toggleUiMode": "Oberflächenmodus wechseln"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2013,7 +2014,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
-        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen"
+        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
+        "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden"
       }
     },
     "shortcuts": {

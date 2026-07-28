@@ -1950,7 +1950,8 @@
         "localModels": "המריצים המקומיים שלי",
         "sandbox": "פתח ארגז חול",
         "shortcuts": "קיצורי מקלדת",
-        "bugHunt": "ציד באגים"
+        "bugHunt": "ציד באגים",
+        "toggleUiMode": "החלפת מצב ממשק"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1971,7 +1972,8 @@
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
         "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
         "shortcuts": "קיצורים מקלדת מקשים עזרה",
-        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות"
+        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות",
+        "toggleUiMode": "ממשק מצב בסיסי מתקדם הצגה הסתרה"
       }
     },
     "integrationsHub": {

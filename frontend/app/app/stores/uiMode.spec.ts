@@ -87,51 +87,49 @@ describe('useUiModeStore navbar collapse', () => {
     expect(advanced.navCollapsed).toBe(false)
   })
 
-  it('starts collapsed in basic mode even after an advanced-mode rail preference was stored', () => {
-    const ui = useUiModeStore()
-    // What a restored persisted state looks like for a user who ran the rail in advanced mode
-    // and has since switched back to basic.
-    ui.railPreference = true
-    ui.storedMode = 'basic'
-    expect(ui.navCollapsed).toBe(true)
-  })
-
-  it('lets the user expand the rail within a basic-mode session without persisting it', () => {
+  it('remembers the rail choice in EITHER tier, across a reload', () => {
+    // The persisted shape is per-tier, so an expand in basic is remembered just as an advanced
+    // one is — the default is what differs between the tiers, not whether a choice sticks.
     const ui = useUiModeStore()
     ui.toggleNav()
     expect(ui.navCollapsed).toBe(false)
-    // Basic mode's default is fixed, so the expand is session-only: nothing is remembered.
-    expect(ui.railPreference).toBe(false)
+    expect(ui.railCollapsed.basic).toBe(false)
+
+    const advanced = storeWithEnv('advanced')
+    advanced.toggleNav()
+    expect(advanced.navCollapsed).toBe(true)
+    expect(advanced.railCollapsed.advanced).toBe(true)
   })
 
-  it('remembers an advanced-mode rail choice', () => {
-    const ui = storeWithEnv('advanced')
-    ui.toggleNav()
-    expect(ui.navCollapsed).toBe(true)
-    expect(ui.railPreference).toBe(true)
-  })
-
-  it('re-derives the collapse from the mode when the user switches tiers', async () => {
+  it('keeps each tier’s rail state independent across a switch', async () => {
     const ui = useUiModeStore()
-    // Basic + explicitly expanded, then promoted to advanced: the advanced default (the stored
-    // rail preference, here expanded) applies rather than the basic-mode override lingering.
+    // Expand in basic, then collapse in advanced: neither choice may leak into the other tier.
     ui.toggleNav()
     expect(ui.navCollapsed).toBe(false)
 
     ui.setMode('advanced')
     await nextTick()
-    expect(ui.navCollapsed).toBe(false)
-
-    // Collapse it in advanced (persisted), then drop back to basic: basic starts collapsed.
+    expect(ui.navCollapsed).toBe(false) // advanced's own default
     ui.toggleNav()
+    expect(ui.navCollapsed).toBe(true)
+
     ui.setMode('basic')
     await nextTick()
-    expect(ui.navCollapsed).toBe(true)
+    expect(ui.navCollapsed).toBe(false) // the basic expand survived the round trip
 
-    // ...and back up to advanced restores the remembered rail.
     ui.setMode('advanced')
     await nextTick()
     expect(ui.navCollapsed).toBe(true)
+  })
+
+  it('falls back to the tier default when the restored preference is missing a key', () => {
+    // A persisted blob from an older build (or a hand-edited cookie) can omit a tier; a rail
+    // stuck on `undefined` would render expanded, which is wrong for basic.
+    const ui = useUiModeStore()
+    ui.railCollapsed = {} as Record<UiMode, boolean>
+    expect(ui.navCollapsed).toBe(true)
+    ui.setMode('advanced')
+    expect(ui.navCollapsed).toBe(false)
   })
 
   it('setNavCollapsed is idempotent', () => {

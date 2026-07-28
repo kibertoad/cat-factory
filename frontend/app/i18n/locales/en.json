@@ -2019,7 +2019,8 @@
         "localModels": "My local runners",
         "sandbox": "Open Sandbox",
         "shortcuts": "Keyboard shortcuts",
-        "bugHunt": "Bug hunt"
+        "bugHunt": "Bug hunt",
+        "toggleUiMode": "Switch interface mode"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2040,7 +2041,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
-        "bugHunt": "bug hunt triage backlog issue tracker unassigned"
+        "bugHunt": "bug hunt triage backlog issue tracker unassigned",
+        "toggleUiMode": "interface mode basic advanced simple expert show hide"
       }
     },
     "shortcuts": {

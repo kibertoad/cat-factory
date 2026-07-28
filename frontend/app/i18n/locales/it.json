@@ -1992,7 +1992,8 @@
         "localModels": "I miei runner locali",
         "sandbox": "Apri Sandbox",
         "shortcuts": "Scorciatoie da tastiera",
-        "bugHunt": "Caccia ai bug"
+        "bugHunt": "Caccia ai bug",
+        "toggleUiMode": "Cambia modalità interfaccia"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2013,7 +2014,8 @@
         "localModels": "modello locale runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt modello test esperimento giudice fixture benchmark valuta",
         "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
-        "bugHunt": "bug caccia triage backlog ticket non assegnati"
+        "bugHunt": "bug caccia triage backlog ticket non assegnati",
+        "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi"
       }
     },
     "shortcuts": {

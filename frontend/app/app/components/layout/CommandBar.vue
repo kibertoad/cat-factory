@@ -235,13 +235,14 @@ function indexOf(cmd: Command) {
 <template>
   <UModal v-model:open="open" :ui="{ content: 'max-w-xl' }">
     <template #content>
-      <div class="flex flex-col" @keydown="onKeydown">
+      <div class="flex flex-col" data-testid="command-bar" @keydown="onKeydown">
         <div class="flex items-center gap-2 border-b border-slate-800 px-3">
           <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0 text-slate-500" />
           <UInput
             ref="inputRef"
             v-model="query"
             variant="none"
+            data-testid="command-bar-input"
             :placeholder="t('layout.commandBar.searchPlaceholder')"
             class="w-full"
             :ui="{ base: 'py-3 text-sm' }"
@@ -264,6 +265,7 @@ function indexOf(cmd: Command) {
               v-for="cmd in group.items"
               :key="cmd.id"
               type="button"
+              :data-testid="`command-${cmd.id}`"
               class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-start text-sm transition"
               :class="
                 indexOf(cmd) === activeIndex

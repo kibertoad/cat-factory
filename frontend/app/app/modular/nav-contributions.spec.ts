@@ -106,6 +106,18 @@ describe('navSlotFilter', () => {
     expect(kept).not.toContain('operator-dashboard')
   })
 
+  it('keeps the tier switch itself reachable in basic mode', () => {
+    // Basic is the shipped default, so this palette entry is how a user who never finds the
+    // (icon-only, in the basic rail) sidebar switcher gets to the advanced half at all. Marking
+    // it `advanced` would hide the way back from exactly the tier that needs it.
+    const uiModeItem = NAV_CONTRIBUTIONS.find((i) => i.id === 'ui-mode')
+    expect(uiModeItem?.advanced).toBeUndefined()
+    expect(uiModeItem?.gate).toBeUndefined()
+
+    const gates: NavGates = { ...NO_GATES, advancedMode: false }
+    expect(ids(navSlotFilter(slots(), { gates }))).toContain('ui-mode')
+  })
+
   it('keeps the tier and the permission axes independent — both must pass', () => {
     // `build-pipeline` is advanced AND needs board.write: neither axis alone reveals it.
     const advancedOnly: NavGates = { ...NO_GATES, advancedMode: true }
@@ -216,7 +228,8 @@ describe('nav grouping helpers', () => {
 
   it('groupCommands preserves the pre-slice-1 workspace-group order', () => {
     const workspace = groupCommands(NAV_CONTRIBUTIONS).find((g) => g.group === 'workspace')
-    // Same order the old CommandBar pushed them in (parity, not a reorder).
+    // Same order the old CommandBar pushed them in (parity, not a reorder), with genuinely
+    // new entries appended after it rather than interleaved.
     expect(workspace?.items.map((ci) => ci.item.id)).toEqual([
       'fragments',
       'merge-thresholds',
@@ -226,6 +239,7 @@ describe('nav grouping helpers', () => {
       'local-models',
       'sandbox',
       'keyboard-shortcuts',
+      'ui-mode',
     ])
   })
 

@@ -65,12 +65,15 @@ everything. The tier resolves in a fixed order, first match wins:
    set the in-app switcher is a read-only indicator, since a preference the resolver ignores
    would be a lie. An unrecognised value is ignored rather than failing the boot.
 2. **The user's own choice**, persisted client-side (the `uiMode` store) and changed from the
-   switcher at the bottom of the sidebar.
+   switcher at the bottom of the sidebar — or from the **command palette** entry, which is
+   deliberately _not_ an advanced item: basic is the default, so the route back to the
+   advanced half has to exist inside basic mode.
 3. **`basic`.**
 
 The sidebar can independently be **collapsed to an icon rail** (the toggle at its top, lg+
-only — below `lg` the navbar is already an off-canvas drawer). Basic mode always _starts_
-railed; an advanced-mode user's rail choice is remembered.
+only — below `lg` the navbar is already an off-canvas drawer). The rail preference is
+**per-tier**: basic _defaults_ to railed and advanced to expanded, and each tier remembers its
+own choice, so an expand in either survives a reload and a round trip through the other.
 
 Two seams carry the tier, and a new feature should use them rather than reading the store ad
 hoc where it can be avoided:
@@ -84,6 +87,13 @@ hoc where it can be avoided:
   field would have shown, so a basic-mode user never gets different behaviour from an advanced
   one — only fewer choices. An input nothing else supplies (the pipeline, the apriori branches)
   stays in both tiers however advanced it feels.
+- **An override control on an EXISTING entity gates on `showOverrideField(isAdvanced, …values)`**
+  (`app/utils/uiMode.ts`) rather than on `isAdvanced` alone. Hiding an override is only safe
+  while it is unset — always true for a creation form, never guaranteed for a block that a
+  teammate on the advanced tier (or the API) already wrote one onto. The helper reveals the
+  control, editable, as soon as any value it edits is set (`false` included — a tri-state
+  `false` is a choice, not absence), so basic mode can never conceal a setting a run will
+  actually use.
 
 ## Extending the layer (consumer modules)
 

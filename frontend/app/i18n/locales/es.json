@@ -1950,7 +1950,8 @@
         "localModels": "Mis ejecutores locales",
         "sandbox": "Abrir el entorno de pruebas",
         "shortcuts": "Atajos de teclado",
-        "bugHunt": "Caza de errores"
+        "bugHunt": "Caza de errores",
+        "toggleUiMode": "Cambiar el modo de interfaz"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -1971,7 +1972,8 @@
         "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
         "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
         "shortcuts": "atajos teclado teclas ayuda",
-        "bugHunt": "error bug caza triaje backlog incidencias sin asignar"
+        "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
+        "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar"
       }
     },
     "integrationsHub": {

@@ -160,9 +160,12 @@ watch(
   >
     <!-- Rail toggle. lg-only: below it the hamburger + backdrop already own showing and
          hiding the whole navbar, and a second collapse control there would fight them. -->
+    <!-- The panel glyphs are drawn for a left-hand navbar; under RTL the aside is `start`-anchored
+         to the right, so mirror them like the other directional icons in the SPA. -->
     <UButton
       class="hidden shrink-0 lg:flex"
       :class="railed ? 'justify-center' : 'justify-end'"
+      :ui="{ leadingIcon: 'rtl:-scale-x-100' }"
       :icon="railed ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'"
       color="neutral"
       variant="ghost"
@@ -185,6 +188,7 @@ watch(
         :class="railed ? 'justify-center px-0' : 'px-2.5'"
         :aria-label="t('nav.commandBar')"
         :title="railed ? t('nav.commandBar') : undefined"
+        data-testid="command-bar-launcher"
         @click="ui.openCommandBar()"
       >
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />

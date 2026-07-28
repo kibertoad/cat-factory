@@ -1436,10 +1436,30 @@ basic mode always STARTS railed). Full model:
   flag), so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an
   input NOTHING else supplies stays in BOTH tiers however advanced it feels — the e2e suite caught
   exactly this on the apriori-branch picker, which has no default to fall back to.
+- **Gate an override control on `showOverrideField(isAdvanced, ...values)`, NOT on `isAdvanced`
+  alone** (`utils/uiMode.ts`). The rule above holds only while the override is UNSET, which is
+  guaranteed at CREATION time (a fresh form starts from the defaults) but never for an EXISTING
+  entity: a block can already carry an override written by a teammate on the advanced tier, by the
+  API, or by this user before switching down. Hiding it then would leave a basic-mode user on
+  settings they can neither see nor clear — the exact divergence the rule forbids. The helper keeps
+  the control whenever any value it edits is set (`false` counts — a tri-state `false` is a choice,
+  not absence), so basic stays clean for the common case without ever concealing a deviation.
 - **The env pin makes the switcher READ-ONLY** (`envPinned`), and `setMode` refuses to write. A
-  persisted preference the resolver would then ignore is a lie to the user, not a fallback.
+  persisted preference the resolver would then ignore is a lie to the user, not a fallback. That
+  refusal is hygiene, not the invariant — a persisted setup store must return its state to persist
+  it, so a direct write to `storedMode` is always possible; the tier is safe because `resolveUiMode`
+  consults the env FIRST, so such a write can only leave a stale value, never change the mode.
+- **The rail state is a PER-TIER preference** (`railCollapsed`, keyed by `UiMode`), not one shared
+  boolean. Each tier has its own default (`DEFAULT_RAIL_COLLAPSED`: basic railed, advanced expanded)
+  AND its own memory, so a choice in either tier survives a reload and a round trip through the
+  other. Don't reintroduce a single flag with a reset watcher — it can only honour one tier's
+  default, and it does so by discarding the other tier's explicit choice.
+- **Never mark the way BACK as `advanced`.** Basic is the shipped default, so anything that is the
+  only route to the advanced half (the `ui-mode` palette entry, the sidebar switcher) has to stay
+  visible in basic mode, or the tier is a one-way door for a user who never finds the switcher.
 - **An e2e spec whose subject is not the tier pins it** with `useAdvancedInterfaceMode(page)`
-  before `openBoard`; `ui-mode.spec.ts` owns the default + the switch.
+  before `openBoard`; `ui-mode.spec.ts` owns the default, the switch, the rail, and the palette
+  route back.
 
 ## Internationalization (i18n)
 

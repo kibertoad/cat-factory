@@ -68,6 +68,37 @@ test.describe('interface mode (basic / advanced)', () => {
     await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
   })
 
+  test('a basic-mode rail choice survives a reload', async ({ page, seededBoard }) => {
+    void seededBoard
+    // The rail preference is per-tier, so basic remembers an expand just as advanced does —
+    // `collapsed` is basic's DEFAULT, not a rule that re-asserts itself on every load. Without
+    // this the most-repeated interaction in the shipped tier would be the one that never sticks.
+    const sidebar = page.getByTestId('sidebar')
+    await expect(sidebar).toHaveAttribute('data-collapsed', 'true')
+    await page.getByTestId('sidebar-collapse-toggle').click()
+    await expect(sidebar).toHaveAttribute('data-collapsed', 'false')
+
+    await page.reload()
+    await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
+    // Still basic: remembering the rail must not promote the tier.
+    await expect(page.getByTestId('nav-build-pipeline')).toHaveCount(0)
+  })
+
+  test('the command palette can reach the tier switch from basic mode', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+    // The way BACK out of basic mode. The sidebar switcher is icon-only in the basic rail, so
+    // the palette entry is what keeps the advanced half discoverable — it must not be `advanced`.
+    // Driven by click rather than ⌘K so the spec doesn't also depend on the shortcut binding.
+    await page.getByTestId('command-bar-launcher').click()
+    await expect(page.getByTestId('command-bar')).toBeVisible()
+    await page.getByTestId('command-ui-mode').click()
+
+    await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
+  })
+
   test('a stored advanced choice survives a reload', async ({ page, request }) => {
     // Not the `seededBoard` fixture: the tier cookie has to be seeded before the first goto.
     const snapshot = await createSeededWorkspace(request)

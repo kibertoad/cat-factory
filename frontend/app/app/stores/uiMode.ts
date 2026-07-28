@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
-import { parseUiMode, resolveUiMode, type UiMode } from '~/utils/uiMode'
+import { computed, ref } from 'vue'
+import { DEFAULT_RAIL_COLLAPSED, parseUiMode, resolveUiMode, type UiMode } from '~/utils/uiMode'
 
 /**
  * The interface tier (`basic` / `advanced`) and the side-navbar collapse state.
@@ -12,12 +12,14 @@ import { parseUiMode, resolveUiMode, type UiMode } from '~/utils/uiMode'
  * own choice is persisted, so a deployment that later drops its env pin falls back to
  * whatever the user last picked instead of to the default.
  *
- * The collapse state is deliberately NOT a single persisted boolean. Basic mode must ALWAYS
- * start collapsed (the rail is part of what makes it feel basic), so a plain persisted flag
- * would either violate that or silently discard an advanced user's choice. Instead the
- * collapse is DERIVED from the mode, with a session-scoped override the toggle sets: basic
- * derives `collapsed`, advanced derives the user's persisted rail preference, and switching
- * mode drops the override so the new mode's default applies.
+ * The collapse state is a PER-TIER preference (`railCollapsed`), not a single boolean. The two
+ * tiers want different resting states — basic opens railed, advanced expanded — so one shared
+ * flag can only serve one of them: it would either override the other tier's default or throw
+ * away the user's choice on every switch. Keying the preference by tier gives each its own
+ * default (`DEFAULT_RAIL_COLLAPSED`) AND its own memory, so switching tiers restores what that
+ * tier last looked like and neither has to forget. That is also why there is no watcher here:
+ * the collapse follows `mode` because it is indexed by it, not because something resets on
+ * change.
  */
 export const useUiModeStore = defineStore(
   'uiMode',
@@ -26,28 +28,31 @@ export const useUiModeStore = defineStore(
 
     /** The user's explicit pick, persisted. `null` until they choose one. */
     const storedMode = ref<UiMode | null>(null)
-    /** The rail preference an ADVANCED-mode user last chose, persisted. */
-    const railPreference = ref(false)
-    /** This session's explicit collapse choice; `null` = follow the mode's default. */
-    const collapseOverride = ref<boolean | null>(null)
+    /** The rail state each tier was last left in, persisted. Seeded from the per-tier defaults. */
+    const railCollapsed = ref<Record<UiMode, boolean>>({ ...DEFAULT_RAIL_COLLAPSED })
 
     const mode = computed<UiMode>(() => resolveUiMode(envMode, storedMode.value))
     const isAdvanced = computed(() => mode.value === 'advanced')
     /** Pinned by the deployment: the switcher is read-only, since a write would be ignored. */
     const envPinned = computed(() => envMode !== null)
 
+    // `?? the default` because the restored value is untrusted input, exactly like the env
+    // string: a persisted blob written by an older build (or hand-edited) can be missing this
+    // tier's key, and a rail stuck on `undefined` would render as expanded in basic mode.
     const navCollapsed = computed(
-      () => collapseOverride.value ?? (isAdvanced.value ? railPreference.value : true),
+      () => railCollapsed.value[mode.value] ?? DEFAULT_RAIL_COLLAPSED[mode.value],
     )
 
-    // A mode switch re-derives the collapse from the new mode (basic → rail, advanced → the
-    // user's rail preference), which is what "basic mode always starts collapsed" means for a
-    // user who flips modes mid-session rather than only across reloads.
-    watch(mode, () => {
-      collapseOverride.value = null
-    })
-
-    /** Record the user's pick. A no-op under an env pin — the resolver would ignore it. */
+    /**
+     * Record the user's pick. A no-op under an env pin — the resolver would ignore it.
+     *
+     * This guard is hygiene, not the invariant. `storedMode` is returned from the store because
+     * a setup store can only persist what it returns (as in `auth`, `accounts`, `workspace`), so
+     * a caller CAN write it directly and skip this check. That is harmless by construction:
+     * `mode` runs `resolveUiMode(env, stored)`, which consults the env pin FIRST, so a direct
+     * write can leave a stale persisted value but can never change the tier under a pin. The
+     * "env pin wins, in both directions" case above is what actually pins that.
+     */
     function setMode(next: UiMode) {
       if (envPinned.value) return
       storedMode.value = next
@@ -57,11 +62,9 @@ export const useUiModeStore = defineStore(
       setMode(isAdvanced.value ? 'basic' : 'advanced')
     }
 
+    /** Remember the rail state for the CURRENT tier; the other tier keeps its own. */
     function setNavCollapsed(collapsed: boolean) {
-      collapseOverride.value = collapsed
-      // Only advanced mode has a persisted rail preference to update: basic mode's default is
-      // fixed, so remembering a basic-mode expand would contradict the start-collapsed rule.
-      if (isAdvanced.value) railPreference.value = collapsed
+      railCollapsed.value = { ...railCollapsed.value, [mode.value]: collapsed }
     }
 
     function toggleNav() {
@@ -73,7 +76,7 @@ export const useUiModeStore = defineStore(
       isAdvanced,
       envPinned,
       storedMode,
-      railPreference,
+      railCollapsed,
       navCollapsed,
       setMode,
       toggleMode,
@@ -81,5 +84,5 @@ export const useUiModeStore = defineStore(
       toggleNav,
     }
   },
-  { persist: { pick: ['storedMode', 'railPreference'] } },
+  { persist: { pick: ['storedMode', 'railCollapsed'] } },
 )

@@ -1950,7 +1950,8 @@
         "localModels": "Yerel çalıştırıcılarım",
         "sandbox": "Sandbox'ı aç",
         "shortcuts": "Klavye kısayolları",
-        "bugHunt": "Hata avı"
+        "bugHunt": "Hata avı",
+        "toggleUiMode": "Arayüz modunu değiştir"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -1971,7 +1972,8 @@
         "localModels": "yerel model çalıştırıcı ollama lm studio llamacpp vllm uç nokta",
         "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir",
         "shortcuts": "kısayollar klavye tuşlar yardım",
-        "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış"
+        "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
+        "toggleUiMode": "arayüz mod temel gelişmiş göster gizle"
       }
     },
     "integrationsHub": {

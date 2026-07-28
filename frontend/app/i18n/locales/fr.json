@@ -1950,7 +1950,8 @@
         "localModels": "Mes exécuteurs locaux",
         "sandbox": "Ouvrir le bac à sable",
         "shortcuts": "Raccourcis clavier",
-        "bugHunt": "Chasse aux bugs"
+        "bugHunt": "Chasse aux bugs",
+        "toggleUiMode": "Changer le mode d'interface"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -1971,7 +1972,8 @@
         "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
         "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer",
         "shortcuts": "raccourcis clavier touches aide",
-        "bugHunt": "bug chasse tri backlog tickets non assignés"
+        "bugHunt": "bug chasse tri backlog tickets non assignés",
+        "toggleUiMode": "interface mode simple avancé afficher masquer"
       }
     },
     "integrationsHub": {
