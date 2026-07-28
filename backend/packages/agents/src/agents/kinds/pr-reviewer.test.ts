@@ -5,6 +5,7 @@ import type {
   RepoFiles,
   RepoOpContext,
 } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, hasTrait } from './traits.js'
@@ -60,6 +61,7 @@ function ctxWith(
     context: { block: { taskTypeFields } } as unknown as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    logger: noopLogger,
   }
 }
 
@@ -73,6 +75,7 @@ function ctxWithThreads(
     context: { block: { taskTypeFields } } as unknown as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    logger: noopLogger,
   }
 }
 
@@ -406,6 +409,7 @@ describe('standards as context files', () => {
       } as unknown as AgentRunContext,
       branch: 'main',
       opensPr: false,
+      logger: noopLogger,
     })
     expect(result?.contextFiles?.map((f) => f.path)).toEqual([
       'standards.md',
@@ -421,6 +425,7 @@ describe('standards as context files', () => {
         context: { block: {} } as unknown as AgentRunContext,
         branch: 'main',
         opensPr: false,
+        logger: noopLogger,
       }),
     ).toBeUndefined()
   })

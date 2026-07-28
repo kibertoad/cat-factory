@@ -6,6 +6,7 @@ import {
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
 import type { AgentFailureKind } from '@cat-factory/kernel'
+import { redactSecrets } from '@cat-factory/kernel'
 import type { AdvanceResult } from '@cat-factory/orchestration'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
@@ -37,6 +38,10 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     step: WorkflowStep,
   ): Promise<void> {
     const { workspaceId, executionId } = event.payload
+    // Bind the run's correlation ONCE, the way `BootstrapWorkflow`/`EnvConfigRepairWorkflow`
+    // already do and `driveExecution` does on the Node side. Re-spreading the ids per call is
+    // how a nested emit ends up with none of them (observability-logging-gaps.md, A3).
+    const log = logger.child({ workspaceId, executionId, workflow: 'execution' })
     // One DI-graph assembly per wake: the container is pure wiring over env bindings
     // (no I/O), so every step/poll in this invocation shares it instead of re-running
     // the whole composition root per `step.do`. A hibernation wake replays `run()`
@@ -65,7 +70,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       kind: AgentFailureKind = 'agent',
       detail: string | null = null,
     ): Promise<void> => {
-      logger.warn(`failing run: ${message}`, { workspaceId, executionId, step: i })
+      log.warn(`failing run: ${message}`, { step: i, failureKind: kind })
       await step.do(`fail-${i}`, () =>
         container.executionService.failRun(workspaceId, executionId, message, kind, detail),
       )
@@ -81,10 +86,11 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       try {
         return { kind: 'ok', result: (await step.do(label, STEP_CONFIG, read)) as AdvanceResult }
       } catch (error) {
-        return {
-          kind: 'read_failed',
-          message: error instanceof Error ? error.message : String(error),
-        }
+        // Scrubbed HERE, once, because this message is both logged and folded into the run's
+        // user-visible failure text — and a poll error surfaced from `fetch` routinely echoes
+        // the request URL (with its query) or an auth header back in its own message.
+        const raw = error instanceof Error ? error.message : String(error)
+        return { kind: 'read_failed', message: redactSecrets(raw) ?? '' }
       }
     }
 
@@ -110,9 +116,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         )
         if (attempt.kind === 'read_failed') {
           pollReadFailures += 1
-          logger.warn('poll could not read job status; treating as still running and retrying', {
-            workspaceId,
-            executionId,
+          log.warn('poll could not read job status; treating as still running and retrying', {
             step: i,
             poll: p,
             pollReadFailures,
@@ -160,9 +164,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         )
         if (attempt.kind === 'read_failed') {
           pollReadFailures += 1
-          logger.warn(
+          log.warn(
             'gate poll could not read its precheck; treating as still pending and retrying',
-            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
+            {
+              step: i,
+              poll: p,
+              pollReadFailures,
+              err: attempt.message,
+            },
           )
           if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
           await failRun(

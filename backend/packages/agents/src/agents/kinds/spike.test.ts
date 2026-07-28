@@ -1,5 +1,6 @@
 import type { CommitFilesInput, OpenPullRequestInput } from '@cat-factory/contracts'
 import type { AgentRunContext, RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { systemPromptFor } from '../catalog.js'
 import { FINAL_ANSWER_IN_REPLY } from '../prompts/shared.js'
@@ -93,6 +94,7 @@ const ctx = (
   repo,
   branch: 'main',
   opensPr: opts.opensPr ?? false,
+  logger: noopLogger,
   context: {
     agentKind: SPIKE_AGENT_KIND,
     block: {

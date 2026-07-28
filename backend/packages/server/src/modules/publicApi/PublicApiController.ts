@@ -26,7 +26,7 @@ import {
   type PublicTask,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { CredentialRequiredError } from '@cat-factory/kernel'
+import { CredentialRequiredError, runBestEffort } from '@cat-factory/kernel'
 import { scopeSatisfies } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -243,8 +243,21 @@ async function rollbackInitiativeRun<E extends AppEnv>(
   blockId: string,
 ): Promise<void> {
   const container = c.get('container')
-  await container.executionRepository.deleteByBlock(workspaceId, blockId).catch(() => {})
-  await container.boardService.deleteInternalTask(workspaceId, blockId).catch(() => {})
+  // A failed rollback leaves an anonymous anchor block + its execution rows behind with nothing
+  // pointing at them, so the leak is invisible to every surface — hence the log.
+  const fields = { workspaceId, blockId }
+  await runBestEffort(
+    container.logger,
+    'publicApi.rollbackRun',
+    () => container.executionRepository.deleteByBlock(workspaceId, blockId),
+    fields,
+  )
+  await runBestEffort(
+    container.logger,
+    'publicApi.rollbackAnchorBlock',
+    () => container.boardService.deleteInternalTask(workspaceId, blockId),
+    fields,
+  )
 }
 
 export function publicApiController(): Hono<AppEnv> {

@@ -1,6 +1,10 @@
 import {
+  describeError,
+  type Logger,
+  noopLogger,
   redactSecrets,
   resolveWritebackFlag,
+  runBestEffort,
   REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
   type Clock,
@@ -103,13 +107,22 @@ export interface IssueWritebackServiceDependencies {
    * every construction site having to.
    */
   clock?: Clock
+  /**
+   * Where the two swallowed paths below report: a marker that could not be settled, and a
+   * per-issue writeback that threw inside the fan-out. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
 }
 
 /** The GitHub in-progress label applied on pickup when the schedule doesn't name one. */
 export const DEFAULT_IN_PROGRESS_LABEL = 'in-progress'
 
 export class IssueWritebackService implements IssueWritebackProvider {
-  constructor(private readonly deps: IssueWritebackServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: IssueWritebackServiceDependencies) {
+    this.log = (deps.logger ?? noopLogger).child({ service: 'issueWriteback' })
+  }
 
   async onPullRequestOpened(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
     const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
@@ -121,7 +134,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
     const body = `🔧 A pull request was opened for this issue: ${pr.url}`
-    await this.forEachIssue(issues, async (issue) => {
+    await this.forEachIssue('writeback.onPullRequestOpened', workspaceId, issues, async (issue) => {
       await this.comment(workspaceId, issue, body)
     })
   }
@@ -136,7 +149,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
     const body = `✅ The pull request was merged and this issue is resolved: ${pr.url}`
-    await this.forEachIssue(issues, async (issue) => {
+    await this.forEachIssue('writeback.onPullRequestMerged', workspaceId, issues, async (issue) => {
       await this.comment(workspaceId, issue, body)
       await this.resolve(workspaceId, issue)
     })
@@ -155,7 +168,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const body = info.runUrl
       ? `🤖 Taken by cat-factory — this issue is being worked autonomously: ${info.runUrl}`
       : '🤖 Taken by cat-factory — this issue is being worked autonomously.'
-    await this.forEachIssue(issues, async (issue) => {
+    await this.forEachIssue('writeback.onIssuePickedUp', workspaceId, issues, async (issue) => {
       await this.comment(workspaceId, issue, body)
       await this.markInProgress(workspaceId, issue, info.inProgressLabel)
     })
@@ -175,7 +188,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
       '',
       ...asked.map((q) => `- ${q}`),
     ].join('\n')
-    await this.forEachIssue(issues, async (issue) => {
+    await this.forEachIssue('writeback.postQuestions', workspaceId, issues, async (issue) => {
       await this.comment(workspaceId, issue, body)
     })
   }
@@ -223,7 +236,18 @@ export class IssueWritebackService implements IssueWritebackProvider {
         now: at,
         reclaimPendingBefore: at - REVIEW_QUESTION_POST_CLAIM_TTL_MS,
       }
-      if (!(await markers.claim(key, window).catch(() => false))) {
+      // A store failure reads as "someone else holds the claim", which silently suppresses this
+      // iteration's post — so it is the one fallback-value catch here that must still say why.
+      const claimed = await markers.claim(key, window).catch((error: unknown) => {
+        this.log.warn('review question claim unreadable; treating it as already claimed', {
+          workspaceId,
+          blockId: block.id,
+          issueRef: key.issueRef,
+          ...describeError(error),
+        })
+        return false
+      })
+      if (!claimed) {
         outcome.skipped += 1
         continue
       }
@@ -244,7 +268,21 @@ export class IssueWritebackService implements IssueWritebackProvider {
         // URL, and this row is read back by operators (and, in slice 2b, by support tooling).
         const raw = e instanceof Error ? e.message : String(e)
         const error = (redactSecrets(raw) ?? '').slice(0, 500)
-        await markers.settle(key, { status: 'failed', error }, now()).catch(() => {})
+        this.log.warn('review question post failed', {
+          workspaceId,
+          blockId: block.id,
+          source: issue.source,
+          externalId: issue.externalId,
+          err: error,
+        })
+        // A settle that ALSO fails leaves the claim `pending` until its TTL reclaims it, so the
+        // post still self-heals — but the marker store being the second broken thing needs saying.
+        await runBestEffort(
+          this.log,
+          'reviewQuestionPost.settleFailed',
+          () => markers.settle(key, { status: 'failed', error }, now()),
+          { workspaceId, blockId: block.id, source: issue.source, externalId: issue.externalId },
+        )
       }
     }
     return outcome
@@ -270,12 +308,27 @@ export class IssueWritebackService implements IssueWritebackProvider {
     await this.comment(workspaceId, issue, renderReviewReplyAck(ack))
   }
 
-  /** Run a writeback per issue, isolating failures so one bad issue can't block the rest. */
+  /**
+   * Run a writeback per issue, isolating failures so one bad issue can't block the rest. Each
+   * isolated failure names the issue it belongs to: these hooks are fire-and-forget, so a
+   * permanently broken tracker connection produces no other symptom than comments that never
+   * appear.
+   */
   private async forEachIssue(
+    label: string,
+    workspaceId: string,
     issues: TaskRecord[],
     fn: (issue: TaskRecord) => Promise<void>,
   ): Promise<void> {
-    await Promise.all(issues.map((issue) => fn(issue).catch(() => {})))
+    await Promise.all(
+      issues.map((issue) =>
+        runBestEffort(this.log, label, () => fn(issue), {
+          workspaceId,
+          source: issue.source,
+          externalId: issue.externalId,
+        }),
+      ),
+    )
   }
 
   /**

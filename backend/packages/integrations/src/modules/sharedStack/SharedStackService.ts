@@ -3,6 +3,7 @@ import type {
   CreateSharedStackInput,
   DetectSharedStackInput,
   IdGenerator,
+  Logger,
   PreflightRef,
   PreflightResult,
   RecipeStepRecorder,
@@ -19,7 +20,9 @@ import {
   assertFound,
   ConflictError,
   getErrorMessage,
+  noopLogger,
   requireWorkspace,
+  runBestEffort,
   ValidationError,
 } from '@cat-factory/kernel'
 import {
@@ -91,6 +94,8 @@ export interface SharedStackServiceDependencies {
    * Absent ⇒ built-in behaviour.
    */
   detectionConventions?: DetectionConventions
+  /** Where the best-effort teardown below reports a failed `compose down`. Absent ⇒ `noopLogger`. */
+  logger?: Logger
 }
 
 // Bound (ms) for the plain compose calls (network / down / version) so a wedged daemon can't hang
@@ -132,8 +137,10 @@ export class SharedStackService {
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
   private readonly inflight = new Map<string, Promise<SharedStack>>()
+  private readonly log: Logger
 
   constructor(deps: SharedStackServiceDependencies) {
+    this.log = (deps.logger ?? noopLogger).child({ service: 'sharedStack' })
     this.stacks = deps.sharedStackRepository
     this.workspaceRepository = deps.workspaceRepository
     this.idGenerator = deps.idGenerator
@@ -382,9 +389,17 @@ export class SharedStackService {
       )
     }
     const project = this.projectName(stack)
-    await this.runtime
-      .compose(['-p', project, 'down', '-v', '--remove-orphans'], { timeoutMs: SHORT_TIMEOUT_MS })
-      .catch(() => {})
+    // A `down` that fails still flips the row to `stopped` (the operator asked for it), so the
+    // failure has no other symptom than containers that outlive the stack they belong to.
+    await runBestEffort(
+      this.log,
+      'sharedStack.composeDown',
+      () =>
+        this.runtime!.compose(['-p', project, 'down', '-v', '--remove-orphans'], {
+          timeoutMs: SHORT_TIMEOUT_MS,
+        }),
+      { workspaceId, stackId: id, project },
+    )
     await this.runtime.cleanupProject?.(project)
     return this.persist(workspaceId, stack, { status: 'stopped', lastError: null })
   }

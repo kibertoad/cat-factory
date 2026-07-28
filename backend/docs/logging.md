@@ -114,6 +114,31 @@ an error surfaced from `fetch`, a shell spawn or a provider SDK routinely echoes
 (with its query) or an auth header back in its text. It deliberately omits the stack: high volume,
 rarely what identifies the failure. Pass one explicitly at a site that needs it.
 
+### The guard, and the escape hatch
+
+`scripts/check-silent-catch.mjs` (CI's `repo-guards` job) fails on `.catch(() => {})` anywhere in
+`backend/packages` or `backend/runtimes` non-test source. It is a script rather than a lint rule
+only because oxlint ships no `no-restricted-syntax` — the same reason `check-file-size.mjs` exists
+beside `max-lines`.
+
+Not every silent drop is a bug. When the failure genuinely needs no report — the classic case is a
+rejection some other path has already observed and reported — keep the idiom and say why on the
+line(s) above it:
+
+```ts
+// silent-catch-ok: the race above already surfaces this rejection when it lands in time; a
+// second report here would warn on every probe timeout for a cause the caller already has.
+promise.catch(() => {})
+```
+
+The marker requires a reason, so opting out is a sentence a reviewer reads rather than a token they
+skim past. Two areas are deliberately out of scope and tracked as their own slices in
+[`observability-logging-gaps.md`](../../docs/initiatives/observability-logging-gaps.md): the
+executor/deploy harnesses (a source change there bumps the published runner image, so all harness
+work batches together) and the SPA (it has no logger to report through until client-side error
+reporting lands). A bare `catch {}` isn't checked yet either — there are ~110 in scope, most of them
+documented deliberate swallows.
+
 ## Secrets
 
 **Any field that can carry command output, a URL, model text, or a raw error message goes through

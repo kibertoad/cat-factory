@@ -4,12 +4,13 @@ import type {
   BlockRepository,
   EnvironmentHandle,
   ExecutionInstance,
+  Logger,
   PipelineStep,
   ProvisionContext,
   RunnerJobRef,
   ServiceProvisioning,
 } from '@cat-factory/kernel'
-import { getErrorMessage, getErrorReason } from '@cat-factory/kernel'
+import { getErrorMessage, getErrorReason, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { frameProfile, frontendOriginsForService } from '@cat-factory/contracts'
 import { moduleSlug } from '@cat-factory/agents'
 import type {
@@ -132,6 +133,12 @@ export interface DeployerStepControllerDeps {
     failure: ContainerFailureView,
     onBeforeRedispatch?: () => Promise<void>,
   ) => Promise<AdvanceResult | null>
+  /**
+   * Where the two provisioning-lease releases below report a failure. Both are best-effort by
+   * design, so without this a leaked lease (billed-but-useless compute, or a permanently held
+   * self-hosted pool slot) is invisible. Absent ⇒ `noopLogger`.
+   */
+  logger?: Logger
 }
 
 /**
@@ -152,6 +159,7 @@ export class DeployerStepController {
   private readonly applyContainerRunning: DeployerStepControllerDeps['applyContainerRunning']
   private readonly applySubtaskProgress: DeployerStepControllerDeps['applySubtaskProgress']
   private readonly recoverContainerEviction: DeployerStepControllerDeps['recoverContainerEviction']
+  private readonly log: Logger
 
   constructor(deps: DeployerStepControllerDeps) {
     this.blockRepository = deps.blockRepository
@@ -162,6 +170,7 @@ export class DeployerStepController {
     this.applyContainerRunning = deps.applyContainerRunning
     this.applySubtaskProgress = deps.applySubtaskProgress
     this.recoverContainerEviction = deps.recoverContainerEviction
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'deployerStep' })
   }
 
   /**
@@ -520,6 +529,26 @@ export class DeployerStepController {
   }
 
   /**
+   * Reclaim a finished (or evicted) deploy job's runner. Best-effort and idempotent — a failure
+   * here must never fail the run — but NOT silent: the lease is what holds billed compute or a
+   * self-hosted pool slot, so an un-released one is a resource leak whose only other symptom is
+   * a pool that mysteriously runs out of capacity.
+   */
+  private async releaseProvisionJob(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    ref: RunnerJobRef,
+    at: 'eviction-recovery' | 'terminal',
+  ): Promise<void> {
+    await runBestEffort(
+      this.log,
+      'deployer.releaseProvisionJob',
+      () => this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref),
+      { workspaceId, executionId: instance.id, jobId: ref.jobId, at },
+    )
+  }
+
+  /**
    * Poll a `deployer` step's dispatched CONTAINER-backed deploy job (the async kustomize/helm
    * path) through the environment provisioning service — NOT the agent executor. Mirrors
    * `pollAgentJob`: surfaces live container/subtask progress while running, recovers a
@@ -566,7 +595,7 @@ export class DeployerStepController {
     // agent path, reclaiming the dead job's runner first. Null for a non-eviction failure.
     if (view.state === 'failed') {
       const recovered = await this.recoverContainerEviction(workspaceId, instance, step, view, () =>
-        this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
+        this.releaseProvisionJob(workspaceId, instance, ref, 'eviction-recovery'),
       )
       if (recovered) return recovered
     }
@@ -608,7 +637,7 @@ export class DeployerStepController {
     // pool slot. The deploy job is dispatched SEPARATELY from the shared per-run container, so the
     // agent path's `stopRunContainer` (final step only, run-id keyed) never reclaims it.
     // Best-effort/idempotent.
-    await this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {})
+    await this.releaseProvisionJob(workspaceId, instance, ref, 'terminal')
     let handle
     try {
       handle = await this.environmentProvisioning!.finalizeProvision(

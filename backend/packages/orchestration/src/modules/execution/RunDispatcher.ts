@@ -32,6 +32,7 @@ import type {
   GateHelperJobResult,
   IdGenerator,
   IssueWritebackProvider,
+  Logger,
   PipelineStep,
   ProviderCapabilities,
   RequirementConcernLevel,
@@ -47,9 +48,11 @@ import {
   ConflictError,
   getErrorMessage,
   isAsyncAgentExecutor,
+  noopLogger,
   NotFoundError,
   parseLocalModelId,
   recordGateAttempt,
+  runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
@@ -186,6 +189,11 @@ export interface RunDispatcherDeps {
   events: ExecutionEventPublisher
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Where the dispatcher's best-effort hooks (issue writeback, lease release, repo ops) report
+   * their drops. Absent ⇒ `noopLogger`, which is what the engine unit tests construct with.
+   */
+  logger?: Logger
   spend: SpendService
   stepGraph: StepGraph
   runStateMachine: RunStateMachine
@@ -260,6 +268,8 @@ export class RunDispatcher {
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
+  /** Bound once with the subsystem tag; the per-run ids ride each call's fields. */
+  private readonly log: Logger
   private readonly spend: SpendService
   private readonly stepGraph: StepGraph
   private readonly runStateMachine: RunStateMachine
@@ -273,10 +283,9 @@ export class RunDispatcher {
   private readonly reviewGate: ReviewGateController
   private readonly forkDecisionController: ForkDecisionController
   private readonly prReviewController: PrReviewController
-  private readonly requirementsKind: ReviewKind<RequirementReview>
-  private readonly clarityKind: ReviewKind<ClarityReview>
-  private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
-  private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
+  // The four review-gate SUBJECTS are pure pass-throughs into `registryDeps` — the dispatcher
+  // never reads one itself — so they are forwarded from `deps` there rather than mirrored onto
+  // four fields that only ever feed one literal.
   /** Interview-gate controllers keyed by their `agentKind` — the trait-driven dispatch table. */
   private readonly interviewControllers: Map<string, InterviewGateController<unknown>>
   private readonly prVerificationReport: PrVerificationReportController
@@ -359,6 +368,7 @@ export class RunDispatcher {
     this.events = deps.events
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'runDispatcher' })
     this.spend = deps.spend
     this.stepGraph = deps.stepGraph
     this.runStateMachine = deps.runStateMachine
@@ -372,10 +382,6 @@ export class RunDispatcher {
     this.reviewGate = deps.reviewGate
     this.forkDecisionController = deps.forkDecisionController
     this.prReviewController = deps.prReviewController
-    this.requirementsKind = deps.requirementsKind
-    this.clarityKind = deps.clarityKind
-    this.requirementsBrainstormKind = deps.requirementsBrainstormKind
-    this.architectureBrainstormKind = deps.architectureBrainstormKind
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
     )
@@ -403,6 +409,7 @@ export class RunDispatcher {
       applySubtaskProgress: (step, counts) => applySubtaskProgress(step, counts),
       recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
         this.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
+      logger: deps.logger,
     })
     this.followUpGate = new FollowUpGateController({
       executionRepository: deps.executionRepository,
@@ -422,6 +429,7 @@ export class RunDispatcher {
       agentKindRegistry: deps.agentKindRegistry,
       resolveRunRepoContext: deps.resolveRunRepoContext,
       issueWriteback: deps.issueWriteback,
+      logger: deps.logger,
     })
     this.prReviewResolution = new PrReviewResolutionController({
       runStateMachine: deps.runStateMachine,
@@ -501,10 +509,10 @@ export class RunDispatcher {
       forkDecisionController: this.forkDecisionController,
       prReviewController: this.prReviewController,
       mergeResolver: this.mergeResolver,
-      requirementsKind: this.requirementsKind,
-      clarityKind: this.clarityKind,
-      requirementsBrainstormKind: this.requirementsBrainstormKind,
-      architectureBrainstormKind: this.architectureBrainstormKind,
+      requirementsKind: deps.requirementsKind,
+      clarityKind: deps.clarityKind,
+      requirementsBrainstormKind: deps.requirementsBrainstormKind,
+      architectureBrainstormKind: deps.architectureBrainstormKind,
       interviewControllers: this.interviewControllers,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
@@ -1676,9 +1684,13 @@ export class RunDispatcher {
       result.pullRequest &&
       priorBlock.pullRequest?.url !== result.pullRequest.url
     ) {
-      await this.issueWriteback
-        .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
-        .catch(() => {})
+      await runBestEffort(
+        this.log,
+        'writeback.onPullRequestOpened',
+        () =>
+          this.issueWriteback!.onPullRequestOpened(workspaceId, priorBlock, result.pullRequest!),
+        { workspaceId, executionId: instance.id, blockId: priorBlock.id },
+      )
     }
   }
 
@@ -1820,13 +1832,17 @@ export class RunDispatcher {
     // comment). Fire-and-forget — a tracker hiccup must never fail the run, mirroring the PR
     // open/merge writeback hooks; and unlike them this is NOT gated on the writeback settings.
     if (this.issueWriteback) {
-      await this.issueWriteback
-        .onIssuePickedUp(
-          workspaceId,
-          block.id,
-          pickup.inProgressLabel ? { inProgressLabel: pickup.inProgressLabel } : {},
-        )
-        .catch(() => {})
+      await runBestEffort(
+        this.log,
+        'writeback.onIssuePickedUp',
+        () =>
+          this.issueWriteback!.onIssuePickedUp(
+            workspaceId,
+            block.id,
+            pickup.inProgressLabel ? { inProgressLabel: pickup.inProgressLabel } : {},
+          ),
+        { workspaceId, executionId: instance.id, blockId: block.id },
+      )
     }
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
       output: pickup.summary,

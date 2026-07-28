@@ -208,7 +208,11 @@ is named: it adapts pino onto the port. Full patterns:
 - **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps
   the swallow — a best-effort path must NEVER propagate into its caller — and adds one `warn` naming
   the operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the
-  cause with `describeError(error)` instead of discarding it.
+  cause with `describeError(error)` instead of discarding it. `scripts/check-silent-catch.mjs`
+  enforces this over `backend/packages` + `backend/runtimes`; a drop that genuinely needs no report
+  keeps the idiom under a `// silent-catch-ok: <why>` comment, which is a sentence a reviewer reads.
+  The executor/deploy harnesses are out of scope (a source change there bumps the runner image, so
+  they batch into one slice) and so is the SPA (it has no logger to report through yet).
 - **`describeError` scrubs through `redactSecrets`**, because a `fetch`/spawn/SDK error routinely
   echoes the request URL or an auth header. Any OTHER field carrying command output, a URL, or model
   text goes through `redactSecrets` at the emit site. Never log an auth header or a decrypted
@@ -485,6 +489,7 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 > and CI's `Build & typecheck` job is authoritative for both.
 
 - `node scripts/check-file-size.mjs` — the file-size ratchet (split, don't raise).
+- `node scripts/check-silent-catch.mjs` — bans `.catch(() => {})` in backend non-test source.
 - `pnpm exec changeset status --since=origin/main` — after committing locally.
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`) — publish-artifact integrity.

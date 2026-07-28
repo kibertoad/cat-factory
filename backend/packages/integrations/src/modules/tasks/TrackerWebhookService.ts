@@ -3,7 +3,9 @@ import {
   getErrorMessage,
   type IssueWritebackProvider,
   type Logger,
+  noopLogger,
   redactSecrets,
+  runBestEffort,
   type RequirementReview,
   type RequirementReviewItem,
   type ResolveRequirementsExceededChoice,
@@ -125,7 +127,11 @@ export type TrackerWebhookOutcome =
 const MAX_REPLY_CHARS = 4_000
 
 export class TrackerWebhookService {
-  constructor(private readonly deps: TrackerWebhookServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: TrackerWebhookServiceDependencies) {
+    this.log = (deps.logger ?? noopLogger).child({ service: 'trackerWebhook' })
+  }
 
   /** Route one verified, parsed delivery. */
   async handle(workspaceId: string, event: TrackerWebhookEvent): Promise<TrackerWebhookOutcome> {
@@ -189,7 +195,7 @@ export class TrackerWebhookService {
     const allowList = connection?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? ''
     if (!isAllowedReplyAuthor(event.author, allowList)) {
       // The one path that leaves NO other trace, so it must leave a log line.
-      this.deps.logger?.warn('tracker reply ignored: author not allowed', {
+      this.log.warn('tracker reply ignored: author not allowed', {
         workspaceId,
         source: event.source,
         externalId: event.externalId,
@@ -235,18 +241,32 @@ export class TrackerWebhookService {
       await markers.settle(key, { status: 'applied' }, this.now())
       // Commit the state, THEN talk to the tracker: a failed ack must never look like a failed
       // reply, and the answer is already durable by the time this runs.
-      await this.deps.issueWriteback
-        ?.postReviewReplyAck(
-          workspaceId,
-          { source: event.source, externalId: event.externalId },
-          ack,
+      if (this.deps.issueWriteback) {
+        await runBestEffort(
+          this.log,
+          'writeback.postReviewReplyAck',
+          () =>
+            this.deps.issueWriteback!.postReviewReplyAck(
+              workspaceId,
+              { source: event.source, externalId: event.externalId },
+              ack,
+            ),
+          { workspaceId, blockId, source: event.source, externalId: event.externalId },
         )
-        .catch(() => {})
+      }
       return { kind: 'reply', outcome: ack.outcome }
     } catch (error) {
       const raw = getErrorMessage(error)
       const scrubbed = (redactSecrets(raw) ?? '').slice(0, 500)
-      await markers.settle(key, { status: 'failed', error: scrubbed }, this.now()).catch(() => {})
+      // The apply already threw; a failed marker settle on top leaves the claim `pending` until
+      // its TTL reclaims it, so the delivery still self-heals — but nothing else would say the
+      // marker store is the second thing that is broken.
+      await runBestEffort(
+        this.log,
+        'trackerCommentIngest.settleFailed',
+        () => markers.settle(key, { status: 'failed', error: scrubbed }, this.now()),
+        { workspaceId, source: event.source, externalId: event.externalId },
+      )
       throw error
     }
   }

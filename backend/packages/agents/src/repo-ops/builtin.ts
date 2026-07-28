@@ -6,7 +6,8 @@ import {
   SPEC_FEATURES_DIR,
   SPEC_MODULES_DIR,
 } from '@cat-factory/contracts'
-import type { AgentRunResult, RepoFiles, RepoOp } from '@cat-factory/kernel'
+import type { AgentRunResult, RepoFiles, RepoOp, RepoOpContext } from '@cat-factory/kernel'
+import { describeError } from '@cat-factory/kernel'
 import {
   asString,
   clearAspirationalTag,
@@ -310,6 +311,86 @@ function governingGroupShard(path: string): string | null {
   return null
 }
 
+/** What the safety diff concluded: the committed bytes, the shards that round-tripped, and
+ * the promoted ids that will actually land in one of them. */
+interface SafePromotion {
+  committed: Map<string, string | null>
+  safeShards: Set<string>
+  landed: Set<string>
+}
+
+/**
+ * Read the committed canonical tree and decide what may be rewritten from the in-memory view.
+ *
+ * A group shard is SAFE when its committed bytes are either the pre-promotion `baseline` (it
+ * round-tripped losslessly through the salvaging read) or the post-promotion render (a replay).
+ * Anything else means the read dropped or rewrote something, so neither that shard nor the
+ * markdown derived from it may be regenerated.
+ *
+ * `landed` is then the promoted ids living in a safe shard. A requirement stranded in an unsafe
+ * one keeps BOTH its `aspirational` shard entry and its `@aspirational` tag, so the two can never
+ * disagree — clearing the tag alone would make a runner exercise a scenario the spec still calls
+ * unbuilt, the unsafe direction of the "a stale tag only ever costs a skip" trade.
+ */
+async function resolveSafePromotion(
+  ctx: RepoOpContext,
+  canonical: readonly RenderedFile[],
+  baseline: Map<string, string>,
+  promoted: readonly string[],
+): Promise<SafePromotion> {
+  const committed = new Map<string, string | null>()
+  for (const f of canonical) {
+    const existing = await ctx.repo.getFile(f.path, ctx.branch)
+    committed.set(f.path, existing?.content ?? null)
+  }
+  const safeShards = new Set<string>()
+  for (const f of canonical) {
+    if (!isGroupShard(f.path)) continue
+    const existing = committed.get(f.path)
+    if (existing == null) continue
+    if (existing === baseline.get(f.path) || existing === f.content) safeShards.add(f.path)
+  }
+  const promotedSet = new Set(promoted)
+  const landed = new Set<string>()
+  for (const f of canonical) {
+    if (!isGroupShard(f.path) || !safeShards.has(f.path)) continue
+    for (const id of requirementIdsIn(f.content)) if (promotedSet.has(id)) landed.add(id)
+  }
+  return { committed, safeShards, landed }
+}
+
+/**
+ * The exact files the promotion commit carries: the canonical renders that genuinely differ and
+ * whose governing shard was safe, plus the seed-once feature files whose `@aspirational` tag a
+ * landed id makes stale. A path the render would CREATE is skipped — promotion flips a field, it
+ * never restructures the tree. The feature contents come from `readServiceSpec`'s own fetch
+ * rather than a second read off the branch.
+ */
+function promotionFiles(
+  canonical: readonly RenderedFile[],
+  committed: Map<string, string | null>,
+  safeShards: Set<string>,
+  features: readonly { path: string; content: string }[],
+  landed: Set<string>,
+): RenderedFile[] {
+  const files: RenderedFile[] = []
+  for (const f of canonical) {
+    const existing = committed.get(f.path) ?? null
+    // Absent ⇒ a path this render would CREATE; equal ⇒ already current (a replay).
+    if (existing === null || existing === f.content) continue
+    // Every other canonical file (`service.json`, `_module.json`, `overview.md`) is a pure
+    // index over data that lives in the shards, so rewriting it can lose nothing.
+    const shard = governingGroupShard(f.path)
+    if (shard && !safeShards.has(shard)) continue
+    files.push(f)
+  }
+  for (const feature of features) {
+    const updated = clearAspirationalTag(feature.content, landed)
+    if (updated !== feature.content) files.push({ path: feature.path, content: updated })
+  }
+  return files
+}
+
 /**
  * POST-OP for the tester kinds: promote every spec requirement the Tester OBSERVED to pass
  * from `aspirational` to `established`, and commit the updated shards onto the run's branch.
@@ -329,16 +410,27 @@ function governingGroupShard(path: string): string | null {
  * added beside the original — promotion never restructures the tree, it only flips a field.
  *
  * BEST-EFFORT: a throwing post-op fails its step, and promotion is bookkeeping — a spec that
- * failed to promote must never turn a green tester run red. Every failure path is a silent
- * no-op, exactly like the PR verification report's publish.
+ * failed to promote must never turn a green tester run red. Every failure path stays a no-op,
+ * but NOT a silent one: a tester that verified ten requirements and promoted none looked
+ * exactly like a tester that had nothing to promote, which is the D3 hole in the gap analysis.
+ * Each outcome names itself on `ctx.logger` — `debug` for the ordinary no-ops (nothing met, no
+ * spec in the repo, a durable-driver replay) and `warn` only where a promotion was genuinely
+ * DROPPED, so the level distinguishes "nothing to do" from "something was lost".
  */
 export const specPromotionPostOp: RepoOp = async (ctx) => {
+  const log = ctx.logger.child({ op: 'specPromotion', branch: ctx.branch })
   try {
     const met = metRequirementIds(ctx.result)
-    if (met.size === 0) return
+    if (met.size === 0) {
+      log.debug('spec promotion skipped: the tester reported no met requirements')
+      return
+    }
 
     const view = await readServiceSpec(ctx.repo, ctx.branch)
-    if (!view.present || !view.spec) return
+    if (!view.present || !view.spec) {
+      log.debug('spec promotion skipped: the repo carries no spec/ tree', { metCount: met.size })
+      return
+    }
 
     // Materialised BEFORE the in-place promotion below, so it captures the tree exactly as the
     // read reconstructed it. A committed group shard that differs from this lost something on
@@ -346,63 +438,47 @@ export const specPromotionPostOp: RepoOp = async (ctx) => {
     const baseline = new Map(renderSpecFiles(view.spec).map((f) => [f.path, f.content]))
 
     const promoted = promoteRequirementStates(view.spec, met)
-    if (promoted.length === 0) return
+    if (promoted.length === 0) {
+      log.debug('spec promotion skipped: every met requirement is already established', {
+        metCount: met.size,
+      })
+      return
+    }
 
     // Re-render the canonical shards only. The seed-once feature files are NOT re-rendered
     // (that would discard pass-2 polish); their stale tag is edited in place below.
     const canonical = renderSpecFiles(view.spec)
-    const committed = new Map<string, string | null>()
-    for (const f of canonical) {
-      const existing = await ctx.repo.getFile(f.path, ctx.branch)
-      committed.set(f.path, existing?.content ?? null)
+    const { committed, safeShards, landed } = await resolveSafePromotion(
+      ctx,
+      canonical,
+      baseline,
+      promoted,
+    )
+    if (landed.size === 0) {
+      // Every promotable requirement is stranded in a shard that did not round-trip. The spec
+      // still calls verified behaviour `aspirational`, and nothing else reports it.
+      log.warn('spec promotion dropped: every promoted requirement sits in an unsafe shard', {
+        promotedCount: promoted.length,
+        safeShardCount: safeShards.size,
+      })
+      return
+    }
+    if (landed.size < promoted.length) {
+      log.warn('spec promotion partially dropped: some requirements sit in an unsafe shard', {
+        promotedCount: promoted.length,
+        landedCount: landed.size,
+      })
     }
 
-    // A group shard is SAFE when its committed bytes are either the pre-promotion baseline
-    // (it round-tripped losslessly) or the post-promotion render (a replay). Anything else
-    // means the read dropped or rewrote something, and neither that shard nor the markdown
-    // derived from it may be rewritten from the view.
-    const safeShards = new Set<string>()
-    for (const f of canonical) {
-      if (!isGroupShard(f.path)) continue
-      const existing = committed.get(f.path)
-      if (existing == null) continue
-      if (existing === baseline.get(f.path) || existing === f.content) safeShards.add(f.path)
-    }
-
-    // The ids whose state change will actually LAND: those living in a safe shard. A
-    // requirement stranded in an unsafe one keeps both its `aspirational` shard entry and its
-    // `@aspirational` tag, so the two never disagree — clearing the tag alone would make a
-    // runner exercise a scenario the spec still calls unbuilt, the unsafe direction of the
-    // "a stale tag only ever costs a skip" trade.
-    const promotedSet = new Set(promoted)
-    const landed = new Set<string>()
-    for (const f of canonical) {
-      if (!isGroupShard(f.path) || !safeShards.has(f.path)) continue
-      for (const id of requirementIdsIn(f.content)) if (promotedSet.has(id)) landed.add(id)
-    }
-    if (landed.size === 0) return
-
-    const files: RenderedFile[] = []
-    for (const f of canonical) {
-      const existing = committed.get(f.path) ?? null
-      // Absent ⇒ a path this render would CREATE; equal ⇒ already current (a replay).
-      if (existing === null || existing === f.content) continue
-      // Every other canonical file (`service.json`, `_module.json`, `overview.md`) is a pure
-      // index over data that lives in the shards, so rewriting it can lose nothing.
-      const shard = governingGroupShard(f.path)
-      if (shard && !safeShards.has(shard)) continue
-      files.push(f)
-    }
-
-    // The feature files were already fetched by `readServiceSpec` — edit the content in hand
-    // rather than re-reading each one off the branch.
-    for (const feature of view.features) {
-      const updated = clearAspirationalTag(feature.content, landed)
-      if (updated !== feature.content) files.push({ path: feature.path, content: updated })
-    }
+    const files = promotionFiles(canonical, committed, safeShards, view.features, landed)
 
     // Nothing actually differs ⇒ a replay. Commit nothing.
-    if (files.length === 0) return
+    if (files.length === 0) {
+      log.debug('spec promotion skipped: the committed tree already carries the promotion', {
+        landedCount: landed.size,
+      })
+      return
+    }
 
     await ctx.repo.commitFiles({
       branch: ctx.branch,
@@ -411,7 +487,10 @@ export const specPromotionPostOp: RepoOp = async (ctx) => {
       } to established`,
       files,
     })
-  } catch {
-    // Bookkeeping: never fail a tester step because the spec could not be promoted.
+    log.info('spec promotion committed', { landedCount: landed.size, fileCount: files.length })
+  } catch (error) {
+    // Bookkeeping: never fail a tester step because the spec could not be promoted — but a
+    // 403, a rate limit or a malformed tree must not read as "there was nothing to promote".
+    log.warn('spec promotion failed; the tester step is unaffected', describeError(error))
   }
 }

@@ -1,7 +1,12 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import { type AppConfig, FetchGitHubClient, WebCryptoSecretCipher } from '@cat-factory/server'
+import {
+  type AppConfig,
+  FetchGitHubClient,
+  logger,
+  WebCryptoSecretCipher,
+} from '@cat-factory/server'
 import {
   IssueWritebackService,
   TicketTrackerService,
@@ -55,6 +60,9 @@ export function selectRecurringDeps(
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: new D1ReviewQuestionPostRepository({ db }),
     clock,
+    // Every hook here is fire-and-forget; without a logger a permanently broken tracker
+    // connection produces no symptom but comments that never appear.
+    logger,
   }
   // GitHub issues: file through the App-authenticated client against the service's
   // linked repo (resolved from the github_repos projection). Only when the App is configured.

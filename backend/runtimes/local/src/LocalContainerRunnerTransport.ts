@@ -12,6 +12,7 @@ import { redactSecrets } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
+import { runBestEffort } from '@cat-factory/kernel'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
@@ -303,7 +304,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       poolIdleTtlMs: settings?.pool?.idleTtlMs,
     })
     this.extraEnv = checkoutExtraEnv(settings)
-    void this.reconcilePool().catch(() => {})
+    // Fire-and-forget: a settings change must not block on Docker. A failure leaves the pool at
+    // its previous sizing, which nothing else would report.
+    void runBestEffort(logger, 'localPool.reconcile', () => this.reconcilePool())
   }
 
   /** Bring the warm set in line with the current sizing: trim excess idle, then re-warm. */
