@@ -3406,7 +3406,8 @@
       "useThisFolder": "このフォルダを使用",
       "errors": {
         "listDirectory": "ディレクトリを一覧表示できませんでした"
-      }
+      },
+      "selectAllFiles": "{count} 件のファイルを選択 | {count} 件のファイルをすべて選択"
     }
   },
   "slack": {
@@ -4805,7 +4806,19 @@
       "link": "リビングフラグメントとしてリンク",
       "githubBrowseHint": "リポジトリを参照してリンクするファイルを1つ以上選択します。",
       "selectedFiles": "選択したファイル ({count})",
-      "removeFile": "ファイルを削除"
+      "removeFile": "ファイルを削除",
+      "blockedReason": {
+        "noSource": "まず上でドキュメントソースを選択してください。",
+        "noRepo": "リポジトリを選択するか、上に GitHub のファイルまたはフォルダーの URL を貼り付けてください。",
+        "noFiles": "リポジトリブラウザーでファイルを 1 つ以上チェックしてください。",
+        "noRef": "まずページ ID または URL を入力してください。"
+      },
+      "urlImport": {
+        "placeholder": "GitHub のファイルまたはフォルダーの URL を貼り付け (例: https://github.com/owner/repo/tree/main/docs)",
+        "action": "検索",
+        "invalid": "リポジトリのファイルまたはフォルダーの URL ではないようです。",
+        "notFound": "{slug} に一致するアクセス可能なリポジトリがありません。URL を確認するか、まずリポジトリを接続してください。"
+      }
     },
     "sources": {
       "metaSynced": "同期済み · ref {ref}",

@@ -6,7 +6,7 @@
 // the merged catalog (built-in ∪ account ∪ workspace) an agent is selected from per
 // run. The account scope has no resolved/merged catalog and fetches document
 // fragments through `viaWorkspaceId` (document-source credentials are per-workspace).
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type {
   DocumentSourceKind,
   FragmentOwnerKind,
@@ -16,6 +16,7 @@ import type {
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -274,6 +275,9 @@ const docRepo = ref<GitHubAvailableRepo | undefined>(undefined)
 // The staged files (repo-root-relative paths) for the selected repo. Multi-select so
 // any number of files from any nesting level can be linked in one action.
 const docFilePaths = ref<string[]>([])
+// Where the tree browser opens (repo root by default); a pasted directory URL jumps it
+// straight to the pasted folder so its files can be bulk-checked.
+const docBrowsePath = ref('')
 
 // Reset the picker (and the manual ref) whenever the selected source changes.
 watch(
@@ -282,15 +286,24 @@ watch(
     docRepoId.value = undefined
     docRepo.value = undefined
     docFilePaths.value = []
+    docBrowsePath.value = ''
     docDraft.value.ref = ''
   },
 )
 
-// A new repo selection clears the previously-staged files (they were repo-scoped).
+// A URL import wants the browser opened at the pasted folder in the SAME flush as its
+// repo selection (so the tree loads once, at the right path); a manual repo switch
+// wants the path reset instead. The import stages its target here for the watcher.
+let pendingBrowsePath: string | null = null
+
+// A new repo selection clears the previously-staged files (they were repo-scoped) and
+// re-roots the browser (a folder from the previous repo has no meaning in the new one).
 // When the repo is fully deselected, drop the cached repo too so no stale `docRepo`
 // lingers behind a now-empty picker.
 watch(docRepoId, (id) => {
   docFilePaths.value = []
+  docBrowsePath.value = pendingBrowsePath ?? ''
+  pendingBrowsePath = null
   if (id === undefined) docRepo.value = undefined
 })
 
@@ -329,6 +342,58 @@ const stagedDocRefs = computed(() =>
 
 /** When the rich picker drives the ref(s); otherwise the free-text field does. */
 const usingDocPicker = computed(() => showGithubDocPicker.value)
+
+/**
+ * A pasted GitHub file/directory URL resolved to a repo + location: select the repo
+ * (through the same refs the search select drives), then stage the file or jump the
+ * tree browser to the directory for bulk checking. Staging waits a tick because the
+ * `docRepoId` watcher clears the cart on a repo change.
+ */
+async function onDocUrlResolved(target: {
+  repo: GitHubAvailableRepo
+  path: string
+  kind: 'file' | 'dir'
+}) {
+  const clean = normalizeRepoPath(target.path)
+  // A file opens its parent folder (so the pick is visible in context); a dir opens itself.
+  const browseDir =
+    target.kind === 'dir'
+      ? clean
+      : clean.includes('/')
+        ? clean.slice(0, clean.lastIndexOf('/'))
+        : ''
+  if (docRepoId.value !== target.repo.githubId) {
+    pendingBrowsePath = browseDir
+    docRepo.value = target.repo
+    docRepoId.value = target.repo.githubId
+    // Let the repo-change watcher run (clears the cart, applies the browse path)
+    // before staging, or the staged file would be swept with the old repo's cart.
+    await nextTick()
+  } else {
+    docBrowsePath.value = browseDir
+  }
+  if (target.kind === 'file' && clean) {
+    if (!docFilePaths.value.includes(clean) && !docAddedPaths.value.includes(clean)) {
+      docFilePaths.value.push(clean)
+    }
+  }
+}
+
+/**
+ * The reason the "Link as living fragment" button is disabled, stated next to it —
+ * an inert button with no explanation reads as broken. Null when the button is live
+ * (or already busy linking).
+ */
+const docLinkBlockedReason = computed<string | null>(() => {
+  if (linkingDoc.value || docDraftValid.value) return null
+  if (!docDraft.value.source) return t('fragments.documents.blockedReason.noSource')
+  if (usingDocPicker.value) {
+    if (docRepoId.value === undefined) return t('fragments.documents.blockedReason.noRepo')
+    return t('fragments.documents.blockedReason.noFiles')
+  }
+  if (!docDraft.value.ref.trim()) return t('fragments.documents.blockedReason.noRef')
+  return null
+})
 
 async function linkDocumentFragment() {
   if (!docDraftValid.value) return
@@ -824,8 +889,10 @@ async function unlinkSource(id: string) {
               </UButton>
             </div>
 
-            <!-- GitHub: search a repo + browse to one or more files instead of typing the ref -->
+            <!-- GitHub: paste a file/directory URL, or search a repo + browse to one or
+                 more files, instead of typing the ref -->
             <template v-if="showGithubDocPicker">
+              <GitHubDocUrlImport @resolved="onDocUrlResolved" />
               <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
               <div
                 v-if="docRepoId !== undefined"
@@ -838,6 +905,7 @@ async function unlinkSource(id: string) {
                   :repo-github-id="docRepoId"
                   mode="file"
                   multiple
+                  :start-path="docBrowsePath"
                   :selected-paths="docFilePaths"
                   :added-paths="docAddedPaths"
                   @toggle="toggleDocFile"
@@ -879,16 +947,26 @@ async function unlinkSource(id: string) {
               v-model="docDraft.tags"
               :placeholder="t('fragments.documents.tagsPlaceholder')"
             />
-            <UButton
-              icon="i-lucide-link"
-              size="sm"
-              :disabled="!docDraftValid"
-              :loading="linkingDoc"
-              class="self-start"
-              @click="linkDocumentFragment"
-            >
-              {{ t('fragments.documents.link') }}
-            </UButton>
+            <div class="flex items-center gap-2 self-start">
+              <UButton
+                icon="i-lucide-link"
+                size="sm"
+                :disabled="!docDraftValid"
+                :loading="linkingDoc"
+                data-testid="fragment-link-document"
+                @click="linkDocumentFragment"
+              >
+                {{ t('fragments.documents.link') }}
+              </UButton>
+              <p
+                v-if="docLinkBlockedReason"
+                class="flex items-center gap-1 text-xs text-slate-500"
+                data-testid="fragment-link-blocked-reason"
+              >
+                <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0" />
+                {{ docLinkBlockedReason }}
+              </p>
+            </div>
           </div>
         </div>
       </div>

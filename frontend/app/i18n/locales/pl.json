@@ -3394,7 +3394,8 @@
       "useThisFolder": "Użyj tego folderu",
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"
-      }
+      },
+      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików"
     }
   },
   "slack": {
@@ -4793,7 +4794,19 @@
       "link": "Połącz jako żywy fragment",
       "githubBrowseHint": "Przeglądaj repozytorium i wybierz jeden lub więcej plików do połączenia.",
       "selectedFiles": "Wybrane pliki ({count})",
-      "removeFile": "Usuń plik"
+      "removeFile": "Usuń plik",
+      "blockedReason": {
+        "noSource": "Najpierw wybierz źródło dokumentów powyżej.",
+        "noRepo": "Wybierz repozytorium lub wklej powyżej URL pliku albo folderu GitHub.",
+        "noFiles": "Zaznacz co najmniej jeden plik w przeglądarce repozytorium.",
+        "noRef": "Najpierw podaj id strony lub URL."
+      },
+      "urlImport": {
+        "placeholder": "Wklej URL pliku lub folderu GitHub (np. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Znajdź",
+        "invalid": "To nie wygląda na URL pliku ani folderu repozytorium.",
+        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium."
+      }
     },
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",

@@ -3405,7 +3405,8 @@
       "useThisFolder": "השתמש בתיקייה זו",
       "errors": {
         "listDirectory": "לא ניתן היה לרשום את הספרייה"
-      }
+      },
+      "selectAllFiles": "בחר {count} קובץ | בחר את כל {count} הקבצים"
     }
   },
   "slack": {
@@ -4804,7 +4805,19 @@
       "link": "קשר כמקטע חי",
       "githubBrowseHint": "עיין במאגר ובחר קובץ אחד או יותר לקישור.",
       "selectedFiles": "קבצים שנבחרו ({count})",
-      "removeFile": "הסר קובץ"
+      "removeFile": "הסר קובץ",
+      "blockedReason": {
+        "noSource": "בחר תחילה מקור מסמכים למעלה.",
+        "noRepo": "בחר מאגר, או הדבק למעלה כתובת URL של קובץ או תיקייה ב-GitHub.",
+        "noFiles": "סמן לפחות קובץ אחד בדפדפן המאגר.",
+        "noRef": "הזן תחילה מזהה עמוד או כתובת URL."
+      },
+      "urlImport": {
+        "placeholder": "הדבק כתובת URL של קובץ או תיקייה ב-GitHub (למשל https://github.com/owner/repo/tree/main/docs)",
+        "action": "חפש",
+        "invalid": "זה לא נראה כמו כתובת URL של קובץ או תיקייה במאגר.",
+        "notFound": "אין מאגר נגיש התואם ל-{slug}. בדוק את הכתובת או חבר תחילה את המאגר."
+      }
     },
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
