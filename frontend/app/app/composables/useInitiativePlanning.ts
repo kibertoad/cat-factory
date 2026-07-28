@@ -4,7 +4,7 @@ import { useExecutionStore } from '~/stores/execution'
 import { useInitiativesStore } from '~/stores/initiative'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
-import { initiativeInterviewPhase } from '~/utils/initiative'
+import { interviewGatePhase } from '~/utils/interviewGate'
 
 /**
  * Shared planning affordances for an `initiative`-level block, used by BOTH the board card
@@ -39,11 +39,11 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
 
   /**
    * The live interview phase, derived from the entity AND the planning run (see
-   * {@link initiativeInterviewPhase} for why the run status is load-bearing).
+   * {@link interviewGatePhase} for why the run status is load-bearing).
    */
   const interviewPhase = computed(() =>
-    initiativeInterviewPhase(
-      initiative.value?.interview,
+    interviewGatePhase(
+      initiative.value?.interview?.status,
       execution.getByBlock(toValue(blockId))?.status,
     ),
   )

@@ -18,7 +18,9 @@
 // so instead of leaving the human staring at questions they already submitted.
 import { computed, reactive, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
-import { initiativeInterviewPhase, INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
+import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
+import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
+import { interviewGatePhase } from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const board = useBoardStore()
@@ -59,7 +61,7 @@ watch(
 const resuming = computed(() => initiatives.resuming)
 
 /**
- * The live phase (see `initiativeInterviewPhase`). `resuming` folds in the request itself so the
+ * The live phase (see `interviewGatePhase`). `resuming` folds in the request itself so the
  * body swaps to the waiting state on the click rather than a beat later when the run's `running`
  * event lands — and if the request fails, `resuming` clears and the phase falls back to whatever
  * the run actually says, so the questions come back rather than the window sticking on a spinner.
@@ -67,7 +69,7 @@ const resuming = computed(() => initiatives.resuming)
 const phase = computed(() =>
   resuming.value
     ? 'working'
-    : initiativeInterviewPhase(initiative.value?.interview, run.value?.status),
+    : interviewGatePhase(initiative.value?.interview?.status, run.value?.status),
 )
 
 /**
@@ -159,27 +161,24 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
           {{ t('initiative.planning.intro') }}
         </p>
 
-        <!-- An interviewer pass is running: the human is waiting on the planner. Without this the
-             window is byte-identical to the parked state and the submit reads as a no-op. -->
-        <div
+        <!-- A pass is running: the human is waiting on the planner. Without this the window is
+             byte-identical to the parked state and the submit reads as a no-op. -->
+        <InterviewGateNotice
           v-if="phase === 'working'"
-          class="flex flex-col items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-6 text-center"
-          data-testid="initiative-planning-working"
-        >
-          <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-indigo-300" />
-          <p class="text-[13px] text-slate-200">{{ t('initiative.planning.working') }}</p>
-          <p class="text-[12px] text-slate-400">{{ t('initiative.planning.workingHint') }}</p>
-        </div>
+          variant="working"
+          :title="t('initiative.planning.working')"
+          :hint="t('initiative.planning.workingHint')"
+          testid="initiative-planning-working"
+        />
 
         <!-- The planning run stopped before the interview settled — a dead end otherwise. -->
-        <div
+        <InterviewGateNotice
           v-else-if="phase === 'failed'"
-          class="rounded-lg border border-red-900/60 bg-red-950/20 p-4 text-center"
-          data-testid="initiative-planning-failed"
-        >
-          <p class="text-[13px] text-red-200">{{ t('initiative.planning.failed') }}</p>
-          <p class="mt-1 text-[12px] text-slate-400">{{ t('initiative.planning.failedHint') }}</p>
-        </div>
+          variant="failed"
+          :title="t('initiative.planning.failed')"
+          :hint="t('initiative.planning.failedHint')"
+          testid="initiative-planning-failed"
+        />
 
         <!-- Planning was never started, so there is nothing to answer YET (distinct from
              converged, which means the planner already has what it needs). -->

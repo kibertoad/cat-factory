@@ -87,18 +87,23 @@ board-surfacing of requirements-review + clarity-review without merging the serv
   which then runs the (slow) interviewer LLM, so the response carries the PRE-resume entity — same
   questions, same `awaiting` status. Rendered from the entity, the window is byte-identical before
   and after the click, and a submit whose only effect lands 30s later is indistinguishable from a
-  dead button (it was reported as exactly that). The planning window folds the planning RUN's
-  status in (`initiativeInterviewPhase` in `app/utils/initiative.ts`): a resumed run flips
-  `blocked` → `running` and emits, so `awaiting` + `running` is precisely "a pass is in flight".
-  Derive it from the run rather than a local in-flight flag — that survives a reload and cannot
-  wedge, because a pass that dies takes the run to `failed` instead of spinning forever. The doc
-  interviewer's window (`DocInterviewWindow.vue`) still has the entity-only shape and wants the
-  same treatment when it is next touched.
-- **Name the two controls by what they DO, not by "forward".** "Continue" vs "Proceed to plan"
-  both read as "go on" and were reported as indistinguishable; the pair is now "Submit answers"
-  (the planner may ask follow-ups) vs "Plan now" (skip the rest and draft). Same rule for a
-  disabled control: the planning window renders the unanswered COUNT, because a primary button
-  that is silently greyed out is itself a "nothing happened".
+  dead button (it was reported as exactly that). Both windows fold their RUN's status in via the
+  shared `interviewGatePhase` (`app/utils/interviewGate.ts`, the frontend dual of the backend
+  `InterviewGateController` spine): a resumed run flips `blocked` → `running` and emits, so
+  `awaiting` + `running` is precisely "a pass is in flight". Derive it from the run rather than a
+  local in-flight flag — that survives a reload and cannot wedge, because a pass that dies takes
+  the run to `failed` instead of spinning forever. `converged` outranks `failed` deliberately: a
+  failure after the interview settled belongs to the step that failed, not to the interview.
+- **The two states the entity cannot express get a SHARED panel.** `components/common/
+InterviewGateNotice.vue` renders the wait and the stopped-run notice for both windows (copy per
+  feature, treatment shared) — the same rule as `ClarificationItem`: reuse, don't clone.
+- **Name the two controls by what they DO, not by "forward".** "Continue" vs "Proceed to
+  plan"/"Proceed to draft" both read as "go on" and were reported as indistinguishable; the pair
+  is now "Submit answers" (the interviewer may ask follow-ups) vs "Plan now" / "Draft now" (skip
+  the rest and go). Same rule for a disabled control: both windows render the unanswered COUNT,
+  because a primary button that is silently greyed out is itself a "nothing happened". Where a
+  window also has an RBAC gate on those buttons (the doc one does), the RBAC reason outranks the
+  draft gap — a member who cannot execute runs must not be told to finish answering.
 - **Requirements adoption (6c) uses the slots, not new coupling.** Put its recommend-toggle button
   in the `actions` slot, its severity/category badges in the `badges` slot, drive `requested` from
   `recommend_requested`, and leave its recommendations section OUTSIDE the component — so the
