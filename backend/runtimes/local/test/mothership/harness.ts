@@ -32,6 +32,7 @@ import {
   schema,
 } from '@cat-factory/node-server'
 import {
+  type LocalFirstPersistenceRepository,
   type PersistenceRpcClient,
   type PersistenceRpcRequest,
   type PersistenceRpcResponse,
@@ -51,6 +52,7 @@ import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
+import { createLocalTelemetryStore } from '../../src/sqlite/telemetryStore.js'
 import { ENCRYPTION_KEY, SESSION_SECRET, buildMothershipEnv, mintMachineToken } from './setup.js'
 
 // ---------------------------------------------------------------------------
@@ -335,7 +337,20 @@ export function makeMothershipConformanceApp(
   const scopeAccountIds = ms.scopeAccountIds
   const client = buildMothershipRpcClient(ms)
 
-  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
+  // Telemetry is LOCAL-FIRST on a mothership-mode node (docs/initiatives/mothership-mode.md,
+  // PR 5), so the SUT composes the same in-memory `node:sqlite` telemetry store production
+  // composes — otherwise the run path's per-step token rollups and the observability reads would
+  // resolve to remote proxies the allow-list refuses, and the topology would stop matching the
+  // real local facade. Typed by the server-side bucket declaration, so it cannot half-wire.
+  const telemetryStore = createLocalTelemetryStore(':memory:')
+  const localFirst: Record<LocalFirstPersistenceRepository, unknown> = {
+    llmCallMetricRepository: telemetryStore.llmCallMetricRepository,
+    agentContextSnapshotRepository: telemetryStore.agentContextSnapshotRepository,
+    agentSearchQueryRepository: telemetryStore.agentSearchQueryRepository,
+    provisioningLogRepository: telemetryStore.provisioningLogRepository,
+    subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
+  }
+  const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
   const credentialStore = createLocalCredentialStore(':memory:')
   const recorder = new RecordingEventPublisher()
   const overrides = buildMothershipOverrides(recorder, agentOptions, opts)

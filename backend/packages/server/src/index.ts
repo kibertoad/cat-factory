@@ -373,6 +373,13 @@ export {
   createRemoteRepositoryRegistry,
   HttpPersistenceRpcClient,
 } from './persistence/remoteRepositories.js'
+// The complement of the allow-list: the repositories a mothership-mode node serves from its OWN
+// local store (the local-first telemetry bucket) rather than over the RPC. The local facade types
+// its composition by this list so the bucket can never be half-wired.
+export {
+  LOCAL_FIRST_PERSISTENCE_REPOSITORIES,
+  type LocalFirstPersistenceRepository,
+} from './persistence/rpc-allowlist.js'
 // Mothership-mode GitHub token delegation: the mothership mints short-lived installation
 // tokens for a machine-authed node (`ServerContainer.githubTokenDelegation` serves it),
 // and a mothership-mode local node consumes them through this AppTokenSource so the shared
