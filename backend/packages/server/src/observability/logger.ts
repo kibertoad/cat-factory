@@ -55,9 +55,32 @@ export function getLogLevel(): LogLevel {
   return activeLevel
 }
 
+/**
+ * Serialise one log object, never throwing. The port promises a logger cannot fail
+ * (`kernel/ports/logging.ts`), and a plain `JSON.stringify` breaks that promise on the Worker:
+ * a circular field bag or a `BigInt` raises a `TypeError` straight out of the `logger.warn(…)`
+ * call, turning observability into the new failure class the port exists to rule out. The Node
+ * path never reaches here — pino serialises with its own cycle-safe stringifier — so this is
+ * specifically the browser-build writer's obligation.
+ *
+ * A field bag we cannot render degrades to a line that still carries the message and names the
+ * problem, because a dropped line is indistinguishable from a code path that never ran.
+ */
+export function serialize(o: object): string {
+  try {
+    return JSON.stringify(o)
+  } catch (error) {
+    const msg = (o as { msg?: unknown }).msg
+    return JSON.stringify({
+      ...(typeof msg === 'string' ? { msg } : {}),
+      logSerializationError: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 function write(level: LogLevel): (o: object) => void {
   return (o: object) => {
-    const line = JSON.stringify(o)
+    const line = serialize(o)
     if (level === 'error') console.error(line)
     else if (level === 'warn') console.warn(line)
     else console.log(line)

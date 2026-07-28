@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { mintMachineToken } from '@cat-factory/server'
 import type { AuthConfig } from '@cat-factory/server'
+import { noopLogger } from '@cat-factory/kernel'
 import { WebSocket } from 'ws'
 import { describe, expect, it } from 'vitest'
 import { NodeRealtimeHub, attachRealtime } from '../src/realtime.js'
@@ -33,7 +34,7 @@ function harness(opts: { accountOf?: (id: string) => Promise<string | null> } = 
     server as never,
     hub,
     AUTH,
-    { info: () => {}, warn: () => {} },
+    noopLogger,
     opts.accountOf ? { accountOf: opts.accountOf } : undefined,
   )
   const upgrade = async (path: string, token?: string) => {
@@ -128,15 +129,9 @@ describe('machine event subscription (Node upgrade listener)', () => {
     hub.watchRooms({ roomOpened: (id) => rooms.push(id), roomClosed: () => {} })
     const server = createServer()
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const stop = attachRealtime(
-      server as never,
-      hub,
-      AUTH,
-      { info: () => {}, warn: () => {} },
-      {
-        accountOf,
-      },
-    )
+    const stop = attachRealtime(server as never, hub, AUTH, noopLogger, {
+      accountOf,
+    })
     const port = (server.address() as AddressInfo).port
 
     const client = new WebSocket(

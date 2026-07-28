@@ -4,6 +4,7 @@ import {
   createPinoLogger,
   getLogLevel,
   parseLogLevel,
+  serialize,
   setLogLevel,
 } from '../src/observability/logger.js'
 
@@ -71,6 +72,19 @@ describe('the pino-backed logger', () => {
     const { logger, lines } = capturing()
     logger.debug('chatty')
     expect(lines()).toEqual([])
+  })
+
+  it('survives a field bag that cannot be serialised', () => {
+    // The port promises a logger cannot throw. On the Worker the browser build hands the log
+    // object to our own writer, so an unserialisable field there would raise out of the caller's
+    // `logger.warn(…)` — hence the guarded stringify. The message must survive; the fields need
+    // not.
+    const circular: Record<string, unknown> = { workspaceId: 'ws_1' }
+    circular.self = circular
+    const line = serialize({ msg: 'poll failed', ...circular })
+    expect(JSON.parse(line)).toMatchObject({ msg: 'poll failed' })
+    expect(JSON.parse(line)).toHaveProperty('logSerializationError')
+    expect(() => serialize({ msg: 'big', size: 1n })).not.toThrow()
   })
 
   it('applies a level raised AFTER a child was derived', () => {

@@ -25,6 +25,7 @@
 // a silent degradation back to the base branch is observable in telemetry rather than
 // invisible.
 
+import { describeError } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 
 export interface EnsureWorkBranchInput {
@@ -124,7 +125,10 @@ export async function ensureWorkBranchViaRest(input: EnsureWorkBranchInput): Pro
     })
     return false
   } catch (err) {
-    logger.warn('ensureWorkBranch: request failed', { branch: input.branch, err })
+    logger.warn('ensureWorkBranch: request failed', {
+      branch: input.branch,
+      ...describeError(err),
+    })
     return false
   }
 }

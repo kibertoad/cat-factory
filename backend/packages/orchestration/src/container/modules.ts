@@ -1066,7 +1066,7 @@ export function createMergeTrackRecordModule(
       resolveRunRepoContext: deps.resolveRunRepoContext,
       // The whole feature swallows its own failures, so without this a dead side channel is
       // indistinguishable from a healthy one.
-      ...(deps.logger ? { logger: deps.logger } : {}),
+      logger: deps.logger,
     }),
   }
 }
@@ -1359,7 +1359,7 @@ export function createTrackerWebhookModule(
     resolveRunId: (ws, blockId) =>
       deps.executionRepository.getByBlock(ws, blockId).then((run) => run?.id ?? null),
     clock: deps.clock,
-    ...(deps.logger ? { logger: deps.logger } : {}),
+    logger: deps.logger,
   })
   return { service }
 }
@@ -1394,7 +1394,7 @@ export function createRecurringModule(
     executionEventPublisher,
     // Gives `triggerForIssueEvent`'s per-schedule isolation somewhere to report to; without it a
     // webhook-fired schedule that consistently fails leaves no trace at all.
-    ...(deps.logger ? { logger: deps.logger } : {}),
+    logger: deps.logger,
   })
   return { service }
 }

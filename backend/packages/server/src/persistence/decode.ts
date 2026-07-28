@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { describeError } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 
 // Validate-on-read guards for the persistence boundary.
@@ -95,7 +96,10 @@ export function decodeJson<T>(
     parsed = JSON.parse(raw)
   } catch (err) {
     const ctx = { ...context, raw: preview(raw) }
-    logger.error('persistence: stored JSON failed to parse', { ...ctx, err })
+    // `describeError`, not a bare `err`: the Worker's browser build stringifies a raw `Error`
+    // to `{}`, which would erase the parse failure's cause on precisely the corrupt-row path
+    // that exists to explain it.
+    logger.error('persistence: stored JSON failed to parse', { ...ctx, ...describeError(err) })
     throw new DataIntegrityError(
       `Malformed JSON for ${String(context.column ?? context.field ?? 'column')}`,
       ctx,

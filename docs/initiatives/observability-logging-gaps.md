@@ -372,10 +372,13 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 - **`layered-loader` keeps its own pino-shaped `Logger`.** `@cat-factory/caching` adapts ours onto
   it in `asLayeredLoaderLogger`; that is the one place the two conventions meet, and it should stay
   the only one.
-- **`CoreDependencies.logger` stays OPTIONAL** so a harness can build a container cheaply, but
-  `createCore` re-binds the resolved instance onto the dependency bag before any service is
-  constructed — so production always has a real logger and no service null-checks. A new service
-  takes `logger?: Logger` and normalises once (`this.log = deps.logger ?? noopLogger`).
+- **`CoreDependencies.logger` is REQUIRED.** It was optional at first, and that is exactly how the
+  Worker shipped with no `logger` key at all — an absent optional dep is silent by definition, and
+  this one's absence is a facade-parity gap that disables the whole initiative on one runtime.
+  Requiring it turns that class of bug into a typecheck failure, the same guard the message-first
+  signature gives the call sites; a harness passes `noopLogger` explicitly. A new SERVICE still
+  takes `logger?: Logger` and normalises once (`this.log = deps.logger ?? noopLogger`), so it can
+  be unit-tested standalone.
 - **Drive-by, unrelated to logging**: `backend/packages/caching/src/appCaches.test.ts` was failing
   to typecheck on `main` (a `ResolvedCatalogEntry` fixture missing the `brief` field added by the
   two-tier standards work). Fixed here because it blocked the repo-wide typecheck this change

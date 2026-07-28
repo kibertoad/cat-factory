@@ -3,6 +3,7 @@ import type {
   RealtimeRoomListener,
   RealtimeRoomWatcher,
 } from '@cat-factory/node-server'
+import type { LogFields } from '@cat-factory/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MothershipEventSubscriber,
@@ -80,9 +81,11 @@ function makeSubscriber(opts: { token?: string | null } = {}) {
     baseUrl: 'https://mothership.example.com/',
     token: () => token,
     connectionId: 'mothership-node-abc',
+    // Message-first, per the kernel `Logger` port: the assertions below are all about the
+    // FIELDS, so the message is discarded and the field bag is what accumulates.
     log: {
       info: () => {},
-      warn: (fields: unknown) => void warnings.push(fields as Record<string, unknown>),
+      warn: (_msg: string, fields?: LogFields) => void warnings.push(fields ?? {}),
     },
     connect,
     // Pin the backoff jitter to the top of its window, so the delays below are the plain

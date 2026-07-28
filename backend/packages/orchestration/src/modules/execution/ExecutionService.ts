@@ -68,6 +68,7 @@ import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
+import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { buildGateWindowControllers, buildReviewSubjects } from './gate-window-controllers.js'
@@ -112,7 +113,7 @@ import type { ResolvedRunRiskPolicy } from './policy-types.js'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import { dependenciesMet, descendantIds, serviceOf } from '../board/board.logic.js'
+import { descendantIds } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
@@ -226,6 +227,8 @@ export class ExecutionService {
   private readonly prMerger?: PullRequestMerger
   private readonly notifications?: NotificationService
   private readonly mergePolicy: RunMergePolicy
+  /** The board-shaped follow-up a merged task triggers (module materialisation, dependents). */
+  private readonly postMergeBoard: PostMergeBoardController
   private readonly issueWriteback?: IssueWritebackProvider
   /**
    * The engine's structured logger, resolved once so the best-effort paths below can report
@@ -394,6 +397,7 @@ export class ExecutionService {
     })
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
+    this.postMergeBoard = this.buildPostMergeBoard()
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
@@ -548,6 +552,30 @@ export class ExecutionService {
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+  }
+
+  /**
+   * Assemble the post-merge board controller. A method rather than a literal in the constructor
+   * because everything it reads is already a field by the time it runs, so it needs no destructured
+   * parameter threaded through — and the constructor is a god-function against its size budget.
+   */
+  private buildPostMergeBoard(): PostMergeBoardController {
+    // An explicit host literal, not `this`: the fields below are `private`, which makes the class
+    // structurally incompatible with the interface even from inside it.
+    const host: PostMergeBoardHost = {
+      blockRepository: this.blockRepository,
+      pipelineRepository: this.pipelineRepository,
+      admission: this.admission,
+      board: this.board,
+      events: this.events,
+    }
+    return new PostMergeBoardController(host, {
+      // A system-initiated auto-start has no human present to unlock a personal credential, so it
+      // reports NO activation and any individual-usage dependent is skipped rather than started.
+      resolveIndividualVendors: (ws, modelId, presetId, kinds) =>
+        this.resolveIndividualVendors(ws, modelId, presetId, kinds, () => false),
+      start: (ws, blockId, pipelineId, opts) => this.start(ws, blockId, pipelineId, opts),
+    })
   }
 
   // ---- gate-window action sub-facades -------------------------------------
@@ -1619,59 +1647,11 @@ export class ExecutionService {
   }
 
   /**
-   * After a task with `autoStartDependents` merges, start every task that `dependsOn` it
-   * and whose remaining dependencies are all now `done`. System-initiated (no human
-   * present), so a dependent on an individual-usage model — which needs its owner to
-   * unlock a personal credential per run — is SKIPPED rather than started (it would fault
-   * at dispatch); the human starts it manually. Each dependent is started independently so
-   * one failure (already running, no provider, …) never blocks the rest.
+   * Start the dependents a merged task was blocking. Delegates to
+   * {@link PostMergeBoardController}; the skip rules live there.
    */
-  private async autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const dependents = blocks.filter(
-      (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
-    )
-    // Nothing depends on the merged block (the common case) — skip the cross-workspace
-    // augment and the pipeline list entirely rather than paying reads with no dependent to act on.
-    if (dependents.length === 0) return
-    // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
-    // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
-    await this.admission.augmentWithCrossWorkspaceDeps(
-      blocks,
-      dependents.flatMap((d) => d.dependsOn),
-    )
-    // Resolve every dependent's pipeline from ONE workspace list, not a per-dependent
-    // point-read in the loop (banned N+1): index the catalog by id, and take the board's
-    // "Run" default (the first pipeline) for any dependent with no pinned pipeline.
-    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
-    const pipelinesById = new Map(pipelines.map((p) => [p.id, p]))
-    const firstPipeline = pipelines[0] ?? null
-    for (const dependent of dependents) {
-      // All of the dependent's blockers must now be satisfied (not just the one that merged).
-      if (!dependenciesMet(blocks, dependent.id)) continue
-      // Only auto-start a fresh task — never replace a run already in flight or a finished one.
-      if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
-      const pipeline = dependent.pipelineId
-        ? (pipelinesById.get(dependent.pipelineId) ?? null)
-        : firstPipeline
-      if (!pipeline) continue
-      // Skip dependents that would lease an individual-usage credential (can't unlock
-      // unattended) — resolved from the block + pipeline already in hand, no re-reads.
-      const individual = await this.resolveIndividualVendors(
-        workspaceId,
-        dependent.modelId,
-        dependent.modelPresetId,
-        pipeline.agentKinds,
-        () => false,
-      )
-      if (individual.length > 0) continue
-      try {
-        await this.start(workspaceId, dependent.id, pipeline.id, { initiatedBy: null })
-      } catch {
-        // Already running, no usable provider, still-unmet dep racing, etc. — leave this
-        // dependent for a manual start; the others still get their chance.
-      }
-    }
+  private autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
+    return this.postMergeBoard.autoStartDependents(workspaceId, mergedBlockId)
   }
 
   /**
@@ -1683,35 +1663,11 @@ export class ExecutionService {
   }
 
   /**
-   * Implementing a task assigned to a module materialises that module: create it
-   * in the service if missing, then move the task inside it.
+   * Materialise the module a merged task was assigned to. Delegates to
+   * {@link PostMergeBoardController}.
    */
-  private async applyModuleAssignment(workspaceId: string, taskId: string): Promise<void> {
-    const task = await this.blockRepository.get(workspaceId, taskId)
-    if (!task || !task.moduleName) return
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const service = serviceOf(blocks, task)
-    if (!service) return
-
-    let module = blocks.find(
-      (b) => b.parentId === service.id && b.level === 'module' && b.title === task.moduleName,
-    )
-    if (!module) {
-      module = await this.board.addModule(workspaceId, service.id, {
-        name: task.moduleName,
-      })
-    }
-    if (module.id !== task.parentId) {
-      const n = blocks.filter((b) => b.parentId === module!.id && b.level === 'task').length
-      await this.board.reparent(workspaceId, taskId, {
-        parentId: module.id,
-        position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },
-      })
-    }
-    // A module node appeared and/or a task changed parent — the per-block event
-    // can't express that hierarchy change, so signal a coarse board refresh. Name the moved
-    // task so the refresh fans out to every board mounting its shared service.
-    await this.events.boardChanged(workspaceId, 'module', taskId)
+  private applyModuleAssignment(workspaceId: string, taskId: string): Promise<void> {
+    return this.postMergeBoard.applyModuleAssignment(workspaceId, taskId)
   }
 
   /** Resolve a pending decision; the run's next step lets the agent finish it. */

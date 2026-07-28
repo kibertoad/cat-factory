@@ -201,13 +201,18 @@ export interface CoreDependencies {
   appBaseUrl?: string
   /**
    * The structured logger every domain service emits through (`backend/docs/logging.md`).
-   * A facade injects its pino-backed instance from `@cat-factory/server`; absent (tests,
-   * harnesses) ⇒ `createCore` substitutes `noopLogger`, so a service never null-checks it
-   * and construction stays cheap. Services that swallow their own failures — the PR
-   * verification report, the track-record side channel — depend on this being present in
-   * production: it is the only account of a drop they will ever leave.
+   * A facade injects its pino-backed instance from `@cat-factory/server`; a test or harness
+   * that does not care passes `noopLogger` explicitly.
+   *
+   * REQUIRED, deliberately. It was optional first, and the Worker's dependency literal simply
+   * had no `logger` key — so on the deployed runtime every domain service fell back to
+   * `noopLogger`, putting exactly the best-effort paths this logger exists to surface back in
+   * the dark, with nothing failing to say so. An optional dep whose absence is silent and
+   * whose presence is a facade-parity obligation is the wrong shape: making it required turns
+   * that whole class of gap into a typecheck failure, the same guard the message-first
+   * signature gives the call sites.
    */
-  logger?: Logger
+  logger: Logger
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository

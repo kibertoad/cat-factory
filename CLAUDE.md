@@ -200,10 +200,11 @@ is named: it adapts pino onto the port. Full patterns:
 - **Declaring a local `interface XLogger { warn(obj, msg?) }` is BANNED.** That was the pre-port
   stopgap and every instance has been retired; a package that can't see kernel is in the wrong
   layer. Same for a bespoke `log?: (event, msg) => void` callback dependency.
-- **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`).
-  `createCore` re-binds the resolved logger onto the dependency bag, so production always has a real
-  one and no call site null-checks. `container.logger` exposes the same instance to controllers and
-  facade sweepers.
+- **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`)
+  so it stays unit-testable standalone, but **`CoreDependencies.logger` is REQUIRED** — a facade
+  that forgets to wire it fails to typecheck rather than silently running the whole engine on
+  `noopLogger`, which is how the Worker originally shipped. `container.logger` exposes the same
+  instance to controllers and facade sweepers.
 - **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps
   the swallow — a best-effort path must NEVER propagate into its caller — and adds one `warn` naming
   the operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the

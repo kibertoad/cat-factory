@@ -43,7 +43,7 @@ export function buildEnvironmentUserHandlerService(
       ? { customTlsSupported: deps.environmentCustomTlsSupported }
       : {}),
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
-    ...(deps.logger ? { logger: deps.logger } : {}),
+    logger: deps.logger,
   })
 }
 
@@ -149,6 +149,6 @@ export function buildEnvironmentTestService(args: {
     clock: deps.clock,
     ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
     ...(eventPublisher ? { eventPublisher } : {}),
-    ...(deps.logger ? { logger: deps.logger } : {}),
+    logger: deps.logger,
   })
 }

@@ -173,14 +173,6 @@ const app = createApp({
   },
 })
 
-/** Compact, log-friendly shape for an unknown caught value. */
-function errInfo(error: unknown): { message: string; stack?: string } {
-  if (error instanceof Error) {
-    return { message: error.message, ...(error.stack ? { stack: error.stack } : {}) }
-  }
-  return { message: String(error) }
-}
-
 /** The boot/cron key-fingerprint check's logger, tagged so its lines are greppable by cron. */
 const keyFingerprintLogger = logger.child({ cron: 'key-fingerprint' })
 
@@ -243,7 +235,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
       }).catch((error) =>
         logger.error('key fingerprint check failed', {
           cron: 'key-fingerprint',
-          err: errInfo(error),
+          ...describeError(error),
         }),
       ),
     )
@@ -255,7 +247,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
         keyFingerprintLogger,
       ).catch((error) =>
-        logger.error('key drift sweep failed', { cron: 'key-drift', err: errInfo(error) }),
+        logger.error('key drift sweep failed', { cron: 'key-drift', ...describeError(error) }),
       ),
     )
   }
@@ -295,7 +287,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
     })
       .then((result) => logger.info('retention sweep complete', { cron: 'retention', ...result }))
       .catch((error) =>
-        logger.error('retention sweep failed', { cron: 'retention', err: errInfo(error) }),
+        logger.error('retention sweep failed', { cron: 'retention', ...describeError(error) }),
       ),
   )
   // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
@@ -333,7 +325,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         .catch((error) =>
           logger.error('artifact retention sweep failed', {
             cron: 'retention',
-            err: errInfo(error),
+            ...describeError(error),
           }),
         ),
     )
@@ -432,7 +424,7 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
           }
         })
         .catch((error) =>
-          logger.error('run sweep failed', { cron: 'run-sweeper', err: errInfo(error) }),
+          logger.error('run sweep failed', { cron: 'run-sweeper', ...describeError(error) }),
         ),
     )
   }
@@ -473,7 +465,10 @@ function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemCloc
           }
         })
         .catch((error) =>
-          logger.error('env-test sweep failed', { cron: 'env-test-sweeper', err: errInfo(error) }),
+          logger.error('env-test sweep failed', {
+            cron: 'env-test-sweeper',
+            ...describeError(error),
+          }),
         ),
     )
   }
@@ -497,7 +492,7 @@ function reclaimExpiredActivations(env: Env, ctx: ExecutionContext, clock: Syste
       .catch((error) =>
         logger.error('activation sweep failed', {
           cron: 'activation-sweeper',
-          err: errInfo(error),
+          ...describeError(error),
         }),
       ),
   )
@@ -528,7 +523,10 @@ function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock
             logger.warn('reaped leaked containers', { cron: 'container-reaper', reaped })
         })
         .catch((error) =>
-          logger.error('container reap failed', { cron: 'container-reaper', err: errInfo(error) }),
+          logger.error('container reap failed', {
+            cron: 'container-reaper',
+            ...describeError(error),
+          }),
         ),
     )
   }
@@ -552,7 +550,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       .catch((error) =>
         logger.error('notification escalation failed', {
           cron: 'notification-escalation',
-          err: errInfo(error),
+          ...describeError(error),
         }),
       ),
   )
@@ -570,7 +568,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       .catch((error) =>
         logger.error('recurring-pipeline sweep failed', {
           cron: 'recurring-pipelines',
-          err: errInfo(error),
+          ...describeError(error),
         }),
       ),
   )
@@ -588,7 +586,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       .catch((error) =>
         logger.error('initiative-loop sweep failed', {
           cron: 'initiative-loop',
-          err: errInfo(error),
+          ...describeError(error),
         }),
       ),
   )
@@ -612,7 +610,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
             logger.info('ran pending kaizen gradings', { cron: 'kaizen-sweeper', processed })
         })
         .catch((error) =>
-          logger.error('kaizen sweep failed', { cron: 'kaizen-sweeper', err: errInfo(error) }),
+          logger.error('kaizen sweep failed', { cron: 'kaizen-sweeper', ...describeError(error) }),
         )
         .finally(() => {
           kaizenSweeping = false
@@ -631,7 +629,10 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
           logger.info('scheduled repo resyncs', { sweep: 'github-reconcile', scheduled })
       })
       .catch((error) =>
-        logger.error('github reconcile failed', { sweep: 'github-reconcile', err: errInfo(error) }),
+        logger.error('github reconcile failed', {
+          sweep: 'github-reconcile',
+          ...describeError(error),
+        }),
       ),
   )
 
@@ -639,7 +640,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
   // environment integration is configured).
   ctx.waitUntil(
     sweepExpiredEnvironments(env, clock).catch((error) =>
-      logger.error('environment sweep failed', { cron: 'env-sweeper', err: errInfo(error) }),
+      logger.error('environment sweep failed', { cron: 'env-sweeper', ...describeError(error) }),
     ),
   )
 
@@ -675,7 +676,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
         .catch((error) =>
           logger.error('platform health sweep failed', {
             cron: 'platform-health',
-            err: errInfo(error),
+            ...describeError(error),
           }),
         ),
     )

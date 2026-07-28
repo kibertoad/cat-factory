@@ -481,11 +481,10 @@ export function createCore(injected: CoreDependencies): Core {
     caches,
     logger,
   } = resolveCoreRuntime(injected)
-  // Re-bind the resolved logger onto the dependency bag once. `CoreDependencies.logger` is
-  // optional (a harness wires none), but every service below should be able to log
-  // unconditionally — doing it here beats a `?? noopLogger` at each of the ~15 wiring sites,
-  // and guarantees they all share one instance.
-  const dependencies: CoreDependencies = { ...injected, logger }
+  // `logger` is required on `CoreDependencies`, so `injected` already carries it; aliasing the
+  // bag here keeps the rest of this function reading against one name and makes it explicit that
+  // every service below is threaded the SAME resolved instance.
+  const dependencies: CoreDependencies = injected
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency

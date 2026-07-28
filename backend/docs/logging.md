@@ -45,9 +45,14 @@ wrong layer.
 | A facade (`runtimes/*`)                                      | `import { logger } from '@cat-factory/server'`, or `container.logger` when you want the same instance the domain services got.                                                                                                |
 | A test                                                       | `createRecordingLogger()` from kernel — a `Logger` that records `{ level, msg, fields }` into `.lines` instead of emitting.                                                                                                   |
 
-`CoreDependencies.logger` is optional so a harness can construct a container cheaply;
-`resolveCoreRuntime` substitutes `noopLogger` and re-binds it onto the dependency bag, so no
-service downstream ever null-checks.
+**`CoreDependencies.logger` is REQUIRED**, so a facade that forgets to wire it fails to typecheck.
+That is not incidental strictness: it was optional first, and the Worker's dependency literal
+simply had no `logger` key — every domain service on the deployed runtime silently fell back to
+`noopLogger`, and nothing anywhere said so. A test or harness that does not care passes
+`noopLogger` explicitly, which costs one line and cannot happen by accident.
+
+Individual services still declare `logger?: Logger` in their own dependency interfaces, so one can
+be constructed standalone in a unit test; `createCore` always passes the real instance.
 
 ## Levels
 
@@ -124,6 +129,11 @@ implementation must not throw, and no fix to a swallow site may let the failure 
 caller. Adding a log line is always safe; changing a `catch` into a rethrow is a behaviour change,
 not an observability change.
 
+The pino adapter holds up its end: the Worker's writer serialises through a guarded stringify, so
+an unserialisable field bag (a cycle, a `BigInt`) degrades to a line carrying the message and a
+`logSerializationError` instead of raising a `TypeError` out of the caller's `logger.warn(…)`. A
+second `Logger` implementation owes the same guarantee.
+
 The corollary matters just as much: don't create a new class of silent background failure while
 building the thing that watches for them.
 
@@ -144,6 +154,18 @@ this.log.warn('merge classification failed; recording an unclassified row', {
 - It says what happened AND what the system did about it.
 - The fields answer the first question an operator will ask ("which board, which PR, did we at
   least keep attribution?").
+
+### Field names to avoid
+
+`msg`, `level` and `time` are the envelope's own keys (see [Output format](#output-format)), so a
+field bag carrying one of them collides with the line's own structure rather than adding to it —
+silently, since nothing rejects it. Name yours something else (`detail`, `severityHint`,
+`observedAt`).
+
+Prefer `...describeError(error)` over hand-rolling an error field. Besides the scrubbing, it keeps
+one shape (`err` + `errKind`) across every line in the platform, and it avoids the specific trap of
+passing a raw `Error` object: the Worker bundles pino's browser build, which `JSON.stringify`s an
+`Error` to `{}` — so the cause vanishes on exactly the runtime you cannot attach a debugger to.
 
 ## Testing that something logged
 
