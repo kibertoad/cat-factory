@@ -49,6 +49,17 @@ export interface BugHuntServiceDependencies {
    * presenting an unranked list as a ranking would be the one genuinely misleading outcome.
    */
   assessor?: BugHuntAssessor
+  /**
+   * The workspace spend safeguard, as the narrow predicate the ranking needs (so this layer
+   * takes no dependency on `@cat-factory/spend`).
+   *
+   * A hunt is the platform's first BILLABLE model call that is not behind a run start, so the
+   * budget check `RunAdmission` performs for a run has no equivalent here unless it is made
+   * one: without it, a workspace that has exhausted its budget — and can therefore no longer
+   * start the very run a hunt exists to start — could still spend on ranking, repeatedly.
+   * Unwired ⇒ no guard, exactly as an unwired spend service means no guard on a run.
+   */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
 }
 
 /**
@@ -74,7 +85,13 @@ export class BugHuntService {
   async listBoards(workspaceId: string, source: TaskSourceKind): Promise<TrackerBoard[]> {
     const provider = this.deps.taskSourceRegistry.get(source)
     if (!provider?.listBoards) {
-      throw new ValidationError(`The '${source}' source cannot list boards on this deployment.`)
+      // `reason` is what the SPA acts on: "this tracker cannot enumerate boards" is the ONE
+      // failure whose answer is "type the board in yourself", and it must be distinguishable
+      // from an unreachable tracker or an expired token — which would otherwise present as the
+      // same free-text field, followed by a hunt that fails for a reason nobody was told.
+      throw new ValidationError(`The '${source}' source cannot list boards on this deployment.`, {
+        reason: 'boards_unsupported',
+      })
     }
     const credentials = await this.credentialsFor(workspaceId, source)
     return provider.listBoards(credentials, workspaceId)
@@ -115,9 +132,15 @@ export class BugHuntService {
       issueType: input.issueType || DEFAULT_ISSUE_TYPE,
       unassignedOnly: true,
       excludeExternalIds,
-      limit: BUG_HUNT_SCAN_LIMIT,
+      // Ask for ONE past the cap purely to learn whether the board holds more. Comparing the
+      // returned count against the cap instead cannot tell "exactly 40 bugs, all of them here"
+      // from "40 shown, more behind them", and would tell a user their board holds more than
+      // they can see whenever it holds exactly the cap.
+      limit: BUG_HUNT_SCAN_LIMIT + 1,
     }
-    const candidates = await provider.listBugCandidates(credentials, query, workspaceId)
+    const found = await provider.listBugCandidates(credentials, query, workspaceId)
+    const truncated = found.length > BUG_HUNT_SCAN_LIMIT
+    const candidates = truncated ? found.slice(0, BUG_HUNT_SCAN_LIMIT) : found
 
     const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates)
     return {
@@ -127,7 +150,7 @@ export class BugHuntService {
       model,
       candidates: ranked,
       scanned: candidates.length,
-      truncated: candidates.length >= BUG_HUNT_SCAN_LIMIT,
+      truncated,
     }
   }
 
@@ -183,6 +206,17 @@ export class BugHuntService {
       return { ranked: unranked, analysisStatus: 'unavailable', model: null }
     }
     try {
+      // Checked BEFORE the call, and reported as its OWN status rather than folded into
+      // `failed`: an exhausted budget is not a broken model, and the fix (raise the budget, or
+      // wait for the window to roll) is not the fix for a revoked key.
+      //
+      // Inside the try because it reads the spend ledger: a probe that cannot answer must not
+      // cost the user the scan they already paid a vendor call for. It then degrades to
+      // `failed` — accurate (the rating could not be completed) and fail-CLOSED (no model call
+      // is made), which is the only safe direction for a budget guard.
+      if (await this.deps.isOverBudget?.(workspaceId)) {
+        return { ranked: unranked, analysisStatus: 'over_budget', model: null }
+      }
       // Bug bodies are written by anyone who can file a ticket and are about to be sent to a
       // model provider, so they are scrubbed BEFORE they leave the deployment — the same
       // boundary the agent-context snapshots apply, for the same reason.
@@ -198,6 +232,7 @@ export class BugHuntService {
     } catch {
       // Deliberately swallowed: `analysisStatus: 'failed'` is what the user acts on, and the
       // scan they paid for is still in the response. The assessor logs the underlying cause.
+      // A budget probe that threw lands here too — nothing was spent, and the scan survives.
       return { ranked: unranked, analysisStatus: 'failed', model: null }
     }
   }

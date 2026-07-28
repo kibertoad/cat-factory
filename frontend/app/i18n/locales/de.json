@@ -3317,6 +3317,7 @@
     "board": "Board",
     "pickBoard": "Board auswählen",
     "boardPlaceholder": "Projektschlüssel, Team-ID oder owner/repo",
+    "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
     "labels": "Labels",
@@ -3345,6 +3346,7 @@
       "ranked": "Sortiert nach Auswirkung im Verhältnis zum geschätzten Aufwand.",
       "unavailable": "Es ist kein Bewertungsmodell konfiguriert, daher sind diese unbewertet.",
       "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
+      "over_budget": "Dieser Arbeitsbereich hat sein Ausgabenbudget überschritten, daher wurden diese nicht bewertet.",
       "empty": "Nichts zu bewerten."
     }
   },

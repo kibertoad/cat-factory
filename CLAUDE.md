@@ -793,15 +793,26 @@ is adopted as a `bug` task on `pl_bugfix` with its run started. Design:
   issue payload, so a per-candidate detail fetch would be 40 round trips for data we were
   discarding. Predicates are pushed into the vendor query, the already-adopted exclusion is one
   batched `listByWorkspace` read.
+- **A caller-supplied board scope is QUOTED or SHAPE-VALIDATED before it reaches a vendor query.**
+  A hunt's board arrives in a request body, so GitHub's unquotable `repo:` qualifier is checked as
+  `owner/repo` (`assertBoardSlug`) — a scope carrying a second qualifier would silently contradict
+  the `is:open` / `no:assignee` narrowing the whole surface promises. The scan asks for ONE past
+  the cap so `truncated` distinguishes "exactly 40" from "40 and more".
+- **The rating answers to the spend safeguard.** It is the platform's first billable model call
+  that no run start gates, so `BugHuntService` takes `isOverBudget` (the narrow predicate, not the
+  spend package) and reports `over_budget` — its own status, because an exhausted budget is not a
+  broken model. Any future un-run-scoped LLM call owes the same guard.
 - **The model RATES; the platform RANKS.** `bugHuntScore` computes the impact/effort ratio from the
   two 1-5 judgements — never read off the reply, or the list is sorted by something its own
   rationale doesn't explain. Verdicts are joined onto the PROVIDER's rows by `externalId`, so a
   verdict naming an issue the board never returned is dropped rather than surfaced.
 - **Degradation is stated, never silent.** `analysisStatus` distinguishes `unavailable` (no model
-  configured) from `failed` (wired but broken) because they need different fixes; either way the
-  scan is still returned, with unassessed candidates carrying `analysis: null` and sorting last. A
-  swallowed ranking failure is LOGGED by the assessor, or a revoked key surfaces only as a
-  permanently unranked hunt.
+  configured) from `failed` (wired but broken) from `over_budget` because they need different
+  fixes; either way the scan is still returned, with an unassessed candidate carrying a null
+  `analysis` and sorting last. A swallowed ranking failure is LOGGED by the assessor, or a revoked
+  key surfaces only as a permanently unranked hunt. Same rule on the read side: "this tracker cannot
+  list boards" is a `details.reason` the SPA maps to a free-text field, never inferred from the
+  presence of an error — a tracker outage would otherwise wear the same clothes.
 - **The adopt is split like intake's**: `BugHuntService` imports + creates the task (through
   `createTaskFromIssue`'s new optional `taskType`/`pipelineId` shape), the CONTROLLER starts the run
   behind the personal-credential gate. A failed start deliberately KEEPS the task — unlike the

@@ -602,6 +602,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     notifications,
     fragmentLibrary,
     boardService,
+    spend: spendService,
   })
 
   const executionService = new ExecutionService({

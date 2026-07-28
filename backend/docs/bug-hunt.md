@@ -23,6 +23,12 @@ Three steps, one per user action, all under `/workspaces/:ws/bug-hunt/:source`:
 | Hunt  | `POST /hunts`     | Reads + rates the board's open unassigned bugs. **No writes.**   |
 | Adopt | `POST /adoptions` | Imports the issue, creates the bug task, starts the run          |
 
+A source whose provider cannot enumerate boards is refused with a machine-readable
+`details.reason: 'boards_unsupported'`, and the SPA turns **that reason specifically** into a
+free-text board field. Keying the fallback on "any error" instead would present an unreachable
+tracker or an expired token as "type the board in yourself", which just moves the same failure to
+the next click; those are shown as the errors they are.
+
 `BugHuntController` (`@cat-factory/server`) is member-tier, deliberately NOT mounted alongside the
 admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection, and what it does
 — create a task, start a run — is exactly what the member tier is for. Gating it on
@@ -66,7 +72,17 @@ the same shape `BugIntakeService` uses.
 
 The scan is capped at `BUG_HUNT_SCAN_LIMIT` (40) because the whole set goes into one rating
 prompt. A board with more matching bugs comes back `truncated: true` and the UI says so — a
-silently shortened list reads exactly like an exhaustive one.
+silently shortened list reads exactly like an exhaustive one. The service asks the provider for
+**one past the cap** and trims: comparing the returned count against the cap instead cannot tell
+"exactly 40 bugs, all of them here" from "40 shown, more behind them", and would tell a user their
+board holds more than they can see whenever it holds exactly 40.
+
+**The board scope is validated, not just interpolated.** A hunt's `board` arrives in a request
+body, and GitHub's `repo:` qualifier is the one value the search grammar takes bare — so
+`buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is quoted).
+Without that, a board of `owner/repo is:closed` would silently contradict the `is:open` /
+`no:assignee` qualifiers the whole surface rests on. Jira escapes its project key into a quoted
+JQL literal and Linear passes the team id as a GraphQL variable, so neither has the same hole.
 
 ## 4. Rating
 
@@ -101,15 +117,30 @@ they leave the deployment, and the prompt frames them as data with the real inst
 
 ### Degradation is stated, never silent
 
-`analysisStatus` is the field the UI acts on, and the two failure modes are kept distinct because
-they need different fixes from whoever reads them:
+`analysisStatus` is the field the UI acts on, and the failure modes are kept distinct because they
+need different fixes from whoever reads them:
 
-| Status        | Meaning                                                          |
-| ------------- | ---------------------------------------------------------------- |
-| `ranked`      | The model rated the candidates.                                  |
-| `unavailable` | No rating model is configured on this deployment.                |
-| `failed`      | A model is wired but the assessment failed; scan still returned. |
-| `empty`       | Nothing matched on the board.                                    |
+| Status        | Meaning                                                              |
+| ------------- | -------------------------------------------------------------------- |
+| `ranked`      | The model rated the candidates.                                      |
+| `unavailable` | No rating model is configured on this deployment.                    |
+| `failed`      | A model is wired but the assessment failed; scan still returned.     |
+| `over_budget` | The workspace is over its spend budget, so nothing was spent rating. |
+| `empty`       | Nothing matched on the board.                                        |
+
+### The rating answers to the spend budget
+
+A hunt is the platform's first **billable model call that is not behind a run start**, so the
+budget check `RunAdmission` performs before a run has no equivalent here unless it is made one:
+without it a workspace that has exhausted its budget — and therefore can no longer start the very
+run a hunt exists to start — could still spend on rating, repeatedly, from a member-tier endpoint
+with no in-flight cap.
+
+`BugHuntService` takes the safeguard as the narrow `isOverBudget(workspaceId)` predicate (so the
+integrations layer takes no dependency on `@cat-factory/spend`), checks it **before** the call, and
+reports `over_budget` rather than folding it into `failed` — an exhausted budget is not a broken
+model, and "raise the budget" is not the fix for a revoked key. Unwired ⇒ no guard, exactly as an
+unwired spend service means no guard on a run.
 
 A failed rating never costs the user the scan — the board read is useful on its own — but it is
 never presented as a ranking either. A candidate the rating skipped carries `analysis: null` and

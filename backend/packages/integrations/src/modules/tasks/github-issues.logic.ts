@@ -7,6 +7,7 @@ import type {
   TaskSourceDescriptor,
   TrackerBoard,
 } from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
 // unit-testable without a live API: parsing an issue reference out of user input
@@ -169,6 +170,30 @@ function quoteQualifierValue(value: string): string {
   return `"${value.replace(/"/g, '').trim()}"`
 }
 
+/** The only shape a GitHub board scope may take: `owner/repo`, both plain path segments. */
+const REPO_SLUG = new RegExp(`^${SEG}/${SEG}$`)
+
+/**
+ * Validate a board scope before it is interpolated into the search text.
+ *
+ * The `repo:` qualifier is the ONE hole in {@link buildGitHubIntakeQuery} that cannot be quoted
+ * — GitHub's search grammar takes the slug bare — so it is validated instead. It has to be:
+ * a board reaches this from a bug hunt's request body, where a value like
+ * `owner/repo is:closed` would silently contradict the `is:open` / `no:assignee` qualifiers the
+ * whole scan rests on, and one like `owner/repo org:elsewhere` would widen it. A malformed
+ * scope is refused loudly rather than searched with a meaning nobody asked for; the recurring
+ * intake's stored board goes through the same check, where a wrong-scope search is just as
+ * wrong for being configured earlier.
+ */
+function assertBoardSlug(slug: string): string {
+  if (!REPO_SLUG.test(slug)) {
+    throw new ValidationError(`'${slug}' is not a GitHub repository scope; expected owner/repo.`, {
+      reason: 'invalid_board',
+    })
+  }
+  return slug
+}
+
 /**
  * Build the GitHub search text for an issue-intake predicate search: open issues
  * in the configured repo matching every present predicate. Labels become
@@ -180,10 +205,14 @@ function quoteQualifierValue(value: string): string {
  * search API's `created-asc` order (see `GitHubClient.searchIssues`). The
  * already-worked exclusion list is not expressible in GitHub search; the
  * provider filters it from a bounded overscan.
+ *
+ * Every value that reaches the search text is either quoted or, for the unquotable board
+ * scope, shape-validated (see {@link assertBoardSlug}) — a caller-supplied string must never
+ * be able to add a qualifier of its own.
  */
 export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
   const parts: string[] = []
-  if (query.board.githubRepo) parts.push(`repo:${query.board.githubRepo.trim()}`)
+  if (query.board.githubRepo) parts.push(`repo:${assertBoardSlug(query.board.githubRepo.trim())}`)
   parts.push('is:open')
   // `no:assignee` is GitHub search's unassigned qualifier — pushed down like the rest, so a
   // hunt never spends its overscan window on issues somebody already owns.

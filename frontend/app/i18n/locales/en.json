@@ -3719,6 +3719,7 @@
     "board": "Board",
     "pickBoard": "Pick a board",
     "boardPlaceholder": "Project key, team id or owner/repo",
+    "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
     "labels": "Labels",
@@ -3750,6 +3751,7 @@
       "ranked": "Ranked by impact against how hard each looks to fix.",
       "unavailable": "No rating model is configured, so these are unrated.",
       "failed": "The rating could not be completed, so these are unrated.",
+      "over_budget": "This workspace is over its spend budget, so these were not rated.",
       "empty": "Nothing to rate."
     }
   },

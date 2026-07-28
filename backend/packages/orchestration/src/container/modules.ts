@@ -22,6 +22,7 @@ import type {
 } from '@cat-factory/kernel'
 import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
+import type { SpendService } from '@cat-factory/spend'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
   BugIntakeService,
@@ -305,6 +306,7 @@ export function createDocumentsModule(
 export function createTasksModule(
   deps: CoreDependencies,
   boardService: BoardService,
+  spend: SpendService,
 ): TasksModule | undefined {
   const {
     taskSourceProviders,
@@ -381,6 +383,9 @@ export function createTasksModule(
     taskRepository,
     importService,
     linkService,
+    // The ranking is a billable model call that no run start gates, so it answers to the SAME
+    // workspace budget safeguard `RunAdmission` applies before a run — see the dependency's doc.
+    isOverBudget: (workspaceId) => spend.isOverBudget(workspaceId),
     ...(() => {
       const assessor = createBugHuntAssessor(deps)
       return assessor ? { assessor } : {}

@@ -105,6 +105,11 @@ export const bugHuntAnalysisStatusSchema = v.picklist([
   'unavailable',
   /** A model is wired but the assessment failed; the candidates are returned unranked. */
   'failed',
+  /**
+   * The workspace is over its spend budget, so the billable ranking call was not made. Distinct
+   * from `failed` because nothing is broken and the fix is a budget, not a credential.
+   */
+  'over_budget',
   /** Nothing to rank (the board had no matching open unassigned bugs). */
   'empty',
 ])
@@ -120,12 +125,16 @@ export const bugHuntResultSchema = v.object({
   /** Candidates, best-scoring first; unassessed ones sort last. */
   candidates: v.array(bugHuntCandidateSchema),
   /**
-   * How many open unassigned bugs the board search returned before ranking. Equal to
-   * `candidates.length` unless the scan cap truncated it, which the UI says out loud —
-   * a silently shortened list reads exactly like an exhaustive one.
+   * How many open unassigned bugs this hunt considered — the board search's result, bounded by
+   * the scan cap. It is what the truncation notice counts, so it is reported rather than left
+   * to be inferred from `candidates`.
    */
   scanned: v.number(),
-  /** Whether the scan hit its cap, so the board holds more candidates than were considered. */
+  /**
+   * Whether the board holds MORE matching bugs than the cap allowed in (detected by scanning one
+   * past it), so the list is a prefix rather than the whole board. Said out loud because a
+   * silently shortened list reads exactly like an exhaustive one.
+   */
   truncated: v.boolean(),
 })
 export type BugHuntResult = v.InferOutput<typeof bugHuntResultSchema>

@@ -10,7 +10,10 @@ prerequisites are configured.
 - `github/`, `documents/`, `tasks/`, `tracker/` — VCS + document/issue sources. `tasks/webhook/`
   holds the INBOUND side: the per-vendor verify+parse adapters behind
   `TaskSourceProvider.webhook`, driving `tasks/TrackerWebhookService.ts` (push intake fires a
-  matching schedule; a ticket comment answers a parked review).
+  matching schedule; a ticket comment answers a parked review). `tasks/` also holds the two issue
+  PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
+  step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated
+  board scan), both over the `listBugCandidates` / `listBoards` provider capabilities.
 - `environments/` — ephemeral-environment provisioning (the heaviest module) + `kubernetes/`,
   `runners/` (the self-hosted runner-pool transports).
 - `datadog/` + `observability/` — release-health providers; `pagerduty/`, `incidentio/`,
@@ -26,5 +29,5 @@ prerequisites are configured.
   desync.
 - `backend-registries.ts` — a loose registration file sitting among the module dirs.
 
-**See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks"; `backend/docs/`
-{`runner-pool-integration`, `environments-integration`, `github-integration`, `document-sources`}`.md`.
+**See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
+{`runner-pool-integration`, `environments-integration`, `github-integration`, `document-sources`, `bug-hunt`}`.md`.

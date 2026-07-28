@@ -3611,6 +3611,7 @@
     "board": "Tablero",
     "pickBoard": "Elige un tablero",
     "boardPlaceholder": "Clave de proyecto, id de equipo o owner/repo",
+    "boardsFailed": "No se pudieron cargar los tableros: {reason}",
     "issueType": "Tipo de incidencia",
     "issueTypeHelp": "Por defecto bug. Se ignora en gestores sin tipos de incidencia.",
     "labels": "Etiquetas",
@@ -3639,6 +3640,7 @@
       "ranked": "Ordenados por impacto frente a lo difícil que parece arreglar cada uno.",
       "unavailable": "No hay ningún modelo de valoración configurado, así que están sin valorar.",
       "failed": "No se ha podido completar la valoración, así que están sin valorar.",
+      "over_budget": "Este espacio de trabajo ha superado su presupuesto de gasto, así que no se han valorado.",
       "empty": "Nada que valorar."
     }
   },

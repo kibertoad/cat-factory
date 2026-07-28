@@ -9,6 +9,7 @@
 
 export type {
   TrackerBoard,
+  TrackerBoardsView,
   BugCandidate,
   BugHuntAnalysis,
   BugHuntAnalysisStatus,

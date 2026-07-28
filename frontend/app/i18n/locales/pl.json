@@ -3611,6 +3611,7 @@
     "board": "Tablica",
     "pickBoard": "Wybierz tablicę",
     "boardPlaceholder": "Klucz projektu, identyfikator zespołu lub owner/repo",
+    "boardsFailed": "Nie udało się wczytać tablic: {reason}",
     "issueType": "Typ zgłoszenia",
     "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
     "labels": "Etykiety",
@@ -3639,6 +3640,7 @@
       "ranked": "Uszeregowane według wpływu w stosunku do przewidywanej trudności naprawy.",
       "unavailable": "Nie skonfigurowano modelu oceniającego, więc te zgłoszenia są nieocenione.",
       "failed": "Nie udało się dokończyć oceny, więc te zgłoszenia są nieocenione.",
+      "over_budget": "Ta przestrzeń robocza przekroczyła budżet wydatków, więc nie zostały ocenione.",
       "empty": "Nie ma czego oceniać."
     }
   },

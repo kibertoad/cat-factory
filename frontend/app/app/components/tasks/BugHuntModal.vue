@@ -10,7 +10,12 @@
 // unavailable or failed still shows its candidates (flagged as unassessed, since the scan is
 // useful on its own), and a scan that hit its cap says so — a silently shortened list reads
 // exactly like an exhaustive one.
-import type { BugHuntCandidate, TaskSourceKind } from '~/types/domain'
+import type {
+  BugHuntAnalysisStatus,
+  BugHuntCandidate,
+  BugHuntConfidence,
+  TaskSourceKind,
+} from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, d, n } = useI18n()
@@ -59,8 +64,31 @@ const boardItems = computed(() =>
   })),
 )
 
-/** The tracker couldn't enumerate boards, so the user types the scope in themselves. */
-const boardIsFreeText = computed(() => !hunt.boardsLoading && hunt.boardsError !== null)
+/**
+ * The tracker CANNOT enumerate boards, so the user types the scope in themselves. Keyed on the
+ * backend's reason code, not on "any error": an unreachable tracker or an expired token would
+ * otherwise present as a free-text field that simply moves the same failure to the next click.
+ */
+const boardIsFreeText = computed(
+  () => !hunt.boardsLoading && hunt.boardsErrorReason === 'boards_unsupported',
+)
+
+/** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */
+const boardsFailure = computed(() =>
+  !hunt.boardsLoading && hunt.boardsError !== null && !boardIsFreeText.value
+    ? hunt.boardsError
+    : null,
+)
+
+/**
+ * A tracker date the SPA can actually format. A provider reports `createdAt` as an opaque
+ * string, so an unparseable one must render as nothing rather than as "Invalid Date".
+ */
+function createdAtDate(createdAt: string): Date | null {
+  if (!createdAt) return null
+  const parsed = new Date(createdAt)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
 
 const canHunt = computed(() => !!source.value && boardId.value.trim().length > 0)
 
@@ -137,17 +165,18 @@ function scoreColor(score: number): 'success' | 'primary' | 'neutral' {
  * Confidence labels, as an exhaustive Record over the closed union so a new member fails the
  * typecheck rather than rendering a raw code (the enum→key drift guard).
  */
-const CONFIDENCE_KEYS: Record<'high' | 'medium' | 'low', string> = {
+const CONFIDENCE_KEYS: Record<BugHuntConfidence, string> = {
   high: 'bugHunt.confidence.high',
   medium: 'bugHunt.confidence.medium',
   low: 'bugHunt.confidence.low',
 }
 
 /** The banner shown above the results, per analysis status — same exhaustive-Record guard. */
-const STATUS_KEYS: Record<'ranked' | 'unavailable' | 'failed' | 'empty', string> = {
+const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
   ranked: 'bugHunt.status.ranked',
   unavailable: 'bugHunt.status.unavailable',
   failed: 'bugHunt.status.failed',
+  over_budget: 'bugHunt.status.over_budget',
   empty: 'bugHunt.status.empty',
 }
 </script>
@@ -206,6 +235,11 @@ const STATUS_KEYS: Record<'ranked' | 'unavailable' | 'failed' | 'empty', string>
               :placeholder="t('bugHunt.pickBoard')"
               class="w-full"
             />
+            <!-- A board read that failed for a fixable reason (unreachable site, expired
+                 token): named, so the user isn't left with an empty picker and no cause. -->
+            <p v-if="boardsFailure" class="mt-1 text-xs text-amber-400">
+              {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
+            </p>
           </UFormField>
 
           <UFormField :label="t('bugHunt.issueType')" :help="t('bugHunt.issueTypeHelp')">
@@ -269,6 +303,7 @@ const STATUS_KEYS: Record<'ranked' | 'unavailable' | 'failed' | 'empty', string>
                   <ULink
                     :to="candidate.url"
                     target="_blank"
+                    rel="noopener noreferrer"
                     class="truncate text-sm font-medium text-slate-100"
                   >
                     {{ candidate.externalId }}: {{ candidate.title }}
@@ -289,8 +324,8 @@ const STATUS_KEYS: Record<'ranked' | 'unavailable' | 'failed' | 'empty', string>
                 <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                   <span v-if="candidate.priority">{{ candidate.priority }}</span>
                   <span v-for="label in candidate.labels" :key="label">{{ label }}</span>
-                  <span v-if="candidate.createdAt">
-                    {{ d(new Date(candidate.createdAt), 'short') }}
+                  <span v-if="createdAtDate(candidate.createdAt)">
+                    {{ d(createdAtDate(candidate.createdAt)!, 'short') }}
                   </span>
                   <span>{{
                     t('bugHunt.comments', { count: candidate.commentCount }, candidate.commentCount)

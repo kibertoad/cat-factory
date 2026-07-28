@@ -3611,6 +3611,7 @@
     "board": "Tableau",
     "pickBoard": "Choisir un tableau",
     "boardPlaceholder": "Clé de projet, id d'équipe ou owner/repo",
+    "boardsFailed": "Impossible de charger les tableaux : {reason}",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
     "labels": "Étiquettes",
@@ -3639,6 +3640,7 @@
       "ranked": "Classés par impact face à la difficulté apparente du correctif.",
       "unavailable": "Aucun modèle d'évaluation n'est configuré, ils sont donc non évalués.",
       "failed": "L'évaluation n'a pas pu aboutir, ils sont donc non évalués.",
+      "over_budget": "Cet espace de travail a dépassé son budget de dépenses, ces bogues n'ont donc pas été évalués.",
       "empty": "Rien à évaluer."
     }
   },

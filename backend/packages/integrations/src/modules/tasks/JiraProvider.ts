@@ -321,6 +321,13 @@ export class JiraProvider implements TaskSourceProvider {
     return jiraLogic.parseJiraBoards(json)
   }
 
+  /** The connection's site root, trimmed and re-validated — the one place either is done. */
+  private siteBase(credentials: TaskCredentials): string {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    atlassianLogic.assertSafeAtlassianBaseUrl(base)
+    return base
+  }
+
   /**
    * Bug-hunt candidate search: the same predicate JQL the intake builds (plus
    * `assignee IS EMPTY`, from `query.unassignedOnly`), asked for the richer
@@ -331,7 +338,7 @@ export class JiraProvider implements TaskSourceProvider {
     credentials: TaskCredentials,
     query: IssueIntakeQuery,
   ): Promise<BugCandidate[]> {
-    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    const base = this.siteBase(credentials)
     const jql = encodeURIComponent(jiraLogic.buildJiraIntakeJql(query))
     const json = await this.getJson(
       credentials,
@@ -342,9 +349,7 @@ export class JiraProvider implements TaskSourceProvider {
 
   /** Authenticated GET against the connection's site, re-validating the stored base URL. */
   private async getJson(credentials: TaskCredentials, path: string): Promise<unknown> {
-    const base = credentials.baseUrl!.replace(/\/+$/, '')
-    atlassianLogic.assertSafeAtlassianBaseUrl(base)
-    const url = `${base}${path}`
+    const url = `${this.siteBase(credentials)}${path}`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
     const res = await fetch(url, {
       method: 'GET',

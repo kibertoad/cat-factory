@@ -27,8 +27,9 @@ const MAX_RATIONALE_CHARS = 400
  * is sorted by something the rationale doesn't explain.
  */
 export function bugHuntScore(impact: number, complexity: number): number {
-  const safeComplexity = Math.max(clampRating(complexity), MIN_RATING)
-  return Math.round((clampRating(impact) / safeComplexity) * 100) / 100
+  // `clampRating` floors at MIN_RATING (1), which is what makes the division safe — there is no
+  // second guard here, because a second guard would suggest the first one might not hold.
+  return Math.round((clampRating(impact) / clampRating(complexity)) * 100) / 100
 }
 
 /** Clamp a model-supplied rating into 1–5; a non-finite value degrades to the midpoint. */

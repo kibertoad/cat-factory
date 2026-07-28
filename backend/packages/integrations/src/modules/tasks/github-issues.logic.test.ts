@@ -3,7 +3,9 @@ import {
   buildGitHubIntakeQuery,
   buildGitHubIssueSearchQuery,
   detectExactGitHubIssueRef,
+  githubHitToBugCandidate,
   githubIssueUrl,
+  githubReposToBoards,
   parseGitHubIssueExternalId,
   parseGitHubIssueRef,
   parseIssueDependencyLinks,
@@ -170,5 +172,106 @@ describe('buildGitHubIntakeQuery', () => {
     expect(buildGitHubIntakeQuery({ board: {}, labels: ['a"b'], limit: 5 })).toBe(
       'is:open label:"ab"',
     )
+  })
+
+  it('pushes the bug hunt unassigned predicate down as no:assignee', () => {
+    expect(
+      buildGitHubIntakeQuery({ board: { githubRepo: 'octo/app' }, unassignedOnly: true, limit: 5 }),
+    ).toBe('repo:octo/app is:open no:assignee')
+  })
+
+  it('refuses a board scope that is not a plain owner/repo slug', () => {
+    // The `repo:` qualifier is the one value the grammar takes bare, and a hunt's board comes
+    // straight from a request body — so a scope carrying a second qualifier must be refused,
+    // not searched. Silently contradicting `is:open`/`no:assignee` would return issues the
+    // whole surface promises it is not showing.
+    for (const board of [
+      'octo/app is:closed',
+      'octo/app no:assignee org:elsewhere',
+      'octo/app"',
+      'octo',
+      'octo/app/extra',
+    ]) {
+      expect(() => buildGitHubIntakeQuery({ board: { githubRepo: board }, limit: 5 })).toThrow(
+        /owner\/repo/,
+      )
+    }
+  })
+
+  it('accepts the punctuation GitHub actually allows in a repo slug', () => {
+    expect(buildGitHubIntakeQuery({ board: { githubRepo: 'octo-org/my.app_v2' }, limit: 5 })).toBe(
+      'repo:octo-org/my.app_v2 is:open',
+    )
+  })
+})
+
+describe('githubHitToBugCandidate', () => {
+  const hit = {
+    owner: 'octo',
+    repo: 'app',
+    number: 12,
+    title: 'Checkout crashes',
+    state: 'open',
+    url: 'https://github.com/octo/app/issues/12',
+    body: 'Steps: click pay.',
+    labels: ['bug', 'checkout'],
+    createdAt: '2026-01-02T03:04:05Z',
+    commentCount: 4,
+  }
+
+  it('projects the fields the search response already carries', () => {
+    expect(githubHitToBugCandidate(hit)).toEqual({
+      source: 'github',
+      externalId: 'octo/app#12',
+      title: 'Checkout crashes',
+      url: 'https://github.com/octo/app/issues/12',
+      status: 'open',
+      type: '',
+      priority: null,
+      labels: ['bug', 'checkout'],
+      description: 'Steps: click pay.',
+      createdAt: '2026-01-02T03:04:05Z',
+      commentCount: 4,
+    })
+  })
+
+  it('degrades an adapter that omits the optional fields to an empty report', () => {
+    // The GitLab-backed client projects onto this shape without them; the ranking must then
+    // read a vague report and rate it as such, never a fabricated one.
+    const thin = { owner: 'octo', repo: 'app', number: 3, title: 'T', state: 'open', url: 'u' }
+    expect(githubHitToBugCandidate(thin)).toMatchObject({
+      description: '',
+      labels: [],
+      createdAt: '',
+      commentCount: 0,
+    })
+  })
+
+  it('truncates a body long enough to dominate the ranking prompt', () => {
+    const candidate = githubHitToBugCandidate({ ...hit, body: 'x'.repeat(5_000) })
+    expect(candidate.description).toHaveLength(1_200)
+  })
+})
+
+describe('githubReposToBoards', () => {
+  it('maps installation repos onto owner/repo-scoped boards', () => {
+    expect(
+      githubReposToBoards([
+        { owner: 'octo', name: 'app' },
+        { owner: 'octo', name: 'infra' },
+      ]),
+    ).toEqual([
+      { id: 'octo/app', name: 'app', key: 'octo/app' },
+      { id: 'octo/infra', name: 'infra', key: 'octo/infra' },
+    ])
+  })
+
+  it('drops a repo missing either half of the scope it would produce', () => {
+    expect(
+      githubReposToBoards([
+        { owner: '', name: 'app' },
+        { owner: 'octo', name: '' },
+      ]),
+    ).toEqual([])
   })
 })
