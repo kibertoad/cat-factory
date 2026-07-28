@@ -1335,7 +1335,8 @@
         "title": "このサービスをアーカイブしますか？",
         "body": "「{name}」とそのタスクはボードから非表示になります。いつでも復元できます。"
       },
-      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}"
+      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}",
+      "huntBugs": "バグをハント"
     }
   },
   "observability": {
@@ -1937,7 +1938,8 @@
         "accountSettings": "アカウント設定",
         "localModels": "マイローカルランナー",
         "sandbox": "Sandbox を開く",
-        "shortcuts": "キーボードショートカット"
+        "shortcuts": "キーボードショートカット",
+        "bugHunt": "バグハント"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1957,7 +1959,8 @@
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal アカウント チーム メンバー ロール 招待 メール APIキー フラグメント ベストプラクティス ライブラリ コンテキスト 組織 個人",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
-        "shortcuts": "キーボード ショートカット キー ヘルプ"
+        "shortcuts": "キーボード ショートカット キー ヘルプ",
+        "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て"
       }
     },
     "integrationsHub": {
@@ -2043,6 +2046,10 @@
         },
         "documentTemplates": {
           "label": "テンプレートと例"
+        },
+        "bugHunt": {
+          "label": "バグハント",
+          "description": "ボードの未割り当ての未解決バグを評価し、修正するものをひとつ選びます"
         }
       }
     },
@@ -3604,6 +3611,49 @@
       "connect": "接続",
       "oauthButton": "{label} で接続",
       "oauthOr": "または API キーで接続"
+    }
+  },
+  "bugHunt": {
+    "title": "バグハント",
+    "intro": "トラッカーのボードから未割り当ての未解決バグを探し、影響度と修正の難しさの比で並べ替えます。ひとつ選ぶと、バグ修正パイプラインを実行するタスクになります。",
+    "connectFirst": "先にタスクソースを接続または有効化してください。",
+    "connectSource": "{label} を接続",
+    "needFrameFirst": "選んだバグの受け入れ先が必要なので、先にサービスフレームをボードに追加してください。",
+    "tracker": "トラッカー",
+    "board": "ボード",
+    "pickBoard": "ボードを選択",
+    "boardPlaceholder": "プロジェクトキー、チーム ID または owner/repo",
+    "boardsFailed": "ボードを読み込めませんでした: {reason}",
+    "issueType": "課題タイプ",
+    "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
+    "labels": "ラベル",
+    "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
+    "adoptInto": "選んだバグの追加先",
+    "run": "ハント",
+    "running": "ボードを読み取り、見つかったものを評価しています…",
+    "huntFailed": "ハントに失敗しました",
+    "notAssessed": "未評価",
+    "recommended": "おすすめ",
+    "adopt": "これを選ぶ",
+    "adopted": "{id} を引き受けました",
+    "adoptedRunning": "バグ修正パイプラインが実行中です。",
+    "adoptFailed": "このバグを引き受けられませんでした",
+    "noCandidates": "このボードには条件に合う未割り当ての未解決バグがありません。",
+    "ratings": "影響度 {impact}/5、複雑さ {complexity}/5、確信度 {confidence}",
+    "viaModel": "{model} による評価です。",
+    "truncated": "一致したバグのうち最初の {count} 件のみを走査しました。このボードにはさらにあります。",
+    "comments": "コメント {count} 件 | コメント {count} 件",
+    "confidence": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "status": {
+      "ranked": "影響度と修正の難しさの比で並べ替えました。",
+      "unavailable": "評価モデルが設定されていないため、未評価のまま表示しています。",
+      "failed": "評価を完了できなかったため、未評価のまま表示しています。",
+      "over_budget": "このワークスペースは利用予算を超えているため、評価は行われませんでした。",
+      "empty": "評価する対象がありません。"
     }
   },
   "pipeline": {

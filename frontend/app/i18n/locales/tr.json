@@ -1335,7 +1335,8 @@
         "title": "Bu hizmet arşivlensin mi?",
         "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
       },
-      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}"
+      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}",
+      "huntBugs": "Hata avla"
     }
   },
   "observability": {
@@ -1937,7 +1938,8 @@
         "accountSettings": "Hesap ayarları",
         "localModels": "Yerel çalıştırıcılarım",
         "sandbox": "Sandbox'ı aç",
-        "shortcuts": "Klavye kısayolları"
+        "shortcuts": "Klavye kısayolları",
+        "bugHunt": "Hata avı"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -1957,7 +1959,8 @@
         "accountSettings": "hesap ekip üyeler roller davetler e-posta api anahtarlar parça en iyi uygulama kitaplık bağlam organizasyon kişisel",
         "localModels": "yerel model çalıştırıcı ollama lm studio llamacpp vllm uç nokta",
         "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir",
-        "shortcuts": "kısayollar klavye tuşlar yardım"
+        "shortcuts": "kısayollar klavye tuşlar yardım",
+        "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış"
       }
     },
     "integrationsHub": {
@@ -2043,6 +2046,10 @@
         },
         "documentTemplates": {
           "label": "Şablonlar ve örnekler"
+        },
+        "bugHunt": {
+          "label": "Hata avı",
+          "description": "Bir panodaki açık ve atanmamış hataları değerlendirin ve düzeltmek için birini seçin"
         }
       }
     },
@@ -3604,6 +3611,49 @@
       "connect": "Bağla",
       "oauthButton": "{label} ile bağlan",
       "oauthOr": "veya bir API anahtarıyla bağlan"
+    }
+  },
+  "bugHunt": {
+    "title": "Hata avı",
+    "intro": "Bir takip panosunu açık ve kimseye atanmamış hatalar için tarayın ve bunları etkilerine karşı düzeltmenin ne kadar zor göründüğüne göre sıralayın. Birini seçin, hata düzeltme hattını çalıştıran bir göreve dönüşsün.",
+    "connectFirst": "Önce bir görev kaynağı bağlayın veya etkinleştirin.",
+    "connectSource": "{label} bağla",
+    "needFrameFirst": "Seçilen hatanın ineceği bir yer olması için önce panoya bir servis çerçevesi ekleyin.",
+    "tracker": "Takip aracı",
+    "board": "Pano",
+    "pickBoard": "Bir pano seçin",
+    "boardPlaceholder": "Proje anahtarı, takım kimliği veya owner/repo",
+    "boardsFailed": "Panolar yüklenemedi: {reason}",
+    "issueType": "Kayıt türü",
+    "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
+    "labels": "Etiketler",
+    "labelsHelp": "Virgülle ayrılır. Hepsinin bulunması gerekir.",
+    "adoptInto": "Seçilen hatayı şuraya ekle",
+    "run": "Avla",
+    "running": "Pano okunuyor ve bulunanlar değerlendiriliyor…",
+    "huntFailed": "Av başarısız oldu",
+    "notAssessed": "Değerlendirilmedi",
+    "recommended": "Önerilen",
+    "adopt": "Bunu seç",
+    "adopted": "{id} devralındı",
+    "adoptedRunning": "Hata düzeltme hattı onun üzerinde çalışıyor.",
+    "adoptFailed": "Bu hata devralınamadı",
+    "noCandidates": "Bu panoda eşleşen açık ve atanmamış hata yok.",
+    "ratings": "Etki {impact}/5, karmaşıklık {complexity}/5, güven {confidence}",
+    "viaModel": "{model} tarafından değerlendirildi.",
+    "truncated": "Yalnızca eşleşen ilk {count} hata tarandı; bu panoda daha fazlası var.",
+    "comments": "{count} yorum | {count} yorum",
+    "confidence": {
+      "high": "yüksek",
+      "medium": "orta",
+      "low": "düşük"
+    },
+    "status": {
+      "ranked": "Etkiye karşı düzeltmenin ne kadar zor göründüğüne göre sıralandı.",
+      "unavailable": "Yapılandırılmış bir değerlendirme modeli yok, bu yüzden bunlar değerlendirilmedi.",
+      "failed": "Değerlendirme tamamlanamadı, bu yüzden bunlar değerlendirilmedi.",
+      "over_budget": "Bu çalışma alanı harcama bütçesini aştığı için bunlar değerlendirilmedi.",
+      "empty": "Değerlendirilecek bir şey yok."
     }
   },
   "pipeline": {

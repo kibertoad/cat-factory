@@ -1650,7 +1650,8 @@
         "title": "Archiviare questo servizio?",
         "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
       },
-      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}"
+      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}",
+      "huntBugs": "Cerca bug"
     }
   },
   "layout": {
@@ -1989,7 +1990,8 @@
         "accountSettings": "Impostazioni account",
         "localModels": "I miei runner locali",
         "sandbox": "Apri Sandbox",
-        "shortcuts": "Scorciatoie da tastiera"
+        "shortcuts": "Scorciatoie da tastiera",
+        "bugHunt": "Caccia ai bug"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2009,7 +2011,8 @@
         "accountSettings": "account team membri ruoli inviti email chiavi api frammento best practice libreria contesto organizzazione personale",
         "localModels": "modello locale runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt modello test esperimento giudice fixture benchmark valuta",
-        "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto"
+        "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
+        "bugHunt": "bug caccia triage backlog ticket non assegnati"
       }
     },
     "shortcuts": {
@@ -2102,6 +2105,10 @@
         },
         "documentTemplates": {
           "label": "Template ed esempi"
+        },
+        "bugHunt": {
+          "label": "Caccia ai bug",
+          "description": "Valuta i bug aperti e non assegnati di una bacheca e scegline uno da correggere"
         }
       }
     },
@@ -3298,6 +3305,49 @@
       "connect": "Collega",
       "oauthButton": "Collega con {label}",
       "oauthOr": "oppure collega con una chiave API"
+    }
+  },
+  "bugHunt": {
+    "title": "Caccia ai bug",
+    "intro": "Esplora una bacheca del tracker alla ricerca di bug aperti e non assegnati e classificali per impatto rispetto a quanto sembra difficile risolverli. Scegline uno e diventerà un'attività che esegue la pipeline di correzione.",
+    "connectFirst": "Collega o abilita prima una sorgente di attività.",
+    "connectSource": "Collega {label}",
+    "needFrameFirst": "Aggiungi prima un frame di servizio alla bacheca, così il bug scelto ha dove atterrare.",
+    "tracker": "Tracker",
+    "board": "Bacheca",
+    "pickBoard": "Scegli una bacheca",
+    "boardPlaceholder": "Chiave progetto, id team oppure owner/repo",
+    "boardsFailed": "Impossibile caricare le board: {reason}",
+    "issueType": "Tipo di ticket",
+    "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
+    "labels": "Etichette",
+    "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
+    "adoptInto": "Aggiungi il bug scelto a",
+    "run": "Cerca",
+    "running": "Lettura della bacheca e valutazione di quanto trovato…",
+    "huntFailed": "La caccia non è riuscita",
+    "notAssessed": "Non valutato",
+    "recommended": "Consigliato",
+    "adopt": "Scegli questo",
+    "adopted": "{id} preso in carico",
+    "adoptedRunning": "La pipeline di correzione è in esecuzione su di esso.",
+    "adoptFailed": "Impossibile prendere in carico questo bug",
+    "noCandidates": "Nessun bug aperto e non assegnato corrisponde su questa bacheca.",
+    "ratings": "Impatto {impact}/5, complessità {complexity}/5, confidenza {confidence}",
+    "viaModel": "Valutato da {model}.",
+    "truncated": "Sono stati esaminati solo i primi {count} bug corrispondenti; questa bacheca ne contiene altri.",
+    "comments": "{count} commento | {count} commenti",
+    "confidence": {
+      "high": "alta",
+      "medium": "media",
+      "low": "bassa"
+    },
+    "status": {
+      "ranked": "Ordinati per impatto rispetto a quanto sembra difficile risolverli.",
+      "unavailable": "Nessun modello di valutazione è configurato, quindi non sono valutati.",
+      "failed": "La valutazione non è stata completata, quindi non sono valutati.",
+      "over_budget": "Questo spazio di lavoro ha superato il budget di spesa, quindi non sono stati valutati.",
+      "empty": "Nulla da valutare."
     }
   },
   "pipeline": {

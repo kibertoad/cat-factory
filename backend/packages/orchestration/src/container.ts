@@ -75,6 +75,7 @@ import {
   TaskImportService,
   TaskLinkService,
   BugIntakeService,
+  BugHuntService,
   EnvironmentConnectionService,
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
@@ -145,6 +146,13 @@ export interface TasksModule {
    * step can pull one matching issue from the schedule's tracker board and claim it.
    */
   bugIntakeService?: BugIntakeService
+  /**
+   * The interactive bug hunt's read-and-rank helper — the human-driven dual of `bug-intake`.
+   * Always present when task sources are configured (unlike `bugIntakeService`, it needs no
+   * schedule repository); its RANKING degrades on its own when no model is wired, so the
+   * board scan stays available on a model-less deployment.
+   */
+  bugHuntService: BugHuntService
 }
 
 /** The environment integration's services, present only when configured. */
@@ -594,6 +602,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     notifications,
     fragmentLibrary,
     boardService,
+    spend: spendService,
   })
 
   const executionService = new ExecutionService({

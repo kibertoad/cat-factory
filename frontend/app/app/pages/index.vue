@@ -45,6 +45,7 @@ const TaskSourceConnectModal = defineAsyncComponent(
   () => import('~/components/tasks/TaskSourceConnectModal.vue'),
 )
 const TaskImportModal = defineAsyncComponent(() => import('~/components/tasks/TaskImportModal.vue'))
+const BugHuntModal = defineAsyncComponent(() => import('~/components/tasks/BugHuntModal.vue'))
 const RecurringPipelineModal = defineAsyncComponent(
   () => import('~/components/board/RecurringPipelineModal.vue'),
 )
@@ -398,6 +399,7 @@ watch(
            first open (its own chunk) rather than bloating the initial bundle. -->
       <TaskSourceConnectModal v-if="ui.taskConnect" />
       <TaskImportModal v-if="ui.taskImport" />
+      <BugHuntModal v-if="ui.bugHunt" />
       <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
       <ObservabilityPanel v-if="ui.observabilityInstanceId" />
       <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />

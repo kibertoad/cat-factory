@@ -1,11 +1,13 @@
 import {
   ValidationError,
+  type BugCandidate,
   type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import {
@@ -14,6 +16,8 @@ import {
   linearAuthFromCredentials,
 } from '../shared/linear.client.js'
 import {
+  LINEAR_CANDIDATE_ISSUES_QUERY,
+  LINEAR_COMMENT_PROBE,
   LINEAR_INTAKE_ISSUES_QUERY,
   LINEAR_INTAKE_PAGE_CAP,
   LINEAR_ISSUE_CHILDREN_QUERY,
@@ -24,6 +28,8 @@ import {
   LINEAR_TASK_DESCRIPTOR,
   LINEAR_TEAMS_QUERY,
   LINEAR_VIEWER_QUERY,
+  type LinearCandidateNode,
+  type LinearCandidatePage,
   type LinearChildrenPage,
   type LinearCommentsPage,
   type LinearIntakeNode,
@@ -31,6 +37,7 @@ import {
   type LinearTeam,
   buildLinearIntakeFilter,
   linearIssueSearchHit,
+  mapLinearBugCandidates,
   mapLinearChildIds,
   mapLinearComments,
   mapLinearIntakeResults,
@@ -242,6 +249,52 @@ export class LinearTaskProvider implements TaskSourceProvider {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<Parameters<typeof mapLinearTeams>[0]>(LINEAR_TEAMS_QUERY)
     return mapLinearTeams(data)
+  }
+
+  /**
+   * A Linear "board" IS a team, and {@link LinearTeam} is already the {@link TrackerBoard}
+   * shape (id / name / key), so the generic board listing is the team listing. Kept as its
+   * own method rather than aliased, because the two are the same only by coincidence of
+   * Linear's model — the ticket-filing picker and the hunt picker are free to diverge.
+   */
+  async listBoards(credentials: TaskCredentials): Promise<TrackerBoard[]> {
+    return this.listTeams(credentials)
+  }
+
+  /**
+   * Bug-hunt candidate search: the same `IssueFilter` + oldest-first walk as
+   * {@link searchIssues} (now also carrying `assignee: { null: true }`, from
+   * `query.unassignedOnly`), projecting the fields the ranking reasons over. The exclusion
+   * list is the one predicate Linear can't express on the human identifier, so the walk
+   * overscans by its size and the mapper filters — exactly as the intake does.
+   */
+  async listBugCandidates(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<BugCandidate[]> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const exclude = query.excludeExternalIds ?? []
+    const excluded = new Set(exclude.map((id) => id.toUpperCase()))
+    const filter = buildLinearIntakeFilter(query)
+    const first = Math.min(query.limit + exclude.length, 100)
+    const nodes: LinearCandidateNode[] = []
+    let after: string | undefined
+    for (let page = 0; page < LINEAR_INTAKE_PAGE_CAP; page++) {
+      const data = await client.query<LinearCandidatePage>(LINEAR_CANDIDATE_ISSUES_QUERY, {
+        filter,
+        first,
+        after,
+        comments: LINEAR_COMMENT_PROBE,
+      })
+      nodes.push(...(data.issues?.nodes ?? []))
+      const fresh = nodes.filter(
+        (n) => n.identifier && !excluded.has(n.identifier.toUpperCase()),
+      ).length
+      const pageInfo = data.issues?.pageInfo
+      if (fresh >= query.limit || !pageInfo?.hasNextPage || !pageInfo.endCursor) break
+      after = pageInfo.endCursor
+    }
+    return mapLinearBugCandidates({ issues: { nodes } }, query.limit, exclude)
   }
 
   /**

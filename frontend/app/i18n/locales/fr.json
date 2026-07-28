@@ -1335,7 +1335,8 @@
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       },
-      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}",
+      "huntBugs": "Chasser les bugs"
     }
   },
   "observability": {
@@ -1937,7 +1938,8 @@
         "accountSettings": "Paramètres du compte",
         "localModels": "Mes exécuteurs locaux",
         "sandbox": "Ouvrir le bac à sable",
-        "shortcuts": "Raccourcis clavier"
+        "shortcuts": "Raccourcis clavier",
+        "bugHunt": "Chasse aux bugs"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -1957,7 +1959,8 @@
         "accountSettings": "compte équipe membres rôles invitations e-mail clés api fragment bonnes pratiques bibliothèque contexte organisation personnel",
         "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
         "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer",
-        "shortcuts": "raccourcis clavier touches aide"
+        "shortcuts": "raccourcis clavier touches aide",
+        "bugHunt": "bug chasse tri backlog tickets non assignés"
       }
     },
     "integrationsHub": {
@@ -2043,6 +2046,10 @@
         },
         "documentTemplates": {
           "label": "Modèles et exemples"
+        },
+        "bugHunt": {
+          "label": "Chasse aux bugs",
+          "description": "Évaluer les bugs ouverts et non assignés d'un tableau et en choisir un à corriger"
         }
       }
     },
@@ -3592,6 +3599,49 @@
       "connect": "Connecter",
       "oauthButton": "Se connecter avec {label}",
       "oauthOr": "ou connectez-vous avec une clé API"
+    }
+  },
+  "bugHunt": {
+    "title": "Chasse aux bugs",
+    "intro": "Parcourez un tableau du gestionnaire de tickets à la recherche de bugs ouverts et non assignés, puis classez-les selon leur impact face à la difficulté apparente du correctif. Choisissez-en un et il devient une tâche qui exécute le pipeline de correction.",
+    "connectFirst": "Connectez ou activez d'abord une source de tâches.",
+    "connectSource": "Connecter {label}",
+    "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau, pour que le bug retenu ait un endroit où atterrir.",
+    "tracker": "Gestionnaire de tickets",
+    "board": "Tableau",
+    "pickBoard": "Choisir un tableau",
+    "boardPlaceholder": "Clé de projet, id d'équipe ou owner/repo",
+    "boardsFailed": "Impossible de charger les tableaux : {reason}",
+    "issueType": "Type de ticket",
+    "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
+    "labels": "Étiquettes",
+    "labelsHelp": "Séparées par des virgules. Toutes doivent être présentes.",
+    "adoptInto": "Ajouter le bug retenu à",
+    "run": "Chasser",
+    "running": "Lecture du tableau et évaluation des résultats…",
+    "huntFailed": "La chasse a échoué",
+    "notAssessed": "Non évalué",
+    "recommended": "Recommandé",
+    "adopt": "Choisir celui-ci",
+    "adopted": "{id} retenu",
+    "adoptedRunning": "Le pipeline de correction est en cours dessus.",
+    "adoptFailed": "Impossible de retenir ce bug",
+    "noCandidates": "Aucun bug ouvert et non assigné ne correspond sur ce tableau.",
+    "ratings": "Impact {impact}/5, complexité {complexity}/5, confiance {confidence}",
+    "viaModel": "Évalué par {model}.",
+    "truncated": "Seuls les {count} premiers bugs correspondants ont été parcourus ; ce tableau en contient davantage.",
+    "comments": "{count} commentaire | {count} commentaires",
+    "confidence": {
+      "high": "élevée",
+      "medium": "moyenne",
+      "low": "faible"
+    },
+    "status": {
+      "ranked": "Classés par impact face à la difficulté apparente du correctif.",
+      "unavailable": "Aucun modèle d'évaluation n'est configuré, ils sont donc non évalués.",
+      "failed": "L'évaluation n'a pas pu aboutir, ils sont donc non évalués.",
+      "over_budget": "Cet espace de travail a dépassé son budget de dépenses, ces bogues n'ont donc pas été évalués.",
+      "empty": "Rien à évaluer."
     }
   },
   "pipeline": {

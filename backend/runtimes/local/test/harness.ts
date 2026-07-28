@@ -168,6 +168,7 @@ type ConformanceAppOpts = {
   gateRegistry?: CoreDependencies['gateRegistry']
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
+  bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -256,6 +257,9 @@ function buildConformanceOverrides(
       // The judge's verdict producer: a deterministic fake, so the pass / park / bounce / fail
       // loop drives with no model — and a DISABLED one proves the unwired pass-through.
       judgeAssessor: o.judgeAssessor,
+      // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
+      // outcomes drive with no model on every runtime.
+      bugHuntAssessor: o.bugHuntAssessor,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,

@@ -44,6 +44,7 @@ import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
+import { bugHuntApi } from './api/bugHunt'
 import { testSecretsApi } from './api/testSecrets'
 import { userSecretsApi } from './api/userSecrets'
 import { userSettingsApi } from './api/userSettings'
@@ -119,6 +120,7 @@ export function useApi() {
     ...executionApi(ctx),
     ...documentsApi(ctx),
     ...tasksApi(ctx),
+    ...bugHuntApi(ctx),
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
     ...forkDecisionApi(ctx),

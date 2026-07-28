@@ -1335,7 +1335,8 @@
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
       },
-      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}",
+      "huntBugs": "Cazar errores"
     }
   },
   "observability": {
@@ -1937,7 +1938,8 @@
         "accountSettings": "Ajustes de la cuenta",
         "localModels": "Mis ejecutores locales",
         "sandbox": "Abrir el entorno de pruebas",
-        "shortcuts": "Atajos de teclado"
+        "shortcuts": "Atajos de teclado",
+        "bugHunt": "Caza de errores"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -1957,7 +1959,8 @@
         "accountSettings": "cuenta equipo miembros roles invitaciones correo claves api fragmento buenas prácticas biblioteca contexto organización personal",
         "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
         "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
-        "shortcuts": "atajos teclado teclas ayuda"
+        "shortcuts": "atajos teclado teclas ayuda",
+        "bugHunt": "error bug caza triaje backlog incidencias sin asignar"
       }
     },
     "integrationsHub": {
@@ -2043,6 +2046,10 @@
         },
         "documentTemplates": {
           "label": "Plantillas y ejemplos"
+        },
+        "bugHunt": {
+          "label": "Caza de errores",
+          "description": "Valora los errores abiertos y sin asignar de un tablero y elige uno para arreglar"
         }
       }
     },
@@ -3592,6 +3599,49 @@
       "connect": "Conectar",
       "oauthButton": "Conectar con {label}",
       "oauthOr": "o conecta con una clave API"
+    }
+  },
+  "bugHunt": {
+    "title": "Caza de errores",
+    "intro": "Explora un tablero del gestor de incidencias en busca de errores abiertos y sin asignar, y clasifícalos por impacto frente a lo difícil que parece arreglar cada uno. Elige uno y se convertirá en una tarea que ejecuta la canalización de corrección de errores.",
+    "connectFirst": "Conecta o activa primero una fuente de tareas.",
+    "connectSource": "Conectar {label}",
+    "needFrameFirst": "Añade primero un marco de servicio al tablero para que el error elegido tenga dónde aterrizar.",
+    "tracker": "Gestor de incidencias",
+    "board": "Tablero",
+    "pickBoard": "Elige un tablero",
+    "boardPlaceholder": "Clave de proyecto, id de equipo o owner/repo",
+    "boardsFailed": "No se pudieron cargar los tableros: {reason}",
+    "issueType": "Tipo de incidencia",
+    "issueTypeHelp": "Por defecto bug. Se ignora en gestores sin tipos de incidencia.",
+    "labels": "Etiquetas",
+    "labelsHelp": "Separadas por comas. Todas deben estar presentes.",
+    "adoptInto": "Añadir el error elegido a",
+    "run": "Cazar",
+    "running": "Leyendo el tablero y valorando lo que encuentra…",
+    "huntFailed": "La caza ha fallado",
+    "notAssessed": "Sin valorar",
+    "recommended": "Recomendado",
+    "adopt": "Elegir este",
+    "adopted": "{id} adoptado",
+    "adoptedRunning": "La canalización de corrección de errores ya se está ejecutando.",
+    "adoptFailed": "No se ha podido adoptar este error",
+    "noCandidates": "No hay errores abiertos y sin asignar que coincidan en este tablero.",
+    "ratings": "Impacto {impact}/5, complejidad {complexity}/5, confianza {confidence}",
+    "viaModel": "Valorado por {model}.",
+    "truncated": "Solo se han explorado los primeros {count} errores coincidentes; este tablero contiene más.",
+    "comments": "{count} comentario | {count} comentarios",
+    "confidence": {
+      "high": "alta",
+      "medium": "media",
+      "low": "baja"
+    },
+    "status": {
+      "ranked": "Ordenados por impacto frente a lo difícil que parece arreglar cada uno.",
+      "unavailable": "No hay ningún modelo de valoración configurado, así que están sin valorar.",
+      "failed": "No se ha podido completar la valoración, así que están sin valorar.",
+      "over_budget": "Este espacio de trabajo ha superado su presupuesto de gasto, así que no se han valorado.",
+      "empty": "Nada que valorar."
     }
   },
   "pipeline": {

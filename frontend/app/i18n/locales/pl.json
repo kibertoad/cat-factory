@@ -1335,7 +1335,8 @@
         "title": "Zarchiwizować tę usługę?",
         "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
       },
-      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}"
+      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}",
+      "huntBugs": "Poluj na błędy"
     }
   },
   "observability": {
@@ -1937,7 +1938,8 @@
         "accountSettings": "Ustawienia konta",
         "localModels": "Moje lokalne silniki",
         "sandbox": "Otwórz piaskownicę",
-        "shortcuts": "Skróty klawiszowe"
+        "shortcuts": "Skróty klawiszowe",
+        "bugHunt": "Polowanie na błędy"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -1957,7 +1959,8 @@
         "accountSettings": "konto zespół członkowie role zaproszenia e-mail klucze api fragment dobre praktyki biblioteka kontekst organizacja osobiste",
         "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
         "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
-        "shortcuts": "skróty klawiatura klawisze pomoc"
+        "shortcuts": "skróty klawiatura klawisze pomoc",
+        "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane"
       }
     },
     "integrationsHub": {
@@ -2043,6 +2046,10 @@
         },
         "documentTemplates": {
           "label": "Szablony i przykłady"
+        },
+        "bugHunt": {
+          "label": "Polowanie na błędy",
+          "description": "Oceń otwarte, nieprzypisane błędy z tablicy i wybierz jeden do naprawy"
         }
       }
     },
@@ -3592,6 +3599,49 @@
       "connect": "Połącz",
       "oauthButton": "Połącz z {label}",
       "oauthOr": "lub połącz za pomocą klucza API"
+    }
+  },
+  "bugHunt": {
+    "title": "Polowanie na błędy",
+    "intro": "Przeszukaj tablicę systemu zgłoszeń w poszukiwaniu otwartych, nieprzypisanych błędów i uszereguj je według wpływu w stosunku do przewidywanej trudności naprawy. Wybierz jeden, a stanie się zadaniem uruchamiającym potok naprawy błędów.",
+    "connectFirst": "Najpierw połącz lub włącz źródło zadań.",
+    "connectSource": "Połącz {label}",
+    "needFrameFirst": "Najpierw dodaj ramkę usługi do tablicy, aby wybrany błąd miał gdzie wylądować.",
+    "tracker": "System zgłoszeń",
+    "board": "Tablica",
+    "pickBoard": "Wybierz tablicę",
+    "boardPlaceholder": "Klucz projektu, identyfikator zespołu lub owner/repo",
+    "boardsFailed": "Nie udało się wczytać tablic: {reason}",
+    "issueType": "Typ zgłoszenia",
+    "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
+    "labels": "Etykiety",
+    "labelsHelp": "Oddzielone przecinkami. Wszystkie muszą występować.",
+    "adoptInto": "Dodaj wybrany błąd do",
+    "run": "Poluj",
+    "running": "Odczytywanie tablicy i ocenianie znalezionych zgłoszeń…",
+    "huntFailed": "Polowanie nie powiodło się",
+    "notAssessed": "Nieoceniony",
+    "recommended": "Zalecany",
+    "adopt": "Wybierz ten",
+    "adopted": "Przejęto {id}",
+    "adoptedRunning": "Potok naprawy błędów już na nim działa.",
+    "adoptFailed": "Nie udało się przejąć tego błędu",
+    "noCandidates": "Na tej tablicy nie ma pasujących otwartych, nieprzypisanych błędów.",
+    "ratings": "Wpływ {impact}/5, złożoność {complexity}/5, pewność {confidence}",
+    "viaModel": "Ocenione przez {model}.",
+    "truncated": "Przeszukano tylko pierwsze pasujące zgłoszenia w liczbie {count}; ta tablica zawiera ich więcej.",
+    "comments": "{count} komentarz | {count} komentarze | {count} komentarzy",
+    "confidence": {
+      "high": "wysoka",
+      "medium": "średnia",
+      "low": "niska"
+    },
+    "status": {
+      "ranked": "Uszeregowane według wpływu w stosunku do przewidywanej trudności naprawy.",
+      "unavailable": "Nie skonfigurowano modelu oceniającego, więc te zgłoszenia są nieocenione.",
+      "failed": "Nie udało się dokończyć oceny, więc te zgłoszenia są nieocenione.",
+      "over_budget": "Ta przestrzeń robocza przekroczyła budżet wydatków, więc nie zostały ocenione.",
+      "empty": "Nie ma czego oceniać."
     }
   },
   "pipeline": {

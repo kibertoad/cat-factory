@@ -1,8 +1,10 @@
 import type {
+  BugCandidate,
   IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchResult,
   TaskSourceDescriptor,
+  TrackerBoard,
 } from '@cat-factory/kernel'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
@@ -70,11 +72,96 @@ export function buildJiraIntakeJql(query: IssueIntakeQuery): string {
     clauses.push(`project = "${escapeJql(query.board.jiraProjectKey)}"`)
   clauses.push('statusCategory != Done')
   if (query.issueType) clauses.push(`issuetype = "${escapeJql(query.issueType)}"`)
+  // `assignee IS EMPTY` is JQL's unassigned predicate — pushed down like every other, so a
+  // hunt never pays for (or truncates on) issues somebody already owns.
+  if (query.unassignedOnly) clauses.push('assignee IS EMPTY')
   for (const label of query.labels ?? []) clauses.push(`labels = "${escapeJql(label)}"`)
   if (query.titleFragment) clauses.push(`summary ~ "${escapeJql(query.titleFragment)}"`)
   const excluded = (query.excludeExternalIds ?? []).filter((id) => JIRA_KEY.test(id))
   if (excluded.length > 0) clauses.push(`issuekey NOT IN (${excluded.join(', ')})`)
   return `${clauses.join(' AND ')} ORDER BY created ASC`
+}
+
+/**
+ * The issue fields a bug-hunt candidate needs, as ONE `fields=` selection. Everything the
+ * ranking reasons over comes back in the same search response — there is deliberately no
+ * per-issue detail fetch, which at 40 candidates would be 40 extra round trips against a
+ * rate-limited API for data the search endpoint already returns.
+ */
+export const JIRA_CANDIDATE_FIELDS =
+  'summary,description,status,issuetype,priority,labels,created,comment'
+
+/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
+const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+
+interface JiraCandidateResponse {
+  issues?: {
+    key?: string
+    fields?: {
+      summary?: string
+      description?: unknown
+      status?: { name?: string }
+      issuetype?: { name?: string }
+      priority?: { name?: string } | null
+      labels?: string[]
+      created?: string
+      comment?: { total?: number; comments?: unknown[] }
+    }
+  }[]
+}
+
+/**
+ * Map a candidate search response onto {@link BugCandidate} rows. The ADF description is
+ * converted with the same {@link adfToMarkdown} the import path uses (so the ranking reads
+ * the body a human would) and then truncated.
+ *
+ * `comment.total` is Jira's own count and is preferred over the returned array's length,
+ * which is only the page the `fields` selection happened to include — reporting "2 comments"
+ * for a 40-comment argument would understate exactly the contested bugs worth flagging.
+ */
+export function parseJiraBugCandidates(json: unknown, base: string): BugCandidate[] {
+  const body = (json ?? {}) as JiraCandidateResponse
+  const cleanBase = base.replace(/\/+$/, '')
+  const out: BugCandidate[] = []
+  for (const issue of Array.isArray(body.issues) ? body.issues : []) {
+    if (!issue.key) continue
+    const f = issue.fields ?? {}
+    out.push({
+      source: 'jira',
+      externalId: issue.key,
+      title: f.summary ?? '(untitled)',
+      url: `${cleanBase}/browse/${issue.key}`,
+      status: f.status?.name ?? '',
+      type: f.issuetype?.name ?? '',
+      priority: f.priority?.name ?? null,
+      labels: Array.isArray(f.labels) ? f.labels : [],
+      description: adfToMarkdown(f.description).trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
+      createdAt: f.created ?? '',
+      commentCount:
+        typeof f.comment?.total === 'number' ? f.comment.total : (f.comment?.comments?.length ?? 0),
+    })
+  }
+  return out
+}
+
+interface JiraProjectsResponse {
+  values?: { key?: string; name?: string }[]
+}
+
+/**
+ * Map the paginated project-search response onto boards. A Jira board scope is the project
+ * KEY (what `buildJiraIntakeJql` puts in `project = …`), so `id` and `key` are the same value
+ * here — the picker still shows both because `name` alone is ambiguous across similarly-named
+ * projects, which is the whole reason the key exists.
+ */
+export function parseJiraBoards(json: unknown): TrackerBoard[] {
+  const body = (json ?? {}) as JiraProjectsResponse
+  const out: TrackerBoard[] = []
+  for (const project of Array.isArray(body.values) ? body.values : []) {
+    if (!project.key) continue
+    out.push({ id: project.key, name: project.name ?? project.key, key: project.key })
+  }
+  return out
 }
 
 interface JiraSearchResponse {

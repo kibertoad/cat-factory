@@ -963,3 +963,9 @@ export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
 export const TECH_DEBT_PIPELINE_ID = 'pl_tech_debt'
 /** Pipeline id of the recurring bug-triage pipeline (backlog worker; see backend/docs/bug-triage-pipeline.md). */
 export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
+/**
+ * Pipeline id of the one-off bug-fix preset (investigate → triage → fix → ship). This is the
+ * default an adopted bug-hunt candidate runs, so the interactive hunt lands on the same
+ * investigate/clarify path the recurring triage pipeline uses — see backend/docs/bug-hunt.md.
+ */
+export const BUGFIX_PIPELINE_ID = 'pl_bugfix'

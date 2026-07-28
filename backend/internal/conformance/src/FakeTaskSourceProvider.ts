@@ -1,5 +1,7 @@
 import type {
+  BugCandidate,
   IssueIntakeQuery,
+  TrackerBoard,
   TaskContent,
   TaskCredentials,
   TaskSearchResult,
@@ -45,6 +47,11 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   readonly searchCalls: { credentials: TaskCredentials; query: string }[] = []
   /** Recorded issue-intake (`bug-intake`) queries, for the intake-step tests. */
   readonly intakeCalls: { credentials: TaskCredentials; query: IssueIntakeQuery }[] = []
+  /** Canned hunt boards + recorded calls, for the bug-hunt board picker. */
+  boards: TrackerBoard[] = [{ id: 'PROJ', name: 'Platform', key: 'PROJ' }]
+  readonly boardCalls: { credentials: TaskCredentials }[] = []
+  /** Recorded bug-hunt candidate queries, so the suite can assert the pushed-down predicates. */
+  readonly candidateCalls: { credentials: TaskCredentials; query: IssueIntakeQuery }[] = []
   /** Canned setup-check verdict + recorded calls, for the diagnostics endpoint tests. */
   diagnostic: Omit<TaskSourceDiagnostic, 'source'> = { ok: true, status: 'ready', message: 'ok' }
   readonly diagnoseCalls: { workspaceId: string; credentials: TaskCredentials | null }[] = []
@@ -143,6 +150,53 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
       if (hits.length >= query.limit) break
     }
     return hits
+  }
+
+  /** The boards the hunt's picker lists — canned, so the suite controls what a source offers. */
+  async listBoards(credentials: TaskCredentials): Promise<TrackerBoard[]> {
+    this.boardCalls.push({ credentials })
+    return this.boards
+  }
+
+  /**
+   * Bug-hunt candidate search: the richer sibling of {@link searchIssues}, over the same
+   * registered issues and the same predicates, plus the `unassignedOnly` filter the hunt sets
+   * (honoured here against each issue's `assignee`, so the suite can prove an owned bug is
+   * never offered as free to take).
+   */
+  async listBugCandidates(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<BugCandidate[]> {
+    this.candidateCalls.push({ credentials, query })
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toUpperCase()))
+    const out: BugCandidate[] = []
+    for (const issue of this.issues.values()) {
+      if (excluded.has(issue.externalId.toUpperCase())) continue
+      if (query.unassignedOnly && issue.assignee) continue
+      if (
+        query.titleFragment &&
+        !issue.title.toLowerCase().includes(query.titleFragment.toLowerCase())
+      ) {
+        continue
+      }
+      if (query.labels?.length && !query.labels.every((l) => issue.labels.includes(l))) continue
+      out.push({
+        source: this.kind,
+        externalId: issue.externalId,
+        title: issue.title,
+        url: issue.url,
+        status: issue.status,
+        type: issue.type,
+        priority: issue.priority,
+        labels: issue.labels,
+        description: issue.description,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        commentCount: issue.comments.length,
+      })
+      if (out.length >= query.limit) break
+    }
+    return out
   }
 
   async diagnose(input: {

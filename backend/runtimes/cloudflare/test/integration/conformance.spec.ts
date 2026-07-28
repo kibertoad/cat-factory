@@ -102,6 +102,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       //   pass-through) is driven against real D1 with no model.
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
+      bugHuntAssessor: o.bugHuntAssessor,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       agentKindRegistry: o.agentKindRegistry,

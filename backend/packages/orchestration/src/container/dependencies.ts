@@ -65,6 +65,7 @@ import type {
   FragmentSourceRepository,
   GateRegistry,
   JudgeAssessor,
+  BugHuntAssessor,
   JudgeRegistry,
   GitHubClient,
   GitHubInstallation,
@@ -259,6 +260,15 @@ export interface CoreDependencies {
    * deterministic verdict. Absent/disabled ⇒ every judge step is a pass-through.
    */
   judgeAssessor?: JudgeAssessor
+  /**
+   * The ranking producer behind the interactive bug hunt. Optional for the same reason as
+   * {@link CoreDependencies.judgeAssessor}: `createCore` builds the inline
+   * `BugHuntAssessorService` from the model-provider dependencies the facade already wires, so
+   * the hunt needs NO per-facade wiring. Injected explicitly only by a test/conformance harness
+   * that wants a deterministic ranking. Absent/disabled ⇒ a hunt returns its board scan
+   * unranked, flagged `analysisStatus: 'unavailable'`.
+   */
+  bugHuntAssessor?: BugHuntAssessor
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers).
    * Optional + defaulted to `defaultStepResolverRegistry()` (EMPTY — the built-in `merger`

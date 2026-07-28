@@ -29,6 +29,7 @@ import {
   createRequirementsModule,
   createTasksModule,
 } from './modules.js'
+import type { SpendService } from '@cat-factory/spend'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
@@ -45,6 +46,8 @@ export interface EngineCollaboratorsInput {
   notifications: NotificationsModule | undefined
   fragmentLibrary: ReturnType<typeof createFragmentLibraryModule> | undefined
   boardService: BoardService
+  /** The spend safeguard, so the bug hunt's billable ranking honours the same budget a run does. */
+  spend: SpendService
 }
 
 export function createEngineCollaborators(input: EngineCollaboratorsInput) {
@@ -56,6 +59,7 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     notifications,
     fragmentLibrary,
     boardService,
+    spend,
   } = input
   // Built before the execution engine so the planning pipeline's plan ingest + the
   // committer step's tracker mirror can run through it.
@@ -131,7 +135,7 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // Built before the execution engine so the engine's `bug-intake` step can drive the
   // read-and-claim intake helper (`tasks.bugIntakeService`). Also feeds the recurring module's
   // schedule intake-config validation below.
-  const tasks = modules.build('tasks', () => createTasksModule(dependencies, boardService))
+  const tasks = modules.build('tasks', () => createTasksModule(dependencies, boardService, spend))
 
   return {
     initiativeService,

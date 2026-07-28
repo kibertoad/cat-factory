@@ -1,9 +1,11 @@
 import {
   ConflictError,
   ValidationError,
+  type BugCandidate,
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
+  type GitHubIssueSearchHit,
   type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
@@ -11,6 +13,7 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
@@ -181,6 +184,33 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     query: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<TaskSearchResult[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map((hit) => ({
+      source: 'github',
+      externalId: githubIssuesLogic.githubIssueExternalId(hit),
+      title: hit.title,
+      url: hit.url,
+      status: hit.state,
+      excerpt: '',
+    }))
+  }
+
+  /**
+   * The oldest-first page walk BOTH intake reads ride, returning the eligible hits so each
+   * caller only supplies its own projection ({@link TaskSearchResult} for the recurring
+   * intake, {@link BugCandidate} for a hunt).
+   *
+   * Shared rather than copied because every rule in here is one the two must agree on, and a
+   * second copy is how they stop agreeing — the unassigned guard below landed in one of them
+   * only. The walk: compile the predicates into one search text, overscan by the exclusion
+   * count (the one predicate GitHub search can't express, and the excluded issues ARE the
+   * oldest so they cluster at the front), and page through — bounded — so a first page that is
+   * entirely excluded can't starve the result while eligible issues exist beyond it.
+   */
+  private async walkIntakeHits(
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<GitHubIssueSearchHit[]> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
     // Owner/repo are case-insensitive on GitHub, so normalize both sides — otherwise an
@@ -188,12 +218,8 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     // slips past the filter and is re-picked.
     const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toLowerCase()))
     const searchText = githubIssuesLogic.buildGitHubIntakeQuery(query)
-    // Oldest-first, and the already-worked (excluded) issues ARE the oldest, so they
-    // cluster at the front. The exclusion list is the one predicate GitHub search can't
-    // express, so overscan by its size — and page through (bounded) so a first page that
-    // is entirely excluded can't starve the result while eligible issues exist beyond it.
     const per = Math.min(query.limit + excluded.size, 100)
-    const out: TaskSearchResult[] = []
+    const out: GitHubIssueSearchHit[] = []
     for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < query.limit; page++) {
       const hits = await this.deps.githubClient.searchIssues(
         installation.installationId,
@@ -205,19 +231,43 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       for (const hit of hits) {
         const externalId = githubIssuesLogic.githubIssueExternalId(hit)
         if (excluded.has(externalId.toLowerCase())) continue
-        out.push({
-          source: 'github',
-          externalId,
-          title: hit.title,
-          url: hit.url,
-          status: hit.state,
-          excerpt: '',
-        })
+        // Defence in depth on the unassigned predicate: `no:assignee` is what actually
+        // narrows the search, but an adapter that reports an assignee while ignoring the
+        // qualifier would otherwise offer up somebody else's in-flight work as free to take.
+        if (query.unassignedOnly && hit.assignee) continue
+        out.push(hit)
         if (out.length >= query.limit) break
       }
       if (hits.length < per) break // a short page is the last page — stop paging
     }
     return out
+  }
+
+  /**
+   * List the workspace installation's repositories as hunt boards. No installation ⇒ an empty
+   * list, matching every other read on this provider (GitHub Issues rides the App, so "not
+   * installed" is an absence, not an error).
+   */
+  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const page = await this.deps.githubClient.listInstallationRepos(installation.installationId)
+    return githubIssuesLogic.githubReposToBoards(page.items)
+  }
+
+  /**
+   * Bug-hunt candidate search: the SAME repo-scoped walk as {@link searchIssues} (now also
+   * carrying `no:assignee`, from `query.unassignedOnly`), projected onto the richer candidate
+   * shape. GitHub's search response already carries the body, labels, age and comment count,
+   * so no per-candidate detail fetch is needed — the whole board scan is one request per page.
+   */
+  async listBugCandidates(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<BugCandidate[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map(githubIssuesLogic.githubHitToBugCandidate)
   }
 
   /**

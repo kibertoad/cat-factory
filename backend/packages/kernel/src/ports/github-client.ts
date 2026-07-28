@@ -296,6 +296,22 @@ export interface GitHubIssueSearchHit {
   state: string
   /** Canonical web URL (GitHub `html_url`). */
   url: string
+  // ---- Fields the search response already carries, read only by the bug hunt's candidate
+  // listing (which needs the report itself to rate impact vs effort, and must get it from
+  // the SAME call — a per-candidate detail fetch would be one round trip per open bug).
+  // All optional: an adapter that projects a different backend onto this shape (the
+  // GitLab-backed client) simply omits them, and the ranking then reads an empty report
+  // and rates it as too vague rather than reporting anything false. ----
+  /** Issue body (GitHub Markdown), when the adapter surfaces it. */
+  body?: string
+  /** Issue labels, when the adapter surfaces them. */
+  labels?: string[]
+  /** ISO-8601 creation timestamp, when the adapter surfaces it. */
+  createdAt?: string
+  /** Number of comments on the issue, when the adapter surfaces it. */
+  commentCount?: number
+  /** Assignee login, or null when unassigned; undefined when the adapter doesn't report it. */
+  assignee?: string | null
 }
 
 /** A single hit from code-searching an installation's repos for a file. */

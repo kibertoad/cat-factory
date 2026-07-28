@@ -451,6 +451,19 @@ const showOriginalDescription = ref(false)
               : t('panels.inspector.connectTracker')
           }}
         </UButton>
+        <!-- Hunt this service's tracker board for a bug worth picking up. Scoped to the
+             selected container, so an adopted candidate lands here rather than wherever the
+             board's first frame happens to be. -->
+        <UButton
+          v-if="isContainer && tasks.anyOffered"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-radar"
+          @click="ui.openBugHunt(null, block!.id)"
+        >
+          {{ t('panels.inspector.huntBugs') }}
+        </UButton>
         <UButton
           v-if="isContainer && documents.available && documents.anyConnected"
           color="neutral"

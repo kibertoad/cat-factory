@@ -109,6 +109,11 @@ export {
   type BugIntakePickup,
 } from './modules/tasks/BugIntakeService.js'
 export {
+  BugHuntService,
+  BUG_HUNT_SCAN_LIMIT,
+  type BugHuntServiceDependencies,
+} from './modules/tasks/BugHuntService.js'
+export {
   trackerWebhookPath,
   type TaskSourceWebhookState,
 } from './modules/tasks/TaskConnectionService.js'
