@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LanguageModel } from 'ai'
+import { promptVersionLabel } from '@cat-factory/agents'
 import type { ModelProvider } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -44,9 +45,13 @@ afterEach(async () => {
 })
 
 describe('prompt versioning', () => {
+  // Asserted against the live registry, not a hard-coded number: the subject here is that a
+  // default variant resolves to the CURRENTLY-SHIPPING `id@vN` and carries that prompt's text.
+  // Pinning the digit instead makes every routine prompt bump a spurious test failure, which is
+  // exactly how this drifted to `build@v3` while the registry moved on to v5.
   it('resolves built-in prompts to id@vN with their text', () => {
     const r = resolvePromptVariant(defaultVariant('build'))
-    expect(r.label).toBe('build@v3')
+    expect(r.label).toBe(promptVersionLabel('build'))
     expect(r.system).toContain('senior engineer')
   })
 
@@ -136,13 +141,13 @@ describe('runBenchmark', () => {
     const rr = results.find((r) => r.cell.task === 'requirement-review')!
     expect(rr.error).toBeUndefined()
     expect(rr.cell.model).toBe('workers-ai:@cf/test')
-    expect(rr.cell.prompt).toBe('requirement-review@v2')
+    expect(rr.cell.prompt).toBe(promptVersionLabel('requirement-review'))
     expect(rr.output).toContain('Link expiry')
     // The requirement-review runner now also reports provider cache hits (0 here — the
     // fake model serves no cached tokens), so the caching dimension can be measured.
     expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22, cachedInputTokens: 0 })
     const cr = results.find((r) => r.cell.task === 'code-review')!
-    expect(cr.cell.prompt).toBe('review@v2')
+    expect(cr.cell.prompt).toBe(promptVersionLabel('review'))
     expect(cr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
     expect(cr.output).toContain(reviewJson)
     // Cost is metered from the usage via core pricing.

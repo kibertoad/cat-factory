@@ -4097,6 +4097,7 @@
     "title": "Requirements review",
     "iteration": "Iteration {current} / {max}",
     "intro": "An AI reviewer inspected this {level}'s collected requirements — its description plus any linked PRDs and tracker issues — and raised the findings below. {answer} the relevant ones and {dismiss} the irrelevant, then incorporate them; the reviewer re-reviews until the requirements are clear.",
+    "scopeNote": "This stage covers product and business requirements only: what the software must do and the rules that govern it. Technical decisions such as technology choice, architecture and data shapes are settled later by the Architect and Researcher steps, which run with the codebase in hand.",
     "levelFallback": "item",
     "answerVerb": "Answer",
     "dismissVerb": "dismiss",

@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type {
   BugHuntAssessor,
   BugHuntSubject,
+  Logger,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
@@ -56,7 +57,7 @@ export interface BugHuntAssessorServiceDeps {
   /** Current time, injected so the rendered candidate ages are deterministic under test. */
   now?: () => number
   /** Facade logger; a swallowed ranking failure with no trace is an unowned bug. */
-  logger?: { warn(obj: Record<string, unknown>, msg?: string): void }
+  logger?: Logger
 }
 
 /**
@@ -123,10 +124,10 @@ export class BugHuntAssessorService implements BugHuntAssessor {
    */
   private fail(subject: BugHuntSubject, ref: ModelRef, reason: string): ValidationError {
     const message = `The bug-hunt ranking (${ref.provider}:${ref.model}) ${reason}`
-    this.deps.logger?.warn(
-      { workspaceId: subject.workspaceId, candidates: subject.candidates.length },
-      message,
-    )
+    this.deps.logger?.warn(message, {
+      workspaceId: subject.workspaceId,
+      candidates: subject.candidates.length,
+    })
     return new ValidationError(message)
   }
 

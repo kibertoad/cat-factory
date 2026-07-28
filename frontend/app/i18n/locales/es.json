@@ -3948,6 +3948,7 @@
     "title": "Revisión de requisitos",
     "iteration": "Iteración {current} / {max}",
     "intro": "Un revisor de IA inspeccionó los requisitos recopilados de este {level} — su descripción más cualquier PRD y ticket vinculados — y planteó los hallazgos siguientes. {answer} los relevantes y {dismiss} los irrelevantes, luego incorpóralos; el revisor vuelve a revisar hasta que los requisitos queden claros.",
+    "scopeNote": "Esta etapa cubre solo los requisitos de producto y negocio: qué debe hacer el software y las reglas que lo rigen. Las decisiones técnicas, como la elección de tecnología, la arquitectura y las estructuras de datos, se resuelven después en los pasos de Arquitecto e Investigador, que trabajan con el código a la vista.",
     "levelFallback": "elemento",
     "answerVerb": "Responde",
     "dismissVerb": "descarta",

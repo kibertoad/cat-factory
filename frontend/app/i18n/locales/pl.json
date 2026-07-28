@@ -3948,6 +3948,7 @@
     "title": "Przegląd wymagań",
     "iteration": "Iteracja {current} / {max}",
     "intro": "Recenzent AI przeanalizował zebrane wymagania tego elementu ({level}) — jego opis oraz powiązane dokumenty PRD i zgłoszenia — i zgłosił poniższe uwagi. {answer} na istotne i {dismiss} nieistotne, a następnie włącz je; recenzent powtarza przegląd, aż wymagania będą jasne.",
+    "scopeNote": "Ten etap obejmuje wyłącznie wymagania produktowe i biznesowe: co oprogramowanie ma robić i jakie reguły nim rządzą. Decyzje techniczne, takie jak wybór technologii, architektura i struktury danych, zapadają później w krokach Architekt i Badacz, które mają dostęp do kodu.",
     "levelFallback": "element",
     "answerVerb": "Odpowiedz",
     "dismissVerb": "odrzuć",

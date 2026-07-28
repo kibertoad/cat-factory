@@ -590,6 +590,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           >
         </i18n-t>
 
+        <!-- Why the findings never ask a technical question: this gate settles the
+                 product/business layer, and the architect/researcher steps settle the rest.
+                 Without this a reader reads the missing technical questions as an oversight. -->
+        <p class="mb-4 text-xs text-slate-500">{{ t('requirements.scopeNote') }}</p>
+
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
         <div
