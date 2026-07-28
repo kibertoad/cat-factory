@@ -7,8 +7,39 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { MergeClassRules, RiskPolicy, RequirementConcernLevel } from '~/types/merge'
 import type { StepGating } from '@cat-factory/contracts'
+import {
+  RISK_POLICY_AXES,
+  RISK_POLICY_CEILING_FIELD,
+  type RiskPolicyAxis,
+} from '~/utils/riskPolicy'
 
 const { t } = useI18n()
+
+// Both axis groups below iterate the SHARED presentation order rather than hard-coding one,
+// so this editor can't drift from the order the picker's preview and the inspector's summary
+// line use (it used to read complexity-first while they read risk-first).
+const CEILING_LABEL_KEYS: Record<RiskPolicyAxis, string> = {
+  risk: 'settings.riskPolicy.field.maxRisk',
+  impact: 'settings.riskPolicy.field.maxImpact',
+  complexity: 'settings.riskPolicy.field.maxComplexity',
+}
+
+// The fork-decision group is the same three axes read as FLOORS (how big an estimate has to
+// be before the coder stops to propose implementations), so it shares the order but not the
+// fields.
+const FORK_FLOOR_FIELD: Record<
+  RiskPolicyAxis,
+  'forkMinRisk' | 'forkMinImpact' | 'forkMinComplexity'
+> = {
+  risk: 'forkMinRisk',
+  impact: 'forkMinImpact',
+  complexity: 'forkMinComplexity',
+}
+const FORK_FLOOR_LABEL_KEYS: Record<RiskPolicyAxis, string> = {
+  risk: 'settings.riskPolicy.forkDecision.minRisk',
+  impact: 'settings.riskPolicy.forkDecision.minImpact',
+  complexity: 'settings.riskPolicy.forkDecision.minComplexity',
+}
 
 // Per-concern-level label. An exhaustive Record keyed off the union (a missing member fails
 // the typecheck); each value is a LITERAL catalog key so the typed-message-keys check sees
@@ -276,36 +307,12 @@ async function create() {
       </div>
 
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <label class="block">
+        <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.riskPolicy.field.maxComplexity') }}
+            {{ t(CEILING_LABEL_KEYS[axis]) }}
           </span>
           <UInput
-            v-model.number="drafts[p.id]!.maxComplexity"
-            type="number"
-            :min="0"
-            :max="100"
-            size="sm"
-          />
-        </label>
-        <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.riskPolicy.field.maxRisk') }}
-          </span>
-          <UInput
-            v-model.number="drafts[p.id]!.maxRisk"
-            type="number"
-            :min="0"
-            :max="100"
-            size="sm"
-          />
-        </label>
-        <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.riskPolicy.field.maxImpact') }}
-          </span>
-          <UInput
-            v-model.number="drafts[p.id]!.maxImpact"
+            v-model.number="drafts[p.id]![RISK_POLICY_CEILING_FIELD[axis]]"
             type="number"
             :min="0"
             :max="100"
@@ -369,36 +376,12 @@ async function create() {
           :description="t('settings.riskPolicy.forkDecision.hint')"
         />
         <div v-if="drafts[p.id]!.forkEnabled" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label class="block">
+          <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
             <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-              {{ t('settings.riskPolicy.forkDecision.minComplexity') }}
+              {{ t(FORK_FLOOR_LABEL_KEYS[axis]) }}
             </span>
             <UInput
-              v-model.number="drafts[p.id]!.forkMinComplexity"
-              type="number"
-              size="sm"
-              :min="0"
-              :max="100"
-            />
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-              {{ t('settings.riskPolicy.forkDecision.minRisk') }}
-            </span>
-            <UInput
-              v-model.number="drafts[p.id]!.forkMinRisk"
-              type="number"
-              size="sm"
-              :min="0"
-              :max="100"
-            />
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-              {{ t('settings.riskPolicy.forkDecision.minImpact') }}
-            </span>
-            <UInput
-              v-model.number="drafts[p.id]!.forkMinImpact"
+              v-model.number="drafts[p.id]![FORK_FLOOR_FIELD[axis]]"
               type="number"
               size="sm"
               :min="0"

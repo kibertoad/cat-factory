@@ -290,7 +290,7 @@
       "chooseAtRunTime": "Choose at run time",
       "mergePolicy": "Risk policy",
       "workspaceDefault": "Workspace default",
-      "defaultPreset": "Default ({name}) — {thresholds}",
+      "defaultPreset": "Default ({name})",
       "defaultModelPreset": "Default ({name})",
       "modelPreset": "Model preset",
       "bestPractices": "Best practices",
@@ -1063,8 +1063,8 @@
       "unassigned": "Unassigned",
       "workspaceDefault": "Workspace default",
       "workspaceDefaultParen": "(workspace default)",
-      "defaultPresetThresholds": "Default ({name}): {thresholds}",
-      "defaultPreset": "Default ({name})",
+      "defaultRiskPolicy": "Default ({name})",
+      "defaultModelPreset": "Default ({name})",
       "noDefault": "No default",
       "inheritWorkspace": "Inherit workspace",
       "on": "On",
@@ -1080,7 +1080,8 @@
       "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
       "pipelineHint": "The pipeline the Run button starts by default: the sequence of agent steps (for example spec, code, test, merge) executed for this task.",
       "mergePolicy": "Risk policy",
-      "riskPolicyDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
+      "riskPolicyDetail": "{name}: merges without human review when risk ≤ {risk}, impact ≤ {impact} and complexity ≤ {complexity}; up to {attempts} CI-fix attempts.",
+      "riskPolicyManual": "{name}: never merges on its own, so every pull request waits for a human review; up to {attempts} CI-fix attempts.",
       "riskPolicyEmpty": "No risk policy configured. The merger raises a review notification for every PR.",
       "mergePolicyHint": "Decides when a finished pull request merges automatically instead of waiting for a human review, and how many CI-fix attempts a run gets.",
       "modelPreset": "Model preset",
@@ -3968,6 +3969,25 @@
       "toast": {
         "reseedFailed": "Could not reseed risk policy"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Applied because this task picks no policy of its own.",
+      "noneHint": "No risk policy configured. Every pull request waits for a human review."
+    },
+    "preview": {
+      "defaultBadge": "Default",
+      "autoMergeHeading": "Automatic merge thresholds",
+      "axis": {
+        "risk": "Risk",
+        "impact": "Impact",
+        "complexity": "Complexity"
+      },
+      "ceiling": "at or below {value}",
+      "autoMergeExplainer": "Once CI is green the merger agent scores the pull request on these three axes. Every score at or below its ceiling means the pull request merges on its own and skips human review; anything above sends it to a person instead.",
+      "manualHeading": "Manual review only",
+      "manualExplainer": "This policy never merges on its own, so every pull request waits for a human review whatever it scores.",
+      "ciHeading": "CI fixes",
+      "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up."
     }
   },
   "modelPreset": {
