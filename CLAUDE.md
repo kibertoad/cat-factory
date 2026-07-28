@@ -1490,7 +1490,15 @@ basic mode always STARTS railed). Full model:
 - **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
   `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
   RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
-  un-disentangleable in the specs (and a consumer item loses the declarative flag).
+  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar for
+  setting it is ROUTE COUNT, not how advanced the surface feels**: hiding the SOLE route to a
+  capability removes that capability from the tier, while hiding a shortcut into a surface a basic
+  destination also opens removes nothing. So it belongs on a surface beside the delivery path
+  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Integrations
+  hub already offers — never on the pipeline builder, the fragment library, the
+  infrastructure/PREnv windows, or the operator/reports views, however deep those feel.
+  `nav-contributions.spec.ts` pins the advanced set against a table naming each item's
+  alternative route, so a promotion has to write that claim down rather than assume it.
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
   disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
   field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred
