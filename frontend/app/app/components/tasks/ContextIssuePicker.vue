@@ -17,8 +17,9 @@
 // context issue is where a missing integration is discovered, and the connect modal
 // opens over the caller's form rather than navigating away from it.
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
-import { apiErrorEnvelope } from '~/composables/api/errors'
+import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
 import { buildSourceChoices, reconcileSource } from '~/components/tasks/ContextIssuePicker.logic'
 
@@ -159,21 +160,14 @@ async function runSearch() {
     // "This service has no repo" is the one failure with an action attached, so it gets its
     // own localized copy off the backend's machine-readable reason rather than the raw
     // message (CLAUDE.md "Backend strings"). Anything else keeps the generic wording.
+    const notLinked: TaskSourceReadReason = 'repo_not_linked'
     searchError.value =
-      errorReasonOf(e) === 'repo_not_linked'
+      apiErrorReason(e) === notLinked
         ? t('tasks.picker.searchNeedsRepo')
         : t('tasks.picker.searchFailed', { error: e instanceof Error ? e.message : String(e) })
   } finally {
     searching.value = false
   }
-}
-
-/** The backend's `error.details.reason` code, when it sent one. */
-function errorReasonOf(error: unknown): string | null {
-  const details = apiErrorEnvelope(error)?.details
-  if (!details || typeof details !== 'object') return null
-  const reason = (details as Record<string, unknown>).reason
-  return typeof reason === 'string' ? reason : null
 }
 
 const icon = computed(() => descriptor.value?.icon ?? 'i-lucide-square-check')

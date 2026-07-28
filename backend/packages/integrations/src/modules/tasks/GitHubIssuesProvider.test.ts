@@ -189,10 +189,16 @@ describe('GitHubIssuesProvider.search', () => {
     // installation token an unscoped query silently returned the installation's repos, which
     // is why it looked harmless; under a PAT the same query searches all of public GitHub and
     // hands the user strangers' issues. No scope ⇒ no query at all.
+    //
+    // The port makes the argument mandatory, so this can only be reached with the explicit
+    // `null` a repo-LESS source (Jira, Linear) legitimately passes — never by a caller that
+    // forgot it, which is now a typecheck failure.
     const { client, searchCalls, issueCalls } = fakeClient({ hits: [] })
     const provider = new GitHubIssuesProvider({ githubClient: client, installations })
 
-    await expect(provider.search({}, 'login bug', 'ws1')).rejects.toThrow(/scoped to a repository/)
+    await expect(provider.search({}, 'login bug', 'ws1', null)).rejects.toThrow(
+      /scoped to a repository/,
+    )
     expect(searchCalls).toEqual([])
     expect(issueCalls).toEqual([])
   })

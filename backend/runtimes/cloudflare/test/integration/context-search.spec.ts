@@ -115,4 +115,32 @@ describe('task source search', () => {
     expect(res.status).toBe(400)
     expect(jira.searchCalls).toEqual([])
   })
+
+  it('refuses a repo-backed search from a service with no linked repository', async () => {
+    // The other half of the guard: the block IS named, but it resolves to no repo — so there
+    // is nothing to scope to and the search is refused rather than widened. The `reason` is
+    // the contract with the SPA (it renders localized "link a repo first" copy off this code,
+    // not off the prose), so it is asserted here rather than just the status.
+    const github = new FakeTaskSourceProvider('github')
+    const app = makeApp(new FakeAgentExecutor(), tasksDeps({ providers: [github] }))
+    const { workspace, blocks } = await app.createWorkspace()
+
+    await app.call('POST', `/workspaces/${workspace.id}/task-sources/github/connect`, {
+      credentials: {},
+    })
+
+    const res = await app.call<{ error: { details?: { reason?: string } } }>(
+      'POST',
+      `/workspaces/${workspace.id}/task-sources/github/search`,
+      { query: 'login', blockId: blocks[0]!.id },
+    )
+
+    // 422, not the 400 the missing-`blockId` case above returns: that one is refused by the
+    // wire contract before the handler runs, this one is a domain `ValidationError` raised
+    // inside it. Both are refusals; only the second carries a reason the SPA can act on.
+    expect(res.status).toBe(422)
+    expect(res.body.error.details?.reason).toBe('repo_not_linked')
+    // Refused BEFORE the provider is reached — the point is that no query is ever issued.
+    expect(github.searchCalls).toEqual([])
+  })
 })

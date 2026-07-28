@@ -137,12 +137,18 @@ describe('detectExactGitHubIssueRef', () => {
     )
   })
 
-  it('matches the scoped repo case-insensitively, as GitHub does', () => {
+  it('matches the scoped repo case-insensitively, and returns the scope casing', () => {
     // Repo names are case-preserving but case-insensitive for lookup, so a paste from the
-    // address bar must not be rejected over casing.
+    // address bar must not be rejected over casing — AND must not be echoed back in the
+    // casing it was typed in. An external id is persisted verbatim, so returning
+    // `Kibertoad/Simple-Service#11` would create a second projection row for the issue the
+    // search already knows as `kibertoad/simple-service#11`: one issue, two context keys.
     expect(
       detectExactGitHubIssueRef('https://github.com/Kibertoad/Simple-Service/issues/11', scope),
-    ).toBe('Kibertoad/Simple-Service#11')
+    ).toBe('kibertoad/simple-service#11')
+    expect(detectExactGitHubIssueRef('KIBERTOAD/SIMPLE-SERVICE#11', scope)).toBe(
+      'kibertoad/simple-service#11',
+    )
   })
 
   it('does NOT resolve a reference to another repository', () => {

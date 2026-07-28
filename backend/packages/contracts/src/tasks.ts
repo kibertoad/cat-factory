@@ -301,6 +301,38 @@ export const importTaskSchema = v.object({
 })
 export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
 
+/**
+ * Machine-readable causes of a REFUSED task-source read (an issue search, a board listing),
+ * carried on the 400's `error.details.reason` so the SPA can word each case precisely — and,
+ * for the two that have a fix attached, point at it — instead of showing the backend's
+ * untranslated prose (CLAUDE.md "Backend strings").
+ *
+ * Single source of truth lives HERE, like {@link CONFLICT_REASONS}, because the emit sites and
+ * the consumer sit in different packages: `@cat-factory/server` and `@cat-factory/integrations`
+ * throw these, the SPA maps them to localized copy. A bare string literal on both sides is how
+ * a rename silently degrades the SPA to the generic message with nothing failing to typecheck.
+ */
+export const TASK_SOURCE_READ_REASONS = [
+  // The search's originating service frame has no linked repository, so there is nothing to
+  // scope a repo-backed search to. The one reason with a user-facing fix: link a repo.
+  'repo_not_linked',
+  // A repo-backed provider was asked to search with no scope at all. Defence in depth behind
+  // the required `blockId` and `repo_not_linked` — unreachable from the SPA, which is why it
+  // maps to no bespoke copy.
+  'repo_scope_required',
+  // A `bug-intake` schedule or bug hunt reached the GitHub query builder with no repository
+  // configured. Refused rather than searching everything the credential can reach.
+  'missing_board',
+  // A board scope that is not a plain `owner/repo` slug — it could smuggle a second search
+  // qualifier past the `repo:` prefix and widen the very scope it is meant to pin.
+  'invalid_board',
+  // The tracker cannot enumerate boards for a bug hunt, so the SPA offers a free-text field
+  // instead. Distinct from a tracker OUTAGE, which must be shown as the error it is.
+  'boards_unsupported',
+] as const
+
+export type TaskSourceReadReason = (typeof TASK_SOURCE_READ_REASONS)[number]
+
 /** Search a tracker's issues by free text (title/content). */
 export const searchTasksSchema = v.object({
   query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),

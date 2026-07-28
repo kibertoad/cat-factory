@@ -127,14 +127,16 @@ export class TaskImportService {
    * provider `search`), so the controller can answer cleanly.
    *
    * `scope` (resolved by the controller from the search's originating block) pins
-   * a repo-backed source to one repository; the provider ignores it when the
-   * source has no repo notion.
+   * a repo-backed source to one repository; a repo-less source has nothing to
+   * narrow and takes `null`. It is required-but-nullable so that "this source has
+   * no repo" is something a caller STATES rather than something it reaches by
+   * leaving an argument off — see the kernel port for why the difference matters.
    */
   async search(
     workspaceId: string,
     source: TaskSourceKind,
     query: string,
-    scope?: TaskSearchRepoScope,
+    scope: TaskSearchRepoScope | null,
   ): Promise<TaskSearchResult[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)

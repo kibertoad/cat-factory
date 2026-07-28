@@ -163,9 +163,8 @@ async function doSpawnEpic() {
              or paste a URL/key — choosing one opens the prefilled add-task form. The
              search is scoped to the chosen container's repo (so a GitHub search stays
              in that service's repo and a pasted URL / bare number resolves there). -->
-        <UFormField :label="t('tasks.import.searchIssues')">
+        <UFormField v-if="containerId" :label="t('tasks.import.searchIssues')">
           <ContextIssuePicker
-            v-if="containerId"
             v-model:source="source"
             :scope-block-id="containerId"
             @pick="createFromPick"

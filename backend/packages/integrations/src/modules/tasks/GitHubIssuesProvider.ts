@@ -16,6 +16,7 @@ import {
   type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
 import * as githubIssuesLogic from './github-issues.logic.js'
 import { httpStatusOf } from './tasks.logic.js'
@@ -114,11 +115,13 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
 
   /**
    * Search issues in ONE repository: the one linked to the service frame the search runs
-   * from. `scope` is therefore REQUIRED, and a call without it is refused rather than
-   * widened — GitHub's `/search/issues` carries no scope of its own, so an unscoped query
-   * returns whatever the credential can reach, which for a PAT-backed deployment is every
-   * public repository on GitHub. Credentials are unused (the App/PAT authenticates
-   * out-of-band), matching `fetchTask`.
+   * from. `scope` is therefore REQUIRED, and a `null` one is refused rather than widened —
+   * GitHub's `/search/issues` carries no scope of its own, so an unscoped query returns
+   * whatever the credential can reach, which for a PAT-backed deployment is every public
+   * repository on GitHub. The port makes the ARGUMENT mandatory so a caller cannot reach
+   * this by forgetting it; the throw below is what answers a caller that passed the
+   * repo-less `null` a Jira search legitimately passes. Credentials are unused (the App/PAT
+   * authenticates out-of-band), matching `fetchTask`.
    *
    * Within the scope, input that names one specific issue — a pasted issue URL, the
    * `owner/repo#n` shorthand, or a bare issue number — is resolved to that exact issue and
@@ -132,13 +135,13 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     _credentials: TaskCredentials,
     query: string,
     workspaceId: string,
-    scope?: TaskSearchRepoScope,
+    scope: TaskSearchRepoScope | null,
   ): Promise<TaskSearchResult[]> {
     if (!scope) {
       throw new ValidationError(
         'A GitHub issue search must be scoped to a repository. Run it from a service frame ' +
           'linked to a repo, or paste the issue URL to link one directly.',
-        { reason: 'repo_scope_required' },
+        { reason: 'repo_scope_required' satisfies TaskSourceReadReason },
       )
     }
     const installation = await this.deps.installations.getByWorkspace(workspaceId)

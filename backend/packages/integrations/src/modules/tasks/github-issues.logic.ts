@@ -8,6 +8,7 @@ import type {
   TrackerBoard,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
 // unit-testable without a live API: parsing an issue reference out of user input
@@ -166,6 +167,11 @@ export function parseIssueDependencyLinks(
  * The slug is shape-validated exactly as {@link buildGitHubIntakeQuery}'s board is: `repo:`
  * is unquotable, so a value smuggling a second qualifier could otherwise widen the scope
  * this whole function exists to enforce.
+ *
+ * An EMPTY query yields the bare `repo:owner/name`, i.e. the scoped repo's issues rather
+ * than nothing. That is unreachable over HTTP (the wire contract requires a non-empty query)
+ * and it is the right answer for an internal caller: the scope is the floor of what this
+ * search may return, never a filter that can be dropped.
  */
 export function buildGitHubIssueSearchQuery(query: string, scope: TaskSearchRepoScope): string {
   const text = query.trim()
@@ -196,7 +202,7 @@ const REPO_SLUG = new RegExp(`^${SEG}/${SEG}$`)
 function assertBoardSlug(slug: string): string {
   if (!REPO_SLUG.test(slug)) {
     throw new ValidationError(`'${slug}' is not a GitHub repository scope; expected owner/repo.`, {
-      reason: 'invalid_board',
+      reason: 'invalid_board' satisfies TaskSourceReadReason,
     })
   }
   return slug
@@ -230,7 +236,7 @@ export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
     throw new ValidationError(
       'This GitHub issue search has no repository configured. Set the intake board to the ' +
         'owner/repo it should scan; an unscoped GitHub search reaches every public repository.',
-      { reason: 'missing_board' },
+      { reason: 'missing_board' satisfies TaskSourceReadReason },
     )
   }
   const parts: string[] = [`repo:${assertBoardSlug(board)}`]
@@ -266,6 +272,14 @@ export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
  * Repo comparison is case-insensitive: GitHub owner/repo names are case-PRESERVING but
  * case-INSENSITIVE for lookup, so `Owner/Repo#1` and `owner/repo#1` are the same issue and
  * matching them exactly would reject a paste from the browser address bar.
+ *
+ * The id is then rebuilt from the SCOPE rather than echoed back in the casing the user typed.
+ * An external id is stored verbatim (`fetchTask` passes it straight through to the
+ * projection), so returning `Owner/Repo#1` here would persist a SECOND row for an issue the
+ * search already knows as `owner/repo#1` — two context keys, two "imported" entries, one
+ * issue. The scope's casing comes from the repo projection, i.e. GitHub's own, so it is the
+ * canonical form. (`walkIntakeHits` lowercases both sides of its exclusion check for exactly
+ * this hazard; here the canonical form is known, so it can be normalised instead.)
  */
 export function detectExactGitHubIssueRef(
   query: string,
@@ -273,17 +287,19 @@ export function detectExactGitHubIssueRef(
 ): string | null {
   const trimmed = query.trim()
   const ref = parseGitHubIssueRef(trimmed)
-  if (ref) return refIsInScope(ref, scope) ? ref : null
+  if (ref) {
+    const id = parseGitHubIssueExternalId(ref)
+    if (!id || !isScopedRepo(id, scope)) return null
+    return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: id.number })
+  }
   if (/^\d+$/.test(trimmed)) {
     return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: Number(trimmed) })
   }
   return null
 }
 
-/** Whether a canonical `owner/repo#number` id names the scoped repository. */
-function refIsInScope(externalId: string, scope: TaskSearchRepoScope): boolean {
-  const id = parseGitHubIssueExternalId(externalId)
-  if (!id) return false
+/** Whether a parsed issue id names the scoped repository (case-insensitively, as GitHub does). */
+function isScopedRepo(id: GitHubIssueExternalId, scope: TaskSearchRepoScope): boolean {
   return (
     id.owner.toLowerCase() === scope.owner.toLowerCase() &&
     id.repo.toLowerCase() === scope.repo.toLowerCase()

@@ -19,6 +19,7 @@ import {
   taskSourceKindSchema,
   updateTaskSourceWebhookContract,
   type TaskSourceKind,
+  type TaskSourceReadReason,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -60,15 +61,15 @@ function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
  * against an unlinked service anyway, and an unscoped GitHub search reaches every
  * repository the deployment's credential can see — under a PAT, all of public
  * GitHub). `blockId` is required by the contract, so there is no unscoped surface
- * left to skip; repo-less sources (Jira, Linear) have nothing to narrow and pass
- * through with no scope.
+ * left to skip; repo-less sources (Jira, Linear) have nothing to narrow and take
+ * the explicit `null`.
  */
 async function resolveSearchScope<E extends AppEnv>(
   c: Context<E>,
   source: TaskSourceKind,
   blockId: string,
-): Promise<TaskSearchRepoScope | undefined> {
-  if (source !== 'github') return undefined
+): Promise<TaskSearchRepoScope | null> {
+  if (source !== 'github') return null
   const resolve = c.get('container').resolveRepoTarget
   let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
   try {
@@ -86,7 +87,7 @@ async function resolveSearchScope<E extends AppEnv>(
     // untranslated last resort (CLAUDE.md "Backend strings").
     throw new ValidationError(
       'This service is not linked to a GitHub repository. Link it to a repo before creating tasks from issues.',
-      { reason: 'repo_not_linked' },
+      { reason: 'repo_not_linked' satisfies TaskSourceReadReason },
     )
   }
   return { owner: target.owner, repo: target.name }

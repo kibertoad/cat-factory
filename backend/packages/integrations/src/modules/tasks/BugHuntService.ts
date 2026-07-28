@@ -18,6 +18,7 @@ import {
   rankBugCandidates,
   redactSecrets,
 } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { TaskImportService } from './TaskImportService.js'
 import type { TaskFromIssue, TaskLinkService } from './TaskLinkService.js'
 
@@ -90,7 +91,7 @@ export class BugHuntService {
       // from an unreachable tracker or an expired token — which would otherwise present as the
       // same free-text field, followed by a hunt that fails for a reason nobody was told.
       throw new ValidationError(`The '${source}' source cannot list boards on this deployment.`, {
-        reason: 'boards_unsupported',
+        reason: 'boards_unsupported' satisfies TaskSourceReadReason,
       })
     }
     const credentials = await this.credentialsFor(workspaceId, source)

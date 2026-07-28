@@ -167,7 +167,9 @@ describe('GitHubIssuesProvider', () => {
       installation({ workspaceId: 'ws_1', installationId: 100 }),
     ])
 
-    await expect(provider.search({}, 'csv', 'ws_1')).rejects.toThrow(/scoped to a repository/)
+    // Only reachable with the explicit repo-less `null`; omitting the argument no longer
+    // typechecks, which is where the guarantee actually lives.
+    await expect(provider.search({}, 'csv', 'ws_1', null)).rejects.toThrow(/scoped to a repository/)
     expect(client.searchIssuesCalls).toEqual([])
   })
 })
