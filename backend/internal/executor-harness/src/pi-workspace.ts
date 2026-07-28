@@ -12,6 +12,7 @@ import {
   CONTEXT_DIR,
   materializeContextFiles,
   materializeSkillResources,
+  phasedProxyBaseUrl,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -346,7 +347,14 @@ export async function runAgentInWorkspace(
     hasBlueprints,
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
-  await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
+  // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so
+  // the phase this pass runs under is carried on the URL it is pointed at. Resolved per pass
+  // (this whole function re-runs for every repair round), which is what makes a repair round's
+  // spend distinguishable from the first pass's.
+  await writePiModelsConfig({
+    model: spec.model,
+    proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.()),
+  })
   const { signal, onActivity, onProgress, onSpan } = opts
   const piOutcome = await runPi({
     cwd: spec.dir,

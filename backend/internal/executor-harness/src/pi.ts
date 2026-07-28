@@ -33,6 +33,27 @@ import {
  */
 export const PI_MAX_OUTPUT_TOKENS = 32_768
 
+/**
+ * Point Pi's provider at the phase-tagged completions path for the pass about to run, so the
+ * backend can stamp WHICH slice of the run spent each call (the agent's own loop vs a pre-PR
+ * validation repair round vs a reproduction-proof repair round) — see
+ * `docs/initiatives/token-burn-instrumentation.md`. The harness drives those loops, so it is
+ * the only component that knows; reconstructing the boundary downstream from wall-clock
+ * timestamps is exactly the brittle inference this avoids.
+ *
+ * A URL segment because the harness does not make these requests: Pi does, from a config whose
+ * only per-run knobs are the base URL and the token — there is no per-request header to set. An
+ * absent or unrecognisable phase returns the base URL UNCHANGED (the canonical path), so a run
+ * with no phase marker keeps working and its calls land in the backend's unattributed slice.
+ * Pure so the join is unit-testable without spawning anything.
+ */
+export function phasedProxyBaseUrl(proxyBaseUrl: string, phase: string | undefined): string {
+  // The same alphabet the backend normalises to (kernel's `normalizeCallPhase`): a label that
+  // wouldn't survive it would be sent only to be discarded, so send the plain path instead.
+  if (!phase || !/^[a-z0-9-]{1,32}$/.test(phase)) return proxyBaseUrl
+  return `${proxyBaseUrl.replace(/\/+$/, '')}/phase/${phase}`
+}
+
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
   model: string
@@ -540,6 +561,17 @@ export interface HarnessCallMetric {
    * falls back to the array index, which is what it always used before streaming existed.
    */
   seq?: number
+  /**
+   * The run PHASE that spent this call (`agent` / `validation-repair` / `reproduction-repair` /
+   * …), stamped by the job registry from the same marker the handlers set as they enter each
+   * phase — so the phase axis on `llm_call_metrics` comes from the component that owns the
+   * boundary rather than from a downstream guess
+   * (`docs/initiatives/token-burn-instrumentation.md`).
+   *
+   * Stamped on the SAME object as {@link seq}, so the live drain and the terminal result can
+   * never disagree about which phase billed a call.
+   */
+  phase?: string
 }
 
 /**

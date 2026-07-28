@@ -823,6 +823,11 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       // call's recorded row id identical across the live poll drain and the terminal list, so
       // dropping it here would make a pool-backed run store every streamed call twice.
       ...(typeof e.seq === 'number' ? { seq: e.seq } : {}),
+      // The run phase that spent the call. Passed through as the harness reported it and
+      // normalised at the recorder (kernel's `normalizeCallPhase`), so this boundary neither
+      // invents a phase nor has to know the vocabulary — a pool on a newer image reporting a
+      // phase this backend predates is stored verbatim rather than coerced away.
+      ...(typeof e.phase === 'string' ? { phase: e.phase } : {}),
     })
   }
   return out

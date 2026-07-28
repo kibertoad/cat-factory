@@ -57,7 +57,10 @@ The implementation job (`POST /run`) is the canonical sequence:
    to Pi's **global** context file `~/.pi/agent/AGENTS.md` (outside the checkout,
    so it never lands in a commit and never clobbers a repo's own `AGENTS.md` —
    Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
-   `~/.pi/agent/models.json` (provider `proxy`, `api: openai-completions`),
+   `~/.pi/agent/models.json` (provider `proxy`, `api: openai-completions`) — at the
+   phase-tagged completions path for the pass about to run (`.../phase/<phase>`), which is
+   how a repair round's model spend stays distinguishable from the first pass's in telemetry
+   (see [token-burn instrumentation](../../../docs/initiatives/token-burn-instrumentation.md)),
 3. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
 4. **validate** the checkout, when the job body carries `validationChecks` — the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and

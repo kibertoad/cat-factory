@@ -1,6 +1,6 @@
 # Initiative: per-run token-burn instrumentation & diagnosis
 
-**Status:** in progress (Slice 2 next) · **Owner:** core · **Started:** 2026-07-28
+**Status:** in progress (Slice 3 next) · **Owner:** core · **Started:** 2026-07-28
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -90,6 +90,40 @@ driver this instrument is meant to rank, not a settled cause:
     Whichever wins becomes its own follow-up initiative; this tracker's job is to name it with
     evidence.
 
+## Carried out of Slice 2 (read before adding a producer)
+
+The axis landed as `phase` (TEXT, `''` = unattributed) + `turn_index` (INTEGER, NULLABLE) on both
+telemetry stores, and the two producing paths carry it themselves. What the implementation
+settled, and what a Slice 3 rollup must not undo:
+
+- **Two channels, two carriers, because they are not the same shape.** A subscription harness's
+  calls are objects the harness owns, so the job registry stamps `phase` on them beside `seq`.
+  Pi's calls are made BY PI, to the server-side proxy, from a config file whose only per-run knobs
+  are the base URL and the token — there is no per-request header to set. So the harness rewrites
+  the base URL per pass (`${proxyBaseUrl}/phase/<phase>`) and the proxy reads the segment back.
+  Both paths are the component that owns the boundary telling the store; neither infers.
+- **Stamp at EMIT time, not drain time.** A drained poll can land long after the phase moved on,
+  which would file a whole repair round under whatever phase happened to be current when the
+  backend got around to reading it. The registry stamps inside `onCallMetric`.
+- **The unphased proxy path stays the canonical route.** An image that predates the phase segment
+  keeps working and lands in `''`. The reverse pairing (an image NEWER than its backend) 404s every
+  model call — acceptable, since the harness image and the backend are already a matched set
+  (`RECOMMENDED_HARNESS_IMAGE`), and a capability-negotiation flag would be exactly the compat shim
+  this repo refuses.
+- **`turn_index` is NULL for a proxied call, never 0.** The proxy has no job-scoped counter; a 0
+  would read as "the first turn" and sort every Pi call to the front of its phase. Slice 3 orders
+  those rows by `created_at` (with `message_count` as the tie-break the export already uses).
+- **The turn ordinal IS `seq`**, the same number `<jobId>-hc-<seq>` is minted from — deliberately
+  not a second counter, so a rollup ordering by turn sees exactly the sequence the ids encode.
+- **The label is normalised at every boundary** (`normalizeCallPhase`, kernel): two of the three
+  producing paths are inputs the platform does not author (a request path anyone holding a session
+  token can write, a runner pool's JSON). It rejects rather than escapes, so the stored vocabulary
+  stays one alphabet and `GROUP BY phase` can't be split by case or padding — but it passes an
+  UNKNOWN label through, so a phase a future harness adds reaches telemetry verbatim.
+- **Hono footgun:** registering one handler on both paths via `app.on('POST', [paths], …)` silently
+  degrades the handler's contextual typing (an inner `.catch((err) =>` becomes an implicit-any
+  error). The handler is a named function registered per path instead.
+
 ## Target pattern (Slice 2 — the reference implementation)
 
 The instrument rides seams that already exist, so it needs no new sink and stays runtime-symmetric
@@ -117,7 +151,7 @@ conformance suite):
 | --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ----- |
 | 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done | #1430 |
 | 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done |       |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo |       |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done |       |
 | 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo |       |
 | 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
 | 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo |       |

@@ -1232,6 +1232,24 @@ error handling — and the phased plan to close them — are tracked in
   (a ~31M-token run rendered as 685). Design + the gotchas:
   [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
 
+  **Every row is stamped with the PHASE that spent it and its TURN ordinal**, so a run's burn can
+  be attributed to the slice that caused it (the agent's own loop vs a pre-PR validation repair
+  round vs a reproduction-proof repair round) instead of piling into one figure per agent kind.
+  Design: [`docs/initiatives/token-burn-instrumentation.md`](./docs/initiatives/token-burn-instrumentation.md).
+  - **The phase is stamped by whoever OWNS the boundary, never reconstructed downstream.** The
+    harness drives those loops, so its job registry stamps `phase` on each streamed call at EMIT
+    time (not drain time — a poll lands long after the phase moved on), and the Pi path, whose
+    calls are metered server-side, carries it on the proxy URL (`${proxyBaseUrl}/phase/<phase>`,
+    rewritten per pass) because Pi makes those requests from a config with no per-request header
+    to set. Reconstructing phase from wall-clock timestamps is the brittle inference this avoids.
+  - **`''` is a REAL slice, not a gap** — an unphased call (an older image, an inline call, the
+    unphased proxy path) is filed as unattributed rather than guessed at from the agent kind. Every
+    boundary the free-text label crosses runs it through kernel's `normalizeCallPhase`, since two of
+    the three producing paths (a request path, a pool's JSON) arrive over HTTP.
+  - **`turn_index` is NULLABLE, not 0.** It is the harness's job-scoped `seq` (the same number the
+    row id is minted from); the proxy has no job-scoped counter, and a 0 there would sort every
+    proxied call to the front of its phase as "the first turn".
+
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
   (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list
