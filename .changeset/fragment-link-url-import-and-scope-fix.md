@@ -4,6 +4,7 @@
 '@cat-factory/agents': minor
 '@cat-factory/integrations': patch
 '@cat-factory/conformance': minor
+'@cat-factory/server': patch
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
 '@cat-factory/app': minor
@@ -33,4 +34,4 @@ Three field-reported failures on one surface, fixed together:
   id for local PAT mode's synthetic rows. The shared `createTierInstallationResolvers`
   (`@cat-factory/agents`, wired by both facades for fragments AND skills) now falls back
   through the account's own boards, via the new `WorkspaceRepository.listByAccount` (D1 ⇄
-  Drizzle, conformance-asserted).
+  Drizzle, conformance-asserted, and proxied in mothership mode under the `account` scope rule).

@@ -59,6 +59,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     accessRowOf: { scope: { kind: 'workspace', arg: 0 } },
     rename: { scope: { kind: 'workspace', arg: 0 } },
     setDescription: { scope: { kind: 'workspace', arg: 0 } },
+    // The account-tier installation fallback (`createTierInstallationResolvers.forAccount`) reads
+    // the account's own boards in one batch on the repo-sourced fragment/skill sync path. arg0 is
+    // an accountId → the `account` rule, exactly like `serviceRepository.listByAccount`.
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
   },
   blockRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
