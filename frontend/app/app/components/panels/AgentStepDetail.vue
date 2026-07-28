@@ -15,6 +15,7 @@ import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
+import { dedicatedParkView } from '~/utils/pipelineRender'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -151,6 +152,25 @@ const approvalId = computed(() => step.value?.approval?.id ?? null)
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
 const companionExceeded = computed(() => approvalPending.value && !!step.value?.companion?.exceeded)
+// A park a DEDICATED window owns (fork choice / follow-up triage): the generic approve
+// resolver refuses these server-side, so the rail is replaced by a redirect to that window.
+// Computed live, since a coder step can park on one WHILE this overlay is already open
+// (the routing in `dispatchStepView` only covers the open click).
+const dedicatedPark = computed(() => (step.value ? dedicatedParkView(step.value) : null))
+/** The generic approve/request-changes/reject rail applies (no dedicated surface owns the park). */
+const genericApprovalPending = computed(
+  () => approvalPending.value && !companionExceeded.value && !dedicatedPark.value,
+)
+
+/** Jump from this overlay to the window that can actually resolve the dedicated park. */
+function openDedicatedWindow() {
+  const c = ctx.value
+  const park = dedicatedPark.value
+  if (!c || !park) return
+  close()
+  if (park === 'follow-ups') ui.openFollowUps(c.instanceId, c.stepIndex)
+  else ui.openForkDecision(c.instanceId, c.stepIndex)
+}
 
 function close() {
   // Reset the approval-mode sub-states so reopening the same step is clean
@@ -159,13 +179,14 @@ function close() {
   ui.closeStepDetail()
 }
 
-// The GitHub-style approval/review state machine for a pending gate step.
+// The GitHub-style approval/review state machine for a pending gate step. A park a
+// dedicated window owns is NOT reviewable here, so it doesn't count as pending.
 const approval = useStepApproval({
   step: () => step.value,
   scrollEl: () => scrollEl.value,
   instanceId: () => ctx.value?.instanceId,
   approvalId: () => approvalId.value,
-  approvalPending: () => approvalPending.value,
+  approvalPending: () => approvalPending.value && !dedicatedPark.value,
   companionExceeded: () => companionExceeded.value,
   close,
 })
@@ -292,7 +313,7 @@ async function copyOutput() {
             </div>
             <div class="ms-auto flex items-center gap-1.5">
               <UBadge
-                v-if="approvalPending && !companionExceeded"
+                v-if="genericApprovalPending"
                 color="warning"
                 variant="subtle"
                 size="sm"
@@ -302,7 +323,7 @@ async function copyOutput() {
                 {{ t('panels.stepDetail.approvalRequired') }}
               </UBadge>
               <UBadge
-                v-else-if="companionExceeded"
+                v-else-if="companionExceeded || dedicatedPark"
                 color="warning"
                 variant="subtle"
                 size="sm"
@@ -395,6 +416,37 @@ async function copyOutput() {
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"
               />
+
+              <!-- a park a dedicated window owns (fork choice / follow-up triage): the
+                   generic approval rail can't resolve it (the server refuses), so point
+                   the human at the window that can -->
+              <div
+                v-if="dedicatedPark"
+                class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+                data-testid="dedicated-park-redirect"
+              >
+                <p class="text-[13px] leading-relaxed text-amber-200/90">
+                  {{
+                    dedicatedPark === 'follow-ups'
+                      ? t('panels.stepDetail.followUpsParked')
+                      : t('panels.stepDetail.forkParked')
+                  }}
+                </p>
+                <UButton
+                  class="mt-3"
+                  color="primary"
+                  size="sm"
+                  :icon="dedicatedPark === 'follow-ups' ? 'i-lucide-compass' : 'i-lucide-git-fork'"
+                  data-testid="dedicated-park-open"
+                  @click="openDedicatedWindow"
+                >
+                  {{
+                    dedicatedPark === 'follow-ups'
+                      ? t('panels.stepDetail.openFollowUps')
+                      : t('panels.stepDetail.chooseApproach')
+                  }}
+                </UButton>
+              </div>
 
               <!-- ephemeral environment lifecycle (spinning up / running / shut down /
                    errored + the exact error), when this step runs against one -->
@@ -545,7 +597,7 @@ async function copyOutput() {
                     class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
                     :class="[
                       s.depth > 0 ? 'ps-6' : '',
-                      approvalPending && !editing && !companionExceeded ? 'review-mode' : '',
+                      genericApprovalPending && !editing ? 'review-mode' : '',
                     ]"
                     @click="onProseClick"
                     v-html="s.bodyHtml"
@@ -567,7 +619,7 @@ async function copyOutput() {
              Approve / Request changes / Reject. A end-side rail on wide screens; a
              bottom sheet (still reachable) below lg, so the gate is always actionable. -->
         <aside
-          v-if="approvalPending && !companionExceeded"
+          v-if="genericApprovalPending"
           class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
         >
           <div class="border-b border-slate-800 px-4 py-3">

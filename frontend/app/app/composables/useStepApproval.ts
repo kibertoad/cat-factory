@@ -100,14 +100,15 @@ export function useStepApproval(opts: {
     () => !!feedback.value.trim() || reviewComments.value.length > 0,
   )
 
-  // Plain approve: accept the agent's proposal verbatim and advance.
+  // Plain approve: accept the agent's proposal verbatim and advance. Every action below
+  // closes the overlay ONLY when the command actually ran — a server refusal (surfaced as
+  // a toast by the store) or a cancelled credential prompt keeps the review open.
   async function approve() {
     const id = opts.approvalId()
     if (!opts.instanceId() || !id || submitting.value) return
     submitting.value = true
     try {
-      await execution.approveStep(opts.instanceId()!, id)
-      opts.close()
+      if (await execution.approveStep(opts.instanceId()!, id)) opts.close()
     } finally {
       submitting.value = false
     }
@@ -130,8 +131,7 @@ export function useStepApproval(opts: {
     if (!opts.instanceId() || !id || submitting.value) return
     submitting.value = true
     try {
-      await execution.approveStep(opts.instanceId()!, id, draftProposal.value)
-      opts.close()
+      if (await execution.approveStep(opts.instanceId()!, id, draftProposal.value)) opts.close()
     } finally {
       submitting.value = false
     }
@@ -141,7 +141,7 @@ export function useStepApproval(opts: {
     if (!opts.instanceId() || !id || submitting.value || !canRequestChanges.value) return
     submitting.value = true
     try {
-      await execution.requestStepChanges(opts.instanceId()!, id, {
+      const ok = await execution.requestStepChanges(opts.instanceId()!, id, {
         feedback: feedback.value.trim() || undefined,
         comments: reviewComments.value.length
           ? reviewComments.value.map((c) => ({
@@ -152,7 +152,7 @@ export function useStepApproval(opts: {
             }))
           : undefined,
       })
-      opts.close()
+      if (ok) opts.close()
     } finally {
       submitting.value = false
     }
@@ -168,8 +168,9 @@ export function useStepApproval(opts: {
     if (!opts.instanceId() || !id || submitting.value) return
     submitting.value = true
     try {
-      await execution.rejectStep(opts.instanceId()!, id, feedback.value.trim() || undefined)
-      opts.close()
+      if (await execution.rejectStep(opts.instanceId()!, id, feedback.value.trim() || undefined)) {
+        opts.close()
+      }
     } finally {
       submitting.value = false
       rejectArmed.value = false

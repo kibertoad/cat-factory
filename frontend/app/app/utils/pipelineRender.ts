@@ -134,6 +134,32 @@ export function isCompanionKind(kind: string): boolean {
 }
 
 /**
+ * The dedicated window that owns a step's approval park, when the park is NOT a generic
+ * prose approval: the implementation-fork window while a coder waits on (or chats about)
+ * an approach choice, or the follow-up triage window while surfaced items are undecided.
+ * The generic approve/request-changes/reject resolvers deliberately refuse these parks
+ * server-side (`assertNotIterativeGate`), so every surface that offers a step's pending
+ * approval must route these to their window instead of the generic "Approve & proceed"
+ * rail — which would blink a 409 and resolve nothing.
+ */
+export function dedicatedParkView(step: PipelineStep): 'follow-ups' | 'fork-decision' | null {
+  // The fork park sits BEFORE the coder's build dispatch; `answering` (a chat turn in
+  // flight) still belongs to the fork window, which renders the pending reply.
+  const fork = step.forkDecision?.status
+  if (fork === 'awaiting_choice' || fork === 'answering') return 'fork-decision'
+  // Follow-ups only own the park itself: while the coder is still WORKING (streaming
+  // items, no approval raised) a step click should keep opening the ordinary detail.
+  if (
+    step.approval?.status === 'pending' &&
+    step.followUps?.enabled &&
+    step.followUps.items.some((i) => i.status === 'pending')
+  ) {
+    return 'follow-ups'
+  }
+  return null
+}
+
+/**
  * The friendly label for a container's live phase (clone → "Preparing workspace",
  * agent → "Agent running", …), falling back to the raw phase string for an unknown/new
  * phase (the phase vocabulary is harness-controlled and open-ended). `null` when there's

@@ -19,8 +19,8 @@ reads, so it's a reporting problem." Two facts kill that read:
    `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` — because cache reads
    still physically occupy the context window. cat-factory summing the same buckets is therefore a
    **like-for-like** measure of the same thing, not an inflation relative to how Claude Code
-   reports. The cache-read composition explains why the *dollar* cost stays low; it explains
-   nothing about the *volume*.
+   reports. The cache-read composition explains why the _dollar_ cost stays low; it explains
+   nothing about the _volume_.
 2. **The volume is abnormal.** A one-line change (e.g. "bump pnpm") that an interactive session
    finishes in a tiny fraction of the tokens routinely drives ~1M input tokens through the model
    in the pipeline. That is turns × context, and both terms are inflated.
@@ -32,12 +32,12 @@ which lever matters without this.
 
 ### Why autonomous runs spiral past an interactive session (the hypotheses to measure)
 
-Grounded in the #1261-era investigation and the pipeline architecture; each is a *candidate*
+Grounded in the #1261-era investigation and the pipeline architecture; each is a _candidate_
 driver this instrument is meant to rank, not a settled cause:
 
 1. **No human off-ramp.** Headless `-p` + `bypassPermissions`, bounded only by the inactivity
    watchdog (`JOB_INACTIVITY_MS`, 10 min) and the command watchdog (15 min). A person bumping
-   pnpm stops when the diff is done; the autonomous coder runs to its *own* notion of "done."
+   pnpm stops when the diff is done; the autonomous coder runs to its _own_ notion of "done."
 2. **The pipeline piles on model work the edit never needed.** Pre-PR validation with repair loops
    (`validation-checks.ts`), the bugfix reproduction proof (`reproduction-proof.ts`), the effort
    report, follow-up generation (a trivial run emitted 3 follow-ups at `maxLoops: 3`), the coder
@@ -54,7 +54,7 @@ driver this instrument is meant to rank, not a settled cause:
   delivery, computed slicing) and are real wins — but scoped to the PR-review kind.
 - `ProgressGuard` (`ProgressGuardLimits` in the harness, `guardLimits` per agent kind) is the only
   anti-spiral lever, and it only fires on **pathological non-progress** (no-edit probing,
-  error/web loops). A run *productively* grinding through validation/repair loops on a trivial task
+  error/web loops). A run _productively_ grinding through validation/repair loops on a trivial task
   will not trip it, and the burn continues.
 - So today we reduce baseline weight and catch the worst runaways; we do **not** cap "doing far too
   much work for a small task." Closing that needs the measurement this tracker produces.
@@ -79,14 +79,14 @@ driver this instrument is meant to rank, not a settled cause:
   observability panel and available headless for the baseline runs.
 - **Slice 4 — the baseline & the decision.** Run the same trivial task ("bump pnpm") as (a) an
   interactive Claude Code session and (b) a full pipeline run, and compare the ratio + the
-  per-phase breakdown. The breakdown *decides the fix* rather than us guessing:
+  per-phase breakdown. The breakdown _decides the fix_ rather than us guessing:
   - prefix size dominates → prompt/`CLAUDE.md` trimming + compaction;
   - turn count dominates → a per-run turn budget / `ProgressGuard` extension to productive-but-
     excessive runs;
   - the pipeline does redundant work on trivial tasks → trivial-task routing to a single-shot
     runner, or trimming the pipeline steps a small task doesn't need.
-  Whichever wins becomes its own follow-up initiative; this tracker's job is to name it with
-  evidence.
+    Whichever wins becomes its own follow-up initiative; this tracker's job is to name it with
+    evidence.
 
 ## Target pattern (Slice 2 — the reference implementation)
 
@@ -111,12 +111,12 @@ conformance suite):
 
 ## Per-slice checklist
 
-| #   | Slice                     | Scope                                                                                                             | Status      | PR  |
-| --- | ------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------- | --- |
-| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency               | ⬜ blocked  |     |
-| 2   | Turn index + phase axis   | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo     |     |
-| 3   | Per-run rollup by phase   | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo     |     |
-| 4   | Baseline & decision       | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo     |     |
+| #   | Slice                      | Scope                                                                                                            | Status     | PR  |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | --- |
+| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ⬜ blocked |     |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo    |     |
+| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo    |     |
+| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo    |     |
 
 ## Conventions / gotchas carried between iterations
 
@@ -127,8 +127,8 @@ conformance suite):
   `cachedPromptTokens`) makes a per-phase attribution meaningless: a repair loop that re-writes the
   cache looks identical to one that only re-reads it. Land
   [`token-telemetry-per-class-and-cost`](./token-telemetry-per-class-and-cost.md) Slice 1 first.
-- **`ProgressGuard` is not a token budget.** It stops *pathological non-progress*, not *productive
-  excess*. A trivial task that legitimately edits, validates, repairs, reproduces and follows-up
+- **`ProgressGuard` is not a token budget.** It stops _pathological non-progress_, not _productive
+  excess_. A trivial task that legitimately edits, validates, repairs, reproduces and follows-up
   will never trip it, so "we already have a guard" is not a reason to skip the instrument.
 - **Attribute at the source, never reconstruct.** The harness owns the phase boundaries; carry the
   label on the streamed metric. Reconstructing phase from wall-clock timestamps downstream is the
@@ -144,6 +144,6 @@ conformance suite):
 
 - [`token-telemetry-per-class-and-cost`](./token-telemetry-per-class-and-cost.md) — makes the
   read/write/fresh split honest (Slice 1 is this tracker's dependency) and adds cost surfacing.
-- [`pr-review-turn-reduction`](./pr-review-turn-reduction.md) — attacks the *cause* for the
+- [`pr-review-turn-reduction`](./pr-review-turn-reduction.md) — attacks the _cause_ for the
   PR-review kind (cut what each turn carries); its "measure the reduction" slice is a consumer of
   this instrument.

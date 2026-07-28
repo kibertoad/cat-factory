@@ -456,7 +456,10 @@
       "retryFailed": "El reintento falló",
       "startFailed": "No se pudo iniciar",
       "mergeFailed": "No se pudo fusionar",
-      "restartFailed": "No se pudo reiniciar"
+      "restartFailed": "No se pudo reiniciar",
+      "approveFailed": "No se pudo aprobar",
+      "requestChangesFailed": "No se pudieron solicitar cambios",
+      "rejectFailed": "No se pudo rechazar"
     },
     "reviewFriction": {
       "warnTitle": "Tareas esperando revisión",
@@ -980,6 +983,7 @@
         "body": "Inicia un pipeline para ver el historial de ejecución aquí."
       },
       "chooseApproach": "Elegir enfoque",
+      "triageFollowUps": "Decidir seguimientos",
       "elapsedTooltip": "Tiempo transcurrido en este paso",
       "reviewFindings": "Revisar hallazgos"
     },
@@ -1213,6 +1217,10 @@
       "details": "Detalles",
       "approvalRequired": "Se requiere aprobación",
       "decisionRequired": "Se requiere una decisión",
+      "followUpsParked": "El Coder planteó seguimientos que necesitan una decisión antes de que la ejecución pueda continuar. Resuelve cada elemento (crear, devolver, responder o descartar) en la ventana de seguimientos.",
+      "forkParked": "Este paso del Coder espera a que se elija un enfoque de implementación antes de escribir código. Elige un enfoque propuesto (o introduce el tuyo) en la ventana de decisión.",
+      "openFollowUps": "Abrir seguimientos",
+      "chooseApproach": "Elegir enfoque",
       "expandAll": "Expandir todas las secciones",
       "collapseAll": "Contraer todas las secciones",
       "copyRawOutput": "Copiar salida sin procesar",

@@ -69,35 +69,66 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     })
   }
 
-  /** Approve a step's gated proposal (optionally edited); the run advances. */
-  async function approveStep(instanceId: string, approvalId: string, proposal?: string) {
+  /**
+   * Approve a step's gated proposal (optionally edited); the run advances. Returns false —
+   * with the failure surfaced as an actionable toast — when the server refused (e.g. a 409
+   * for a park a dedicated window owns) or the user cancelled the credential prompt, so the
+   * approval rail can stay open instead of closing over a silently-failed approve.
+   */
+  async function approveStep(
+    instanceId: string,
+    approvalId: string,
+    proposal?: string,
+  ): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    return await personal.withCredential(async (password) => {
-      await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal }, password)
-      await ws.refresh()
-    })
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal }, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'errors.action.approveFailed')
+      return false
+    }
   }
 
-  /** Request changes on a gated proposal; the step re-runs with the review. */
+  /** Request changes on a gated proposal; the step re-runs with the review. Returns false
+   *  (with a toast) on refusal / a cancelled credential prompt, like {@link approveStep}. */
   async function requestStepChanges(
     instanceId: string,
     approvalId: string,
     review: RequestStepChangesInput,
-  ) {
+  ): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    return await personal.withCredential(async (password) => {
-      await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review, password)
-      await ws.refresh()
-    })
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'errors.action.requestChangesFailed')
+      return false
+    }
   }
 
-  /** Reject a gated proposal; the run stops entirely (a retryable failure). */
-  async function rejectStep(instanceId: string, approvalId: string, reason?: string) {
+  /** Reject a gated proposal; the run stops entirely (a retryable failure). Returns false
+   *  (with a toast) when the server refused. */
+  async function rejectStep(
+    instanceId: string,
+    approvalId: string,
+    reason?: string,
+  ): Promise<boolean> {
     const ws = useWorkspaceStore()
-    await api.rejectStep(ws.requireId(), instanceId, approvalId, { reason })
-    await ws.refresh()
+    try {
+      await api.rejectStep(ws.requireId(), instanceId, approvalId, { reason })
+      await ws.refresh()
+      return true
+    } catch (e) {
+      runErrors.present(e, 'errors.action.rejectFailed')
+      return false
+    }
   }
 
   /**

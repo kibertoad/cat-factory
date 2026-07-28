@@ -456,7 +456,10 @@
       "retryFailed": "Échec de la nouvelle tentative",
       "startFailed": "Échec du démarrage",
       "mergeFailed": "Échec de la fusion",
-      "restartFailed": "Échec du redémarrage"
+      "restartFailed": "Échec du redémarrage",
+      "approveFailed": "Échec de l'approbation",
+      "requestChangesFailed": "Échec de la demande de modifications",
+      "rejectFailed": "Échec du rejet"
     },
     "reviewFriction": {
       "warnTitle": "Tâches en attente de revue",
@@ -980,6 +983,7 @@
         "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
       },
       "chooseApproach": "Choisir l'approche",
+      "triageFollowUps": "Trancher les suivis",
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "reviewFindings": "Examiner les remarques"
     },
@@ -1213,6 +1217,10 @@
       "details": "Détails",
       "approvalRequired": "Approbation requise",
       "decisionRequired": "Décision requise",
+      "followUpsParked": "Le Coder a soulevé des suivis qui doivent être tranchés avant que l'exécution puisse continuer. Traitez chaque élément (créer, renvoyer, répondre ou écarter) dans la fenêtre des suivis.",
+      "forkParked": "Cette étape du Coder attend le choix d'une approche d'implémentation avant d'écrire du code. Choisissez une approche proposée (ou saisissez la vôtre) dans la fenêtre de décision.",
+      "openFollowUps": "Ouvrir les suivis",
+      "chooseApproach": "Choisir l'approche",
       "expandAll": "Développer toutes les sections",
       "collapseAll": "Réduire toutes les sections",
       "copyRawOutput": "Copier la sortie brute",

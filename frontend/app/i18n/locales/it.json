@@ -1298,6 +1298,7 @@
       "open": "Aperta",
       "mergePr": "Unisci PR",
       "chooseApproach": "Scegli approccio",
+      "triageFollowUps": "Decidi i follow-up",
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "reviewFindings": "Esamina i rilievi"
     },
@@ -1531,6 +1532,10 @@
       "details": "Dettagli",
       "approvalRequired": "Approvazione richiesta",
       "decisionRequired": "Decisione richiesta",
+      "followUpsParked": "Il Coder ha sollevato follow-up che richiedono una decisione prima che la run possa continuare. Gestisci ogni elemento (crea, rimanda indietro, rispondi o scarta) nella finestra dei follow-up.",
+      "forkParked": "Questo passo del Coder attende la scelta di un approccio di implementazione prima di scrivere codice. Scegli un approccio proposto (o inserisci il tuo) nella finestra di decisione.",
+      "openFollowUps": "Apri i follow-up",
+      "chooseApproach": "Scegli approccio",
       "expandAll": "Espandi tutte le sezioni",
       "collapseAll": "Comprimi tutte le sezioni",
       "copyRawOutput": "Copia l'output grezzo",
@@ -4231,7 +4236,10 @@
       "retryFailed": "Nuovo tentativo non riuscito",
       "startFailed": "Avvio non riuscito",
       "mergeFailed": "Merge non riuscito",
-      "restartFailed": "Riavvio non riuscito"
+      "restartFailed": "Riavvio non riuscito",
+      "approveFailed": "Approvazione non riuscita",
+      "requestChangesFailed": "Richiesta di modifiche non riuscita",
+      "rejectFailed": "Rifiuto non riuscito"
     },
     "reviewFriction": {
       "warnTitle": "Attività in attesa di revisione",

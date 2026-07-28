@@ -10,6 +10,7 @@ import {
   isFailedStep,
   FAILED_STEP_META,
   containerPhaseLabel,
+  dedicatedParkView,
 } from '~/utils/pipelineRender'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
@@ -74,7 +75,9 @@ function followUpLabel(step: PipelineStep): string {
 /** The active fork-decision phase status on a coder step (proposing / awaiting a choice). */
 function forkPhase(step: PipelineStep): 'proposing' | 'awaiting_choice' | null {
   const status = step.forkDecision?.status
-  return status === 'proposing' || status === 'awaiting_choice' ? status : null
+  if (status === 'proposing') return 'proposing'
+  // `answering` (a chat reply in flight) still belongs to the fork window's choice phase.
+  return status === 'awaiting_choice' || status === 'answering' ? 'awaiting_choice' : null
 }
 
 /**
@@ -670,9 +673,16 @@ const ITEM_ICON: Record<string, string> = {
             {{ reviewStageLabel(s.agentKind) }}
           </div>
 
-          <!-- approval gate: review (and edit) the proposal before continuing -->
+          <!-- approval gate: review (and edit) the proposal before continuing. A park a
+               dedicated window owns (fork choice / follow-up triage) renders its own chip
+               above instead — the generic approve resolver refuses those server-side. -->
           <div
-            v-else-if="s.approval && s.approval.status === 'pending' && !prReviewAwaiting(s)"
+            v-else-if="
+              s.approval &&
+              s.approval.status === 'pending' &&
+              !prReviewAwaiting(s) &&
+              !dedicatedParkView(s)
+            "
             class="mt-3"
           >
             <UButton
