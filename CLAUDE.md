@@ -1189,6 +1189,18 @@ error handling — and the phased plan to close them — are tracked in
     chain, and those interleave with the parent's now that telemetry streams; a tip nothing can
     chain onto loses delta compression on exactly the subagent-heavy runs where it matters.
 
+  **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input,
+  with `cacheReadTokens` + `cacheWriteTokens` beside it, so total input is their sum. They are
+  priced ~1x / ~0.1x / 1.25-2x base input respectively — a cache WRITE costs more than fresh —
+  so any producer summing them makes a loop that keeps invalidating its prefix read exactly like
+  one riding a warm cache. A new producer normalises to fresh at the source: subtract the cached
+  subset where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex, via
+  `freshPromptTokens`), read the already-exclusive field where it reports them apart (Anthropic);
+  `cacheTokensFromUsage` covers the field names. Only Anthropic reports a write class — 0
+  elsewhere, never guessed. Distinct from the harness's `PiRunOutcome.usage`, which is the
+  key-rotation WEIGHT and deliberately keeps summing every billed bucket. Design + the gotchas:
+  [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
+
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
   (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list
