@@ -942,7 +942,7 @@
     },
     "execution": {
       "title": "Wykonanie",
-      "hint": "Trwające wykonanie potoku tego zadania: każdy krok agenta, jego postęp i powstały pull request.",
+      "hint": "Trwające wykonanie potoku: każdy krok agenta, jego postęp i powstały pull request.",
       "stage": {
         "incorporating": "Włączanie…",
         "reviewing": "Ponowna recenzja…",
@@ -963,10 +963,10 @@
       "stop": "Zatrzymaj",
       "stopTooltip": "Zatrzymaj uruchomienie, ale zachowaj je (do odczytu i ponownego uruchomienia)",
       "reset": "Resetuj",
-      "resetTooltip": "Odrzuć to uruchomienie i przywróć zadanie do stanu zaplanowanego",
+      "resetTooltip": "Odrzuć to uruchomienie i przywróć stan zaplanowany",
       "resetConfirm": {
         "title": "Odrzucić to uruchomienie?",
-        "body": "Spowoduje to usunięcie uruchomienia i przywrócenie zadania do stanu zaplanowanego. Tej operacji nie można cofnąć.",
+        "body": "Spowoduje to usunięcie uruchomienia i przywrócenie stanu zaplanowanego. Tej operacji nie można cofnąć.",
         "confirm": "Odrzuć uruchomienie"
       },
       "mergeConfirm": {
@@ -1305,6 +1305,7 @@
       "deleteRecurringPipeline": "Usuń cykliczny potok",
       "deleteTask": "Usuń zadanie",
       "deleteModule": "Usuń moduł",
+      "deleteInitiative": "Usuń inicjatywę",
       "deleteService": "Usuń usługę",
       "titlePlaceholder": "Tytuł…",
       "reworkedRequirements": "Przerobione wymagania",
@@ -1331,6 +1332,10 @@
         "module": {
           "title": "Usunąć ten moduł?",
           "body": "\"{name}\" i cała jego zawartość zostaną usunięte. Tej operacji nie można cofnąć."
+        },
+        "initiative": {
+          "title": "Usunąć tę inicjatywę?",
+          "body": "\"{name}\" i jej plan zostaną usunięte. Utworzone już zadania pozostaną na tablicy. Tej operacji nie można cofnąć."
         },
         "service": {
           "title": "Usunąć tę usługę?",
@@ -5214,6 +5219,8 @@
       "unanswered": "Pytania bez odpowiedzi: {count}",
       "proceed": "Zaplanuj teraz",
       "proceedTitle": "Pomin pozostale pytania i utworz plan teraz",
+      "discard": "Odrzuć uruchomienie",
+      "discardTitle": "Odrzuć zablokowane uruchomienie planowania, aby zacząć planowanie od nowa",
       "continue": "Wyslij odpowiedzi",
       "continueTitle": "Wyslij swoje odpowiedzi; planista moze zadac dodatkowe pytania"
     },

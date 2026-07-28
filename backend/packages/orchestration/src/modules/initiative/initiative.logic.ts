@@ -461,6 +461,25 @@ export function applyInterviewQuestions(
 }
 
 /**
+ * Drop the interview state a PRIOR planning run left behind, so a re-run starts a clean
+ * round-1 interview instead of resuming a stale (often at-cap) session. Keeps the SAME digest
+ * {@link applyInterviewQuestions} keeps — answered + dismissed exchanges, which the preset form
+ * seeded and the human already settled — and drops only the round bookkeeping plus any questions
+ * the last run left pending.
+ *
+ * This is what makes a wedged planning run recoverable: without it, a run that burned its rounds
+ * leaves `interview.round >= maxRounds`, so the next run's first pass is force-converged
+ * ({@link interviewAtCap}) and the human is never asked anything again.
+ */
+export function applyInterviewReset(initiative: Initiative): Initiative {
+  // Delete the key rather than setting `undefined`: the entity is persisted (and content-compared)
+  // as JSON, where an explicit `undefined` and an absent key are indistinguishable — so dropping it
+  // keeps the reset a true no-op when there was no interview to clear.
+  const { interview: _cleared, ...rest } = initiative
+  return { ...rest, qa: retainedQa(initiative) }
+}
+
+/**
  * Mark one question `dismissed` ("not relevant") or reopen it. Dismissing clears any drafted
  * answer + AI recommendation (the question is being set aside, not answered). Matched by id;
  * no-op if unknown. Part of the shared clarification surface the planning window borrows from

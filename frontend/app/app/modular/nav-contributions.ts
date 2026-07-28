@@ -153,24 +153,35 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  *    with accounts enabled).
  *  - one icon per destination across shells.
  *
- * `advanced: true` marks the power-user half, hidden in basic interface mode. The line is
- * drawn by ROUTE COUNT, not by how advanced a surface feels: hiding the only way to reach a
- * capability removes the capability from the tier, while hiding a shortcut to a surface basic
- * mode already reaches removes nothing. So an item is advanced only when both of these hold —
- * it is not the sole route to its capability, and nothing on the delivery path needs it:
+ * `advanced: true` marks the power-user half, hidden in basic interface mode. Basic is the
+ * EVERYDAY DELIVERY SURFACE — plan work on a board, run it, review and merge it — so an item
+ * is advanced when it is not part of that loop. That happens two ways, and the difference
+ * matters when reading the list (it is the column `nav-contributions.spec.ts` makes you fill
+ * in):
  *
- *  - `sandbox` / `kaizen` — experimentation and self-grading surfaces, beside the delivery
- *    path rather than on it.
+ * REACHED ANOTHER WAY — hiding a shortcut removes nothing, because a basic destination opens
+ * the same surface:
  *  - `merge-thresholds` / `service-fragment-defaults` — palette shortcuts into Workspace
  *    settings tabs (Merge, Service best practices), which basic mode reaches via
  *    `workspace-settings`.
  *  - `local-models` — a per-user endpoint knob the Integrations hub already offers.
  *
- * Everything else stays in basic BECAUSE it is a sole route: authoring a flow
- * (`build-pipeline`), the standards/skills library (`fragments`, whose only other route is a
- * button two levels into Workspace settings), the PREnv + runner plumbing (`infrastructure`,
- * `environment-setup`), and the operator/cost views that are the only aggregate read of run
- * health and spend (`operator-dashboard`, `reports`).
+ * OUT OF THE TIER — the sole route, hidden deliberately, so the capability itself is absent
+ * from basic mode. This is a product decision, not an oversight: each of these answers a
+ * question an everyday delivery user does not ask, and carrying it costs the basic nav more
+ * than the capability is worth there. Switching to advanced is the way to it.
+ *  - `sandbox` / `kaizen` — experimentation and self-grading surfaces, beside the delivery
+ *    path rather than on it.
+ *  - `bootstrap-repo` — standing a NEW repository up from a reference architecture: a
+ *    once-per-service setup act, not part of running work on an existing board.
+ *  - `operator-dashboard` / `reports` — the deployment-wide health and spend rollups. They
+ *    read across every workspace for whoever operates the deployment, which is a different
+ *    job from delivering a task on one board.
+ *
+ * Everything else stays in basic because the delivery loop needs it: authoring a flow
+ * (`build-pipeline`), adding a repo (`add-from-repo`), the standards/skills library
+ * (`fragments`), the PREnv + runner plumbing (`infrastructure`, `environment-setup`), and the
+ * workspace/model configuration a run actually reads (`workspace-settings`, `model-config`).
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
@@ -210,6 +221,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.bootstrapRepo',
     icon: 'i-lucide-git-branch-plus',
     surfaces: S('sidebar', 'command'),
+    advanced: true,
     gate: (g) => g.canManageIntegrations,
     action: 'bootstrapRepo',
     testId: 'nav-bootstrap-repo',
@@ -388,6 +400,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.operatorDashboard',
     icon: 'i-lucide-gauge',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'operatorDashboard',
     testId: 'nav-operator-dashboard',
@@ -398,6 +411,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.reports',
     icon: 'i-lucide-chart-column',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'reports',
     testId: 'nav-reports',

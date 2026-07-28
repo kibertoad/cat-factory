@@ -50,6 +50,8 @@ async function seed(store: LocalTelemetryStore, createdAt: number, id: string): 
     promptHash: id,
     responseText: '',
     reasoningText: '',
+    phase: '',
+    turnIndex: null,
   })
   await store.agentContextSnapshotRepository.record({
     id,

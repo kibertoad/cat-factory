@@ -8,6 +8,7 @@ import {
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyInterviewReset,
   applyCheckpointCleared,
   applyItemEdit,
   applyPlanDraft,
@@ -680,6 +681,41 @@ describe('interview state transitions', () => {
     expect(applyAnalysis(emptyEntity(), '  The codebase is layered.  ').analysisSummary).toBe(
       'The codebase is layered.',
     )
+  })
+})
+
+describe('applyInterviewReset (fresh-run reset)', () => {
+  const asked = () => {
+    let n = 0
+    return applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++n}`)
+  }
+
+  it('clears the round bookkeeping so a re-run interviews from scratch', () => {
+    // The whole point: at the cap the next pass would be force-converged, so a wedged run would
+    // stay wedged across a re-run. After the reset the run is back to round zero.
+    const capped = {
+      ...asked(),
+      interview: { round: 4, maxRounds: 4, status: 'awaiting' as const },
+    }
+    expect(interviewAtCap(capped)).toBe(true)
+    const reset = applyInterviewReset(capped)
+    expect(reset.interview).toBeUndefined()
+    expect(interviewAtCap(reset)).toBe(false)
+  })
+
+  it('keeps the answered + dismissed digest and drops only what is still pending', () => {
+    const answered = applyInterviewAnswer(asked(), 'iqa-1', 'A1') // Q2 left pending
+    const withDismissed = applyQuestionStatus(answered, 'iqa-2', 'dismissed')
+    expect(applyInterviewReset(withDismissed).qa?.map((q) => q.question)).toEqual(['Q1', 'Q2'])
+    // Q2 answered by nobody and NOT dismissed is genuinely pending, so it goes.
+    expect(applyInterviewReset(answered).qa?.map((q) => q.question)).toEqual(['Q1'])
+  })
+
+  it('is a content no-op when there is no interview state to clear', () => {
+    // Guards the CAS short-circuit: the gate calls this on EVERY fresh run, including the first,
+    // and a spurious write there would bump the rev (and emit) on every planning start.
+    const base = emptyEntity()
+    expect(applyInterviewReset(base)).toEqual(base)
   })
 })
 

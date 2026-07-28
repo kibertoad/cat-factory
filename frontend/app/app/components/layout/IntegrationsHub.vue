@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { showOverrideField } from '~/utils/uiMode'
+
 // The Integrations hub: a single modal that lists every external system the WORKSPACE can
 // enable or link in. Each row reuses the existing per-integration panel handlers on the `ui`
 // store (so the integrations themselves are unchanged); opening one closes the hub and
@@ -25,6 +27,7 @@ const publicApiKeys = usePublicApiKeysStore()
 const userSecrets = useUserSecretsStore()
 const apiKeys = useApiKeysStore()
 const workspace = useWorkspaceStore()
+const uiMode = useUiModeStore()
 
 // True when the per-user "My setup" hub is reachable (UserMenu renders only when signed in).
 // When false (auth disabled / local mode) we fold the personal rows back into this hub so
@@ -268,7 +271,17 @@ const groups = computed<IntegrationGroup[]>(() => {
   // Gated like every other backend-toggleable system: hidden until a probe confirms
   // the observability module is enabled (`available === true`), so a disabled backend
   // doesn't show a dead "Connect" row that only 503s.
-  if (releaseHealth.available) {
+  //
+  // Also an ADVANCED-tier row. Post-release health is the one integration here that acts
+  // AFTER delivery rather than during it — it watches monitors once a release ships and can
+  // spawn an on-call agent — so it sits outside the everyday loop the basic tier serves.
+  // Gated with `showOverrideField` rather than a bare `isAdvanced`: an already-connected
+  // Datadog is live behaviour on this workspace, and a tier must never conceal a connection a
+  // basic-mode user would then have no way to inspect or disconnect.
+  if (
+    releaseHealth.available &&
+    showOverrideField(uiMode.isAdvanced, releaseHealth.connection.connected || null)
+  ) {
     out.push({
       title: t('layout.integrationsHub.groups.observability'),
       items: [

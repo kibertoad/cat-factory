@@ -942,7 +942,7 @@
     },
     "execution": {
       "title": "Exécution",
-      "hint": "L'exécution en direct du pipeline de cette tâche : chaque étape d'agent, sa progression et la pull request obtenue.",
+      "hint": "L'exécution en direct du pipeline : chaque étape d'agent, sa progression et la pull request obtenue.",
       "stage": {
         "incorporating": "Intégration en cours…",
         "reviewing": "Nouvelle revue en cours…",
@@ -963,10 +963,10 @@
       "stop": "Arrêter",
       "stopTooltip": "Arrêter l'exécution mais la conserver (lisible et relançable)",
       "reset": "Réinitialiser",
-      "resetTooltip": "Abandonner cette exécution et réinitialiser la tâche à planifiée",
+      "resetTooltip": "Abandonner cette exécution et réinitialiser le statut à planifiée",
       "resetConfirm": {
         "title": "Abandonner cette exécution ?",
-        "body": "Cela supprime l'exécution et ramène la tâche à planifiée. Cette action est irréversible.",
+        "body": "Cela supprime l'exécution et réinitialise le statut à planifiée. Cette action est irréversible.",
         "confirm": "Abandonner l'exécution"
       },
       "mergeConfirm": {
@@ -1305,6 +1305,7 @@
       "deleteRecurringPipeline": "Supprimer le pipeline récurrent",
       "deleteTask": "Supprimer la tâche",
       "deleteModule": "Supprimer le module",
+      "deleteInitiative": "Supprimer l'initiative",
       "deleteService": "Supprimer le service",
       "titlePlaceholder": "Titre…",
       "reworkedRequirements": "Exigences retravaillées",
@@ -1331,6 +1332,10 @@
         "module": {
           "title": "Supprimer ce module ?",
           "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
+        },
+        "initiative": {
+          "title": "Supprimer cette initiative ?",
+          "body": "\"{name}\" et son plan seront supprimés. Les tâches déjà créées restent sur le tableau. Cette action est irréversible."
         },
         "service": {
           "title": "Supprimer ce service ?",
@@ -5214,6 +5219,8 @@
       "unanswered": "Questions sans reponse : {count}",
       "proceed": "Planifier maintenant",
       "proceedTitle": "Ignorer les questions restantes et rediger le plan maintenant",
+      "discard": "Abandonner l'exécution",
+      "discardTitle": "Abandonner l'exécution de planification bloquée pour recommencer",
       "continue": "Envoyer les reponses",
       "continueTitle": "Envoyez vos reponses ; le planificateur peut poser des questions complementaires"
     },

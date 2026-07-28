@@ -942,7 +942,7 @@
     },
     "execution": {
       "title": "Yürütme",
-      "hint": "Bu görevin pipeline'ının canlı yürütmesi: her ajan adımı, ilerlemesi ve ortaya çıkan pull request.",
+      "hint": "Pipeline'ın canlı yürütmesi: her ajan adımı, ilerlemesi ve ortaya çıkan pull request.",
       "stage": {
         "incorporating": "Dahil ediliyor…",
         "reviewing": "Yeniden inceleniyor…",
@@ -963,10 +963,10 @@
       "stop": "Durdur",
       "stopTooltip": "Çalıştırmayı durdur ancak sakla (okunabilir ve yeniden denenebilir)",
       "reset": "Sıfırla",
-      "resetTooltip": "Bu çalıştırmayı sil ve görevi planlandı durumuna sıfırla",
+      "resetTooltip": "Bu çalıştırmayı sil ve durumu planlandı olarak sıfırla",
       "resetConfirm": {
         "title": "Bu çalıştırma silinsin mi?",
-        "body": "Bu, çalıştırmayı siler ve görevi planlandı durumuna döndürür. Bu geri alınamaz.",
+        "body": "Bu, çalıştırmayı siler ve durumu planlandı olarak sıfırlar. Bu geri alınamaz.",
         "confirm": "Çalıştırmayı sil"
       },
       "mergeConfirm": {
@@ -1305,6 +1305,7 @@
       "deleteRecurringPipeline": "Yinelenen ardışık düzeni sil",
       "deleteTask": "Görevi sil",
       "deleteModule": "Modülü sil",
+      "deleteInitiative": "Girişimi sil",
       "deleteService": "Hizmeti sil",
       "titlePlaceholder": "Başlık…",
       "reworkedRequirements": "Yeniden işlenmiş gereksinimler",
@@ -1331,6 +1332,10 @@
         "module": {
           "title": "Bu modül silinsin mi?",
           "body": "\"{name}\" ve içindeki her şey kaldırılacak. Bu işlem geri alınamaz."
+        },
+        "initiative": {
+          "title": "Bu girişim silinsin mi?",
+          "body": "\"{name}\" ve planı kaldırılacak. Daha önce oluşturduğu görevler panoda kalır. Bu işlem geri alınamaz."
         },
         "service": {
           "title": "Bu servis silinsin mi?",
@@ -5226,6 +5231,8 @@
       "unanswered": "Yanitlanmamis sorular: {count}",
       "proceed": "Simdi planla",
       "proceedTitle": "Kalan sorulari atlayin ve plani simdi hazirlayin",
+      "discard": "Çalıştırmayı sil",
+      "discardTitle": "Takılan planlama çalıştırmasını silin ve planlamaya yeniden başlayın",
       "continue": "Yanitlari gonder",
       "continueTitle": "Yanitlarinizi gonderin; planlayici ek sorular sorabilir"
     },
