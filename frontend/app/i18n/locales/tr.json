@@ -5423,6 +5423,7 @@
     "subtitle": "Kalıcı bir döngü: görev üzerinde çalış, doğrulama komutunu çalıştır ve geçene kadar tekrarla.",
     "status": {
       "passed": "Geçti",
+      "stalled": "Takıldı",
       "gaveUp": "Vazgeçildi",
       "running": "Çalışıyor",
       "failing": "Başarısız"
@@ -5431,7 +5432,9 @@
     "validationCommand": "Doğrulama komutu",
     "lastOutput": "Son doğrulama (çıkış {exit})",
     "viewPr": "Pull request'i görüntüle",
+    "stalledNote": "Döngü erken durdu: ardışık yinelemeler dalı değiştirmedi ve doğrulama komutu hâlâ başarısız oluyor, bu yüzden bütçesinin kalanını harcamadı. Yeniden denemenin işe yaraması için muhtemelen görevin ya da doğrulama komutunun değişmesi gerekiyor.",
     "iterationsHeading": "Yinelemeler",
+    "iterationsTruncated": "Önceki {count} yineleme gösterilmiyor (geçmiş sınırlıdır).",
     "iteration": "Yineleme {number}",
     "iterationPassed": "doğrulama geçti",
     "iterationFailed": "çıkış {exit}",

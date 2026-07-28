@@ -1,8 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { spawn } from 'node:child_process'
-import { killChildProcess, spawnDetached } from './process.js'
-import { MAX_CAPTURED_OUTPUT_CHARS, redactSecrets } from './redact.js'
+import { runCapturedCommand } from './captured-command.js'
 import type {
   AgentJob,
   AgentResult,
@@ -186,6 +184,8 @@ export interface CodingAgentOutcome {
     exitCode: number
     validationOutputTail?: string
     iteration?: number
+    /** The work-branch HEAD the command was judged against (absent when it could not be read). */
+    headSha?: string
   }
   /**
    * The pre-PR validation loop's LAST attempt (present only when {@link CodingAgentSpec.validationChecks}
@@ -726,7 +726,7 @@ async function finalizeCodingRun(args: {
   // Runs regardless of whether this pass pushed — a no-op iteration must still be able
   // to report that the criterion is (already) met. The harness runs it, never the model.
   if (spec.validation) {
-    outcome.validation = await runRalphValidation(workDir, spec.validation, logger, opts)
+    outcome.validation = await runRalphValidation(dir, workDir, spec.validation, logger, opts)
   }
   // Pre-PR validation: the loop already ran (before this finalize, so a red checkout never
   // reaches the PR-opening caller); attach its verdict for the caller to gate on and for the
@@ -804,22 +804,57 @@ function mergeAgentPasses<T extends Awaited<ReturnType<typeof runAgentInWorkspac
  * killed and treated as a failure (a hung `pnpm test` must never block the loop forever).
  * Overridable via env for tests; defaults to 15 minutes.
  */
-function ralphValidationTimeoutMs(): number {
+export function ralphValidationTimeoutMs(): number {
   const n = Number(process.env.RALPH_VALIDATION_TIMEOUT_MS)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 15 * 60_000
 }
 
 /**
- * Ralph loop: run the programmatic completion command in the checkout and return its exit
- * code plus a bounded, redacted tail of its output. The EXIT CODE is the loop's authoritative
- * done signal (0 = the criterion is met) — computed here by the harness, never self-reported
- * by the model, which is the whole point of a programmatic exit condition. Runs
- * `sh -c <command>` in `cwd`; a watchdog kills the whole process tree on timeout (a hung
- * command counts as a failure so the loop is never blocked), and an aborted run resolves to a
- * non-zero code too. The command runs INSIDE the sandboxed run container (the same trust
- * boundary as the coding agent) — there is no host/backend execution.
+ * How often the Ralph validation feeds the run's inactivity watchdog while its command runs.
+ * The command is exactly the activity-SILENT kind — a full `pnpm test`, a cold install-then-build
+ * — and the harness spawns it ITSELF rather than through the agent, so it emits no activity
+ * events of its own. `JOB_INACTIVITY_MS` (default 10 min) is TIGHTER than the command's own
+ * watchdog ({@link ralphValidationTimeoutMs}, default 15 min), so without this heartbeat any
+ * validation running past 10 minutes aborted the whole iteration as "inactivity" — mislabelling
+ * a healthy test suite as a wedge, and making the 15-minute watchdog unreachable at stock
+ * settings. The two sibling harness-run phases (pre-PR validation, reproduction proof) have
+ * always fed it; this one did not. Overridable via env for tests.
  */
-async function runRalphValidation(
+export function ralphHeartbeatMs(): number {
+  const n = Number(process.env.RALPH_VALIDATION_HEARTBEAT_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 30_000
+}
+
+/**
+ * Bound on the validation output tail that crosses the wire. Deliberately smaller than
+ * `MAX_CAPTURED_OUTPUT_CHARS` (`redact.ts`) and equal to the two sibling phases' budgets, for
+ * the same reason: this tail is persisted on the step (and on EVERY iteration of the attempt
+ * log) inside the run's `detail` JSON blob, which is re-serialized on every step-progress write.
+ */
+export const RALPH_VALIDATION_TAIL_CHARS = 4_000
+
+/**
+ * Ralph loop: run the programmatic completion command in the checkout and return its exit
+ * code, a bounded + redacted tail of its output, and the work branch's HEAD it ran against.
+ * The EXIT CODE is the loop's authoritative done signal (0 = the criterion is met) — computed
+ * here by the harness, never self-reported by the model, which is the whole point of a
+ * programmatic exit condition. The command runs INSIDE the sandboxed run container (the same
+ * trust boundary as the coding agent) — there is no host/backend execution.
+ *
+ * The spawn itself goes through {@link runCapturedCommand}, the ONE seam for a harness-run
+ * command, rather than the near-verbatim copy this used to be. That copy had drifted in two
+ * ways the seam exists to prevent: it scrubbed secrets AFTER the rolling truncation with no
+ * margin (so a credential straddling the cut lost its `KEY=` prefix and survived redaction as
+ * an unrecognised partial, on a tail that reaches the step, the notification and the SPA), and
+ * it published the full 16k capture where both siblings deliberately bound the wire tail.
+ *
+ * `headSha` is what lets the engine tell a loop that is iterating from one that is merely
+ * repeating: two consecutive failing iterations against an unchanged head means the agent
+ * committed nothing, and the loop is ended early instead of spending the rest of its budget.
+ * Best-effort — a head that cannot be read is simply omitted, and the engine's check fails open.
+ */
+export async function runRalphValidation(
+  repoDir: string,
   cwd: string,
   validation: { command: string; iteration?: number },
   logger: Logger,
@@ -829,66 +864,50 @@ async function runRalphValidation(
   exitCode: number
   validationOutputTail?: string
   iteration?: number
+  headSha?: string
 }> {
-  const timeoutMs = ralphValidationTimeoutMs()
   logger.info('coding-agent(ralph): running validation command', {
     iteration: validation.iteration,
   })
-  return new Promise((resolve) => {
-    let out = ''
-    let settled = false
-    const child = spawn('sh', ['-c', validation.command], {
+  // Keep the run's inactivity watchdog fed for the whole command — see `ralphHeartbeatMs`.
+  const heartbeat = setInterval(() => opts.onActivity?.(), ralphHeartbeatMs())
+  heartbeat.unref?.()
+  let captured
+  try {
+    captured = await runCapturedCommand({
       cwd,
-      detached: spawnDetached,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // The job's own env (see `RunOptions.agentEnv`): a validation command typically installs
-      // before it tests, and this is spawned by the HARNESS rather than the agent, so it does not
-      // otherwise inherit the job's private-registry npmrc pointer on the native path.
-      env: { ...process.env, ...opts.agentEnv },
+      command: validation.command,
+      timeoutMs: ralphValidationTimeoutMs(),
+      reportTailChars: RALPH_VALIDATION_TAIL_CHARS,
+      logLabel: 'coding-agent(ralph): validation',
+      logFields: { iteration: validation.iteration },
+      logger,
+      opts,
     })
-    // Keep only the tail; guard against unbounded buffering on a chatty command.
-    const capture = (chunk: Buffer): void => {
-      out = (out + chunk.toString('utf8')).slice(-MAX_CAPTURED_OUTPUT_CHARS)
-    }
-    child.stdout?.on('data', capture)
-    child.stderr?.on('data', capture)
-    const finish = (exitCode: number): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      const trimmed = out.trim()
-      const tail = trimmed ? redactSecrets(trimmed) : undefined
-      logger.info('coding-agent(ralph): validation finished', {
-        exitCode,
-        iteration: validation.iteration,
-      })
-      resolve({
-        validationPassed: exitCode === 0,
-        exitCode,
-        ...(tail ? { validationOutputTail: tail } : {}),
-        ...(validation.iteration !== undefined ? { iteration: validation.iteration } : {}),
-      })
-    }
-    const timer = setTimeout(() => {
-      logger.warn('coding-agent(ralph): validation command timed out', { timeoutMs })
-      killChildProcess(child, undefined, logger)
-      finish(124) // conventional timeout exit code (a non-zero fail)
-    }, timeoutMs)
-    timer.unref?.()
-    const onAbort = (): void => {
-      killChildProcess(child, undefined, logger)
-      finish(130) // aborted (a non-zero fail)
-    }
-    opts.signal?.addEventListener('abort', onAbort, { once: true })
-    child.on('error', (err) => {
-      logger.warn('coding-agent(ralph): validation command failed to spawn', {
-        error: err instanceof Error ? err.message : String(err),
-      })
-      finish(127) // spawn error / command not found (a non-zero fail)
+  } finally {
+    clearInterval(heartbeat)
+  }
+  // The commit the criterion was judged against. Read AFTER the command so a validation that
+  // itself commits (a formatter check that rewrites files, say) is attributed to what it left.
+  // Best-effort: an unreadable head only costs the engine's no-progress guard, never the
+  // verdict — but it is REPORTED, or a guard that quietly stopped firing leaves no trace.
+  const headSha = await headCommit(repoDir, opts.signal).catch((err: unknown) => {
+    logger.warn('coding-agent(ralph): could not read the work-branch head', {
+      error: err instanceof Error ? err.message : String(err),
     })
-    child.on('close', (code) => finish(code ?? 1))
+    return ''
   })
+  logger.info('coding-agent(ralph): validation finished', {
+    exitCode: captured.exitCode,
+    iteration: validation.iteration,
+  })
+  return {
+    validationPassed: captured.passed,
+    exitCode: captured.exitCode,
+    ...(captured.outputTail ? { validationOutputTail: captured.outputTail } : {}),
+    ...(validation.iteration !== undefined ? { iteration: validation.iteration } : {}),
+    ...(headSha ? { headSha } : {}),
+  }
 }
 
 /** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */

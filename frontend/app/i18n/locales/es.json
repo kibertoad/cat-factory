@@ -5411,6 +5411,7 @@
     "subtitle": "Un bucle persistente: trabaja la tarea, ejecuta el comando de validación y repite hasta que pase.",
     "status": {
       "passed": "Superado",
+      "stalled": "Estancado",
       "gaveUp": "Abandonado",
       "running": "En ejecución",
       "failing": "Fallando"
@@ -5419,7 +5420,9 @@
     "validationCommand": "Comando de validación",
     "lastOutput": "Última validación (salida {exit})",
     "viewPr": "Ver pull request",
+    "stalledNote": "El bucle se detuvo antes de tiempo: iteraciones consecutivas dejaron la rama sin cambios y el comando de validación sigue fallando, por lo que no gastó el resto de su presupuesto. Probablemente haya que cambiar la tarea o el comando de validación para que un reintento sirva de algo.",
     "iterationsHeading": "Iteraciones",
+    "iterationsTruncated": "No se muestra {count} iteración anterior (el historial está limitado). | No se muestran {count} iteraciones anteriores (el historial está limitado).",
     "iteration": "Iteración {number}",
     "iterationPassed": "validación superada",
     "iterationFailed": "salida {exit}",
