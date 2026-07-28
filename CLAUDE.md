@@ -1145,7 +1145,9 @@ signals), finish the gate. The human decides revert/acknowledge out of band.
 A deployment ships its own agent kinds without forking and without rebuilding the harness image.
 Governing principle: **zero `switch(agentKind)` in the container**. The harness is a generic
 LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full model:
-[`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md).
+[`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md); the ROLE-authoring guide
+(prompt composition, skill + tool-server authoring):
+[`backend/docs/custom-agent-roles.md`](./backend/docs/custom-agent-roles.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS reading and
   committing a targeted subset via the `RepoFiles` port, no checkout) → `agent` (optional:

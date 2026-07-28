@@ -9,6 +9,9 @@ platform and without rebuilding the executor-harness image**. This document is t
 > For the ergonomics layered on these seams — provider tokens, schema-driven structured
 > output, boot-time registration validation, and the surface-driven prompt/`resultView`
 > wiring — see [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md).
+> For AUTHORING the role itself — how the final system prompt is composed around your
+> text, and how to write the kind's skills and tool-server definitions — see
+> [`custom-agent-roles.md`](./custom-agent-roles.md).
 
 ## The governing principle
 
@@ -113,6 +116,8 @@ A `container-*` surface implies the container requirement automatically
 
 Beyond its prompt, a kind declares WHAT IT KNOWS (skills — procedural playbooks) and WHAT IT CAN
 REACH (tool servers — MCP). Design record: [ADR 0029](./adr/0029-agent-kind-capabilities.md).
+Field-by-field authoring guidance for both (and for the role prompt they accompany):
+[`custom-agent-roles.md`](./custom-agent-roles.md).
 
 ```ts
 // Reusable definitions register on the SAME injected registry, then any number of kinds
