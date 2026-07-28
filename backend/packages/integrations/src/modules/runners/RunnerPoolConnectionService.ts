@@ -1,4 +1,5 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import type {
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
@@ -50,6 +51,8 @@ export interface RunnerPoolConnectionServiceDependencies {
   runnerPoolProvider?: RunnerPoolProvider
   /** The app-owned registry resolving a stored backend `kind` to its provider. */
   runnerBackendRegistry: RunnerBackendRegistry
+  /** Optional so the service stays unit-testable standalone; every facade wires the real one. */
+  logger?: Logger
 }
 
 /** A resolved runner backend: the live transport + its identity (for provisioning logs). */
@@ -60,7 +63,11 @@ export interface ResolvedRunnerBackend {
 }
 
 export class RunnerPoolConnectionService {
-  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: RunnerPoolConnectionServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** The per-call context a backend provider needs to build/test a transport. */
   private context(resolveSecret: (key: string) => string | undefined) {
@@ -117,6 +124,17 @@ export class RunnerPoolConnectionService {
       deletedAt: null,
     }
     await this.deps.runnerPoolConnectionRepository.upsert(record)
+    // Registration is the ONE moment an operator is looking at this backend, and each gap the
+    // provider reports costs a recovery/cleanup path that is otherwise invisible until an
+    // incident (a release-less manifest leaks a runner on every cancelled run). Warn loudly
+    // here rather than per dispatch, where the same line would be pure noise.
+    for (const warning of provider.warnings?.(config) ?? []) {
+      this.log.warn(`Runner backend registered with a gap: ${warning}`, {
+        workspaceId,
+        kind: config.kind,
+        providerId: meta.providerId,
+      })
+    }
     return this.toConnection(record, Object.keys(input.secrets))
   }
 

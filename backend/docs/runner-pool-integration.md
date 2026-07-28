@@ -451,9 +451,24 @@ manifest.
 - The scalar paths (`prUrlPath`, `branchPath`, `summaryPath`) still apply and
   **override** `resultPath` when set — for schedulers that surface those outside any
   envelope.
-- `statusMap` matching is case-insensitive. An unmapped/unknown status falls back to
-  `running` (keeps the driver waiting rather than wrongly failing). Map your terminal
-  states explicitly to `done` / `failed`.
+- `statusMap` matching is case-insensitive and always wins. A status your manifest does
+  **not** map is matched against a built-in vocabulary of common scheduler words —
+  `done`/`completed`/`succeeded`/… → `done`, `failed`/`error`/`cancelled`/`timeout`/… →
+  `failed` — and anything still unrecognised falls back to `running` (keeps the driver
+  waiting rather than wrongly failing a live run). Map your terminal states explicitly
+  anyway: the vocabulary is a safety net, not a substitute for a mapping.
+- **Report a reclaimed runner with a reclaim word and the step is retried on a fresh
+  runner.** `evicted` / `preempted` / `oomkilled` / `node_lost` (and friends) are read as
+  the RUNNER going away rather than the job failing, so cat-factory re-dispatches the step
+  onto a new pool member instead of failing the run. This applies to a mapped status too —
+  `{"from": "evicted", "to": "failed"}` still gets the retry. Words that usually mean a
+  human intervened (`cancelled`, `killed`, `aborted`) are deliberately **not** treated this
+  way: they fail the step, they never resurrect it.
+- **A poll that 404s (or 410s) is read the same way.** If your scheduler forgets a job whose
+  runner died, answering the poll with a 404 is the simplest way to say so — cat-factory
+  treats it as a reclaimed runner and re-dispatches. Any other non-2xx is treated as _your
+  scheduler_ being unwell (retried a few times, then the run fails), so don't 404 a job that
+  merely hasn't been scheduled yet — report it as `running`.
 - **Set `callMetricsPath` if your poll response proxies the harness view verbatim** (it is
   `callMetrics` there). The harness drains per-model-call telemetry on every poll, so
   mapping it lands a run's token spend and prompt/response bodies in observability WHILE the
@@ -610,6 +625,11 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   re-drive) and polls reach the same job.
 - Rely on the harness watchdogs (`JOB_MAX_DURATION_MS` / `JOB_INACTIVITY_MS`) to reap
   stuck jobs; cat-factory's `release` is best-effort cleanup, not a guaranteed kill.
+- **Define `release` even if it only sets a cancel flag.** Without it there is no way to
+  tell your pool that a cancelled or failed run's job is no longer wanted, so its runner
+  stays busy until your own TTL reaps it. Registering a manifest with no `release` logs a
+  warning naming this, and the same goes for a manifest with no `response.statusPath` — a
+  poll that can never report an outcome leaves every job to expire on the run's poll budget.
 
 ---
 

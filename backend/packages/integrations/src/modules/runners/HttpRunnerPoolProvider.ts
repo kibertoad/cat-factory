@@ -40,6 +40,14 @@ import * as runnersLogic from './runners.logic.js'
 // LLM-proxy tokens travel inside the interpolated dispatch body (the runner needs
 // them) and are likewise never logged.
 
+/**
+ * The failed-poll error minted when the pool has lost a job. The eviction verdict the engine
+ * acts on rides the STRUCTURED {@link RunnerJobView.evicted} field alongside it; this string is
+ * descriptive context (and the sentinel the dispatch-time `isContainerEvictionError` still
+ * matches), kept identical to the Cloudflare / local / Kubernetes transports.
+ */
+const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
+
 const DEFAULT_TIMEOUT_MS = 30_000
 const MAX_RESPONSE_CHARS = 200_000
 /** Hard cap on the bytes read off any response body (mirrors MAX_RESPONSE_CHARS). */
@@ -104,12 +112,25 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {
-    const json = await this.execute(
-      req.manifest,
-      req.manifest.poll,
-      this.scope(req.jobId),
-      req.resolveSecret,
-    )
+    let json: unknown
+    try {
+      json = await this.execute(
+        req.manifest,
+        req.manifest.poll,
+        this.scope(req.jobId),
+        req.resolveSecret,
+      )
+    } catch (error) {
+      // The scheduler no longer knows this job (404 Not Found / 410 Gone): its runner is gone
+      // and the job with it. Report it as an EVICTION rather than letting the throw count
+      // against the poll-failure tolerance, so the engine re-dispatches onto a fresh pool
+      // member instead of spending ~3 minutes of retries and then failing the run. Mirrors the
+      // Cloudflare container and Kubernetes transports, which map their own 404 the same way.
+      if (error instanceof RunnerPoolApiError && (error.status === 404 || error.status === 410)) {
+        return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+      }
+      throw error
+    }
     return this.mapJobView(req.manifest, json)
   }
 
@@ -354,10 +375,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   private mapJobView(manifest: RunnerPoolManifest, json: unknown): RunnerJobView {
     const r = manifest.response
     const rawStatus = environmentsLogic.extractString(json, r.statusPath)
-    const state = runnersLogic.mapJobState(rawStatus, r.statusMap)
+    const { state, evicted } = runnersLogic.classifyJobStatus(rawStatus, r.statusMap)
     const error = environmentsLogic.extractString(json, r.errorPath)
 
     const view: RunnerJobView = { state }
+    // A scheduler that reports its runner was reclaimed (evicted / preempted / OOM-killed /
+    // node lost) describes INFRASTRUCTURE loss, not the job's own verdict, so it rides the
+    // structured eviction field and the engine retries on a fresh pool member.
+    if (evicted) view.evicted = evicted
 
     const progress = this.mapProgress(manifest, json)
     if (progress) view.progress = progress
@@ -404,7 +429,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (detail) view.detail = detail
 
     if (state === 'failed') {
-      view.error = error ?? 'Runner pool reported the job failed'
+      view.error =
+        error ??
+        (evicted
+          ? `Runner pool reported the runner was reclaimed ('${rawStatus}') — ${EVICTION_ERROR}`
+          : 'Runner pool reported the job failed')
       return view
     }
 
