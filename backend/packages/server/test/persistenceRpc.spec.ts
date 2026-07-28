@@ -117,6 +117,8 @@ function makeRegistry(): {
           })
           .filter(Boolean),
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // The public API's in-flight cap (workspace-scoped SQL COUNT → a number).
+      countActiveInternal: async (_ws: string) => 3,
     },
     serviceRepository: {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
@@ -164,6 +166,8 @@ function makeRegistry(): {
       upsert: async () => undefined,
       update: async () => undefined,
       remove: async () => undefined,
+      // The real-time fan-out's per-publish read: origin workspaceId (arg0) + a blockId.
+      listWorkspaceIdsMountingBlock: async (ws: string, blockId: string) => [`${ws}:${blockId}`],
     },
     workspaceSettingsRepository: {
       get: async (ws: string) => ({ ws }),
@@ -783,6 +787,16 @@ describe('board-load read surface (workspace-scoped)', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.deleteByWorkspace!('ws_in'),
     ).rejects.toThrow(/not callable/)
+  })
+
+  // The public API's in-flight concurrency cap. Not in the table above because it returns a
+  // NUMBER, not an echoing row — which is also why it is safe: a workspace-scoped SQL COUNT
+  // carries no row content across the machine API.
+  it('forwards blockRepository.countActiveInternal for an in-scope workspace, and 404s otherwise', async () => {
+    await expect(remoteRegistry().blockRepository!.countActiveInternal!('ws_in')).resolves.toBe(3)
+    await expect(
+      remoteRegistry().blockRepository!.countActiveInternal!('ws_out'),
+    ).rejects.toMatchObject({ code: 'not_found' })
   })
 })
 
@@ -1573,6 +1587,22 @@ describe('shared-service mount management surface', () => {
       ).rejects.toMatchObject({ code: 'not_found' })
     })
   }
+
+  // The real-time fan-out's per-publish read. Unlike the rest of this repo's surface it is not a
+  // management call: `FanOutEventPublisher` makes it on EVERY event, so an un-listed method here
+  // didn't merely lose a frame — it rejected the publish, and the rejection reached the run-state
+  // emit. arg0 is the ORIGIN workspaceId, so it takes the plain `workspace` rule.
+  it('forwards workspaceMountRepository.listWorkspaceIdsMountingBlock for an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listWorkspaceIdsMountingBlock!('ws_in', 'blk_1'),
+    ).resolves.toEqual(['ws_in:blk_1'])
+  })
+
+  it('rejects workspaceMountRepository.listWorkspaceIdsMountingBlock for an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listWorkspaceIdsMountingBlock!('ws_out', 'blk_1'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
 
   // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
   // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the

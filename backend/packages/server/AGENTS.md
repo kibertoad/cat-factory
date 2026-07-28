@@ -46,8 +46,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades — see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),
-  `events/machineEvents.ts` + `modules/events/EventsRelayController.ts` (real-time upstream
-  publish), and `notifications/machineNotifications.ts` +
+  `events/machineEvents.ts` + `events/machineSubscribe.ts` +
+  `modules/events/EventsRelayController.ts` (real-time in BOTH directions — the upstream publish
+  and the node's inbound per-workspace subscription, whose handshake is handed to the SAME
+  `gateways.realtime.upgrade` seam the browser stream uses), and `notifications/machineNotifications.ts` +
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
   external transports). Each pairs a mothership-side controller + `ServerContainer` seam with the
   client half a mothership-mode node consumes.
