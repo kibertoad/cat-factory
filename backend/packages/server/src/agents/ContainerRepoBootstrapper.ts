@@ -245,6 +245,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       // the deployment's proxyable model rather than a workspace's pooled subscription
       // token — there is no per-block model selection on a not-yet-existing repo.
       proxyBaseUrl: this.deps.proxyBaseUrl,
+      // This backend serves the phase-tagged completions route (see `ContainerAgentExecutor`),
+      // so a bootstrap's calls are attributed rather than landing in the unattributed slice.
+      proxyPhasePath: true,
       sessionToken,
       ghToken,
       ...(packageRegistries.length ? { packageRegistries } : {}),

@@ -15,6 +15,10 @@ export {
 // Process-level failure guards (unhandled rejection / uncaught exception), shared with the
 // local facade so both Node-hosted deployments crash-report the same way.
 export { installProcessFailureGuards } from './processGuards.js'
+// The shared periodic-sweep helper (run-once-first, non-overlapping, unref'd, best-effort),
+// re-exported so the local facade's mothership boot — which never calls `start()`, and so gets
+// none of the sweepers wired there — prunes its local telemetry store on the same shape.
+export { startSweeper, type SweeperOptions } from './sweeper.js'
 // Real-time WebSocket transport pieces, re-exported so the local facade's mothership boot
 // (which does NOT call `start()`, since there is no Postgres/pg-boss) can stand up the same
 // per-workspace hub + `ws` upgrade listener the standard Node boot does.

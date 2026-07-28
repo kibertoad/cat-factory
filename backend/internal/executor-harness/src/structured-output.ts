@@ -1,6 +1,6 @@
 import { redact, redactSecrets, secretsToRedact } from './redact.js'
 import { log } from './logger.js'
-import { PI_MAX_OUTPUT_TOKENS } from './pi.js'
+import { PI_MAX_OUTPUT_TOKENS, phasedProxyBaseUrl } from './pi.js'
 
 // A reusable abstraction for the "agent returns a structured JSON document as its
 // final assistant message" pattern (requirements, blueprint, merger — and any future
@@ -52,10 +52,23 @@ export interface StructuredOutputSpec<T> {
   parse: (text: string) => T | null
 }
 
+/**
+ * The run phase a structured-output repair call is billed to. A constant, not a `currentPhase`
+ * read: this call is made by the harness itself (the agent has already finished and left text
+ * that won't parse), so it belongs to no pass the registry marks.
+ */
+const STRUCTURED_REPAIR_PHASE = 'structured-repair'
+
 /** Runtime wiring to reach the LLM proxy for the repair call. */
 export interface ProxyAccess {
   /** Pi-harness proxy base URL; absent for subscription harnesses (no proxy repair). */
   proxyBaseUrl?: string
+  /**
+   * The backend serves the phase-tagged completions route, so the repair call can be attributed
+   * to {@link STRUCTURED_REPAIR_PHASE} rather than piling into the unattributed slice
+   * (see {@link HarnessAuthFields.proxyPhasePath}).
+   */
+  proxyPhasePath?: boolean
   /** Pi-harness proxy session token; absent for subscription harnesses. */
   sessionToken?: string
   model: string
@@ -266,7 +279,16 @@ async function callRepair<T>(
   if (!access.proxyBaseUrl || !access.sessionToken) {
     throw new Error('structured-output repair requires the LLM proxy (Pi harness)')
   }
-  const url = `${access.proxyBaseUrl.replace(/\/+$/, '')}/chat/completions`
+  // A repair round is its own slice of the run's burn, not part of the agent's loop that
+  // produced the unparseable text — and unlike the phases the registry marks, this call is made
+  // by the HARNESS itself, so its phase is a constant rather than a read of `currentPhase`
+  // (docs/initiatives/token-burn-instrumentation.md).
+  const repairBaseUrl = phasedProxyBaseUrl(
+    access.proxyBaseUrl,
+    STRUCTURED_REPAIR_PHASE,
+    access.proxyPhasePath,
+  )
+  const url = `${repairBaseUrl.replace(/\/+$/, '')}/chat/completions`
   const messages = [
     { role: 'system', content: REPAIR_SYSTEM },
     {

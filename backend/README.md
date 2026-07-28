@@ -704,7 +704,13 @@ blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA 
 
 The container never holds a provider key: it reaches models only through this Worker's LLM proxy
 (`/v1/chat/completions`) using a short-lived, model-locked session token, and the proxy is the
-single spend-metering point.
+single spend-metering point. The same handler is also served at
+`/v1/phase/<phase>/chat/completions`: the harness points Pi there for the pass it is about to run
+so each metered call is attributed to the run phase that spent it (the agent's own loop vs a
+validation or reproduction repair round — see
+[token-burn instrumentation](../docs/initiatives/token-burn-instrumentation.md)). The backend
+advertises that route on the job body (`proxyPhasePath`), so a harness image paired with an older
+backend keeps using the plain path instead of 404ing; those calls are recorded as unattributed.
 
 **No extra LLM secret is required.** With no direct-provider key set, blocks resolve to their
 **Workers AI** flavour, and the proxy serves those in-process through the Worker's `AI` binding —
