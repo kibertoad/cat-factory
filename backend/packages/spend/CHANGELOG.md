@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.12.102
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+
 ## 0.12.101
 
 ### Patch Changes

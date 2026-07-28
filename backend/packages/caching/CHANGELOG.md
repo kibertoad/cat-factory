@@ -1,5 +1,12 @@
 # @cat-factory/caching
 
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/kernel@0.173.0
+
 ## 0.11.0
 
 ### Minor Changes

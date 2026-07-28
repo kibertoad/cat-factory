@@ -1,5 +1,14 @@
 # @cat-factory/agents
 
+## 0.77.1
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+  - @cat-factory/kernel@0.173.0
+  - @cat-factory/prompt-fragments@0.15.3
+
 ## 0.77.0
 
 ### Minor Changes
