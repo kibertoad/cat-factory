@@ -1232,6 +1232,38 @@ error handling — and the phased plan to close them — are tracked in
 - **Parity** asserted by `defineAgentContextSuite`. Cloudflare fails fast at build if `TELEMETRY_DB`
   is unbound.
 
+### Remote debugging reads (`/api/v1/debug/*`)
+
+The same three sinks plus the provisioning event log, exposed to an EXTERNAL caller — in practice
+an LLM asked to diagnose a run. Full model: [`backend/docs/debug-api.md`](./backend/docs/debug-api.md).
+
+The whole surface is shaped by one rule, and a new endpoint on it must obey the same one: **a
+response's size has to be computable BEFORE the request.** The SPA drill-down loads a run's whole
+telemetry into a browser, which is fine for a human with a scrollbar and useless for a caller with
+a context budget.
+
+- **Fan-out lists NEVER carry bodies; bodies are always a point read.** A snapshot row is
+  routinely megabytes (it holds every injected context file's full content), so the list
+  projection is identity + SQL `length()`. The one opt-in exception is `?bodyChars=` on the
+  LLM-call list, where a size alone can't tell an empty reply from an un-previewed one.
+- **Slice and filter IN SQL** (`substr`/`length`, the outcome predicate, the agent-kind narrowing).
+  A zero budget selects a literal `''`, so a sweep reads no body bytes out of the store at all —
+  doing it in TypeScript would transfer everything and then throw it away.
+- **Every body is a `debugText`** (`{ text, chars, totalChars, truncated }`). A bare truncated
+  string reads exactly like a short one, so a model would report "the agent said nothing" from a
+  payload that merely hit its budget.
+- **Keyset cursors ride the `(createdAt, id)` COMPOSITE**, never a bare timestamp: telemetry is
+  appended in same-millisecond bursts and a timestamp-only cursor silently drops the ties.
+- **`available: false` ≠ `count: 0`.** The overview's per-sink block distinguishes "this deployment
+  retains none of this" from "nothing happened", because they need different follow-up.
+- **`read` scope, deliberately not `admin`** — `admin` also merges PRs and deletes tasks, so gating
+  a read-only diagnostic surface behind it would hand a debugging agent a destructive key. What
+  text is retained at all stays governed at CAPTURE time (`LLM_RECORD_PROMPTS` + `storeAgentContext`).
+- **Run scope is the WORKSPACE**, wider than the task surface's `loadScopedRun` on purpose: a
+  frame's blueprint run and a recurring bug-intake fire are exactly what someone asks about.
+- **Telemetry reads stay OFF the mothership RPC** (`telemetry` bucket — local-first by design);
+  only `ExecutionRepository.listRecent`, which reads org/durable run state, is allow-listed.
+
 ### External trace destinations (the `LlmTraceSink` seam)
 
 Exporting the same activity to an operator's backend goes through ONE kernel port and never a second

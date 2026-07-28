@@ -1,8 +1,11 @@
 import {
   LLM_WARNING_FINISH_REASONS,
   type LlmCallMetric,
+  type LlmCallMetricPage,
   type LlmCallMetricRepository,
   type LlmCallMetricSummary,
+  type LlmCallOutcomeFilter,
+  type LlmCallPageQuery,
   type LlmPromptChainTip,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -70,6 +73,93 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     promptHash: row.prompt_hash,
     responseText: row.response_text,
     reasoningText: row.reasoning_text,
+  }
+}
+
+/**
+ * The metadata columns a bounded page selects, plus each body's full `length()`. The bodies
+ * themselves are added by {@link bodyColumns} so the SLICE can be bound to the caller's budget.
+ */
+const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
+  created_at, streaming, message_count, tool_count, request_max_tokens, prompt_tokens,
+  cached_prompt_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
+  overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
+  length(prompt_text)    AS prompt_chars,
+  length(response_text)  AS response_chars,
+  length(reasoning_text) AS reasoning_chars`
+
+/**
+ * The three body columns, SLICED to `bodyChars`.
+ *
+ * A budget of 0 selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over
+ * a long run never makes SQLite materialise (or D1 transfer) a single prompt byte — which is
+ * the whole reason bodies are opt-in on this surface. Lengths are still reported by
+ * {@link PAGE_METADATA_COLUMNS}, because a size is what tells the caller which rows are worth a
+ * point read. Mirrors the Drizzle repo's `llmPageColumns`.
+ */
+function bodyColumns(bodyChars: number): string {
+  if (bodyChars <= 0) {
+    return `'' AS prompt_text, '' AS response_text, '' AS reasoning_text`
+  }
+  return `substr(prompt_text, 1, ?)    AS prompt_text,
+          substr(response_text, 1, ?)  AS response_text,
+          substr(reasoning_text, 1, ?) AS reasoning_text`
+}
+
+/** The slice-length binds `bodyColumns` needs, in the order its placeholders appear. */
+function bodyBinds(bodyChars: number): number[] {
+  return bodyChars > 0 ? [bodyChars, bodyChars, bodyChars] : []
+}
+
+/**
+ * The SQL predicate for one outcome class, or null for "no narrowing". Mirrors `classifyCall`
+ * and the Drizzle repo: a failed call is an `error`; a successful one cut short by the output
+ * limit or a content filter is a `warning`; the rest are `ok`. In SQL so a narrowed page spends
+ * its `limit` on rows the caller wants.
+ */
+function outcomeClause(outcome: LlmCallOutcomeFilter | undefined): string | null {
+  if (outcome === 'error') return 'ok = 0'
+  if (outcome === 'warning') return `ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL})`
+  if (outcome === 'ok') {
+    return `ok = 1 AND (finish_reason IS NULL OR finish_reason NOT IN (${WARNING_REASONS_SQL}))`
+  }
+  return null
+}
+
+interface PageRow extends Omit<MetricRow, 'prompt_hash'> {
+  prompt_chars: number
+  response_chars: number
+  reasoning_chars: number
+}
+
+function rowToPage(row: PageRow): LlmCallMetricPage {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    provider: row.provider,
+    model: row.model,
+    createdAt: row.created_at,
+    streaming: row.streaming === 1,
+    messageCount: row.message_count,
+    toolCount: row.tool_count,
+    requestMaxTokens: row.request_max_tokens,
+    promptTokens: row.prompt_tokens,
+    cachedPromptTokens: row.cached_prompt_tokens,
+    completionTokens: row.completion_tokens,
+    totalTokens: row.total_tokens,
+    finishReason: row.finish_reason,
+    upstreamMs: row.upstream_ms,
+    overheadMs: row.overhead_ms,
+    totalMs: row.total_ms,
+    ok: row.ok === 1,
+    httpStatus: row.http_status,
+    errorMessage: row.error_message,
+    promptPrefixCount: row.prompt_prefix_count,
+    prompt: { text: row.prompt_text, totalChars: row.prompt_chars ?? 0 },
+    response: { text: row.response_text, totalChars: row.response_chars ?? 0 },
+    reasoning: { text: row.reasoning_text, totalChars: row.reasoning_chars ?? 0 },
   }
 }
 
@@ -178,6 +268,55 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       .bind(workspaceId, executionId, agentKind ?? null, agentKind ?? null, limit ?? -1)
       .all<MetricRow>()
     return (results ?? []).map(rowToMetric)
+  }
+
+  async listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]> {
+    const ascending = query.order === 'oldest'
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    // The slice binds come FIRST: they sit in the SELECT list, ahead of every WHERE placeholder.
+    const binds: unknown[] = [...bodyBinds(query.bodyChars), workspaceId, query.executionId]
+    if (query.agentKind != null) {
+      clauses.push('agent_kind = ?')
+      binds.push(query.agentKind)
+    }
+    const outcome = outcomeClause(query.outcome)
+    if (outcome) clauses.push(`(${outcome})`)
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY. Calls are recorded off the response path, so a
+      // burst genuinely shares a millisecond; a `created_at`-only bound would drop the ties.
+      const cmp = ascending ? '>' : '<'
+      clauses.push(`(created_at ${cmp} ? OR (created_at = ? AND id ${cmp} ?))`)
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    const direction = ascending ? 'ASC' : 'DESC'
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(query.bodyChars)}
+         FROM llm_call_metrics
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at ${direction}, id ${direction}
+         LIMIT ?`,
+      )
+      .bind(...binds)
+      .all<PageRow>()
+    return (results ?? []).map(rowToPage)
+  }
+
+  async get(
+    workspaceId: string,
+    id: string,
+    bodyChars = Number.MAX_SAFE_INTEGER,
+  ): Promise<LlmCallMetricPage | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(bodyChars)}
+         FROM llm_call_metrics
+         WHERE workspace_id = ? AND id = ?`,
+      )
+      .bind(...bodyBinds(bodyChars), workspaceId, id)
+      .first<PageRow>()
+    return row ? rowToPage(row) : null
   }
 
   async summarizeByExecution(

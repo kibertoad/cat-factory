@@ -240,6 +240,7 @@ export {
   type PlatformAlertThresholds,
 } from './modules/observability/platform-health.logic.js'
 export {
+  cacheHitRate,
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,
@@ -247,6 +248,23 @@ export {
   buildLlmMetricsExport,
   type LlmCallOutcome,
 } from './modules/observability/observability.logic.js'
+export {
+  RunDebugService,
+  type DebugCursor,
+  type DebugPage,
+  type RunDebugServiceDependencies,
+} from './modules/debug/RunDebugService.js'
+export {
+  MAX_EVICTION_DETAIL_CHARS,
+  deriveSignals,
+  foldLlmRollup,
+  sliceText,
+  toDebugAgentContextDetail,
+  toDebugAgentContextEntry,
+  toDebugLlmCall,
+  toDebugRunStep,
+  toDebugRunSummary,
+} from './modules/debug/debug.logic.js'
 
 export {
   BootstrapService,

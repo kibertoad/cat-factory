@@ -203,20 +203,32 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     spendTrend: 'admin',
   },
   tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
+  // The remote debugging surface's per-run reads (`listPage`/`get`/`listIndex`/`countByExecution`)
+  // are `telemetry`, NOT `pending`: telemetry is local-first by design (Phase 5), so in mothership
+  // mode a node reads its OWN telemetry store rather than the mothership's — there is nothing to
+  // proxy. Routing them would also be the exact shape the bucket exists to forbid, since a page
+  // walked over a long run is a bulk read of the heaviest columns in the system.
   llmCallMetricRepository: {
     record: 'telemetry',
     latestChainTip: 'telemetry',
     listByExecution: 'pending',
+    listPage: 'telemetry',
+    get: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   agentContextSnapshotRepository: {
     record: 'telemetry',
     listByExecution: 'pending',
+    listIndex: 'telemetry',
+    get: 'telemetry',
+    countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   agentSearchQueryRepository: {
     record: 'telemetry',
     listByExecution: 'pending',
+    listPage: 'telemetry',
+    countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the
@@ -341,7 +353,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // dispatch's frame read). Nothing sealed — the commands are operator-authored shell strings
   // that run inside the run's own container — so the plain record rides the machine API.
   validationConfigRepository: {},
-  provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
+  provisioningLogRepository: {
+    append: 'telemetry',
+    list: 'pending',
+    // Same reasoning as the three sinks above: the provisioning log is a separate high-churn
+    // store that stays local, so its debug count never crosses the machine API.
+    countByExecution: 'telemetry',
+    deleteOlderThan: 'sweeper',
+  },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /
   // stop surface); `listByWorkspace`/`listByServices` were already remote. `blockServiceId` is a

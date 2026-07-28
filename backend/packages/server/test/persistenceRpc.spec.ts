@@ -97,6 +97,9 @@ function makeRegistry(): {
         throw new ConflictError('already terminal', 'invalid_state' as never)
       },
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // The remote debugging surface's run index — echoes the bound workspace like every other
+      // workspace-scoped list stub below.
+      listRecent: async (workspaceId: string) => [{ ws: workspaceId }],
     },
     // Entity-id-keyed (findById/findByIds) + cross-service (listByServices) board-composition reads.
     blockRepository: {
@@ -746,6 +749,7 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'trackerSettingsRepository', method: 'get', args: [] },
     { repo: 'notificationRepository', method: 'listOpen', args: [] },
     { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'executionRepository', method: 'listRecent', args: [{ limit: 10 }] },
     { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
     { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },

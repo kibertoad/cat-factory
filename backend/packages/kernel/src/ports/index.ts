@@ -87,9 +87,13 @@ export type {
   UsageBreakdownRow,
 } from './token-usage.js'
 export type {
+  LlmCallBodySlice,
   LlmCallMetric,
+  LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcomeFilter,
+  LlmCallPageQuery,
   LlmPromptChainTip,
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
@@ -112,13 +116,16 @@ export type {
 export type {
   AgentContextFile,
   AgentContextFragment,
+  AgentContextIndexQuery,
   AgentContextRecorder,
   AgentContextSnapshot,
+  AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
   RecordAgentContextInput,
 } from './agent-context.js'
 export type {
   AgentSearchQuery,
+  AgentSearchQueryPageQuery,
   AgentSearchQueryRecorder,
   AgentSearchQueryRepository,
   RecordAgentSearchQueryInput,

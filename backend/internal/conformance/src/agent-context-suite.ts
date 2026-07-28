@@ -106,6 +106,112 @@ export function defineAgentContextSuite(
       expect(stored.extras).toMatchObject({ branch: 'cat-factory/blk', webSearch: true })
     })
 
+    // --- the remote debugging surface's bounded index (`/api/v1/debug/*`) ---------------
+    // The index exists precisely so a page of snapshots can never carry bodies (one row is
+    // routinely megabytes). These assertions pin that: the SIZES must be right and the bodies
+    // must be absent from the projection entirely.
+
+    it('indexes snapshots by size, keyset-paged, without returning any body', async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.record(
+        snapshot({
+          id: `${ws}-a`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          stepIndex: 0,
+          systemPrompt: 'sys',
+          userPrompt: 'a user prompt',
+        }),
+      )
+      // Shares a millisecond with the next row — the tie a `created_at`-only cursor loses.
+      await repo.record(
+        snapshot({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20, stepIndex: 1 }),
+      )
+      await repo.record(
+        snapshot({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20, stepIndex: 2 }),
+      )
+      await repo.record(
+        snapshot({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 99 }),
+      )
+
+      const first = await repo.listIndex(ws, { executionId: e1, limit: 2 })
+      expect(first.map((r) => r.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      const last = first[first.length - 1]!
+      const second = await repo.listIndex(ws, {
+        executionId: e1,
+        limit: 2,
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      expect(second.map((r) => r.id)).toEqual([`${ws}-a`])
+
+      const oldest = second[0]!
+      expect(oldest.systemPromptChars).toBe('sys'.length)
+      expect(oldest.userPromptChars).toBe('a user prompt'.length)
+      // The two JSON columns are MEASURED, not parsed — both stores must agree on the serialized
+      // length, which is what a caller uses to decide whether a point read is worth it.
+      expect(oldest.fragmentsChars).toBeGreaterThan(0)
+      expect(oldest.contextFilesChars).toBeGreaterThan(0)
+      expect(oldest.model).toBe('workers-ai:m')
+      expect(oldest.harness).toBe('pi')
+      // No body ever rides an index row.
+      expect(Object.keys(oldest)).not.toContain('systemPrompt')
+    })
+
+    it("narrows the index to one step and counts a run's snapshots", async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.record(
+        snapshot({ id: `${ws}-s0`, workspaceId: ws, executionId: e1, stepIndex: 0, createdAt: 10 }),
+      )
+      // A retried step records one snapshot per attempt — both must survive the narrowing.
+      await repo.record(
+        snapshot({
+          id: `${ws}-s1a`,
+          workspaceId: ws,
+          executionId: e1,
+          stepIndex: 1,
+          createdAt: 20,
+        }),
+      )
+      await repo.record(
+        snapshot({
+          id: `${ws}-s1b`,
+          workspaceId: ws,
+          executionId: e1,
+          stepIndex: 1,
+          createdAt: 30,
+        }),
+      )
+      await repo.record(
+        snapshot({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 40 }),
+      )
+
+      const step1 = await repo.listIndex(ws, { executionId: e1, limit: 10, stepIndex: 1 })
+      expect(step1.map((r) => r.id)).toEqual([`${ws}-s1b`, `${ws}-s1a`])
+      expect(await repo.countByExecution(ws, e1)).toBe(3)
+      expect(await repo.countByExecution(ws, e2)).toBe(1)
+      // A run with nothing captured counts 0 — which the overview reports differently from an
+      // unwired sink, so it must not throw.
+      expect(await repo.countByExecution(ws, 'exec-nothing')).toBe(0)
+    })
+
+    it('point-reads one snapshot with its bodies, scoped to its workspace', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        snapshot({ id: `${ws}-a`, workspaceId: ws, executionId: e1, systemPrompt: 'the system' }),
+      )
+
+      const found = await repo.get(ws, `${ws}-a`)
+      expect(found?.systemPrompt).toBe('the system')
+      expect(found?.fragments).toEqual([{ id: 'node-ts', body: 'use TypeScript' }])
+      // A foreign workspace reads as missing, never as another tenant's snapshot.
+      expect(await repo.get('ws-someone-else', `${ws}-a`)).toBeNull()
+      expect(await repo.get(ws, 'acs_nope')).toBeNull()
+    })
+
     it('prunes snapshots older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

@@ -84,6 +84,33 @@ export function defineAgentSearchQuerySuite(
       expect((await repo.listByExecution(ws, e1))[0]!.provider).toBeNull()
     })
 
+    // --- the remote debugging surface's bounded page (`/api/v1/debug/*`) ---------------
+    it("pages a run's searches with a composite keyset cursor, and counts them", async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.record(query({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      // Two searches in the same millisecond — the tie a `created_at`-only cursor loses.
+      await repo.record(query({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.record(query({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.record(query({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 30 }))
+
+      const first = await repo.listPage(ws, { executionId: e1, limit: 2 })
+      expect(first.map((q) => q.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      const last = first[first.length - 1]!
+      const second = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 2,
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      expect(second.map((q) => q.id)).toEqual([`${ws}-a`])
+
+      expect(await repo.countByExecution(ws, e1)).toBe(3)
+      expect(await repo.countByExecution(ws, e2)).toBe(1)
+      // A run that searched nothing counts 0 rather than throwing — the overview reports that
+      // differently from an unwired sink.
+      expect(await repo.countByExecution(ws, 'exec-nothing')).toBe(0)
+    })
+
     it('prunes queries older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

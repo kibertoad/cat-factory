@@ -108,6 +108,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // One bounded page of the workspace's headless (`internal`-anchored) runs — the public API's
     // job list. Workspace-scoped like every other list read here.
     listInternal: { scope: { kind: 'workspace', arg: 0 } },
+    // One bounded page of ALL the workspace's runs — the remote debugging surface's run index
+    // (`GET /api/v1/debug/runs`). Workspace-scoped exactly like `listInternal`; it is wider only
+    // in WHICH runs it returns (no `internal` anchor join), and that width is bounded by the same
+    // workspace the scope rule already pins. Remote because the runs themselves are org/durable
+    // state and live on the mothership even in mothership mode — unlike the per-run TELEMETRY the
+    // rest of that surface reads, which stays local by design.
+    listRecent: { scope: { kind: 'workspace', arg: 0 } },
   },
   accountRepository: {
     // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).

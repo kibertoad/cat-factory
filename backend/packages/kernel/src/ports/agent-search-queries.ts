@@ -32,11 +32,28 @@ export interface AgentSearchQueryRecorder {
   record(input: RecordAgentSearchQueryInput): Promise<void>
 }
 
+/** A bounded, keyset-paginated query over one run's performed searches. */
+export interface AgentSearchQueryPageQuery {
+  executionId: string
+  limit: number
+  /** EXCLUSIVE keyset on the `(createdAt, id)` composite the ordering uses. */
+  cursor?: { createdAt: number; id: string }
+}
+
 export interface AgentSearchQueryRepository {
   /** Append one performed search query. */
   record(query: AgentSearchQuery): Promise<void>
   /** Queries recorded for a run, newest first. */
   listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]>
+  /**
+   * One BOUNDED page of a run's searches, newest first. Unlike the other two telemetry
+   * sinks these rows carry no unbounded body (the query text is capped at capture time), so
+   * the page returns them whole — the bound it adds is on ROW COUNT, which a search-heavy
+   * run still needs.
+   */
+  listPage(workspaceId: string, query: AgentSearchQueryPageQuery): Promise<AgentSearchQuery[]>
+  /** How many searches the run performed — one indexed COUNT, no rows read. */
+  countByExecution(workspaceId: string, executionId: string): Promise<number>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many were
    * removed. Pruned to the same window as the per-call LLM telemetry.

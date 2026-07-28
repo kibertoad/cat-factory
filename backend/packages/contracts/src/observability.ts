@@ -138,6 +138,30 @@ export const llmExportInsightSchema = v.object({
 export type LlmExportInsight = v.InferOutput<typeof llmExportInsightSchema>
 
 /**
+ * Run-wide totals over every recorded call, with the same derived ratios the per-agent
+ * insights carry. Named (rather than inlined in the export below) because the remote
+ * debugging surface's run overview reports exactly these numbers — folded from the same
+ * SQL rollup — and a second, hand-copied totals shape would be free to drift from it.
+ */
+export const llmExportTotalsSchema = v.object({
+  calls: v.number(),
+  promptTokens: v.number(),
+  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
+  cachedPromptTokens: v.number(),
+  /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+  cacheHitRate: v.nullable(v.number()),
+  completionTokens: v.number(),
+  upstreamMs: v.number(),
+  overheadMs: v.number(),
+  /** Share of total latency spent in transport/proxy (0..1), or null with no timing. */
+  transportOverheadRatio: v.nullable(v.number()),
+  errors: v.number(),
+  warnings: v.number(),
+  truncatedCalls: v.number(),
+})
+export type LlmExportTotals = v.InferOutput<typeof llmExportTotalsSchema>
+
+/**
  * LLM-friendly export of a run's model activity: a self-describing, structured JSON
  * bundle (totals + per-agent insights + every call) intended to be handed straight
  * to a model for analysis ("why did this run truncate / spend / stall?"). Field
@@ -149,22 +173,7 @@ export const llmMetricsExportSchema = v.object({
   version: v.literal(1),
   executionId: v.string(),
   generatedAt: v.number(),
-  totals: v.object({
-    calls: v.number(),
-    promptTokens: v.number(),
-    /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
-    cachedPromptTokens: v.number(),
-    /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
-    cacheHitRate: v.nullable(v.number()),
-    completionTokens: v.number(),
-    upstreamMs: v.number(),
-    overheadMs: v.number(),
-    /** Share of total latency spent in transport/proxy (0..1), or null with no timing. */
-    transportOverheadRatio: v.nullable(v.number()),
-    errors: v.number(),
-    warnings: v.number(),
-    truncatedCalls: v.number(),
-  }),
+  totals: llmExportTotalsSchema,
   insights: v.array(llmExportInsightSchema),
   calls: v.array(llmCallMetricSchema),
 })

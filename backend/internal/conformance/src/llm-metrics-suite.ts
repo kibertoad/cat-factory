@@ -413,6 +413,173 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(JSON.parse(byResponse['p2']!.promptText)).toHaveLength(1)
     })
 
+    // --- the remote debugging surface's bounded page (`/api/v1/debug/*`) -----------------
+    // These are the assertions that keep the size guarantee honest across stores: the slice and
+    // every filter are pushed into SQL, so a runtime that implemented either in JavaScript (or
+    // sliced with a different offset convention — `substr` is 1-based, `slice` is 0-based) would
+    // hand a remote caller more bytes than it budgeted for, and only fail here.
+
+    it('pages calls newest-first with a composite keyset cursor', async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      // Two of the three share a millisecond — the case a `created_at`-only cursor loses.
+      await repo.record(metric({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      await repo.record(metric({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.record(metric({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.record(metric({ id: `${ws}-x`, workspaceId: ws, executionId: e2, createdAt: 30 }))
+
+      const first = await repo.listPage(ws, { executionId: e1, limit: 2, bodyChars: 0 })
+      expect(first.map((c) => c.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      const last = first[first.length - 1]!
+      const second = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 2,
+        bodyChars: 0,
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      // The tied row is neither repeated nor skipped, and the other run never leaks in.
+      expect(second.map((c) => c.id)).toEqual([`${ws}-a`])
+    })
+
+    it('walks a conversation forwards when asked for oldest-first order', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(metric({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      await repo.record(metric({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.record(metric({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 30 }))
+
+      const page = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 2,
+        bodyChars: 0,
+        order: 'oldest',
+      })
+      expect(page.map((c) => c.id)).toEqual([`${ws}-a`, `${ws}-b`])
+      const last = page[page.length - 1]!
+      const next = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 2,
+        bodyChars: 0,
+        order: 'oldest',
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      // The ascending cursor must compare the other way round; a shared `<` would return nothing.
+      expect(next.map((c) => c.id)).toEqual([`${ws}-c`])
+    })
+
+    it('reports body sizes without returning bodies, and slices to the budget when asked', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({
+          id: `${ws}-a`,
+          workspaceId: ws,
+          executionId: e1,
+          promptText: '0123456789',
+          responseText: 'abcdefghij',
+          reasoningText: 'thinking',
+        }),
+      )
+
+      const [sizesOnly] = await repo.listPage(ws, { executionId: e1, limit: 10, bodyChars: 0 })
+      // No body bytes, but the full lengths — which is what makes a zero-cost sweep useful.
+      expect(sizesOnly!.prompt).toEqual({ text: '', totalChars: 10 })
+      expect(sizesOnly!.response).toEqual({ text: '', totalChars: 10 })
+      expect(sizesOnly!.reasoning.totalChars).toBe(8)
+
+      const [preview] = await repo.listPage(ws, { executionId: e1, limit: 10, bodyChars: 4 })
+      // LEADING 4 characters: `substr(col, 1, n)` is 1-based, so an off-by-one here would
+      // silently drop the first character of every prompt on one runtime only.
+      expect(preview!.prompt).toEqual({ text: '0123', totalChars: 10 })
+      expect(preview!.response).toEqual({ text: 'abcd', totalChars: 10 })
+      // A budget larger than the body returns the body, never padding.
+      const [whole] = await repo.listPage(ws, { executionId: e1, limit: 10, bodyChars: 1_000 })
+      expect(whole!.reasoning).toEqual({ text: 'thinking', totalChars: 8 })
+    })
+
+    it('narrows a page by agent kind and by outcome, in SQL', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(metric({ id: `${ws}-ok`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      await repo.record(
+        metric({
+          id: `${ws}-warn`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 20,
+          finishReason: 'length',
+        }),
+      )
+      await repo.record(
+        metric({
+          id: `${ws}-err`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 30,
+          ok: false,
+          httpStatus: 500,
+          finishReason: null,
+        }),
+      )
+      await repo.record(
+        metric({
+          id: `${ws}-other`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 40,
+          agentKind: 'tester',
+        }),
+      )
+
+      const kind = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        agentKind: 'tester',
+      })
+      expect(kind.map((c) => c.id)).toEqual([`${ws}-other`])
+
+      const errors = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        outcome: 'error',
+      })
+      expect(errors.map((c) => c.id)).toEqual([`${ws}-err`])
+      const warnings = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        outcome: 'warning',
+      })
+      expect(warnings.map((c) => c.id)).toEqual([`${ws}-warn`])
+      const oks = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        outcome: 'ok',
+      })
+      // `ok` must admit a NULL finish reason too — a plain `NOT IN (...)` is unknown for NULL in
+      // SQL, so a runtime that forgot the null branch would silently drop clean calls.
+      expect(oks.map((c) => c.id).sort()).toEqual([`${ws}-ok`, `${ws}-other`].sort())
+    })
+
+    it('point-reads one call by id, scoped to its workspace', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({ id: `${ws}-a`, workspaceId: ws, executionId: e1, responseText: 'hello world' }),
+      )
+
+      const whole = await repo.get(ws, `${ws}-a`)
+      expect(whole?.response).toEqual({ text: 'hello world', totalChars: 11 })
+      const budgeted = await repo.get(ws, `${ws}-a`, 5)
+      expect(budgeted?.response).toEqual({ text: 'hello', totalChars: 11 })
+      // A foreign workspace reads as missing, never as another tenant's row.
+      expect(await repo.get('ws-someone-else', `${ws}-a`)).toBeNull()
+      expect(await repo.get(ws, 'llm_nope')).toBeNull()
+    })
+
     it('prunes rows older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

@@ -2,6 +2,7 @@ import type {
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
+  ProvisioningOutcome,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -92,9 +93,11 @@ export class D1ProvisioningLogRepository implements ProvisioningLogRepository {
       clauses.push('target_id = ?')
       binds.push(query.targetId)
     }
-    if (query.before != null) {
-      clauses.push('created_at < ?')
-      binds.push(query.before)
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY: provisioning attempts are appended in bursts,
+      // so a `created_at`-only bound would silently drop rows sharing a millisecond.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
     }
     // Newest first; `LIMIT -1` means "no limit" in SQLite, so an omitted cap reads all.
     binds.push(query.limit ?? -1)
@@ -108,6 +111,21 @@ export class D1ProvisioningLogRepository implements ProvisioningLogRepository {
       .bind(...binds)
       .all<ProvisioningLogRow>()
     return (results ?? []).map(rowToRecord)
+  }
+
+  async countByExecution(
+    workspaceId: string,
+    executionId: string,
+    outcome?: ProvisioningOutcome,
+  ): Promise<number> {
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM provisioning_log
+         WHERE workspace_id = ? AND execution_id = ? AND (? IS NULL OR outcome = ?)`,
+      )
+      .bind(workspaceId, executionId, outcome ?? null, outcome ?? null)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

@@ -231,6 +231,45 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     )
   }
 
+  async listRecent(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // Same predicates and ordering as `listInternal`, minus its anchor-block join: the debug
+    // run index deliberately spans every run in the workspace (see the port). Mirrors the D1 repo.
+    const filters = [eq(agentRuns.workspace_id, workspaceId), this.isExecution]
+    if (opts.statuses && opts.statuses.length > 0) {
+      filters.push(inArray(agentRuns.status, opts.statuses))
+    }
+    if (opts.since != null) filters.push(gte(agentRuns.created_at, opts.since))
+    if (opts.cursor) {
+      const cursor = opts.cursor
+      filters.push(
+        or(
+          lt(agentRuns.created_at, cursor.createdAt),
+          and(eq(agentRuns.created_at, cursor.createdAt), lt(agentRuns.id, cursor.id)),
+        )!,
+      )
+    }
+    const rows = await this.db
+      .select()
+      .from(agentRuns)
+      .where(and(...filters))
+      .orderBy(desc(agentRuns.created_at), desc(agentRuns.id))
+      .limit(opts.limit)
+    // List read: drop a corrupt run rather than failing the whole page.
+    return tryDecodeRows(
+      rows,
+      (r) => rowToExecution(r as ExecutionRow),
+      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
+    )
+  }
+
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
     const rows = await this.db
       .select()

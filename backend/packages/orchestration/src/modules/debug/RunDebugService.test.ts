@@ -1,0 +1,212 @@
+import { describe, expect, it, vi } from 'vitest'
+import type {
+  AgentContextSnapshotRepository,
+  AgentSearchQueryRepository,
+  Clock,
+  ExecutionInstance,
+  ExecutionRepository,
+  LlmCallMetricPage,
+  LlmCallMetricRepository,
+  ProvisioningLogRepository,
+} from '@cat-factory/kernel'
+import { RunDebugService } from './RunDebugService.js'
+
+const clock: Clock = { now: () => 4_242 }
+
+function run(id: string, createdAt: number, over: Partial<ExecutionInstance> = {}) {
+  return {
+    id,
+    blockId: 'blk_1',
+    pipelineId: 'pl_build',
+    pipelineName: 'Build',
+    steps: [{ agentKind: 'coder', state: 'done', progress: 1, decision: null }],
+    currentStep: 0,
+    status: 'done',
+    createdAt,
+    ...over,
+  } as ExecutionInstance
+}
+
+function call(id: string, createdAt: number): LlmCallMetricPage {
+  return {
+    id,
+    workspaceId: 'ws',
+    executionId: 'exec_1',
+    agentKind: 'coder',
+    provider: 'openai',
+    model: 'gpt',
+    createdAt,
+    streaming: false,
+    messageCount: 1,
+    toolCount: 0,
+    requestMaxTokens: null,
+    promptTokens: 1,
+    cachedPromptTokens: 0,
+    completionTokens: 1,
+    totalTokens: 2,
+    finishReason: 'stop',
+    upstreamMs: 1,
+    overheadMs: 0,
+    totalMs: 1,
+    ok: true,
+    httpStatus: 200,
+    errorMessage: null,
+    promptPrefixCount: 0,
+    prompt: { text: '', totalChars: 10 },
+    response: { text: '', totalChars: 10 },
+    reasoning: { text: '', totalChars: 0 },
+  }
+}
+
+/** An execution repo whose `listRecent` echoes whatever the fixture supplies. */
+function executionRepo(rows: ExecutionInstance[]) {
+  return {
+    listRecent: vi.fn(async (_ws: string, opts: { limit: number }) => rows.slice(0, opts.limit)),
+    get: vi.fn(async (_ws: string, id: string) => rows.find((r) => r.id === id) ?? null),
+  } as unknown as ExecutionRepository & {
+    listRecent: ReturnType<typeof vi.fn>
+    get: ReturnType<typeof vi.fn>
+  }
+}
+
+describe('RunDebugService paging', () => {
+  it('asks the store for one row MORE than the page, and hides it', async () => {
+    // The extra row is how "is there another page" is answered without a second COUNT — so it
+    // must be requested and it must never reach the caller.
+    const repo = executionRepo([run('a', 30), run('b', 20), run('c', 10)])
+    const service = new RunDebugService({ executionRepository: repo, clock })
+
+    const page = await service.listRuns('ws', { limit: 2 })
+
+    expect(repo.listRecent).toHaveBeenCalledWith('ws', expect.objectContaining({ limit: 3 }))
+    expect(page.items.map((r) => r.runId)).toEqual(['a', 'b'])
+    // The cursor names the LAST RETURNED row, not the peeked one — resuming from the peeked row
+    // would skip it entirely.
+    expect(page.nextCursor).toEqual({ createdAt: 20, id: 'b' })
+  })
+
+  it('reports no next cursor when the page was the last one', async () => {
+    const repo = executionRepo([run('a', 30), run('b', 20)])
+    const service = new RunDebugService({ executionRepository: repo, clock })
+    const page = await service.listRuns('ws', { limit: 5 })
+    expect(page.items).toHaveLength(2)
+    expect(page.nextCursor).toBeNull()
+  })
+
+  it("passes the caller's body budget straight through to the store", async () => {
+    const listPage = vi.fn(async () => [call('llm_1', 5)])
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      llmCallMetricRepository: { listPage } as unknown as LlmCallMetricRepository,
+    })
+
+    await service.listLlmCalls('ws', 'exec_1', { limit: 10, bodyChars: 256, order: 'oldest' })
+
+    // The slice happens IN SQL, so the budget has to survive the hop unmodified — a service that
+    // clamped it here would be a second, drifting copy of the contract's ceiling.
+    expect(listPage).toHaveBeenCalledWith(
+      'ws',
+      expect.objectContaining({
+        executionId: 'exec_1',
+        bodyChars: 256,
+        order: 'oldest',
+        limit: 11,
+      }),
+    )
+  })
+})
+
+describe('RunDebugService with unwired sinks', () => {
+  it('returns empty pages instead of failing when a telemetry sink is absent', async () => {
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+    })
+    await expect(
+      service.listLlmCalls('ws', 'exec_1', { limit: 10, bodyChars: 0 }),
+    ).resolves.toEqual({ items: [], nextCursor: null })
+    await expect(service.listAgentContext('ws', 'exec_1', { limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    })
+    await expect(service.listSearchQueries('ws', 'exec_1', { limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    })
+    await expect(service.listProvisioningLog('ws', 'exec_1', { limit: 10 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    })
+    await expect(service.getLlmCall('ws', 'llm_1')).resolves.toBeNull()
+    await expect(service.getAgentContext('ws', 'acs_1', 100)).resolves.toBeNull()
+  })
+
+  it('marks an absent sink UNAVAILABLE in the overview rather than reporting a count of zero', async () => {
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+    })
+    const overview = await service.overview('ws', run('exec_1', 1))
+    // "We never recorded this" and "nothing happened" need different follow-up from the caller,
+    // so the two must never render identically.
+    expect(overview.sinks).toEqual({
+      llmCalls: { available: false, count: 0 },
+      agentContext: { available: false, count: 0 },
+      searchQueries: { available: false, count: 0 },
+      provisioningLog: { available: false, count: 0 },
+    })
+    expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(4)
+    expect(overview.signals.map((s) => s.code)).not.toContain('no_model_calls')
+    expect(overview.generatedAt).toBe(4_242)
+  })
+})
+
+describe('RunDebugService overview', () => {
+  it('folds the LLM call count from the rollup instead of counting twice', async () => {
+    const summarizeByExecution = vi.fn(async () => [
+      {
+        agentKind: 'coder',
+        calls: 7,
+        promptTokens: 10,
+        cachedPromptTokens: 0,
+        completionTokens: 5,
+        peakCompletionTokens: 5,
+        maxOutputTokens: null,
+        truncatedCalls: 0,
+        upstreamMs: 1,
+        overheadMs: 0,
+        errors: 0,
+        warnings: 0,
+      },
+    ])
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      llmCallMetricRepository: {
+        summarizeByExecution,
+      } as unknown as LlmCallMetricRepository,
+      agentContextSnapshotRepository: {
+        countByExecution: async () => 2,
+      } as unknown as AgentContextSnapshotRepository,
+      agentSearchQueryRepository: {
+        countByExecution: async () => 0,
+      } as unknown as AgentSearchQueryRepository,
+      provisioningLogRepository: {
+        countByExecution: async (_w: string, _e: string, outcome?: string) =>
+          outcome === 'failure' ? 1 : 4,
+      } as unknown as ProvisioningLogRepository,
+    })
+
+    const overview = await service.overview('ws', run('exec_1', 1))
+
+    expect(summarizeByExecution).toHaveBeenCalledTimes(1)
+    // Folded, not a second COUNT that could disagree with the breakdown beside it.
+    expect(overview.sinks.llmCalls).toEqual({ available: true, count: 7 })
+    expect(overview.llm.totals.calls).toBe(7)
+    expect(overview.sinks.agentContext).toEqual({ available: true, count: 2 })
+    expect(overview.sinks.provisioningLog).toEqual({ available: true, count: 4 })
+    // The failure count is a separate, narrowed COUNT and drives the top signal.
+    expect(overview.signals[0]).toMatchObject({ code: 'provisioning_failed', count: 1 })
+  })
+})

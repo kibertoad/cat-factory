@@ -47,8 +47,14 @@ export interface ProvisioningLogQuery {
   targetId?: string
   /** Cap on rows returned (the read service clamps to a hard maximum). */
   limit?: number
-  /** Keyset on `createdAt` (exclusive) for paging older rows. */
-  before?: number
+  /**
+   * EXCLUSIVE keyset for paging older rows, on the `(createdAt, id)` composite the ordering
+   * uses. A bare `createdAt` bound is NOT enough: provisioning attempts are appended in
+   * bursts (a run brings several containers up at once) and rows sharing a millisecond would
+   * be silently dropped from the next page — invisible to the caller, and worst on exactly
+   * the noisy runs someone is paging through to debug.
+   */
+  cursor?: { createdAt: number; id: string }
 }
 
 export interface ProvisioningLogRepository {
@@ -56,6 +62,17 @@ export interface ProvisioningLogRepository {
   append(record: ProvisioningLogRecord): Promise<void>
   /** Rows for a workspace matching the query, newest first. */
   list(workspaceId: string, query?: ProvisioningLogQuery): Promise<ProvisioningLogRecord[]>
+  /**
+   * How many attempts were logged for a run — one indexed COUNT, no rows read. `outcome`
+   * narrows to successes or failures, which is what lets a run overview state "3 provisioning
+   * failures" without paging the log: for a run whose container never came up there is no LLM
+   * telemetry at all, so this is the only count that explains it.
+   */
+  countByExecution(
+    workspaceId: string,
+    executionId: string,
+    outcome?: ProvisioningOutcome,
+  ): Promise<number>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many
    * were removed. The store is high-churn, so it is pruned to a configured window

@@ -286,6 +286,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Re-exposed on the core for the search-query read endpoint AND the search proxy's
     // write path (it reads it off the request container).
     searchQueryObservability,
+    // The stores behind the two sinks above, handed in alongside them for the remote
+    // debugging reader — a pure reader that wants neither sink's capture gate.
+    agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+    agentSearchQueryRepository: repos.agentSearchQueryRepository,
     // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
     // recorded LLM call out as a generation. Built only when configured; otherwise
     // undefined and there is no external emission.

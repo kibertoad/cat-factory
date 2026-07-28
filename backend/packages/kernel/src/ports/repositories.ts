@@ -273,6 +273,30 @@ export interface ExecutionRepository {
       since?: number
     },
   ): Promise<ExecutionInstance[]>
+  /**
+   * One BOUNDED page of the workspace's runs, newest first (`created_at DESC, id DESC`) —
+   * the run index the remote debugging surface leads with.
+   *
+   * The sibling of {@link ExecutionRepository.listInternal}, and deliberately WITHOUT its
+   * anchor-block join: the public JOB surface may only ever surface runs it created, whereas
+   * a debugger that cannot see the run that failed is useless — a service frame's blueprint
+   * run and a recurring bug-intake fire are exactly the ones someone asks about. The scope
+   * that remains is the workspace, which is the whole reach of the key doing the asking.
+   *
+   * Same keyset contract as `listInternal` (composite `(createdAt, id)`, exclusive), and the
+   * same reason for it. NOT {@link ExecutionRepository.listByWorkspace} with a slice: that
+   * one reads and JSON-decodes every historical run in the workspace before anything is
+   * discarded, which is precisely what a paginated surface must not do.
+   */
+  listRecent(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   /**
