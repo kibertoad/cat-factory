@@ -8,9 +8,7 @@ import type {
   CloudProvider,
   DocInterviewRepository,
   DocKind,
-  DocumentRecord,
   DocumentRepository,
-  DocumentSourceKind,
   ExecutionInstance,
   FrontendConfig,
   Initiative,
@@ -21,7 +19,6 @@ import type {
   RequirementReviewRepository,
   ResolvedSkill,
   SkillVersionPin,
-  TaskRecord,
   TaskRepository,
   TestSecretRef,
   WorkspaceRepository,
@@ -56,7 +53,11 @@ import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { resolveRunSkills } from './run-skills.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
-import { extractReferences } from '@cat-factory/integrations'
+import {
+  type DocumentUrlResolver,
+  type LinkedContext,
+  resolveLinkedContext as resolveLinkedContextFor,
+} from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 
 /**
@@ -165,16 +166,7 @@ export interface SkillResolver {
   ): Promise<{ skill: ResolvedSkill; version: SkillVersionPin }>
 }
 
-/**
- * Resolve a URL named in prose to the document it refers to, by its stable
- * `(source, externalId)` key. Built from the document providers' `parseRef` so a noisy
- * pasted link (title segment, `&t=` tracking params, dash vs colon node id) still maps to
- * the canonical id the document was imported under. Returns null when no provider claims
- * the URL.
- */
-export type DocumentUrlResolver = (
-  url: string,
-) => { source: DocumentSourceKind; externalId: string } | null
+export type { DocumentUrlResolver } from './linked-context.js'
 
 /** The collaborators the context builder reads from (all owned by the engine container). */
 export interface AgentContextBuilderDeps {
@@ -1128,93 +1120,30 @@ export class AgentContextBuilder {
   }
 
   /**
-   * Resolve the high-confidence external context for a block: the docs/tasks a human
-   * attached to it (only when `includeLinked` — skipped in reworked mode, where the
-   * incorporated requirements doc already folds them in) UNIONed with any items the
-   * `description` names explicitly (a Jira key, a fully-qualified GitHub `owner/repo#N`,
-   * or a URL), each resolved against the imported corpus by a POINT LOOKUP (no
-   * full-corpus scan — a single keyed/URL query per named reference). Each source repo
-   * is optional, so this is a no-op for sources that aren't wired. Deduped by
-   * (source, externalId). The full body travels to the container as a materialised
-   * file; the prompt carries only the one-line `summary` (see the executor +
-   * `linkedContextSection`).
+   * Resolve the block's linked context (attachments UNION the references its description names)
+   * through the shared {@link resolveLinkedContextFor} — the same resolver the initiative-planning
+   * interviewer uses, so an inline planning step and a container one can never disagree about what
+   * a human attached.
    */
-  private async resolveLinkedContext(
+  private resolveLinkedContext(
     workspaceId: string,
     blockId: string,
     description: string,
     opts: { includeLinked: boolean },
-  ): Promise<{
-    docs: NonNullable<AgentRunContext['block']['contextDocs']>
-    tasks: NonNullable<AgentRunContext['block']['contextTasks']>
-  }> {
-    const docs = new Map<string, DocumentRecord>()
-    const tasks = new Map<string, TaskRecord>()
-    const docKey = (d: DocumentRecord) => `${d.source}:${d.externalId}`
-    const taskKey = (t: TaskRecord) => `${t.source}:${t.externalId}`
-    const addDoc = (d: DocumentRecord | null) => {
-      if (d && !docs.has(docKey(d))) docs.set(docKey(d), d)
-    }
-    const addTask = (t: TaskRecord | null) => {
-      if (t && !tasks.has(taskKey(t))) tasks.set(taskKey(t), t)
-    }
-
-    if (opts.includeLinked) {
-      const [linkedDocs, linkedTasks] = await Promise.all([
-        this.deps.documents?.listByBlock(workspaceId, blockId) ?? [],
-        this.deps.tasks?.listByBlock(workspaceId, blockId) ?? [],
-      ])
-      for (const d of linkedDocs) addDoc(d)
-      for (const t of linkedTasks) addTask(t)
-    }
-
-    // Resolve explicitly-named references against the imported corpus — never a full-corpus
-    // scan. Only items that actually exist are added (a `UTF-8` that happens to match the
-    // Jira-key shape just resolves to nothing); nothing is fetched live. The keyed jira/github
-    // refs are BATCH-resolved in one chunked-`IN` read per source (`listByRefs`, never a
-    // point-read per reference — an N+1); the URL lookups stay per-URL point reads. Both run
-    // concurrently, and results are folded in in reference order so the dedupe (and the
-    // resulting context ordering) stays deterministic.
-    const refs = extractReferences(description ?? '')
-    const documents = this.deps.documents
-    const taskRepo = this.deps.tasks
-    const [keyedTasks, urlItems] = await Promise.all([
-      taskRepo?.listByRefs(workspaceId, refs.taskRefs) ?? [],
-      Promise.all(
-        refs.urls.map(async (url) => {
-          const [doc, task] = await Promise.all([
-            (async () => {
-              if (!documents) return null
-              // Prefer a precise match by the document's stable (source, externalId) — a pasted
-              // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
-              // title segment or tracking params still resolves. Fall back to the url-string
-              // lookup for any source the resolver doesn't claim (or when it isn't wired).
-              const ref = this.deps.documentUrlResolver?.(url)
-              const byRef = ref
-                ? await documents.get(workspaceId, ref.source, ref.externalId)
-                : null
-              return byRef ?? (await documents.getByUrl(workspaceId, url))
-            })(),
-            taskRepo?.getByUrl(workspaceId, url) ?? null,
-          ])
-          return { doc, task }
-        }),
-      ),
-    ])
-    // Fold the batch result in in reference order (listByRefs makes no ordering guarantee),
-    // so the dedupe and context ordering match the by-reference sequence deterministically.
-    const keyedByRef = new Map(keyedTasks.map((t) => [taskKey(t), t] as const))
-    for (const ref of refs.taskRefs)
-      addTask(keyedByRef.get(`${ref.source}:${ref.externalId}`) ?? null)
-    for (const { doc, task } of urlItems) {
-      addDoc(doc)
-      addTask(task)
-    }
-
-    return {
-      docs: [...docs.values()].map((d) => toContextDoc(d)),
-      tasks: [...tasks.values()].map((t) => toContextTask(t)),
-    }
+  ): Promise<LinkedContext> {
+    return resolveLinkedContextFor(
+      {
+        ...(this.deps.documents ? { documents: this.deps.documents } : {}),
+        ...(this.deps.tasks ? { tasks: this.deps.tasks } : {}),
+        ...(this.deps.documentUrlResolver
+          ? { documentUrlResolver: this.deps.documentUrlResolver }
+          : {}),
+      },
+      workspaceId,
+      blockId,
+      description,
+      opts,
+    )
   }
 
   /**
@@ -1273,37 +1202,5 @@ export class AgentContextBuilder {
         ...(envUrl ? { envUrl } : {}),
       }
     })
-  }
-}
-
-/** Map a document record to the agent-context doc shape (summary index + materialisable body). */
-function toContextDoc(
-  d: DocumentRecord,
-): NonNullable<AgentRunContext['block']['contextDocs']>[number] {
-  return {
-    title: d.title,
-    url: d.url,
-    excerpt: d.excerpt,
-    summary: buildExcerpt(d.body || d.excerpt, CONTEXT_BUDGET.summaryChars),
-    body: d.body,
-  }
-}
-
-/** Map a task record to the agent-context task shape (adds the index `summary`). */
-function toContextTask(
-  t: TaskRecord,
-): NonNullable<AgentRunContext['block']['contextTasks']>[number] {
-  return {
-    key: t.externalId,
-    url: t.url,
-    title: t.title,
-    status: t.status,
-    type: t.type,
-    assignee: t.assignee,
-    priority: t.priority,
-    labels: t.labels,
-    description: t.description,
-    comments: t.comments,
-    summary: buildExcerpt(t.description || t.title, CONTEXT_BUDGET.summaryChars),
   }
 }

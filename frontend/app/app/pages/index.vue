@@ -9,6 +9,7 @@ import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
+import DefaultTestEnvBanner from '~/components/layout/DefaultTestEnvBanner.vue'
 // Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
 // store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
@@ -155,6 +156,9 @@ onMounted(() => {
   // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
   // window pre-seeded with the provisioned connection so the user only pastes the token + saves.
   ui.consumeK3sSetupDeepLink()
+  // Honour the setup banner's shareable link (`?settings=default-test-env`): open the
+  // Infrastructure window on the default test-environment provisioning section.
+  ui.consumeDefaultProvisionDeepLink()
 })
 
 // Per-session guards so each AI-onboarding dialog auto-opens at most once (later opens are
@@ -179,6 +183,9 @@ watch(
       ui.resetAiOnboarding()
       // Infra-setup banner session dismissals are per-workspace too — clear them on switch.
       ui.resetInfraSetupDismissals()
+      // Same for the default test-environment prompt: each board records its own choice, so a
+      // dismissal on one must not hide the (independent) prompt for another.
+      ui.resetDefaultProvisionDismissal()
       // A different board has its own pipeline library, so re-arm the once-per-session advisory.
       ui.pipelineHealthSeen = false
     }
@@ -312,7 +319,10 @@ watch(
          - AI-readiness (no usable model source, or default preset uses unavailable models).
          - Infrastructure provider (env/runner-pool wired but missing mandatory config).
          - Infra-setup (this deployment needs an executor / test env / storage the operator hasn't
-           defined yet, so a class of agents can't run). -->
+           defined yet, so a class of agents can't run).
+         - Default test environment (this BOARD has never chosen the provisioning mechanism its
+           new services should default to). Last in the column: it asks for a convenience default,
+           so it yields to the prompts about things that are outright broken. -->
     <div
       v-if="workspace.ready && !needsGitHubInstall && !githubProbePending"
       class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
@@ -320,6 +330,7 @@ watch(
       <AiProvidersBanner />
       <ProviderConfigBanner />
       <InfraSetupBanner />
+      <DefaultTestEnvBanner />
     </div>
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->

@@ -104,10 +104,11 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // deployment-registered default pipeline (the raw `dependencies.taskTypeRegistry` may be
     // undefined; this is the same instance re-exposed on `Core` for the snapshot projection).
     taskTypeRegistry,
-    // Opt-in review-debt friction on task creation: read the acting workspace's settings + open
-    // notifications to decide whether authoring a new task is frictioned. Optional seams — when a
-    // facade doesn't wire settings/notifications, the guard is a pass-through.
-    reviewFrictionSettings: settings?.service,
+    // The acting workspace's runtime settings, feeding two collaborators: the opt-in review-debt
+    // friction guard on task creation (paired with the open-notification reader below), and the
+    // default test-environment provisioning stamped onto a new service frame. Optional seam —
+    // when a facade doesn't wire settings, both are pass-throughs.
+    workspaceSettings: settings?.service,
     reviewFrictionNotifications: notifications?.service,
   })
   const workspaceService = new WorkspaceService({

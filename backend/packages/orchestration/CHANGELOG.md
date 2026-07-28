@@ -1,5 +1,175 @@
 # @cat-factory/orchestration
 
+## 0.158.0
+
+### Minor Changes
+
+- 8a9f311: Let an initiative carry linked context documents and tracker issues, and put them in front of the
+  whole planning pipeline.
+
+  Requirements, RFCs, PRDs and tracker issues can now be attached while CREATING an initiative — the
+  same staged picker the add-task flow uses, extracted into a shared `ContextAttachmentFields` so the
+  two surfaces cannot drift. Attachments are linked once the initiative block exists.
+
+  The backend gap this closes is that the engine already RESOLVED a block's attachments for initiative
+  blocks (an initiative is anchored to an ordinary block) and the container already materialised them
+  under `.cat-context/` — but the initiative agent kinds build their own user prompts and so returned
+  before the generic `linkedContextSection` fold. The analyst and planner had the files on disk with
+  nothing telling them the files existed, and `initiative-breakdown`'s system prompt told it to reason
+  from "any linked context" the user prompt never supplied. All three now fold it in, each in the form
+  matching its surface (index + `.cat-context/` pointer for the container kinds, inlined bodies for the
+  inline one).
+
+  The interviewer needed wiring rather than a fold: it is an inline service that never passes through
+  `AgentContextBuilder`. `resolveLinkedContext` moved out of the builder into its own module and both
+  paths now share it, so the interviewer can never see a different set of attachments than the analyst
+  and planner that follow it. It is also told to treat what an attachment settles as already answered,
+  which is the point of attaching a PRD — otherwise the stakeholder is interrogated about exactly the
+  facts the document they attached already states.
+
+  Attachments are still only editable at create time; the inspector's context panels remain task-only.
+  Pasting a document URL or issue key into the initiative's goal text reaches the planning agents too,
+  so an initiative created without attachments is not a dead end.
+
+### Patch Changes
+
+- Updated dependencies [9d965c9]
+- Updated dependencies [8a9f311]
+  - @cat-factory/contracts@0.185.0
+  - @cat-factory/kernel@0.178.0
+  - @cat-factory/agents@0.81.0
+  - @cat-factory/integrations@0.107.3
+  - @cat-factory/prompt-fragments@0.15.8
+  - @cat-factory/sandbox@0.10.6
+  - @cat-factory/spend@0.12.107
+  - @cat-factory/workspaces@0.19.6
+  - @cat-factory/caching@0.11.6
+
+## 0.157.0
+
+### Minor Changes
+
+- 58e06a2: Give a workspace a DEFAULT test-environment provisioning mechanism, suggested for every service
+  added afterwards, and prompt for it when a board has never chosen one.
+
+  Declaring a provision type per service (ADR 0007) is right, but it made the common case — a board
+  where every service provisions the same way — a per-service chore, and a service nobody got to
+  silently produced no test environment at all. `workspace_settings` gains
+  `defaultProvisionType` + `defaultProvisionManifestId` (D1 + Drizzle, with a conformance
+  assertion), and `BoardService` stamps them onto every newly created service frame via both
+  creation paths, alongside the existing default fragment selection.
+
+  The pair is nullable rather than defaulted, and the distinction is the feature: `null` means the
+  operator has never chosen — what the new `DefaultTestEnvBanner` nags about, which covers a
+  manually created board, the board the SPA creates implicitly on first launch, and an older board
+  predating the setting under one condition — while `infraless` is a real decision ("services stand
+  up no environment") that silences it. The banner carries a shareable `?settings=default-test-env`
+  deep link to the Infrastructure window's Test-environments tab, where the new section preselects
+  the first REGISTERED custom provider when the deployment shipped one and nothing is stored yet
+  (unsaved, and labelled as a suggestion until saved).
+
+  The seed is creation-time only: the engine still reads a service's own `provisioning`, so changing
+  the default never retroactively alters an existing service. `WorkspaceSettingsService.update`
+  refuses a `custom` default with no manifest id and clears a stale id when switching away, since a
+  `custom` service pinning nothing matches no `remote-custom` handler.
+
+  `BoardService`'s `reviewFrictionSettings` dependency is renamed to `workspaceSettings` (one reader
+  now feeds both the friction guard and the provisioning seed), and the frame-creation defaults move
+  into a `newServiceFrameDefaults` collaborator.
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+  - @cat-factory/kernel@0.177.0
+  - @cat-factory/agents@0.80.1
+  - @cat-factory/integrations@0.107.2
+  - @cat-factory/prompt-fragments@0.15.7
+  - @cat-factory/sandbox@0.10.5
+  - @cat-factory/spend@0.12.106
+  - @cat-factory/workspaces@0.19.5
+  - @cat-factory/caching@0.11.5
+
+## 0.156.0
+
+### Minor Changes
+
+- 65b87c1: Agent kinds can now declare CAPABILITIES: the skills they apply (procedural playbooks — bundled in
+  the deployment's own package, or referenced from the account's repo-synced catalog) and the tool
+  servers they may call (MCP, stdio or HTTP). Both are registered on the same app-owned
+  `AgentKindRegistry` and referenced by id from any number of kinds, or attached to a BUILT-IN kind
+  with `assignSkills` / `assignToolServers`. Tool-server credentials are declared by name and
+  resolved at dispatch through the new kernel `ToolSecretResolver` port (both facades wire the
+  deployment-environment resolver by default), so a value never reaches a prompt or the run's
+  telemetry snapshot. See `backend/docs/adr/0029-agent-kind-capabilities.md`.
+
+  BREAKING (pre-1.0, no migration): `AgentRunContext.skill` is now `skills` (an array),
+  `PipelineStep.skillVersion` is now `skillVersions`, and the harness job body's `skill` field is now
+  `skills` alongside the new `mcpServers`.
+
+  OPERATORS — self-hosted runner pools must be moved to the `1.67.0` harness image. A pool still
+  running an older image parses the job body with the old singular `skill` field, so the new
+  `skills` array is dropped on the floor. On Pi/codex that degrades quietly (their prompt still
+  carries the folded-in instructions), but a leased-credential claude-code run is told in its prompt
+  that the skill "is installed for this step" while nothing was installed — a blind run rather than a
+  failed one. `mcpServers` is dropped the same way, which surfaces as an agent that was promised
+  tools it does not have.
+
+  SECURITY NOTE for a deployment that installs agent packages it did not author: a tool-server
+  definition names both the credential it wants and the endpoint it talks to, and the default
+  `createEnvToolSecretResolver` will resolve any key off the deployment environment. On the Worker
+  that is a real widening (`env` is not otherwise ambient to a registration). Pass
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` to confine it.
+
+- df48cb0: Close five gaps in the Ralph loop, of which two silently changed what a run actually did.
+
+  A re-run un-looped the step. `retry.logic.resetStep` rebuilds a step from an explicit field list
+  and so DROPPED `step.ralph`. Unlike `step.test` — seeded lazily when the tester's report arrives
+  — the loop state is needed BEFORE the dispatch: it is what puts the `validation` block on the job
+  body. So a retried or restarted ralph run dispatched a plain coding pass, got no verdict back,
+  never fired the `ralph-verdict` interceptor, and finished as an ungated one-shot coder. The
+  loop-back reset (`StepGraph.resetStepForRerun`) had the mirror-image bug: it preserved the state
+  with `attempts` still at the spent budget, so the re-run's first verdict went straight to
+  `exhausted`. Both now go through the pure `restartRalphState` — frozen config kept, counters
+  zeroed.
+
+  The validation command starved the inactivity watchdog. `JOB_INACTIVITY_MS` (10 min) is tighter
+  than the command's own watchdog (15 min), and a harness-spawned command emits no activity of its
+  own, so any validation past ten minutes aborted the iteration as a wedge and made the 15-minute
+  watchdog unreachable at stock settings. It now heartbeats at 30s like the two sibling harness-run
+  phases.
+
+  `runRalphValidation` was a third copy of what `captured-command.ts` exists to prevent, and had
+  drifted in both ways that seam guards: it scrubbed secrets AFTER the rolling truncation with no
+  margin (a credential straddling the cut lost its `KEY=` prefix and survived redaction as an
+  unrecognised partial — on a tail that reaches the step, the notification and the SPA), and it
+  published the full 16k in-container capture where both siblings bound the wire tail. It now runs
+  through `runCapturedCommand` at a 4k report budget.
+
+  The loop also gains the no-progress early abort the design had deferred: the harness stamps the
+  work branch's HEAD onto the verdict, and two consecutive failing iterations against an unchanged
+  head end the loop instead of burning the rest of the budget. It fails open on an unknown head (an
+  older harness image never trips it) and is reported distinctly from a spent budget, since only one
+  of the two is fixed by raising the budget. Finally, the per-iteration attempt log — which rides
+  the run `detail` blob re-serialized on every progress write — is capped, with the dropped count
+  recorded and surfaced rather than silently truncated.
+
+  Image-affecting: bumps the runner image to 1.67.0.
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/contracts@0.183.0
+  - @cat-factory/agents@0.80.0
+  - @cat-factory/kernel@0.176.0
+  - @cat-factory/integrations@0.107.1
+  - @cat-factory/prompt-fragments@0.15.6
+  - @cat-factory/sandbox@0.10.4
+  - @cat-factory/spend@0.12.105
+  - @cat-factory/workspaces@0.19.4
+  - @cat-factory/caching@0.11.4
+
 ## 0.155.0
 
 ### Minor Changes

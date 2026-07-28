@@ -181,6 +181,15 @@ export async function createSeededWorkspace(
     await request.post(`${BACKEND_URL}/workspaces`, { data: { seed: true } }),
   )
   await seedGitHub(request, snapshot.workspace.id)
+  // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
+  // advisory top overlay that would otherwise render on every seeded board and intercept clicks
+  // on the board chrome the specs drive — legitimately doesn't fire. `infraless` is the ACCURATE
+  // answer for this backend, not a mute button: e2e fakes the agent executor and wires no
+  // environment provider, so its services genuinely stand up no environment. A future spec that
+  // wants to drive the banner creates its workspace directly and records no choice.
+  await request.put(`${BACKEND_URL}/workspaces/${snapshot.workspace.id}/settings`, {
+    data: { defaultProvisionType: 'infraless' },
+  })
   return snapshot
 }
 

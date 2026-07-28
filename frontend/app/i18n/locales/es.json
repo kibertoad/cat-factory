@@ -285,17 +285,6 @@
       "bestPractices": "Buenas prácticas",
       "bestPracticesHint": "Fija fragmentos de buenas prácticas para que los agentes de esta tarea los sigan, además de los estándares del servicio.",
       "agentConfiguration": "Configuración del agente",
-      "contextDocuments": "Documentos de contexto",
-      "contextIssues": "Incidencias de contexto",
-      "attach": "Adjuntar",
-      "connectSource": "Conectar una fuente",
-      "connectSourceNamed": "Conectar {source}",
-      "done": "Hecho",
-      "attachDocDisabledConnect": "Conecta primero una fuente de documentos (Integraciones)",
-      "attachDocDisabledEnable": "Activa primero la integración de documentos",
-      "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
-      "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
-      "importsOnAdd": "se importa al añadir",
       "noDocsHint": "Adjunta un requisito, RFC o PRD para que los agentes lo vean al implementar esta tarea.",
       "noIssuesHint": "Adjunta una incidencia del gestor para que los agentes vean su descripción y comentarios al implementar esta tarea.",
       "plannedHint": "La tarea se añade en estado planificado. No se ejecutará hasta que inicies una pipeline sobre ella; puedes seguir editándola hasta entonces.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} activas",
       "noTasksYet": "Aún no hay tareas"
     }
+  },
+  "contextAttachments": {
+    "documents": "Documentos de contexto",
+    "issues": "Incidencias de contexto",
+    "attach": "Adjuntar",
+    "done": "Hecho",
+    "connectSource": "Conectar una fuente",
+    "connectSourceNamed": "Conectar {source}",
+    "attachDocDisabledConnect": "Conecta primero una fuente de documentos (Integraciones)",
+    "attachDocDisabledEnable": "Activa primero la integración de documentos",
+    "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
+    "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
+    "importsOnAdd": "se importa al añadir"
   },
   "errors": {
     "action": {
@@ -2121,6 +2123,11 @@
         "add": "No se pudo añadir el miembro",
         "remove": "No se pudo quitar el miembro"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Elige un entorno de pruebas predeterminado",
+      "body": "Este tablero aún no ha definido cómo obtienen un entorno de pruebas sus servicios. Elige un valor predeterminado y todos los servicios que añadas a partir de ahora empezarán con él, en lugar de configurarse uno a uno. Podrás cambiarlo en cada servicio.",
+      "action": "Elegir predeterminado"
     }
   },
   "settings": {
@@ -3046,6 +3053,15 @@
       },
       "saved": "Política de acceso a modelos guardada",
       "saveFailed": "No se pudo guardar la política de acceso a modelos"
+    },
+    "defaultProvision": {
+      "title": "Predeterminado para servicios nuevos",
+      "hint": "El mecanismo de aprovisionamiento que se sugerirá para cada servicio que añadas a partir de ahora. No modifica los servicios ya existentes y cada servicio puede sustituirlo.",
+      "suggestionHint": "Por ahora es solo una sugerencia. Guárdala para registrarla como predeterminado del tablero.",
+      "save": "Guardar predeterminado",
+      "saved": "Entorno de pruebas predeterminado guardado.",
+      "savedState": "Guardado.",
+      "saveFailed": "No se ha podido guardar el entorno de pruebas predeterminado."
     }
   },
   "providers": {
@@ -3380,7 +3396,8 @@
       "useThisFolder": "Usar esta carpeta",
       "errors": {
         "listDirectory": "No se pudo listar el directorio"
-      }
+      },
+      "selectAllFiles": "Seleccionar {count} archivo | Seleccionar los {count} archivos"
     }
   },
   "slack": {
@@ -3454,14 +3471,21 @@
   "docInterview": {
     "title": "Refinar el documento",
     "subtitle": "Responde a las preguntas del entrevistador para dar forma al documento",
-    "intro": "El entrevistador está refinando este documento antes de redactarlo. Responde a sus preguntas para definir el alcance, el público y la estructura, y luego continúa — o procede a redactar con lo que tiene.",
+    "intro": "El entrevistador está refinando este documento antes de redactarlo. Responde a sus preguntas para definir el alcance, el público y la estructura, y luego envíalas. También puedes pedirle que redacte ahora con lo que ya tiene.",
     "empty": "No se encontró ninguna entrevista para este bloque.",
     "brief": "Resumen de redacción",
     "converged": "No hay preguntas pendientes. El entrevistador tiene lo que necesita y el documento se está redactando.",
+    "working": "El entrevistador está procesando tus respuestas",
+    "workingHint": "Esto tarda un momento. Las preguntas de seguimiento aparecerán aquí cuando termine, o empezará la redacción si ya tiene suficiente.",
+    "failed": "La ejecución del documento se detuvo",
+    "failedHint": "Terminó antes de que el entrevistador pudiera responder. Tus respuestas están guardadas; vuelve a ejecutar la tarea del documento.",
     "answerPlaceholder": "Tu respuesta",
-    "hint": "Continuar permite al entrevistador hacer preguntas de seguimiento; Proceder redacta con las respuestas actuales.",
-    "proceed": "Proceder a redactar",
-    "continue": "Continuar",
+    "hint": "Enviar respuestas permite al entrevistador hacer preguntas de seguimiento; Redactar ahora redacta con las respuestas actuales.",
+    "unanswered": "Preguntas sin responder: {count}",
+    "proceed": "Redactar ahora",
+    "proceedTitle": "Omitir las preguntas restantes y empezar la redacción ahora",
+    "continue": "Enviar respuestas",
+    "continueTitle": "Envía tus respuestas; el entrevistador puede hacer preguntas de seguimiento",
     "status": {
       "awaiting": "Esperando respuestas",
       "done": "Hecho"
@@ -4779,7 +4803,19 @@
       "link": "Vincular como fragmento vivo",
       "githubBrowseHint": "Explora el repositorio y elige uno o más archivos a enlazar.",
       "selectedFiles": "Archivos seleccionados ({count})",
-      "removeFile": "Quitar archivo"
+      "removeFile": "Quitar archivo",
+      "blockedReason": {
+        "noSource": "Elige primero una fuente de documentos arriba.",
+        "noRepo": "Elige un repositorio o pega arriba la URL de un archivo o carpeta de GitHub.",
+        "noFiles": "Marca al menos un archivo en el explorador del repositorio.",
+        "noRef": "Introduce primero un id de página o una URL."
+      },
+      "urlImport": {
+        "placeholder": "Pega la URL de un archivo o carpeta de GitHub (p. ej. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Buscar",
+        "invalid": "Esto no parece la URL de un archivo o carpeta de un repositorio.",
+        "notFound": "Ningún repositorio accesible coincide con {slug}. Revisa la URL o conecta primero el repositorio."
+      }
     },
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
@@ -5103,7 +5139,10 @@
       "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
       "hint": "Todavia no se ejecuta nada: tras crearla, ejecuta el pipeline de planificacion de iniciativas sobre el bloque. Analiza el codigo y redacta el plan multifase para tu aprobacion.",
       "submit": "Crear iniciativa",
-      "failedTitle": "No se pudo crear la iniciativa"
+      "failedTitle": "No se pudo crear la iniciativa",
+      "contextDocsHint": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al delimitar y redactar el plan.",
+      "contextIssuesHint": "Adjunta una incidencia para que los agentes de planificación vean su descripción y comentarios al redactar el plan.",
+      "linkFailed": "Iniciativa creada, pero no se pudo vincular {count} adjunto | Iniciativa creada, pero no se pudieron vincular {count} adjuntos"
     },
     "status": {
       "planning": "Planificando",
@@ -5156,6 +5195,7 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancel": "Cancelar iniciativa",
@@ -5164,13 +5204,21 @@
     "planning": {
       "title": "Planificar la iniciativa",
       "subtitle": "Responde las preguntas del planificador para acotar la iniciativa",
-      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, luego continua, o procede a planificar con lo que tiene.",
+      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, y luego envialas. Tambien puedes pedirle que planifique ahora con lo que ya tiene.",
       "empty": "No se encontro ninguna iniciativa para este bloque.",
       "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
+      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa para iniciar la entrevista.",
+      "working": "El planificador esta procesando tus respuestas",
+      "workingHint": "Esto tarda un momento. Las preguntas de seguimiento apareceran aqui cuando termine, o empezara a redactar el plan si ya tiene suficiente.",
+      "failed": "La ejecucion de planificacion se detuvo",
+      "failedHint": "Termino antes de que el planificador pudiera responder. Tus respuestas estan guardadas; vuelve a ejecutar la planificacion desde la iniciativa.",
       "answerPlaceholder": "Tu respuesta",
-      "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
-      "proceed": "Proceder a planificar",
-      "continue": "Continuar"
+      "hint": "Enviar respuestas permite al planificador hacer mas preguntas; Planificar ahora redacta el plan con las respuestas actuales.",
+      "unanswered": "Preguntas sin responder: {count}",
+      "proceed": "Planificar ahora",
+      "proceedTitle": "Omitir las preguntas restantes y redactar el plan ahora",
+      "continue": "Enviar respuestas",
+      "continueTitle": "Envia tus respuestas; el planificador puede hacer preguntas de seguimiento"
     },
     "followUpStatus": {
       "open": "Abierto",

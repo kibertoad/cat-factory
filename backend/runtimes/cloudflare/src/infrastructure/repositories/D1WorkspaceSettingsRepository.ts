@@ -1,5 +1,6 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
 import type {
+  ProvisionType,
   ReviewFrictionMode,
   TaskLimitMode,
   TaskLimitPerType,
@@ -25,6 +26,8 @@ interface WorkspaceSettingsRow {
   review_friction_block_stuck_minutes: number | null
   spend_currency: string | null
   spend_monthly_limit: number | null
+  default_provision_type: string | null
+  default_provision_manifest_id: string | null
 }
 
 function parseJson<T>(raw: string | null): T | null {
@@ -53,6 +56,8 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     reviewFrictionBlockStuckMinutes: row.review_friction_block_stuck_minutes,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
+    defaultProvisionType: (row.default_provision_type as ProvisionType | null) ?? null,
+    defaultProvisionManifestId: row.default_provision_manifest_id,
   }
 }
 
@@ -100,8 +105,8 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
             artifact_retention_days, kaizen_enabled,
             delegate_agents_to_runner_pool, review_friction_mode, review_friction_warn_count,
             review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
-            spend_monthly_limit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            spend_monthly_limit, default_provision_type, default_provision_manifest_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -117,7 +122,9 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            review_friction_block_count = excluded.review_friction_block_count,
            review_friction_block_stuck_minutes = excluded.review_friction_block_stuck_minutes,
            spend_currency = excluded.spend_currency,
-           spend_monthly_limit = excluded.spend_monthly_limit`,
+           spend_monthly_limit = excluded.spend_monthly_limit,
+           default_provision_type = excluded.default_provision_type,
+           default_provision_manifest_id = excluded.default_provision_manifest_id`,
       )
       .bind(
         workspaceId,
@@ -136,6 +143,8 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.reviewFrictionBlockStuckMinutes,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
+        settings.defaultProvisionType,
+        settings.defaultProvisionManifestId,
       )
       .run()
   }

@@ -19,5 +19,10 @@ top-level files are the domain contracts.
   surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same: the code
   is declared HERE, so a rename fails the typecheck on both sides rather than degrading the
   SPA to the backend's untranslated prose.
+- `repo-url.ts` — pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
+  `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
+  backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding
+  it to the provider's name search). Lives here because contracts is the only package both
+  sides import.
 
 **See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".

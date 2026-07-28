@@ -285,17 +285,6 @@
       "bestPractices": "En iyi uygulamalar",
       "bestPracticesHint": "Bu görevin ajanlarının hizmet düzeyindeki standartlara ek olarak uygulaması için en iyi uygulama parçacıklarını sabitleyin.",
       "agentConfiguration": "Ajan yapılandırması",
-      "contextDocuments": "Bağlam belgeleri",
-      "contextIssues": "Bağlam sorunları",
-      "attach": "Ekle",
-      "connectSource": "Bir kaynak bağla",
-      "connectSourceNamed": "{source} bağla",
-      "done": "Tamam",
-      "attachDocDisabledConnect": "Önce bir belge kaynağı bağlayın (Entegrasyonlar)",
-      "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
-      "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
-      "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
-      "importsOnAdd": "eklendiğinde içe aktarılır",
       "noDocsHint": "Ajanların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekleyin.",
       "noIssuesHint": "Ajanların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir izleyici sorunu ekleyin.",
       "plannedHint": "Görev planlanmış bir durumda eklenir. Üzerinde bir işlem hattı başlatana kadar çalışmaz, o zamana kadar düzenlemeye devam edebilirsiniz.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} etkin",
       "noTasksYet": "Henüz görev yok"
     }
+  },
+  "contextAttachments": {
+    "documents": "Bağlam belgeleri",
+    "issues": "Bağlam sorunları",
+    "attach": "Ekle",
+    "done": "Tamam",
+    "connectSource": "Bir kaynak bağla",
+    "connectSourceNamed": "{source} bağla",
+    "attachDocDisabledConnect": "Önce bir belge kaynağı bağlayın (Entegrasyonlar)",
+    "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
+    "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
+    "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
+    "importsOnAdd": "eklendiğinde içe aktarılır"
   },
   "errors": {
     "action": {
@@ -2121,6 +2123,11 @@
         "add": "Üye eklenemedi",
         "remove": "Üye kaldırılamadı"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Varsayılan test ortamı seçin",
+      "body": "Bu pano, servislerinin test ortamını nasıl edineceğini henüz belirlemedi. Bir varsayılan seçin; bundan sonra eklediğiniz her servis tek tek kurulmak yerine bununla başlasın. Servis bazında yine değiştirebilirsiniz.",
+      "action": "Varsayılanı seç"
     }
   },
   "settings": {
@@ -3058,6 +3065,15 @@
       },
       "saved": "Model erişim politikası kaydedildi",
       "saveFailed": "Model erişim politikası kaydedilemedi"
+    },
+    "defaultProvision": {
+      "title": "Yeni servisler için varsayılan",
+      "hint": "Bundan sonra ekleyeceğiniz her servis için önerilecek sağlama mekanizması. Mevcut servisleri değiştirmez ve her servis bunu geçersiz kılabilir.",
+      "suggestionHint": "Bu şimdilik yalnızca bir öneri. Panonun varsayılanı olarak kaydetmek için kaydedin.",
+      "save": "Varsayılanı kaydet",
+      "saved": "Varsayılan test ortamı kaydedildi.",
+      "savedState": "Kaydedildi.",
+      "saveFailed": "Varsayılan test ortamı kaydedilemedi."
     }
   },
   "providers": {
@@ -3392,7 +3408,8 @@
       "useThisFolder": "Bu klasörü kullan",
       "errors": {
         "listDirectory": "Dizin listelenemedi"
-      }
+      },
+      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç"
     }
   },
   "slack": {
@@ -3466,14 +3483,21 @@
   "docInterview": {
     "title": "Belgeyi iyileştir",
     "subtitle": "Belgeyi şekillendirebilmesi için görüşmecinin sorularını yanıtlayın",
-    "intro": "Görüşmeci, yazılmadan önce bu belgeyi iyileştiriyor. Kapsamı, hedef kitleyi ve yapıyı belirlemek için sorularını yanıtlayın, ardından devam edin — veya mevcut yanıtlarla taslağa geçin.",
+    "intro": "Görüşmeci, yazılmadan önce bu belgeyi iyileştiriyor. Kapsamı, hedef kitleyi ve yapıyı belirlemek için sorularını yanıtlayın, ardından yanıtları gönderin. Elindekiyle hemen taslak hazırlamasını da isteyebilirsiniz.",
     "empty": "Bu blok için görüşme bulunamadı.",
     "brief": "Yazım özeti",
     "converged": "Bekleyen soru yok. Görüşmecinin ihtiyacı olan bilgi var ve belge taslağı hazırlanıyor.",
+    "working": "Görüşmeci yanıtlarınızı işliyor",
+    "workingHint": "Bu biraz sürer. Bittiğinde ek sorular burada görünür, yeterli bilgi varsa taslak hazırlanmaya başlar.",
+    "failed": "Belge çalışması durdu",
+    "failedHint": "Görüşmeci yanıt veremeden sona erdi. Yanıtlarınız kaydedildi; belge görevini yeniden çalıştırın.",
     "answerPlaceholder": "Yanıtınız",
-    "hint": "Devam et, görüşmecinin ek sorular sormasını sağlar; İlerle, mevcut yanıtlarla taslak oluşturur.",
-    "proceed": "Taslağa geç",
-    "continue": "Devam et",
+    "hint": "Yanıtları gönder, görüşmecinin ek sorular sormasını sağlar; Şimdi taslak oluştur, mevcut yanıtlarla belgeyi yazar.",
+    "unanswered": "Yanıtlanmamış sorular: {count}",
+    "proceed": "Şimdi taslak oluştur",
+    "proceedTitle": "Kalan soruları atlayın ve taslağı şimdi başlatın",
+    "continue": "Yanıtları gönder",
+    "continueTitle": "Yanıtlarınızı gönderin; görüşmeci ek sorular sorabilir",
     "status": {
       "awaiting": "Yanıt bekleniyor",
       "done": "Tamamlandı"
@@ -4791,7 +4815,19 @@
       "link": "Canlı parça olarak bağla",
       "githubBrowseHint": "Depoya göz atın ve bağlanacak bir veya daha fazla dosya seçin.",
       "selectedFiles": "Seçilen dosyalar ({count})",
-      "removeFile": "Dosyayı kaldır"
+      "removeFile": "Dosyayı kaldır",
+      "blockedReason": {
+        "noSource": "Önce yukarıdan bir belge kaynağı seçin.",
+        "noRepo": "Bir depo seçin veya yukarıya bir GitHub dosya ya da klasör URL'si yapıştırın.",
+        "noFiles": "Depo tarayıcısında en az bir dosyayı işaretleyin.",
+        "noRef": "Önce bir sayfa kimliği veya URL girin."
+      },
+      "urlImport": {
+        "placeholder": "GitHub dosya veya klasör URL'si yapıştırın (örn. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Bul",
+        "invalid": "Bu, bir depo dosyası veya klasör URL'sine benzemiyor.",
+        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın."
+      }
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
@@ -5115,7 +5151,10 @@
       "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan).",
       "hint": "Henuz hicbir sey calismiyor: olusturduktan sonra blok uzerinde Girisim Planlama hattini calistirin. Kod tabanini analiz eder ve onayiniz icin cok asamali plani taslak olarak hazirlar.",
       "submit": "Girisim olustur",
-      "failedTitle": "Girisim olusturulamadi"
+      "failedTitle": "Girisim olusturulamadi",
+      "contextDocsHint": "Planlama ajanlarının kapsamı belirlerken ve planı hazırlarken okuması için bir gereksinim, RFC veya PRD ekleyin.",
+      "contextIssuesHint": "Planlama ajanlarının planı hazırlarken açıklamasını ve yorumlarını görmesi için bir sorun kaydı ekleyin.",
+      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı"
     },
     "status": {
       "planning": "Planlaniyor",
@@ -5168,6 +5207,7 @@
     "inspector": {
       "runPlanning": "Planlamayi calistir",
       "answerPlanning": "Planlama sorularini yanitla",
+      "planningInProgress": "Planlama suruyor",
       "pause": "Duraklat",
       "resume": "Devam et",
       "cancel": "Girisimi iptal et",
@@ -5176,13 +5216,21 @@
     "planning": {
       "title": "Girisimi planla",
       "subtitle": "Girisimi kapsamlandirmak icin planlayicinin sorularini yanitlayin",
-      "intro": "Planlayici bu girisimi kapsamlandiriyor. Hedefi ve kisitlari sekillendirmek icin sorularini yanitlayin, ardindan devam edin veya elindekiyle planlamaya gecin.",
+      "intro": "Planlayici bu girisimi kapsamlandiriyor. Hedefi ve kisitlari sekillendirmek icin sorularini yanitlayin, ardindan yanitlari gonderin. Elindekiyle hemen planlamasini da isteyebilirsiniz.",
       "empty": "Bu blok icin girisim bulunamadi.",
       "converged": "Bekleyen soru yok. Planlayici ihtiyaci olani aldi ve plani hazirliyor.",
+      "idle": "Planlama henuz baslamadi. Gorusmeyi baslatmak icin girisimden planlamayi calistirin.",
+      "working": "Planlayici yanitlarinizi isliyor",
+      "workingHint": "Bu biraz surer. Bittiginde ek sorular burada gorunur, yeterli bilgi varsa plani hazirlamaya baslar.",
+      "failed": "Planlama calismasi durdu",
+      "failedHint": "Planlayici yanit veremeden sona erdi. Yanitlariniz kaydedildi; planlamayi girisimden yeniden calistirin.",
       "answerPlaceholder": "Yanitiniz",
-      "hint": "Devam et, planlayicinin ek sorular sormasini saglar; Planlamaya gec, mevcut yanitlarla planlar.",
-      "proceed": "Planlamaya gec",
-      "continue": "Devam et"
+      "hint": "Yanitlari gonder, planlayicinin ek sorular sormasini saglar; Simdi planla, mevcut yanitlarla plani hazirlar.",
+      "unanswered": "Yanitlanmamis sorular: {count}",
+      "proceed": "Simdi planla",
+      "proceedTitle": "Kalan sorulari atlayin ve plani simdi hazirlayin",
+      "continue": "Yanitlari gonder",
+      "continueTitle": "Yanitlarinizi gonderin; planlayici ek sorular sorabilir"
     },
     "followUpStatus": {
       "open": "Acik",

@@ -23,6 +23,7 @@ const {
   planningPipeline,
   running,
   awaitingAnswers,
+  interviewing,
   starting,
   runPlanning,
   openPlanning,
@@ -65,6 +66,20 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         @click="openPlanning"
       >
         {{ t('initiative.inspector.answerPlanning') }}
+      </UButton>
+      <!-- Mid-pass there is nothing to answer, but the window must stay reachable — it is where
+           the "planner is working" state is shown. -->
+      <UButton
+        v-else-if="interviewing"
+        data-testid="initiative-planning-in-progress"
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-loader-circle"
+        :ui="{ leadingIcon: 'animate-spin' }"
+        @click="openPlanning"
+      >
+        {{ t('initiative.inspector.planningInProgress') }}
       </UButton>
       <UButton
         data-testid="initiative-run-planning"

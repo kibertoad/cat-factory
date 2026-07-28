@@ -62,7 +62,7 @@ describe('BoardService review-debt friction on task creation', () => {
       clock: { now: () => NOW },
       ...(wireSeams
         ? {
-            reviewFrictionSettings: {
+            workspaceSettings: {
               get: async (): Promise<WorkspaceSettings> => ({
                 ...DEFAULT_WORKSPACE_SETTINGS,
                 ...opts.settings,

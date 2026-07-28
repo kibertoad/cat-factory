@@ -39,6 +39,7 @@ const {
   planningPipeline,
   running,
   awaitingAnswers,
+  interviewing,
   starting,
   runPlanning,
   openPlanning,
@@ -115,6 +116,19 @@ function onHandle(e: PointerEvent) {
           @click.stop="openPlanning"
         >
           {{ t('initiative.inspector.answerPlanning') }}
+        </UButton>
+        <!-- Mid-pass: nothing to answer, but keep the route into the window (it shows the wait). -->
+        <UButton
+          v-else-if="interviewing"
+          data-testid="initiative-card-planning-in-progress"
+          size="xs"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-loader-circle"
+          :ui="{ leadingIcon: 'animate-spin' }"
+          @click.stop="openPlanning"
+        >
+          {{ t('initiative.inspector.planningInProgress') }}
         </UButton>
         <UButton
           v-else

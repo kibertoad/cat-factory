@@ -1,5 +1,117 @@
 # @cat-factory/agents
 
+## 0.81.0
+
+### Minor Changes
+
+- 9d965c9: Make linking living fragments from GitHub work from a pasted URL end to end, and explain the
+  link button whenever it is inert.
+
+  Three field-reported failures on one surface, fixed together:
+
+  - **Pasting a full GitHub URL into the repo picker found nothing** ("no repositories found
+    for <url>"): the picker's realtime search feeds the provider's tokenized name search, which a
+    URL never matches. Contracts gains a pure `parseRepoWebUrl` (GitHub `tree`/`blob`/`raw` and
+    GitLab `/-/` shapes, subgroups included), and `GitHubSyncService.listAvailableRepos` now
+    collapses a pasted URL to its `owner/name` slug AND resolves that slug with a direct
+    `getRepo` point-read merged ahead of the search results — a reachable repo resolves even when
+    the provider's search misses it.
+  - **Bulk-import by directory URL**: the Documents tab takes a pasted GitHub file or folder URL,
+    resolves the repo by slug (no search dependency), opens the tree browser at that folder, and
+    the browser's multi-file mode gains per-file checkboxes plus a select-all row — so a whole
+    directory of documents can be checked and linked as living fragments in one action.
+  - **"Link as living fragment" disabled with no explanation**: the button now states, beside it,
+    exactly what is missing (no source chosen / no repository / no files ticked / empty ref).
+  - **Account-tier repo sources failed with "No GitHub installation is available for this
+    scope"** even when the repo was browsable: the account-scope resolver matched only
+    `installation.accountId`, which is null for a per-workspace PAT connect and a GitHub account
+    id for local PAT mode's synthetic rows. The shared `createTierInstallationResolvers`
+    (`@cat-factory/agents`, wired by both facades for fragments AND skills) now falls back
+    through the account's own boards, via the new `WorkspaceRepository.listByAccount` (D1 ⇄
+    Drizzle, conformance-asserted, and proxied in mothership mode under the `account` scope rule).
+
+- 8a9f311: Let an initiative carry linked context documents and tracker issues, and put them in front of the
+  whole planning pipeline.
+
+  Requirements, RFCs, PRDs and tracker issues can now be attached while CREATING an initiative — the
+  same staged picker the add-task flow uses, extracted into a shared `ContextAttachmentFields` so the
+  two surfaces cannot drift. Attachments are linked once the initiative block exists.
+
+  The backend gap this closes is that the engine already RESOLVED a block's attachments for initiative
+  blocks (an initiative is anchored to an ordinary block) and the container already materialised them
+  under `.cat-context/` — but the initiative agent kinds build their own user prompts and so returned
+  before the generic `linkedContextSection` fold. The analyst and planner had the files on disk with
+  nothing telling them the files existed, and `initiative-breakdown`'s system prompt told it to reason
+  from "any linked context" the user prompt never supplied. All three now fold it in, each in the form
+  matching its surface (index + `.cat-context/` pointer for the container kinds, inlined bodies for the
+  inline one).
+
+  The interviewer needed wiring rather than a fold: it is an inline service that never passes through
+  `AgentContextBuilder`. `resolveLinkedContext` moved out of the builder into its own module and both
+  paths now share it, so the interviewer can never see a different set of attachments than the analyst
+  and planner that follow it. It is also told to treat what an attachment settles as already answered,
+  which is the point of attaching a PRD — otherwise the stakeholder is interrogated about exactly the
+  facts the document they attached already states.
+
+  Attachments are still only editable at create time; the inspector's context panels remain task-only.
+  Pasting a document URL or issue key into the initiative's goal text reaches the planning agents too,
+  so an initiative created without attachments is not a dead end.
+
+### Patch Changes
+
+- Updated dependencies [9d965c9]
+  - @cat-factory/contracts@0.185.0
+  - @cat-factory/kernel@0.178.0
+  - @cat-factory/prompt-fragments@0.15.8
+
+## 0.80.1
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+  - @cat-factory/kernel@0.177.0
+  - @cat-factory/prompt-fragments@0.15.7
+
+## 0.80.0
+
+### Minor Changes
+
+- 65b87c1: Agent kinds can now declare CAPABILITIES: the skills they apply (procedural playbooks — bundled in
+  the deployment's own package, or referenced from the account's repo-synced catalog) and the tool
+  servers they may call (MCP, stdio or HTTP). Both are registered on the same app-owned
+  `AgentKindRegistry` and referenced by id from any number of kinds, or attached to a BUILT-IN kind
+  with `assignSkills` / `assignToolServers`. Tool-server credentials are declared by name and
+  resolved at dispatch through the new kernel `ToolSecretResolver` port (both facades wire the
+  deployment-environment resolver by default), so a value never reaches a prompt or the run's
+  telemetry snapshot. See `backend/docs/adr/0029-agent-kind-capabilities.md`.
+
+  BREAKING (pre-1.0, no migration): `AgentRunContext.skill` is now `skills` (an array),
+  `PipelineStep.skillVersion` is now `skillVersions`, and the harness job body's `skill` field is now
+  `skills` alongside the new `mcpServers`.
+
+  OPERATORS — self-hosted runner pools must be moved to the `1.67.0` harness image. A pool still
+  running an older image parses the job body with the old singular `skill` field, so the new
+  `skills` array is dropped on the floor. On Pi/codex that degrades quietly (their prompt still
+  carries the folded-in instructions), but a leased-credential claude-code run is told in its prompt
+  that the skill "is installed for this step" while nothing was installed — a blind run rather than a
+  failed one. `mcpServers` is dropped the same way, which surfaces as an agent that was promised
+  tools it does not have.
+
+  SECURITY NOTE for a deployment that installs agent packages it did not author: a tool-server
+  definition names both the credential it wants and the endpoint it talks to, and the default
+  `createEnvToolSecretResolver` will resolve any key off the deployment environment. On the Worker
+  that is a real widening (`env` is not otherwise ambient to a registration). Pass
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` to confine it.
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/contracts@0.183.0
+  - @cat-factory/kernel@0.176.0
+  - @cat-factory/prompt-fragments@0.15.6
+
 ## 0.79.0
 
 ### Minor Changes

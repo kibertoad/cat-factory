@@ -90,7 +90,8 @@ export type McpTransport = McpStdioTransport | McpHttpTransport
 export interface McpSecretRef {
   /**
    * The secret's key. For a `stdio` server it becomes an environment variable of the server
-   * process; for an `http` server it fills the `${key}` placeholder in {@link McpSecretRef.header}.
+   * process; for an `http` server the resolved value is sent as the {@link McpSecretRef.header}
+   * request header (shaped by {@link McpSecretRef.headerTemplate}).
    */
   key: string
   /**

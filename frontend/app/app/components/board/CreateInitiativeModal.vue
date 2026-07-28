@@ -9,6 +9,11 @@
 // The preset form is rendered GENERICALLY from `descriptor.fields` (InitiativePresetFields) — zero
 // per-preset frontend code. A preset with a repo-detection probe prefills its form from the frame's
 // repo on selection (best-effort; failures fall back to descriptor defaults and never block create).
+//
+// The user can also attach CONTEXT — requirements, RFCs, PRDs, tracker issues — which the whole
+// planning pipeline then reads: the interviewer stops asking what an attached document already
+// answers, and the analyst and planner ground the plan in it. Linking needs a block id, so picks
+// are staged and committed once the initiative exists (the add-task flow's shared orchestration).
 import { computed, ref, watch } from 'vue'
 import {
   sanitizeInitiativePresetInputs,
@@ -18,12 +23,15 @@ import type { InitiativePresetInputs, InitiativePresetInputValue } from '~/types
 import { defaultPresetInputs } from '~/utils/initiative'
 import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import InitiativePresetFields from '~/components/board/InitiativePresetFields.vue'
+import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import type { PendingContext } from '~/composables/useContextLinking'
 
 const ui = useUiStore()
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const toast = useToast()
 const { t } = useI18n()
+const { linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed({
   get: () => ui.createInitiativeFrameId !== null,
@@ -45,6 +53,8 @@ const selectedPreset = computed(() => initiatives.presetById(selectedPresetId.va
 const title = ref('')
 const description = ref('')
 const inputs = ref<InitiativePresetInputs>({})
+// Context the user chose to attach, committed once the initiative block exists (see create()).
+const pendingContext = ref<PendingContext[]>([])
 
 // Monotonic token so a slow probe response from a since-changed preset/frame is discarded.
 let probeSeq = 0
@@ -97,6 +107,7 @@ watch(open, (o) => {
   if (!o) return
   title.value = ''
   description.value = ''
+  pendingContext.value = []
   selectedPresetId.value = GENERIC_PRESET_ID
   applyPreset()
 })
@@ -122,6 +133,12 @@ async function create() {
       presetInputs: descriptor
         ? sanitizeInitiativePresetInputs(descriptor, inputs.value)
         : undefined,
+    })
+    // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
+    // permission/visibility error, a not-found doc, …) rather than a bare count. The initiative
+    // itself is already created, so a failed attachment never costs the user the form.
+    presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id, {
+      title: (count) => t('initiative.create.linkFailed', { count }, count),
     })
     ui.closeCreateInitiative()
     // Select the fresh block so the inspector offers "Run planning" right away.
@@ -214,6 +231,16 @@ async function create() {
           v-if="selectedPreset"
           v-model="inputs"
           :descriptor="selectedPreset"
+        />
+
+        <!-- Attached requirements / issues, staged here and linked once the block exists. The
+             issue search is scoped to the service frame, which is what resolves its repo. -->
+        <ContextAttachmentFields
+          v-if="ui.createInitiativeFrameId"
+          v-model="pendingContext"
+          :scope-block-id="ui.createInitiativeFrameId"
+          :docs-hint="t('initiative.create.contextDocsHint')"
+          :issues-hint="t('initiative.create.contextIssuesHint')"
         />
 
         <p class="text-[11px] text-slate-500">

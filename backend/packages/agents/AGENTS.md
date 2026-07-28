@@ -18,7 +18,13 @@
 - `providers/` — the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy).
-- `fragmentLibrary/` — the prompt-fragment library plumbing.
+- `fragmentLibrary/` — the prompt-fragment library plumbing. The repo-source engine both
+  libraries share lives in `repoSourceSync/`, including
+  `tier-installation-resolver.ts` (`createTierInstallationResolvers`) — the ONE
+  implementation of "which GitHub installation reads this tier's repos" both runtime facades
+  wire for fragments AND skills. The account tier resolves through the account's boards, not
+  the installation row's `accountId` (null for a PAT connect, a GitHub id for local mode's
+  synthetic rows).
 - `skillLibrary/` — the repo-sourced Claude Skills catalog + sync (ADR 0024) and
   `SkillRunResolver`, which resolves ONE catalog skill (instructions + resource bodies at its
   pinned commit) for a dispatch. A BUNDLED skill needs none of this — it is deployment code,
@@ -40,4 +46,5 @@
   `docs/initiatives/tech-migration-preset-and-mssql-postgres-pilot.md`).
 
 **See also:** `CLAUDE.md` → "Custom agents", "Conventions" (the `FINAL_ANSWER_IN_REPLY` rule);
-`backend/docs/model-support.md`.
+`backend/docs/custom-agent-roles.md` (authoring a registered kind's prompt / skills / tool
+servers on these seams); `backend/docs/model-support.md`.

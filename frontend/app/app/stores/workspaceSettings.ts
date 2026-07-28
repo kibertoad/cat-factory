@@ -20,6 +20,11 @@ const DEFAULTS: WorkspaceSettings = {
   reviewFrictionBlockStuckMinutes: null,
   spendCurrency: null,
   spendMonthlyLimit: null,
+  // Null means the operator has never chosen a default test-environment provisioning mechanism,
+  // which is what the setup banner nags about. Defaulting it to a type here would silence that
+  // banner on every board before the snapshot even lands.
+  defaultProvisionType: null,
+  defaultProvisionManifestId: null,
 }
 
 /**

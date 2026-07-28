@@ -1294,6 +1294,12 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),
   spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+  // The default test-environment provisioning mechanism suggested for newly added service
+  // frames, plus the custom manifest id a `custom` default pins. Both nullable with NO
+  // default: null means the operator has never chosen (which the SPA nags about), and is
+  // deliberately distinct from an explicit `infraless`. Mirrors the D1 columns.
+  default_provision_type: text('default_provision_type'),
+  default_provision_manifest_id: text('default_provision_manifest_id'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's

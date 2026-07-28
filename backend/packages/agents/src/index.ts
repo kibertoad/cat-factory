@@ -141,6 +141,7 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
+  renderLinkedContext,
   initiativePresetSection,
   CONTEXT_DIR,
 } from './agents/prompts/standard.js'
@@ -493,3 +494,8 @@ export {
   type ReconcileResult,
   type SyncRepoSourceParams,
 } from './repoSourceSync/repo-source-sync.js'
+export {
+  createTierInstallationResolvers,
+  type TierInstallationResolverDependencies,
+  type TierInstallationResolvers,
+} from './repoSourceSync/tier-installation-resolver.js'

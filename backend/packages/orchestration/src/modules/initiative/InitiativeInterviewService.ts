@@ -13,8 +13,9 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/agents'
+import { catFactoryObservability, renderLinkedContext } from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+import type { LinkedContext } from '../execution/linked-context.js'
 import { extractJson } from '../requirements/requirements.logic.js'
 import {
   coerceInterviewOutput,
@@ -125,6 +126,20 @@ export interface InitiativeInterviewDeps {
   ) => Promise<string | undefined>
   /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
   resolveRunContext?: ResolveBlockRunContext
+  /**
+   * Resolve the initiative block's linked context (attached requirements / RFCs / PRDs / tracker
+   * issues, plus anything the brief names outright). Needed explicitly because this service is
+   * INLINE and assembles its own prompt — it never passes through `AgentContextBuilder`, which is
+   * what puts the same attachments in front of the analyst and planner that follow.
+   *
+   * Absent (or unwired document/task sources) ⇒ the prompts are byte-for-byte their previous
+   * shape, so a deployment without the documents/tasks integrations is unaffected.
+   */
+  resolveLinkedContext?: (
+    workspaceId: string,
+    blockId: string,
+    description: string,
+  ) => Promise<LinkedContext>
 }
 
 export class InitiativeInterviewService {
@@ -145,14 +160,17 @@ export class InitiativeInterviewService {
     initiative: Initiative,
     opts: { finalize: boolean },
   ): Promise<InterviewOutput> {
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    const [{ modelProvider, ref }, linked] = await Promise.all([
+      this.resolveModel(workspaceId, block),
+      this.linkedSection(workspaceId, block),
+    ])
     let text: string
     try {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
         system: INITIATIVE_INTERVIEW_SYSTEM_PROMPT,
-        prompt: this.buildPrompt(block, initiative, opts.finalize),
+        prompt: this.buildPrompt(block, initiative, opts.finalize, linked),
         temperature: 0.2,
         maxOutputTokens: 3000,
         providerOptions: catFactoryObservability({
@@ -183,13 +201,16 @@ export class InitiativeInterviewService {
     initiative: Initiative,
     question: string,
   ): Promise<string> {
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    const [{ modelProvider, ref }, linked] = await Promise.all([
+      this.resolveModel(workspaceId, block),
+      this.linkedSection(workspaceId, block),
+    ])
     try {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
         system: INITIATIVE_RECOMMEND_SYSTEM_PROMPT,
-        prompt: this.buildRecommendPrompt(block, initiative, question),
+        prompt: this.buildRecommendPrompt(block, initiative, question, linked),
         temperature: 0.3,
         maxOutputTokens: 800,
         providerOptions: catFactoryObservability({
@@ -207,8 +228,33 @@ export class InitiativeInterviewService {
     }
   }
 
+  /**
+   * The initiative's attached requirements / RFCs / issues, rendered for the prompt, or '' when
+   * nothing is attached (or no resolver is wired). INLINE rendering — the interviewer has no
+   * checkout to materialise files into, so the bodies are injected, clamped by the shared
+   * `CONTEXT_BUDGET` the container path also honours.
+   *
+   * A read failure PROPAGATES rather than degrading to '', matching how the analyst and planner
+   * resolve the same attachments through `AgentContextBuilder`: interviewing a stakeholder about
+   * a document the platform silently failed to open is worse than failing the round outright.
+   */
+  private async linkedSection(workspaceId: string, block: Block): Promise<string> {
+    if (!this.deps.resolveLinkedContext) return ''
+    const { docs, tasks } = await this.deps.resolveLinkedContext(
+      workspaceId,
+      block.id,
+      block.description ?? '',
+    )
+    return renderLinkedContext(docs, tasks)
+  }
+
   /** Assemble the interviewer prompt: the brief + the answered digest + the round intent. */
-  private buildPrompt(block: Block, initiative: Initiative, finalize: boolean): string {
+  private buildPrompt(
+    block: Block,
+    initiative: Initiative,
+    finalize: boolean,
+    linked: string,
+  ): string {
     const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
     const brief = block.description?.trim()
     if (brief) lines.push('', 'Brief:', brief)
@@ -219,6 +265,20 @@ export class InitiativeInterviewService {
     const steering = presetInterviewerSteering(initiative, this.deps.initiativePresetRegistry)
     if (steering) {
       lines.push('', `## Initiative preset: ${steering.label}`, '', steering.promptAddition)
+    }
+    // The stakeholder's own attached source material, before the answers gathered so far: it is
+    // part of the BRIEF, so the interviewer must read it before deciding what is still unclear.
+    // The instruction is what makes attaching a PRD worth doing — without it the model treats the
+    // document as background and still asks the questions the document already answers, which is
+    // precisely the interrogation the attachment was meant to spare the stakeholder.
+    if (linked) {
+      lines.push(linked)
+      lines.push(
+        '',
+        'The linked context above was attached to this initiative by the stakeholder. Read it ' +
+          'as part of the brief and treat everything it settles as ALREADY ANSWERED: do NOT ask ' +
+          'about anything it states. Ask only about what it leaves genuinely open or ambiguous.',
+      )
     }
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
     if (answered.length) {
@@ -261,10 +321,19 @@ export class InitiativeInterviewService {
   }
 
   /** Assemble the recommend prompt: the brief + answered digest + the ONE question to answer. */
-  private buildRecommendPrompt(block: Block, initiative: Initiative, question: string): string {
+  private buildRecommendPrompt(
+    block: Block,
+    initiative: Initiative,
+    question: string,
+    linked: string,
+  ): string {
     const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
     const brief = block.description?.trim()
     if (brief) lines.push('', 'Brief:', brief)
+    // The attached material is the best source a suggested answer can be grounded in — this is
+    // the action a stakeholder reaches for precisely when they would rather the platform read
+    // the document than answer from it themselves.
+    if (linked) lines.push(linked)
     if (initiative.goal?.trim()) lines.push('', `Goal so far: ${initiative.goal.trim()}`)
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
     if (answered.length) {

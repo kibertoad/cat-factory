@@ -7,11 +7,7 @@ import type {
 import { assessReviewFriction } from '@cat-factory/contracts'
 import type { Block, Clock } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
-
-/** Minimal read seam over workspace settings for the review-debt friction guard. */
-export interface ReviewFrictionSettingsReader {
-  get(workspaceId: string): Promise<WorkspaceSettings>
-}
+import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 
 /** Minimal read seam over open notifications for the review-debt friction guard. */
 export interface ReviewFrictionNotificationReader {
@@ -21,7 +17,7 @@ export interface ReviewFrictionNotificationReader {
 export interface ReviewFrictionGuardDeps {
   clock: Clock
   /** When BOTH readers are wired and friction is enabled the guard enforces; else pass-through. */
-  settings?: ReviewFrictionSettingsReader
+  settings?: WorkspaceSettingsReader
   notifications?: ReviewFrictionNotificationReader
 }
 
@@ -34,7 +30,7 @@ export interface ReviewFrictionGuardDeps {
  */
 export class ReviewFrictionGuard {
   private readonly clock: Clock
-  private readonly settings?: ReviewFrictionSettingsReader
+  private readonly settings?: WorkspaceSettingsReader
   private readonly notifications?: ReviewFrictionNotificationReader
 
   constructor({ clock, settings, notifications }: ReviewFrictionGuardDeps) {

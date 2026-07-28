@@ -1,5 +1,166 @@
 # @cat-factory/app
 
+## 0.173.0
+
+### Minor Changes
+
+- 9d965c9: Make linking living fragments from GitHub work from a pasted URL end to end, and explain the
+  link button whenever it is inert.
+
+  Three field-reported failures on one surface, fixed together:
+
+  - **Pasting a full GitHub URL into the repo picker found nothing** ("no repositories found
+    for <url>"): the picker's realtime search feeds the provider's tokenized name search, which a
+    URL never matches. Contracts gains a pure `parseRepoWebUrl` (GitHub `tree`/`blob`/`raw` and
+    GitLab `/-/` shapes, subgroups included), and `GitHubSyncService.listAvailableRepos` now
+    collapses a pasted URL to its `owner/name` slug AND resolves that slug with a direct
+    `getRepo` point-read merged ahead of the search results — a reachable repo resolves even when
+    the provider's search misses it.
+  - **Bulk-import by directory URL**: the Documents tab takes a pasted GitHub file or folder URL,
+    resolves the repo by slug (no search dependency), opens the tree browser at that folder, and
+    the browser's multi-file mode gains per-file checkboxes plus a select-all row — so a whole
+    directory of documents can be checked and linked as living fragments in one action.
+  - **"Link as living fragment" disabled with no explanation**: the button now states, beside it,
+    exactly what is missing (no source chosen / no repository / no files ticked / empty ref).
+  - **Account-tier repo sources failed with "No GitHub installation is available for this
+    scope"** even when the repo was browsable: the account-scope resolver matched only
+    `installation.accountId`, which is null for a per-workspace PAT connect and a GitHub account
+    id for local PAT mode's synthetic rows. The shared `createTierInstallationResolvers`
+    (`@cat-factory/agents`, wired by both facades for fragments AND skills) now falls back
+    through the account's own boards, via the new `WorkspaceRepository.listByAccount` (D1 ⇄
+    Drizzle, conformance-asserted, and proxied in mothership mode under the `account` scope rule).
+
+- 8a9f311: Let an initiative carry linked context documents and tracker issues, and put them in front of the
+  whole planning pipeline.
+
+  Requirements, RFCs, PRDs and tracker issues can now be attached while CREATING an initiative — the
+  same staged picker the add-task flow uses, extracted into a shared `ContextAttachmentFields` so the
+  two surfaces cannot drift. Attachments are linked once the initiative block exists.
+
+  The backend gap this closes is that the engine already RESOLVED a block's attachments for initiative
+  blocks (an initiative is anchored to an ordinary block) and the container already materialised them
+  under `.cat-context/` — but the initiative agent kinds build their own user prompts and so returned
+  before the generic `linkedContextSection` fold. The analyst and planner had the files on disk with
+  nothing telling them the files existed, and `initiative-breakdown`'s system prompt told it to reason
+  from "any linked context" the user prompt never supplied. All three now fold it in, each in the form
+  matching its surface (index + `.cat-context/` pointer for the container kinds, inlined bodies for the
+  inline one).
+
+  The interviewer needed wiring rather than a fold: it is an inline service that never passes through
+  `AgentContextBuilder`. `resolveLinkedContext` moved out of the builder into its own module and both
+  paths now share it, so the interviewer can never see a different set of attachments than the analyst
+  and planner that follow it. It is also told to treat what an attachment settles as already answered,
+  which is the point of attaching a PRD — otherwise the stakeholder is interrogated about exactly the
+  facts the document they attached already states.
+
+  Attachments are still only editable at create time; the inspector's context panels remain task-only.
+  Pasting a document URL or issue key into the initiative's goal text reaches the planning agents too,
+  so an initiative created without attachments is not a dead end.
+
+### Patch Changes
+
+- 6ece835: Make both interview windows show that continue/proceed did something. The resume is asynchronous
+  by design (the call records the intent on the parked step and wakes the durable driver, which runs
+  the interviewer LLM), so the response carries the pre-resume entity and an entity-keyed window
+  rendered identically before and after the click — indistinguishable from a dead button for as long
+  as the pass took. The initiative-planning and document-interview windows now fold their run's
+  status in through a shared `interviewGatePhase`, rendering a waiting state while a pass is in
+  flight and a failure notice when the run stopped before the interview settled; planning also gets
+  a distinct "not started yet" state instead of borrowing the converged copy. The initiative board
+  card and inspector follow the same phase, so they stop offering "Answer planning questions" (and
+  pulsing) over a question set that is already submitted.
+
+  Renames the action-rail controls in both windows, which both read as "go forward": "Continue" is
+  now "Submit answers", and "Proceed to plan" / "Proceed to draft" are "Plan now" / "Draft now",
+  with tooltips and reworded hints. A disabled "Submit answers" now states how many questions are
+  still unanswered rather than greying out silently — except where the workspace RBAC gate is what
+  blocks it, which keeps precedence.
+
+- Updated dependencies [9d965c9]
+  - @cat-factory/contracts@0.185.0
+
+## 0.172.0
+
+### Minor Changes
+
+- 58e06a2: Give a workspace a DEFAULT test-environment provisioning mechanism, suggested for every service
+  added afterwards, and prompt for it when a board has never chosen one.
+
+  Declaring a provision type per service (ADR 0007) is right, but it made the common case — a board
+  where every service provisions the same way — a per-service chore, and a service nobody got to
+  silently produced no test environment at all. `workspace_settings` gains
+  `defaultProvisionType` + `defaultProvisionManifestId` (D1 + Drizzle, with a conformance
+  assertion), and `BoardService` stamps them onto every newly created service frame via both
+  creation paths, alongside the existing default fragment selection.
+
+  The pair is nullable rather than defaulted, and the distinction is the feature: `null` means the
+  operator has never chosen — what the new `DefaultTestEnvBanner` nags about, which covers a
+  manually created board, the board the SPA creates implicitly on first launch, and an older board
+  predating the setting under one condition — while `infraless` is a real decision ("services stand
+  up no environment") that silences it. The banner carries a shareable `?settings=default-test-env`
+  deep link to the Infrastructure window's Test-environments tab, where the new section preselects
+  the first REGISTERED custom provider when the deployment shipped one and nothing is stored yet
+  (unsaved, and labelled as a suggestion until saved).
+
+  The seed is creation-time only: the engine still reads a service's own `provisioning`, so changing
+  the default never retroactively alters an existing service. `WorkspaceSettingsService.update`
+  refuses a `custom` default with no manifest id and clears a stale id when switching away, since a
+  `custom` service pinning nothing matches no `remote-custom` handler.
+
+  `BoardService`'s `reviewFrictionSettings` dependency is renamed to `workspaceSettings` (one reader
+  now feeds both the friction guard and the provisioning seed), and the frame-creation defaults move
+  into a `newServiceFrameDefaults` collaborator.
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+
+## 0.171.0
+
+### Minor Changes
+
+- df48cb0: Close five gaps in the Ralph loop, of which two silently changed what a run actually did.
+
+  A re-run un-looped the step. `retry.logic.resetStep` rebuilds a step from an explicit field list
+  and so DROPPED `step.ralph`. Unlike `step.test` — seeded lazily when the tester's report arrives
+  — the loop state is needed BEFORE the dispatch: it is what puts the `validation` block on the job
+  body. So a retried or restarted ralph run dispatched a plain coding pass, got no verdict back,
+  never fired the `ralph-verdict` interceptor, and finished as an ungated one-shot coder. The
+  loop-back reset (`StepGraph.resetStepForRerun`) had the mirror-image bug: it preserved the state
+  with `attempts` still at the spent budget, so the re-run's first verdict went straight to
+  `exhausted`. Both now go through the pure `restartRalphState` — frozen config kept, counters
+  zeroed.
+
+  The validation command starved the inactivity watchdog. `JOB_INACTIVITY_MS` (10 min) is tighter
+  than the command's own watchdog (15 min), and a harness-spawned command emits no activity of its
+  own, so any validation past ten minutes aborted the iteration as a wedge and made the 15-minute
+  watchdog unreachable at stock settings. It now heartbeats at 30s like the two sibling harness-run
+  phases.
+
+  `runRalphValidation` was a third copy of what `captured-command.ts` exists to prevent, and had
+  drifted in both ways that seam guards: it scrubbed secrets AFTER the rolling truncation with no
+  margin (a credential straddling the cut lost its `KEY=` prefix and survived redaction as an
+  unrecognised partial — on a tail that reaches the step, the notification and the SPA), and it
+  published the full 16k in-container capture where both siblings bound the wire tail. It now runs
+  through `runCapturedCommand` at a 4k report budget.
+
+  The loop also gains the no-progress early abort the design had deferred: the harness stamps the
+  work branch's HEAD onto the verdict, and two consecutive failing iterations against an unchanged
+  head end the loop instead of burning the rest of the budget. It fails open on an unknown head (an
+  older harness image never trips it) and is reported distinctly from a spent budget, since only one
+  of the two is fixed by raising the budget. Finally, the per-iteration attempt log — which rides
+  the run `detail` blob re-serialized on every progress write — is capped, with the dropped count
+  recorded and surfaced rather than silently truncated.
+
+  Image-affecting: bumps the runner image to 1.67.0.
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/contracts@0.183.0
+
 ## 0.170.0
 
 ### Minor Changes

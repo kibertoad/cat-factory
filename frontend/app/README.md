@@ -133,6 +133,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   single way a pipeline is chosen anywhere — add-task, run settings, the recurring
   schedule, the focus view's Run menu — so every surface explains a pipeline by the
   ordered steps it will run rather than by its name alone.
+- **Context attachments** (`components/context`) — `ContextAttachmentFields`, the
+  shared staged-attachment form used by both the add-task and create-initiative
+  modals. Picks are held locally and import-and-linked once the block exists (see
+  `composables/useContextLinking`), because linking needs a block id.
 - **Integrations** — modals/panels for `github` (the source-control panel, shared
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
