@@ -46,6 +46,11 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   reviewFrictionBlockStuckMinutes: null,
   spendCurrency: null,
   spendMonthlyLimit: null,
+  // Null, not `infraless`: a fresh board has NOT decided how its services get a test
+  // environment, and the SPA's setup banner needs to tell that apart from a deliberate
+  // "no environments" choice (which is `infraless`, and silences the banner).
+  defaultProvisionType: null,
+  defaultProvisionManifestId: null,
 }
 
 /**

@@ -2121,6 +2121,11 @@
         "add": "Üye eklenemedi",
         "remove": "Üye kaldırılamadı"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Varsayılan test ortamı seçin",
+      "body": "Bu pano, servislerinin test ortamını nasıl edineceğini henüz belirlemedi. Bir varsayılan seçin; bundan sonra eklediğiniz her servis tek tek kurulmak yerine bununla başlasın. Servis bazında yine değiştirebilirsiniz.",
+      "action": "Varsayılanı seç"
     }
   },
   "settings": {
@@ -3058,6 +3063,15 @@
       },
       "saved": "Model erişim politikası kaydedildi",
       "saveFailed": "Model erişim politikası kaydedilemedi"
+    },
+    "defaultProvision": {
+      "title": "Yeni servisler için varsayılan",
+      "hint": "Bundan sonra ekleyeceğiniz her servis için önerilecek sağlama mekanizması. Mevcut servisleri değiştirmez ve her servis bunu geçersiz kılabilir.",
+      "suggestionHint": "Bu şimdilik yalnızca bir öneri. Panonun varsayılanı olarak kaydetmek için kaydedin.",
+      "save": "Varsayılanı kaydet",
+      "saved": "Varsayılan test ortamı kaydedildi.",
+      "savedState": "Kaydedildi.",
+      "saveFailed": "Varsayılan test ortamı kaydedilemedi."
     }
   },
   "providers": {

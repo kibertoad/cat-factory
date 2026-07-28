@@ -55,6 +55,45 @@ one of:
 An **undeclared** service (no `provisioning`) falls through to the legacy single-connection
 path via the compat bridge, so pre-existing workspaces keep provisioning unchanged.
 
+## The workspace default for new services
+
+Declaring a provision type per service is right (services genuinely differ), but it made the
+COMMON case — a board where every service provisions the same way — a per-service chore, and a
+service nobody got to silently produced no test environment.
+
+So a workspace records a default: `defaultProvisionType` (+ `defaultProvisionManifestId` for
+`custom`) on `workspace_settings`. `BoardService` stamps it onto every newly created service
+frame — both `addFrame` (drag-drop) and `addServiceFromRepo` (import a repo) — through
+`newServiceFrameDefaults.ts`, alongside the workspace's default fragment selection.
+
+Three properties are load-bearing:
+
+- **It is a CREATION-TIME SEED, never a run-time fallback.** The engine still reads only a
+  service's own `provisioning`, so changing the default never retroactively alters what an
+  existing service provisions. It is a suggestion the user owns and edits per service in the
+  inspector, exactly like the auto-detection below.
+- **`null` ≠ `infraless`.** `null` means the operator has never chosen — the state the SPA's
+  `DefaultTestEnvBanner` nags about, on a board created by hand, one the SPA created implicitly
+  on first launch, or one predating the setting. `infraless` is a real decision ("services stand
+  up no environment") and silences the banner. Collapsing them would leave the banner able only
+  to nag forever or never.
+- **`custom` must name its `manifestId`.** `WorkspaceSettingsService.update` refuses the pair
+  without one (and clears a stale id when switching away), because a `custom` service pinning
+  nothing matches no `remote-custom` handler — a failure that would otherwise surface much later,
+  at the deployer step, on services nobody knowingly misconfigured.
+
+The setting is edited in the Infrastructure window's **Test environments** tab
+(`DefaultProvisionTypeSection.vue`), above the per-type handler configurator: what services
+PRODUCE comes before configuring how each type is handled. With nothing recorded, the section
+preselects the first **registered** custom provider when the deployment shipped one — a
+registered provider is evidence of a deliberate platform-level integration, so it is almost
+always the right answer — falling back to a workspace-defined custom type, and otherwise opening
+unset. It deliberately never guesses a built-in: `kubernetes` being in the picker says nothing
+about whether this board's services use it. The suggestion is unsaved until the operator saves,
+and says so on screen. The banner carries a shareable deep link
+(`?settings=default-test-env`) to that section so the prompt can be handed to whoever owns the
+board's infrastructure.
+
 ## Engines & backends
 
 The workspace handler picks an **engine** (`infraEngineSchema`); a registered
