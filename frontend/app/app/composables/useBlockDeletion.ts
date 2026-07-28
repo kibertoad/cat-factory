@@ -76,7 +76,14 @@ export function useBlockDeletion() {
         ? 'task'
         : block.level === 'module'
           ? 'module'
-          : 'service'
+          : // An initiative names itself rather than falling through to the service copy, which
+            // would describe a blast radius orders of magnitude larger than the real one. Its
+            // cascade is also genuinely different from a container's: the plan goes with it, but
+            // the tasks its loop already spawned are NOT descendants — the backend only detaches
+            // their membership link — so the count branch below deliberately doesn't apply.
+            block.level === 'initiative'
+            ? 'initiative'
+            : 'service'
     const title = t(`panels.inspector.confirmDelete.${kind}.title`)
     // For a container (service/module) state the exact cascade size so the blast radius is
     // explicit — "and everything inside it" hides how many tasks/modules go with it.

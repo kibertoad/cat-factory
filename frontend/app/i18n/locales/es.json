@@ -942,7 +942,7 @@
     },
     "execution": {
       "title": "Ejecución",
-      "hint": "La ejecución en vivo del pipeline de esta tarea: cada paso de agente, su progreso y el pull request resultante.",
+      "hint": "La ejecución en vivo del pipeline: cada paso de agente, su progreso y el pull request resultante.",
       "stage": {
         "incorporating": "Incorporando…",
         "reviewing": "Revisando de nuevo…",
@@ -963,10 +963,10 @@
       "stop": "Detener",
       "stopTooltip": "Detener la ejecución pero conservarla (legible y reintentable)",
       "reset": "Restablecer",
-      "resetTooltip": "Descartar esta ejecución y restablecer la tarea a planificada",
+      "resetTooltip": "Descartar esta ejecución y restablecer el estado a planificada",
       "resetConfirm": {
         "title": "¿Descartar esta ejecución?",
-        "body": "Esto elimina la ejecución y devuelve la tarea a planificada. Esto no se puede deshacer.",
+        "body": "Esto elimina la ejecución y restablece el estado a planificada. Esto no se puede deshacer.",
         "confirm": "Descartar ejecución"
       },
       "mergeConfirm": {
@@ -1305,6 +1305,7 @@
       "deleteRecurringPipeline": "Eliminar pipeline recurrente",
       "deleteTask": "Eliminar tarea",
       "deleteModule": "Eliminar módulo",
+      "deleteInitiative": "Eliminar iniciativa",
       "deleteService": "Eliminar servicio",
       "titlePlaceholder": "Título…",
       "reworkedRequirements": "Requisitos reelaborados",
@@ -1332,6 +1333,10 @@
         "module": {
           "title": "¿Eliminar este módulo?",
           "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
+        },
+        "initiative": {
+          "title": "¿Eliminar esta iniciativa?",
+          "body": "Se eliminarán \"{name}\" y su plan. Las tareas que ya creó permanecen en el tablero. Esta acción no se puede deshacer."
         },
         "service": {
           "title": "¿Eliminar este servicio?",
@@ -5217,6 +5222,8 @@
       "unanswered": "Preguntas sin responder: {count}",
       "proceed": "Planificar ahora",
       "proceedTitle": "Omitir las preguntas restantes y redactar el plan ahora",
+      "discard": "Descartar ejecución",
+      "discardTitle": "Descartar la ejecución de planificación bloqueada para volver a empezar",
       "continue": "Enviar respuestas",
       "continueTitle": "Envia tus respuestas; el planificador puede hacer preguntas de seguimiento"
     },

@@ -1259,7 +1259,7 @@
     },
     "execution": {
       "title": "Esecuzione",
-      "hint": "L'esecuzione dal vivo della pipeline di questa attivita': ogni passaggio dell'agente, il suo avanzamento e la pull request risultante.",
+      "hint": "L'esecuzione dal vivo della pipeline: ogni passaggio dell'agente, il suo avanzamento e la pull request risultante.",
       "stage": {
         "incorporating": "Incorporazione…",
         "reviewing": "Nuova revisione…",
@@ -1284,10 +1284,10 @@
       "stop": "Arresta",
       "stopTooltip": "Arresta l'esecuzione ma conservala (leggibile e ripetibile)",
       "reset": "Reimposta",
-      "resetTooltip": "Scarta questa esecuzione e reimposta l'attivita' a pianificata",
+      "resetTooltip": "Scarta questa esecuzione e reimposta lo stato a pianificata",
       "resetConfirm": {
         "title": "Scartare questa esecuzione?",
-        "body": "Questo elimina l'esecuzione e riporta l'attivita' a pianificata. L'operazione non puo' essere annullata.",
+        "body": "Questo elimina l'esecuzione e reimposta lo stato a pianificata. L'operazione non puo' essere annullata.",
         "confirm": "Scarta esecuzione"
       },
       "mergeConfirm": {
@@ -1622,6 +1622,7 @@
       "deleteRecurringPipeline": "Elimina la pipeline ricorrente",
       "deleteTask": "Elimina attivita'",
       "deleteModule": "Elimina modulo",
+      "deleteInitiative": "Elimina iniziativa",
       "deleteService": "Elimina servizio",
       "confirmDelete": {
         "task": {
@@ -1631,6 +1632,10 @@
         "module": {
           "title": "Eliminare questo modulo?",
           "body": "\"{name}\" e tutto cio' che contiene verranno rimossi. L'operazione non puo' essere annullata."
+        },
+        "initiative": {
+          "title": "Eliminare questa iniziativa?",
+          "body": "\"{name}\" e il suo piano verranno rimossi. Le attivita' gia' create restano sulla board. L'operazione non puo' essere annullata."
         },
         "service": {
           "title": "Eliminare questo servizio?",
@@ -4208,6 +4213,8 @@
       "unanswered": "Domande senza risposta: {count}",
       "proceed": "Pianifica ora",
       "proceedTitle": "Salta le domande rimanenti e redigi subito il piano",
+      "discard": "Scarta esecuzione",
+      "discardTitle": "Scarta l'esecuzione di pianificazione bloccata per ricominciare",
       "continue": "Invia risposte",
       "continueTitle": "Invia le tue risposte; il pianificatore potrebbe porre domande di follow-up"
     },
