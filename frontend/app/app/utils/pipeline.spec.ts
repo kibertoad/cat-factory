@@ -1,12 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import { pipelineAllowedForTaskType, purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
-import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import {
+  pipelineAllowedForManualStart,
+  pipelineDisplaySteps,
+  pipelineGateCount,
+} from '~/utils/pipeline'
 
 // A minimal pipeline: only the fields the launch/task-type filters read matter here.
 function pipeline(over: Partial<Pipeline> = {}): Pipeline {
   return { id: 'pl_x', name: 'X', agentKinds: ['coder'], ...over } as Pipeline
 }
+
+// The data behind every picker's preview pane: the ordered steps a run will actually execute.
+describe('pipelineDisplaySteps', () => {
+  it('keeps the authored order and flags the gated steps', () => {
+    const p = pipeline({
+      agentKinds: ['task-estimator', 'coder', 'reviewer'],
+      gates: [false, true, false],
+    })
+    expect(pipelineDisplaySteps(p)).toEqual([
+      { kind: 'task-estimator', gated: false },
+      { kind: 'coder', gated: true },
+      { kind: 'reviewer', gated: false },
+    ])
+  })
+
+  it('drops steps disabled by default — they never run, so listing them would misdescribe it', () => {
+    // The short `enabled` array also pins "no entry ⇒ enabled": `tester` has none and stays.
+    const p = pipeline({ agentKinds: ['architect', 'coder', 'tester'], enabled: [false, true] })
+    expect(pipelineDisplaySteps(p).map((s) => s.kind)).toEqual(['coder', 'tester'])
+  })
+})
+
+describe('pipelineGateCount', () => {
+  it('counts only the gates that a run can actually stop at', () => {
+    expect(pipelineGateCount(pipeline({ agentKinds: ['coder'] }))).toBe(0)
+    expect(
+      pipelineGateCount(pipeline({ agentKinds: ['coder', 'merger'], gates: [true, true] })),
+    ).toBe(2)
+    // A gate declared on a disabled step gates nothing: the step is skipped at run.
+    expect(
+      pipelineGateCount(
+        pipeline({ agentKinds: ['coder', 'merger'], gates: [true, true], enabled: [true, false] }),
+      ),
+    ).toBe(1)
+  })
+})
 
 describe('pipelineAllowedForTaskType', () => {
   it('a document task offers ONLY document-purpose pipelines', () => {

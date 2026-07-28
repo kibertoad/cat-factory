@@ -70,17 +70,7 @@ function defaultRecurrence(): Recurrence {
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) => pipelineAllowedForSchedule(p, frame.value, board.blocks)),
 )
-const pipelineMenu = computed(() => [
-  selectablePipelines.value.map((p) => ({
-    label: p.name,
-    icon: 'i-lucide-workflow',
-    onSelect: () => (pipelineId.value = p.id),
-  })),
-])
 const selectedPipeline = computed(() => pipelines.getPipeline(pipelineId.value))
-const selectedPipelineLabel = computed(
-  () => selectedPipeline.value?.name ?? t('board.recurring.pickPipeline'),
-)
 
 // Infer the template from the picked pipeline so the backend seeds the right block
 // description (and so we know to show the tracker config).
@@ -269,19 +259,16 @@ async function add() {
           />
         </UFormField>
 
+        <!-- The rich picker, not a name-only menu: which steps a schedule will run unattended,
+             every time it fires, is exactly what the person setting it up needs to see. A schedule
+             must name a pipeline, so there is no "none" row. -->
         <UFormField :label="t('board.recurring.pipeline')" required>
-          <UDropdownMenu :items="pipelineMenu" class="w-full">
-            <UButton
-              color="neutral"
-              variant="subtle"
-              size="sm"
-              icon="i-lucide-workflow"
-              trailing-icon="i-lucide-chevron-down"
-              class="w-full justify-between"
-            >
-              {{ selectedPipelineLabel }}
-            </UButton>
-          </UDropdownMenu>
+          <PipelinePicker
+            v-model="pipelineId"
+            :options="selectablePipelines"
+            :placeholder="t('board.recurring.pickPipeline')"
+            trigger-class="w-full justify-between"
+          />
         </UFormField>
 
         <UFormField :label="t('board.recurring.prompt')">

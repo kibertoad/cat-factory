@@ -3664,10 +3664,12 @@
     },
     "preview": {
       "stepCount": "{count} adım | {count} adım",
+      "gateCount": "{count} onay | {count} onay",
       "gated": "Bu adımdan sonra insan onayı"
     },
     "picker": {
-      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin."
+      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin.",
+      "hoverHint": "Çalıştırdığı adımları görmek için bir pipeline'ın üzerine gelin."
     },
     "builder": {
       "title": "Pipeline oluşturucu",

@@ -3652,10 +3652,12 @@
     },
     "preview": {
       "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "gateCount": "{count} zatwierdzenie | {count} zatwierdzenia | {count} zatwierdzeń",
       "gated": "Ręczne zatwierdzenie po tym kroku"
     },
     "picker": {
-      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania."
+      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania.",
+      "hoverHint": "Najedź na pipeline, aby zobaczyć kroki, które wykonuje."
     },
     "builder": {
       "title": "Kreator pipeline'ów",

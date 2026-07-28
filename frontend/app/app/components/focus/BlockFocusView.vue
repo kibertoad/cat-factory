@@ -31,16 +31,18 @@ const deps = computed(() =>
 // Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
 // pipelines (a manual run of one is refused server-side), and — for a `document` task — every
 // non-document pipeline (per the `purpose` classifier) — see the backend gate.
-const runMenu = computed(() => {
+const runOptions = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
-  return pipelines.pipelines
-    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks, block.value?.taskType))
-    .map((p) => ({
-      label: p.name,
-      icon: 'i-lucide-play',
-      onSelect: () => block.value && execution.start(block.value.id, p),
-    }))
+  return pipelines.pipelines.filter((p) =>
+    pipelineAllowedForManualStart(p, frame, board.blocks, block.value?.taskType),
+  )
 })
+
+/** Start the picked pipeline immediately — the Run menu chooses an ACTION, it stores no default. */
+function runPipeline(id: string) {
+  const pipeline = pipelines.getPipeline(id)
+  if (pipeline && block.value) void execution.start(block.value.id, pipeline)
+}
 
 function close() {
   ui.focus(null)
@@ -97,17 +99,21 @@ function openApprovalFor(approvalId: string) {
         {{ statusMeta.label }}
       </UBadge>
       <div class="ms-auto flex items-center gap-2">
-        <UDropdownMenu :items="runMenu">
-          <UButton
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-play"
-            trailing-icon="i-lucide-chevron-down"
-          >
-            {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
-          </UButton>
-        </UDropdownMenu>
+        <!-- The rich picker rather than a list of names: the run starts the moment a row is
+             clicked, so the preview is the only chance to see which agents it will run. -->
+        <PipelinePicker model-value="" :options="runOptions" @update:model-value="runPipeline">
+          <template #trigger>
+            <UButton
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-play"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
+            </UButton>
+          </template>
+        </PipelinePicker>
         <IconButton
           icon="i-lucide-x"
           color="neutral"

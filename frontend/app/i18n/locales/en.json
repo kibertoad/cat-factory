@@ -3763,10 +3763,12 @@
     },
     "preview": {
       "stepCount": "{count} step | {count} steps",
+      "gateCount": "{count} approval gate | {count} approval gates",
       "gated": "Human approval gate after this step"
     },
     "picker": {
-      "noneHint": "No default pipeline. You choose one when you run the task."
+      "noneHint": "No default pipeline. You choose one when you run the task.",
+      "hoverHint": "Hover a pipeline to see the steps it runs."
     },
     "builder": {
       "title": "Pipeline builder",
