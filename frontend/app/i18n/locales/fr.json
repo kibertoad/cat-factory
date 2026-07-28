@@ -5411,6 +5411,7 @@
     "subtitle": "Une boucle persistante : traiter la tâche, exécuter la commande de validation, et recommencer jusqu'à ce qu'elle réussisse.",
     "status": {
       "passed": "Réussi",
+      "stalled": "Bloquée",
       "gaveUp": "Abandonné",
       "running": "En cours",
       "failing": "En échec"
@@ -5419,7 +5420,9 @@
     "validationCommand": "Commande de validation",
     "lastOutput": "Dernière validation (code {exit})",
     "viewPr": "Voir la pull request",
+    "stalledNote": "La boucle s'est arrêtée prématurément : des itérations consécutives ont laissé la branche inchangée et la commande de validation échoue toujours, elle n'a donc pas consommé le reste de son budget. La tâche ou la commande de validation doit probablement être modifiée pour qu'une relance serve à quelque chose.",
     "iterationsHeading": "Itérations",
+    "iterationsTruncated": "{count} itération antérieure n'est pas affichée (l'historique est plafonné). | {count} itérations antérieures ne sont pas affichées (l'historique est plafonné).",
     "iteration": "Itération {number}",
     "iterationPassed": "validation réussie",
     "iterationFailed": "code {exit}",

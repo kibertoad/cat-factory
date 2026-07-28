@@ -4,6 +4,7 @@ import type {
   PipelineStep,
   PriorStepOutput,
 } from '@cat-factory/kernel'
+import { restartRalphState } from './ralph.logic.js'
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
@@ -160,8 +161,17 @@ function planFromStep(
  * fresh timing (`startStep` re-stamps `startedAt`). The structural fields the
  * pipeline defined — `agentKind` and `requiresApproval` — are preserved so the
  * approval gate still fires after the re-run.
+ *
+ * A `ralph` step's loop state is RE-SEEDED rather than dropped. Everything else here is
+ * re-derived at dispatch or lazily on the way back (`step.test` is seeded when the tester's
+ * report arrives), but a ralph loop's completion command is needed BEFORE the dispatch: it is
+ * what puts the `validation` block on the job body. Rebuilding this object without it left the
+ * retried step with no ralph state at all, so the harness ran a plain coding pass, returned no
+ * verdict, and the loop interceptor never fired — the step completed as an ungated one-shot
+ * coder. {@link restartRalphState} keeps the frozen config and zeroes the counters.
  */
 function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineStep {
+  const ralph = restartRalphState(step.ralph)
   return {
     agentKind: step.agentKind,
     state,
@@ -178,6 +188,7 @@ function resetStep(step: PipelineStep, state: 'working' | 'pending'): PipelineSt
     startedAt: undefined,
     finishedAt: undefined,
     pausedAt: undefined,
+    ...(ralph ? { ralph } : {}),
   }
 }
 

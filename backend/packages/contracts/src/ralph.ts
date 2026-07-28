@@ -25,6 +25,14 @@ export const ralphVerdictSchema = v.object({
   validationOutputTail: v.fallback(v.optional(v.string()), undefined),
   /** 1-based iteration number the harness ran this validation for. */
   iteration: v.fallback(v.optional(v.number()), undefined),
+  /**
+   * The work branch's HEAD commit the validation ran against. The engine compares it across
+   * consecutive failing iterations to detect a loop that is no longer making progress (the
+   * agent committed nothing and the criterion still fails) and abort early, instead of burning
+   * the whole budget. ABSENT is a real case — a self-hosted runner pool may run an older
+   * harness image — and the no-progress check deliberately fails open on it.
+   */
+  headSha: v.fallback(v.optional(v.string()), undefined),
 })
 export type RalphVerdict = v.InferOutput<typeof ralphVerdictSchema>
 
@@ -52,6 +60,8 @@ export const ralphAttemptSchema = v.object({
   outputTail: v.optional(v.nullable(v.string())),
   /** The iteration's own account of what it changed (its prose output), for the timeline. */
   summary: v.optional(v.nullable(v.string())),
+  /** The work branch's HEAD this iteration's validation ran against (absent on an older image). */
+  headSha: v.optional(v.nullable(v.string())),
 })
 export type RalphAttempt = v.InferOutput<typeof ralphAttemptSchema>
 
@@ -78,7 +88,26 @@ export const ralphStepStateSchema = v.object({
   lastExitCode: v.optional(v.nullable(v.number())),
   /** A bounded tail of the most recent iteration's validation output. */
   lastValidationTail: v.optional(v.nullable(v.string())),
-  /** Append-only history of the iterations this loop ran. */
+  /**
+   * How many consecutive FAILING iterations have now finished against an unchanged work-branch
+   * HEAD — i.e. the loop is re-running without the agent committing anything. The engine aborts
+   * early once this reaches its no-progress limit, so a provably stuck loop stops costing model
+   * calls instead of running out the budget. Reset to 0 by any iteration that moves the head (or
+   * whose head is unknown, so an older harness image never trips the check).
+   */
+  noProgressStreak: v.optional(v.nullable(v.number())),
+  /**
+   * Recent history of the iterations this loop ran, newest last. CAPPED — the whole loop state
+   * rides the run's `detail` JSON, which is re-serialized on every step-progress write, so an
+   * uncapped log would bloat every write for the rest of a long loop's life (the same reason
+   * the run's failure/output trails are capped). See {@link droppedAttempts}.
+   */
   attemptLog: v.optional(v.nullable(v.array(ralphAttemptSchema))),
+  /**
+   * How many earlier iterations the {@link attemptLog} cap dropped. Recorded rather than
+   * silently truncated, so the timeline can say the history is partial — an apparently short
+   * log on a long loop otherwise reads as if those iterations never ran.
+   */
+  droppedAttempts: v.optional(v.nullable(v.number())),
 })
 export type RalphStepState = v.InferOutput<typeof ralphStepStateSchema>

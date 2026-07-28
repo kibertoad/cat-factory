@@ -1160,6 +1160,47 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
   skip. `runRepoOps` lives in `@cat-factory/agents` so orchestration doesn't import the server layer.
 - **`RepoFiles`** (`kernel/ports/repo-files.ts`) is a per-run, checkout-free facade over the Git
   Data + contents API: pure HTTP, so runtime-symmetric.
+- **CAPABILITIES — what the kind KNOWS and what it can REACH**
+  ([ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md)): `skills` (procedural playbooks)
+  and `toolServers` (MCP), declared on the kind and resolved per dispatch. Reusable definitions
+  register on the SAME `AgentKindRegistry` (`registerSkill` / `registerToolServer`) — they are
+  capabilities OF agent kinds, like traits, so they do NOT get their own registries — and
+  `assignSkills` / `assignToolServers` attach them to an EXISTING (built-in) kind without
+  redefining it, exactly like `assignTraits`.
+  - **Skills resolve in the ENGINE** (`resolveRunSkills` → `context.skills`, catalog versions
+    pinned onto `step.skillVersions`); **tool servers resolve in the container EXECUTOR**
+    (`resolveToolServers`), because what is servable depends on the resolved HARNESS and the
+    facade-wired credential resolver, neither of which the runtime-neutral engine knows.
+  - **A BUNDLED skill ships in the deployment's own code** — no library, no GitHub, no pin — which
+    is what lets a shipped agent package carry its own playbook. A `{ catalogSkillId }` ref is the
+    tenant-authored repo-synced kind (ADR 0024) and FAILS the dispatch when it can't resolve unless
+    it declares `optional`.
+  - **A tool-server credential is declared BY NAME** (`secretKeys`) and resolved through the kernel
+    `ToolSecretResolver` port — both facades wire `createEnvToolSecretResolver` (the deployment's
+    own env), so a server needs no table and no UI. The VALUE rides the job body's `mcpServers`
+    field only; `context.toolServers` is the non-secret projection the prompt AND the telemetry
+    snapshot see. The job spec also NAMES which `env`/`headers` keys are credentials, so the
+    harness registers exactly those for redaction rather than scrubbing declared config too.
+    That default resolver is a TRUST BOUNDARY: a definition names both the key it wants and the
+    endpoint it reaches, so a deployment installing third-party agent packages passes
+    `{ allowKeys }` (convention: an `MCP_…` prefix).
+  - **`allowedTools` is SCOPING, never a security boundary.** Stated in the prompt on every
+    harness; additionally sent to claude-code's `--allowedTools`, which must ALWAYS carry the
+    CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). Whether the
+    CLI gates on it is permission-mode dependent, so the harness is written to be correct either
+    way. An `http` server must be `https` or loopback — refused at registration AND at the job
+    boundary, because its credential rides a request header.
+  - **A capability on a NON-container kind is inert and boot says so**
+    (`skills_without_container` / `tool_servers_without_container`).
+  - **A server that can't be wired is STATED to the agent, never silently dropped** (Pi has no MCP
+    client; an ambient Codex run has no per-run config home; a required secret didn't resolve), so
+    it plans around the gap instead of discovering it mid-run. A required secret defaults to
+    `required: true` — a tool whose first call 401s is worse than one the agent knows it lacks.
+  - **The harness MATERIALISES, never decides**: `skills[]` → native
+    `CLAUDE_CONFIG_DIR/skills/<name>/` or `.cat-context/skill/<name>/`; `mcpServers[]` → a per-run
+    `--mcp-config` + `--strict-mcp-config` (claude-code) or `[mcp_servers.*]` in the per-run
+    `CODEX_HOME/config.toml`. Both are PER-JOB paths — never HOME-global, never the checkout.
+    Changing either means an image bump.
 - **Frontend**: the workspace snapshot carries `customAgentKinds`, merged into the palette via
   `useAgentsStore().registerCustomKinds`; a structured kind's `result.custom` renders through the
   shared `generic-structured` view. No bespoke UI.

@@ -1,5 +1,6 @@
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { companionTargets } from '@cat-factory/agents'
+import { restartRalphState } from './ralph.logic.js'
 
 /**
  * The pure, synchronous step/cursor mutators of the execution engine — the dependency-free
@@ -90,6 +91,13 @@ export class StepGraph {
     step.deployFrameId = undefined
     step.deployProvisioning = undefined
     step.deployPrimaryFrameId = undefined
+    // Re-seed a `ralph` step's loop state: unlike the fields above it must NOT be dropped (a
+    // ralph step with no state dispatches with no completion command and silently degrades to a
+    // one-shot coder), but keeping it as-is is just as wrong — a spent `attempts` would send the
+    // re-run's very first verdict straight to `exhausted`. Keep the frozen config, zero the
+    // counters; a non-ralph step is untouched.
+    const ralph = restartRalphState(step.ralph)
+    if (ralph) step.ralph = ralph
   }
 
   /**

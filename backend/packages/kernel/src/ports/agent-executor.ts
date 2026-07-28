@@ -21,6 +21,11 @@ import type {
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
+import type {
+  ResolvedSkill,
+  ResolvedToolServer,
+  UnavailableToolServer,
+} from '../domain/agent-capabilities.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
@@ -158,35 +163,34 @@ export interface AgentRunContext {
     maxAttempts: number
   }
   /**
-   * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
-   * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
-   * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)
-   * and the sibling resource files fetched at the skill's pinned commit. The container executor
-   * renders it HARNESS-AWARE: for the claude-code harness it travels as the dedicated top-level
-   * `skill` job-body field (the harness materialises `~/.claude/skills/<name>/` natively); for
-   * Pi/codex the instructions are folded into the prompt and the resources materialised as
-   * `.cat-context/skill/*` context files. A resource's `body` is absent when it was oversized /
-   * binary / unreadable at the pinned commit — the agent is pointed at its repo `path` instead.
+   * The skills this dispatch applies, resolved by the engine (see {@link ResolvedSkill}). Two
+   * sources merge into one list, in this order:
+   *  - the running agent KIND's declared skills (`AgentKindDefinition.skills`) — bundled with the
+   *    deployment's package, or referenced from the account's synced catalog;
+   *  - the step's own picked skill (`stepOptions.skillId`), which is what the built-in `skill`
+   *    kind runs.
+   * Deduplicated by skill id, so a kind that declares the same skill a step picked carries it once.
+   *
+   * The container executor renders them HARNESS-AWARE: for the claude-code harness they travel as
+   * the dedicated top-level `skills` job-body field (the harness installs each under
+   * `CLAUDE_CONFIG_DIR/skills/<name>/` natively); for Pi/codex the instructions are folded into
+   * the prompt and the resources materialised as `.cat-context/skill/*` files. Absent ⇒ no skills.
    */
-  skill?: {
-    /** The skill id (`src:<sourceId>:<dirName>`). */
-    skillId: string
-    /** Skill name (the native CLI skill directory name + the `SKILL.md` frontmatter `name`). */
-    name: string
-    /** One-line description (the `SKILL.md` frontmatter `description`; feeds the native manifest). */
-    description: string
-    /** The procedural instructions — the `SKILL.md` body. */
-    instructions: string
-    /** Sibling resource files fetched at the pinned commit (capped; oversized/binary omit `body`). */
-    resources: {
-      /** Repo-relative path (used to reference an un-materialised resource in the prompt). */
-      path: string
-      /** Path within the skill directory (where it materialises, under the skill / `.cat-context/skill`). */
-      relPath: string
-      /** File body; absent when the resource was oversized / binary / unreadable at dispatch. */
-      body?: string
-    }[]
-  }
+  skills?: ResolvedSkill[]
+  /**
+   * The tool servers (MCP) wired for this dispatch — the running agent kind's declared servers,
+   * minus any the running harness cannot serve or whose required credential did not resolve.
+   * PROMPT-FACING and non-secret by construction: credentials ride the job body's dedicated
+   * `mcpServers` field and never appear here (this object IS copied into the agent-context
+   * telemetry snapshot). Absent ⇒ the kind declared none.
+   */
+  toolServers?: ResolvedToolServer[]
+  /**
+   * Tool servers the kind declared that were NOT wired for this dispatch, with the reason. The
+   * prompt states them so the agent plans around a tool it does not have rather than discovering
+   * that mid-run, and the run's snapshot records why. Absent ⇒ every declared server was wired.
+   */
+  unavailableToolServers?: UnavailableToolServer[]
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

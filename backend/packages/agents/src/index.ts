@@ -28,6 +28,19 @@ export {
   AgentKindRegistry,
   defaultAgentKindRegistry,
 } from './agents/kinds/registry.js'
+// Agent CAPABILITIES: the skills a kind applies and the tool servers (MCP) it may call.
+// A deployment registers reusable definitions on the same injected registry and references
+// them by id from any number of kinds, or declares one inline on a single kind. See
+// `backend/docs/custom-agents.md` → "Capabilities: skills and tools".
+export {
+  type AgentKindSkillRef,
+  type AgentKindToolRef,
+  type BundledSkillDefinition,
+  type NormalizedSkillRefs,
+  bundledSkillToResolved,
+  normalizeSkillRefs,
+  normalizeToolRefs,
+} from './agents/kinds/capabilities.js'
 export {
   isInlineModelStep,
   REQUIREMENTS_REVIEW_AGENT_KIND,
@@ -131,6 +144,7 @@ export {
   initiativePresetSection,
   CONTEXT_DIR,
 } from './agents/prompts/standard.js'
+export { toolServersSection } from './agents/prompts/capabilities.js'
 export {
   type AcceptanceAgentKind,
   ACCEPTANCE_AGENT_KINDS,

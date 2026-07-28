@@ -154,6 +154,45 @@ describe('planRestartFromStep', () => {
     const { currentStep } = planRestartFromStep({ steps: fullSteps('done') }, 99)
     expect(currentStep).toBe(5) // last step
   })
+
+  // A ralph step is the one kind whose reset must PRESERVE something: its completion command is
+  // read at DISPATCH time to build the job's validation block, so a reset that drops the loop
+  // state leaves the re-run dispatching an ungated one-shot coding pass that reports no verdict
+  // — the loop silently stops existing. Zeroing the counters while keeping the frozen config is
+  // the only reset that is right for both a retry and a restart.
+  it('re-arms a ralph step: frozen config kept, iteration counters back at zero', () => {
+    const ralphSteps = [
+      step('architect', 'done', { output: 'a', startedAt: 1, finishedAt: 2 }),
+      step('ralph', 'done', {
+        jobId: 'j',
+        output: 'Ralph loop gave up after 6 iteration(s)',
+        ralph: {
+          phase: 'iterating',
+          attempts: 6,
+          maxIterations: 6,
+          validationCommand: 'pnpm test',
+          progressPath: '.cat-factory/ralph-progress.md',
+          noProgressStreak: 2,
+          lastExitCode: 1,
+          lastValidationTail: 'still red',
+          attemptLog: [{ attempt: 6, at: 4, validationPassed: false }],
+        },
+      }),
+    ]
+    const { steps } = planRestartFromStep({ steps: ralphSteps }, 1)
+    const ralph = steps[1]!.ralph
+    expect(ralph?.validationCommand).toBe('pnpm test')
+    expect(ralph?.maxIterations).toBe(6)
+    expect(ralph?.attempts).toBe(0)
+    expect(ralph?.attemptLog).toEqual([])
+    expect(ralph?.noProgressStreak).toBeUndefined()
+    expect(ralph?.lastValidationTail).toBeUndefined()
+  })
+
+  it('leaves a non-ralph step with no loop state', () => {
+    const { steps } = planRestartFromStep({ steps: fullSteps('done') }, 3)
+    expect(steps[3]!.ralph).toBeUndefined()
+  })
 })
 
 describe('carryForwardFailures', () => {

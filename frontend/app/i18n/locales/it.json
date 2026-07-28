@@ -5423,6 +5423,7 @@
     "subtitle": "Un ciclo persistente: lavora sull'attività, esegui il comando di validazione e ripeti finché non passa.",
     "status": {
       "passed": "Superato",
+      "stalled": "In stallo",
       "gaveUp": "Interrotto",
       "running": "In esecuzione",
       "failing": "In errore"
@@ -5431,7 +5432,9 @@
     "validationCommand": "Comando di validazione",
     "lastOutput": "Ultima validazione (uscita {exit})",
     "viewPr": "Visualizza pull request",
+    "stalledNote": "Il ciclo si è fermato in anticipo: iterazioni consecutive hanno lasciato il branch invariato e il comando di validazione continua a fallire, quindi non ha consumato il resto del budget. Probabilmente occorre modificare il task o il comando di validazione prima che un nuovo tentativo possa servire.",
     "iterationsHeading": "Iterazioni",
+    "iterationsTruncated": "{count} iterazione precedente non è mostrata (la cronologia è limitata). | {count} iterazioni precedenti non sono mostrate (la cronologia è limitata).",
     "iteration": "Iterazione {number}",
     "iterationPassed": "validazione superata",
     "iterationFailed": "uscita {exit}",
