@@ -36,18 +36,50 @@ import {
 export const MAX_EVICTION_DETAIL_CHARS = 4_000
 
 /**
+ * Count Unicode CODE POINTS — the unit the stores measure in. SQL `length()`/`substr()` count
+ * code points on both SQLite and Postgres, while JS `.length` counts UTF-16 units, so an
+ * astral-plane character (an emoji) is one to the store and two to `.length`. Every `chars`/
+ * `totalChars` on this surface is in code points; mixing the units made `truncated` lie on
+ * exactly the boundary case it exists for (a body cut by SQL whose UTF-16 length happened to
+ * equal the code-point total read as untruncated).
+ */
+function codePointLength(text: string): number {
+  let count = 0
+  for (let i = 0; i < text.length; i += 1) {
+    count += 1
+    const unit = text.charCodeAt(i)
+    // A high surrogate leads a two-unit pair encoding one code point; skip its partner.
+    if (unit >= 0xd800 && unit <= 0xdbff) i += 1
+  }
+  return count
+}
+
+/**
  * Slice a stored body to a caller's budget and SAY SO. The pair matters more than either
  * half: a bare truncated string reads exactly like a short one, so a model handed the first
  * 2 kB of a 40 kB reply would confidently report that the agent said almost nothing.
  *
  * `budget` of 0 returns no text at all while still reporting the full size — that is the
  * shape a sweep uses, and the reason a size-only page is still worth reading.
+ *
+ * Budgets and sizes are CODE POINTS (see {@link codePointLength}), matching the SQL-sliced
+ * bodies — and the cut walks whole code points, so it can never split a surrogate pair and
+ * hand the caller a lone half of one.
  */
 export function sliceText(text: string, budget: number): DebugText {
-  const total = text.length
+  const total = codePointLength(text)
   const chars = Math.max(0, Math.min(budget, total))
+  let sliced = text
+  if (chars < total) {
+    let end = 0
+    for (let taken = 0; taken < chars; taken += 1) {
+      const unit = text.charCodeAt(end)
+      end += unit >= 0xd800 && unit <= 0xdbff ? 2 : 1
+    }
+    sliced = text.slice(0, end)
+  }
   return {
-    text: chars === total ? text : text.slice(0, chars),
+    text: sliced,
     chars,
     totalChars: total,
     truncated: chars < total,
@@ -59,13 +91,18 @@ export function sliceText(text: string, budget: number): DebugText {
  * because it cut the body in SQL (so the untaken bytes never left the database); this only
  * re-derives the two fields the wire shape adds. Deliberately does NOT re-slice: `text` is
  * already within budget, and slicing again would silently disagree with `totalChars`.
+ *
+ * `chars` and the truncation check count CODE POINTS, because `totalChars` came from SQL
+ * `length()` which counts the same — a JS `.length` here reads a SQL-cut emoji-bearing body
+ * as untruncated (see {@link codePointLength}).
  */
 export function toDebugText(slice: LlmCallBodySlice): DebugText {
+  const chars = codePointLength(slice.text)
   return {
     text: slice.text,
-    chars: slice.text.length,
+    chars,
     totalChars: slice.totalChars,
-    truncated: slice.text.length < slice.totalChars,
+    truncated: chars < slice.totalChars,
   }
 }
 
@@ -389,14 +426,19 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     ['provisioningLog', sinks.provisioningLog, 'provisioning events'],
   ] as const) {
     if (!sink.available) {
+      // Availability is REPOSITORY presence only. A workspace that turned capture off (or a
+      // deployment without LLM_RECORD_PROMPTS) still reads `available: true, count: 0` — the
+      // capture gates act at record time, and this reader cannot see them.
       push(
         'telemetry_unavailable',
         'info',
-        `No ${what} are retained: the '${name}' sink is not wired on this deployment, or the workspace turned agent-context capture off. Its count of 0 does not mean none happened.`,
+        `No ${what} are retained: the '${name}' sink is not wired on this deployment. Its count of 0 does not mean none happened.`,
       )
     }
   }
-  if (sinks.llmCalls.available && sinks.llmCalls.count === 0) {
+  // Skipped for a `done` run on purpose: a completed run with no model calls is a legitimate
+  // shape (a gate-only or pass-through pipeline), not a diagnosis.
+  if (sinks.llmCalls.available && sinks.llmCalls.count === 0 && execution.status !== 'done') {
     push(
       'no_model_calls',
       'warning',

@@ -262,7 +262,10 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
       .where(and(...filters))
       .orderBy(desc(agentRuns.created_at), desc(agentRuns.id))
       .limit(opts.limit)
-    // List read: drop a corrupt run rather than failing the whole page.
+    // List read: drop a corrupt run rather than failing the whole page. Note the interaction
+    // with the caller's peek-one-extra pagination: a dropped row shrinks the page below
+    // `limit + 1`, so a page containing a corrupt run reads as the LAST page and later rows
+    // become unreachable until the row is repaired — accepted, matching every other list read.
     return tryDecodeRows(
       rows,
       (r) => rowToExecution(r as ExecutionRow),
@@ -302,6 +305,16 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
       )
     }
     return out
+  }
+
+  async exists(workspaceId: string, id: string): Promise<boolean> {
+    // One indexed probe, no row decode (see the port). Mirrors the D1 repo.
+    const rows = await this.db
+      .select({ one: sql<number>`1` })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id), this.isExecution))
+      .limit(1)
+    return rows.length > 0
   }
 
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {

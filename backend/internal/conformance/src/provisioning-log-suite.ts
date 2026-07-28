@@ -164,12 +164,11 @@ export function defineProvisioningLogSuite(
       )
       await repo.append(record({ id: `${ws}-x`, workspaceId: ws, executionId: e2 }))
 
-      expect(await repo.countByExecution(ws, e1)).toBe(3)
-      // The failure count is what a run overview reports as its highest-severity signal: for a
-      // run whose container never came up there is no model telemetry at all to explain it.
-      expect(await repo.countByExecution(ws, e1, 'failure')).toBe(2)
-      expect(await repo.countByExecution(ws, e1, 'success')).toBe(1)
-      expect(await repo.countByExecution(ws, e2, 'failure')).toBe(0)
+      // Total + failures come back from ONE aggregate pass. The failure count is what a run
+      // overview reports as its highest-severity signal: for a run whose container never came
+      // up there is no model telemetry at all to explain it.
+      expect(await repo.countByExecution(ws, e1)).toEqual({ total: 3, failures: 2 })
+      expect(await repo.countByExecution(ws, e2)).toEqual({ total: 1, failures: 0 })
     })
 
     it('prunes rows older than a cutoff', async () => {

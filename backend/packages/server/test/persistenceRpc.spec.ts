@@ -100,6 +100,9 @@ function makeRegistry(): {
       // The remote debugging surface's run index — echoes the bound workspace like every other
       // workspace-scoped list stub below.
       listRecent: async (workspaceId: string) => [{ ws: workspaceId }],
+      // The per-run debug lists' 404 guard probe. The stub echoes the workspace so the READS
+      // table can prove the call reached it (the real method returns a boolean).
+      exists: async (workspaceId: string) => ({ ws: workspaceId }),
     },
     // Entity-id-keyed (findById/findByIds) + cross-service (listByServices) board-composition reads.
     blockRepository: {
@@ -750,6 +753,7 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'notificationRepository', method: 'listOpen', args: [] },
     { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
     { repo: 'executionRepository', method: 'listRecent', args: [{ limit: 10 }] },
+    { repo: 'executionRepository', method: 'exists', args: ['exec_1'] },
     { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
     { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },

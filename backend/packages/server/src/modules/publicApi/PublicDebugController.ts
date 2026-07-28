@@ -147,8 +147,9 @@ export function publicDebugController(): Hono<AppEnv> {
     const cursor = readCursor(query.cursor)
     if ('invalid' in cursor) return invalidCursor(c)
     // 404 on an unknown run rather than an empty page: a caller that mistyped a run id (or is
-    // pointed at the wrong workspace) must not read "this run made no model calls".
-    if (!(await debug.getRun(workspaceId, runId))) return notFound(c, 'run')
+    // pointed at the wrong workspace) must not read "this run made no model calls". A PROBE,
+    // not a `getRun`: the guard runs on every page and discards the run.
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
     const page = await debug.listLlmCalls(workspaceId, runId, {
       limit: query.limit ?? DEFAULT_CALL_PAGE,
       cursor: cursor.cursor,
@@ -195,7 +196,7 @@ export function publicDebugController(): Hono<AppEnv> {
     const query = c.req.valid('query')
     const cursor = readCursor(query.cursor)
     if ('invalid' in cursor) return invalidCursor(c)
-    if (!(await debug.getRun(workspaceId, runId))) return notFound(c, 'run')
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
     const page = await debug.listAgentContext(workspaceId, runId, {
       limit: query.limit ?? DEFAULT_CONTEXT_PAGE,
       cursor: cursor.cursor,
@@ -239,7 +240,7 @@ export function publicDebugController(): Hono<AppEnv> {
     const query = c.req.valid('query')
     const cursor = readCursor(query.cursor)
     if ('invalid' in cursor) return invalidCursor(c)
-    if (!(await debug.getRun(workspaceId, runId))) return notFound(c, 'run')
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
     const page = await debug.listSearchQueries(workspaceId, runId, {
       limit: query.limit ?? DEFAULT_SMALL_ROW_PAGE,
       cursor: cursor.cursor,
@@ -265,7 +266,7 @@ export function publicDebugController(): Hono<AppEnv> {
     const query = c.req.valid('query')
     const cursor = readCursor(query.cursor)
     if ('invalid' in cursor) return invalidCursor(c)
-    if (!(await debug.getRun(workspaceId, runId))) return notFound(c, 'run')
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
     const page = await debug.listProvisioningLog(workspaceId, runId, {
       limit: query.limit ?? DEFAULT_SMALL_ROW_PAGE,
       cursor: cursor.cursor,

@@ -128,9 +128,12 @@ const nonNegativeIntQuerySchema = v.pipe(
 export const debugTextSchema = v.object({
   /** The returned slice — the leading `chars` characters of the stored body. */
   text: v.string(),
-  /** Characters actually returned in {@link debugTextSchema} `text`. */
+  /**
+   * Characters actually returned in {@link debugTextSchema} `text`, in Unicode CODE POINTS —
+   * the unit SQL `length()`/`substr()` measure in (an emoji counts once, not twice).
+   */
   chars: v.number(),
-  /** Characters stored for this field (the full length, regardless of what was returned). */
+  /** Characters stored for this field (the full code-point length, regardless of what was returned). */
   totalChars: v.number(),
   /** True when `chars < totalChars`, i.e. the body was cut to fit the caller's budget. */
   truncated: v.boolean(),
@@ -239,8 +242,12 @@ export type DebugRunStep = v.InferOutput<typeof debugRunStepSchema>
 /**
  * Whether one telemetry sink has anything for this run, and how much. The point of the block
  * is to stop a caller issuing four detail requests to discover three of them are empty —
- * `available: false` means the sink is not wired (or the workspace opted out of capture), so
- * a zero count there is "we never recorded this", not "nothing happened".
+ * `available: false` means the sink's repository is not wired on this deployment, so a zero
+ * count there is "we never recorded this", not "nothing happened".
+ *
+ * Availability is REPOSITORY presence only. The capture-time gates (`LLM_RECORD_PROMPTS`, the
+ * per-workspace `storeAgentContext`) act at record time and are invisible here: a workspace
+ * that opted out of capture reads `available: true, count: 0`.
  */
 export const debugSinkStatusSchema = v.object({
   available: v.boolean(),
@@ -405,7 +412,10 @@ export type DebugLlmCallList = v.InferOutput<typeof debugLlmCallListSchema>
 
 /** Query params for the single-call point read. */
 export const getDebugLlmCallQuerySchema = v.object({
-  /** Per-field budget, 0..{@link DEBUG_MAX_BODY_CHARS}. Absent ⇒ the full stored body. */
+  /**
+   * Per-field budget, 0..{@link DEBUG_MAX_BODY_CHARS}. Absent ⇒ the ceiling itself: a body
+   * longer than {@link DEBUG_MAX_BODY_CHARS} is still cut (and says so via `truncated`).
+   */
   bodyChars: v.optional(bodyCharsSchema),
 })
 export type GetDebugLlmCallQuery = v.InferOutput<typeof getDebugLlmCallQuerySchema>
@@ -504,7 +514,10 @@ export type DebugAgentContextDetail = v.InferOutput<typeof debugAgentContextDeta
 
 /** Query params for the single-snapshot point read. */
 export const getDebugAgentContextQuerySchema = v.object({
-  /** Per-body budget, 0..{@link DEBUG_MAX_BODY_CHARS}. Absent ⇒ the full stored bodies. */
+  /**
+   * Per-body budget, 0..{@link DEBUG_MAX_BODY_CHARS}. Absent ⇒ the ceiling itself: a body
+   * longer than {@link DEBUG_MAX_BODY_CHARS} is still cut (and says so via `truncated`).
+   */
   bodyChars: v.optional(bodyCharsSchema),
 })
 export type GetDebugAgentContextQuery = v.InferOutput<typeof getDebugAgentContextQuerySchema>

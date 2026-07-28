@@ -17,5 +17,6 @@ all, and every truncation reports what it left out. The surface needs only a `re
 key.
 
 Compatibility break: `ProvisioningLogQuery.before` (a bare `createdAt` keyset) is replaced by a
-composite `cursor: { createdAt, id }`. The old form dropped rows sharing a millisecond between
-pages, which is the common case for a log written in bursts. No caller passed it.
+composite `cursor: { createdAt, id }`, and the matching `?before=` query param is removed from
+`GET /workspaces/:ws/provisioning-logs` (the SPA never sent it). The old form dropped rows sharing
+a millisecond between pages, which is the common case for a log written in bursts.

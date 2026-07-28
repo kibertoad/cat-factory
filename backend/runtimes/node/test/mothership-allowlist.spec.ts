@@ -203,22 +203,24 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     spendTrend: 'admin',
   },
   tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
-  // The remote debugging surface's per-run reads (`listPage`/`get`/`listIndex`/`countByExecution`)
-  // are `telemetry`, NOT `pending`: telemetry is local-first by design (Phase 5), so in mothership
-  // mode a node reads its OWN telemetry store rather than the mothership's — there is nothing to
-  // proxy. Routing them would also be the exact shape the bucket exists to forbid, since a page
-  // walked over a long run is a bulk read of the heaviest columns in the system.
+  // EVERY read on the three telemetry sinks is `telemetry`, never `pending`: telemetry is
+  // local-first by design (Phase 5), so in mothership mode a node reads its OWN telemetry store
+  // rather than the mothership's — there is nothing to proxy, for the SPA observability reads
+  // (`listByExecution`) exactly as for the remote debugging surface's bounded pages
+  // (`listPage`/`get`/`listIndex`/`countByExecution`). Routing any of them would be the exact
+  // shape the bucket exists to forbid, since a read over a long run is a bulk read of the
+  // heaviest columns in the system.
   llmCallMetricRepository: {
     record: 'telemetry',
     latestChainTip: 'telemetry',
-    listByExecution: 'pending',
+    listByExecution: 'telemetry',
     listPage: 'telemetry',
     get: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   agentContextSnapshotRepository: {
     record: 'telemetry',
-    listByExecution: 'pending',
+    listByExecution: 'telemetry',
     listIndex: 'telemetry',
     get: 'telemetry',
     countByExecution: 'telemetry',
@@ -226,7 +228,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   agentSearchQueryRepository: {
     record: 'telemetry',
-    listByExecution: 'pending',
+    listByExecution: 'telemetry',
     listPage: 'telemetry',
     countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
@@ -355,9 +357,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   validationConfigRepository: {},
   provisioningLogRepository: {
     append: 'telemetry',
-    list: 'pending',
     // Same reasoning as the three sinks above: the provisioning log is a separate high-churn
-    // store that stays local, so its debug count never crosses the machine API.
+    // store that stays local, so neither the SPA's log drawer read nor the debug count ever
+    // crosses the machine API.
+    list: 'telemetry',
     countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },

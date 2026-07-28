@@ -95,6 +95,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Lean live-run projection backing the dispatch guard + resumePaused (workspace-scoped read).
     listLive: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The per-run debug lists' 404 guard: `get` without the row decode. Same scope shape.
+    exists: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     // The one-live-run-per-block insert used by start/retry/restart. Workspace-scoped like

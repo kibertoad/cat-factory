@@ -195,8 +195,7 @@ describe('RunDebugService overview', () => {
         countByExecution: async () => 0,
       } as unknown as AgentSearchQueryRepository,
       provisioningLogRepository: {
-        countByExecution: async (_w: string, _e: string, outcome?: string) =>
-          outcome === 'failure' ? 1 : 4,
+        countByExecution: async () => ({ total: 4, failures: 1 }),
       } as unknown as ProvisioningLogRepository,
     })
 
@@ -208,7 +207,7 @@ describe('RunDebugService overview', () => {
     expect(overview.llm.totals.calls).toBe(7)
     expect(overview.sinks.agentContext).toEqual({ available: true, count: 2 })
     expect(overview.sinks.provisioningLog).toEqual({ available: true, count: 4 })
-    // The failure count is a separate, narrowed COUNT and drives the top signal.
+    // The failure count rides the same aggregate pass and drives the top signal.
     expect(overview.signals[0]).toMatchObject({ code: 'provisioning_failed', count: 1 })
   })
 })

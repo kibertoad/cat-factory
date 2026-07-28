@@ -459,8 +459,10 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       const repo = makeRepo()
       const { ws, e1 } = ids()
       await repo.record(metric({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      // The last two share a millisecond, so the ASCENDING composite tie-break is exercised too
+      // (the newest-first test covers the descending one).
       await repo.record(metric({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
-      await repo.record(metric({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 30 }))
+      await repo.record(metric({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20 }))
 
       const page = await repo.listPage(ws, {
         executionId: e1,
@@ -477,7 +479,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         order: 'oldest',
         cursor: { createdAt: last.createdAt, id: last.id },
       })
-      // The ascending cursor must compare the other way round; a shared `<` would return nothing.
+      // The ascending cursor must compare the other way round on BOTH keyset legs: a shared `<`
+      // would return nothing, and a `<` on the id leg alone would drop the tied row.
       expect(next.map((c) => c.id)).toEqual([`${ws}-c`])
     })
 
@@ -544,6 +547,17 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
           agentKind: 'tester',
         }),
       )
+      // A clean call that recorded NO finish reason at all (a real shape: harness-lifted
+      // metrics are read leniently, and not every provider reports one).
+      await repo.record(
+        metric({
+          id: `${ws}-null-ok`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 50,
+          finishReason: null,
+        }),
+      )
 
       const kind = await repo.listPage(ws, {
         executionId: e1,
@@ -575,7 +589,9 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       })
       // `ok` must admit a NULL finish reason too — a plain `NOT IN (...)` is unknown for NULL in
       // SQL, so a runtime that forgot the null branch would silently drop clean calls.
-      expect(oks.map((c) => c.id).sort()).toEqual([`${ws}-ok`, `${ws}-other`].sort())
+      expect(oks.map((c) => c.id).sort()).toEqual(
+        [`${ws}-ok`, `${ws}-other`, `${ws}-null-ok`].sort(),
+      )
     })
 
     it('point-reads one call by id, scoped to its workspace', async () => {

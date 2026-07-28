@@ -83,6 +83,22 @@ describe('sliceText', () => {
     expect(sliceText('hi', 100)).toEqual({ text: 'hi', chars: 2, totalChars: 2, truncated: false })
     expect(sliceText('', 10)).toEqual({ text: '', chars: 0, totalChars: 0, truncated: false })
   })
+
+  it('counts and cuts in code points, never splitting a surrogate pair', () => {
+    // Four emoji: 4 code points, 8 UTF-16 units. The budget is code points (the SQL unit).
+    expect(sliceText('😀😀😀😀', 2)).toEqual({
+      text: '😀😀',
+      chars: 2,
+      totalChars: 4,
+      truncated: true,
+    })
+    expect(sliceText('😀😀', 10)).toEqual({
+      text: '😀😀',
+      chars: 2,
+      totalChars: 2,
+      truncated: false,
+    })
+  })
 })
 
 describe('toDebugText', () => {
@@ -93,6 +109,17 @@ describe('toDebugText', () => {
       text: 'abc',
       chars: 3,
       totalChars: 40,
+      truncated: true,
+    })
+  })
+
+  it('measures the returned slice in code points, matching the SQL total', () => {
+    // A body of 10 emoji cut by SQL to 5: `.length` of the slice is 10 UTF-16 units, which
+    // EQUALS the code-point total — a unit mix here read a halved body as untruncated.
+    expect(toDebugText({ text: '😀😀😀😀😀', totalChars: 10 })).toEqual({
+      text: '😀😀😀😀😀',
+      chars: 5,
+      totalChars: 10,
       truncated: true,
     })
   })
@@ -276,11 +303,20 @@ describe('deriveSignals', () => {
 
     const wiredButEmpty = deriveSignals({
       ...base,
-      execution: run(),
+      execution: run({ status: 'failed' }),
       sinks: { ...EMPTY_SINKS, llmCalls: { available: true, count: 0 } },
     })
-    // Wired and empty: the run really did no agent work, which is itself the finding.
+    // Wired and empty on a run that did not finish: no agent work is itself the finding.
     expect(wiredButEmpty.map((s) => s.code)).toContain('no_model_calls')
+
+    const doneWithoutCalls = deriveSignals({
+      ...base,
+      execution: run({ status: 'done' }),
+      sinks: { ...EMPTY_SINKS, llmCalls: { available: true, count: 0 } },
+    })
+    // A COMPLETED run with no calls is a legitimate shape (a gate-only pipeline), not a
+    // "failed or stalled" diagnosis — the warning must not fire on success.
+    expect(doneWithoutCalls.map((s) => s.code)).not.toContain('no_model_calls')
   })
 
   it('flags a cold prompt cache only once the run sent enough prompt to benefit', () => {

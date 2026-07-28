@@ -63,16 +63,17 @@ export interface ProvisioningLogRepository {
   /** Rows for a workspace matching the query, newest first. */
   list(workspaceId: string, query?: ProvisioningLogQuery): Promise<ProvisioningLogRecord[]>
   /**
-   * How many attempts were logged for a run — one indexed COUNT, no rows read. `outcome`
-   * narrows to successes or failures, which is what lets a run overview state "3 provisioning
-   * failures" without paging the log: for a run whose container never came up there is no LLM
-   * telemetry at all, so this is the only count that explains it.
+   * How many attempts were logged for a run, and how many of them failed — ONE aggregate pass
+   * (`COUNT` + a conditional `SUM`), no rows read. The pair travels together because the run
+   * overview always wants both, and two separate COUNTs over the same rows would double the
+   * round trips only to risk disagreeing with each other. The failure count is what lets an
+   * overview state "3 provisioning failures" without paging the log: for a run whose container
+   * never came up there is no LLM telemetry at all, so this is the only count that explains it.
    */
   countByExecution(
     workspaceId: string,
     executionId: string,
-    outcome?: ProvisioningOutcome,
-  ): Promise<number>
+  ): Promise<{ total: number; failures: number }>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many
    * were removed. The store is high-churn, so it is pruned to a configured window

@@ -1326,7 +1326,8 @@ a context budget.
 - **Run scope is the WORKSPACE**, wider than the task surface's `loadScopedRun` on purpose: a
   frame's blueprint run and a recurring bug-intake fire are exactly what someone asks about.
 - **Telemetry reads stay OFF the mothership RPC** (`telemetry` bucket — local-first by design);
-  only `ExecutionRepository.listRecent`, which reads org/durable run state, is allow-listed.
+  only `ExecutionRepository.listRecent`/`exists`, which read org/durable run state, are
+  allow-listed.
 
 ### External trace destinations (the `LlmTraceSink` seam)
 

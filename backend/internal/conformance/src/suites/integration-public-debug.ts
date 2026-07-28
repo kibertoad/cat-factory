@@ -10,9 +10,10 @@ import type { ConformanceHarness } from '../harness.js'
 // `provisioning-log-suite`), which drive the real SQL on both runtimes. What belongs HERE is the
 // half those cannot see: that each facade MOUNTS the surface, resolves the run through its own
 // execution store, and composes an overview whose per-sink availability reflects what that facade
-// actually wired. A runtime that shipped the controller but forgot a telemetry repository would
-// otherwise report `available: true, count: 0` — indistinguishable from a run that did nothing,
-// which is precisely the confusion the sink block exists to prevent.
+// actually wired. Every conformance facade wires all four telemetry stores, so the overview test
+// pins each sink to `available: true` — a facade that shipped the controller but forgot a
+// repository reports `available: false` and fails there instead of shipping a surface that
+// wrongly tells callers the deployment retains nothing.
 //
 // See backend/docs/debug-api.md.
 
@@ -51,6 +52,27 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       )
       expect(started.status).toBe(201)
       const runId = started.body.id
+      // A second run on a fresh task under a fresh frame (the other seeded tasks carry
+      // dependencies or are done, so they refuse a start), so the one-row page below has a
+      // real next page.
+      const writeAuth = await mintKey(app, wsId, 'write')
+      const frame = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 500, y: 500 },
+      })
+      const task = await app.call<{ taskId: string }>(
+        'POST',
+        `/api/v1/services/${frame.body.id}/tasks`,
+        { title: 'Debug paging task', description: 'second run' },
+        writeAuth,
+      )
+      expect(task.status).toBe(201)
+      const other = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/${task.body.taskId}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(other.status).toBe(201)
 
       const listed = await app.call<DebugRunList>('GET', '/api/v1/debug/runs', undefined, auth)
       expect(listed.status).toBe(200)
@@ -60,7 +82,8 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       expect(found).toMatchObject({ blockId: 'task_login', pipelineId: pipeline.body.id })
       expect(found?.stepCount).toBe(1)
 
-      // A one-row page hands back a cursor; resuming from it must not re-serve the same row.
+      // With two runs, a one-row page MUST hand back a cursor, and resuming from it must serve
+      // the other run — never a repeat, never an empty tail while rows remain.
       const firstPage = await app.call<DebugRunList>(
         'GET',
         '/api/v1/debug/runs?limit=1',
@@ -68,16 +91,43 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(firstPage.body.runs).toHaveLength(1)
-      if (firstPage.body.nextCursor) {
-        const next = await app.call<DebugRunList>(
-          'GET',
-          `/api/v1/debug/runs?limit=1&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`,
-          undefined,
-          auth,
-        )
-        expect(next.status).toBe(200)
-        expect(next.body.runs[0]?.runId).not.toBe(firstPage.body.runs[0]?.runId)
-      }
+      expect(firstPage.body.nextCursor).not.toBeNull()
+      const next = await app.call<DebugRunList>(
+        'GET',
+        `/api/v1/debug/runs?limit=1&cursor=${encodeURIComponent(firstPage.body.nextCursor!)}`,
+        undefined,
+        auth,
+      )
+      expect(next.status).toBe(200)
+      expect(next.body.runs).toHaveLength(1)
+      expect(next.body.runs[0]?.runId).not.toBe(firstPage.body.runs[0]?.runId)
+      expect([firstPage.body.runs[0]?.runId, next.body.runs[0]?.runId].sort()).toEqual(
+        [runId, other.body.id].sort(),
+      )
+
+      // The `status` and `since` narrowings are applied in SQL by `listRecent` — pin the wiring
+      // from query param to predicate on each facade (the repo has no per-store suite).
+      const failedOnly = await app.call<DebugRunList>(
+        'GET',
+        '/api/v1/debug/runs?status=failed',
+        undefined,
+        auth,
+      )
+      expect(failedOnly.body.runs).toHaveLength(0)
+      const sinceFuture = await app.call<DebugRunList>(
+        'GET',
+        `/api/v1/debug/runs?since=${Date.now() + 3_600_000}`,
+        undefined,
+        auth,
+      )
+      expect(sinceFuture.body.runs).toHaveLength(0)
+      const sinceEpoch = await app.call<DebugRunList>(
+        'GET',
+        '/api/v1/debug/runs?since=0',
+        undefined,
+        auth,
+      )
+      expect(sinceEpoch.body.runs.length).toBeGreaterThanOrEqual(2)
 
       // A corrupted cursor is a 400, never a silent re-serve of page one — for an autonomous
       // caller the latter is an infinite loop rather than a visible failure.
@@ -112,10 +162,12 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       expect(overview.body.kind).toBe('cat-factory.run-debug-overview')
       expect(overview.body.run.runId).toBe(runId)
       expect(overview.body.steps.map((s) => s.agentKind)).toEqual(['coder'])
-      // Every sink reports availability, and an available one is a wired repository — the
-      // assertion that catches a facade which mounted the routes but not the store.
+      // Every conformance facade wires all four telemetry repositories, so each sink MUST read
+      // `available: true` here — this is the assertion that catches a facade which mounted the
+      // routes but forgot a store (which would report `available: false` and pass a weaker
+      // "is a boolean" check while contradicting what the facade actually retains).
       for (const sink of Object.values(overview.body.sinks)) {
-        expect(typeof sink.available).toBe('boolean')
+        expect(sink.available).toBe(true)
         expect(sink.count).toBeGreaterThanOrEqual(0)
       }
       // Totals are folded from the SQL rollup, so they exist even for a run with no calls.
@@ -165,6 +217,28 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(overLimit.status).toBe(400)
+
+      // The two FLAT point reads (addressed by the row's own id, not nested under the run) are
+      // mounted and workspace-scoped too: an unknown id is a 404 through the real controller +
+      // service, never a 500 or an empty 200. Their body/slicing semantics are pinned by the
+      // per-store suites; what only this can see is that each facade wired the route.
+      const noCall = await app.call('GET', '/api/v1/debug/llm-calls/llm_nope', undefined, auth)
+      expect(noCall.status).toBe(404)
+      const noSnapshot = await app.call(
+        'GET',
+        '/api/v1/debug/agent-context/acs_nope',
+        undefined,
+        auth,
+      )
+      expect(noSnapshot.status).toBe(404)
+      // The point-read body ceiling is enforced by the contract exactly like the list's limit.
+      const overBudget = await app.call(
+        'GET',
+        '/api/v1/debug/llm-calls/llm_nope?bodyChars=999999999',
+        undefined,
+        auth,
+      )
+      expect(overBudget.status).toBe(400)
     })
 
     it('hides a run in another workspace, and refuses an unauthenticated call', async () => {
@@ -189,14 +263,17 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       const overview = await app.call('GET', `/api/v1/debug/runs/${foreignRunId}`, undefined, auth)
       expect(overview.status).toBe(404)
       // The detail lists resolve the run first for exactly this reason: an unscoped list would
-      // answer 200-with-nothing and quietly leak that the id is unknown to this key.
-      const calls = await app.call(
-        'GET',
-        `/api/v1/debug/runs/${foreignRunId}/llm-calls`,
-        undefined,
-        auth,
-      )
-      expect(calls.status).toBe(404)
+      // answer 200-with-nothing and quietly leak that the id is unknown to this key. All four
+      // repeat the same guard, so all four are pinned.
+      for (const path of ['llm-calls', 'agent-context', 'search-queries', 'logs']) {
+        const res = await app.call(
+          'GET',
+          `/api/v1/debug/runs/${foreignRunId}/${path}`,
+          undefined,
+          auth,
+        )
+        expect(res.status).toBe(404)
+      }
 
       const unauthenticated = await app.call('GET', '/api/v1/debug/runs')
       expect(unauthenticated.status).toBe(401)

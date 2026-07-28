@@ -25,7 +25,6 @@ import type {
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
-  ProvisioningOutcome,
   TokenUsageRecord,
   TokenUsageRepository,
   TokenUsageTotals,
@@ -34,7 +33,21 @@ import type {
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
-import { and, asc, count, desc, eq, gt, gte, inArray, lt, not, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { DrizzleDb } from '../../db/client.js'
 import {
@@ -245,7 +258,13 @@ function llmOutcomeFilter(outcome: LlmCallOutcomeFilter | undefined) {
     return and(eq(llmCallMetrics.ok, 1), inArray(llmCallMetrics.finish_reason, reasons))
   }
   if (outcome === 'ok') {
-    return and(eq(llmCallMetrics.ok, 1), not(inArray(llmCallMetrics.finish_reason, reasons)))
+    // `finish_reason` is nullable and a plain `NOT IN (...)` is UNKNOWN for NULL in SQL, which
+    // would silently drop clean calls that recorded no finish reason. Mirrors the D1 repo's
+    // explicit `finish_reason IS NULL OR finish_reason NOT IN (...)`.
+    return and(
+      eq(llmCallMetrics.ok, 1),
+      or(isNull(llmCallMetrics.finish_reason), notInArray(llmCallMetrics.finish_reason, reasons)),
+    )
   }
   return undefined
 }
@@ -1036,19 +1055,21 @@ export class DrizzleProvisioningLogRepository implements ProvisioningLogReposito
   async countByExecution(
     workspaceId: string,
     executionId: string,
-    outcome?: ProvisioningOutcome,
-  ): Promise<number> {
+  ): Promise<{ total: number; failures: number }> {
+    // Total + failures in ONE aggregate pass over the run's slice (see the port).
     const rows = await this.db
-      .select({ n: count() })
+      .select({
+        total: count(),
+        failures: sql<number>`coalesce(sum(case when ${provisioningLog.outcome} = 'failure' then 1 else 0 end), 0)::int`,
+      })
       .from(provisioningLog)
       .where(
         and(
           eq(provisioningLog.workspace_id, workspaceId),
           eq(provisioningLog.execution_id, executionId),
-          ...(outcome ? [eq(provisioningLog.outcome, outcome)] : []),
         ),
       )
-    return Number(rows[0]?.n ?? 0)
+    return { total: Number(rows[0]?.total ?? 0), failures: Number(rows[0]?.failures ?? 0) }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

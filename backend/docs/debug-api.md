@@ -52,6 +52,17 @@ than the exposure it was meant to prevent. What model text is retained at all st
 it is captured: `LLM_RECORD_PROMPTS` (deployment) **and** the per-workspace `storeAgentContext`
 setting. Turn either off and this surface has nothing to serve.
 
+Treat a `read` key accordingly when handing one out: it now reaches **prompt and response bodies,
+injected context files, and run diagnostics** (repo, control-plane host) that were previously
+visible only to workspace members through the SPA's RBAC-gated observability drill-down. A `read`
+key was always able to see task titles and run status; with this surface it can see everything the
+telemetry store retains for its workspace.
+
+Note the overview's `sinks.available` flag is **repository presence only** — it says whether this
+deployment wired the store, not whether capture was on. A workspace that turned `storeAgentContext`
+off (or a deployment without `LLM_RECORD_PROMPTS`) reads `available: true, count: 0` for the runs
+it stopped capturing.
+
 Scope is the **workspace**, which is wider than the task surface's `loadScopedRun` on purpose: a
 service frame's blueprint run and a recurring bug-intake fire are exactly the runs someone asks
 about, and a debugger that cannot see the run that failed is useless. A run outside the key's
@@ -126,9 +137,10 @@ so, which is the property that matters: the caller knows it is reasoning over a 
 Cross-runtime parity is pinned twice: the per-store suites
 (`llm-metrics-suite`, `agent-context-suite`, `agent-search-queries-suite`,
 `provisioning-log-suite`) drive the real SQL on both runtimes, and
-`suites/integration-public-debug.ts` drives the HTTP surface end to end so a facade that mounts the
-routes but forgets a telemetry repository fails there rather than reporting
-`available: true, count: 0` for a sink it never wired.
+`suites/integration-public-debug.ts` drives the HTTP surface end to end and asserts every sink
+reads `available: true` on the conformance facades (all of which wire the stores) — so a facade
+that mounts the routes but forgets a telemetry repository fails there rather than shipping a
+surface that reports the sink as unavailable.
 
 ## Mothership mode
 

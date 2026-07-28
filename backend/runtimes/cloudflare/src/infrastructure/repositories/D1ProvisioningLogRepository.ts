@@ -2,7 +2,6 @@ import type {
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
-  ProvisioningOutcome,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -116,16 +115,18 @@ export class D1ProvisioningLogRepository implements ProvisioningLogRepository {
   async countByExecution(
     workspaceId: string,
     executionId: string,
-    outcome?: ProvisioningOutcome,
-  ): Promise<number> {
+  ): Promise<{ total: number; failures: number }> {
+    // Total + failures in ONE aggregate pass over the run's slice (see the port).
     const row = await this.db
       .prepare(
-        `SELECT COUNT(*) AS n FROM provisioning_log
-         WHERE workspace_id = ? AND execution_id = ? AND (? IS NULL OR outcome = ?)`,
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN outcome = 'failure' THEN 1 ELSE 0 END), 0) AS failures
+         FROM provisioning_log
+         WHERE workspace_id = ? AND execution_id = ?`,
       )
-      .bind(workspaceId, executionId, outcome ?? null, outcome ?? null)
-      .first<{ n: number }>()
-    return row?.n ?? 0
+      .bind(workspaceId, executionId)
+      .first<{ total: number; failures: number }>()
+    return { total: row?.total ?? 0, failures: row?.failures ?? 0 }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

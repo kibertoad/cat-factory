@@ -298,6 +298,12 @@ export interface ExecutionRepository {
     },
   ): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
+  /**
+   * Whether the workspace has this run — one indexed probe that decodes NOTHING. The 404
+   * guard the per-run debug lists apply on EVERY page: answering it with `get` would
+   * JSON-decode the heaviest row in the request only to discard it.
+   */
+  exists(workspaceId: string, id: string): Promise<boolean>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   /**
    * Persist the run (force-write). Bumps the row's monotonic `rev` on every write so a

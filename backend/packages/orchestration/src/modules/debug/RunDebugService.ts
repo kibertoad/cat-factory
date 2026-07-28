@@ -120,6 +120,15 @@ export class RunDebugService {
   }
 
   /**
+   * Whether the workspace has this run — the 404 guard the per-run detail lists apply on
+   * every page. A probe rather than {@link RunDebugService.getRun}: the guard discards the
+   * run, and `get` JSON-decodes the heaviest row in the request to answer a boolean.
+   */
+  runExists(workspaceId: string, runId: string): Promise<boolean> {
+    return this.deps.executionRepository.exists(workspaceId, runId)
+  }
+
+  /**
    * The run's diagnostic map. Composed from AGGREGATES ONLY — four counts and one GROUP BY,
    * no prompt, response or context body — which is what makes it cheap enough to be the first
    * call a debugging client always issues, and what lets its `sinks` block stop the caller
@@ -133,12 +142,15 @@ export class RunDebugService {
     const runId = execution.id
     // Independent aggregates over four separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
-    const [summaries, contextCount, searchCount, logCount, logFailures] = await Promise.all([
+    const [summaries, contextCount, searchCount, logCounts] = await Promise.all([
       this.deps.llmCallMetricRepository?.summarizeByExecution(workspaceId, runId) ?? [],
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
-      this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? 0,
-      this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId, 'failure') ?? 0,
+      // Total + failures in one aggregate pass — the overview always wants both.
+      this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? {
+        total: 0,
+        failures: 0,
+      },
     ])
     const { totals, byAgentKind } = foldLlmRollup(summaries)
     const steps = execution.steps.map(toDebugRunStep)
@@ -152,7 +164,7 @@ export class RunDebugService {
         count: contextCount,
       },
       searchQueries: { available: !!this.deps.agentSearchQueryRepository, count: searchCount },
-      provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCount },
+      provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCounts.total },
     }
     return {
       kind: 'cat-factory.run-debug-overview',
@@ -169,7 +181,7 @@ export class RunDebugService {
         totals,
         byAgentKind,
         sinks,
-        provisioningFailures: logFailures,
+        provisioningFailures: logCounts.failures,
       }),
     }
   }
