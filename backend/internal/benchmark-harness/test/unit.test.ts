@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LanguageModel } from 'ai'
-import { promptVersionLabel } from '@cat-factory/agents'
+import { PROMPT_VERSIONS } from '@cat-factory/agents'
 import type { ModelProvider } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -34,6 +34,31 @@ function fakeProvider(text: string): ModelProvider {
   return { resolve: () => model }
 }
 
+/**
+ * {@link fakeProvider} plus a record of what each call was actually prompted with, so a test can
+ * check that the prompt a cell CLAIMS to have used is the one the model saw. The whole message
+ * array is stringified rather than the system message picked out of it: the assertion only needs
+ * "this text reached the model", and digging into the SDK's message shape would tie the test to a
+ * detail the harness does not own.
+ */
+function recordingProvider(text: string, seen: string[]): ModelProvider {
+  const model: LanguageModel = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      seen.push(JSON.stringify(options.prompt))
+      return {
+        content: [{ type: 'text', text }],
+        finishReason: { unified: 'stop' as const, raw: undefined },
+        usage: {
+          inputTokens: { total: 11, noCache: 11, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 22, text: 22, reasoning: 0 },
+        },
+        warnings: [],
+      }
+    },
+  })
+  return { resolve: () => model }
+}
+
 const tmpDirs: string[] = []
 async function makeTmp(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'cat-bench-test-'))
@@ -45,14 +70,26 @@ afterEach(async () => {
 })
 
 describe('prompt versioning', () => {
-  // Asserted against the live registry, not a hard-coded number: the subject here is that a
-  // default variant resolves to the CURRENTLY-SHIPPING `id@vN` and carries that prompt's text.
-  // Pinning the digit instead makes every routine prompt bump a spurious test failure, which is
-  // exactly how this drifted to `build@v3` while the registry moved on to v5.
-  it('resolves built-in prompts to id@vN with their text', () => {
+  // The resolver exists to make a report's attribution true: the `id@vN` a cell records must
+  // name the prompt text that actually ran. So these exercise the RULES that produce that pair.
+  // The version DIGIT is not one of them — pinning `build@v3` asserted nothing about the
+  // resolver and merely rotted two releases behind the registry.
+
+  it('pairs a built-in prompt with the version from its own registry entry', () => {
+    const builtin = PROMPT_VERSIONS.build
     const r = resolvePromptVariant(defaultVariant('build'))
-    expect(r.label).toBe(promptVersionLabel('build'))
-    expect(r.system).toContain('senior engineer')
+    expect(r.system).toBe(builtin.text)
+    expect(r.label).toBe(`build@v${builtin.version}`)
+  })
+
+  // The default benchmark path builds `{promptId}` with NO version (see `variantsFor`), so this
+  // fallback is what every un-configured run rides. Losing it does not fail anything visibly:
+  // cells keep resolving, they just all label `@v1` while running the current prompt, and the
+  // whole report silently attributes its numbers to a prompt that never ran.
+  it('falls back to the registry version when the variant names none', () => {
+    const r = resolvePromptVariant({ promptId: 'build' })
+    expect(r.label).toBe(`build@v${PROMPT_VERSIONS.build.version}`)
+    expect(r.system).toBe(PROMPT_VERSIONS.build.text)
   })
 
   it('honours an experimental variant override + version', () => {
@@ -65,6 +102,28 @@ describe('prompt versioning', () => {
     expect(r.label).toBe('review@v2')
     expect(r.system).toBe('Be terse.')
     expect(r.temperature).toBe(0.5)
+  })
+
+  it('lets an explicit label win over the computed one', () => {
+    const r = resolvePromptVariant({
+      promptId: 'review',
+      version: 2,
+      system: 'Be terse.',
+      label: 'terse-experiment',
+    })
+    expect(r.label).toBe('terse-experiment')
+  })
+
+  it('versions an unknown prompt id at v1 when the variant brings its own text', () => {
+    const r = resolvePromptVariant({ promptId: 'house-style', system: 'Be terse.' })
+    expect(r.label).toBe('house-style@v1')
+    expect(r.system).toBe('Be terse.')
+  })
+
+  // The alternative — resolving to an empty system prompt — would run the whole matrix against
+  // a typo'd id and report the scores as if they meant something.
+  it('refuses an unknown prompt id with no text of its own', () => {
+    expect(() => resolvePromptVariant({ promptId: 'house-style' })).toThrow(/house-style/)
   })
 })
 
@@ -141,17 +200,43 @@ describe('runBenchmark', () => {
     const rr = results.find((r) => r.cell.task === 'requirement-review')!
     expect(rr.error).toBeUndefined()
     expect(rr.cell.model).toBe('workers-ai:@cf/test')
-    expect(rr.cell.prompt).toBe(promptVersionLabel('requirement-review'))
+    // Shape, not digit: the contract `CellKey.prompt` carries is "the exact prompt version,
+    // `id@vN`", for the prompt this task routes to. Which N is the registry's business, and
+    // asserting it here only guarantees the test needs editing on every prompt bump.
+    expect(rr.cell.prompt).toMatch(/^requirement-review@v\d+$/)
     expect(rr.output).toContain('Link expiry')
     // The requirement-review runner now also reports provider cache hits (0 here — the
     // fake model serves no cached tokens), so the caching dimension can be measured.
     expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22, cachedInputTokens: 0 })
     const cr = results.find((r) => r.cell.task === 'code-review')!
-    expect(cr.cell.prompt).toBe(promptVersionLabel('review'))
+    expect(cr.cell.prompt).toMatch(/^review@v\d+$/)
     expect(cr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
     expect(cr.output).toContain(reviewJson)
     // Cost is metered from the usage via core pricing.
     expect(cr.costEur).toBeGreaterThan(0)
+  })
+
+  // The attribution claim end-to-end, and the only way to test it without restating the
+  // resolver: the expected label is one the TEST chose, so it cannot be satisfied by recomputing
+  // whatever the implementation happens to produce. A harness that ran the built-in prompt while
+  // labelling cells with the configured variant would compare two things that never differed.
+  it('runs the configured variant and labels the cell with it, not the built-in default', async () => {
+    const sentinel = 'SENTINEL-VARIANT-SYSTEM-PROMPT'
+    const seen: string[] = []
+    const results = await runBenchmark({
+      config: {
+        tasks: ['requirement-review'],
+        models: [{ ref: { provider: 'workers-ai', model: '@cf/test' } }],
+        prompts: {
+          'requirement-review': [{ promptId: 'requirement-review', version: 99, system: sentinel }],
+        },
+      },
+      provider: recordingProvider(JSON.stringify({ items: [] }), seen),
+      env: {} as NodeJS.ProcessEnv,
+    })
+    expect(results).not.toHaveLength(0)
+    expect(seen.join('\n')).toContain(sentinel)
+    for (const r of results) expect(r.cell.prompt).toBe('requirement-review@v99')
   })
 
   it('captures runner failures as error cells rather than throwing', async () => {
