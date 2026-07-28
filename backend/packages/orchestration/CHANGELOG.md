@@ -1,5 +1,40 @@
 # @cat-factory/orchestration
 
+## 0.150.1
+
+### Patch Changes
+
+- cf2779a: Cut coder token/quota burn and fix subscription usage attribution.
+
+  - **Two-tier best-practice fragments.** `PromptFragment` gains an optional `brief` body; a new `brief-standards` trait marks the high-turn code-writing implementer kinds (coder, fixer, ci-fixer, conflict-resolver) so their system prompt — re-sent on every turn of a long agentic loop — folds the condensed standard instead of the full body. Reviewer/planner kinds keep the full text. The brief is resolved ALONGSIDE the body it condenses and never re-looked-up by id, so a workspace/account-tier row that overrides a built-in id folds its own full body rather than the built-in's condensed text. Backward-safe: no `brief` / unmarked kind ⇒ the full body, unchanged. `brief` authored for every built-in fragment that can reach an implementer kind (node, react, design, migration).
+  - **No-progress guard on the claude-code path.** The `ProgressGuard` that killed rabbit-holing Pi runs (no-edit probing, error-retry loops, web rabbit-holes) now also runs on the claude-code subscription harness, which previously had only the wall-clock watchdog. Its no-edit exploration allowance scales with the task-estimator's complexity when an estimator ran (conservative default otherwise), so it only ever catches absolute spiralling and never truncates a productively-editing run. Subagent dispatches (`Agent`/`Task`) are neutral to the no-edit bound, since the edits they make are invisible on the parent stream.
+  - **Trimmed always-on prompt bloat.** The harness no longer appends its own spec-reading block (deduped — it now comes solely from the backend `spec-aware` trait, so a spec-aware Pi run stops carrying it twice); the blueprint orientation note is included only when the checkout (or, for a multi-repo run, one of its legs) actually ships `blueprints/`; and the spec-reading guidance now steers agents to the overview index and the relevant-and-adjacent shards in one line.
+  - **Fix subscription token-usage attribution.** A container/subscription step's `token_usage` row recorded `provider='unknown'` / `model=''` because the durable poll path rebuilt a stripped job handle without the dispatch model. It now forwards `step.model`, so the row records the real provider + model.
+
+- 5e5d409: Fix the dead-end "Approve & proceed" rail on a Coder step parked for a dedicated decision.
+
+  A coder parked on the follow-up gate (or the implementation-fork choice) rides `step.approval`,
+  so every generic approval surface — the inspector "Approve" button, the focus-view
+  "Review & approve" chip, and the step-detail rail — offered a generic approve the server
+  deliberately refuses (409), and the failure was swallowed client-side: the button blinked and
+  nothing happened. The step click now routes those parks to the window that can resolve them
+  (follow-up triage / fork choice), the step-detail overlay swaps the rail for a redirect when a
+  step parks while it is open, and approve/request-changes/reject failures surface as actionable
+  toasts (closing the overlay only on success). Server-side, the fork-decision park is now guarded
+  in `assertNotIterativeGate` like the other dedicated gates — a stray generic approve could
+  previously advance the run past the coder without the build ever dispatching.
+
+- Updated dependencies [cf2779a]
+  - @cat-factory/contracts@0.177.0
+  - @cat-factory/prompt-fragments@0.15.0
+  - @cat-factory/agents@0.75.0
+  - @cat-factory/kernel@0.170.0
+  - @cat-factory/integrations@0.103.2
+  - @cat-factory/sandbox@0.9.161
+  - @cat-factory/spend@0.12.99
+  - @cat-factory/workspaces@0.18.15
+  - @cat-factory/caching@0.10.55
+
 ## 0.150.0
 
 ### Minor Changes
