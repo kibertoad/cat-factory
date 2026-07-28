@@ -1318,8 +1318,8 @@
       "unassigned": "Non assegnato",
       "workspaceDefault": "Predefinito del workspace",
       "workspaceDefaultParen": "(predefinito del workspace)",
-      "defaultPresetThresholds": "Predefinito ({name}): {thresholds}",
-      "defaultPreset": "Predefinito ({name})",
+      "defaultRiskPolicy": "Predefinito ({name})",
+      "defaultModelPreset": "Predefinito ({name})",
       "noDefault": "Nessun predefinito",
       "inheritWorkspace": "Eredita dal workspace",
       "on": "Attivo",
@@ -1335,7 +1335,8 @@
       "pipelineEmpty": "Nessun predefinito. Scegli una pipeline quando esegui questa attivita'.",
       "pipelineHint": "La pipeline che il pulsante Esegui avvia per impostazione predefinita: la sequenza di passaggi dell'agente (ad esempio spec, code, test, merge) eseguiti per questa attivita'.",
       "mergePolicy": "Criterio di rischio",
-      "riskPolicyDetail": "{name}: unione automatica quando complessita' ≤ {complexity}, rischio ≤ {risk}, impatto ≤ {impact}; fino a {attempts} tentativi di correzione CI.",
+      "riskPolicyDetail": "{name}: unisce senza revisione umana quando rischio ≤ {risk}, impatto ≤ {impact} e complessita ≤ {complexity}; fino a {attempts} tentativi di correzione CI.",
+      "riskPolicyManual": "{name}: non unisce mai da solo, quindi ogni pull request attende una revisione umana; fino a {attempts} tentativi di correzione CI.",
       "riskPolicyEmpty": "Nessun criterio di rischio configurato. Il merger genera una notifica di revisione per ogni PR.",
       "mergePolicyHint": "Decide quando una pull request completata viene unita automaticamente invece di attendere una revisione umana, e quanti tentativi di correzione CI ottiene un'esecuzione.",
       "modelPreset": "Preset del modello",
@@ -2304,7 +2305,7 @@
       "chooseAtRunTime": "Scegli al momento dell'esecuzione",
       "mergePolicy": "Criterio di rischio",
       "workspaceDefault": "Predefinito del workspace",
-      "defaultPreset": "Predefinito ({name}) — {thresholds}",
+      "defaultPreset": "Predefinito ({name})",
       "defaultModelPreset": "Predefinito ({name})",
       "modelPreset": "Preset di modello",
       "bestPractices": "Best practice",
@@ -3246,7 +3247,11 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna issue corrispondente nel repository di questo servizio. Incolla l'URL di una issue per allegarne una da altrove.",
       "emptySearchable": "Cerca per titolo nel repository di questo servizio, oppure scegli una issue importata.",
-      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla."
+      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla.",
+      "sourceLabel": "Fonte",
+      "noSource": "Scegli una fonte",
+      "connectSource": "Collega {label}",
+      "enableSource": "Abilita {label}"
     },
     "contextIssues": {
       "title": "Issue di contesto",
@@ -3359,10 +3364,12 @@
     },
     "preview": {
       "stepCount": "{count} step | {count} step",
+      "gateCount": "{count} approvazione | {count} approvazioni",
       "gated": "Approvazione umana dopo questo step"
     },
     "picker": {
-      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita."
+      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita.",
+      "hoverHint": "Passa il mouse su una pipeline per vedere gli step che esegue."
     },
     "builder": {
       "title": "Costruttore di pipeline",
@@ -3587,6 +3594,11 @@
     "recommendationRequested": "Raccomandazione richiesta — rivedi il suggerimento qui sotto.",
     "recommendedDefault": "Valore predefinito consigliato: mantienilo, modificalo o ignora il rilievo.",
     "needsYourInput": "Richiede il tuo intervento",
+    "group": {
+      "action": "Richiede la tua reazione",
+      "waiting": "In attesa di suggerimenti",
+      "settled": "Gestiti"
+    },
     "mode": {
       "answer": "Rispondi",
       "dismiss": "Ignora",
@@ -5126,6 +5138,25 @@
       "toast": {
         "reseedFailed": "Impossibile ripristinare il criterio di rischio"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Si applica perche questa attivita non sceglie un criterio proprio.",
+      "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana."
+    },
+    "preview": {
+      "defaultBadge": "Predefinito",
+      "autoMergeHeading": "Soglie di unione automatica",
+      "axis": {
+        "risk": "Rischio",
+        "impact": "Impatto",
+        "complexity": "Complessita"
+      },
+      "ceiling": "pari o inferiore a {value}",
+      "autoMergeExplainer": "Quando la CI e verde, l'agente merger valuta la pull request su questi tre assi. Se ogni punteggio resta entro il proprio limite, la pull request si unisce da sola e salta la revisione umana; qualsiasi valore superiore la manda a una persona.",
+      "manualHeading": "Solo revisione manuale",
+      "manualExplainer": "Questo criterio non unisce mai da solo, quindi ogni pull request attende una revisione umana qualunque sia il punteggio.",
+      "ciHeading": "Correzioni CI",
+      "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi."
     }
   },
   "modelPreset": {

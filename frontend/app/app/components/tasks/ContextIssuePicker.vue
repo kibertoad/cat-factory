@@ -11,9 +11,16 @@
 // An issue in another repo is reachable only by pasting its URL, which the explicit
 // "attach by reference" row below imports directly — it never comes back as a hit,
 // so what the search offers is exactly what the service owns.
+//
+// The tracker being searched is ALWAYS on screen (even when the workspace offers
+// exactly one), and its menu doubles as the "add a tracker" affordance: attaching a
+// context issue is where a missing integration is discovered, and the connect modal
+// opens over the caller's form rather than navigating away from it.
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
+import { buildSourceChoices, reconcileSource } from '~/components/tasks/ContextIssuePicker.logic'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -32,13 +39,6 @@ const props = defineProps<{
    * `v-model:source`); omitted, the picker manages it internally (the add-task case).
    */
   source?: TaskSourceKind
-  /**
-   * Always render the source selector, even with a single offered tracker — so the
-   * user can see *which* tracker is being searched (the "create task from issue"
-   * surface, where the source is otherwise invisible). Off by default: the inline
-   * add-task picker stays compact and only shows a selector when there's a choice.
-   */
-  alwaysShowSource?: boolean
 }>()
 const emit = defineEmits<{
   pick: [item: PendingContext]
@@ -47,12 +47,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const tasks = useTasksStore()
+const ui = useUiStore()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
 
 // Source: default to the first offered tracker. Controlled when the parent passes
-// `source` (write-through to `update:source`), else internal. A selector appears when
-// more than one source is offered, or whenever the parent asks (`alwaysShowSource`).
+// `source` (write-through to `update:source`), else internal. The selector is always
+// rendered, single tracker or not — which tracker is being searched decides what a
+// pasted key resolves to, so it must never be invisible.
 const internalSource = ref<TaskSourceKind | undefined>(tasks.offeredSources[0]?.source)
 const source = computed<TaskSourceKind | undefined>({
   get: () => props.source ?? internalSource.value,
@@ -61,13 +63,49 @@ const source = computed<TaskSourceKind | undefined>({
     if (v) emit('update:source', v)
   },
 })
-const sourceItems = computed(() =>
-  tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
-)
-const showSourceSelect = computed(
-  () => sourceItems.value.length > 1 || (props.alwaysShowSource && sourceItems.value.length > 0),
-)
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
+
+// The tracker the user left to connect, so it becomes the selection the moment it turns
+// up offered (the connect modal re-probes on success). Also the reconcile trigger for a
+// source that stops being offered — disconnected, or toggled off in settings.
+const awaitingConnect = ref<TaskSourceKind | null>(null)
+function addSource(s: TaskSourceKind) {
+  awaitingConnect.value = s
+  ui.openTaskConnect(s)
+}
+watch(
+  () => tasks.offeredSources.map((s) => s.source),
+  (offered) => {
+    const next = reconcileSource(offered, source.value, awaitingConnect.value)
+    if (next && next === awaitingConnect.value) awaitingConnect.value = null
+    if (next !== source.value && next) source.value = next
+  },
+)
+
+// Two-tier menu: pick an offered tracker, or add one that isn't offered yet.
+const sourceMenu = computed<DropdownMenuItem[][]>(() =>
+  buildSourceChoices(tasks.sources, source.value).map((group) =>
+    group.map((choice) =>
+      choice.action === 'select'
+        ? {
+            label: choice.label,
+            icon: choice.icon,
+            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
+            onSelect: () => {
+              source.value = choice.source
+            },
+          }
+        : {
+            label:
+              choice.action === 'enable'
+                ? t('tasks.picker.enableSource', { label: choice.label })
+                : t('tasks.picker.connectSource', { label: choice.label }),
+            icon: 'i-lucide-plug',
+            onSelect: () => addSource(choice.source),
+          },
+    ),
+  ),
+)
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 
 const query = ref('')
@@ -245,13 +283,25 @@ onMounted(() => {
 
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <USelect
-      v-if="showSourceSelect"
-      v-model="source"
-      :items="sourceItems"
-      size="xs"
-      class="w-full"
-    />
+    <!-- Which tracker is being searched, always visible, plus the trackers the user
+         could add from here (each opens the connect modal over the caller's form). -->
+    <div class="flex items-center gap-1.5">
+      <span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('tasks.picker.sourceLabel') }}
+      </span>
+      <UDropdownMenu :items="sourceMenu" :content="{ side: 'bottom', align: 'start' }">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          :icon="icon"
+          trailing-icon="i-lucide-chevron-down"
+          class="max-w-full"
+        >
+          <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
+        </UButton>
+      </UDropdownMenu>
+    </div>
 
     <UInput
       v-model="query"

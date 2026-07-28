@@ -269,7 +269,7 @@
       "chooseAtRunTime": "Wybierz przy uruchomieniu",
       "mergePolicy": "Zasada ryzyka",
       "workspaceDefault": "Domyślne dla obszaru roboczego",
-      "defaultPreset": "Domyślny ({name}): {thresholds}",
+      "defaultPreset": "Domyślna ({name})",
       "defaultModelPreset": "Domyślny ({name})",
       "modelPreset": "Preset modelu",
       "bestPractices": "Dobre praktyki",
@@ -1003,8 +1003,8 @@
       "unassigned": "Nieprzypisane",
       "workspaceDefault": "Domyślne obszaru roboczego",
       "workspaceDefaultParen": "(domyślne obszaru roboczego)",
-      "defaultPresetThresholds": "Domyślny ({name}): {thresholds}",
-      "defaultPreset": "Domyślny ({name})",
+      "defaultRiskPolicy": "Domyślna ({name})",
+      "defaultModelPreset": "Domyślny ({name})",
       "noDefault": "Brak domyślnego",
       "inheritWorkspace": "Dziedzicz z obszaru roboczego",
       "on": "Wł.",
@@ -1020,7 +1020,8 @@
       "pipelineEmpty": "Brak domyślnego. Wybierz potok przy uruchamianiu tego zadania.",
       "pipelineHint": "Potok uruchamiany domyślnie przyciskiem uruchamiania: sekwencja kroków agentów (np. specyfikacja, kod, testy, scalenie) wykonywana dla tego zadania.",
       "mergePolicy": "Zasada ryzyka",
-      "riskPolicyDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
+      "riskPolicyDetail": "{name}: scala bez ludzkiej recenzji, gdy ryzyko ≤ {risk}, wpływ ≤ {impact} i złożoność ≤ {complexity}; do {attempts} prób naprawy CI.",
+      "riskPolicyManual": "{name}: nigdy nie scala samodzielnie, więc każdy pull request czeka na ludzką recenzję; do {attempts} prób naprawy CI.",
       "riskPolicyEmpty": "Nie skonfigurowano zasady ryzyka. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
       "mergePolicyHint": "Decyduje, kiedy ukończony pull request jest scalany automatycznie zamiast czekać na ludzką recenzję, oraz ile prób naprawy CI otrzymuje uruchomienie.",
       "modelPreset": "Preset modelu",
@@ -3540,7 +3541,11 @@
       "attachByReference": "Dołącz {ref} przez odniesienie",
       "noMatches": "Brak pasujących zgłoszeń w repozytorium tej usługi. Wklej adres URL zgłoszenia, aby dołączyć je z innego miejsca.",
       "emptySearchable": "Szukaj według tytułu w repozytorium tej usługi lub wybierz zaimportowane zgłoszenie.",
-      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć."
+      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć.",
+      "sourceLabel": "Źródło",
+      "noSource": "Wybierz źródło",
+      "connectSource": "Połącz {label}",
+      "enableSource": "Włącz {label}"
     },
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",
@@ -3653,10 +3658,12 @@
     },
     "preview": {
       "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "gateCount": "{count} zatwierdzenie | {count} zatwierdzenia | {count} zatwierdzeń",
       "gated": "Ręczne zatwierdzenie po tym kroku"
     },
     "picker": {
-      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania."
+      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania.",
+      "hoverHint": "Najedź na pipeline, aby zobaczyć kroki, które wykonuje."
     },
     "builder": {
       "title": "Kreator pipeline'ów",
@@ -3991,6 +3998,11 @@
     "recommendationRequested": "Poproszono o rekomendację — sprawdź sugestię poniżej.",
     "recommendedDefault": "Zalecana wartość domyślna: zachowaj ją, edytuj lub odrzuć uwagę.",
     "needsYourInput": "Wymaga Twojej reakcji",
+    "group": {
+      "action": "Wymaga Twojej reakcji",
+      "waiting": "Oczekują na sugestie",
+      "settled": "Rozpatrzone"
+    },
     "mode": {
       "answer": "Odpowiedz",
       "dismiss": "Odrzuć",
@@ -5009,6 +5021,25 @@
       "toast": {
         "reseedFailed": "Nie udało się zregenerować zasady ryzyka"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Stosowana, ponieważ to zadanie nie wybiera własnej zasady.",
+      "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję."
+    },
+    "preview": {
+      "defaultBadge": "Domyślna",
+      "autoMergeHeading": "Progi automatycznego scalania",
+      "axis": {
+        "risk": "Ryzyko",
+        "impact": "Wpływ",
+        "complexity": "Złożoność"
+      },
+      "ceiling": "na poziomie {value} lub niżej",
+      "autoMergeExplainer": "Gdy CI jest zielone, agent scalający ocenia pull requesta na tych trzech osiach. Jeśli każda ocena mieści się w swoim limicie, pull request scala się sam i pomija ludzką recenzję; cokolwiek powyżej trafia do człowieka.",
+      "manualHeading": "Tylko recenzja ręczna",
+      "manualExplainer": "Ta zasada nigdy nie scala samodzielnie, więc każdy pull request czeka na ludzką recenzję niezależnie od ocen.",
+      "ciHeading": "Naprawy CI",
+      "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda."
     }
   },
   "modelPreset": {

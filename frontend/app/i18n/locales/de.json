@@ -1318,8 +1318,8 @@
       "unassigned": "Nicht zugewiesen",
       "workspaceDefault": "Workspace-Standard",
       "workspaceDefaultParen": "(Workspace-Standard)",
-      "defaultPresetThresholds": "Standard ({name}): {thresholds}",
-      "defaultPreset": "Standard ({name})",
+      "defaultRiskPolicy": "Standard ({name})",
+      "defaultModelPreset": "Standard ({name})",
       "noDefault": "Kein Standard",
       "inheritWorkspace": "Vom Workspace erben",
       "on": "An",
@@ -1335,7 +1335,8 @@
       "pipelineEmpty": "Kein Standard. Wähle eine Pipeline, wenn du diese Aufgabe ausführst.",
       "pipelineHint": "Die Pipeline, die der Run-Button standardmäßig startet: die Abfolge der Agent-Schritte (zum Beispiel Spec, Code, Test, Merge), die für diese Aufgabe ausgeführt werden.",
       "mergePolicy": "Risikorichtlinie",
-      "riskPolicyDetail": "{name}: automatisch mergen, wenn Komplexität ≤ {complexity}, Risiko ≤ {risk}, Wirkung ≤ {impact}; bis zu {attempts} CI-Fix-Versuche.",
+      "riskPolicyDetail": "{name}: mergt ohne menschliche Prüfung, wenn Risiko ≤ {risk}, Wirkung ≤ {impact} und Komplexität ≤ {complexity}; bis zu {attempts} CI-Fix-Versuche.",
+      "riskPolicyManual": "{name}: mergt nie von selbst, jeder Pull Request wartet also auf eine menschliche Prüfung; bis zu {attempts} CI-Fix-Versuche.",
       "riskPolicyEmpty": "Keine Risikorichtlinie konfiguriert. Der Merger löst für jeden PR eine Prüfbenachrichtigung aus.",
       "mergePolicyHint": "Entscheidet, wann ein fertiger Pull Request automatisch mergt, statt auf eine menschliche Prüfung zu warten, und wie viele CI-Fix-Versuche ein Lauf erhält.",
       "modelPreset": "Modell-Preset",
@@ -2304,7 +2305,7 @@
       "chooseAtRunTime": "Zur Laufzeit auswählen",
       "mergePolicy": "Risikorichtlinie",
       "workspaceDefault": "Workspace-Standard",
-      "defaultPreset": "Standard ({name}) — {thresholds}",
+      "defaultPreset": "Standard ({name})",
       "defaultModelPreset": "Standard ({name})",
       "modelPreset": "Modell-Preset",
       "bestPractices": "Best Practices",
@@ -3246,7 +3247,11 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Issues im Repository dieses Service. Fügen Sie eine Issue-URL ein, um eines von anderswo anzuhängen.",
       "emptySearchable": "Durchsuchen Sie das Repository dieses Service nach Titel oder wählen Sie ein importiertes Issue aus.",
-      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen.",
+      "sourceLabel": "Quelle",
+      "noSource": "Quelle wählen",
+      "connectSource": "{label} verbinden",
+      "enableSource": "{label} aktivieren"
     },
     "contextIssues": {
       "title": "Kontext-Issues",
@@ -3359,10 +3364,12 @@
     },
     "preview": {
       "stepCount": "{count} Schritt | {count} Schritte",
+      "gateCount": "{count} Freigabe | {count} Freigaben",
       "gated": "Manuelle Freigabe nach diesem Schritt"
     },
     "picker": {
-      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus."
+      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus.",
+      "hoverHint": "Fahre über eine Pipeline, um die Schritte zu sehen, die sie ausführt."
     },
     "builder": {
       "title": "Pipeline-Builder",
@@ -3587,6 +3594,11 @@
     "recommendationRequested": "Empfehlung angefordert — prüfen Sie den Vorschlag unten.",
     "recommendedDefault": "Empfohlene Vorgabe: behalten, bearbeiten oder die Feststellung verwerfen.",
     "needsYourInput": "Benötigt Ihre Eingabe",
+    "group": {
+      "action": "Benötigt Ihre Reaktion",
+      "waiting": "Warten auf Vorschläge",
+      "settled": "Erledigt"
+    },
     "mode": {
       "answer": "Beantworten",
       "dismiss": "Verwerfen",
@@ -5126,6 +5138,25 @@
       "toast": {
         "reseedFailed": "Risikorichtlinie konnte nicht erneut geseedet werden"
       }
+    },
+    "picker": {
+      "workspaceDefaultCaption": "Gilt, weil diese Aufgabe keine eigene Richtlinie wählt.",
+      "noneHint": "Keine Risikorichtlinie konfiguriert. Jeder Pull Request wartet auf eine menschliche Prüfung."
+    },
+    "preview": {
+      "defaultBadge": "Standard",
+      "autoMergeHeading": "Schwellen für automatisches Mergen",
+      "axis": {
+        "risk": "Risiko",
+        "impact": "Wirkung",
+        "complexity": "Komplexität"
+      },
+      "ceiling": "höchstens {value}",
+      "autoMergeExplainer": "Sobald die CI grün ist, bewertet der Merger-Agent den Pull Request auf diesen drei Achsen. Bleibt jede Bewertung auf oder unter ihrer Obergrenze, mergt der Pull Request von selbst und überspringt die menschliche Prüfung; alles darüber geht an eine Person.",
+      "manualHeading": "Nur manuelle Prüfung",
+      "manualExplainer": "Diese Richtlinie mergt nie von selbst, jeder Pull Request wartet also unabhängig von den Bewertungen auf eine menschliche Prüfung.",
+      "ciHeading": "CI-Fixes",
+      "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt."
     }
   },
   "modelPreset": {
