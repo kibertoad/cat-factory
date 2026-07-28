@@ -23,7 +23,7 @@ BREAKING (pre-1.0, no migration): `AgentRunContext.skill` is now `skills` (an ar
 `PipelineStep.skillVersion` is now `skillVersions`, and the harness job body's `skill` field is now
 `skills` alongside the new `mcpServers`.
 
-OPERATORS — self-hosted runner pools must be moved to the `1.66.0` harness image. A pool still
+OPERATORS — self-hosted runner pools must be moved to the `1.67.0` harness image. A pool still
 running an older image parses the job body with the old singular `skill` field, so the new
 `skills` array is dropped on the floor. On Pi/codex that degrades quietly (their prompt still
 carries the folded-in instructions), but a leased-credential claude-code run is told in its prompt
