@@ -20,6 +20,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints
       "shapeHint": "Expected a service tree: {"type": string, "name": string, "summary": string, "references": string[], "modules": [{"name": string, "summary": string, "references": string[]}]}.",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -78,6 +79,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1
     "model": "@cf/test/model",
     "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
@@ -138,6 +140,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-r
     "model": "@cf/test/model",
     "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
@@ -203,6 +206,7 @@ _This description was generated when the run was dispatched; the agent did not w
       "title": "Add widget (Standard build)",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
@@ -285,6 +289,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > fixer 1`] 
     "model": "@cf/test/model",
     "noChangesIsError": false,
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "pushBranch": "cat-factory/blk_1",
     "repo": {
       "baseBranch": "main",
@@ -359,6 +364,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > merger 1`]
       "shapeHint": "Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, "impact": number 0..1, "rationale": string}.",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -407,6 +413,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`
       "shapeHint": "Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": "revert"|"hold"|"monitor", "rationale": string, "evidence": string[]}.",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -454,6 +461,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only 
     "mode": "explore",
     "model": "@cf/test/model",
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -526,6 +534,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
       "shapeHint": "Expected a requirements document with a two-level taxonomy — module (domain) → group (feature) — where each group carries BOTH its requirements and the domain rules scoped to it: {"service": string, "summary": string, "modules": [{"name": string, "summary": string, "groups": [{"name": string, "summary": string, "requirements": [{"id": string, "title": string, "statement": string, "kind": string, "priority": string, "state": "aspirational" | "established", "sourceBlockIds": string[], "acceptance": [{"given": string, "when": string, "outcome": string}]}], "rules": [{"id": string, "rule": string, "rationale": string, "sourceBlockIds": string[]}]}]}]}. For a purely technical task with no business requirements, the document is instead just {"noBusinessSpecs": true}.",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",
@@ -588,6 +597,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (do
       "shapeHint": "Expected a test report: {"greenlight": boolean, "summary": string, "tested": string[], "outcomes": [{"name": string, "status": "passed"|"failed"|"skipped", "detail"?: string}], "concerns": [{"title": string, "detail": string, "severity": "low"|"medium"|"high"|"critical"}]}.",
     },
     "proxyBaseUrl": "https://proxy.test/v1",
+    "proxyPhasePath": true,
     "repo": {
       "baseBranch": "main",
       "cloneUrl": "https://github.com/acme/widgets.git",

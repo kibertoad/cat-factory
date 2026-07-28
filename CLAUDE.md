@@ -1145,7 +1145,9 @@ signals), finish the gate. The human decides revert/acknowledge out of band.
 A deployment ships its own agent kinds without forking and without rebuilding the harness image.
 Governing principle: **zero `switch(agentKind)` in the container**. The harness is a generic
 LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full model:
-[`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md).
+[`backend/docs/custom-agents.md`](./backend/docs/custom-agents.md); the ROLE-authoring guide
+(prompt composition, skill + tool-server authoring):
+[`backend/docs/custom-agent-roles.md`](./backend/docs/custom-agent-roles.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS reading and
   committing a targeted subset via the `RepoFiles` port, no checkout) → `agent` (optional:
@@ -1272,6 +1274,31 @@ error handling — and the phased plan to close them — are tracked in
   classes makes COST readable; leading with the fresh figure would make VOLUME unreadable, and did
   (a ~31M-token run rendered as 685). Design + the gotchas:
   [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
+
+  **Every row is stamped with the PHASE that spent it and its TURN ordinal**, so a run's burn can
+  be attributed to the slice that caused it (the agent's own loop vs a pre-PR validation repair
+  round vs a reproduction-proof repair round) instead of piling into one figure per agent kind.
+  Design: [`docs/initiatives/token-burn-instrumentation.md`](./docs/initiatives/token-burn-instrumentation.md).
+  - **The phase is stamped by whoever OWNS the boundary, never reconstructed downstream.** The
+    harness drives those loops, so its job registry stamps `phase` on each streamed call at EMIT
+    time (not drain time — a poll lands long after the phase moved on), and the Pi path, whose
+    calls are metered server-side, carries it on the proxy URL (`${proxyBaseUrl}/phase/<phase>`,
+    rewritten per pass) because Pi makes those requests from a config with no per-request header
+    to set. Reconstructing phase from wall-clock timestamps is the brittle inference this avoids.
+  - **`''` is a REAL slice, not a gap** — an unphased call (an older image, an inline call, the
+    unphased proxy path) is filed as unattributed rather than guessed at from the agent kind. Every
+    boundary the free-text label crosses runs it through kernel's `normalizeCallPhase`, since two of
+    the three producing paths (a request path, a pool's JSON) arrive over HTTP. The harness carries
+    a COPY of that normaliser (`normalizeProxyPhase`) because the image depends on no workspace
+    package, pinned by `test/llm-phase.conformity.test.ts` exactly as `host-markdown.ts` is.
+  - **The BACKEND declares the phase-tagged route** (`proxyPhasePath` on the job body, the same
+    shape as `webSearch`); the harness tags Pi's base URL only when told. Never assume the harness
+    image and the backend are a matched set: that holds for the Cloudflare deployment, but a runner
+    pool pins its own image and `LOCAL_HARNESS_IMAGE` overrides the recommended pin, and an image
+    ahead of its backend would 404 EVERY model call rather than merely lose its telemetry.
+  - **`turn_index` is NULLABLE, not 0.** It is the harness's job-scoped `seq` (the same number the
+    row id is minted from); the proxy has no job-scoped counter, and a 0 there would sort every
+    proxied call to the front of its phase as "the first turn".
 
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files

@@ -38,6 +38,20 @@ export interface HarnessAuthFields {
   harness?: HarnessKind
   /** Worker LLM proxy base URL, including /v1 (Pi harness only). */
   proxyBaseUrl?: string
+  /**
+   * The backend declaring that it serves the phase-tagged completions route
+   * (`${proxyBaseUrl}/phase/<phase>/chat/completions`), so this run may attribute each model
+   * call to the phase that spent it (`docs/initiatives/token-burn-instrumentation.md`). The
+   * same shape as {@link AgentJob.webSearch}: the backend states what IT serves, and the
+   * harness points Pi accordingly.
+   *
+   * Not a capability handshake — the harness never asks and never adapts to an answer. It
+   * exists because the harness image and the backend are only a matched set on the Cloudflare
+   * deployment: a runner pool pins its own image and `LOCAL_HARNESS_IMAGE` overrides the
+   * recommended pin, so an image ahead of its backend would otherwise 404 every model call.
+   * Absent ⇒ the plain path, and the run's calls are recorded as unattributed.
+   */
+  proxyPhasePath?: boolean
   /** Signed, model-locked proxy session token (Pi harness only). */
   sessionToken?: string
   /** Leased subscription credential (Claude Code OAuth token / Codex auth.json). */
@@ -222,6 +236,8 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
     harness,
     proxyBaseUrl: str(o.proxyBaseUrl, 'proxyBaseUrl'),
     sessionToken: str(o.sessionToken, 'sessionToken'),
+    // Opt-IN, so a backend that doesn't serve the phase route (or predates it) is the default.
+    ...(o.proxyPhasePath === true ? { proxyPhasePath: true } : {}),
   }
 }
 
@@ -941,6 +957,12 @@ export interface AgentResult {
     exitCode: number
     validationOutputTail?: string
     iteration?: number
+    /**
+     * The work-branch HEAD the command was judged against. The engine compares it across
+     * consecutive failing iterations to end a loop that has stopped committing anything,
+     * instead of spending the rest of its budget re-learning that. Absent when unreadable.
+     */
+    headSha?: string
   }
   /**
    * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per

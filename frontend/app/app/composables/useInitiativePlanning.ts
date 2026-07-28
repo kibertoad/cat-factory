@@ -4,6 +4,7 @@ import { useExecutionStore } from '~/stores/execution'
 import { useInitiativesStore } from '~/stores/initiative'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
+import { interviewGatePhase } from '~/utils/interviewGate'
 
 /**
  * Shared planning affordances for an `initiative`-level block, used by BOTH the board card
@@ -37,13 +38,32 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   const running = computed(() => !!block.value?.executionId)
 
   /**
-   * The interviewer has PARKED the planning run for the human. Keyed purely on the interview's
-   * parked `status` (`awaiting`) — NOT on whether individual questions are still blank — so the
-   * "Answer planning questions" affordance stays available even after every question is filled but
-   * before the human resumes. Gating on unanswered questions would hide the only path back to the
-   * interview window once all are answered, stranding the still-parked run.
+   * The live interview phase, derived from the entity AND the planning run (see
+   * {@link interviewGatePhase} for why the run status is load-bearing).
    */
-  const awaitingAnswers = computed(() => initiative.value?.interview?.status === 'awaiting')
+  const interviewPhase = computed(() =>
+    interviewGatePhase(
+      initiative.value?.interview?.status,
+      execution.getByBlock(toValue(blockId))?.status,
+    ),
+  )
+
+  /**
+   * The interviewer has PARKED the planning run for the human. NOT keyed on whether individual
+   * questions are still blank — the "Answer planning questions" affordance must stay available
+   * after every question is filled but before the human resumes, or the only path back to the
+   * interview window disappears and the still-parked run is stranded.
+   *
+   * It IS keyed on the run not being mid-pass: after a continue/proceed the entity still reads
+   * `awaiting` for the whole (slow) interviewer pass, so an entity-only reading keeps the card
+   * pulsing and offering "Answer planning questions" over a question set that is already
+   * submitted and about to be replaced. {@link interviewing} covers that window instead, and a
+   * pass that fails takes the run out of `running`, so this comes back rather than stranding.
+   */
+  const awaitingAnswers = computed(() => interviewPhase.value === 'awaiting')
+
+  /** An interviewer pass is running — the human is waiting on the planner, not the reverse. */
+  const interviewing = computed(() => interviewPhase.value === 'working')
 
   /**
    * Optimistic start flag: flip true the instant "Run planning" is clicked, before the stream
@@ -82,7 +102,9 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   return {
     planningPipeline,
     running,
+    interviewPhase,
     awaitingAnswers,
+    interviewing,
     starting,
     runPlanning,
     openPlanning,

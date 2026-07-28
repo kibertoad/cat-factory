@@ -537,18 +537,25 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
     // of best-practice fragments feeding every agent run, wired exactly like the
     // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
-    ...selectNodeFragmentLibraryDeps(
+    ...selectNodeFragmentLibraryDeps({
       config,
       env,
       db,
       githubClient,
-      githubInstallationRepository,
+      installations: githubInstallationRepository,
+      workspaces: repos.workspaceRepository,
       modelProviderResolver,
-    ),
+    }),
     // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
     // account's catalog of repo-authored skills, wired exactly like the Worker's
     // selectSkillLibraryDeps (account repos + installation resolver).
-    ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
+    ...selectNodeSkillLibraryDeps(
+      config,
+      db,
+      githubClient,
+      githubInstallationRepository,
+      repos.workspaceRepository,
+    ),
     // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
     // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the
     // dispatch-time probe is the freshness backstop.

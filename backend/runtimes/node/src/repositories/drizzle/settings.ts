@@ -339,6 +339,9 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
     reviewFrictionBlockStuckMinutes: row.review_friction_block_stuck_minutes,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
+    defaultProvisionType:
+      (row.default_provision_type as WorkspaceSettings['defaultProvisionType']) ?? null,
+    defaultProvisionManifestId: row.default_provision_manifest_id,
   }
 }
 
@@ -395,6 +398,8 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       review_friction_block_stuck_minutes: settings.reviewFrictionBlockStuckMinutes,
       spend_currency: settings.spendCurrency,
       spend_monthly_limit: settings.spendMonthlyLimit,
+      default_provision_type: settings.defaultProvisionType,
+      default_provision_manifest_id: settings.defaultProvisionManifestId,
     }
     await this.db
       .insert(workspaceSettings)
@@ -417,6 +422,8 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           review_friction_block_stuck_minutes: values.review_friction_block_stuck_minutes,
           spend_currency: values.spend_currency,
           spend_monthly_limit: values.spend_monthly_limit,
+          default_provision_type: values.default_provision_type,
+          default_provision_manifest_id: values.default_provision_manifest_id,
         },
       })
   }

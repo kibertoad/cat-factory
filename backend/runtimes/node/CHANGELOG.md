@@ -1,5 +1,164 @@
 # @cat-factory/node-server
 
+## 0.129.1
+
+### Patch Changes
+
+- 9d965c9: Make linking living fragments from GitHub work from a pasted URL end to end, and explain the
+  link button whenever it is inert.
+
+  Three field-reported failures on one surface, fixed together:
+
+  - **Pasting a full GitHub URL into the repo picker found nothing** ("no repositories found
+    for <url>"): the picker's realtime search feeds the provider's tokenized name search, which a
+    URL never matches. Contracts gains a pure `parseRepoWebUrl` (GitHub `tree`/`blob`/`raw` and
+    GitLab `/-/` shapes, subgroups included), and `GitHubSyncService.listAvailableRepos` now
+    collapses a pasted URL to its `owner/name` slug AND resolves that slug with a direct
+    `getRepo` point-read merged ahead of the search results — a reachable repo resolves even when
+    the provider's search misses it.
+  - **Bulk-import by directory URL**: the Documents tab takes a pasted GitHub file or folder URL,
+    resolves the repo by slug (no search dependency), opens the tree browser at that folder, and
+    the browser's multi-file mode gains per-file checkboxes plus a select-all row — so a whole
+    directory of documents can be checked and linked as living fragments in one action.
+  - **"Link as living fragment" disabled with no explanation**: the button now states, beside it,
+    exactly what is missing (no source chosen / no repository / no files ticked / empty ref).
+  - **Account-tier repo sources failed with "No GitHub installation is available for this
+    scope"** even when the repo was browsable: the account-scope resolver matched only
+    `installation.accountId`, which is null for a per-workspace PAT connect and a GitHub account
+    id for local PAT mode's synthetic rows. The shared `createTierInstallationResolvers`
+    (`@cat-factory/agents`, wired by both facades for fragments AND skills) now falls back
+    through the account's own boards, via the new `WorkspaceRepository.listByAccount` (D1 ⇄
+    Drizzle, conformance-asserted, and proxied in mothership mode under the `account` scope rule).
+
+- Updated dependencies [9d965c9]
+- Updated dependencies [8a9f311]
+  - @cat-factory/contracts@0.185.0
+  - @cat-factory/kernel@0.178.0
+  - @cat-factory/agents@0.81.0
+  - @cat-factory/integrations@0.107.3
+  - @cat-factory/server@0.166.2
+  - @cat-factory/orchestration@0.158.0
+  - @cat-factory/consensus@0.12.7
+  - @cat-factory/eks@0.1.159
+  - @cat-factory/gates@0.8.6
+  - @cat-factory/gitlab@0.13.26
+  - @cat-factory/observability-otel@0.4.3
+  - @cat-factory/prompt-fragments@0.15.8
+  - @cat-factory/spend@0.12.107
+  - @cat-factory/caching@0.11.6
+  - @cat-factory/observability-langfuse@0.9.3
+  - @cat-factory/provider-bedrock@0.7.311
+  - @cat-factory/provider-cloudflare@0.7.312
+  - @cat-factory/provider-s3@0.2.231
+
+## 0.129.0
+
+### Minor Changes
+
+- 58e06a2: Give a workspace a DEFAULT test-environment provisioning mechanism, suggested for every service
+  added afterwards, and prompt for it when a board has never chosen one.
+
+  Declaring a provision type per service (ADR 0007) is right, but it made the common case — a board
+  where every service provisions the same way — a per-service chore, and a service nobody got to
+  silently produced no test environment at all. `workspace_settings` gains
+  `defaultProvisionType` + `defaultProvisionManifestId` (D1 + Drizzle, with a conformance
+  assertion), and `BoardService` stamps them onto every newly created service frame via both
+  creation paths, alongside the existing default fragment selection.
+
+  The pair is nullable rather than defaulted, and the distinction is the feature: `null` means the
+  operator has never chosen — what the new `DefaultTestEnvBanner` nags about, which covers a
+  manually created board, the board the SPA creates implicitly on first launch, and an older board
+  predating the setting under one condition — while `infraless` is a real decision ("services stand
+  up no environment") that silences it. The banner carries a shareable `?settings=default-test-env`
+  deep link to the Infrastructure window's Test-environments tab, where the new section preselects
+  the first REGISTERED custom provider when the deployment shipped one and nothing is stored yet
+  (unsaved, and labelled as a suggestion until saved).
+
+  The seed is creation-time only: the engine still reads a service's own `provisioning`, so changing
+  the default never retroactively alters an existing service. `WorkspaceSettingsService.update`
+  refuses a `custom` default with no manifest id and clears a stale id when switching away, since a
+  `custom` service pinning nothing matches no `remote-custom` handler.
+
+  `BoardService`'s `reviewFrictionSettings` dependency is renamed to `workspaceSettings` (one reader
+  now feeds both the friction guard and the provisioning seed), and the frame-creation defaults move
+  into a `newServiceFrameDefaults` collaborator.
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+  - @cat-factory/kernel@0.177.0
+  - @cat-factory/orchestration@0.157.0
+  - @cat-factory/agents@0.80.1
+  - @cat-factory/consensus@0.12.6
+  - @cat-factory/eks@0.1.158
+  - @cat-factory/gates@0.8.5
+  - @cat-factory/gitlab@0.13.25
+  - @cat-factory/integrations@0.107.2
+  - @cat-factory/observability-otel@0.4.2
+  - @cat-factory/prompt-fragments@0.15.7
+  - @cat-factory/server@0.166.1
+  - @cat-factory/spend@0.12.106
+  - @cat-factory/caching@0.11.5
+  - @cat-factory/observability-langfuse@0.9.2
+  - @cat-factory/provider-bedrock@0.7.310
+  - @cat-factory/provider-cloudflare@0.7.311
+  - @cat-factory/provider-s3@0.2.230
+
+## 0.128.0
+
+### Minor Changes
+
+- 65b87c1: Agent kinds can now declare CAPABILITIES: the skills they apply (procedural playbooks — bundled in
+  the deployment's own package, or referenced from the account's repo-synced catalog) and the tool
+  servers they may call (MCP, stdio or HTTP). Both are registered on the same app-owned
+  `AgentKindRegistry` and referenced by id from any number of kinds, or attached to a BUILT-IN kind
+  with `assignSkills` / `assignToolServers`. Tool-server credentials are declared by name and
+  resolved at dispatch through the new kernel `ToolSecretResolver` port (both facades wire the
+  deployment-environment resolver by default), so a value never reaches a prompt or the run's
+  telemetry snapshot. See `backend/docs/adr/0029-agent-kind-capabilities.md`.
+
+  BREAKING (pre-1.0, no migration): `AgentRunContext.skill` is now `skills` (an array),
+  `PipelineStep.skillVersion` is now `skillVersions`, and the harness job body's `skill` field is now
+  `skills` alongside the new `mcpServers`.
+
+  OPERATORS — self-hosted runner pools must be moved to the `1.67.0` harness image. A pool still
+  running an older image parses the job body with the old singular `skill` field, so the new
+  `skills` array is dropped on the floor. On Pi/codex that degrades quietly (their prompt still
+  carries the folded-in instructions), but a leased-credential claude-code run is told in its prompt
+  that the skill "is installed for this step" while nothing was installed — a blind run rather than a
+  failed one. `mcpServers` is dropped the same way, which surfaces as an agent that was promised
+  tools it does not have.
+
+  SECURITY NOTE for a deployment that installs agent packages it did not author: a tool-server
+  definition names both the credential it wants and the endpoint it talks to, and the default
+  `createEnvToolSecretResolver` will resolve any key off the deployment environment. On the Worker
+  that is a real widening (`env` is not otherwise ambient to a registration). Pass
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` to confine it.
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/orchestration@0.156.0
+  - @cat-factory/contracts@0.183.0
+  - @cat-factory/agents@0.80.0
+  - @cat-factory/kernel@0.176.0
+  - @cat-factory/server@0.166.0
+  - @cat-factory/consensus@0.12.5
+  - @cat-factory/eks@0.1.157
+  - @cat-factory/gates@0.8.4
+  - @cat-factory/gitlab@0.13.24
+  - @cat-factory/integrations@0.107.1
+  - @cat-factory/observability-otel@0.4.1
+  - @cat-factory/prompt-fragments@0.15.6
+  - @cat-factory/spend@0.12.105
+  - @cat-factory/provider-bedrock@0.7.309
+  - @cat-factory/provider-cloudflare@0.7.310
+  - @cat-factory/caching@0.11.4
+  - @cat-factory/observability-langfuse@0.9.1
+  - @cat-factory/provider-s3@0.2.229
+
 ## 0.127.0
 
 ### Minor Changes

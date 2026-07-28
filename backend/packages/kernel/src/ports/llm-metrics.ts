@@ -28,6 +28,27 @@ export interface LlmCallMetric {
   createdAt: number
   /** Whether the upstream call was streamed (SSE) rather than buffered. */
   streaming: boolean
+  /**
+   * WHICH slice of the run spent this call: the agent's own edit loop (`agent`), a pre-PR
+   * validation repair round (`validation-repair`), a reproduction-proof repair round
+   * (`reproduction-repair`), … — the axis a per-phase rollup groups by (see
+   * `docs/initiatives/token-burn-instrumentation.md`). Carried from the producer that OWNS
+   * the boundary (the harness drives those loops itself) and normalised through
+   * `normalizeCallPhase`; never reconstructed downstream from timestamps.
+   *
+   * `''` when nothing could attribute it — a REAL slice of the rollup, not a dropped row.
+   */
+  phase: string
+  /**
+   * The call's ordinal within its job's telemetry sequence (0-based), so a rollup can order a
+   * phase's calls by TURN without parsing it back out of {@link id}. It is the harness's
+   * job-scoped `seq` — the same number the row id is minted from.
+   *
+   * `null` where the producing channel has no turn concept: the LLM proxy sees one HTTP call
+   * at a time with no job-scoped counter, so its rows order by {@link createdAt} instead.
+   * Deliberately not faked from a message count — an envelope is not a turn.
+   */
+  turnIndex: number | null
   /** Number of chat messages in the request. */
   messageCount: number
   /** Number of tools offered in the request (0 = the agent can't edit anything). */

@@ -54,8 +54,12 @@ interface SearchCall {
   opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number }
 }
 
-function makeService(items: GitHubRepo[]): { service: GitHubSyncService; searches: SearchCall[] } {
+function makeService(
+  items: GitHubRepo[],
+  opts: { getRepo?: (ref: { owner: string; repo: string }) => Promise<GitHubRepo> } = {},
+): { service: GitHubSyncService; searches: SearchCall[]; pointReads: string[] } {
   const searches: SearchCall[] = []
+  const pointReads: string[] = []
   const deps = {
     githubInstallationRepository: {
       getByWorkspace: async () => ({
@@ -78,12 +82,19 @@ function makeService(items: GitHubRepo[]): { service: GitHubSyncService; searche
         const q = query.trim().toLowerCase()
         return q ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)) : []
       },
+      // Direct point-read for an exact `owner/name` query. Defaults to the GitHub 404
+      // shape (a rejection) so slug-less specs never depend on it.
+      getRepo: async (_installationId: number, ref: { owner: string; repo: string }) => {
+        pointReads.push(`${ref.owner}/${ref.repo}`)
+        if (opts.getRepo) return opts.getRepo(ref)
+        throw new Error('HTTP 404')
+      },
     },
     repoProjectionRepository: {
       list: async () => [],
     },
   } as unknown as GitHubSyncServiceDependencies
-  return { service: new GitHubSyncService(deps), searches }
+  return { service: new GitHubSyncService(deps), searches, pointReads }
 }
 
 describe('GitHubSyncService.listAvailableRepos', () => {
@@ -122,6 +133,51 @@ describe('GitHubSyncService.listAvailableRepos', () => {
     const { service } = makeService(REPOS)
     const result = await service.listAvailableRepos('ws', { q: 'nonexistent' })
     expect(result).toEqual([])
+  })
+
+  it('collapses a pasted repo URL to its slug and resolves it by point-read, not search', async () => {
+    // The repo is reachable via getRepo but NOT surfaced by the name search (models
+    // GitHub's tokenized search missing an exact slug — the "no repositories found
+    // for [full url]" bug).
+    const hidden = repo(9, 'acme', 'internal-tool')
+    const { service, searches, pointReads } = makeService([], {
+      getRepo: async (ref) => {
+        if (ref.owner === 'acme' && ref.repo === 'internal-tool') return hidden
+        throw new Error('HTTP 404')
+      },
+    })
+    const result = await service.listAvailableRepos('ws', {
+      q: 'https://github.com/acme/internal-tool/tree/main/docs',
+    })
+    expect(result.map((r) => r.githubId)).toEqual([9])
+    // The search leg receives the collapsed slug, never the raw URL.
+    expect(searches).toEqual([
+      {
+        installationId: 1,
+        query: 'acme/internal-tool',
+        opts: { owner: 'acme', ownerType: 'Organization' },
+      },
+    ])
+    expect(pointReads).toEqual(['acme/internal-tool'])
+  })
+
+  it('dedups the point-read hit against the search results, direct hit first', async () => {
+    const { service } = makeService(REPOS, {
+      getRepo: async (ref) => {
+        if (ref.owner === 'acme' && ref.repo === 'api-gateway') return REPOS[0]!
+        throw new Error('HTTP 404')
+      },
+    })
+    const result = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
+    // Search substring-matches repo 1 too; the merged list holds it once.
+    expect(result.map((r) => r.githubId)).toEqual([1])
+  })
+
+  it('falls back to the search results when the point-read 404s', async () => {
+    const { service, pointReads } = makeService(REPOS)
+    const result = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
+    expect(pointReads).toEqual(['acme/api-gateway'])
+    expect(result.map((r) => r.githubId)).toEqual([1])
   })
 })
 

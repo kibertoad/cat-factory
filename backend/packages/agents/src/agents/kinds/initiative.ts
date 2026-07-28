@@ -3,6 +3,7 @@ import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@c
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
+import { linkedContextSection } from '../prompts/standard.js'
 
 // ---------------------------------------------------------------------------
 // The `initiative-breakdown` agent kind — the first agent reachable from the PUBLIC API.
@@ -17,6 +18,24 @@ import { CODE_AWARE_TRAIT } from './traits.js'
 // ---------------------------------------------------------------------------
 
 export const INITIATIVE_BREAKDOWN_KIND = 'initiative-breakdown'
+
+/**
+ * The block's linked context (attached requirements / RFCs / PRDs / tracker issues) as prompt
+ * lines, or [] when nothing is attached. An initiative is anchored to an ordinary board block, so
+ * the engine already resolves attachments for it exactly as it does for a task — this is what
+ * puts them in front of the planning agents.
+ *
+ * A helper rather than a bare {@link linkedContextSection} call because every initiative prompt
+ * below joins its lines verbatim: an empty section spliced in as `''` would leave a stray blank
+ * line, and only `renderStandardUserPrompt` collapses those.
+ */
+function linkedContextLines(
+  context: AgentRunContext,
+  opts: { materialized?: boolean } = {},
+): string[] {
+  const section = linkedContextSection(context, opts)
+  return section ? [section] : []
+}
 
 const INITIATIVE_BREAKDOWN_SYSTEM_PROMPT =
   'You are a senior delivery lead breaking a high-level initiative down into an actionable plan. ' +
@@ -36,6 +55,10 @@ function initiativeBreakdownUserPrompt(context: AgentRunContext): string {
     '',
     'Brief / requirements:',
     brief || '(none provided — infer a reasonable breakdown from the title)',
+    // This kind is INLINE (no checkout), so the bodies are injected here rather than
+    // materialised — which is what the system prompt's "reason purely from the brief and any
+    // linked context" has always assumed was present.
+    ...linkedContextLines(context),
     '',
     'Produce the initiative breakdown as described.',
   ].join('\n')
@@ -210,6 +233,12 @@ export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
     }`,
     ...(description ? ['', description] : []),
     ...initiativeContextLines(context, { includeAnalysis: false, includePlanShape: false }),
+    // The requirements/RFCs/issues a human attached to the initiative block, after the agreed
+    // goal so that brief frames how they are read. Materialised: this kind runs with a checkout,
+    // so the prompt carries only the index and the bodies sit in `.cat-context/`. Spread
+    // conditionally — the section is '' when nothing is attached, and these builders join their
+    // lines verbatim (unlike `renderStandardUserPrompt`, which collapses blank runs).
+    ...linkedContextLines(context, { materialized: true }),
     '',
     'Explore the repository and produce the analysis described in your instructions — ' +
       'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
@@ -232,6 +261,9 @@ export function initiativePlannerUserPrompt(context: AgentRunContext): string {
     `Plan the initiative: ${block.title || '(untitled initiative)'}`,
     ...(description ? ['', description] : []),
     ...initiativeContextLines(context, { includeAnalysis: true, includePlanShape: true }),
+    // The attached requirements/RFCs/issues (see the analyst prompt) — the source material the
+    // plan's phases and items must satisfy, not merely background.
+    ...linkedContextLines(context, { materialized: true }),
     '',
     'Explore this repository to ground the plan in the real code (building on the codebase ' +
       'analysis above), honour the agreed goal / constraints / non-goals, then produce the ' +

@@ -759,6 +759,13 @@ export const llmCallMetrics = telemetry.table(
     model: text('model').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     streaming: integer('streaming').notNull().default(0),
+    // WHICH slice of the run spent the call (`agent` / `validation-repair` / … ), stamped by
+    // the harness that owns the phase boundary; '' is the unattributed slice, a real group in
+    // the rollup rather than a dropped row. `turn_index` is the harness's job-scoped `seq`,
+    // NULL where the producing channel has no turn concept (the proxy). Mirrors D1 migration
+    // 0004_llm_call_phase_turn. See docs/initiatives/token-burn-instrumentation.md.
+    phase: text('phase').notNull().default(''),
+    turn_index: integer('turn_index'),
     message_count: integer('message_count').notNull().default(0),
     tool_count: integer('tool_count').notNull().default(0),
     request_max_tokens: integer('request_max_tokens'),
@@ -1287,6 +1294,12 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),
   spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+  // The default test-environment provisioning mechanism suggested for newly added service
+  // frames, plus the custom manifest id a `custom` default pins. Both nullable with NO
+  // default: null means the operator has never chosen (which the SPA nags about), and is
+  // deliberately distinct from an explicit `infraless`. Mirrors the D1 columns.
+  default_provision_type: text('default_provision_type'),
+  default_provision_manifest_id: text('default_provision_manifest_id'),
 })
 
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's

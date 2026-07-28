@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { manifestIdSchema, provisionTypeSchema } from './environments.js'
 import { createTaskTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -60,6 +61,29 @@ const spendCurrencySchema = v.pipe(
   v.length(3),
   v.regex(/^[A-Z]{3}$/, 'currency must be a 3-letter ISO 4217 code'),
 )
+
+// ---------------------------------------------------------------------------
+// The workspace's DEFAULT test-environment provisioning mechanism: the provision
+// type suggested for every newly added service frame (ADR 0007's "what + where",
+// pre-filled at creation instead of left for the operator to discover per service).
+//
+// This is deliberately NULLABLE rather than defaulted to `infraless`, and the
+// distinction is the whole point — it is the same tri-state the infra-setup
+// projection uses:
+//   - `null`        — the operator has never made a choice. Banner-worthy: the SPA
+//                     nags once per board until a decision is recorded.
+//   - `infraless`   — a real, recorded decision that services stand up no
+//                     environment. Silences the nag exactly like any other choice.
+//   - anything else — that type (plus, for `custom`, the manifest id) is stamped
+//                     onto each new service frame.
+// Collapsing the two would make "nobody decided" indistinguishable from "we decided
+// no environments", so the banner could only either nag forever or never.
+//
+// NOTE this is NOT the `defaultTestEnvironment` toggle ADR 0007 removed. That was a
+// per-service local-vs-ephemeral switch the engine branched on at run time; this
+// never reaches the engine at all — it is a creation-time seed for a field the
+// service still owns and the user can still change.
+// ---------------------------------------------------------------------------
 
 /** A workspace's runtime settings. */
 export const workspaceSettingsSchema = v.object({
@@ -150,6 +174,19 @@ export const workspaceSettingsSchema = v.object({
    * money, so a `0` budget also blocks paid web searches.
    */
   spendMonthlyLimit: v.nullable(v.pipe(v.number(), v.minValue(0))),
+  /**
+   * The provision type stamped onto every newly added service frame that doesn't declare
+   * one of its own. `null` ⇒ the operator has never chosen (the banner-worthy state); see
+   * the block comment above for why this is not defaulted to `infraless`.
+   */
+  defaultProvisionType: v.nullable(provisionTypeSchema),
+  /**
+   * Which custom manifest type a `custom` {@link defaultProvisionType} names. Meaningful
+   * only for `custom` (and REQUIRED there — a `custom` service with no pinned id matches no
+   * `remote-custom` handler, so seeding one would create services that can never provision);
+   * null for every other type. Cross-field validated by `WorkspaceSettingsService.update`.
+   */
+  defaultProvisionManifestId: v.nullable(manifestIdSchema),
 })
 export type WorkspaceSettings = v.InferOutput<typeof workspaceSettingsSchema>
 
@@ -178,5 +215,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   ),
   spendCurrency: v.optional(v.nullable(spendCurrencySchema)),
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
+  defaultProvisionType: v.optional(v.nullable(provisionTypeSchema)),
+  defaultProvisionManifestId: v.optional(v.nullable(manifestIdSchema)),
 })
 export type UpdateWorkspaceSettingsInput = v.InferOutput<typeof updateWorkspaceSettingsSchema>

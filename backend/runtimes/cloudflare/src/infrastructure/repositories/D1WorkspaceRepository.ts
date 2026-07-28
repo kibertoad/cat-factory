@@ -62,6 +62,14 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     return results.map(rowToWorkspace)
   }
 
+  async listByAccount(accountId: string): Promise<Workspace[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM workspaces WHERE account_id = ? ORDER BY created_at DESC')
+      .bind(accountId)
+      .all<WorkspaceRow>()
+    return results.map(rowToWorkspace)
+  }
+
   async get(id: string): Promise<Workspace | null> {
     const row = await this.db
       .prepare('SELECT * FROM workspaces WHERE id = ?')

@@ -35,6 +35,10 @@ import type { BoardService } from '../modules/board/BoardService.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
 import type { CoreDependencies, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
+import {
+  linkedContextSourcesFrom,
+  resolveLinkedContext,
+} from '../modules/execution/linked-context.js'
 
 type CoreRuntime = ReturnType<typeof resolveCoreRuntime>
 
@@ -99,6 +103,21 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
           )
       : undefined,
     resolveRunContext: resolveBlockRunContext(dependencies),
+    // The initiative's attached requirements / RFCs / issues. Wired from the same repositories and
+    // URL canonicaliser `AgentContextBuilder` reads, so the interviewer sees exactly what the
+    // analyst and planner will — including anything the brief names outright, which is why the
+    // description is threaded through. `includeLinked` is unconditionally true: the
+    // reworked-description path it guards is task-only, and an initiative block never has one.
+    resolveLinkedContext: (workspaceId, blockId, description) =>
+      resolveLinkedContext(
+        linkedContextSourcesFrom(dependencies),
+        workspaceId,
+        blockId,
+        description,
+        {
+          includeLinked: true,
+        },
+      ),
   })
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.

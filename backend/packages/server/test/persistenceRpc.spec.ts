@@ -77,6 +77,8 @@ function makeRegistry(): {
       // For an in-scope board: return undefined (not null) so the envelope's `undef` flag is
       // exercised — the trap is that JSON would otherwise coerce a top-level undefined to null.
       ownerOf: async (_id: string) => undefined,
+      // The account-tier installation fallback's batched boards read (`account` scope).
+      listByAccount: async (accountId: string) => [{ id: 'ws_in', accountId }],
       // Not in the allow-list — must be refused even though it's wired.
       delete: async (id: string) => void workspaces.delete(id),
     },
@@ -876,6 +878,26 @@ describe('cross-service + entity-id read surface (board composition)', () => {
   it('rejects serviceRepository.listByAccount for the null (unscoped) listing', async () => {
     // The auth-disabled `null` org listing must never be reachable over a scoped machine token.
     await expect(remoteRegistry().serviceRepository!.listByAccount!(null)).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('forwards workspaceRepository.listByAccount for an in-scope account', async () => {
+    await expect(
+      remoteRegistry().workspaceRepository!.listByAccount!(ACCOUNT),
+    ).resolves.toMatchObject([{ id: 'ws_in', accountId: ACCOUNT }])
+  })
+
+  it('rejects workspaceRepository.listByAccount for an out-of-scope account (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceRepository!.listByAccount!(OTHER_ACCOUNT),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceRepository.listByAccount for the null (unscoped) listing', async () => {
+    // The port types accountId as a string, but the wire does not: a forged null must never
+    // bind to "every account", exactly like `serviceRepository.listByAccount` above.
+    await expect(remoteRegistry().workspaceRepository!.listByAccount!(null)).rejects.toMatchObject({
       code: 'not_found',
     })
   })

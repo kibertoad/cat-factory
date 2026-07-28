@@ -6,7 +6,6 @@ import {
   type DocumentSourceProvider,
   type EmailSender,
   type ExecutionEventPublisher,
-  type FragmentOwnerKind,
   type GitHubClient,
   type GroupCacheHandle,
   type IdGenerator,
@@ -28,6 +27,7 @@ import {
 import {
   AiAgentExecutor,
   type AgentKindRegistry,
+  createTierInstallationResolvers,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -1798,22 +1798,17 @@ export function selectFragmentLibraryDeps(
   db: D1Database,
 ): Partial<CoreDependencies> {
   if (!config.fragmentLibrary.enabled) return {}
-  const installationRepository = new D1GitHubInstallationRepository({ db })
-  const resolveFragmentInstallationId = async (
-    ownerKind: FragmentOwnerKind,
-    ownerId: string,
-  ): Promise<number | null> => {
-    if (ownerKind === 'workspace') {
-      return (await installationRepository.getByWorkspace(ownerId))?.installationId ?? null
-    }
-    // Account scope: the installation bound to this account (migration 0017).
-    const active = await installationRepository.listActive()
-    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
-  }
+  // The shared tier resolver: workspace tier by direct binding, account tier bound directly
+  // (migration 0017) with a fallback through the account's own boards (a per-workspace PAT
+  // connect stores no accountId on its installation row).
+  const resolvers = createTierInstallationResolvers({
+    installations: new D1GitHubInstallationRepository({ db }),
+    workspaces: new D1WorkspaceRepository({ db }),
+  })
   return {
     promptFragmentRepository: new D1PromptFragmentRepository({ db }),
     fragmentSourceRepository: new D1FragmentSourceRepository({ db }),
-    resolveFragmentInstallationId,
+    resolveFragmentInstallationId: resolvers.forOwner,
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
@@ -1838,15 +1833,14 @@ export function selectSkillLibraryDeps(
   db: D1Database,
 ): Partial<CoreDependencies> {
   if (!config.fragmentLibrary.enabled) return {}
-  const installationRepository = new D1GitHubInstallationRepository({ db })
-  const resolveSkillInstallationId = async (accountId: string): Promise<number | null> => {
-    const active = await installationRepository.listActive()
-    return active.find((i) => i.accountId === accountId)?.installationId ?? null
-  }
+  const resolvers = createTierInstallationResolvers({
+    installations: new D1GitHubInstallationRepository({ db }),
+    workspaces: new D1WorkspaceRepository({ db }),
+  })
   return {
     accountSkillRepository: new D1AccountSkillRepository({ db }),
     skillSourceRepository: new D1SkillSourceRepository({ db }),
-    resolveSkillInstallationId,
+    resolveSkillInstallationId: resolvers.forAccount,
   }
 }
 

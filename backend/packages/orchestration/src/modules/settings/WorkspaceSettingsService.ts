@@ -102,6 +102,14 @@ export class WorkspaceSettingsService {
         patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
       spendMonthlyLimit:
         patch.spendMonthlyLimit !== undefined ? patch.spendMonthlyLimit : current.spendMonthlyLimit,
+      defaultProvisionType:
+        patch.defaultProvisionType !== undefined
+          ? patch.defaultProvisionType
+          : current.defaultProvisionType,
+      defaultProvisionManifestId:
+        patch.defaultProvisionManifestId !== undefined
+          ? patch.defaultProvisionManifestId
+          : current.defaultProvisionManifestId,
     }
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.
@@ -132,6 +140,20 @@ export class WorkspaceSettingsService {
           'The review-debt block count must be greater than or equal to the warn count.',
         )
       }
+    }
+    // Default test-environment provisioning cross-field validation. The manifest id is
+    // meaningful ONLY for `custom`, so anything else clears it rather than leaving a stale id
+    // that would silently reappear on the next switch back — the same "keep the inactive
+    // branch's fields consistent with the mode" rule the task-limit block above follows.
+    // `custom` WITHOUT an id is refused outright instead of normalised away: it would seed
+    // every new service with a type that matches no `remote-custom` handler, and the failure
+    // would surface much later, at the deployer step, on a service nobody knowingly misconfigured.
+    if (next.defaultProvisionType !== 'custom') {
+      next.defaultProvisionManifestId = null
+    } else if (!next.defaultProvisionManifestId) {
+      throw new ValidationError(
+        'A custom default provisioning mechanism must name the custom manifest type it uses.',
+      )
     }
     await this.settings.upsert(workspaceId, next)
     // Drop the cached row (and broadcast to peers) after the write commits, so the next

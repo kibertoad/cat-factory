@@ -65,6 +65,23 @@ export function defineWorkspaceAccessSuite(harness: ConformanceHarness): void {
       expect(await repo.accessRowOf(`missing-${uniq()}`)).toBeUndefined()
     })
 
+    it('lists exactly the boards owned by an account via listByAccount', async () => {
+      const app = harness.makeApp()
+      const tag = uniq()
+      // Each createOrgWorkspace mints a FRESH org, so the two boards live in different accounts.
+      const mine = await app.createOrgWorkspace({ name: `WA lba ${tag}` })
+      const foreign = await app.createOrgWorkspace({ name: `WA lba-else ${tag}` })
+      const repo = app.workspaceRepository()
+
+      const accountId = mine.workspace.accountId
+      expect(accountId).toBeTruthy()
+      const listed = await repo.listByAccount(accountId as string)
+      expect(listed.map((w) => w.id)).toContain(mine.workspace.id)
+      expect(listed.map((w) => w.id)).not.toContain(foreign.workspace.id)
+      // An unknown account resolves to an empty list, not a throw.
+      expect(await repo.listByAccount(`acc-missing-${tag}`)).toEqual([])
+    })
+
     it('round-trips a member through upsert → get, and upsert updates the role in place', async () => {
       const app = harness.makeApp()
       const tag = uniq()

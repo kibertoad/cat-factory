@@ -161,8 +161,18 @@ export function useContextLinking() {
    * reasons as the body, and a "Copy details" action that puts the full diagnostic
    * report ({@link buildLinkFailureReport}) on the clipboard. Sticky (`duration: 0`)
    * so the cause stays readable long enough to act on. No-op when nothing failed.
+   *
+   * `opts.title` names what WAS created, which differs per host ("Task added, but …" vs
+   * "Initiative created, but …"). It is a resolver over the count rather than a message key, so
+   * each caller keeps a literal key at its own translation call site — passing the key through
+   * would make it a variable, which defeats both the typed-message-key check and the extractor's
+   * static scan — and the plural choice has to be made against the same count.
    */
-  function presentLinkFailures(failures: LinkFailure[], blockId?: string): void {
+  function presentLinkFailures(
+    failures: LinkFailure[],
+    blockId?: string,
+    opts: { title?: (count: number) => string } = {},
+  ): void {
     if (failures.length === 0) return
     const description = failures.map((f) => `${f.item.title}: ${f.message}`).join('\n')
     const report = buildLinkFailureReport(failures, {
@@ -171,7 +181,9 @@ export function useContextLinking() {
       when: new Date().toISOString(),
     })
     toast.add({
-      title: t('board.addTask.linkFailed', { count: failures.length }, failures.length),
+      title:
+        opts.title?.(failures.length) ??
+        t('board.addTask.linkFailed', { count: failures.length }, failures.length),
       description,
       icon: 'i-lucide-triangle-alert',
       color: 'warning',

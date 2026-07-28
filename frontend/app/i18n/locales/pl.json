@@ -285,17 +285,6 @@
       "bestPractices": "Dobre praktyki",
       "bestPracticesHint": "Przypnij fragmenty dobrych praktyk, aby agenci tego zadania stosowali je oprócz standardów na poziomie usługi.",
       "agentConfiguration": "Konfiguracja agenta",
-      "contextDocuments": "Dokumenty kontekstu",
-      "contextIssues": "Zgłoszenia kontekstu",
-      "attach": "Dołącz",
-      "connectSource": "Połącz źródło",
-      "connectSourceNamed": "Połącz {source}",
-      "done": "Gotowe",
-      "attachDocDisabledConnect": "Najpierw połącz źródło dokumentów (Integracje)",
-      "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
-      "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
-      "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
-      "importsOnAdd": "importowane przy dodaniu",
       "noDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "noIssuesHint": "Dołącz zgłoszenie z systemu, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
       "plannedHint": "Zadanie zostaje dodane w stanie zaplanowanym. Nie uruchomi się, dopóki nie uruchomisz na nim pipeline’u; do tego czasu możesz je edytować.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} aktywnych",
       "noTasksYet": "Brak zadań"
     }
+  },
+  "contextAttachments": {
+    "documents": "Dokumenty kontekstu",
+    "issues": "Zgłoszenia kontekstu",
+    "attach": "Dołącz",
+    "done": "Gotowe",
+    "connectSource": "Połącz źródło",
+    "connectSourceNamed": "Połącz {source}",
+    "attachDocDisabledConnect": "Najpierw połącz źródło dokumentów (Integracje)",
+    "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
+    "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
+    "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
+    "importsOnAdd": "importowane przy dodaniu"
   },
   "errors": {
     "action": {
@@ -2121,6 +2123,11 @@
         "add": "Nie udało się dodać członka",
         "remove": "Nie udało się usunąć członka"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Wybierz domyślne środowisko testowe",
+      "body": "Ta tablica nie ma jeszcze ustalonego sposobu, w jaki jej usługi otrzymują środowisko testowe. Wybierz wartość domyślną, a każda kolejno dodawana usługa będzie od niej startować, zamiast być konfigurowana pojedynczo. Nadal możesz to zmienić dla poszczególnej usługi.",
+      "action": "Wybierz domyślne"
     }
   },
   "settings": {
@@ -3046,6 +3053,15 @@
       },
       "saved": "Zapisano politykę dostępu do modeli",
       "saveFailed": "Nie udało się zapisać polityki dostępu do modeli"
+    },
+    "defaultProvision": {
+      "title": "Domyślne dla nowych usług",
+      "hint": "Mechanizm udostępniania sugerowany dla każdej usługi dodanej od teraz. Nie zmienia już istniejących usług, a każda usługa może go nadpisać.",
+      "suggestionHint": "To na razie tylko sugestia. Zapisz ją, aby zapisać jako domyślną dla tablicy.",
+      "save": "Zapisz domyślne",
+      "saved": "Zapisano domyślne środowisko testowe.",
+      "savedState": "Zapisano.",
+      "saveFailed": "Nie udało się zapisać domyślnego środowiska testowego."
     }
   },
   "providers": {
@@ -3380,7 +3396,8 @@
       "useThisFolder": "Użyj tego folderu",
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"
-      }
+      },
+      "selectAllFiles": "Zaznacz {count} plik | Zaznacz wszystkie {count} pliki | Zaznacz wszystkie {count} plików"
     }
   },
   "slack": {
@@ -3454,14 +3471,21 @@
   "docInterview": {
     "title": "Dopracuj dokument",
     "subtitle": "Odpowiedz na pytania ankietera, aby ukształtować dokument",
-    "intro": "Ankieter dopracowuje ten dokument przed jego napisaniem. Odpowiedz na jego pytania, aby określić zakres, odbiorców i strukturę, a następnie kontynuuj — lub przejdź do redagowania z tym, co ma.",
+    "intro": "Ankieter dopracowuje ten dokument przed jego napisaniem. Odpowiedz na jego pytania, aby określić zakres, odbiorców i strukturę, a następnie wyślij odpowiedzi. Możesz też poprosić go, aby zredagował teraz na podstawie tego, co już ma.",
     "empty": "Nie znaleziono wywiadu dla tego bloku.",
     "brief": "Brief redakcyjny",
     "converged": "Brak oczekujących pytań. Ankieter ma to, czego potrzebuje, a dokument jest redagowany.",
+    "working": "Ankieter przetwarza Twoje odpowiedzi",
+    "workingHint": "To chwilę potrwa. Pytania uzupełniające pojawią się tutaj po zakończeniu, a jeśli informacji wystarczy, rozpocznie się redagowanie.",
+    "failed": "Uruchomienie dokumentu zostało przerwane",
+    "failedHint": "Zakończyło się, zanim ankieter zdążył odpowiedzieć. Twoje odpowiedzi są zapisane; uruchom zadanie dokumentu ponownie.",
     "answerPlaceholder": "Twoja odpowiedź",
-    "hint": "Kontynuuj pozwala ankieterowi zadać dodatkowe pytania; Przejdź dalej redaguje z dotychczasowymi odpowiedziami.",
-    "proceed": "Przejdź do redagowania",
-    "continue": "Kontynuuj",
+    "hint": "Wyślij odpowiedzi pozwala ankieterowi zadać dodatkowe pytania; Redaguj teraz tworzy dokument na podstawie dotychczasowych odpowiedzi.",
+    "unanswered": "Pytania bez odpowiedzi: {count}",
+    "proceed": "Redaguj teraz",
+    "proceedTitle": "Pomiń pozostałe pytania i rozpocznij redagowanie teraz",
+    "continue": "Wyślij odpowiedzi",
+    "continueTitle": "Wyślij swoje odpowiedzi; ankieter może zadać dodatkowe pytania",
     "status": {
       "awaiting": "Oczekiwanie na odpowiedzi",
       "done": "Gotowe"
@@ -4779,7 +4803,19 @@
       "link": "Połącz jako żywy fragment",
       "githubBrowseHint": "Przeglądaj repozytorium i wybierz jeden lub więcej plików do połączenia.",
       "selectedFiles": "Wybrane pliki ({count})",
-      "removeFile": "Usuń plik"
+      "removeFile": "Usuń plik",
+      "blockedReason": {
+        "noSource": "Najpierw wybierz źródło dokumentów powyżej.",
+        "noRepo": "Wybierz repozytorium lub wklej powyżej URL pliku albo folderu GitHub.",
+        "noFiles": "Zaznacz co najmniej jeden plik w przeglądarce repozytorium.",
+        "noRef": "Najpierw podaj id strony lub URL."
+      },
+      "urlImport": {
+        "placeholder": "Wklej URL pliku lub folderu GitHub (np. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Znajdź",
+        "invalid": "To nie wygląda na URL pliku ani folderu repozytorium.",
+        "notFound": "Żadne dostępne repozytorium nie pasuje do {slug}. Sprawdź URL lub najpierw połącz repozytorium."
+      }
     },
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",
@@ -5103,7 +5139,10 @@
       "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
       "hint": "Nic jeszcze nie jest uruchamiane: po utworzeniu uruchom na bloku pipeline planowania inicjatywy. Analizuje on kod i przygotowuje wielofazowy plan do zatwierdzenia.",
       "submit": "Utworz inicjatywe",
-      "failedTitle": "Nie udalo sie utworzyc inicjatywy"
+      "failedTitle": "Nie udalo sie utworzyc inicjatywy",
+      "contextDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci planowania przeczytali je podczas określania zakresu i tworzenia planu.",
+      "contextIssuesHint": "Dołącz zgłoszenie, aby agenci planowania zobaczyli jego opis i komentarze podczas tworzenia planu.",
+      "linkFailed": "Inicjatywa utworzona, ale nie udało się powiązać {count} załącznika | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników"
     },
     "status": {
       "planning": "Planowanie",
@@ -5156,6 +5195,7 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
+      "planningInProgress": "Planowanie w toku",
       "pause": "Wstrzymaj",
       "resume": "Wznow",
       "cancel": "Anuluj inicjatywe",
@@ -5164,13 +5204,21 @@
     "planning": {
       "title": "Zaplanuj inicjatywe",
       "subtitle": "Odpowiedz na pytania planisty, aby okreslic zakres inicjatywy",
-      "intro": "Planista okresla zakres tej inicjatywy. Odpowiedz na pytania, aby uksztaltowac cel i ograniczenia, a nastepnie kontynuuj lub przejdz do planowania z tym, co ma.",
+      "intro": "Planista okresla zakres tej inicjatywy. Odpowiedz na pytania, aby uksztaltowac cel i ograniczenia, a nastepnie wyslij odpowiedzi. Mozesz tez poprosic go, aby zaplanowal teraz na podstawie tego, co juz ma.",
       "empty": "Nie znaleziono inicjatywy dla tego bloku.",
       "converged": "Brak oczekujacych pytan. Planista ma to, czego potrzebuje, i tworzy plan.",
+      "idle": "Planowanie jeszcze sie nie rozpoczelo. Uruchom planowanie z poziomu inicjatywy, aby rozpoczac wywiad.",
+      "working": "Planista przetwarza Twoje odpowiedzi",
+      "workingHint": "To chwile potrwa. Pytania uzupelniajace pojawia sie tutaj po zakonczeniu, a jesli informacji wystarczy, planista zacznie tworzyc plan.",
+      "failed": "Uruchomienie planowania zostalo przerwane",
+      "failedHint": "Zakonczylo sie, zanim planista zdazyl odpowiedziec. Twoje odpowiedzi sa zapisane; uruchom planowanie ponownie z poziomu inicjatywy.",
       "answerPlaceholder": "Twoja odpowiedz",
-      "hint": "Kontynuuj pozwala planiscie zadac kolejne pytania; Przejdz do planowania planuje na podstawie dotychczasowych odpowiedzi.",
-      "proceed": "Przejdz do planowania",
-      "continue": "Kontynuuj"
+      "hint": "Wyslij odpowiedzi pozwala planiscie zadac kolejne pytania; Zaplanuj teraz tworzy plan na podstawie dotychczasowych odpowiedzi.",
+      "unanswered": "Pytania bez odpowiedzi: {count}",
+      "proceed": "Zaplanuj teraz",
+      "proceedTitle": "Pomin pozostale pytania i utworz plan teraz",
+      "continue": "Wyslij odpowiedzi",
+      "continueTitle": "Wyslij swoje odpowiedzi; planista moze zadac dodatkowe pytania"
     },
     "followUpStatus": {
       "open": "Otwarte",
@@ -5411,6 +5459,7 @@
     "subtitle": "Trwała pętla: pracuj nad zadaniem, uruchom polecenie walidacji i powtarzaj, aż się powiedzie.",
     "status": {
       "passed": "Zaliczono",
+      "stalled": "Utknęła",
       "gaveUp": "Poddano się",
       "running": "Działa",
       "failing": "Niepowodzenie"
@@ -5419,7 +5468,9 @@
     "validationCommand": "Polecenie walidacji",
     "lastOutput": "Ostatnia walidacja (kod {exit})",
     "viewPr": "Zobacz pull request",
+    "stalledNote": "Pętla zatrzymała się przedwcześnie: kolejne iteracje nie zmieniły gałęzi, a polecenie walidacji nadal kończy się niepowodzeniem, więc nie zużyła reszty budżetu. Zanim ponowna próba cokolwiek da, prawdopodobnie trzeba zmienić zadanie lub polecenie walidacji.",
     "iterationsHeading": "Iteracje",
+    "iterationsTruncated": "Nie pokazano {count} wcześniejszej iteracji (historia jest ograniczona). | Nie pokazano {count} wcześniejszych iteracji (historia jest ograniczona).",
     "iteration": "Iteracja {number}",
     "iterationPassed": "walidacja zaliczona",
     "iterationFailed": "kod {exit}",

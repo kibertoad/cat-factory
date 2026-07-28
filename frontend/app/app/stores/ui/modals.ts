@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
+import {
+  DEFAULT_PROVISION_DEEP_LINK_PARAM,
+  DEFAULT_PROVISION_DEEP_LINK_VALUE,
+} from '~/utils/defaultProvisioning'
 
 /** Values used to seed the add-task form when it is opened from another surface. */
 export interface AddTaskPrefill {
@@ -761,6 +765,29 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     const qs = params.toString()
     history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }
+  // Open the Infrastructure window straight at the default test-environment provisioning
+  // mechanism (the section at the top of the Test-environments tab). Distinct from
+  // `openProviderConnection('environment')` only in intent today, but it is the target of a
+  // SHAREABLE deep link (see `consumeDefaultProvisionDeepLink`), so it gets its own entry point
+  // rather than leaving the banner and the URL to duplicate the tab choice independently.
+  function openDefaultProvisionSettings() {
+    resetHubReturn()
+    infrastructureTab.value = 'environment'
+    infrastructureOpen.value = true
+  }
+  // Capture the `?settings=default-test-env` deep link on app load — the URL the setup banner
+  // shows, so an operator can send "go configure this" to a teammate rather than describing
+  // where the screen lives. Strips the param afterwards (mirroring the k3s hand-off above) so a
+  // reload doesn't re-open the window and the link isn't left in history. No-op when absent.
+  function consumeDefaultProvisionDeepLink() {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get(DEFAULT_PROVISION_DEEP_LINK_PARAM) !== DEFAULT_PROVISION_DEEP_LINK_VALUE) return
+    openDefaultProvisionSettings()
+    params.delete(DEFAULT_PROVISION_DEEP_LINK_PARAM)
+    const qs = params.toString()
+    history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }
   // Launch the environment setup wizard, optionally preselecting the service frame it targets
   // (the inspector nudge passes the frame; the navbar entry opens it with the pick step active).
   function openEnvironmentSetup(frameId: string | null = null) {
@@ -781,6 +808,8 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     consumeK3sSetupDeepLink,
     environmentWizardOpen,
     environmentWizardFrameId,
+    openDefaultProvisionSettings,
+    consumeDefaultProvisionDeepLink,
     openProviderConnection,
     closeProviderConnection,
     openEnvironmentSetup,
@@ -813,6 +842,20 @@ function createAiOnboardingModals() {
   }
   function resetInfraSetupDismissals() {
     infraSetupSessionDismissed.value = []
+  }
+
+  // Default-test-environment banner: a single per-SESSION dismissal, cleared on workspace switch
+  // like the flags above. There is deliberately no PERMANENT dismissal here (unlike the
+  // infra-setup areas): the prompt asks for a DECISION, and every answer — including `infraless`
+  // ("services stand up no environment") — is recordable in one click, so "silence this forever
+  // without answering" would only ever produce a board nobody can tell apart from an unconfigured
+  // one. Dismissing hides it until the next load.
+  const defaultProvisionDismissed = ref(false)
+  function dismissDefaultProvision() {
+    defaultProvisionDismissed.value = true
+  }
+  function resetDefaultProvisionDismissal() {
+    defaultProvisionDismissed.value = false
   }
 
   function openAiProviderSetup() {
@@ -857,6 +900,9 @@ function createAiOnboardingModals() {
     infraSetupSessionDismissed,
     dismissInfraSetupForSession,
     resetInfraSetupDismissals,
+    defaultProvisionDismissed,
+    dismissDefaultProvision,
+    resetDefaultProvisionDismissal,
     openAiProviderSetup,
     closeAiProviderSetup,
     openAiPresetMismatch,

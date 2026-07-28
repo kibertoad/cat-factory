@@ -46,6 +46,7 @@ import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
+import { makeDocumentUrlResolver } from './modules/execution/linked-context.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
@@ -657,15 +658,7 @@ export function createCore(injected: CoreDependencies): Core {
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the
     // stored canonical url omits. Absent providers → undefined (url-string match only).
-    documentUrlResolver: dependencies.documentSourceProviders?.length
-      ? (url: string) => {
-          for (const provider of dependencies.documentSourceProviders!) {
-            const externalId = provider.parseRef(url)
-            if (externalId) return { source: provider.kind, externalId }
-          }
-          return null
-        }
-      : undefined,
+    documentUrlResolver: makeDocumentUrlResolver(dependencies.documentSourceProviders),
     requirementReviewService: requirements?.service,
     docInterviewService: docInterview,
     forkChatService: forkChat,

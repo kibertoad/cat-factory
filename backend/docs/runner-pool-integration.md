@@ -488,7 +488,9 @@ manifest.
   a terminal result. Leave it unset and those calls are recorded only from the terminal
   result envelope, which an evicted or OOM-killed run never produces. Recording is
   idempotent (each call carries a job-scoped `seq`), so the terminal envelope repeating them
-  costs nothing.
+  costs nothing. Pass each call through VERBATIM — it also carries the `phase` that spent it
+  (the agent's own loop vs a validation/reproduction repair round), which is what makes a run's
+  burn attributable to the slice that caused it.
 - Every request carries your auth automatically; per-call timeouts are bounded
   (`timeoutMs`, ≤60s, default 30s). Responses over ~200KB are rejected.
 

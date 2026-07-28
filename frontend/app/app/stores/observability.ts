@@ -119,6 +119,10 @@ export const useObservabilityStore = defineStore('observability', () => {
     if (existing.some((c) => c.id === activity.id)) return
     const row: LlmCallMetric = {
       ...activity,
+      // The live event carries the phase (the proxy knows it) but no turn ordinal — that is
+      // the harness's job-scoped counter, which a proxied call has no equivalent of. Null is
+      // what the stored row will say too, so the live row and the loaded one agree.
+      turnIndex: null,
       promptText: '',
       promptPrefixCount: 0,
       promptHash: '',

@@ -34,8 +34,11 @@ async function seedZeroBudget(workspaceId: string) {
   })
 }
 
-function chatRequest(token: string | null, model = 'whatever') {
-  return new Request(`${BASE}/v1/chat/completions`, {
+function chatRequest(token: string | null, model = 'whatever', phase?: string) {
+  // The phase-tagged path the harness points Pi at for the pass it is running; the plain path
+  // is the same handler with nothing to attribute.
+  const path = phase ? `/v1/phase/${phase}/chat/completions` : '/v1/chat/completions'
+  return new Request(`${BASE}${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -234,6 +237,46 @@ describe('llm proxy /v1/chat/completions', () => {
     // The live event is asserted rather than the persisted row because both sinks are composed
     // from the SAME values in one pass: what could drift is the derivation, which this pins,
     // not the two writes. The row's own column mapping is pinned by the conformance suite.
+  })
+
+  it('attributes a call to the run phase on its path, and refuses a bogus one', async () => {
+    // The phase axis (docs/initiatives/token-burn-instrumentation.md): the harness re-points Pi
+    // at a phase-tagged URL per pass, so the proxy — which otherwise sees only an HTTP request —
+    // can say WHICH slice of the run spent a call. The segment is untrusted (a session token is
+    // all it takes to write one), so anything outside the phase alphabet must fall back to the
+    // unattributed slice rather than become a grouping key of its own.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    await seedQwenKey(workspaceId)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 5 },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const call = async (phase?: string) => {
+      const token = await mint({ workspaceId, executionId: `ex-${crypto.randomUUID()}` })
+      const res = await app.fetch(chatRequest(token, 'cheap-model', phase), testEnv())
+      expect(res.status).toBe(200)
+      return recorder.llmCalls[recorder.llmCalls.length - 1]!
+    }
+
+    expect((await call('validation-repair')).phase).toBe('validation-repair')
+    // The unphased path still serves the same handler — that is what keeps an older harness
+    // image working — and its calls are honestly unattributed.
+    expect((await call()).phase).toBe('')
+    expect((await call('Not A Phase!')).phase).toBe('')
   })
 
   it('returns 502 when the locked provider has no configured key', async () => {

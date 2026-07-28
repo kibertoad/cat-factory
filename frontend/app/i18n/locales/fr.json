@@ -285,17 +285,6 @@
       "bestPractices": "Bonnes pratiques",
       "bestPracticesHint": "Épinglez des fragments de bonnes pratiques pour que les agents de cette tâche les suivent, en plus des standards au niveau du service.",
       "agentConfiguration": "Configuration de l’agent",
-      "contextDocuments": "Documents de contexte",
-      "contextIssues": "Tickets de contexte",
-      "attach": "Joindre",
-      "connectSource": "Connecter une source",
-      "connectSourceNamed": "Connecter {source}",
-      "done": "Terminé",
-      "attachDocDisabledConnect": "Connectez d’abord une source de documents (Intégrations)",
-      "attachDocDisabledEnable": "Activez d’abord l’intégration de documents",
-      "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
-      "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
-      "importsOnAdd": "importé à l’ajout",
       "noDocsHint": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient en implémentant cette tâche.",
       "noIssuesHint": "Joignez un ticket du suivi pour que les agents voient sa description et ses commentaires en implémentant cette tâche.",
       "plannedHint": "La tâche est ajoutée à l’état planifié. Elle ne s’exécutera pas tant que vous n’aurez pas lancé une pipeline dessus ; vous pouvez la modifier jusque-là.",
@@ -460,6 +449,19 @@
       "activeCount": "{count} actives",
       "noTasksYet": "Pas encore de tâches"
     }
+  },
+  "contextAttachments": {
+    "documents": "Documents de contexte",
+    "issues": "Tickets de contexte",
+    "attach": "Joindre",
+    "done": "Terminé",
+    "connectSource": "Connecter une source",
+    "connectSourceNamed": "Connecter {source}",
+    "attachDocDisabledConnect": "Connectez d’abord une source de documents (Intégrations)",
+    "attachDocDisabledEnable": "Activez d’abord l’intégration de documents",
+    "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
+    "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
+    "importsOnAdd": "importé à l’ajout"
   },
   "errors": {
     "action": {
@@ -2121,6 +2123,11 @@
         "add": "Impossible d'ajouter le membre",
         "remove": "Impossible de retirer le membre"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Choisissez un environnement de test par défaut",
+      "body": "Ce tableau n'a pas encore défini comment ses services obtiennent un environnement de test. Choisissez une valeur par défaut et chaque service ajouté ensuite démarrera avec elle, au lieu d'être configuré un par un. Vous pourrez toujours la modifier service par service.",
+      "action": "Choisir la valeur par défaut"
     }
   },
   "settings": {
@@ -3046,6 +3053,15 @@
       },
       "saved": "Politique d'accès aux modèles enregistrée",
       "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles"
+    },
+    "defaultProvision": {
+      "title": "Valeur par défaut pour les nouveaux services",
+      "hint": "Le mécanisme de provisionnement suggéré pour chaque service ajouté à partir de maintenant. Il ne modifie pas les services existants et chaque service peut le remplacer.",
+      "suggestionHint": "Ce n'est qu'une suggestion pour l'instant. Enregistrez-la pour en faire la valeur par défaut du tableau.",
+      "save": "Enregistrer la valeur par défaut",
+      "saved": "Environnement de test par défaut enregistré.",
+      "savedState": "Enregistré.",
+      "saveFailed": "Impossible d'enregistrer l'environnement de test par défaut."
     }
   },
   "providers": {
@@ -3380,7 +3396,8 @@
       "useThisFolder": "Utiliser ce dossier",
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
-      }
+      },
+      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers"
     }
   },
   "slack": {
@@ -3454,14 +3471,21 @@
   "docInterview": {
     "title": "Affiner le document",
     "subtitle": "Répondez aux questions de l'intervieweur pour façonner le document",
-    "intro": "L'intervieweur affine ce document avant sa rédaction. Répondez à ses questions pour définir la portée, le public et la structure, puis continuez — ou procédez à la rédaction avec ce qu'il a.",
+    "intro": "L'intervieweur affine ce document avant sa rédaction. Répondez à ses questions pour définir la portée, le public et la structure, puis envoyez-les. Vous pouvez aussi lui demander de rédiger maintenant avec ce qu'il a déjà.",
     "empty": "Aucun entretien trouvé pour ce bloc.",
     "brief": "Brief de rédaction",
     "converged": "Aucune question en attente. L'intervieweur a ce qu'il lui faut et le document est en cours de rédaction.",
+    "working": "L'intervieweur traite vos réponses",
+    "workingHint": "Cela prend un instant. Les questions complémentaires apparaîtront ici une fois terminé, ou la rédaction commencera s'il en a assez.",
+    "failed": "L'exécution du document s'est arrêtée",
+    "failedHint": "Elle s'est terminée avant que l'intervieweur puisse répondre. Vos réponses sont enregistrées ; relancez la tâche du document.",
     "answerPlaceholder": "Votre réponse",
-    "hint": "Continuer permet à l'intervieweur de poser des questions complémentaires ; Procéder rédige avec les réponses actuelles.",
-    "proceed": "Procéder à la rédaction",
-    "continue": "Continuer",
+    "hint": "Envoyer les réponses permet à l'intervieweur de poser des questions complémentaires ; Rédiger maintenant rédige avec les réponses actuelles.",
+    "unanswered": "Questions sans réponse : {count}",
+    "proceed": "Rédiger maintenant",
+    "proceedTitle": "Ignorer les questions restantes et commencer la rédaction maintenant",
+    "continue": "Envoyer les réponses",
+    "continueTitle": "Envoyez vos réponses ; l'intervieweur peut poser des questions complémentaires",
     "status": {
       "awaiting": "En attente de réponses",
       "done": "Terminé"
@@ -4779,7 +4803,19 @@
       "link": "Lier comme fragment vivant",
       "githubBrowseHint": "Parcourez le dépôt et choisissez un ou plusieurs fichiers à lier.",
       "selectedFiles": "Fichiers sélectionnés ({count})",
-      "removeFile": "Retirer le fichier"
+      "removeFile": "Retirer le fichier",
+      "blockedReason": {
+        "noSource": "Choisissez d'abord une source de documents ci-dessus.",
+        "noRepo": "Choisissez un dépôt ou collez ci-dessus l'URL d'un fichier ou d'un dossier GitHub.",
+        "noFiles": "Cochez au moins un fichier dans l'explorateur du dépôt.",
+        "noRef": "Saisissez d'abord un id de page ou une URL."
+      },
+      "urlImport": {
+        "placeholder": "Collez l'URL d'un fichier ou d'un dossier GitHub (par ex. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Rechercher",
+        "invalid": "Ceci ne ressemble pas à l'URL d'un fichier ou d'un dossier de dépôt.",
+        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt."
+      }
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
@@ -5103,7 +5139,10 @@
       "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs).",
       "hint": "Rien ne s'execute encore : apres la creation, lancez le pipeline de planification d'initiative sur le bloc. Il analyse le code et redige le plan multiphase pour votre approbation.",
       "submit": "Creer l'initiative",
-      "failedTitle": "Impossible de creer l'initiative"
+      "failedTitle": "Impossible de creer l'initiative",
+      "contextDocsHint": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification la lisent en cadrant et en rédigeant le plan.",
+      "contextIssuesHint": "Joignez un ticket pour que les agents de planification voient sa description et ses commentaires en rédigeant le plan.",
+      "linkFailed": "Initiative créée, mais {count} pièce jointe n’a pas pu être liée | Initiative créée, mais {count} pièces jointes n’ont pas pu être liées"
     },
     "status": {
       "planning": "Planification",
@@ -5156,6 +5195,7 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "planningInProgress": "Planification en cours",
       "pause": "Mettre en pause",
       "resume": "Reprendre",
       "cancel": "Annuler l'initiative",
@@ -5164,13 +5204,21 @@
     "planning": {
       "title": "Planifier l'initiative",
       "subtitle": "Repondez aux questions du planificateur pour cadrer l'initiative",
-      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis continuez, ou procedez a la planification avec ce qu'il a.",
+      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis envoyez-les. Vous pouvez aussi lui demander de planifier maintenant avec ce qu'il a deja.",
       "empty": "Aucune initiative trouvee pour ce bloc.",
       "converged": "Aucune question en attente. Le planificateur dispose de ce qu'il faut et redige le plan.",
+      "idle": "La planification n'a pas encore demarre. Lancez la planification depuis l'initiative pour commencer l'entretien.",
+      "working": "Le planificateur traite vos reponses",
+      "workingHint": "Cela prend un instant. Les questions complementaires apparaitront ici une fois termine, ou il commencera a rediger le plan s'il en a assez.",
+      "failed": "L'execution de planification s'est arretee",
+      "failedHint": "Elle s'est terminee avant que le planificateur puisse repondre. Vos reponses sont enregistrees ; relancez la planification depuis l'initiative.",
       "answerPlaceholder": "Votre reponse",
-      "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
-      "proceed": "Proceder a la planification",
-      "continue": "Continuer"
+      "hint": "Envoyer les reponses permet au planificateur de poser des questions complementaires ; Planifier maintenant redige le plan avec les reponses actuelles.",
+      "unanswered": "Questions sans reponse : {count}",
+      "proceed": "Planifier maintenant",
+      "proceedTitle": "Ignorer les questions restantes et rediger le plan maintenant",
+      "continue": "Envoyer les reponses",
+      "continueTitle": "Envoyez vos reponses ; le planificateur peut poser des questions complementaires"
     },
     "followUpStatus": {
       "open": "Ouvert",
@@ -5411,6 +5459,7 @@
     "subtitle": "Une boucle persistante : traiter la tâche, exécuter la commande de validation, et recommencer jusqu'à ce qu'elle réussisse.",
     "status": {
       "passed": "Réussi",
+      "stalled": "Bloquée",
       "gaveUp": "Abandonné",
       "running": "En cours",
       "failing": "En échec"
@@ -5419,7 +5468,9 @@
     "validationCommand": "Commande de validation",
     "lastOutput": "Dernière validation (code {exit})",
     "viewPr": "Voir la pull request",
+    "stalledNote": "La boucle s'est arrêtée prématurément : des itérations consécutives ont laissé la branche inchangée et la commande de validation échoue toujours, elle n'a donc pas consommé le reste de son budget. La tâche ou la commande de validation doit probablement être modifiée pour qu'une relance serve à quelque chose.",
     "iterationsHeading": "Itérations",
+    "iterationsTruncated": "{count} itération antérieure n'est pas affichée (l'historique est plafonné). | {count} itérations antérieures ne sont pas affichées (l'historique est plafonné).",
     "iteration": "Itération {number}",
     "iterationPassed": "validation réussie",
     "iterationFailed": "code {exit}",
