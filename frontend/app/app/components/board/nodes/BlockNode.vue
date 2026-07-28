@@ -24,6 +24,7 @@ const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
 const access = useWorkspaceAccess()
+const uiMode = useUiModeStore()
 const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
@@ -159,6 +160,13 @@ function createTaskFromIssue() {
 
 function addRecurring() {
   ui.openAddRecurring(props.id)
+}
+
+// Hunt this service's tracker board for a bug worth picking up. Scoped to THIS frame, so
+// an adopted candidate lands here rather than wherever the board's first frame happens to be.
+function huntBugs() {
+  ui.expandFrame(props.id)
+  ui.openBugHunt(null, props.id)
 }
 
 function createInitiative() {
@@ -491,8 +499,18 @@ const ITEM_ICON: Record<string, string> = {
                   :title="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
+                <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
+                     work rather than do it (a schedule that fires runs on a cadence, an
+                     initiative that groups tasks under a goal), and the basic frame header is
+                     the most-used control strip on the board. Hiding the CREATE affordance
+                     removes neither's existing state from basic mode — a live schedule still
+                     badges its task card and opens its inspector panel, and an initiative is
+                     still a block on the board with its own inspector — so what a basic-mode
+                     user loses is the ability to author a new one, not sight of one. -->
                 <UButton
+                  v-if="uiMode.isAdvanced"
                   class="nodrag"
+                  data-testid="frame-add-recurring"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
@@ -501,6 +519,7 @@ const ITEM_ICON: Record<string, string> = {
                   @click.stop="addRecurring"
                 />
                 <UButton
+                  v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-initiative"
                   :size="isTouch ? 'sm' : 'xs'"
@@ -509,6 +528,17 @@ const ITEM_ICON: Record<string, string> = {
                   icon="i-lucide-milestone"
                   :title="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
+                />
+                <UButton
+                  v-if="tasks.anyOffered"
+                  class="nodrag"
+                  data-testid="frame-hunt-bugs"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-radar"
+                  :title="t('board.frame.huntBugsTitle')"
+                  @click.stop="huntBugs"
                 />
               </template>
               <UButton

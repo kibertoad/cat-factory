@@ -1,5 +1,11 @@
 import { test, expect } from './fixtures'
-import { createSeededWorkspace, openBoard, pinWorkspace, useAdvancedInterfaceMode } from './helpers'
+import {
+  createSeededWorkspace,
+  openBoard,
+  pinWorkspace,
+  taskCard,
+  useAdvancedInterfaceMode,
+} from './helpers'
 
 // The basic/advanced interface separation as the assembled product shows it. Three things
 // only the real shell can prove: the SHIPPED DEFAULT is basic (the unit specs assert the
@@ -26,11 +32,38 @@ test.describe('interface mode (basic / advanced)', () => {
     // The advanced half is absent from the DOM, not merely disabled.
     await expect(page.getByTestId('nav-kaizen')).toHaveCount(0)
     await expect(page.getByTestId('nav-sandbox')).toHaveCount(0)
+    // Including the destinations whose capability basic mode genuinely does without: repo
+    // bootstrap is a one-off setup act rather than delivery work. (Its `integrations.manage`
+    // gate passes dev-open, so the tier is the only thing that can be hiding it — unlike
+    // `nav-reports` / `nav-operator-dashboard`, which also need accounts + an admin role and
+    // so prove nothing about the tier on this deployment.)
+    await expect(page.getByTestId('nav-bootstrap-repo')).toHaveCount(0)
     // ...while the sole-route destinations stay, however deep they feel: basic hides
     // shortcuts and side surfaces, never the only way to reach a capability. The pipeline
     // builder is the probe (its `board.write` gate passes dev-open, unlike `nav-fragments`,
     // whose availability gate depends on the library integration this server may not wire).
     await expect(page.getByTestId('nav-build-pipeline')).toBeVisible()
+  })
+
+  test('the frame header keeps only its basic-tier authoring buttons', async ({
+    page,
+    seededBoard,
+  }) => {
+    void seededBoard
+    // The tier reaches the BOARD, not just the nav: a frame's header offers add-task in both
+    // tiers (the everyday act) but hides the recurring-schedule and initiative authoring
+    // buttons in basic. All three share one `board.write` gate, so a difference between them
+    // can only be the tier.
+    const frame = taskCard(page, 'blk_auth')
+    await expect(frame.getByTestId('frame-add-task').first()).toBeVisible()
+    await expect(frame.getByTestId('frame-add-recurring')).toHaveCount(0)
+    await expect(frame.getByTestId('frame-add-initiative')).toHaveCount(0)
+
+    // Switching tiers reveals them live, through the same store the nav reads — no reload.
+    await page.getByTestId('ui-mode-switcher').click()
+    await page.getByRole('menuitem', { name: 'Advanced' }).click()
+    await expect(frame.getByTestId('frame-add-recurring').first()).toBeVisible()
+    await expect(frame.getByTestId('frame-add-initiative').first()).toBeVisible()
   })
 
   test('the rail toggle expands and re-collapses the navbar', async ({ page, seededBoard }) => {

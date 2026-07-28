@@ -395,6 +395,7 @@
       "dragToResize": "Arrastra para cambiar el tamaño",
       "addFirstTask": "Añade la primera tarea",
       "createInitiativeTitle": "Crear iniciativa",
+      "huntBugsTitle": "Cazar errores",
       "accessDenied": {
         "title": "Permiso denegado",
         "hint": "No tienes acceso al repositorio que respalda este servicio."
@@ -632,12 +633,12 @@
   "inspector": {
     "detectRepoUnresolved": "El repositorio de este bloque no está entre los repositorios de GitHub conectados, por lo que no se puede leer. Conecta o sincroniza GitHub para él y vuelve a intentarlo.",
     "container": {
-      "title": "Contenido",
-      "hint": "Los módulos y tareas dentro de este bloque. Haz clic en una entrada para seleccionarla en el tablero.",
-      "modules": "Módulos ({count})",
+      "modulesTitle": "Módulos",
+      "modulesHint": "Los módulos dentro de este servicio. Haz clic en uno para seleccionarlo en el tablero.",
       "taskCount": "{count} tarea | {count} tareas",
-      "allTasks": "Todas las tareas ({count})",
-      "tasks": "Tareas ({count})",
+      "tasksTitle": "Tareas",
+      "allTasksTitle": "Todas las tareas",
+      "tasksHint": "Las tareas dentro de este bloque. Haz clic en una para seleccionarla en el tablero.",
       "addTask": "Añadir tarea",
       "noTasks": "Aún no hay tareas. Añade una para empezar a trabajar.",
       "servicesHint": "Los servicios son de larga duración y no se completan. El trabajo ocurre en sus tareas y módulos."
@@ -1319,8 +1320,6 @@
       "lastIncorporatedRequirements": "Últimos requisitos incorporados",
       "priorDocHint": "De la revisión anterior. Úsalo como base: edita la descripción de arriba y reenvíala.",
       "bootstrapping": "Inicializando…",
-      "importIssue": "Importar incidencia",
-      "connectTracker": "Conectar un tracker",
       "spawnFromDocument": "Generar desde documento",
       "viewRequirements": "Ver requisitos",
       "reRun": "Reejecutar",
@@ -1354,8 +1353,7 @@
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
       },
-      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}",
-      "huntBugs": "Cazar errores"
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
     }
   },
   "observability": {
