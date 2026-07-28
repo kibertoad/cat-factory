@@ -964,8 +964,11 @@ export const requirementReviews = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    // getByBlock looks up a block's reviews (newest wins), mirroring D1 migration 0021.
-    index('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
+    // UNIQUE (D1 migration 0066): a block holds at most ONE live review, and the constraint is
+    // what enforces it — `replaceForBlock` is a conflict-targeted upsert on this key, so two
+    // concurrent review runs can't interleave into two live reviews the way a transactioned
+    // delete-then-insert could under READ COMMITTED. Also serves `getByBlock`'s lookup.
+    uniqueIndex('idx_requirement_reviews_block').on(t.workspace_id, t.block_id),
   ],
 )
 
@@ -1100,7 +1103,9 @@ export const clarityReviews = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
+    // UNIQUE (D1 migration 0066) — see `requirement_reviews`: the constraint, not a transaction,
+    // is what keeps a block to one live review.
+    uniqueIndex('idx_clarity_reviews_block').on(t.workspace_id, t.block_id),
   ],
 )
 
@@ -1129,7 +1134,9 @@ export const brainstormSessions = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+    // UNIQUE (D1 migration 0066) — one live session per block AND STAGE, since a block
+    // legitimately holds a `requirements` and an `architecture` session at the same time.
+    uniqueIndex('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
   ],
 )
 

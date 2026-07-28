@@ -24,10 +24,12 @@ export interface BrainstormSessionRepository {
    */
   compareAndSwap(workspaceId: string, session: BrainstormSession): Promise<boolean>
   /**
-   * ATOMICALLY make `session` the block's one live session FOR ITS STAGE (drop-and-insert in a
-   * single transaction; the stage is read off the session, since a block may hold one live
-   * `requirements` and one live `architecture` session at once) — the brainstorm mirror of
-   * `RequirementReviewRepository.replaceForBlock`.
+   * ATOMICALLY make `session` the block's one live session FOR ITS STAGE (a single
+   * conflict-targeted upsert against the UNIQUE (workspace, block, stage) index; the stage is
+   * read off the session, since a block may hold one live `requirements` and one live
+   * `architecture` session at once) — the brainstorm mirror of
+   * `RequirementReviewRepository.replaceForBlock`, including why a transactioned
+   * delete-then-insert is NOT an acceptable implementation.
    */
   replaceForBlockStage(workspaceId: string, session: BrainstormSession): Promise<void>
 }

@@ -42,8 +42,9 @@ function rowToReview(row: ClarityReviewRow): ClarityReview {
 /**
  * Clarity (bug-report triage) reviews, stored one row per review in `clarity_reviews`.
  * The mirror of {@link D1RequirementReviewRepository}, down to the concurrency contract: items
- * live as a JSON array, `replaceForBlock` keeps exactly one live review per block, and every
- * read-modify-write rides the rev-guarded `compareAndSwap`.
+ * live as a JSON array, a UNIQUE index on (workspace_id, block_id) keeps exactly one live review
+ * per block (which `replaceForBlock` upserts against), and every read-modify-write rides the
+ * rev-guarded `compareAndSwap`.
  */
 export class D1ClarityReviewRepository implements ClarityReviewRepository {
   private readonly db: D1Database
@@ -72,10 +73,15 @@ export class D1ClarityReviewRepository implements ClarityReviewRepository {
     return row ? rowToReview(row) : null
   }
 
-  private insertStatement(workspaceId: string, review: ClarityReview) {
-    // A fresh insert starts at rev 0; a force-write over an existing row BUMPS it, so a
-    // concurrent compareAndSwap holding the old revision still detects that the row moved.
-    return this.db
+  /**
+   * Force-write by review id. A fresh insert starts at rev 0; a write over an existing row BUMPS
+   * it, so a concurrent compareAndSwap holding the old revision still detects that the row moved.
+   * Writing a DIFFERENT id onto a block that already has a review now violates the block's UNIQUE
+   * index (migration 0066) — loudly, which is the point: only {@link replaceForBlock} may change
+   * which review is a block's live one.
+   */
+  async upsert(workspaceId: string, review: ClarityReview): Promise<void> {
+    const row = await this.db
       .prepare(
         `INSERT INTO clarity_reviews
            (workspace_id, id, block_id, status, items, model, clarified_report,
@@ -106,10 +112,7 @@ export class D1ClarityReviewRepository implements ClarityReviewRepository {
         review.createdAt,
         review.updatedAt,
       )
-  }
-
-  async upsert(workspaceId: string, review: ClarityReview): Promise<void> {
-    const row = await this.insertStatement(workspaceId, review).first<{ rev: number }>()
+      .first<{ rev: number }>()
     if (row) review.rev = row.rev
   }
 
@@ -151,14 +154,42 @@ export class D1ClarityReviewRepository implements ClarityReviewRepository {
   }
 
   async replaceForBlock(workspaceId: string, review: ClarityReview): Promise<void> {
-    // ONE transaction: `db.batch` so a second review run for the same block can't interleave
-    // its delete between this delete and this insert and leave two live reviews behind.
-    await this.db.batch([
-      this.db
-        .prepare(`DELETE FROM clarity_reviews WHERE workspace_id = ? AND block_id = ?`)
-        .bind(workspaceId, review.blockId),
-      this.insertStatement(workspaceId, review),
-    ])
-    review.rev = 0
+    // ONE conflict-targeted upsert on the block's UNIQUE key (migration 0066), NOT a
+    // delete-then-insert pair — see {@link D1RequirementReviewRepository.replaceForBlock} for why
+    // a transaction around that pair is not enough.
+    const row = await this.db
+      .prepare(
+        `INSERT INTO clarity_reviews
+           (workspace_id, id, block_id, status, items, model, clarified_report,
+            iteration, max_iterations, rev, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+         ON CONFLICT (workspace_id, block_id) DO UPDATE SET
+           id = excluded.id,
+           status = excluded.status,
+           items = excluded.items,
+           model = excluded.model,
+           clarified_report = excluded.clarified_report,
+           iteration = excluded.iteration,
+           max_iterations = excluded.max_iterations,
+           rev = 0,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at
+         RETURNING rev`,
+      )
+      .bind(
+        workspaceId,
+        review.id,
+        review.blockId,
+        review.status,
+        JSON.stringify(review.items),
+        review.model,
+        review.clarifiedReport,
+        review.iteration ?? 1,
+        review.maxIterations ?? 1,
+        review.createdAt,
+        review.updatedAt,
+      )
+      .first<{ rev: number }>()
+    review.rev = row?.rev ?? 0
   }
 }

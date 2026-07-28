@@ -232,12 +232,24 @@ A direct consequence of 2.2, called out separately because the effect is user-vi
 > and RE-APPLYING on a lost race), including the two that held a snapshot across an LLM call
 > (`incorporate`, `reReview`) and the recommendation paths (`prepareRecommendations`,
 > `fillPendingRecommendations`, `dropPendingRecommendations`, `mutateRecommendation`). The
-> double-run hole is closed by an atomic `replaceForBlock` / `replaceForBlockStage` (D1 `batch()`
-> ⇄ a Postgres transaction) replacing the `deleteByBlock` + `upsert` pair, which is deleted from
-> the port so it can't be reintroduced — so a block can no longer end up with two live reviews,
-> and a parked run's decision can no longer key to a different review than the window loaded.
-> Cross-runtime conformance pins the CAS refusal, the never-resurrects contract and the
-> one-live-review invariant; a service-level unit test pins the reload-and-re-apply.
+> double-run hole is closed by an atomic `replaceForBlock` / `replaceForBlockStage` replacing the
+> `deleteByBlock` + `upsert` pair, which is deleted from the port so it can't be reintroduced — so
+> a block can no longer end up with two live reviews, and a parked run's decision can no longer
+> key to a different review than the window loaded. Cross-runtime conformance pins the CAS
+> refusal, the never-resurrects contract and the one-live-review invariant (under CONCURRENT
+> publishers, not just sequential ones); a service-level unit test pins the reload-and-re-apply.
+> A contended give-up throws `ReviewContendedError`, a `ConflictError` the durable driver also
+> recognises as a re-drive signal, so the incorporation cycle's paid-for LLM output is
+> re-derived on fresh state rather than discarded with a failed run.
+>
+> **The atomicity is a UNIQUE INDEX, not a transaction** (D1 `0066` ⇄ Drizzle, healing pre-existing
+> duplicates before constraining). The first cut of this fix wrapped the delete-then-insert pair in
+> a transaction, which does not hold the invariant: at Postgres' default READ COMMITTED a DELETE
+> takes no predicate lock, so two concurrent publishers both delete nothing and both insert — the
+> hazard, intact. SQLite serializes writers, so D1 was accidentally safe and a SEQUENTIAL
+> conformance test passed on both runtimes. Worth remembering twice over: an invariant about
+> concurrency has to be asserted with concurrent writers, and it belongs in a constraint rather
+> than in the shape of the code that writes.
 >
 > Residual (accepted, not a race): two review runs fired for the same block still each pay their
 > reviewer LLM call — only one of the two reviews survives. Claiming the block BEFORE the reviewer

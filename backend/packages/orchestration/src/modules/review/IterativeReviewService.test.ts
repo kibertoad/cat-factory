@@ -95,11 +95,6 @@ function fakeRepo<T extends Stored>(onBeforeCas?: (review: T) => void) {
       const stored = [...byId.values()].find((r) => r.blockId === blockId)
       return stored ? copy(stored) : null
     },
-    async upsert(_ws: string, review: T): Promise<void> {
-      const prior = byId.get(review.id)
-      review.rev = prior ? prior.rev + 1 : 0
-      byId.set(review.id, copy(review))
-    },
     async compareAndSwap(_ws: string, review: T): Promise<boolean> {
       onBeforeCas?.(review)
       const stored = byId.get(review.id)
@@ -108,6 +103,8 @@ function fakeRepo<T extends Stored>(onBeforeCas?: (review: T) => void) {
       byId.set(review.id, copy(review))
       return true
     },
+    // Models the block's UNIQUE constraint: the block holds one review, and publishing a fresh
+    // one takes the predecessor's place rather than landing beside it.
     async replaceForBlock(_ws: string, review: T): Promise<void> {
       for (const [k, v] of byId) if (v.blockId === review.blockId) byId.delete(k)
       review.rev = 0

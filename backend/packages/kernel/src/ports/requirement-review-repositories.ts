@@ -27,11 +27,18 @@ export interface RequirementReviewRepository {
    */
   compareAndSwap(workspaceId: string, review: RequirementReview): Promise<boolean>
   /**
-   * ATOMICALLY make `review` the block's one live review: drop the block's existing review(s)
-   * and insert this one in a single transaction. The two halves must not be separate calls —
-   * a double-submitted review run would otherwise interleave as delete/delete/insert/insert and
-   * leave the block with TWO live reviews, so a parked run's decision can key to a different
-   * review than the window loaded.
+   * ATOMICALLY make `review` the block's one live review, as a SINGLE conflict-targeted upsert
+   * against the store's UNIQUE index on (workspace, block) — the predecessor's row BECOMES this
+   * one, so it is superseded rather than left beside it, and `rev` restarts at 0.
+   *
+   * It must be one statement against the constraint, NOT a delete-then-insert pair — not even
+   * inside a transaction. A double-submitted review run would otherwise interleave as
+   * delete/delete/insert/insert and leave the block with TWO live reviews, so a parked run's
+   * decision can key to a different review than the window loaded; and a transaction does NOT
+   * prevent that, because at READ COMMITTED a DELETE takes no predicate lock, so both
+   * transactions delete nothing and both insert. The uniqueness constraint is what holds this
+   * invariant — SQLite serializing its writers made D1 accidentally safe, which is a property of
+   * the runtime rather than of the design.
    */
   replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void>
 }

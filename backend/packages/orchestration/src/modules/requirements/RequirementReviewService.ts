@@ -461,11 +461,14 @@ export class RequirementReviewService extends IterativeReviewService<
     reviewId: string,
     onProgress?: (review: RequirementReview) => Promise<void>,
   ): Promise<void> {
-    if (!(await this.repository.get(workspaceId, reviewId))) return
+    // `IfPresent`, because this is the DEGRADATION path: it runs when the Writer can't be
+    // resolved, and it must not itself throw. A review that vanished (a fresh review run replaced
+    // it) leaves nothing to clean up — and the absence is re-checked on every retry, so it can't
+    // surface as a `NotFoundError` from a window between a pre-check and the load either.
     // Rev-guarded, and the pending set is re-derived per attempt: a human accepting one
     // recommendation while this cleanup runs must not have their answer dropped.
     let dropped = false
-    const review = await this.mutateReview(workspaceId, reviewId, (fresh, now) => {
+    const review = await this.mutateReviewIfPresent(workspaceId, reviewId, (fresh, now) => {
       const pending = fresh.recommendations.filter((r) => r.status === 'pending')
       dropped = pending.length > 0
       if (!dropped) return false
@@ -478,7 +481,7 @@ export class RequirementReviewService extends IterativeReviewService<
         }
       }
     })
-    if (dropped) await onProgress?.(review)
+    if (dropped && review) await onProgress?.(review)
   }
 
   /**

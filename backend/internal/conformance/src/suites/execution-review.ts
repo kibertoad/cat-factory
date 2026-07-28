@@ -1294,17 +1294,47 @@ export function defineExecutionReviewConformance(harness: ConformanceHarness): v
       const { workspace } = await app.createWorkspace()
 
       // Two review runs for the same block (a double-submitted gate / a manual run racing the
-      // engine's). Each replace is ONE transaction, so they can't interleave into two live rows
-      // — whichever lands last is the block's only review, and the window and the parked run's
-      // decision can no longer key to different reviews.
+      // engine's). Whichever lands last is the block's only review, so the window and the parked
+      // run's decision can no longer key to different reviews.
       await repo.replaceForBlock(workspace.id, review({ id: 'rrv_run_1' }))
       await repo.replaceForBlock(workspace.id, review({ id: 'rrv_run_2' }))
 
       expect(await repo.get(workspace.id, 'rrv_run_1')).toBeNull()
       expect((await repo.getByBlock(workspace.id, 'blk_review_cas'))?.id).toBe('rrv_run_2')
-      // A fresh insert starts the rev clock over, so the superseded run's revision can't be
-      // mistaken for the new review's.
+      // A replace restarts the rev clock, so the superseded run's revision can't be mistaken for
+      // the new review's.
       expect((await repo.get(workspace.id, 'rrv_run_2'))?.rev).toBe(0)
+    })
+
+    // The invariant above, asserted the way it actually BREAKS. Awaiting the two replaces in
+    // sequence proves nothing about interleaving: the hazard is two runs in flight at once, and a
+    // store that wrapped a DELETE-then-INSERT in a transaction would pass the sequential test
+    // while still splitting the block in two under READ COMMITTED (a DELETE takes no predicate
+    // lock, so both transactions delete nothing and both insert). Only the UNIQUE index on the
+    // block key makes this hold, which is why it is asserted against real D1 and real Postgres
+    // rather than reasoned about.
+    it('replaceForBlock stays single-live under CONCURRENT review runs', async () => {
+      const app = harness.makeApp()
+      const repo = app.requirementReviewRepository()
+      const { workspace } = await app.createWorkspace()
+
+      const ids = ['rrv_par_1', 'rrv_par_2', 'rrv_par_3', 'rrv_par_4']
+      const settled = await Promise.allSettled(
+        ids.map((id) => repo.replaceForBlock(workspace.id, review({ id }))),
+      )
+      // A loser may legitimately be REFUSED by the constraint (that is the invariant holding, and
+      // the caller is a fresh review run that has nothing to lose by failing) — but it must never
+      // succeed into a second live row.
+      expect(settled.some((r) => r.status === 'fulfilled')).toBe(true)
+
+      const live = await repo.getByBlock(workspace.id, 'blk_review_cas')
+      expect(live).not.toBeNull()
+      // Exactly ONE of the four ids survives; every other one is gone rather than parked beside it.
+      const survivors = (await Promise.all(ids.map((id) => repo.get(workspace.id, id)))).filter(
+        (r) => r !== null,
+      )
+      expect(survivors).toHaveLength(1)
+      expect(survivors[0]!.id).toBe(live!.id)
     })
   })
 }

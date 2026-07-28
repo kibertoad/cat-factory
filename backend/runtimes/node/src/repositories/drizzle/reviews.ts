@@ -55,8 +55,10 @@ function rowToRequirementReview(row: RequirementReviewRow): RequirementReview {
 /**
  * Requirements reviews over Postgres (the Drizzle mirror of the Worker's
  * `D1RequirementReviewRepository`, migration 0021). The reviewed items live as a JSON array in
- * `items`; a block holds at most ONE live review, which {@link replaceForBlock} maintains in a
- * transaction, so `getByBlock` returns it. Every read-modify-write rides the rev-guarded
+ * `items`; a block holds at most ONE live review — a UNIQUE index on (workspace_id, block_id)
+ * enforces that, and {@link DrizzleRequirementReviewRepository.replaceForBlock} publishes a fresh
+ * one as a single upsert against it — so `getByBlock` returns it. Every read-modify-write rides
+ * the rev-guarded
  * {@link compareAndSwap}. Behaviourally identical to the D1 repo, so the cross-runtime
  * conformance suite asserts the same substitution AND the same concurrency semantics against
  * both stores.
@@ -167,21 +169,47 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
     return true
   }
 
+  /**
+   * Publish `review` as the block's one live review, as a SINGLE conflict-targeted upsert on the
+   * block's UNIQUE index.
+   *
+   * This deliberately is NOT a transactioned delete-then-insert. A transaction is not a
+   * uniqueness constraint: at Postgres' default READ COMMITTED a DELETE takes no predicate lock,
+   * so two concurrent review runs each delete nothing (or each other's already-gone row), each
+   * insert, and both commit — leaving the block with TWO live reviews, which is the exact hazard
+   * this method exists to prevent. (SQLite serializes writers, so D1 was accidentally safe; a
+   * domain invariant must not rest on which runtime it happens to run under.) One statement
+   * against the constraint has no window to interleave into on either runtime.
+   *
+   * The predecessor's row IS this row — its `id` is overwritten — so the superseded review is
+   * gone rather than left beside the live one, and `rev` restarts at 0 so a writer still holding
+   * the predecessor's revision can't match.
+   */
   async replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void> {
-    // ONE transaction: a second review run for the same block can't interleave its delete
-    // between this delete and this insert and leave two live reviews behind.
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(requirementReviews)
-        .where(
-          and(
-            eq(requirementReviews.workspace_id, workspaceId),
-            eq(requirementReviews.block_id, review.blockId),
-          ),
-        )
-      await tx.insert(requirementReviews).values(requirementReviewValues(workspaceId, review))
-    })
-    review.rev = 0
+    const values = requirementReviewValues(workspaceId, review)
+    const rows = await this.db
+      .insert(requirementReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [requirementReviews.workspace_id, requirementReviews.block_id],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          incorporated_requirements: values.incorporated_requirements,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          recommendations: values.recommendations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: requirementReviews.rev })
+    // Read the revision back rather than assuming it: the caller keeps mutating this object
+    // through `compareAndSwap`, so a `rev` it only believes is right desynchronises it.
+    review.rev = rows[0]?.rev ?? 0
   }
 }
 
@@ -525,19 +553,33 @@ export class DrizzleClarityReviewRepository implements ClarityReviewRepository {
     return true
   }
 
+  /**
+   * A single conflict-targeted upsert on the block's UNIQUE index — see
+   * {@link DrizzleRequirementReviewRepository.replaceForBlock} for why a transactioned
+   * delete-then-insert does not hold this invariant under READ COMMITTED.
+   */
   async replaceForBlock(workspaceId: string, review: ClarityReview): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(clarityReviews)
-        .where(
-          and(
-            eq(clarityReviews.workspace_id, workspaceId),
-            eq(clarityReviews.block_id, review.blockId),
-          ),
-        )
-      await tx.insert(clarityReviews).values(clarityReviewValues(workspaceId, review))
-    })
-    review.rev = 0
+    const values = clarityReviewValues(workspaceId, review)
+    const rows = await this.db
+      .insert(clarityReviews)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [clarityReviews.workspace_id, clarityReviews.block_id],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          clarified_report: values.clarified_report,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: clarityReviews.rev })
+    review.rev = rows[0]?.rev ?? 0
   }
 }
 
@@ -679,20 +721,38 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
     return true
   }
 
+  /**
+   * A single conflict-targeted upsert on the (block, STAGE) UNIQUE index — see
+   * {@link DrizzleRequirementReviewRepository.replaceForBlock} for why a transactioned
+   * delete-then-insert does not hold this invariant under READ COMMITTED. The stage is part of
+   * the conflict target, so the block's other live stage is untouched by construction rather
+   * than by a scoped delete.
+   */
   async replaceForBlockStage(workspaceId: string, session: BrainstormSession): Promise<void> {
-    // Scoped to the session's OWN stage, so the block's other live stage is untouched.
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(brainstormSessions)
-        .where(
-          and(
-            eq(brainstormSessions.workspace_id, workspaceId),
-            eq(brainstormSessions.block_id, session.blockId),
-            eq(brainstormSessions.stage, session.stage),
-          ),
-        )
-      await tx.insert(brainstormSessions).values(brainstormSessionValues(workspaceId, session))
-    })
-    session.rev = 0
+    const values = brainstormSessionValues(workspaceId, session)
+    const rows = await this.db
+      .insert(brainstormSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          brainstormSessions.workspace_id,
+          brainstormSessions.block_id,
+          brainstormSessions.stage,
+        ],
+        set: {
+          id: values.id,
+          status: values.status,
+          items: values.items,
+          model: values.model,
+          converged_direction: values.converged_direction,
+          iteration: values.iteration,
+          max_iterations: values.max_iterations,
+          rev: 0,
+          created_at: values.created_at,
+          updated_at: values.updated_at,
+        },
+      })
+      .returning({ rev: brainstormSessions.rev })
+    session.rev = rows[0]?.rev ?? 0
   }
 }

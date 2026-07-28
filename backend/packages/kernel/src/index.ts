@@ -10,6 +10,7 @@ export {
   CredentialRequiredError,
   ForbiddenError,
   RunContendedError,
+  ReviewContendedError,
   assertFound,
   getErrorMessage,
   getErrorReason,

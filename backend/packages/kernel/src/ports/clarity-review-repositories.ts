@@ -19,8 +19,10 @@ export interface ClarityReviewRepository {
    */
   compareAndSwap(workspaceId: string, review: ClarityReview): Promise<boolean>
   /**
-   * ATOMICALLY make `review` the block's one live review (drop-and-insert in a single
-   * transaction) — the clarity mirror of `RequirementReviewRepository.replaceForBlock`.
+   * ATOMICALLY make `review` the block's one live review (a single conflict-targeted upsert
+   * against the UNIQUE block index) — the clarity mirror of
+   * `RequirementReviewRepository.replaceForBlock`, including why a transactioned
+   * delete-then-insert is NOT an acceptable implementation.
    */
   replaceForBlock(workspaceId: string, review: ClarityReview): Promise<void>
 }

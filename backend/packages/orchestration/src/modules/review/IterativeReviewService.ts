@@ -15,7 +15,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   assertFound,
-  ConflictError,
+  ReviewContendedError,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   inlineModelRef,
   resolveScopedModelProvider,
@@ -61,11 +61,16 @@ export interface ReviewCommon {
   updatedAt: number
 }
 
-/** The structural persistence port both review repositories satisfy. */
+/**
+ * The structural persistence port both review repositories satisfy. Deliberately NARROWER than
+ * the kernel ports: the force-write `upsert` is not on it, because no path in this service may
+ * use one — a whole-row write from a stale read is the bug this concurrency model exists to
+ * prevent, and a fresh review is published through `replaceForBlock`. The kernel ports keep
+ * `upsert` for the seeding/RPC surfaces that legitimately own the row outright.
+ */
 export interface ReviewRepository<TReview> {
   getByBlock(workspaceId: string, blockId: string): Promise<TReview | null>
   get(workspaceId: string, id: string): Promise<TReview | null>
-  upsert(workspaceId: string, review: TReview): Promise<void>
   /** Rev-guarded conditional update; false ⇒ another writer moved (or deleted) the row. */
   compareAndSwap(workspaceId: string, review: TReview): Promise<boolean>
   /** Atomically make this the block's (and, for brainstorm, the stage's) one live review. */
@@ -74,9 +79,10 @@ export interface ReviewRepository<TReview> {
 
 /**
  * How many times a contended {@link IterativeReviewService.mutateReview} reloads and re-applies
- * before giving up with a 409. Matches the engine's `RunStateMachine.mutateInstance` budget: the
- * contending writers here are human clicks and one durable-driver pass, so a handful of retries
- * covers real contention while still failing loudly on a pathological hot row.
+ * before giving up with a {@link ReviewContendedError}. Matches the engine's
+ * `RunStateMachine.mutateInstance` budget: the contending writers here are human clicks and one
+ * durable-driver pass, so a handful of retries covers real contention while still failing loudly
+ * on a pathological hot row.
  */
 const MAX_MUTATE_ATTEMPTS = 8
 
@@ -313,19 +319,27 @@ export abstract class IterativeReviewService<
     // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
     // (a human can grant an extra round, or answer an item that this pass is about to replace).
     // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
-    // snapshot back — the disposition is computed inside so a retry recomputes it too.
-    let disposition: ReviewDisposition = 'auto-pass'
+    // snapshot back — a retry recomputes them against whichever snapshot it lands on.
     const updated = await this.mutateReview(workspaceId, reviewId, (fresh) => {
       const iteration = (fresh.iteration ?? 1) + 1
       const maxIterations = fresh.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
-      disposition = disposeReview(items, { iteration, maxIterations, concernThreshold })
       Object.assign(fresh, {
-        status: statusForDisposition(disposition),
+        status: statusForDisposition(
+          disposeReview(items, { iteration, maxIterations, concernThreshold }),
+        ),
         items,
         model: `${ref.provider}:${ref.model}`,
         iteration,
         maxIterations,
       })
+    })
+    // Re-derived from what was actually PERSISTED, not smuggled out of the mutation on a closure
+    // variable: `disposeReview` is pure, so reading the committed counters back cannot disagree
+    // with the status the winning attempt wrote.
+    const disposition = disposeReview(updated.items, {
+      iteration: updated.iteration,
+      maxIterations: updated.maxIterations,
+      concernThreshold,
     })
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return updated
@@ -611,22 +625,44 @@ export abstract class IterativeReviewService<
    * mutation never has to remember to. Returning `false` from `mutate` means "the fresh state
    * already satisfies this" — no write happens at all, so an idempotent re-request doesn't
    * churn `updatedAt` (and the live event it drives).
+   *
+   * Giving up throws {@link ReviewContendedError}, which is BOTH a 409 for an HTTP caller and the
+   * durable driver's re-drive signal — the driver owns the two paths whose mutation carries
+   * paid-for LLM output (`incorporate`, `reReview`), and failing the run there would throw that
+   * work away for good rather than re-deriving it on fresh state.
    */
   protected async mutateReview(
     workspaceId: string,
     reviewId: string,
     mutate: (review: TReview, now: number) => boolean | void,
   ): Promise<TReview> {
+    return assertFound(
+      await this.mutateReviewIfPresent(workspaceId, reviewId, mutate),
+      this.entityName,
+      reviewId,
+    )
+  }
+
+  /**
+   * {@link mutateReview} for a caller to whom a review that is GONE is an ordinary outcome rather
+   * than a 404 — resolving to null instead of throwing. The absence is re-checked on every
+   * attempt, so a fresh review run replacing the row mid-retry settles as "gone" rather than
+   * surfacing as a `NotFoundError` from a path that must not throw.
+   */
+  protected async mutateReviewIfPresent(
+    workspaceId: string,
+    reviewId: string,
+    mutate: (review: TReview, now: number) => boolean | void,
+  ): Promise<TReview | null> {
     for (let attempt = 0; attempt < MAX_MUTATE_ATTEMPTS; attempt++) {
-      const review = await this.load(workspaceId, reviewId)
+      const review = await this.repository.get(workspaceId, reviewId)
+      if (!review) return null
       const now = this.deps.clock.now()
       if (mutate(review, now) === false) return review
       review.updatedAt = now
       if (await this.repository.compareAndSwap(workspaceId, review)) return review
     }
-    throw new ConflictError(
-      `${this.entityName} '${reviewId}' is being modified concurrently; retry`,
-    )
+    throw new ReviewContendedError(this.entityName, reviewId)
   }
 
   protected async patchReview(
@@ -635,6 +671,9 @@ export abstract class IterativeReviewService<
     patch: (review: TReview) => TReview,
   ): Promise<TReview> {
     // The patch is expressed as a copy, so fold it back onto the loaded instance the CAS guards.
+    // NOTE: this OVERLAYS the copy's fields — a patch that returns an object with a field OMITTED
+    // does not delete it (unlike replacing the object wholesale). Patches here set fields; one
+    // that needs to clear a field must set it explicitly (to null/undefined), not drop the key.
     return this.mutateReview(workspaceId, reviewId, (review) => {
       Object.assign(review, patch(review))
     })
