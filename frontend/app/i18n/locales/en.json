@@ -2190,6 +2190,11 @@
         "add": "Could not add member",
         "remove": "Could not remove member"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Pick a default test environment",
+      "body": "This board hasn't chosen how its services get a test environment. Pick a default and every service you add from now on starts with it, instead of being set up one at a time. You can still change it per service.",
+      "action": "Choose default"
     }
   },
   "settings": {
@@ -3139,6 +3144,15 @@
       },
       "saved": "Model access policy saved",
       "saveFailed": "Could not save the model access policy"
+    },
+    "defaultProvision": {
+      "title": "Default for new services",
+      "hint": "The provisioning mechanism suggested for every service you add from now on. It does not change services that already exist, and each service can override it.",
+      "suggestionHint": "This is a suggestion so far. Save it to record it as the board's default.",
+      "save": "Save default",
+      "saved": "Default test environment saved.",
+      "savedState": "Saved.",
+      "saveFailed": "Could not save the default test environment."
     }
   },
   "providers": {

@@ -2121,6 +2121,11 @@
         "add": "Impossible d'ajouter le membre",
         "remove": "Impossible de retirer le membre"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Choisissez un environnement de test par défaut",
+      "body": "Ce tableau n'a pas encore défini comment ses services obtiennent un environnement de test. Choisissez une valeur par défaut et chaque service ajouté ensuite démarrera avec elle, au lieu d'être configuré un par un. Vous pourrez toujours la modifier service par service.",
+      "action": "Choisir la valeur par défaut"
     }
   },
   "settings": {
@@ -3046,6 +3051,15 @@
       },
       "saved": "Politique d'accès aux modèles enregistrée",
       "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles"
+    },
+    "defaultProvision": {
+      "title": "Valeur par défaut pour les nouveaux services",
+      "hint": "Le mécanisme de provisionnement suggéré pour chaque service ajouté à partir de maintenant. Il ne modifie pas les services existants et chaque service peut le remplacer.",
+      "suggestionHint": "Ce n'est qu'une suggestion pour l'instant. Enregistrez-la pour en faire la valeur par défaut du tableau.",
+      "save": "Enregistrer la valeur par défaut",
+      "saved": "Environnement de test par défaut enregistré.",
+      "savedState": "Enregistré.",
+      "saveFailed": "Impossible d'enregistrer l'environnement de test par défaut."
     }
   },
   "providers": {

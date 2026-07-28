@@ -2121,6 +2121,11 @@
         "add": "No se pudo añadir el miembro",
         "remove": "No se pudo quitar el miembro"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Elige un entorno de pruebas predeterminado",
+      "body": "Este tablero aún no ha definido cómo obtienen un entorno de pruebas sus servicios. Elige un valor predeterminado y todos los servicios que añadas a partir de ahora empezarán con él, en lugar de configurarse uno a uno. Podrás cambiarlo en cada servicio.",
+      "action": "Elegir predeterminado"
     }
   },
   "settings": {
@@ -3046,6 +3051,15 @@
       },
       "saved": "Política de acceso a modelos guardada",
       "saveFailed": "No se pudo guardar la política de acceso a modelos"
+    },
+    "defaultProvision": {
+      "title": "Predeterminado para servicios nuevos",
+      "hint": "El mecanismo de aprovisionamiento que se sugerirá para cada servicio que añadas a partir de ahora. No modifica los servicios ya existentes y cada servicio puede sustituirlo.",
+      "suggestionHint": "Por ahora es solo una sugerencia. Guárdala para registrarla como predeterminado del tablero.",
+      "save": "Guardar predeterminado",
+      "saved": "Entorno de pruebas predeterminado guardado.",
+      "savedState": "Guardado.",
+      "saveFailed": "No se ha podido guardar el entorno de pruebas predeterminado."
     }
   },
   "providers": {

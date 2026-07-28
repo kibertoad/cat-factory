@@ -13,6 +13,7 @@ import { computed, ref, watch } from 'vue'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import InfrastructureBackendPicker from '~/components/settings/InfrastructureBackendPicker.vue'
 import InfraHandlersConfigurator from '~/components/settings/InfraHandlersConfigurator.vue'
+import DefaultProvisionTypeSection from '~/components/settings/DefaultProvisionTypeSection.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
 
@@ -131,10 +132,16 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #environment>
             <div class="space-y-4">
+              <!-- What this board's services PRODUCE by default. Comes first because it is the
+                   question the per-type handlers below answer "how" for, and because a board that
+                   has never chosen is the one the setup banner deep-links straight to here. -->
+              <DefaultProvisionTypeSection />
               <!-- The Tester's environment is driven by each SERVICE's declared provision type
                    (the "what/where"); the workspace configures HOW each type is handled here —
                    the engine + connection per provision type, plus the custom-type catalog. -->
-              <InfraHandlersConfigurator />
+              <div class="border-t border-slate-800 pt-4">
+                <InfraHandlersConfigurator />
+              </div>
             </div>
           </template>
           <template #shared-stacks>

@@ -2121,6 +2121,11 @@
         "add": "Nie udało się dodać członka",
         "remove": "Nie udało się usunąć członka"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Wybierz domyślne środowisko testowe",
+      "body": "Ta tablica nie ma jeszcze ustalonego sposobu, w jaki jej usługi otrzymują środowisko testowe. Wybierz wartość domyślną, a każda kolejno dodawana usługa będzie od niej startować, zamiast być konfigurowana pojedynczo. Nadal możesz to zmienić dla poszczególnej usługi.",
+      "action": "Wybierz domyślne"
     }
   },
   "settings": {
@@ -3046,6 +3051,15 @@
       },
       "saved": "Zapisano politykę dostępu do modeli",
       "saveFailed": "Nie udało się zapisać polityki dostępu do modeli"
+    },
+    "defaultProvision": {
+      "title": "Domyślne dla nowych usług",
+      "hint": "Mechanizm udostępniania sugerowany dla każdej usługi dodanej od teraz. Nie zmienia już istniejących usług, a każda usługa może go nadpisać.",
+      "suggestionHint": "To na razie tylko sugestia. Zapisz ją, aby zapisać jako domyślną dla tablicy.",
+      "save": "Zapisz domyślne",
+      "saved": "Zapisano domyślne środowisko testowe.",
+      "savedState": "Zapisano.",
+      "saveFailed": "Nie udało się zapisać domyślnego środowiska testowego."
     }
   },
   "providers": {

@@ -50,6 +50,8 @@ export function defineWorkspaceSettingsSuite(
           reviewFrictionBlockStuckMinutes: 1440,
           spendCurrency: 'EUR',
           spendMonthlyLimit: 12.5,
+          defaultProvisionType: 'custom',
+          defaultProvisionManifestId: 'acme-preview',
         }),
       )
 
@@ -65,7 +67,35 @@ export function defineWorkspaceSettingsSuite(
         reviewFrictionBlockStuckMinutes: 1440,
         spendCurrency: 'EUR',
         spendMonthlyLimit: 12.5,
+        defaultProvisionType: 'custom',
+        defaultProvisionManifestId: 'acme-preview',
       })
+    })
+
+    // The default-provisioning pair is NULLABLE on purpose: null means "the operator never
+    // chose" (what the SPA's setup banner nags about), which must survive the round trip as
+    // null rather than being coerced to `infraless` or to an empty string by either store —
+    // either would silence the banner on a board that has decided nothing.
+    it('round-trips an unset default provisioning choice as null on both stores', async () => {
+      const repo = makeRepo()
+      const { a } = ids()
+      await repo.upsert(a, settings({ waitingEscalationMinutes: 60 }))
+
+      const stored = await repo.get(a)
+      expect(stored?.defaultProvisionType).toBeNull()
+      expect(stored?.defaultProvisionManifestId).toBeNull()
+    })
+
+    // `infraless` is a real recorded decision ("services stand up no environment"), so it must
+    // read back as itself and NOT collapse into the unset state.
+    it('keeps an explicit infraless default distinct from an unset one', async () => {
+      const repo = makeRepo()
+      const { a } = ids()
+      await repo.upsert(a, settings({ defaultProvisionType: 'infraless' }))
+
+      const stored = await repo.get(a)
+      expect(stored?.defaultProvisionType).toBe('infraless')
+      expect(stored?.defaultProvisionManifestId).toBeNull()
     })
 
     it('batch-reads only the persisted rows, keyed by workspace id', async () => {

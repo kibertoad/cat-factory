@@ -934,6 +934,15 @@
       },
       "saved": "Modellzugriffsrichtlinie gespeichert",
       "saveFailed": "Modellzugriffsrichtlinie konnte nicht gespeichert werden"
+    },
+    "defaultProvision": {
+      "title": "Standard für neue Services",
+      "hint": "Der Bereitstellungsmechanismus, der für jeden künftig hinzugefügten Service vorgeschlagen wird. Bereits vorhandene Services bleiben unverändert, und jeder Service kann davon abweichen.",
+      "suggestionHint": "Das ist bislang nur ein Vorschlag. Speichern Sie ihn, um ihn als Standard des Boards zu hinterlegen.",
+      "save": "Standard speichern",
+      "saved": "Standard-Testumgebung gespeichert.",
+      "savedState": "Gespeichert.",
+      "saveFailed": "Die Standard-Testumgebung konnte nicht gespeichert werden."
     }
   },
   "inspector": {
@@ -2156,6 +2165,11 @@
         "add": "Mitglied konnte nicht hinzugefügt werden",
         "remove": "Mitglied konnte nicht entfernt werden"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Standard-Testumgebung wählen",
+      "body": "Für dieses Board ist noch nicht festgelegt, wie seine Services eine Testumgebung erhalten. Wählen Sie einen Standard, dann startet jeder künftig hinzugefügte Service damit, statt einzeln eingerichtet zu werden. Pro Service lässt sich das weiterhin ändern.",
+      "action": "Standard wählen"
     }
   },
   "board": {

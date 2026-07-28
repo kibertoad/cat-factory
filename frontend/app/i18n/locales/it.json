@@ -934,6 +934,15 @@
       },
       "saved": "Policy di accesso ai modelli salvata",
       "saveFailed": "Impossibile salvare la policy di accesso ai modelli"
+    },
+    "defaultProvision": {
+      "title": "Predefinito per i nuovi servizi",
+      "hint": "Il meccanismo di provisioning suggerito per ogni servizio che aggiungerai d'ora in poi. Non modifica i servizi già esistenti e ogni servizio può sostituirlo.",
+      "suggestionHint": "Per ora è solo un suggerimento. Salvalo per registrarlo come predefinito della board.",
+      "save": "Salva predefinito",
+      "saved": "Ambiente di test predefinito salvato.",
+      "savedState": "Salvato.",
+      "saveFailed": "Impossibile salvare l'ambiente di test predefinito."
     }
   },
   "inspector": {
@@ -2156,6 +2165,11 @@
         "add": "Impossibile aggiungere il membro",
         "remove": "Impossibile rimuovere il membro"
       }
+    },
+    "defaultTestEnvBanner": {
+      "title": "Scegli un ambiente di test predefinito",
+      "body": "Questa board non ha ancora stabilito come i suoi servizi ottengono un ambiente di test. Scegli un valore predefinito e ogni servizio che aggiungerai partirà con quello, invece di essere configurato uno alla volta. Potrai comunque cambiarlo per singolo servizio.",
+      "action": "Scegli predefinito"
     }
   },
   "board": {

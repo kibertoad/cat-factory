@@ -25,6 +25,7 @@ import type {
   GitHubRepo,
   GroupCacheHandle,
   InitiativeRepository,
+  Logger,
   RepoProjectionRepository,
   Service,
   ServiceFragmentDefaultsRepository,
@@ -35,7 +36,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
-import { applyMountLayout, registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import {
+  applyMountLayout,
+  noopLogger,
+  registerServiceForFrame,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 import { reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
@@ -49,18 +55,16 @@ import {
   unfinishedTasksUnder,
   wouldCreateCycle,
 } from './board.logic.js'
-import type {
-  ReviewFrictionNotificationReader,
-  ReviewFrictionSettingsReader,
-} from './reviewFrictionGuard.js'
+import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
+import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
+import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
+import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { PublicBoardReads } from './publicBoardReads.js'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
-export type {
-  ReviewFrictionNotificationReader,
-  ReviewFrictionSettingsReader,
-} from './reviewFrictionGuard.js'
+export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
+export type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -123,14 +127,26 @@ export interface BoardServiceDependencies {
    */
   taskTypeRegistry?: TaskTypeRegistry
   /**
-   * Opt-in review-debt friction on task creation (`backend/docs/review-debt-friction.md`).
-   * When BOTH readers are wired and the workspace has enabled friction, {@link BoardService.addTask}
-   * refuses (or requires acknowledgement for) authoring a new task while too many tasks sit parked
-   * on human review. Absent (tests / conformance / minimal facades / friction off) ⇒ the guard is a
-   * pass-through and creation behaves exactly as before.
+   * The acting workspace's runtime settings, read by two collaborators:
+   *  - the opt-in review-debt friction guard on task creation
+   *    (`backend/docs/review-debt-friction.md`) — with this AND
+   *    {@link reviewFrictionNotifications} wired and the workspace's friction enabled,
+   *    {@link BoardService.addTask} refuses (or requires acknowledgement for) authoring a new
+   *    task while too many tasks sit parked on human review;
+   *  - the default test-environment provisioning seed stamped onto a new service frame
+   *    ({@link serviceProvisioningDefaults}).
+   *
+   * Absent (tests / conformance / minimal facades) ⇒ both degrade to pass-throughs and
+   * creation behaves exactly as before.
    */
-  reviewFrictionSettings?: ReviewFrictionSettingsReader
+  workspaceSettings?: WorkspaceSettingsReader
   reviewFrictionNotifications?: ReviewFrictionNotificationReader
+  /**
+   * Where the best-effort settings read reports a swallowed failure. Absent ⇒ `noopLogger`
+   * (the standalone-unit-test shape); `CoreDependencies.logger` is required, so every facade
+   * supplies a real one.
+   */
+  logger?: Logger
 }
 
 /**
@@ -170,6 +186,8 @@ export class BoardService {
   private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
+  private readonly workspaceSettings?: WorkspaceSettingsReader
+  private readonly log: Logger
   private readonly reviewFrictionGuard: ReviewFrictionGuard
   /** The external `/api/v1` board surface (see publicBoardReads.ts). */
   private readonly publicReads: PublicBoardReads
@@ -188,8 +206,9 @@ export class BoardService {
     initiativeRepository,
     executionEventPublisher,
     taskTypeRegistry,
-    reviewFrictionSettings,
+    workspaceSettings,
     reviewFrictionNotifications,
+    logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -204,9 +223,11 @@ export class BoardService {
     this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
+    this.workspaceSettings = workspaceSettings
+    this.log = (logger ?? noopLogger).child({ service: 'board' })
     this.reviewFrictionGuard = new ReviewFrictionGuard({
       clock,
-      settings: reviewFrictionSettings,
+      settings: workspaceSettings,
       notifications: reviewFrictionNotifications,
     })
     this.publicReads = new PublicBoardReads({
@@ -250,17 +271,16 @@ export class BoardService {
   }
 
   /**
-   * The workspace's default service-fragment selection that a NEW service frame
-   * inherits. Empty when the defaults repo isn't wired or none is set; never throws so
-   * frame creation isn't blocked by a defaults read.
+   * Everything a NEW service frame inherits from its workspace (default fragments + default
+   * test-environment provisioning). Thin delegate to the collaborator that owns the seams and
+   * the best-effort reads — see {@link resolveNewServiceFrameDefaults}.
    */
-  private async defaultServiceFragmentIds(workspaceId: string): Promise<string[]> {
-    if (!this.serviceFragmentDefaultsRepository) return []
-    try {
-      return await this.serviceFragmentDefaultsRepository.get(workspaceId)
-    } catch {
-      return []
-    }
+  private newFrameDefaults(workspaceId: string): Promise<NewServiceFrameDefaults> {
+    return resolveNewServiceFrameDefaults(workspaceId, {
+      settings: this.workspaceSettings,
+      serviceFragmentDefaults: this.serviceFragmentDefaultsRepository,
+      logger: this.log,
+    })
   }
 
   /**
@@ -394,7 +414,7 @@ export class BoardService {
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     const type = input.type as BlockType
     const count = blocks.filter((b) => b.type === type).length + 1
-    const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
+    const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const block: Block = {
       id: this.idGenerator.next('blk'),
       title: `${BLOCK_TYPE_LABEL[type]} ${count}`,
@@ -408,6 +428,7 @@ export class BoardService {
       level: 'frame',
       parentId: null,
       ...(serviceFragmentIds.length ? { serviceFragmentIds } : {}),
+      ...(provisioning ? { provisioning } : {}),
     }
     const serviceId = await this.registerService(workspaceId, block)
     await this.blockRepository.insert(workspaceId, block, serviceId)
@@ -481,7 +502,7 @@ export class BoardService {
     }
     const frames = blocks.filter((b) => b.level === 'frame').length
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
-    const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
+    const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const frameType = input.type ?? 'service'
     const roleLabel = BLOCK_TYPE_LABEL[frameType]
     const block: Block = {
@@ -499,6 +520,7 @@ export class BoardService {
       level: 'frame',
       parentId: null,
       ...(serviceFragmentIds.length ? { serviceFragmentIds } : {}),
+      ...(provisioning ? { provisioning } : {}),
     }
     const serviceId = await this.registerService(workspaceId, block, {
       installationId: repo.installationId,
