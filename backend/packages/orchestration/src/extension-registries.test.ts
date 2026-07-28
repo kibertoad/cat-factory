@@ -340,6 +340,63 @@ describe('validateRegistrations', () => {
     ).not.toThrow()
   })
 
+  it('warns (not errors) when SKILLS are declared on a non-container kind', () => {
+    // Symmetric with tool servers, and for the same reason: only a container dispatch installs a
+    // skill and folds its instructions into the prompt, so an inline kind's declaration is inert.
+    // Left un-warned, a non-optional `{ catalogSkillId }` here is worse than inert — it fails
+    // EVERY dispatch of the kind on a deployment with no skill library, for a skill that could
+    // never have reached the model anyway.
+    registry.register({
+      kind: 'inline-reviewer',
+      systemPrompt: 'review',
+      agent: { surface: 'inline' },
+      skills: [{ catalogSkillId: 'src:acme:house-style' }],
+    })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
+    expect(problems.find((p) => p.code === 'skills_without_container')?.severity).toBe('warn')
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
+  })
+
+  it('rejects a cleartext http tool-server endpoint off loopback', () => {
+    // An HTTP tool server carries its resolved credential in a request header. The harness refuses
+    // the same URL at the job boundary; erroring HERE puts the failure next to the registration
+    // that caused it instead of deep in a container.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [{ id: 'docs', transport: { kind: 'http', url: 'http://mcp.example.com/sse' } }],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
+        (p) => p.code === 'insecure_tool_server_url',
+      ),
+    ).toBe(true)
+  })
+
+  it('accepts an https endpoint, and a plain-http one on loopback', () => {
+    // A server running beside the agent in its own container has no certificate to present.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        { id: 'docs', transport: { kind: 'http', url: 'https://mcp.example.com/sse' } },
+        { id: 'sidecar', transport: { kind: 'http', url: 'http://127.0.0.1:8080/mcp' } },
+      ],
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
+        (p) => p.code === 'insecure_tool_server_url',
+      ),
+    ).toBe(false)
+  })
+
   it('accepts registered + inline capabilities on a container kind', () => {
     registry.registerSkill({
       id: 'house-review',

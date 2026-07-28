@@ -392,6 +392,15 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
     })
 
+    // NOTE on the other half of ADR 0029: TOOL SERVERS are deliberately not asserted here, and
+    // that is not an oversight to be corrected by adding a case. They resolve inside
+    // `ContainerAgentExecutor` (what is servable depends on the resolved harness and the
+    // facade-wired credential resolver), and the conformance harness replaces exactly that
+    // component with `FakeAgentExecutor` — so a case here would assert the fake, not the runtimes.
+    // Their coverage is `packages/server/src/agents/toolServers.test.ts` (resolution + the secret
+    // boundary) plus the harness's own suites. What IS runtime-specific about them — the facades
+    // wiring a `ToolSecretResolver` at all — is symmetric by construction: both call the same
+    // `createEnvToolSecretResolver`.
     describe('registered kind capabilities (skills)', () => {
       // A registered kind can declare the SKILLS it applies — a bundled playbook shipped in the
       // deployment's own code, or a reference to the account's repo-synced catalog. This asserts

@@ -104,8 +104,16 @@ apply and dropped what this harness cannot serve (see
   (so an ambient run never picks up the developer's personal servers), and `[mcp_servers.*]` blocks
   in the per-run `CODEX_HOME/config.toml` for Codex — stdio only, and skipped entirely under
   ambient auth, which has no per-run home to write into. `--allowedTools` is passed ONLY when a
-  server actually narrows its tools: sending it at all would switch the CLI into allow-list mode
-  for every tool and strip the agent of its built-in file/bash tools.
+  server actually narrows its tools, and then carries the CLI's built-in tool names alongside the
+  `mcp__*` patterns — an allow-list is whole-session, not MCP-scoped, so a bare list of MCP
+  patterns would leave the agent unable to read, edit or build anything. Whether the CLI gates on
+  that list at all is permission-mode dependent, so treat the narrowing as scoping rather than
+  enforcement; the prompt states it either way.
+- **An `http` tool server must be `https`, or loopback.** Its headers carry a resolved credential,
+  so the job boundary refuses a cleartext off-box URL (the backend refuses the same at
+  registration). `secretKeys` names which `env`/`headers` entries are credentials, so exactly those
+  values are registered for redaction — scrubbing the whole map would turn ordinary config strings
+  into `***` in every later log line.
 
 Both config files carry this job's resolved credentials, so they are written to a per-job directory
 (mode `0600`) and never into the checkout or a HOME-global path — see the next section.

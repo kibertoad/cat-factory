@@ -136,8 +136,13 @@ export interface McpServerDefinition {
   transport: McpTransport
   /**
    * Restrict which of the server's tools the agent may call (bare tool names, e.g. `search_issues`).
-   * Omitted ⇒ every tool the server exposes. A restricted list is enforced by the CLI's allow-list
-   * where the harness can express it, and is always stated in the prompt.
+   * Omitted ⇒ every tool the server exposes.
+   *
+   * This is SCOPING, not a security boundary. It is always stated in the prompt (every harness),
+   * and additionally passed to the claude-code CLI's `--allowedTools` — but the run's permission
+   * mode decides whether the CLI treats that list as a gate at all, and Codex's config cannot
+   * express a per-tool restriction. A server whose other tools an agent kind must genuinely never
+   * reach should not be wired for that kind at all, rather than wired and narrowed.
    */
   allowedTools?: string[]
   /**
@@ -199,18 +204,35 @@ export function mcpServerSupportsHarness(
  * id with a dot, a space or a quote in it produces either an unmatchable allow-list entry or a
  * malformed config, both of which fail deep inside the CLI rather than at registration.
  */
+export const MCP_SERVER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
 export function isValidMcpServerId(id: string): boolean {
-  return /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)
+  return MCP_SERVER_ID_PATTERN.test(id)
 }
 
 /**
- * The CLI-facing tool-name pattern for a tool server, in the `mcp__<server>__<tool>` convention
- * Claude Code uses for its allow-list. A server with no restriction yields the whole-server
- * wildcard so the allow-list entry stays one string per server.
+ * Whether an HTTP tool server's URL may be dispatched. `https` always; plain `http` ONLY for
+ * loopback, because an HTTP server routinely carries a resolved credential in a request header
+ * and cleartext on any other host puts that credential on the wire. Loopback is exempt so a
+ * server running beside the agent in its own container stays usable without a certificate.
+ *
+ * Deliberately NOT a general SSRF guard: the URL is deployment-authored composition-root data
+ * (an operator naming their own service), not user input, and the request is made by the agent
+ * CLI inside the run container rather than by the backend.
  */
-export function mcpToolPatterns(
-  server: Pick<McpServerDefinition, 'id' | 'allowedTools'>,
-): string[] {
-  if (!server.allowedTools?.length) return [`mcp__${server.id}`]
-  return server.allowedTools.map((tool) => `mcp__${server.id}__${tool}`)
+export function isAllowedMcpHttpUrl(raw: string): boolean {
+  const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
+  if (!match) return false
+  if (match[1]!.toLowerCase() === 'https') return true
+  // Plain http from here: the host must be loopback. Strip userinfo FIRST and from the LAST `@`,
+  // or `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example.
+  const authority = match[2]!
+  const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
+  const closingBracket = hostPort.indexOf(']')
+  const host = (
+    hostPort.startsWith('[') && closingBracket !== -1
+      ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
+      : (hostPort.split(':')[0] ?? '')
+  ).toLowerCase()
+  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }

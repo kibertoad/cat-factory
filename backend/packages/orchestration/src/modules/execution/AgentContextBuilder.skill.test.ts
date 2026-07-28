@@ -90,6 +90,16 @@ describe('AgentContextBuilder skill resolution', () => {
     expect(s.skillVersions).toBeUndefined()
   })
 
+  it('CLEARS a stale pin when a re-dispatched step no longer resolves any skill', async () => {
+    // The pin says "this run executed that version". A step re-dispatched after its pick was
+    // removed takes the no-skills path, so clearing has to happen there too — otherwise the step
+    // keeps reporting the PRIOR round's skill as the one this run ran.
+    const s = step({ stepOptions: {} })
+    s.skillVersions = [RESOLVED.version]
+    await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
+    expect(s.skillVersions).toBeUndefined()
+  })
+
   it('never touches the resolver for a non-skill step', async () => {
     const s = step({ agentKind: 'coder', stepOptions: { skillId: 'src:s:triage' } })
     const context = await makeBuilder({

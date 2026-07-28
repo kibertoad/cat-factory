@@ -52,6 +52,10 @@ export async function resolveRunSkills(
   const pickedSkillId =
     input.agentKind === SKILL_AGENT_KIND ? input.step.stepOptions?.skillId?.trim() : undefined
   if (!declared.bundled.length && !declared.catalog.length && !pickedSkillId) {
+    // Clear on this path too, not just the one below: a step re-dispatched after its pick was
+    // removed (or its kind's declaration dropped) lands HERE, and leaving the prior round's pin
+    // in place would report "this run executed that version" of a skill it never touched.
+    input.step.skillVersions = undefined
     return { skills: [], versions: [] }
   }
 

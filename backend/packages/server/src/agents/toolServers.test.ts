@@ -74,6 +74,7 @@ describe('resolveToolServers', () => {
         args: ['-y', 'issue-mcp'],
         env: { REGION: 'eu', ISSUE_TOKEN: 'tok' },
         allowedTools: ['search_issues'],
+        secretKeys: ['ISSUE_TOKEN'],
       },
     ])
   })
@@ -220,5 +221,58 @@ describe('createEnvToolSecretResolver', () => {
         keys: [{ key: 'ISSUE_TOKEN' }, { key: 'EMPTY' }, { key: 'ABSENT' }],
       }),
     ).toEqual({ ISSUE_TOKEN: 'tok' })
+  })
+
+  it('confines a deployment to an explicit key allow-list when one is set', async () => {
+    // A tool-server definition names BOTH the credential it wants and the endpoint it talks to, so
+    // on the Worker — where `env` is not ambient — the default resolver widens what a registration
+    // can reach. `allowKeys` is how a deployment running agent packages it did not write closes
+    // that back down.
+    const resolve = createEnvToolSecretResolver(
+      { MCP_ISSUE_TOKEN: 'tok', ENCRYPTION_KEY: 'master-key' },
+      { allowKeys: ['MCP_ISSUE_TOKEN'] },
+    )
+    expect(
+      await resolve.resolve({
+        workspaceId: 'ws1',
+        serverId: 'issues',
+        keys: [{ key: 'MCP_ISSUE_TOKEN' }, { key: 'ENCRYPTION_KEY' }],
+      }),
+    ).toEqual({ MCP_ISSUE_TOKEN: 'tok' })
+  })
+})
+
+describe('job-spec secret marking', () => {
+  // The harness registers exactly the marked values for redaction. Marking the whole env/headers
+  // map instead would scrub ordinary config strings out of every log line the container writes.
+  it('names only the keys whose values came from the resolver', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(STDIO, HTTP),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok', DOCS_TOKEN: 'dtok' }),
+    })
+    const [stdio, http] = result.mcpServers
+    // `REGION` is declared transport config, not a credential — it must not be marked.
+    expect(stdio?.env).toEqual({ REGION: 'eu', ISSUE_TOKEN: 'tok' })
+    expect(stdio?.secretKeys).toEqual(['ISSUE_TOKEN'])
+    // For an HTTP server the marked key is the HEADER name, which is where the value landed.
+    expect(http?.headers).toEqual({ Authorization: 'Bearer dtok' })
+    expect(http?.secretKeys).toEqual(['Authorization'])
+  })
+
+  it('marks nothing when a server declared no credentials', async () => {
+    const bare: McpServerDefinition = {
+      id: 'local',
+      transport: { kind: 'stdio', command: 'npx', env: { REGION: 'eu' } },
+    }
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(bare),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.mcpServers[0]?.secretKeys).toBeUndefined()
   })
 })

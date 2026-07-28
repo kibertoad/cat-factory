@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runClaudeCode } from '../src/agent-runner.js'
+import type { McpServerSpec } from '../src/agent-capabilities.js'
 import { testSecretEnv } from '../src/agent.js'
 import { installsSkillNatively } from '../src/pi-workspace.js'
 import { stubTempHome } from './helpers.js'
@@ -82,7 +83,14 @@ describe.runIf(unix)('runClaudeCode per-job isolation', () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  /** A fake `claude` that dumps its environment to `env.json` in its cwd, then exits cleanly. */
+  /**
+   * A fake `claude` that dumps, into its cwd: its environment (`env.json`), its argv
+   * (`argv.json`), and — crucially for the MCP assertions — the CONTENT of whatever
+   * `--mcp-config` file it was pointed at (`mcp.json`). Reading the config from inside the fake
+   * is what makes per-job isolation assertable: the harness deletes the file when the run ends,
+   * so checking it afterwards could only ever show it gone, never show which job's servers it
+   * held while that job was live.
+   */
   async function envDumpingCli(): Promise<void> {
     const script = `#!/usr/bin/env node
 const fs = require('node:fs')
@@ -90,13 +98,31 @@ const path = require('node:path')
 process.stdin.resume()
 process.stdin.on('data', () => {})
 process.stdin.on('end', () => {
+  const argv = process.argv.slice(2)
   fs.writeFileSync(path.join(process.cwd(), 'env.json'), JSON.stringify(process.env))
+  fs.writeFileSync(path.join(process.cwd(), 'argv.json'), JSON.stringify(argv))
+  const at = argv.indexOf('--mcp-config')
+  if (at !== -1 && argv[at + 1]) {
+    fs.writeFileSync(path.join(process.cwd(), 'mcp.json'), fs.readFileSync(argv[at + 1], 'utf8'))
+  }
   const line = JSON.stringify({ type: 'result', result: 'ok' })
   process.stdout.write(line + '\\n', () => process.exit(0))
 })
 `
     await writeFile(join(binDir, 'claude'), script, { mode: 0o755 })
   }
+
+  const readArgv = async (dir: string): Promise<string[]> =>
+    JSON.parse(await readFile(join(dir, 'argv.json'), 'utf8')) as string[]
+
+  const mcpServer = (id: string, token: string): McpServerSpec => ({
+    id,
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', `${id}-mcp`],
+    env: { SERVER_TOKEN: token },
+    secretKeys: ['SERVER_TOKEN'],
+  })
 
   const skill = {
     name: 'repo-linter',
@@ -152,5 +178,88 @@ process.stdin.on('end', () => {
     expect(env.TEST_DB_PASSWORD).toBe('s3cret')
     expect(env.CLAUDE_CONFIG_DIR).toBeTruthy()
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('oauth_tok')
+  })
+
+  // Tool servers (MCP) are the newest per-job state, and the one carrying this job's resolved
+  // credentials. A container hides every mistake here (one job, one process, one HOME); the
+  // native path does not.
+  it('points the CLI at a per-run MCP config and pins it as the ONLY source of servers', async () => {
+    const home = await stubTempHome()
+    await envDumpingCli()
+
+    await runClaudeCode({
+      ...base,
+      cwd,
+      ambientAuth: true,
+      mcpServers: [mcpServer('issues', 'tok-a')],
+    })
+
+    const argv = await readArgv(cwd)
+    const configPath = argv[argv.indexOf('--mcp-config') + 1]!
+    // Without `--strict-mcp-config` an ambient run would ALSO inherit the developer's personal
+    // servers, silently handing the agent tools nobody wired for it.
+    expect(argv).toContain('--strict-mcp-config')
+    // Never the developer's own home (it would outlive the run and race a sibling job), and never
+    // the checkout (it would land in a commit).
+    expect(configPath.startsWith(home)).toBe(false)
+    expect(configPath.startsWith(cwd)).toBe(false)
+    // The config carries a credential, so it must not outlive the run.
+    await expect(stat(configPath)).rejects.toThrow()
+  })
+
+  it('keeps two CONCURRENT ambient jobs on separate MCP configs', async () => {
+    await stubTempHome()
+    await envDumpingCli()
+    const cwdB = await mkdtemp(join(tmpdir(), 'cwd-b-'))
+
+    try {
+      await Promise.all([
+        runClaudeCode({
+          ...base,
+          cwd,
+          ambientAuth: true,
+          mcpServers: [mcpServer('issues', 'tok-a')],
+        }),
+        runClaudeCode({
+          ...base,
+          cwd: cwdB,
+          ambientAuth: true,
+          mcpServers: [mcpServer('advisories', 'tok-b')],
+        }),
+      ])
+
+      const [argvA, argvB] = await Promise.all([readArgv(cwd), readArgv(cwdB)])
+      const pathA = argvA[argvA.indexOf('--mcp-config') + 1]!
+      const pathB = argvB[argvB.indexOf('--mcp-config') + 1]!
+      // A shared path would have one job's servers (and credentials) served to the other — and
+      // whichever finished first would delete the file out from under the one still running.
+      expect(pathA).not.toBe(pathB)
+
+      // What each job's CLI actually READ, captured while it was live. This is the assertion that
+      // would fail on a HOME-global config: both would show the same, last-written servers.
+      const [seenA, seenB] = await Promise.all([
+        readFile(join(cwd, 'mcp.json'), 'utf8'),
+        readFile(join(cwdB, 'mcp.json'), 'utf8'),
+      ])
+      expect(Object.keys(JSON.parse(seenA).mcpServers)).toEqual(['issues'])
+      expect(Object.keys(JSON.parse(seenB).mcpServers)).toEqual(['advisories'])
+      expect(seenA).toContain('tok-a')
+      expect(seenA).not.toContain('tok-b')
+      expect(seenB).not.toContain('tok-a')
+    } finally {
+      await rm(cwdB, { recursive: true, force: true })
+    }
+  })
+
+  it('writes no MCP config, and passes no MCP argv, for a run with no tool servers', async () => {
+    await stubTempHome()
+    await envDumpingCli()
+
+    await runClaudeCode({ ...base, cwd, ambientAuth: true })
+
+    const argv = await readArgv(cwd)
+    expect(argv).not.toContain('--mcp-config')
+    expect(argv).not.toContain('--strict-mcp-config')
+    expect(argv).not.toContain('--allowedTools')
   })
 })

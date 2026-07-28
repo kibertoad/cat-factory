@@ -1179,7 +1179,19 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
     `ToolSecretResolver` port — both facades wire `createEnvToolSecretResolver` (the deployment's
     own env), so a server needs no table and no UI. The VALUE rides the job body's `mcpServers`
     field only; `context.toolServers` is the non-secret projection the prompt AND the telemetry
-    snapshot see.
+    snapshot see. The job spec also NAMES which `env`/`headers` keys are credentials, so the
+    harness registers exactly those for redaction rather than scrubbing declared config too.
+    That default resolver is a TRUST BOUNDARY: a definition names both the key it wants and the
+    endpoint it reaches, so a deployment installing third-party agent packages passes
+    `{ allowKeys }` (convention: an `MCP_…` prefix).
+  - **`allowedTools` is SCOPING, never a security boundary.** Stated in the prompt on every
+    harness; additionally sent to claude-code's `--allowedTools`, which must ALWAYS carry the
+    CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). Whether the
+    CLI gates on it is permission-mode dependent, so the harness is written to be correct either
+    way. An `http` server must be `https` or loopback — refused at registration AND at the job
+    boundary, because its credential rides a request header.
+  - **A capability on a NON-container kind is inert and boot says so**
+    (`skills_without_container` / `tool_servers_without_container`).
   - **A server that can't be wired is STATED to the agent, never silently dropped** (Pi has no MCP
     client; an ambient Codex run has no per-run config home; a required secret didn't resolve), so
     it plans around the gap instead of discovering it mid-run. A required secret defaults to

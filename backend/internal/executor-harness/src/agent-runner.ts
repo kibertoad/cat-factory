@@ -17,13 +17,14 @@ import {
 import {
   claudeAllowedToolPatterns,
   codexMcpConfigToml,
+  mcpServerSecretValues,
   writeClaudeMcpConfig,
   type McpServerSpec,
   type SkillSpec,
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
-import { redact, secretsToRedact } from './redact.js'
+import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
   createTaskPlanTracker,
@@ -348,9 +349,10 @@ async function writeNativeSkill(skillsRoot: string, skill: SkillSpec): Promise<v
  *
  * Two decisions live here. `--strict-mcp-config` makes that file the ONLY source of servers, so an
  * ambient run on a developer's own machine can never silently hand the agent their personal ones.
- * And `--allowedTools` is passed ONLY when a server actually narrows its tools: sending it at all
- * switches the CLI into allow-list mode for EVERY tool, which would strip the agent of its built-in
- * file/bash tools and leave it unable to do the work.
+ * And `--allowedTools` is passed ONLY when a server actually narrows its tools — an allow-list is
+ * whole-session, not MCP-scoped, so `claudeAllowedToolPatterns` re-grants the CLI's built-in
+ * file/bash tools in the same list; see it for why that holds whichever way the run's permission
+ * mode treats an allow-list.
  *
  * The config carries this job's resolved credentials, so it goes in the isolated config home when
  * we own one and a throwaway per-JOB directory otherwise — never the checkout (it would land in a
@@ -362,6 +364,9 @@ async function setUpClaudeMcp(
 ): Promise<{ args: string[]; cleanup: () => Promise<void> }> {
   const noop = { args: [], cleanup: async () => {} }
   if (!servers?.length) return noop
+  // Before anything can spawn: a failing MCP server echoes its own argv/headers into stderr, and
+  // that tail is carried onto the step's diagnostics.
+  registerKnownSecrets(mcpServerSecretValues(servers))
   const home = configHome ?? (await mkdtemp(join(tmpdir(), 'cf-claude-mcp-')))
   const owned = home === configHome ? undefined : home
   const cleanup = async (): Promise<void> => {
@@ -837,6 +842,9 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // into the developer's own `~/.codex/config.toml` would outlive the run and race a concurrent
     // job — so an ambient codex run gets no MCP servers; the backend states them as unavailable
     // the same way it does for a harness with no MCP client at all.
+    // Registered before the CLI starts, for the same reason the claude path does it: a server that
+    // fails to launch puts its own command line into the stderr tail we keep.
+    if (opts.mcpServers?.length) registerKnownSecrets(mcpServerSecretValues(opts.mcpServers))
     const mcpToml = opts.mcpServers?.length ? codexMcpConfigToml(opts.mcpServers) : ''
     await writeFile(
       join(codexHome, 'config.toml'),

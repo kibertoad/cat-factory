@@ -44,6 +44,16 @@ export interface McpServerJobSpec {
   headers?: Record<string, string>
   /** Bare tool names the agent may call. Absent ⇒ every tool the server exposes. */
   allowedTools?: string[]
+  /**
+   * Which keys of `env` / `headers` above hold a RESOLVED CREDENTIAL rather than declared
+   * configuration, so the harness can register exactly those values for redaction.
+   *
+   * The distinction has to travel: the two are merged into one map for the CLI's config, and a
+   * harness that redacted the whole map would scrub ordinary config strings out of every log line
+   * it ever writes (an `env` of `NODE_ENV: production` would turn every later "production" into
+   * `***`). Names only — the values are already in the map beside them.
+   */
+  secretKeys?: string[]
 }
 
 export interface ResolveToolServersInput {
@@ -196,7 +206,8 @@ function buildJobSpec(
 ): McpServerJobSpec {
   const allowed = definition.allowedTools?.length ? { allowedTools: definition.allowedTools } : {}
   if (definition.transport.kind === 'stdio') {
-    const env = { ...definition.transport.env, ...envSecrets(definition.secretKeys, secrets) }
+    const credentials = envSecrets(definition.secretKeys, secrets)
+    const env = { ...definition.transport.env, ...credentials }
     return {
       id: definition.id,
       transport: 'stdio',
@@ -204,19 +215,30 @@ function buildJobSpec(
       ...(definition.transport.args?.length ? { args: definition.transport.args } : {}),
       ...(Object.keys(env).length ? { env } : {}),
       ...allowed,
+      ...secretKeyNames(credentials),
     }
   }
-  const headers = {
-    ...definition.transport.headers,
-    ...headerSecrets(definition.secretKeys, secrets),
-  }
+  const credentials = headerSecrets(definition.secretKeys, secrets)
+  const headers = { ...definition.transport.headers, ...credentials }
   return {
     id: definition.id,
     transport: 'http',
     url: definition.transport.url,
     ...(Object.keys(headers).length ? { headers } : {}),
     ...allowed,
+    ...secretKeyNames(credentials),
   }
+}
+
+/**
+ * Name the keys whose values came from the secret resolver, so the harness redacts those and only
+ * those. Derived from the credentials actually folded in rather than from the DECLARATION: an
+ * optional secret that did not resolve contributes no key, which keeps the list in step with what
+ * the map really holds.
+ */
+function secretKeyNames(credentials: Record<string, string>): { secretKeys?: string[] } {
+  const keys = Object.keys(credentials)
+  return keys.length ? { secretKeys: keys } : {}
 }
 
 /** Secrets destined for the server process's environment (every key that named no header). */
@@ -246,6 +268,24 @@ function headerSecrets(
   return out
 }
 
+export interface EnvToolSecretResolverOptions {
+  /**
+   * Restrict which environment keys a tool server may read. Omitted ⇒ any key resolves.
+   *
+   * TRUST BOUNDARY. A tool-server definition is composition-root data, and it names BOTH the
+   * credential it wants and the endpoint it talks to — so a definition can pair any key this
+   * resolver will hand out with a transport that ships it somewhere. On Node that grants nothing
+   * new (code running in the process can already read `process.env` directly), but on the Worker
+   * it is a real widening: `env` is not ambient there, and a registration that could previously
+   * see only what it was passed can now ask for any binding by name.
+   *
+   * That is fine for a deployment whose agent packages are all its own. Set this when it is not —
+   * an installed third-party agent package is exactly the case the option exists for. The
+   * convention we recommend is a dedicated prefix (`MCP_…`) so the list stays short and additive.
+   */
+  allowKeys?: Iterable<string>
+}
+
 /**
  * The deployment-environment tool-secret resolver both facades wire by default: each declared key
  * is read straight off the deployment's own configured environment (a Worker `env` binding, a Node
@@ -255,14 +295,20 @@ function headerSecrets(
  * variable they already set for everything else. A deployment that needs PER-WORKSPACE credentials
  * implements the {@link ToolSecretResolver} port itself instead; nothing else in the dispatch path
  * changes, which is the whole reason the resolver is a port rather than an env read at the call site.
+ *
+ * See {@link EnvToolSecretResolverOptions.allowKeys} before deciding this default is right for a
+ * deployment that installs agent packages it did not write.
  */
 export function createEnvToolSecretResolver(
   env: Record<string, unknown> | undefined,
+  options: EnvToolSecretResolverOptions = {},
 ): ToolSecretResolver {
+  const allowed = options.allowKeys ? new Set(options.allowKeys) : undefined
   return {
     resolve: async ({ keys }) => {
       const out: Record<string, string> = {}
       for (const key of keys) {
+        if (allowed && !allowed.has(key.key)) continue
         const value = env?.[key.key]
         if (typeof value === 'string' && value) out[key.key] = value
       }

@@ -186,7 +186,7 @@ itself — nothing else in the dispatch path changes. A secret value never reach
 `AgentRunContext`, a prompt, or the telemetry snapshot: it rides the job body's dedicated
 `mcpServers` field, exactly like the tester's `testSecrets`.
 
-Four rules worth knowing before declaring one:
+Rules worth knowing before declaring one:
 
 - **A dropped server is STATED, never silent.** A server the harness cannot serve (Pi has no MCP
   client; an ambient Codex run has no per-run config home) or whose required credential did not
@@ -196,8 +196,21 @@ Four rules worth knowing before declaring one:
   because a tool whose first call 401s is worse than one the agent was told it does not have.
 - **Codex is stdio-only.** An `http` server is skipped in its config; declare
   `harnesses: ['claude-code']` on such a server so the drop is reported rather than invisible.
+- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
+  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
+  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
 - **Tool servers need a container surface.** An inline LLM step has no agent CLI to wire them into;
-  boot validation warns about that combination.
+  boot validation warns about that combination. The same warning covers `skills`, for the same
+  reason.
+- **`allowedTools` is SCOPING, not a security boundary.** It is always stated in the prompt, and
+  additionally passed to claude-code's `--allowedTools` — but whether that CLI list gates depends
+  on the run's permission mode, and Codex cannot express a per-tool restriction at all. If an agent
+  kind must never reach a server's other tools, do not wire that server for that kind.
+- **Mind what `secretKeys` can reach.** The default resolver reads any key off the deployment
+  environment, and a definition also names the endpoint the value is sent to. If a deployment
+  installs agent packages it did not author, wire
+  `createEnvToolSecretResolver(env, { allowKeys: [...] })` and keep the credentials behind an
+  `MCP_…` prefix. See ADR 0029 → Consequences.
 
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
