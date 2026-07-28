@@ -3539,7 +3539,11 @@
       "attachByReference": "Dołącz {ref} przez odniesienie",
       "noMatches": "Brak pasujących zgłoszeń.",
       "emptySearchable": "Szukaj według tytułu lub wybierz zaimportowane zgłoszenie.",
-      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć."
+      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć.",
+      "sourceLabel": "Źródło",
+      "noSource": "Wybierz źródło",
+      "connectSource": "Połącz {label}",
+      "enableSource": "Włącz {label}"
     },
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",

@@ -3245,7 +3245,11 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna issue corrispondente.",
       "emptySearchable": "Cerca per titolo, oppure scegli una issue importata.",
-      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla."
+      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla.",
+      "sourceLabel": "Fonte",
+      "noSource": "Scegli una fonte",
+      "connectSource": "Collega {label}",
+      "enableSource": "Abilita {label}"
     },
     "contextIssues": {
       "title": "Issue di contesto",

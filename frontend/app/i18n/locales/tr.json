@@ -3551,7 +3551,11 @@
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sorun yok.",
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir sorun seç.",
-      "emptyRefOnly": "Eklemek için bir sorun URL'si veya anahtarı yapıştır."
+      "emptyRefOnly": "Eklemek için bir sorun URL'si veya anahtarı yapıştır.",
+      "sourceLabel": "Kaynak",
+      "noSource": "Bir kaynak seç",
+      "connectSource": "{label} bağla",
+      "enableSource": "{label} etkinleştir"
     },
     "contextIssues": {
       "title": "Bağlam sorunları",

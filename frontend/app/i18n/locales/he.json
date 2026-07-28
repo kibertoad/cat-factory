@@ -3550,7 +3550,11 @@
       "attachByReference": "צרף {ref} לפי הפניה",
       "noMatches": "אין ניושנים תואמים.",
       "emptySearchable": "חפש לפי כותרת, או בחר ניושן מיובא.",
-      "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו."
+      "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו.",
+      "sourceLabel": "מקור",
+      "noSource": "בחר מקור",
+      "connectSource": "חבר {label}",
+      "enableSource": "הפעל {label}"
     },
     "contextIssues": {
       "title": "ניושני הקשר",

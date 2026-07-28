@@ -3539,7 +3539,11 @@
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucun ticket correspondant.",
       "emptySearchable": "Recherchez par titre ou choisissez un ticket importé.",
-      "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre."
+      "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre.",
+      "sourceLabel": "Source",
+      "noSource": "Choisir une source",
+      "connectSource": "Connecter {label}",
+      "enableSource": "Activer {label}"
     },
     "contextIssues": {
       "title": "Tickets de contexte",
