@@ -15,21 +15,14 @@
  */
 export const UNATTRIBUTED_CALL_PHASE = ''
 
-/**
- * The phases a container run reports today, for readers of the rollup. Deliberately NOT a
- * closed union at the type level: the harness's phase marker is free-form (a new one shows
- * up verbatim on the job view), so a new label must reach telemetry unchanged rather than
- * being coerced into `''` by a backend that predates it.
- */
-export const KNOWN_CALL_PHASES = [
-  'agent',
-  'validation-repair',
-  'reproduction-repair',
-  'reproduction',
-  'clone',
-  'push',
-  'serve',
-] as const
+// There is deliberately NO `KNOWN_CALL_PHASES` list here. The vocabulary belongs to the
+// harness — it is whatever its handlers pass to `onPhase`, including the registry's initial
+// `starting` and the terminal `done` — and a copy in kernel would be a second source of truth
+// with nothing keeping it in step, which is how the first draft of this module came to omit
+// both of those. Nothing consumed it, either. A rollup that needs display labels should read
+// the phases PRESENT in its own result set (`''` included) rather than a hard-coded list that
+// can only be wrong in one direction: silently dropping a phase a newer harness introduced,
+// which is exactly what `normalizeCallPhase` passing unknown labels through exists to prevent.
 
 /** Longest phase label kept; anything longer is a producer bug, not a phase. */
 const MAX_PHASE_CHARS = 32

@@ -174,6 +174,12 @@ export interface AgentRunSpec {
   ambientAuth?: boolean
   /** Pi proxy base URL (Pi harness only). */
   proxyBaseUrl?: string
+  /**
+   * The backend serves the phase-tagged completions route, so this pass may tag the URL it
+   * points Pi at with the phase it is running under (see {@link HarnessAuthFields.proxyPhasePath}
+   * and `phasedProxyBaseUrl`). Absent ⇒ the plain path.
+   */
+  proxyPhasePath?: boolean
   /** Pi proxy session token (Pi harness only). */
   sessionToken?: string
   /**
@@ -360,10 +366,11 @@ export async function runAgentInWorkspace(
   // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so
   // the phase this pass runs under is carried on the URL it is pointed at. Resolved per pass
   // (this whole function re-runs for every repair round), which is what makes a repair round's
-  // spend distinguishable from the first pass's.
+  // spend distinguishable from the first pass's. Only when the BACKEND said it serves that
+  // route, since a runner pool or `LOCAL_HARNESS_IMAGE` can pair this image with an older one.
   await writePiModelsConfig({
     model: spec.model,
-    proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.()),
+    proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.(), spec.proxyPhasePath),
   })
   const { signal, onActivity, onProgress, onSpan } = opts
   const piOutcome = await runPi({

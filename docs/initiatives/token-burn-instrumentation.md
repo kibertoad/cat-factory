@@ -105,11 +105,40 @@ settled, and what a Slice 3 rollup must not undo:
 - **Stamp at EMIT time, not drain time.** A drained poll can land long after the phase moved on,
   which would file a whole repair round under whatever phase happened to be current when the
   backend got around to reading it. The registry stamps inside `onCallMetric`.
-- **The unphased proxy path stays the canonical route.** An image that predates the phase segment
-  keeps working and lands in `''`. The reverse pairing (an image NEWER than its backend) 404s every
-  model call — acceptable, since the harness image and the backend are already a matched set
-  (`RECOMMENDED_HARNESS_IMAGE`), and a capability-negotiation flag would be exactly the compat shim
-  this repo refuses.
+- **The unphased proxy path stays the canonical route, and the BACKEND decides when it is left.**
+  An image that predates the phase segment keeps working and lands in `''`. The reverse pairing —
+  an image NEWER than its backend — would 404 EVERY model call, killing the run rather than
+  degrading its telemetry, so the backend states on the job body that it serves the route
+  (`proxyPhasePath`, set in `resolveAuth` / the bootstrapper / the env-config repairer) and the
+  harness tags the URL only when told. This is NOT the capability handshake the repo refuses: the
+  harness never asks and never adapts to an answer, it is one more backend-authored job-body field
+  in the exact shape `webSearch` already has ("point your search tool at MY `/web-search`").
+  The first draft skipped it on the grounds that the image and the backend are a matched set
+  (`RECOMMENDED_HARNESS_IMAGE`) — true for the Cloudflare deployment, false everywhere else: a
+  runner pool pins its own executor-harness image in its manifest, and `LOCAL_HARNESS_IMAGE`
+  overrides the recommended pin outright. Note this PR's other carrier already assumed the
+  opposite (`coerceCallMetrics` passes an unknown phase through _because_ a pool may run a newer
+  image), so the two channels have to make the same assumption about skew.
+- **`normalizeCallPhase` has a COPY in the harness** (`normalizeProxyPhase`, `src/pi.ts`), because
+  the image builds from `src/` plus typescript and can depend on no workspace package — the same
+  constraint that forced `src/host-markdown.ts`. It gets the same treatment: a byte-of-behaviour
+  conformity suite (`test/llm-phase.conformity.test.ts`) pinning the two to identical verdicts,
+  plus the end-to-end property that the segment the harness sends must survive the backend's
+  normalisation UNCHANGED. Drift here is silent in both directions — a stricter harness sends the
+  plain path and loses exactly the phase someone went looking for; a looser one spends a request
+  on a segment destined for `''`. Change the alphabet in both or in neither.
+- **There is no `KNOWN_CALL_PHASES` list, deliberately.** The vocabulary is the harness's — it is
+  whatever its handlers pass to `onPhase`, including the registry's initial `starting` and the
+  terminal `done` — so a copy in kernel is a second source of truth with nothing keeping it in
+  step (the first draft's list omitted both of those, and nothing consumed it). A Slice 3 rollup
+  should render the phases PRESENT in its result set (`''` included) rather than a hard-coded
+  list, which can only be wrong in the direction that hides a phase a newer harness introduced.
+- **A phase is not always a `currentPhase` read.** The structured-output repair round
+  (`structured-output.ts`) is billed to the constant `structured-repair`, because the harness
+  makes that call ITSELF — the agent has already finished and left text that won't parse, so it
+  belongs to no pass the registry marks. Any future harness-made call owes the same treatment:
+  leaving it on the plain path would grow `''` into a bucket Slice 3 could no longer read as
+  "old images and genuinely unattributable calls".
 - **`turn_index` is NULL for a proxied call, never 0.** The proxy has no job-scoped counter; a 0
   would read as "the first turn" and sort every Pi call to the front of its phase. Slice 3 orders
   those rows by `created_at` (with `message_count` as the tie-break the export already uses).

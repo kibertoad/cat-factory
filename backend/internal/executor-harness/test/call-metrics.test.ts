@@ -109,11 +109,11 @@ describe('phasedProxyBaseUrl', () => {
   // knobs are the base URL and the token, so the phase rides a URL segment the backend reads
   // back off the request path (docs/initiatives/token-burn-instrumentation.md).
   it('tags the base URL with the phase the pass is running under', () => {
-    expect(phasedProxyBaseUrl('https://api.test/v1', 'validation-repair')).toBe(
+    expect(phasedProxyBaseUrl('https://api.test/v1', 'validation-repair', true)).toBe(
       'https://api.test/v1/phase/validation-repair',
     )
     // A trailing slash must not produce a double one — Pi appends `/chat/completions` verbatim.
-    expect(phasedProxyBaseUrl('https://api.test/v1/', 'agent')).toBe(
+    expect(phasedProxyBaseUrl('https://api.test/v1/', 'agent', true)).toBe(
       'https://api.test/v1/phase/agent',
     )
   })
@@ -122,9 +122,25 @@ describe('phasedProxyBaseUrl', () => {
     // No marker at all (an inline/one-shot caller), and a label the backend would discard
     // anyway: both take the canonical path, so the call is honestly unattributed rather than
     // sent to a URL that only looks attributed.
-    expect(phasedProxyBaseUrl('https://api.test/v1', undefined)).toBe('https://api.test/v1')
-    expect(phasedProxyBaseUrl('https://api.test/v1', '')).toBe('https://api.test/v1')
-    expect(phasedProxyBaseUrl('https://api.test/v1', 'Not A Phase!')).toBe('https://api.test/v1')
-    expect(phasedProxyBaseUrl('https://api.test/v1', 'x'.repeat(33))).toBe('https://api.test/v1')
+    expect(phasedProxyBaseUrl('https://api.test/v1', undefined, true)).toBe('https://api.test/v1')
+    expect(phasedProxyBaseUrl('https://api.test/v1', '', true)).toBe('https://api.test/v1')
+    expect(phasedProxyBaseUrl('https://api.test/v1', 'Not A Phase!', true)).toBe(
+      'https://api.test/v1',
+    )
+    expect(phasedProxyBaseUrl('https://api.test/v1', 'x'.repeat(33), true)).toBe(
+      'https://api.test/v1',
+    )
+  })
+
+  it('never tags a backend that did not say it serves the phase route', () => {
+    // The image and the backend are only a matched set on the Cloudflare deployment: a runner
+    // pool pins its OWN harness image and `LOCAL_HARNESS_IMAGE` overrides the recommended pin,
+    // so an image ahead of its backend would post EVERY model call to a 404 and kill the run.
+    // The backend states what it serves (`proxyPhasePath` on the job body); absent ⇒ plain path
+    // and honestly unattributed telemetry, which is a cost worth paying to never 404.
+    expect(phasedProxyBaseUrl('https://api.test/v1', 'validation-repair', undefined)).toBe(
+      'https://api.test/v1',
+    )
+    expect(phasedProxyBaseUrl('https://api.test/v1', 'agent', false)).toBe('https://api.test/v1')
   })
 })

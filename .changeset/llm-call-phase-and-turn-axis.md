@@ -23,6 +23,11 @@ metered server-side by the proxy — carries it on the URL Pi is pointed at
 with no per-request header to set. The proxy therefore serves completions on a second, optional
 phase-tagged path; the plain path is unchanged and its calls are recorded as unattributed.
 
+The backend advertises that route on the job body (`proxyPhasePath`, the same shape as
+`webSearch`) and the harness tags the URL only when told, so an image paired with an older backend
+— a runner pool pins its own harness image, and `LOCAL_HARNESS_IMAGE` overrides the recommended
+pin — falls back to the plain path instead of posting every model call to a 404.
+
 `LlmCallMetric` gains `phase: string` (`''` = unattributed, a real slice of the rollup rather
 than a dropped row) and `turnIndex: number | null` (the harness's job-scoped `seq`; NULL where the
 producing channel has no turn concept, so a proxied call is never faked into "turn 0").

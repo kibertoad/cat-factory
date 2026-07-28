@@ -33,11 +33,7 @@ export {
   type ChangeClassification,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
-export {
-  KNOWN_CALL_PHASES,
-  UNATTRIBUTED_CALL_PHASE,
-  normalizeCallPhase,
-} from './domain/llm-phase.js'
+export { UNATTRIBUTED_CALL_PHASE, normalizeCallPhase } from './domain/llm-phase.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,

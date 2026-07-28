@@ -444,6 +444,142 @@ const MAX_PROXY_BODY_BYTES = 32 * 1024 * 1024
 const COMPLETIONS_PATHS: string[] = ['/v1/chat/completions', '/v1/phase/:phase/chat/completions']
 
 /**
+ * The per-call facts a metered call is described by, fixed at request entry. `requestMaxTokens`
+ * is a GETTER because the proxy may still override `max_tokens` after this is built (the Workers
+ * AI floor), and the metric must report the ceiling that actually applied.
+ */
+interface CallMeterContext {
+  session: ContainerSession
+  callId: string
+  /** Proxy-entry clock, for the end-to-end `totalMs`. */
+  startedAt: number
+  streaming: boolean
+  phase: string
+  messageCount: number
+  toolCount: number
+  promptText: string
+  requestMaxTokens: () => number | null
+}
+
+/**
+ * Build the per-call observation handler: (1) push a COMPACT live activity event (no
+ * prompt/response bodies) so an open "Model activity" panel updates in real time, independent
+ * of the durable driver — the proxy records calls even while the run's poll loop is evicted;
+ * (2) persist the full metric to the observability sink when it is wired.
+ *
+ * `upstreamMs` is supplied by whichever path made the call; `totalMs` is the proxy's end-to-end
+ * time. Both halves are best-effort and must never break the proxy. Extracted from
+ * {@link handleChatCompletion} because it is a cohesive collaborator (everything the metering
+ * boundary needs is in {@link CallMeterContext}) and the handler had no headroom left under the
+ * 300-line function budget.
+ */
+function makeCallObserver(
+  meter: CallMeterContext,
+  deps: {
+    waitUntil: (p: Promise<unknown>) => void
+    log: ReturnType<typeof logger.child>
+    executionEventPublisher: ServerContainer['executionEventPublisher']
+    llmObservability: ServerContainer['llmObservability']
+  },
+): (obs: ProxyCallObservation) => void {
+  const { session, callId, startedAt, streaming, phase, messageCount, toolCount, promptText } =
+    meter
+  const { waitUntil, log, executionEventPublisher, llmObservability } = deps
+  return (obs: ProxyCallObservation): void => {
+    const completionTokens = obs.usage?.completion_tokens ?? 0
+    // The three input classes are recorded ORTHOGONALLY, so total input is their sum. An
+    // upstream path that already knows the split (a gateway whose own shape carries it)
+    // hands all three over together; otherwise they are read off the usage payload, which
+    // is where the inclusive-vs-exclusive reconciliation lives.
+    const input = obs.inputTokens ?? readInputTokenClasses(obs.usage)
+    const totalMs = Date.now() - startedAt
+    const requestMaxTokens = meter.requestMaxTokens()
+    const totalTokens = input.fresh + input.cacheRead + input.cacheWrite + completionTokens
+
+    // Emitted regardless of whether the persistence sink is wired, so the live view works
+    // even on a deployment that does not retain metrics. This fires on EVERY observed
+    // outcome, including refusals/errors (spend exhausted, unavailable provider, upstream
+    // non-2xx) where no model work ran: surfacing those live (with `ok:false`) is intentional
+    // and matches what the sink persists. Best-effort: a publish failure (no subscribers,
+    // transient hub error) must not break metering.
+    waitUntil(
+      runBestEffort(log, 'llmProxy.publishCallObserved', () =>
+        // `?.` on the publisher itself, not just the method: a minimal container
+        // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
+        // emit is best-effort — a missing publisher must never break metering.
+        executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
+          id: callId,
+          workspaceId: session.workspaceId,
+          executionId: session.executionId,
+          agentKind: session.agentKind,
+          provider: session.provider,
+          model: session.model,
+          createdAt: Date.now(),
+          streaming,
+          phase,
+          messageCount,
+          toolCount,
+          requestMaxTokens,
+          promptTokens: input.fresh,
+          cacheReadTokens: input.cacheRead,
+          cacheWriteTokens: input.cacheWrite,
+          completionTokens,
+          totalTokens,
+          finishReason: obs.finishReason,
+          upstreamMs: obs.upstreamMs,
+          overheadMs: Math.max(0, totalMs - obs.upstreamMs),
+          totalMs,
+          ok: obs.ok,
+          httpStatus: obs.httpStatus,
+          errorMessage: obs.errorMessage,
+        }),
+      ),
+    )
+
+    if (!llmObservability) return
+    waitUntil(
+      llmObservability
+        .record({
+          id: callId,
+          workspaceId: session.workspaceId,
+          executionId: session.executionId,
+          agentKind: session.agentKind,
+          provider: session.provider,
+          model: session.model,
+          streaming,
+          phase,
+          // A proxied call carries no job-scoped turn counter — the proxy sees one HTTP
+          // request at a time — so its rows order by `createdAt`, never by a faked turn.
+          turnIndex: null,
+          messageCount,
+          toolCount,
+          requestMaxTokens,
+          promptTokens: input.fresh,
+          cacheReadTokens: input.cacheRead,
+          cacheWriteTokens: input.cacheWrite,
+          completionTokens,
+          totalTokens,
+          finishReason: obs.finishReason,
+          totalMs,
+          upstreamMs: obs.upstreamMs,
+          ok: obs.ok,
+          httpStatus: obs.httpStatus,
+          errorMessage: obs.errorMessage,
+          promptText,
+          responseText: obs.responseText,
+          reasoningText: obs.reasoningText ?? '',
+        })
+        // Observability must never break the proxy.
+        .catch((err) =>
+          log.warn('llm proxy: failed to record metric', {
+            err: err instanceof Error ? err.message : String(err),
+          }),
+        ),
+    )
+  }
+}
+
+/**
  * Serve one proxied chat completion: verify the container session, harden the payload, gate on
  * spend, forward to the resolved upstream and meter the call. Registered on BOTH completions
  * paths (see {@link COMPLETIONS_PATHS}), which differ only in whether the caller tagged its run
@@ -530,104 +666,23 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // the stored row on reload instead of duplicating.
   const callId = `llm_${crypto.randomUUID()}`
 
-  // Per-call observation handling, off the response path: (1) push a COMPACT live
-  // activity event (no prompt/response bodies) so an open "Model activity" panel
-  // updates in real time, independent of the durable driver — the proxy records
-  // calls even while the run's poll loop is evicted; (2) persist the full metric to
-  // the observability sink when it is wired. `upstreamMs` is supplied by whichever
-  // path made the call; `totalMs` is the proxy's end-to-end time. Both are
-  // best-effort and must never break the proxy.
-  const observe = (obs: ProxyCallObservation): void => {
-    const completionTokens = obs.usage?.completion_tokens ?? 0
-    // The three input classes are recorded ORTHOGONALLY, so total input is their sum. An
-    // upstream path that already knows the split (a gateway whose own shape carries it)
-    // hands all three over together; otherwise they are read off the usage payload, which
-    // is where the inclusive-vs-exclusive reconciliation lives.
-    const input = obs.inputTokens ?? readInputTokenClasses(obs.usage)
-    const totalMs = Date.now() - t0
-
-    // Live activity event — emitted regardless of whether the persistence sink is
-    // wired, so the live view works even on a deployment that does not retain
-    // metrics. This fires on EVERY observed outcome, including refusals/errors (spend
-    // exhausted, unavailable provider, upstream non-2xx) where no model work ran:
-    // surfacing those live (with `ok:false`) is intentional and matches what the sink
-    // persists. Best-effort: a publish failure (no subscribers, transient hub error)
-    // must not break metering.
-    waitUntil(
-      runBestEffort(log, 'llmProxy.publishCallObserved', () =>
-        // `?.` on the publisher itself, not just the method: a minimal container
-        // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
-        // emit is best-effort — a missing publisher must never break metering.
-        executionEventPublisher?.llmCallObserved?.(session.workspaceId, {
-          id: callId,
-          workspaceId: session.workspaceId,
-          executionId: session.executionId,
-          agentKind: session.agentKind,
-          provider: session.provider,
-          model: session.model,
-          createdAt: Date.now(),
-          streaming,
-          phase,
-          messageCount,
-          toolCount,
-          requestMaxTokens,
-          promptTokens: input.fresh,
-          cacheReadTokens: input.cacheRead,
-          cacheWriteTokens: input.cacheWrite,
-          completionTokens,
-          totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
-          finishReason: obs.finishReason,
-          upstreamMs: obs.upstreamMs,
-          overheadMs: Math.max(0, totalMs - obs.upstreamMs),
-          totalMs,
-          ok: obs.ok,
-          httpStatus: obs.httpStatus,
-          errorMessage: obs.errorMessage,
-        }),
-      ),
-    )
-
-    if (!llmObservability) return
-    waitUntil(
-      llmObservability
-        .record({
-          id: callId,
-          workspaceId: session.workspaceId,
-          executionId: session.executionId,
-          agentKind: session.agentKind,
-          provider: session.provider,
-          model: session.model,
-          streaming,
-          phase,
-          // A proxied call carries no job-scoped turn counter — the proxy sees one HTTP
-          // request at a time — so its rows order by `createdAt`, never by a faked turn.
-          turnIndex: null,
-          messageCount,
-          toolCount,
-          requestMaxTokens,
-          promptTokens: input.fresh,
-          cacheReadTokens: input.cacheRead,
-          cacheWriteTokens: input.cacheWrite,
-          completionTokens,
-          totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
-          finishReason: obs.finishReason,
-          totalMs,
-          upstreamMs: obs.upstreamMs,
-          ok: obs.ok,
-          httpStatus: obs.httpStatus,
-          errorMessage: obs.errorMessage,
-          promptText,
-          responseText: obs.responseText,
-          reasoningText: obs.reasoningText ?? '',
-        })
-        // Observability must never break the proxy.
-        .catch((err) =>
-          log.warn('llm proxy: failed to record metric', {
-            err: err instanceof Error ? err.message : String(err),
-          }),
-        ),
-    )
-  }
+  // Per-call observation handling, off the response path — see `makeCallObserver`.
+  const observe = makeCallObserver(
+    {
+      session,
+      callId,
+      startedAt: t0,
+      streaming,
+      phase,
+      messageCount,
+      toolCount,
+      promptText,
+      // Read lazily: the proxy may still raise `max_tokens` below (the Workers AI floor),
+      // and the metric must report the ceiling that actually applied, not the one asked for.
+      requestMaxTokens: () => requestMaxTokens,
+    },
+    { waitUntil, log, executionEventPublisher, llmObservability },
+  )
 
   // Spend gate: refuse once the monthly budget is exhausted, mirroring the
   // engine's pre-step check so a container can't keep spending.

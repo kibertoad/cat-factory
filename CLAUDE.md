@@ -1286,7 +1286,14 @@ error handling — and the phased plan to close them — are tracked in
   - **`''` is a REAL slice, not a gap** — an unphased call (an older image, an inline call, the
     unphased proxy path) is filed as unattributed rather than guessed at from the agent kind. Every
     boundary the free-text label crosses runs it through kernel's `normalizeCallPhase`, since two of
-    the three producing paths (a request path, a pool's JSON) arrive over HTTP.
+    the three producing paths (a request path, a pool's JSON) arrive over HTTP. The harness carries
+    a COPY of that normaliser (`normalizeProxyPhase`) because the image depends on no workspace
+    package, pinned by `test/llm-phase.conformity.test.ts` exactly as `host-markdown.ts` is.
+  - **The BACKEND declares the phase-tagged route** (`proxyPhasePath` on the job body, the same
+    shape as `webSearch`); the harness tags Pi's base URL only when told. Never assume the harness
+    image and the backend are a matched set: that holds for the Cloudflare deployment, but a runner
+    pool pins its own image and `LOCAL_HARNESS_IMAGE` overrides the recommended pin, and an image
+    ahead of its backend would 404 EVERY model call rather than merely lose its telemetry.
   - **`turn_index` is NULLABLE, not 0.** It is the harness's job-scoped `seq` (the same number the
     row id is minted from); the proxy has no job-scoped counter, and a 0 there would sort every
     proxied call to the front of its phase as "the first turn".
