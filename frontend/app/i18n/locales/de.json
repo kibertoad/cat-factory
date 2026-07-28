@@ -3362,10 +3362,12 @@
     },
     "preview": {
       "stepCount": "{count} Schritt | {count} Schritte",
+      "gateCount": "{count} Freigabe | {count} Freigaben",
       "gated": "Manuelle Freigabe nach diesem Schritt"
     },
     "picker": {
-      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus."
+      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus.",
+      "hoverHint": "Fahre über eine Pipeline, um die Schritte zu sehen, die sie ausführt."
     },
     "builder": {
       "title": "Pipeline-Builder",

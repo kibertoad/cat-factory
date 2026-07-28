@@ -3656,10 +3656,12 @@
     },
     "preview": {
       "stepCount": "{count} paso | {count} pasos",
+      "gateCount": "{count} aprobación | {count} aprobaciones",
       "gated": "Aprobación humana después de este paso"
     },
     "picker": {
-      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea."
+      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea.",
+      "hoverHint": "Pasa el cursor por una pipeline para ver los pasos que ejecuta."
     },
     "builder": {
       "title": "Constructor de pipelines",

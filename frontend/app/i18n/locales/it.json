@@ -3362,10 +3362,12 @@
     },
     "preview": {
       "stepCount": "{count} step | {count} step",
+      "gateCount": "{count} approvazione | {count} approvazioni",
       "gated": "Approvazione umana dopo questo step"
     },
     "picker": {
-      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita."
+      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita.",
+      "hoverHint": "Passa il mouse su una pipeline per vedere gli step che esegue."
     },
     "builder": {
       "title": "Costruttore di pipeline",
