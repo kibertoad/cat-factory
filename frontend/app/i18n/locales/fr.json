@@ -394,6 +394,7 @@
       "dragToResize": "Glisser pour redimensionner",
       "addFirstTask": "Ajouter la première tâche",
       "createInitiativeTitle": "Creer une initiative",
+      "huntBugsTitle": "Chasser les bugs",
       "accessDenied": {
         "title": "Autorisation refusée",
         "hint": "Vous n'avez pas accès au dépôt sur lequel repose ce service."
@@ -631,12 +632,12 @@
   "inspector": {
     "detectRepoUnresolved": "Le dépôt de ce bloc ne figure pas parmi les dépôts GitHub connectés et ne peut donc pas être lu. Connectez ou synchronisez GitHub pour ce dépôt, puis réessayez.",
     "container": {
-      "title": "Contenu",
-      "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",
-      "modules": "Modules ({count})",
+      "modulesTitle": "Modules",
+      "modulesHint": "Les modules de ce service. Cliquez sur l'un d'eux pour le sélectionner sur le tableau.",
       "taskCount": "{count} tâche | {count} tâches",
-      "allTasks": "Toutes les tâches ({count})",
-      "tasks": "Tâches ({count})",
+      "tasksTitle": "Tâches",
+      "allTasksTitle": "Toutes les tâches",
+      "tasksHint": "Les tâches contenues dans ce bloc. Cliquez sur l'une d'elles pour la sélectionner sur le tableau.",
       "addTask": "Ajouter une tâche",
       "noTasks": "Aucune tâche pour le moment. Ajoutez-en une pour commencer.",
       "servicesHint": "Les services sont permanents et ne se terminent pas. Le travail se fait dans leurs tâches et modules."
@@ -1317,8 +1318,6 @@
       "lastIncorporatedRequirements": "Dernières exigences intégrées",
       "priorDocHint": "Issu de la revue précédente. Utilisez-le comme base : modifiez la description ci-dessus et resoumettez.",
       "bootstrapping": "Initialisation…",
-      "importIssue": "Importer une issue",
-      "connectTracker": "Connecter un tracker",
       "spawnFromDocument": "Créer à partir d'un document",
       "viewRequirements": "Voir les exigences",
       "reRun": "Relancer",
@@ -1348,8 +1347,7 @@
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       },
-      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}",
-      "huntBugs": "Chasser les bugs"
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
     }
   },
   "observability": {

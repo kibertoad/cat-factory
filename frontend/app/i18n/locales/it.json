@@ -948,12 +948,12 @@
   "inspector": {
     "detectRepoUnresolved": "Il repository di questo blocco non e' tra i repository GitHub collegati, quindi non puo' essere letto. Collega o sincronizza GitHub per esso, poi riprova.",
     "container": {
-      "title": "Contenuti",
-      "hint": "I moduli e le attivita' all'interno di questo blocco. Fai clic su una voce per selezionarla sulla board.",
-      "modules": "Moduli ({count})",
+      "modulesTitle": "Moduli",
+      "modulesHint": "I moduli all'interno di questo servizio. Fai clic su uno per selezionarlo sulla board.",
       "taskCount": "{count} attivita' | {count} attivita'",
-      "allTasks": "Tutte le attivita' ({count})",
-      "tasks": "Attivita' ({count})",
+      "tasksTitle": "Attivita'",
+      "allTasksTitle": "Tutte le attivita'",
+      "tasksHint": "Le attivita' all'interno di questo blocco. Fai clic su una per selezionarla sulla board.",
       "addTask": "Aggiungi attivita'",
       "noTasks": "Nessuna attivita' ancora. Aggiungine una per iniziare il lavoro.",
       "servicesHint": "I servizi sono di lunga durata e non si completano. Il lavoro avviene nelle loro attivita' e nei loro moduli."
@@ -1653,8 +1653,6 @@
       "lastIncorporatedRequirements": "Ultimi requisiti incorporati",
       "priorDocHint": "Dalla revisione precedente. Usalo come base: modifica la descrizione sopra e reinvia.",
       "bootstrapping": "Bootstrap in corso…",
-      "importIssue": "Importa issue",
-      "connectTracker": "Collega un tracker",
       "spawnFromDocument": "Genera da documento",
       "viewRequirements": "Visualizza requisiti",
       "reRun": "Riesegui",
@@ -1665,8 +1663,7 @@
         "title": "Archiviare questo servizio?",
         "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
       },
-      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}",
-      "huntBugs": "Cerca bug"
+      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}"
     }
   },
   "layout": {
@@ -2441,6 +2438,7 @@
       "dragToResize": "Trascina per ridimensionare",
       "addFirstTask": "Aggiungi la prima attività",
       "createInitiativeTitle": "Crea iniziativa",
+      "huntBugsTitle": "Cerca bug",
       "accessDenied": {
         "title": "Autorizzazione negata",
         "hint": "Non hai accesso al repository che supporta questo servizio."
