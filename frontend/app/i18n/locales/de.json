@@ -3245,7 +3245,11 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Issues.",
       "emptySearchable": "Nach Titel suchen oder ein importiertes Issue auswählen.",
-      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen.",
+      "sourceLabel": "Quelle",
+      "noSource": "Quelle wählen",
+      "connectSource": "{label} verbinden",
+      "enableSource": "{label} aktivieren"
     },
     "contextIssues": {
       "title": "Kontext-Issues",

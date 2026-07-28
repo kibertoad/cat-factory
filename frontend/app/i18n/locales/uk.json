@@ -3539,7 +3539,11 @@
       "attachByReference": "Прикріпити {ref} за посиланням",
       "noMatches": "Немає відповідних завдань.",
       "emptySearchable": "Шукайте за назвою або виберіть імпортоване завдання.",
-      "emptyRefOnly": "Вставте URL або ключ завдання, щоб прикріпити його."
+      "emptyRefOnly": "Вставте URL або ключ завдання, щоб прикріпити його.",
+      "sourceLabel": "Джерело",
+      "noSource": "Виберіть джерело",
+      "connectSource": "Підключити {label}",
+      "enableSource": "Увімкнути {label}"
     },
     "contextIssues": {
       "title": "Контекстні завдання",

@@ -3539,7 +3539,11 @@
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay incidencias coincidentes.",
       "emptySearchable": "Busca por título o elige una incidencia importada.",
-      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla."
+      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla.",
+      "sourceLabel": "Fuente",
+      "noSource": "Elige una fuente",
+      "connectSource": "Conectar {label}",
+      "enableSource": "Habilitar {label}"
     },
     "contextIssues": {
       "title": "Incidencias de contexto",

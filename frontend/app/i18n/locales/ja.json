@@ -3551,7 +3551,11 @@
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致する課題がありません。",
       "emptySearchable": "タイトルで検索するか、インポート済みの課題を選択してください。",
-      "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。"
+      "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。",
+      "sourceLabel": "ソース",
+      "noSource": "ソースを選択",
+      "connectSource": "{label} を接続",
+      "enableSource": "{label} を有効化"
     },
     "contextIssues": {
       "title": "コンテキスト課題",
