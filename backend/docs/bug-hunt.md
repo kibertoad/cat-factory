@@ -77,12 +77,20 @@ silently shortened list reads exactly like an exhaustive one. The service asks t
 "exactly 40 bugs, all of them here" from "40 shown, more behind them", and would tell a user their
 board holds more than they can see whenever it holds exactly 40.
 
-**The board scope is validated, not just interpolated.** A hunt's `board` arrives in a request
-body, and GitHub's `repo:` qualifier is the one value the search grammar takes bare — so
-`buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is quoted).
-Without that, a board of `owner/repo is:closed` would silently contradict the `is:open` /
+**The board scope is required, and validated rather than just interpolated.** A hunt's `board`
+arrives in a request body, and GitHub's `repo:` qualifier is the one value the search grammar takes
+bare — so `buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is
+quoted). Without that, a board of `owner/repo is:closed` would silently contradict the `is:open` /
 `no:assignee` qualifiers the whole surface rests on. Jira escapes its project key into a quoted
 JQL literal and Linear passes the team id as a GraphQL variable, so neither has the same hole.
+
+A query with NO repository at all is refused outright, for a blunter reason: `/search/issues`
+carries no implicit scope, so a boardless query returns whatever the credential can reach. Under a
+GitHub App installation token that happens to be the installation's own repos — which is why an
+unscoped query looked harmless — but under a PAT it is every public repository on GitHub. The
+recurring `bug-intake` schedule runs through the same builder and does not merely display its hit:
+it imports the issue and starts a pipeline on it. So a schedule stored without a repo fails its
+fire loudly instead of scanning the world.
 
 ## 4. Rating
 

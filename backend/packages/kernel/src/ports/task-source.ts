@@ -65,10 +65,13 @@ export interface TaskContent {
 }
 
 /**
- * A repo coordinate a search is scoped to, for a repo-backed source (GitHub
- * Issues). When present, the provider restricts its hits to that one repository
- * instead of the whole installation, and can resolve a bare issue number against
- * it. Sources with no repo notion (Jira) ignore it.
+ * The ONE repository a search runs in, for a repo-backed source (GitHub Issues): the
+ * provider confines its hits to it and resolves a bare issue number against it. Sources
+ * with no repo notion (Jira, Linear) have nothing to narrow and ignore it.
+ *
+ * A repo-backed provider REQUIRES this and refuses a search without it — see
+ * {@link TaskSourceProvider.search} for why an unscoped search is not merely broader but
+ * unsafe.
  */
 export interface TaskSearchRepoScope {
   owner: string
@@ -157,16 +160,22 @@ export interface TaskSourceProvider {
    * ignores `credentials`) can scope the search to that workspace's installation
    * instead of leaking across tenants.
    *
-   * `scope` (optional) narrows a repo-backed source (GitHub Issues) to a single
-   * repository — the one the service the search runs from is linked to — so the
-   * results never leak in issues from sibling repos, and a bare issue number /
-   * issue URL resolves to that exact issue. Repo-less sources (Jira) ignore it.
+   * `scope` pins a repo-backed source (GitHub Issues) to a single repository — the one the
+   * service the search runs from is linked to — so the results are that service's own issues
+   * and a bare issue number resolves against it. It is a REQUIRED parameter carrying a
+   * NULLABLE value, deliberately: `null` means "this source has no repo to narrow to" (Jira,
+   * Linear), which every caller must state rather than reach by omitting an argument. That
+   * distinction is load-bearing, because a repo-backed search is not merely broader without a
+   * scope — GitHub's `/search/issues` has no scope of its own, so an unscoped query returns
+   * whatever the CREDENTIAL can reach, which under a PAT is every public repository on GitHub.
+   * A repo-backed provider therefore throws on `null`; a repo-less one ignores it (and its
+   * implementation simply declares fewer parameters).
    */
   search?(
     credentials: TaskCredentials,
     query: string,
     workspaceId: string,
-    scope?: TaskSearchRepoScope,
+    scope: TaskSearchRepoScope | null,
   ): Promise<TaskSearchResult[]>
   /**
    * Predicate search for issue intake: open issues on the query's board matching

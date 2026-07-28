@@ -146,14 +146,17 @@ export const useTasksStore = defineStore('tasks', () => {
 
   /**
    * Search a connected tracker's issues by free text (title/content). `blockId`
-   * (a service frame or a task/module under one) scopes a GitHub search to that
-   * service's linked repo — so hits stay in-repo and a pasted URL / bare issue
-   * number resolves to the exact issue. Omitted → an unscoped workspace search.
+   * (a service frame or a task/module under one) is REQUIRED: it scopes a GitHub
+   * search to that service's linked repo, so hits stay in-repo and a bare issue
+   * number resolves to the exact issue. There is no unscoped mode — an unscoped
+   * GitHub search reaches every repository the backend's credential can see. An
+   * issue in another repo is linked by pasting its URL (the picker's by-reference
+   * row imports it directly instead of searching).
    */
   async function search(
     source: TaskSourceKind,
     query: string,
-    blockId?: string,
+    blockId: string,
   ): Promise<TaskSearchResult[]> {
     const { results } = await api.searchTaskSource(workspace.requireId(), source, query, blockId)
     return results

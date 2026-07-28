@@ -1349,10 +1349,12 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 {{ t('board.addTask.attach') }}
               </UButton>
             </div>
+            <!-- The container is what scopes the issue search to a repo, so the picker is
+                 only rendered once we have one (the modal is open, so we always do). -->
             <ContextIssuePicker
-              v-if="showIssuePicker && issuesConnected"
+              v-if="showIssuePicker && issuesConnected && ui.addTaskContainerId"
               :chosen-keys="chosenIssueKeys"
-              :scope-block-id="ui.addTaskContainerId ?? undefined"
+              :scope-block-id="ui.addTaskContainerId"
               @pick="addPending"
             />
             <div v-if="pendingIssues.length" class="space-y-1">

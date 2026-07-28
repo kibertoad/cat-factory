@@ -166,6 +166,42 @@ describe('GitHubIssuesProvider.search', () => {
     expect(issueCalls).toEqual([])
     expect(results).toEqual([])
   })
+
+  it('does not surface a sibling repo through the search, even in the same account', async () => {
+    // Same account, different repo: the installation CAN read it, so nothing but the scope
+    // stops it being offered as a hit the search "found". Linking it stays possible by
+    // pasting the URL, which imports the ref directly instead of searching.
+    const { client, issueCalls, searchCalls } = fakeClient({
+      hits: [],
+      issues: { 'kibertoad/other-service#3': detail({ number: 3, title: 'Three', url: 'u3' }) },
+    })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.search({}, 'kibertoad/other-service#3', 'ws1', scope)
+
+    expect(issueCalls).toEqual([])
+    expect(searchCalls).toEqual(['repo:kibertoad/simple-service kibertoad/other-service#3'])
+    expect(results).toEqual([])
+  })
+
+  it('refuses an unscoped search instead of querying every repo the credential can see', async () => {
+    // The regression this guards: `/search/issues` has no scope of its own. Under an App
+    // installation token an unscoped query silently returned the installation's repos, which
+    // is why it looked harmless; under a PAT the same query searches all of public GitHub and
+    // hands the user strangers' issues. No scope ⇒ no query at all.
+    //
+    // The port makes the argument mandatory, so this can only be reached with the explicit
+    // `null` a repo-LESS source (Jira, Linear) legitimately passes — never by a caller that
+    // forgot it, which is now a typecheck failure.
+    const { client, searchCalls, issueCalls } = fakeClient({ hits: [] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    await expect(provider.search({}, 'login bug', 'ws1', null)).rejects.toThrow(
+      /scoped to a repository/,
+    )
+    expect(searchCalls).toEqual([])
+    expect(issueCalls).toEqual([])
+  })
 })
 
 describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
