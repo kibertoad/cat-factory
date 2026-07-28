@@ -23,6 +23,14 @@
       "dismiss": "בטל"
     }
   },
+  "uiMode": {
+    "switcher": "ממשק",
+    "basic": "בסיסי",
+    "advanced": "מתקדם",
+    "basicHint": "רק הכלים היומיומיים. עברו למתקדם כדי לראות הכול.",
+    "advancedHint": "כל האזורים וכל אפשרויות ההרצה.",
+    "pinned": "נקבע על ידי פריסה זו"
+  },
   "common": {
     "loading": "טוען…",
     "save": "שמור",
@@ -95,6 +103,8 @@
     "menu": "תפריט ניווט",
     "openMenu": "פתח תפריט",
     "closeMenu": "סגור תפריט",
+    "expandSidebar": "הרחבת סרגל הצד",
+    "collapseSidebar": "כיווץ סרגל הצד",
     "commandBar": "חפש או הרץ פקודה…",
     "create": "יצירה",
     "buildPipeline": "בנה צינור",
@@ -1940,7 +1950,8 @@
         "localModels": "המריצים המקומיים שלי",
         "sandbox": "פתח ארגז חול",
         "shortcuts": "קיצורי מקלדת",
-        "bugHunt": "ציד באגים"
+        "bugHunt": "ציד באגים",
+        "toggleUiMode": "החלפת מצב ממשק"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1961,7 +1972,8 @@
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
         "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
         "shortcuts": "קיצורים מקלדת מקשים עזרה",
-        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות"
+        "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות",
+        "toggleUiMode": "ממשק מצב בסיסי מתקדם הצגה הסתרה"
       }
     },
     "integrationsHub": {

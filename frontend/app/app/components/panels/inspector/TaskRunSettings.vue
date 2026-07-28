@@ -4,6 +4,7 @@ import { connectionNeighborIds } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import { showOverrideField } from '~/utils/uiMode'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
@@ -18,6 +19,23 @@ const pipelines = usePipelinesStore()
 const accounts = useAccountsStore()
 const tracker = useTrackerStore()
 const ui = useUiStore()
+// Interface tier. Basic mode hides only what OVERRIDES something already decided elsewhere:
+// a workspace-level default (merge policy, model preset, tracker writeback) or an
+// engine-inferred value (the technical/business label). That bound is what makes hiding safe
+// — what's left is exactly the value the hidden field would have displayed, so a basic-mode
+// task behaves identically. Everything that carries an input NOTHING else supplies stays in
+// both tiers, however advanced it feels: the pipeline, the involved services, the apriori
+// branches, the responsible person, auto-start. The same split applies at creation time in
+// `AddTaskModal`.
+//
+// Unlike creation — which always starts from the defaults — an EXISTING block can already
+// carry an override (a teammate on the advanced tier, the API, or this user before they
+// switched down). Hiding it then would break the very bound above: the task would run on
+// settings a basic-mode user can neither see nor clear, and no other inspector panel shows
+// them. So each group below asks `showOverrideField`, which keeps the field whenever it is
+// actually set. Basic mode stays clean for the common (unset) case without ever concealing a
+// deviation.
+const uiMode = useUiModeStore()
 const { ready, unavailableInPreset } = useAiReadiness()
 const { t, n } = useI18n()
 
@@ -290,8 +308,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- merge policy preset -->
-    <div>
+    <!-- merge policy preset (advanced, or basic with an override already set) -->
+    <div v-if="showOverrideField(uiMode.isAdvanced, block.riskPolicyId)">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.mergePolicy') }}
@@ -348,8 +366,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- model preset -->
-    <div>
+    <!-- model preset (advanced, or basic with an override already set) -->
+    <div v-if="showOverrideField(uiMode.isAdvanced, block.modelPresetId)">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.modelPreset') }}
@@ -422,8 +440,8 @@ const technicalLabel = computed(() => {
       </p>
     </div>
 
-    <!-- technical label (tri-state) -->
-    <div>
+    <!-- technical label (tri-state) — unset lets the engine infer it -->
+    <div v-if="showOverrideField(uiMode.isAdvanced, block.technical)">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.taskKind') }}
@@ -498,8 +516,17 @@ const technicalLabel = computed(() => {
     <!-- reference repositories: read-only repos the doc-writer reads while drafting (doc tasks) -->
     <DocReferenceRepos v-if="block.taskType === 'document'" :block="block" />
 
-    <!-- issue-tracker writeback overrides -->
-    <div>
+    <!-- issue-tracker writeback overrides (any one set reveals the whole group) -->
+    <div
+      v-if="
+        showOverrideField(
+          uiMode.isAdvanced,
+          block.trackerCommentOnPrOpen,
+          block.trackerResolveOnMerge,
+          block.trackerQuestionsOnPark,
+        )
+      "
+    >
       <div class="mb-1 flex items-center justify-between">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.issueWriteback') }}

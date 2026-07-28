@@ -23,6 +23,17 @@
       "dismiss": "Dismiss"
     }
   },
+  "uiMode": {
+    "switcher": "Interface",
+    "@switcher": {
+      "description": "Label above the picker that chooses how much of the app is shown (Basic or Advanced). It names the app's user interface, NOT a programming interface."
+    },
+    "basic": "Basic",
+    "advanced": "Advanced",
+    "basicHint": "Everyday tools only. Switch to Advanced to see everything.",
+    "advancedHint": "Every destination and every run option.",
+    "pinned": "Set by this deployment"
+  },
   "common": {
     "loading": "Loading…",
     "save": "Save",
@@ -107,6 +118,8 @@
     "menu": "Navigation menu",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
     "commandBar": "Search or run a command…",
     "create": "Create",
     "buildPipeline": "Build a pipeline",
@@ -2006,7 +2019,8 @@
         "localModels": "My local runners",
         "sandbox": "Open Sandbox",
         "shortcuts": "Keyboard shortcuts",
-        "bugHunt": "Bug hunt"
+        "bugHunt": "Bug hunt",
+        "toggleUiMode": "Switch interface mode"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2027,7 +2041,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
-        "bugHunt": "bug hunt triage backlog issue tracker unassigned"
+        "bugHunt": "bug hunt triage backlog issue tracker unassigned",
+        "toggleUiMode": "interface mode basic advanced simple expert show hide"
       }
     },
     "shortcuts": {

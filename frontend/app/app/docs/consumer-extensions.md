@@ -61,11 +61,16 @@ export default defineNuxtPlugin(() => {
 | Run-detail windows                  | `resultViews`     | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView`                          |
 | Agent kinds (palette data)          | `agentKinds`      | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`                                 |
 | Custom task types                   | `taskTypes`       | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`) |
-| Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, run, sidebar?, command?, toolbar? }`                     | the three shells via `useNavContributions`                           |
+| Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`          | the three shells via `useNavContributions`                           |
 | Inspector body panels               | `inspectorPanels` | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                 |
 | Top-level overlays                  | `appOverlays`     | `{ id: '<ns>:<name>', component }`                                                               | `<AppOverlayHost>` via `useAppOverlays().open(id)`                   |
 | Multi-step wizards                  | (journeys)        | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                  |
 | Locale strings                      | (i18n)            | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                      |
+
+A `nav` entry may also declare `advanced: true`, which hides it in **basic** interface mode
+(the shipped default) exactly as it does for the first-party destinations — see
+[the layer README](../../README.md#interface-modes-basic--advanced). Use it for a power-user
+destination; the flag is independent of `gate`, so both must pass for the item to render.
 
 ### Run-detail windows (`resultViews` + `agentKinds`)
 

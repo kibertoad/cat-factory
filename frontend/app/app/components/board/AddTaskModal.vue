@@ -32,6 +32,14 @@ import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 
 const ui = useUiStore()
+// Interface tier. In BASIC mode this form asks for the task itself (type, title,
+// description, per-type fields, context, the pipeline) and hides the OVERRIDES: the run
+// knobs with a workspace-level default (merge policy, model preset), the per-task deviation
+// from the service's best-practice fragments, and the technical/business hint the engine
+// infers on its own. Hidden, never disabled — each one falls back to exactly the value it
+// would have shown, so a basic-mode task behaves identically, it just asks less. The
+// inspector's `TaskRunSettings` applies the same split after creation.
+const uiMode = useUiModeStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
@@ -864,7 +872,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             </UFormField>
           </template>
 
-          <UCheckbox v-model="technical" name="technical">
+          <UCheckbox v-if="uiMode.isAdvanced" v-model="technical" name="technical">
             <template #label>
               <span class="text-sm text-slate-200">{{ t('board.addTask.technical') }}</span>
             </template>
@@ -1113,7 +1121,9 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             </template>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
+          <!-- One column in basic mode, where the pipeline picker is the only survivor and a
+               two-column grid would leave it stranded beside an empty cell. -->
+          <div class="grid gap-3" :class="uiMode.isAdvanced ? 'grid-cols-2' : 'grid-cols-1'">
             <UFormField :label="t('board.addTask.pipeline')">
               <PipelinePicker
                 :model-value="pipelineId"
@@ -1124,8 +1134,12 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               />
             </UFormField>
 
-            <!-- A review task merges nothing, so its risk (merge) policy is meaningless — omit it. -->
-            <UFormField v-if="!isReview" :label="t('board.addTask.mergePolicy')">
+            <!-- A review task merges nothing, so its risk (merge) policy is meaningless — omit it.
+                 Basic mode leaves it (and the model preset below) on the workspace default. -->
+            <UFormField
+              v-if="!isReview && uiMode.isAdvanced"
+              :label="t('board.addTask.mergePolicy')"
+            >
               <RiskPolicyPicker
                 :model-value="riskPolicyId"
                 :options="riskPolicies.presets"
@@ -1136,7 +1150,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               />
             </UFormField>
 
-            <UFormField :label="t('board.addTask.modelPreset')">
+            <UFormField v-if="uiMode.isAdvanced" :label="t('board.addTask.modelPreset')">
               <UDropdownMenu :items="modelPresetMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -1184,8 +1198,11 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           </div>
 
           <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type.
-               Pre-seeded from the enclosing service's standards; the task owns them from here. -->
-          <div class="space-y-2">
+               Pre-seeded from the enclosing service's standards; the task owns them from here.
+               Hidden in basic mode: `fragmentIds` still carries the service-seeded selection, so
+               the task ships with its service's standards either way — advanced mode is what
+               lets you deviate from them per task. -->
+          <div v-if="uiMode.isAdvanced" class="space-y-2">
             <FragmentSelector
               v-model="fragmentIds"
               :pool="fragmentPool"

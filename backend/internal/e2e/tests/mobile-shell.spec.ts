@@ -25,7 +25,9 @@ test.describe('mobile responsive shell', () => {
     // Open the drawer → the backdrop mounts and a nav action inside is reachable.
     await hamburger.click()
     await expect(page.getByTestId('sidebar-backdrop')).toBeVisible()
-    await expect(page.getByTestId('sidebar').getByText('Build a pipeline')).toBeVisible()
+    // A basic-mode destination, so this holds at the shipped default tier. It also proves the
+    // drawer is never RAILED: the collapsed rail is lg-only, so below lg the labels render.
+    await expect(page.getByTestId('sidebar').getByText('Workspace settings')).toBeVisible()
 
     // Tapping the backdrop closes the drawer (backdrop unmounts).
     await page.getByTestId('sidebar-backdrop').click()

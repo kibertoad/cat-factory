@@ -23,6 +23,14 @@
       "dismiss": "Descartar"
     }
   },
+  "uiMode": {
+    "switcher": "Interfaz",
+    "basic": "Básica",
+    "advanced": "Avanzada",
+    "basicHint": "Solo las herramientas del día a día. Cambia a Avanzada para verlo todo.",
+    "advancedHint": "Todas las secciones y todas las opciones de ejecución.",
+    "pinned": "Definido por este despliegue"
+  },
   "common": {
     "loading": "Cargando…",
     "save": "Guardar",
@@ -95,6 +103,8 @@
     "menu": "Menú de navegación",
     "openMenu": "Abrir menú",
     "closeMenu": "Cerrar menú",
+    "expandSidebar": "Expandir barra lateral",
+    "collapseSidebar": "Contraer barra lateral",
     "commandBar": "Buscar o ejecutar un comando…",
     "create": "Crear",
     "buildPipeline": "Crear una canalización",
@@ -1940,7 +1950,8 @@
         "localModels": "Mis ejecutores locales",
         "sandbox": "Abrir el entorno de pruebas",
         "shortcuts": "Atajos de teclado",
-        "bugHunt": "Caza de errores"
+        "bugHunt": "Caza de errores",
+        "toggleUiMode": "Cambiar el modo de interfaz"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -1961,7 +1972,8 @@
         "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
         "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
         "shortcuts": "atajos teclado teclas ayuda",
-        "bugHunt": "error bug caza triaje backlog incidencias sin asignar"
+        "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
+        "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar"
       }
     },
     "integrationsHub": {

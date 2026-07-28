@@ -23,6 +23,14 @@
       "dismiss": "Odrzuć"
     }
   },
+  "uiMode": {
+    "switcher": "Interfejs",
+    "basic": "Podstawowy",
+    "advanced": "Zaawansowany",
+    "basicHint": "Tylko codzienne narzędzia. Przełącz na zaawansowany, aby zobaczyć wszystko.",
+    "advancedHint": "Wszystkie sekcje i wszystkie opcje uruchamiania.",
+    "pinned": "Ustawione przez to wdrożenie"
+  },
   "common": {
     "loading": "Ładowanie…",
     "save": "Zapisz",
@@ -95,6 +103,8 @@
     "menu": "Menu nawigacji",
     "openMenu": "Otwórz menu",
     "closeMenu": "Zamknij menu",
+    "expandSidebar": "Rozwiń panel boczny",
+    "collapseSidebar": "Zwiń panel boczny",
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
     "buildPipeline": "Zbuduj potok",
@@ -1940,7 +1950,8 @@
         "localModels": "Moje lokalne silniki",
         "sandbox": "Otwórz piaskownicę",
         "shortcuts": "Skróty klawiszowe",
-        "bugHunt": "Polowanie na błędy"
+        "bugHunt": "Polowanie na błędy",
+        "toggleUiMode": "Zmień tryb interfejsu"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -1961,7 +1972,8 @@
         "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
         "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
         "shortcuts": "skróty klawiatura klawisze pomoc",
-        "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane"
+        "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
+        "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj"
       }
     },
     "integrationsHub": {

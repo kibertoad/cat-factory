@@ -1,5 +1,12 @@
 import { test, expect } from './fixtures'
-import { LIVE_TIMEOUT, openBoard, pinAuthedWorkspace, seedRbacScenario, taskCard } from './helpers'
+import {
+  LIVE_TIMEOUT,
+  openBoard,
+  pinAuthedWorkspace,
+  seedRbacScenario,
+  taskCard,
+  useAdvancedInterfaceMode,
+} from './helpers'
 
 // Workspace RBAC (the workspace-rbac initiative, ADR 0025) as the assembled product shows
 // it: the SAME restricted board, opened by two different authenticated users, degrades
@@ -30,6 +37,10 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
       scenario.viewerUserId,
       scenario.accountId,
     )
+    // Pin the interface tier so the assertions below are about RBAC alone: `nav-build-pipeline`
+    // is an ADVANCED destination, hidden from everyone in the shipped basic default, so a
+    // basic-mode run would "pass" the viewer case for the wrong reason and fail the admin one.
+    await useAdvancedInterfaceMode(page)
     await openBoard(page)
 
     // Board-authoring affordances (`board.write`) are hidden entirely for a viewer: the
@@ -66,6 +77,7 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
       scenario.adminUserId,
       scenario.accountId,
     )
+    await useAdvancedInterfaceMode(page)
     await openBoard(page)
 
     // Board-authoring + admin-tier affordances are present for an admin (the same ids the

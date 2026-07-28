@@ -60,6 +60,12 @@ export interface NavGates {
   accountsEnabled: boolean
   /** The caller is an admin of the active account. */
   isAccountAdmin: boolean
+  /**
+   * The interface tier is `advanced` (see `stores/uiMode.ts`). Read by
+   * {@link navSlotFilter} for every {@link NavContribution.advanced} item, and
+   * available to a `gate` predicate that needs to combine it with something else.
+   */
+  advancedMode: boolean
 }
 
 /** Command-palette placement + copy for a contribution that appears in the palette. */
@@ -98,6 +104,7 @@ export const NAV_ACTIONS = [
   'operatorDashboard',
   'reports',
   'shortcuts',
+  'toggleUiMode',
 ] as const
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
@@ -111,6 +118,13 @@ export interface NavContribution {
   surfaces: readonly NavSurface[]
   /** Reactive predicate over {@link NavGates}; absent = always visible. */
   gate?: (g: NavGates) => boolean
+  /**
+   * A power-user destination: shown only in ADVANCED interface mode (basic mode is the
+   * everyday surface — see `stores/uiMode.ts`). Declarative rather than folded into
+   * {@link gate}, so an item keeps its RBAC/availability predicate unchanged and the two
+   * axes stay independently assertable. Absent = visible in both tiers.
+   */
+  advanced?: boolean
   /**
    * First-party action id, resolved to a `run()` against the host `ui` store by
    * `useNavContributions`. A consumer module that has its own stores instead
@@ -138,6 +152,14 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  *    previously showed it unconditionally; the account modal only makes sense
  *    with accounts enabled).
  *  - one icon per destination across shells.
+ *
+ * `advanced: true` marks the power-user half, hidden in basic interface mode. The line
+ * drawn here is "would a team shipping their first task open this?": connecting a repo or
+ * an integration, picking models, and the workspace/account settings stay; AUTHORING the
+ * machinery those defaults come from (the pipeline builder, the fragment library, merge
+ * thresholds, service fragment defaults), the experimentation surfaces (sandbox, Kaizen),
+ * the infrastructure/environment plumbing, per-user local models, and the operator-tier
+ * dashboards do not.
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
@@ -145,6 +167,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.buildPipeline',
     icon: 'i-lucide-workflow',
     surfaces: S('sidebar', 'command'),
+    advanced: true,
     gate: (g) => g.canWriteBoard,
     action: 'buildPipeline',
     testId: 'nav-build-pipeline',
@@ -203,6 +226,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.sandbox',
     icon: 'i-lucide-flask-conical',
     surfaces: S('sidebar', 'command'),
+    advanced: true,
     gate: (g) => g.canManageIntegrations,
     action: 'sandbox',
     testId: 'nav-sandbox',
@@ -219,6 +243,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.kaizen',
     icon: 'i-lucide-sparkles',
     surfaces: S('sidebar'),
+    advanced: true,
     action: 'kaizen',
     testId: 'nav-kaizen',
     sidebar: { group: 'integrations', order: 30 },
@@ -228,6 +253,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.infrastructure',
     icon: 'i-lucide-server-cog',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.infrastructureAvailable,
     action: 'infrastructure',
     testId: 'nav-infrastructure',
@@ -238,6 +264,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.environmentSetup',
     icon: 'i-lucide-flask-conical',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.infrastructureAvailable,
     action: 'environmentSetup',
     testId: 'nav-environment-setup',
@@ -248,6 +275,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.contextFragments',
     icon: 'i-lucide-book-marked',
     surfaces: S('sidebar', 'command'),
+    advanced: true,
     gate: (g) => g.libraryAvailable && g.canManageSettings,
     action: 'fragmentLibrary',
     testId: 'nav-fragments',
@@ -264,6 +292,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'layout.commandBar.cmd.mergeThresholds',
     icon: 'i-lucide-git-merge',
     surfaces: S('command'),
+    advanced: true,
     gate: (g) => g.canManageSettings,
     action: 'mergeThresholds',
     command: {
@@ -309,6 +338,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'layout.commandBar.cmd.serviceFragmentDefaults',
     icon: 'i-lucide-book-open-check',
     surfaces: S('command'),
+    advanced: true,
     gate: (g) => g.canManageSettings,
     action: 'serviceFragmentDefaults',
     command: {
@@ -322,6 +352,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'layout.commandBar.cmd.localModels',
     icon: 'i-lucide-server',
     surfaces: S('command'),
+    advanced: true,
     action: 'localModels',
     command: {
       group: 'workspace',
@@ -350,6 +381,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.operatorDashboard',
     icon: 'i-lucide-gauge',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'operatorDashboard',
     testId: 'nav-operator-dashboard',
@@ -360,6 +392,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.reports',
     icon: 'i-lucide-chart-column',
     surfaces: S('sidebar'),
+    advanced: true,
     gate: (g) => g.accountsEnabled && g.isAccountAdmin,
     action: 'reports',
     testId: 'nav-reports',
@@ -377,6 +410,23 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       keywordsKey: 'layout.commandBar.keywords.shortcuts',
     },
   },
+  {
+    // Deliberately NOT `advanced`: this is the way BACK. Basic mode is the shipped default, so
+    // for most users the sidebar switcher is their first sight of the tier — and in the basic
+    // rail it renders icon-only, which is a thin thread to hang the entire advanced half of the
+    // product on. The palette is reachable in both tiers, searchable by name, and is already
+    // "the primary way to reach every action", so the tier belongs in it.
+    id: 'ui-mode',
+    labelKey: 'layout.commandBar.cmd.toggleUiMode',
+    icon: 'i-lucide-toggle-right',
+    surfaces: S('command'),
+    action: 'toggleUiMode',
+    command: {
+      group: 'workspace',
+      order: 90,
+      keywordsKey: 'layout.commandBar.keywords.toggleUiMode',
+    },
+  },
 ]
 
 /**
@@ -390,10 +440,14 @@ export const navigationModule = defineModule({
 })
 
 /**
- * Reactive RBAC/availability filter over the merged `nav` slot. Reads
+ * Reactive RBAC/availability/interface-tier filter over the merged `nav` slot. Reads
  * `deps.gates.*` (the reactive gate service) per item, so evaluated inside
- * `useReactiveSlots` it re-runs when a permission or connection flips. Passed to
- * `installModularApp` as the global `slotFilter`.
+ * `useReactiveSlots` it re-runs when a permission, connection, or the interface
+ * mode flips. Passed to `installModularApp` as the global `slotFilter`.
+ *
+ * The two axes are independent and BOTH must pass: an `advanced` item is dropped in
+ * basic mode, and every item still answers to its own `gate`. Order doesn't matter
+ * (it's a conjunction) but the tier is checked first, since it's the cheaper read.
  *
  * Typed against `AppSlots` (not the generic `SlotFilter`) so it matches the
  * filter shape the runtime infers for this registry. `deps` is widened to an
@@ -406,7 +460,11 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
     ...slots,
     // No gates service wired (tests / bare install) ⇒ show everything, matching
     // the dev-open "absent access allows all" backend parity.
-    nav: gates ? nav.filter((i) => (i.gate ? i.gate(gates) : true)) : nav,
+    nav: gates
+      ? nav.filter(
+          (i) => (i.advanced ? gates.advancedMode : true) && (i.gate ? i.gate(gates) : true),
+        )
+      : nav,
   }
 }
 

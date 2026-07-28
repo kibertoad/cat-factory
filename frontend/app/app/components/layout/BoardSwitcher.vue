@@ -6,6 +6,13 @@ import type { CloudProvider } from '~/types/domain'
 // active board within it, and manages boards (new / rename / delete). The account
 // row is shown only when accounts exist (auth on); in dev it falls back to a plain
 // board switcher over the single unscoped context.
+//
+// `collapsed` renders the icon-only rail variant (the sidebar's collapsed state): the
+// account row folds away — it is a label with a menu duplicated inside the board menu's
+// reach — and the board button keeps only its glyph. Both dropdowns are unchanged, so
+// switching boards never requires expanding the sidebar first.
+withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+
 const { t } = useI18n()
 
 const accounts = useAccountsStore()
@@ -245,9 +252,9 @@ async function submitPrompt() {
 
 <template>
   <div class="space-y-1.5">
-    <!-- account selector (only when accounts exist) -->
+    <!-- account selector (only when accounts exist, and not in the collapsed rail) -->
     <UDropdownMenu
-      v-if="accounts.enabled"
+      v-if="accounts.enabled && !collapsed"
       :items="accountItems"
       :content="{ align: 'start' }"
       class="w-full"
@@ -275,14 +282,24 @@ async function submitPrompt() {
     <UDropdownMenu :items="boardItems" :content="{ align: 'start' }" class="w-full">
       <button
         type="button"
+        :title="
+          collapsed
+            ? (workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback'))
+            : undefined
+        "
         class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-start transition hover:bg-slate-800/60"
+        :class="collapsed ? 'justify-center' : ''"
         :disabled="busy"
       >
         <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
-        <span class="truncate text-sm font-medium text-white">
+        <span v-if="!collapsed" class="truncate text-sm font-medium text-white">
           {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>
-        <UIcon name="i-lucide-chevron-down" class="ms-auto h-4 w-4 shrink-0 text-slate-500" />
+        <UIcon
+          v-if="!collapsed"
+          name="i-lucide-chevron-down"
+          class="ms-auto h-4 w-4 shrink-0 text-slate-500"
+        />
       </button>
     </UDropdownMenu>
 

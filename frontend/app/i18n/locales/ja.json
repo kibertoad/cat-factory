@@ -23,6 +23,14 @@
       "dismiss": "閉じる"
     }
   },
+  "uiMode": {
+    "switcher": "インターフェース",
+    "basic": "基本",
+    "advanced": "詳細",
+    "basicHint": "日常的に使う機能のみ。すべて表示するには「詳細」に切り替えてください。",
+    "advancedHint": "すべての項目とすべての実行オプション。",
+    "pinned": "このデプロイで設定されています"
+  },
   "common": {
     "loading": "読み込み中…",
     "save": "保存",
@@ -95,6 +103,8 @@
     "menu": "ナビゲーションメニュー",
     "openMenu": "メニューを開く",
     "closeMenu": "メニューを閉じる",
+    "expandSidebar": "サイドバーを展開",
+    "collapseSidebar": "サイドバーを折りたたむ",
     "commandBar": "検索またはコマンドを実行…",
     "create": "作成",
     "buildPipeline": "パイプラインを構築",
@@ -1940,7 +1950,8 @@
         "localModels": "マイローカルランナー",
         "sandbox": "Sandbox を開く",
         "shortcuts": "キーボードショートカット",
-        "bugHunt": "バグハント"
+        "bugHunt": "バグハント",
+        "toggleUiMode": "インターフェースモードを切り替え"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1961,7 +1972,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
         "shortcuts": "キーボード ショートカット キー ヘルプ",
-        "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て"
+        "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
+        "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示"
       }
     },
     "integrationsHub": {

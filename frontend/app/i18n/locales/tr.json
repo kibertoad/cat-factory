@@ -23,6 +23,14 @@
       "dismiss": "Kapat"
     }
   },
+  "uiMode": {
+    "switcher": "Arayüz",
+    "basic": "Temel",
+    "advanced": "Gelişmiş",
+    "basicHint": "Yalnızca günlük araçlar. Her şeyi görmek için Gelişmiş’e geçin.",
+    "advancedHint": "Tüm bölümler ve tüm çalıştırma seçenekleri.",
+    "pinned": "Bu dağıtım tarafından belirlendi"
+  },
   "common": {
     "loading": "Yükleniyor…",
     "save": "Kaydet",
@@ -95,6 +103,8 @@
     "menu": "Gezinme menüsü",
     "openMenu": "Menüyü aç",
     "closeMenu": "Menüyü kapat",
+    "expandSidebar": "Kenar çubuğunu genişlet",
+    "collapseSidebar": "Kenar çubuğunu daralt",
     "commandBar": "Arayın veya bir komut çalıştırın…",
     "create": "Oluştur",
     "buildPipeline": "Bir işlem hattı oluştur",
@@ -1940,7 +1950,8 @@
         "localModels": "Yerel çalıştırıcılarım",
         "sandbox": "Sandbox'ı aç",
         "shortcuts": "Klavye kısayolları",
-        "bugHunt": "Hata avı"
+        "bugHunt": "Hata avı",
+        "toggleUiMode": "Arayüz modunu değiştir"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -1961,7 +1972,8 @@
         "localModels": "yerel model çalıştırıcı ollama lm studio llamacpp vllm uç nokta",
         "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir",
         "shortcuts": "kısayollar klavye tuşlar yardım",
-        "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış"
+        "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
+        "toggleUiMode": "arayüz mod temel gelişmiş göster gizle"
       }
     },
     "integrationsHub": {

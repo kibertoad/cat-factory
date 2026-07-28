@@ -519,6 +519,39 @@ export async function pinAuthedWorkspace(
   )
 }
 
+/**
+ * Boot the SPA in ADVANCED interface mode by seeding the `uiMode` store's persisted state.
+ *
+ * The shipped default is BASIC, which hides the power-user nav destinations and the
+ * less-used run options (see `frontend/app/app/stores/uiMode.ts`). A spec whose subject is
+ * something else — RBAC gating, the compact drawer — must therefore pin the tier explicitly,
+ * or it would be asserting two axes at once and fail for the wrong reason. `ui-mode.spec.ts`
+ * is the one place that exercises the default and the switch itself.
+ *
+ * Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}), so this seeds the
+ * cookie the store picks (`storedMode`/`railCollapsed`) rather than localStorage. Must run
+ * BEFORE `page.goto`. Note this is the USER-choice layer: a deployment that also set
+ * NUXT_PUBLIC_UI_MODE would override it, which the e2e frontend deliberately does not.
+ *
+ * `railCollapsed` is seeded explicitly rather than left to its default so a spec that only
+ * wants the advanced DESTINATIONS also gets the labels rendered — a railed navbar hides them,
+ * which would fail a `getByText` assertion for a reason that has nothing to do with the tier.
+ */
+export async function useAdvancedInterfaceMode(page: Page): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'uiMode',
+      value: encodeURIComponent(
+        JSON.stringify({
+          storedMode: 'advanced',
+          railCollapsed: { basic: true, advanced: false },
+        }),
+      ),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
 /** Navigate to the board and wait for it to finish bootstrapping (canvas mounted). The
  * canvas only mounts once auth + the workspace snapshot + the GitHub probe have settled,
  * so its visibility is the single readiness signal we need. We then assert the seeded

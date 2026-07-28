@@ -1997,7 +1997,8 @@
         "localModels": "Meine lokalen Runner",
         "sandbox": "Sandbox öffnen",
         "shortcuts": "Tastenkürzel",
-        "bugHunt": "Fehlerjagd"
+        "bugHunt": "Fehlerjagd",
+        "toggleUiMode": "Oberflächenmodus wechseln"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2018,7 +2019,8 @@
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
-        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen"
+        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
+        "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden"
       }
     },
     "shortcuts": {
@@ -4208,6 +4210,14 @@
       "dismiss": "Schließen"
     }
   },
+  "uiMode": {
+    "switcher": "Oberfläche",
+    "basic": "Einfach",
+    "advanced": "Erweitert",
+    "basicHint": "Nur die alltäglichen Werkzeuge. Für alles auf „Erweitert“ umschalten.",
+    "advancedHint": "Alle Bereiche und alle Ausführungsoptionen.",
+    "pinned": "Von dieser Installation festgelegt"
+  },
   "common": {
     "loading": "Wird geladen…",
     "save": "Speichern",
@@ -4280,6 +4290,8 @@
     "menu": "Navigationsmenü",
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen",
+    "expandSidebar": "Seitenleiste ausklappen",
+    "collapseSidebar": "Seitenleiste einklappen",
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
     "buildPipeline": "Eine Pipeline erstellen",
