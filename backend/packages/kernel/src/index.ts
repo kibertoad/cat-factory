@@ -33,6 +33,23 @@ export {
   type ChangeClassification,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
+export {
+  detectValidationChecks,
+  RepoView,
+  type DetectedCheck,
+  type ValidationDetectionResult,
+  type EcosystemDetection,
+  type EcosystemDetector,
+  type RepoRootEntry,
+  type RepoSurface,
+  type ValidationCheckRole,
+} from './domain/validation-detection.js'
+export {
+  DEFAULT_VALIDATION_DETECTORS,
+  LANGUAGE_DETECTORS,
+  TASK_RUNNER_DETECTORS,
+  VALIDATION_DETECTION_CONTENT_FILES,
+} from './domain/validation-detectors.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,

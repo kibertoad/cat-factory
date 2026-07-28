@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRunContext, ExecutionInstance, Pipeline } from '@cat-factory/kernel'
-import type { ServiceValidationConfig, ValidationReport } from '@cat-factory/contracts'
+import type {
+  AgentRunContext,
+  ExecutionInstance,
+  Pipeline,
+  RepoContentEntry,
+  RepoFiles,
+} from '@cat-factory/kernel'
+import type {
+  DetectedValidationChecks,
+  ServiceValidationConfig,
+  ValidationReport,
+} from '@cat-factory/contracts'
 import type { ConformanceHarness } from '../harness.js'
 
 // PRE-PR VALIDATION conformance (docs/initiatives/pre-pr-validation.md).
@@ -196,6 +206,85 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
         label: 'lint',
         exitCode: 0,
         outputTail: 'all clean',
+      })
+    })
+
+    // AUTODETECTION. The rules themselves are unit-tested in kernel; what has to hold
+    // identically on every runtime is the WIRING — the endpoint reaches the repo through the
+    // same `resolveRunRepoContext` seam the engine binds pre/post-ops with, and states the
+    // no-repo case rather than returning an empty list that reads as "nothing recognised".
+    describe('autodetection', () => {
+      const detect = (app: ReturnType<ConformanceHarness['makeApp']>, wsId: string) =>
+        app.call<DetectedValidationChecks>(
+          'GET',
+          `/workspaces/${wsId}/services/blk_auth/validation-checks/detect`,
+        )
+
+      /** An in-memory repo root: one listing plus the manifests the detector asks for. */
+      const fakeRepo = (files: Record<string, string>): RepoFiles => ({
+        listDirectory: async () =>
+          Object.keys(files).map(
+            (name): RepoContentEntry => ({ path: name, name, type: 'file', sha: `sha-${name}` }),
+          ),
+        getFile: async (path) =>
+          files[path] === undefined ? null : { content: files[path], sha: `sha-${path}` },
+        headSha: async () => 'base-sha',
+        createBranch: async () => {},
+        deleteBranch: async () => {},
+        commitFiles: async () => ({ sha: 'commit-sha' }),
+        openPullRequest: async () => {
+          throw new Error('not exercised by this test')
+        },
+      })
+
+      it('suggests checks from the service repo’s manifests', async () => {
+        const repo = fakeRepo({
+          'package.json': JSON.stringify({
+            packageManager: 'pnpm@9.0.0',
+            scripts: { lint: 'oxlint .', build: 'tsc -b', test: 'vitest' },
+          }),
+          'pnpm-lock.yaml': 'lockfileVersion: 9',
+        })
+        const app = harness.makeApp(
+          {},
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+
+        const res = await detect(app, workspace.id)
+        expect(res.status).toBe(200)
+        expect(res.body.status).toBe('ok')
+        expect(res.body.ecosystems).toEqual(['node'])
+        expect(res.body.checks).toEqual([
+          { label: 'install', command: 'pnpm install --frozen-lockfile' },
+          { label: 'lint', command: 'pnpm run lint' },
+          { label: 'build', command: 'pnpm run build' },
+          { label: 'test', command: 'pnpm run test' },
+        ])
+
+        // Detection is a SUGGESTION: it must not have written the service's config, or the
+        // operator's next board load would claim checks no run was ever told to run.
+        const list = await app.call<ServiceValidationConfig[]>(
+          'GET',
+          `/workspaces/${workspace.id}/validation-checks`,
+        )
+        expect(list.body.map((c) => c.blockId)).not.toContain('blk_auth')
+      })
+
+      it('reports an unlinked repo as such rather than as an empty result', async () => {
+        // No `resolveRunRepoContext` wired — the same shape a workspace with no VCS
+        // connection produces. The status is what lets the panel say WHY it found nothing.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+
+        const res = await detect(app, workspace.id)
+        expect(res.status).toBe(200)
+        expect(res.body).toEqual({
+          status: 'repo_unavailable',
+          ecosystems: [],
+          checks: [],
+          truncated: false,
+        })
       })
     })
   })

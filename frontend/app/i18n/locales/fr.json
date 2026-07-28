@@ -1102,7 +1102,34 @@
       "save": "Enregistrer les vérifications",
       "savedToast": "Vérifications enregistrées",
       "saveFailed": "Impossible d'enregistrer les vérifications",
-      "clearFailed": "Impossible de vider les vérifications"
+      "clearFailed": "Impossible de vider les vérifications",
+      "detect": {
+        "action": "Détecter",
+        "hint": "Proposer des vérifications à partir du dépôt de ce service",
+        "added": "{count} vérification ajoutée | {count} vérifications ajoutées",
+        "found": "Reconnu : {ecosystems}.",
+        "capped": "Certaines suggestions ont été écartées : un service accepte au plus {max} vérifications.",
+        "nothingNew": "Rien à ajouter",
+        "alreadyPresent": "Toutes les commandes détectées figurent déjà dans la liste.",
+        "unrecognised": "Aucun écosystème connu n'a été reconnu à la racine du dépôt. Ajoutez les commandes à la main.",
+        "repo_unavailable": "Aucun dépôt n'est lié à ce service, il n'y a donc rien à inspecter.",
+        "failed": "Le dépôt n'a pas pu être lu"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

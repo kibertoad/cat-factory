@@ -19,7 +19,9 @@ prerequisites are configured.
 - `datadog/` + `observability/` — release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/` — incident enrichment.
 - `testSecrets/` — sealed per-service test credentials; `validation/` — per-service PRE-PR
-  validation checks (the commands the harness runs before a PR opens; frame-chain resolved).
+  validation checks (the commands the harness runs before a PR opens; frame-chain resolved),
+  plus `detectValidationChecksFromRepo` (the repo-root read behind the inspector's "Detect"
+  button — one listing, then only the manifests it proved exist; the rules are pure kernel).
 - `slack/`, `email/`, `notificationWebhook/` — notification channels (the last one is the outbound
   HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/` — supporting services. `writeback/`

@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ServiceValidationConfig, ValidationCheck } from '~/types/validationChecks'
+import type {
+  DetectedValidationChecks,
+  ServiceValidationConfig,
+  ValidationCheck,
+} from '~/types/validationChecks'
 import { VALIDATION_DEFAULT_MAX_ATTEMPTS } from '~/types/validationChecks'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -107,5 +111,16 @@ export const useValidationChecksStore = defineStore('validationChecks', () => {
     dropLocal(blockId)
   }
 
-  return { configs, loading, available, load, ensureLoaded, forBlock, save, remove }
+  /**
+   * Ask the backend what this service's repo implies. Nothing is stored: the suggestion goes
+   * into the panel's unsaved rows, so the operator reviews and saves it like anything they
+   * typed. Deliberately NOT folded into `configs` — a suggestion that looked like saved
+   * config would report a service as configured when no run would run a single command.
+   */
+  async function detect(blockId: string): Promise<DetectedValidationChecks> {
+    const ws = useWorkspaceStore()
+    return api.detectServiceValidationChecks(ws.requireId(), blockId)
+  }
+
+  return { configs, loading, available, load, ensureLoaded, forBlock, save, remove, detect }
 })

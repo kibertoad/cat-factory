@@ -1102,7 +1102,34 @@
       "save": "שמירת בדיקות",
       "savedToast": "הבדיקות נשמרו",
       "saveFailed": "לא ניתן היה לשמור את הבדיקות",
-      "clearFailed": "לא ניתן היה לנקות את הבדיקות"
+      "clearFailed": "לא ניתן היה לנקות את הבדיקות",
+      "detect": {
+        "action": "זהה",
+        "hint": "הצע בדיקות מתוך המאגר של שירות זה",
+        "added": "נוספה בדיקה {count} | נוספו {count} בדיקות",
+        "found": "זוהה: {ecosystems}.",
+        "capped": "חלק מההצעות הושמטו — שירות מקבל לכל היותר {max} בדיקות.",
+        "nothingNew": "אין מה להוסיף",
+        "alreadyPresent": "כל הפקודות שזוהו כבר מופיעות ברשימה.",
+        "unrecognised": "לא זוהתה מערכת אקולוגית מוכרת בשורש המאגר. הוסף את הפקודות ידנית.",
+        "repo_unavailable": "לשירות זה לא משויך מאגר, ולכן אין מה לבדוק.",
+        "failed": "לא ניתן היה לקרוא את המאגר"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

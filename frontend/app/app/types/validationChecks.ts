@@ -9,6 +9,9 @@ export type {
   ValidationReport,
   ServiceValidationConfig,
   UpsertServiceValidationConfigInput,
+  DetectedValidationChecks,
+  ValidationDetectionStatus,
+  ValidationEcosystem,
 } from '@cat-factory/contracts'
 export {
   VALIDATION_DEFAULT_MAX_ATTEMPTS,
