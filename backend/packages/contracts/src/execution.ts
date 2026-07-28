@@ -502,16 +502,24 @@ export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
 export const stepMetricsSchema = v.object({
   /** Number of model calls recorded for this step. */
   calls: v.number(),
-  /** Sum of prompt (input) tokens across the step's calls. */
+  /**
+   * Sum of FRESH (uncached) input tokens across the step's calls — exclusive of both
+   * cache classes, so the step's total input is
+   * `promptTokens + cacheReadTokens + cacheWriteTokens`.
+   */
   promptTokens: v.number(),
   /**
-   * Sum of prompt tokens served from the provider's prefix cache. A subset of
-   * promptTokens on OpenAI/DeepSeek, but on Anthropic cache reads are reported
-   * separately from input tokens, so this can exceed promptTokens. 0 on a cache-less
-   * flavour (Workers AI); the metrics bar shows the cached split when present. Absent ⇒
+   * Sum of input tokens served from the provider's prefix cache (~0.1× base input).
+   * 0 on a cache-less flavour (Workers AI). Absent ⇒ unknown (older snapshot).
+   */
+  cacheReadTokens: v.optional(v.number()),
+  /**
+   * Sum of input tokens written INTO the cache (1.25–2× base input, i.e. dearer than
+   * fresh). Kept apart from the reads because a repair loop that keeps re-writing the
+   * cache and one that only re-reads it look identical once they are summed. Absent ⇒
    * unknown (older snapshot).
    */
-  cachedPromptTokens: v.optional(v.number()),
+  cacheWriteTokens: v.optional(v.number()),
   /** Sum of completion (output) tokens across the step's calls. */
   completionTokens: v.number(),
   /** Largest single completion the model produced (closest approach to the limit). */
@@ -886,19 +894,24 @@ export const pipelineStepSchema = v.object({
    */
   effortReport: v.optional(agentEffortReportSchema),
   /**
-   * The repo-sourced Claude Skill this step was PINNED to at dispatch (a `skill` step; see
-   * `docs/initiatives/repo-skills.md`). Recorded so a run executes a stable version of the
-   * skill even if its source resyncs mid-run, and so a later investigation knows exactly
-   * which skill (and at which commit / manifest blob) ran. `commit` is the source dir's head
-   * commit the resources were fetched at (null if the skill was never synced to a commit);
-   * `sha` is the `SKILL.md` blob sha. Absent for every non-`skill` step.
+   * The repo-sourced Claude Skills this step was PINNED to at dispatch — the step's own picked
+   * skill (a `skill` step) AND any CATALOG skills the running agent kind declared (see
+   * `backend/docs/custom-agents.md` → agent capabilities). Recorded so a run executes a stable
+   * version of each skill even if its source resyncs mid-run, and so a later investigation knows
+   * exactly which skills (and at which commit / manifest blob) ran. `commit` is the source dir's
+   * head commit the resources were fetched at (null if the skill was never synced to a commit);
+   * `sha` is the `SKILL.md` blob sha. A BUNDLED skill (shipped in the deployment's own code) has
+   * no pin — its version is the deployment's — so it never appears here. Absent when the step ran
+   * no catalog skill.
    */
-  skillVersion: v.optional(
-    v.object({
-      skillId: v.string(),
-      commit: v.nullable(v.string()),
-      sha: v.string(),
-    }),
+  skillVersions: v.optional(
+    v.array(
+      v.object({
+        skillId: v.string(),
+        commit: v.nullable(v.string()),
+        sha: v.string(),
+      }),
+    ),
   ),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by

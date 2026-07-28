@@ -14,9 +14,17 @@ import {
   type PiRunStats,
   type TodoProgress,
 } from './pi.js'
+import {
+  claudeAllowedToolPatterns,
+  codexMcpConfigToml,
+  mcpServerSecretValues,
+  writeClaudeMcpConfig,
+  type McpServerSpec,
+  type SkillSpec,
+} from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
-import { redact, secretsToRedact } from './redact.js'
+import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
   createTaskPlanTracker,
@@ -76,18 +84,19 @@ export interface SubscriptionRunOptions {
    */
   ambientAuth?: boolean
   /**
-   * A repo-sourced Claude Skill to install natively before launch (repo-sourced Claude Skills,
-   * slice 2). The claude-code runner writes it to `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md`
-   * (+ resource files) so the CLI loads it — but ONLY when it owns an isolated config home, i.e.
-   * NOT under `ambientAuth`. The codex runner ignores it outright. Every case that skips the
-   * native install reads the checkout's `.cat-context/skill/`, materialised by the caller.
+   * The skills to install natively before launch. The claude-code runner writes each to
+   * `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resource files) so the CLI loads them — but ONLY
+   * when it owns an isolated config home, i.e. NOT under `ambientAuth`. The codex runner ignores
+   * them outright. Every case that skips the native install reads the checkout's
+   * `.cat-context/skill/<name>/`, materialised by the caller.
    */
-  skill?: {
-    name: string
-    description: string
-    instructions: string
-    resources: { relPath: string; content: string }[]
-  }
+  skills?: SkillSpec[]
+  /**
+   * Tool servers (MCP) to wire into the CLI for this run. Written to a PER-RUN config the CLI is
+   * pointed at — never a HOME-global one, which a second concurrent job would clobber and which
+   * carries this job's credentials. Absent ⇒ the CLI's built-in tools only.
+   */
+  mcpServers?: McpServerSpec[]
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
    * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
@@ -320,10 +329,7 @@ export function carryClaudeSystemPrompt(
  * would make the CLI fail to parse the frontmatter and silently skip the skill. A JSON string is a
  * valid YAML double-quoted scalar, so quoting makes the manifest robust to arbitrary text.
  */
-async function writeNativeSkill(
-  skillsRoot: string,
-  skill: NonNullable<SubscriptionRunOptions['skill']>,
-): Promise<void> {
+async function writeNativeSkill(skillsRoot: string, skill: SkillSpec): Promise<void> {
   const dir = join(skillsRoot, skill.name)
   await mkdir(dir, { recursive: true })
   const name = JSON.stringify(skill.name)
@@ -334,6 +340,49 @@ async function writeNativeSkill(
     const dest = join(dir, resource.relPath)
     await mkdir(dirname(dest), { recursive: true })
     await writeFile(dest, resource.content, 'utf8')
+  }
+}
+
+/**
+ * Prepare the Claude Code CLI's MCP wiring for one run: write the servers to a PER-RUN config and
+ * return the argv that points the CLI at it, plus the cleanup for a directory we had to mint.
+ *
+ * Two decisions live here. `--strict-mcp-config` makes that file the ONLY source of servers, so an
+ * ambient run on a developer's own machine can never silently hand the agent their personal ones.
+ * And `--allowedTools` is passed ONLY when a server actually narrows its tools — an allow-list is
+ * whole-session, not MCP-scoped, so `claudeAllowedToolPatterns` re-grants the CLI's built-in
+ * file/bash tools in the same list; see it for why that holds whichever way the run's permission
+ * mode treats an allow-list.
+ *
+ * The config carries this job's resolved credentials, so it goes in the isolated config home when
+ * we own one and a throwaway per-JOB directory otherwise — never the checkout (it would land in a
+ * commit) and never a shared HOME path (a concurrent job would clobber it).
+ */
+async function setUpClaudeMcp(
+  servers: McpServerSpec[] | undefined,
+  configHome: string | undefined,
+): Promise<{ args: string[]; cleanup: () => Promise<void> }> {
+  const noop = { args: [], cleanup: async () => {} }
+  if (!servers?.length) return noop
+  // Before anything can spawn: a failing MCP server echoes its own argv/headers into stderr, and
+  // that tail is carried onto the step's diagnostics.
+  registerKnownSecrets(mcpServerSecretValues(servers))
+  const home = configHome ?? (await mkdtemp(join(tmpdir(), 'cf-claude-mcp-')))
+  const owned = home === configHome ? undefined : home
+  const cleanup = async (): Promise<void> => {
+    if (owned) await rm(owned, { recursive: true, force: true }).catch(() => {})
+  }
+  const configPath = await writeClaudeMcpConfig(home, servers)
+  if (!configPath) return { args: [], cleanup }
+  const allowedTools = claudeAllowedToolPatterns(servers)
+  return {
+    args: [
+      '--mcp-config',
+      configPath,
+      '--strict-mcp-config',
+      ...(allowedTools?.length ? ['--allowedTools', allowedTools.join(',')] : []),
+    ],
+    cleanup,
   }
 }
 
@@ -518,16 +567,22 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
   }
 
-  // Repo-sourced Claude Skill (slice 2): install it as a native skill under the config dir's
-  // `skills/<name>/` so the CLI discovers and can invoke it. ONLY into the isolated per-run config
-  // home — never the developer's own `~/.claude` (ambient/native mode), where it would persist in
-  // their personal setup after the run and two concurrent jobs carrying same-named skills from
-  // different repos would clobber each other. An ambient run reads the skill from the checkout
-  // instead (`.cat-context/skill/`, materialised by the caller). Best-effort: a write failure must
-  // not wedge the run — the prompt still names the skill.
-  if (opts.skill && configHome) {
-    await writeNativeSkill(join(configHome, 'skills'), opts.skill).catch(() => {})
+  // Skills: install each as a native skill under the config dir's `skills/<name>/` so the CLI
+  // discovers and can invoke it. ONLY into the isolated per-run config home — never the
+  // developer's own `~/.claude` (ambient/native mode), where it would persist in their personal
+  // setup after the run and two concurrent jobs carrying same-named skills would clobber each
+  // other. An ambient run reads the skills from the checkout instead (`.cat-context/skill/<name>/`,
+  // materialised by the caller). Best-effort: a write failure must not wedge the run — the prompt
+  // still names the skills.
+  if (configHome) {
+    for (const skill of opts.skills ?? []) {
+      await writeNativeSkill(join(configHome, 'skills'), skill).catch(() => {})
+    }
   }
+
+  // Tool servers (MCP): the CLI is pointed at a per-run config rather than discovering an ambient
+  // one. See `setUpClaudeMcp` for why that matters and what has to be cleaned up afterwards.
+  const mcp = await setUpClaudeMcp(opts.mcpServers, configHome)
 
   const env = buildClaudeEnv(opts, configHome)
 
@@ -572,6 +627,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           'bypassPermissions',
           '--model',
           opts.model,
+          ...mcp.args,
           ...appendArgs,
         ],
       },
@@ -613,6 +669,8 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     throw err
   } finally {
     await subagents?.stop()
+    // The ambient-mode MCP config dir (credential-bearing) never outlives the run.
+    await mcp.cleanup()
     if (configHome) {
       // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
       // home is deleted — the credential lives at the home root, never in `projects/`, so this
@@ -747,7 +805,11 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
 export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
-  let usage: { inputTokens: number; outputTokens: number } | undefined
+  // The running CUMULATIVE total, kept in its reported (inclusive) form plus the cached share
+  // it contains. `PiRunOutcome.usage` needs the inclusive figure — it is the key-rotation
+  // weight — while the fallback call metric below needs the split, so both are derived from
+  // this one value rather than one being reconstructed from the other.
+  let cumulative: CodexCumulativeUsage | undefined
 
   // Codex reads its credentials from $CODEX_HOME/auth.json with file-backed
   // storage. CRITICAL: this home must live OUTSIDE the cloned checkout (`opts.cwd`)
@@ -775,7 +837,20 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   const codexHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-codex-'))
   if (codexHome) {
     await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken!, { mode: 0o600 })
-    await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
+    // Tool servers (MCP) ride the SAME per-run config.toml, so they are scoped to this job and
+    // torn down with the home. Under AMBIENT auth there is no per-run home — and writing servers
+    // into the developer's own `~/.codex/config.toml` would outlive the run and race a concurrent
+    // job — so an ambient codex run gets no MCP servers; the backend states them as unavailable
+    // the same way it does for a harness with no MCP client at all.
+    // Registered before the CLI starts, for the same reason the claude path does it: a server that
+    // fails to launch puts its own command line into the stderr tail we keep.
+    if (opts.mcpServers?.length) registerKnownSecrets(mcpServerSecretValues(opts.mcpServers))
+    const mcpToml = opts.mcpServers?.length ? codexMcpConfigToml(opts.mcpServers) : ''
+    await writeFile(
+      join(codexHome, 'config.toml'),
+      `cli_auth_credentials_store = "file"\n${mcpToml ? `\n${mcpToml}` : ''}`,
+      { encoding: 'utf8', mode: 0o600 },
+    )
   }
 
   // Codex has no system-prompt flag, so fold the composed role + best-practice
@@ -812,7 +887,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     const progress = codexPlanProgress(event)
     if (progress && opts.onProgress) opts.onProgress(progress)
     const turnUsage = codexUsage(event)
-    if (turnUsage) usage = turnUsage
+    if (turnUsage) cumulative = turnUsage
     // A `token_count` event closes a model turn: pair its per-turn usage with the
     // assistant text seen since the previous turn as one telemetry call.
     const perTurn = codexLastTurnUsage(event)
@@ -826,7 +901,8 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           responseText: redactBody(pendingText, secrets),
           reasoningText: '',
           inputTokens: perTurn.inputTokens,
-          cachedInputTokens: perTurn.cachedInputTokens,
+          cacheReadTokens: perTurn.cacheReadTokens,
+          cacheWriteTokens: perTurn.cacheWriteTokens,
           outputTokens: perTurn.outputTokens,
           finishReason: null,
         },
@@ -862,7 +938,11 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
 
     // Fallback for a CLI/version that never emits per-turn `last_token_usage`: record a
     // single call from the cumulative total + final text so the run is still observable.
-    if (calls.length === 0 && (usage || summary)) {
+    // The cumulative total is inclusive of its cached share exactly as a per-turn one is, so
+    // it is split the same way rather than being filed wholesale as fresh — which would report
+    // a cache-heavy run as if nothing had been cached, the one reading this telemetry exists
+    // to rule out.
+    if (calls.length === 0 && (cumulative || summary)) {
       publishCallMetric(
         calls,
         {
@@ -871,14 +951,23 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           messageCount: messages.length,
           responseText: redactBody(summary, secrets),
           reasoningText: '',
-          inputTokens: usage?.inputTokens ?? 0,
-          cachedInputTokens: 0,
-          outputTokens: usage?.outputTokens ?? 0,
+          inputTokens: Math.max(
+            0,
+            (cumulative?.inputTokens ?? 0) - (cumulative?.cachedInputTokens ?? 0),
+          ),
+          cacheReadTokens: cumulative?.cachedInputTokens ?? 0,
+          // Codex reports no separate cache-WRITE class; 0 rather than guessed.
+          cacheWriteTokens: 0,
+          outputTokens: cumulative?.outputTokens ?? 0,
           finishReason: null,
         },
         opts.onCallMetric,
       )
     }
+    // The outcome's usage is the key-rotation WEIGHT, so it keeps the inclusive input count.
+    const usage = cumulative
+      ? { inputTokens: cumulative.inputTokens, outputTokens: cumulative.outputTokens }
+      : undefined
     return {
       summary,
       stats,
@@ -950,18 +1039,27 @@ function codexPlanProgress(event: Record<string, unknown>): TodoProgress | undef
 }
 
 /**
+ * Codex's running cumulative usage, kept in the form the CLI reports it: `inputTokens` is the
+ * TOTAL prompt count (OpenAI semantics) with `cachedInputTokens` a SUBSET already inside it,
+ * never a bucket to add on top. The cached share is carried rather than discarded so a
+ * consumer that needs the fresh figure can subtract it at the point of use, instead of the
+ * only two readings of this number being "inclusive" and "lost".
+ */
+interface CodexCumulativeUsage {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+}
+
+/**
  * Best-effort: pull token usage out of a Codex usage event. Codex `exec --json`
  * reports a running CUMULATIVE total on `token_count` events under
  * `info.total_token_usage` (it also carries the per-turn `last_token_usage`); older /
  * other shapes put it on `usage` / `info.usage` directly. We read the cumulative
  * total when present so the caller can simply overwrite (not sum) — summing
  * cumulative totals across events would multiply-count. Checked most-likely first.
- * `input_tokens` is the TOTAL prompt count (OpenAI semantics: `cached_input_tokens`
- * is a subset already inside it), so it is NOT summed with the cached share.
  */
-function codexUsage(
-  event: Record<string, unknown>,
-): { inputTokens: number; outputTokens: number } | undefined {
+function codexUsage(event: Record<string, unknown>): CodexCumulativeUsage | undefined {
   const info = isObject(event.info) ? (event.info as Record<string, unknown>) : undefined
   const raw =
     (info && isObject(info.total_token_usage) ? info.total_token_usage : undefined) ??
@@ -972,20 +1070,28 @@ function codexUsage(
   const input = numberOf(raw.input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, outputTokens: output }
+  return {
+    inputTokens: input,
+    cachedInputTokens: numberOf(raw.cached_input_tokens),
+    outputTokens: output,
+  }
 }
 
 /**
  * Per-TURN Codex token usage off a `token_count` event's `info.last_token_usage` (the
  * delta for the turn just completed, as opposed to `codexUsage`'s cumulative total).
- * `input_tokens` is the total prompt count for the turn and already INCLUDES the cached
- * share (OpenAI semantics), so `cachedInputTokens` is surfaced as the subset it is —
- * NOT added on top (adding it would double-count every cached token).
+ *
+ * OpenAI semantics: `input_tokens` is the turn's WHOLE prompt count and already INCLUDES
+ * the cached share, so the fresh figure is the difference. Clamped at 0 because the two
+ * counts come off the same event and a vendor inconsistency must not mint a negative token
+ * count. Codex reports no separate cache-WRITE class, so that class is 0 here rather than
+ * guessed.
  */
 function codexLastTurnUsage(event: Record<string, unknown>):
   | {
       inputTokens: number
-      cachedInputTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
       outputTokens: number
     }
   | undefined {
@@ -996,7 +1102,12 @@ function codexLastTurnUsage(event: Record<string, unknown>):
   const cached = numberOf(raw.cached_input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }
+  return {
+    inputTokens: Math.max(0, input - cached),
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+    outputTokens: output,
+  }
 }
 
 /** Dispatch to the configured subscription harness runner. */

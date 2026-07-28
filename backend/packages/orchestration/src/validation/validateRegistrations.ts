@@ -1,10 +1,17 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { GateRegistry, PipelineRegistry, TaskTypeRegistry } from '@cat-factory/kernel'
+import type {
+  AgentKind,
+  GateRegistry,
+  PipelineRegistry,
+  TaskTypeRegistry,
+} from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  isAllowedMcpHttpUrl,
+  isValidMcpServerId,
   seedPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
@@ -163,6 +170,125 @@ export function collectRegistrationProblems(
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
 
+  // 6. Agent capabilities: the skills + tool servers each kind declares.
+  problems.push(...checkAgentCapabilities(agentKinds, registry))
+
+  return problems
+}
+
+/**
+ * Section 6 of {@link collectRegistrationProblems}: a kind's declared capabilities must be
+ * REACHABLE and COHERENT. Every check here covers something that otherwise fails invisibly at run
+ * time — the agent just quietly works without the playbook or the tool it was supposed to have,
+ * which is why boot is the right place to be loud. Split per capability; see each helper.
+ */
+function checkAgentCapabilities(
+  agentKinds: ReturnType<AgentKindRegistry['all']>,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  return agentKinds.flatMap((def) => [
+    ...checkKindSkills(def.kind, registry),
+    ...checkKindToolServers(def.kind, registry),
+  ])
+}
+
+/**
+ * A kind's declared SKILLS:
+ *
+ * - an id with no registration (a typo, or a `registerSkill` call that never ran) is an ERROR;
+ * - skills on a NON-container kind is a WARNING, exactly as for tool servers below. Only the
+ *   container executor renders `AgentRunContext.skills` into a dispatch, so an inline kind's
+ *   declaration can never take effect — and a non-optional `{ catalogSkillId }` there is worse
+ *   than inert, since it fails EVERY dispatch of that kind on a deployment with no skill library
+ *   while never being able to reach the model.
+ */
+function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const skills = registry.skillsFor(kind)
+  for (const id of skills.unknown) {
+    problems.push({
+      severity: 'error',
+      code: 'unknown_bundled_skill',
+      message:
+        `Agent kind "${kind}" declares skill "${id}", which is not registered. Call ` +
+        `registry.registerSkill({ id: '${id}', … }) before registering the kind, declare the ` +
+        `skill inline, or use { catalogSkillId } for a repo-synced skill.`,
+    })
+  }
+  const declared = skills.bundled.length + skills.catalog.length
+  if (declared && !registry.requiresContainer(kind)) {
+    problems.push({
+      severity: 'warn',
+      code: 'skills_without_container',
+      message:
+        `Agent kind "${kind}" declares skills but does not run in a container — only a container ` +
+        `dispatch installs a skill and folds its instructions into the prompt, so an inline LLM ` +
+        `step will never apply them. Give the kind a container surface (agent.surface: ` +
+        `'container-explore' / 'container-coding') or drop the skills.`,
+    })
+  }
+  return problems
+}
+
+/**
+ * A kind's declared TOOL SERVERS:
+ *
+ * - an unregistered id is an ERROR, like an unregistered skill;
+ * - a malformed MCP server id is an ERROR, because it becomes both a tool-name fragment and a
+ *   Codex TOML table key, so the CLI fails on it far from the registration that caused it;
+ * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
+ *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
+ *   it here only moves the failure to a place with no registration to point at;
+ * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
+ *   into, so they can never take effect. A warning rather than an error because a deployment may
+ *   deliberately declare them ahead of moving the kind onto a container surface.
+ */
+function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const tools = registry.toolServersFor(kind)
+  for (const id of tools.unknown) {
+    problems.push({
+      severity: 'error',
+      code: 'unknown_tool_server',
+      message:
+        `Agent kind "${kind}" declares tool server "${id}", which is not registered. Call ` +
+        `registry.registerToolServer({ id: '${id}', … }) before registering the kind, or ` +
+        `declare the server inline.`,
+    })
+  }
+  for (const server of tools.servers) {
+    if (!isValidMcpServerId(server.id)) {
+      problems.push({
+        severity: 'error',
+        code: 'invalid_tool_server_id',
+        message:
+          `Tool server "${server.id}" (on agent kind "${kind}") has an invalid id. It ` +
+          `becomes part of the tool names the CLI exposes (mcp__<id>__<tool>) and a Codex ` +
+          `config key, so it must match [a-z0-9][a-z0-9_-]*.`,
+      })
+    }
+    if (server.transport.kind === 'http' && !isAllowedMcpHttpUrl(server.transport.url)) {
+      problems.push({
+        severity: 'error',
+        code: 'insecure_tool_server_url',
+        message:
+          `Tool server "${server.id}" (on agent kind "${kind}") has url ` +
+          `"${server.transport.url}". An HTTP tool server carries its resolved credential in a ` +
+          `request header, so the url must be https (plain http is accepted only on loopback).`,
+      })
+    }
+  }
+  if (tools.servers.length && !registry.requiresContainer(kind)) {
+    problems.push({
+      severity: 'warn',
+      code: 'tool_servers_without_container',
+      message:
+        `Agent kind "${kind}" declares tool servers but does not run in a container — an ` +
+        `inline LLM step has no agent CLI to wire them into, so they will never be available. ` +
+        `Give the kind a container surface (agent.surface: 'container-explore' / ` +
+        `'container-coding') or drop the tool servers.`,
+    })
+  }
   return problems
 }
 

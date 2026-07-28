@@ -10,6 +10,7 @@ import {
   type HarnessCallMetric,
   type HarnessKind,
   type LlmTraceSink,
+  type Logger,
   type ModelRef,
   type RecordAgentContextInput,
   type RunnerDispatchKind,
@@ -19,6 +20,7 @@ import {
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
+  type ToolSecretResolver,
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import {
@@ -29,33 +31,23 @@ import {
   isIndividualVendor,
   isSubscriptionVendor,
 } from '@cat-factory/kernel'
-import {
-  aprioriReferenceBranches,
-  resolveAprioriWorkingBranch,
-  resolveInstanceTypeId,
-} from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
   withComplexityAllowance,
-  DOC_WRITER_KIND,
-  READ_ONLY_AGENT_KINDS,
   defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
-import { buildContextFiles, renderSkillForHarness } from './contextFiles.js'
+import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
+import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
+import { buildKindBody } from './jobBody.js'
 import {
-  buildKindBody,
-  renderReferenceBranchesSection,
-  renderReferenceReposSection,
-} from './jobBody.js'
-import {
-  SPEC_WRITER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
   isTesterKind,
   type HarnessCallsRecordInput,
@@ -64,13 +56,14 @@ import type { ContainerSessionService } from '../containers/ContainerSessionServ
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
 import {
-  IMPLEMENTER_AGENT_KIND,
   buildCommonBody,
   buildRepoSpec,
   githubRepoOrigin,
   resolveConflictResolverPeer,
   resolveMergerCombinedDiff,
   resolveMultiRepoFanout,
+  resolveReferenceBranches,
+  resolveReferenceRepos,
 } from './containerAgentBody.js'
 
 // Re-exported for the composition root + tests that wire this executor by name.
@@ -233,7 +226,18 @@ function buildAgentContextRecord(
   context: AgentRunContext,
   body: Record<string, unknown>,
   model: string,
-  ids: { workspaceId: string; executionId: string },
+  ids: {
+    workspaceId: string
+    executionId: string
+    /**
+     * The tool servers actually wired for this dispatch, and any that were declared but could
+     * not be. Passed in rather than read off `context` because the harness (not the engine)
+     * decides what is servable, so the run context the engine built does not carry them. Safe to
+     * record: this is the NON-SECRET projection — the credentials live only on the job body's
+     * `mcpServers` field, which this allow-list deliberately never copies.
+     */
+    toolServers?: ResolvedToolServers
+  },
 ): RecordAgentContextInput {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
   const repo = (body.repo ?? {}) as Record<string, unknown>
@@ -275,6 +279,17 @@ function buildAgentContextRecord(
       webSearch: body.webSearch ?? false,
       infra: redactInfra(body.infra),
       decisions: context.decisions,
+      ...(ids.toolServers?.toolServers.length
+        ? { toolServers: ids.toolServers.toolServers.map((t) => t.id) }
+        : {}),
+      ...(ids.toolServers?.unavailableToolServers.length
+        ? {
+            unavailableToolServers: ids.toolServers.unavailableToolServers.map((t) => ({
+              id: t.id,
+              reason: t.reason,
+            })),
+          }
+        : {}),
       ...(context.revision
         ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
         : {}),
@@ -290,42 +305,6 @@ function buildAgentContextRecord(
 function refForHandle(handle: AgentJobHandle): RunnerJobRef {
   return { runId: handle.runId ?? handle.jobId, jobId: handle.jobId }
 }
-
-/**
- * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
- * checkouts the agent may read (to reuse existing solutions) but never write to. Deliberately
- * a SEPARATE gate from {@link MULTI_REPO_FANOUT_BUILTIN_KINDS}: reference repos are not involved
- * services (never writable, no branch/PR, don't need to be board services), so they must not be
- * folded into the fan-out path. Only the document writer reads them today.
- */
-const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
-
-/**
- * The read-only bug-triage kind excluded from the reference-branch consumers below: it clones the
- * REPORTED PR/commit as its subject, so an unrelated prior-art reference branch is noise for it.
- */
-const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
-
-/**
- * The kinds that consume a task's read-only apriori REFERENCE branches (the apriori-branches
- * reference mode) — the branches are fetched into the primary checkout's `origin/<b>` refs so the
- * agent can inspect a spike/prototype/prior-art branch it must never commit to. The consumers are
- * the kinds that read/plan/author against the primary repo — the implementer (`coder`), the
- * spec-writer, the doc-writer, and the read-only design/analysis kinds (`architect` / `analysis`).
- * Deliberately EXCLUDES the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
- * merger): they already carry the work in the PR branch they clone, so a reference branch is noise
- * — and folding it in would spend prompt tokens and a fetch on a branch they will not use.
- *
- * The design/analysis members are DERIVED from the authoritative {@link READ_ONLY_AGENT_KINDS}
- * (minus `bug-investigator`) rather than re-listed as literals, so a newly-registered read-only
- * design kind is picked up here automatically without a second hard-coded list to keep in step.
- */
-const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
-  IMPLEMENTER_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-  DOC_WRITER_KIND,
-  ...[...READ_ONLY_AGENT_KINDS].filter((k) => k !== BUG_INVESTIGATOR_AGENT_KIND),
-])
 
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
@@ -466,6 +445,20 @@ export interface ContainerAgentExecutorDependencies {
    */
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
   /**
+   * Resolve the credentials a TOOL SERVER (MCP) declared, for a kind that declares tool servers.
+   * Both facades wire the deployment-environment resolver (`createEnvToolSecretResolver`) by
+   * default, so a registered server works with no new storage; a deployment needing per-workspace
+   * credentials implements the port itself. Absent ⇒ a server declaring a REQUIRED secret is
+   * reported to the agent as unavailable rather than started without its credential.
+   */
+  resolveToolSecrets?: ToolSecretResolver
+  /**
+   * The facade logger, used for the best-effort degradations around agent capabilities (an
+   * unregistered tool-server id, a credential lookup that failed). Absent ⇒ those are silent,
+   * which is why every facade wires it.
+   */
+  logger?: Logger
+  /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
    * sink the LLM proxy fans generations out to, so the trace tree is complete.
@@ -584,7 +577,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary } =
+    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary, toolServers } =
       await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
@@ -606,7 +599,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (this.deps.agentContextObservability) {
       try {
         await this.deps.agentContextObservability.record(
-          buildAgentContextRecord(context, body, model, { workspaceId, executionId }),
+          buildAgentContextRecord(context, body, model, {
+            workspaceId,
+            executionId,
+            toolServers,
+          }),
         )
       } catch {
         // Swallowed: observability never breaks a dispatch.
@@ -1005,6 +1002,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     search: WebSearchAvailability
     /** The repo the job operates on, for the run diagnostics (owner/name/baseBranch + VCS provider). */
     repoSummary: { owner: string; name: string; baseBranch?: string; provider?: string }
+    /**
+     * The tool servers (MCP) resolved for this dispatch — the non-secret projection plus what
+     * could not be wired. Returned so the caller can record it on the agent-context snapshot: the
+     * decision is made HERE (it depends on the resolved harness) and the run context the engine
+     * built does not carry it.
+     */
+    toolServers: ResolvedToolServers
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     // Per-STEP harness job id: unique within the run so this step's job never aliases
@@ -1110,12 +1114,24 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         url: '',
         content: injected.content,
       })
-    // A `skill` step's resolved skill, rendered harness-aware (repo-skills slice 2): the payload
-    // travels as the top-level `skill` job-body field (the harness materialises it — natively for
-    // claude-code, under `.cat-context/skill/` for Pi/codex), and `skillSection` primes the prompt.
-    // Ambient (native) claude-code takes the checkout path too — it has no isolated config home to
-    // install into — so the prompt must carry the instructions rather than point at an install.
-    const skillRender = renderSkillForHarness(context.skill, harness, auth.ambientAuth === true)
+    // The dispatch's resolved skills (a `skill` step's pick and/or the running kind's declared
+    // playbooks), rendered harness-aware: the payload travels as the top-level `skills` job-body
+    // field (the harness materialises them — natively for claude-code, under
+    // `.cat-context/skill/<name>/` for Pi/codex), and `skillSection` primes the prompt. Ambient
+    // (native) claude-code takes the checkout path too — it has no isolated config home to install
+    // into — so the prompt must carry the instructions rather than point at an install.
+    const skillRender = renderSkillsForHarness(context.skills, harness, auth.ambientAuth === true)
+    // Tool servers (MCP) the running kind declared: filtered to what THIS harness can serve and
+    // whose credentials resolve, split into the prompt-facing projection (folded onto the prompt
+    // context below, so it reaches the prompt AND the agent-context snapshot) and the job-body
+    // `mcpServers` field carrying the transports + their secrets. Never throws — an unwirable
+    // server is reported to the agent as unavailable, not turned into a failed dispatch.
+    const tools = await this.resolveToolServersFor(context, {
+      harness,
+      ambientAuth: auth.ambientAuth === true,
+      workspaceId,
+      blockId,
+    })
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
@@ -1138,7 +1154,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         packageRegistries,
         repoSpec: buildRepoSpec(repo, origin),
         contextFiles,
-        skillBody: skillRender.body,
+        skillsBody: skillRender.body,
+        mcpServers: tools.mcpServers,
         // Extend the no-edit exploration allowance by the task-estimator's complexity when a
         // prior estimator step produced one (absent ⇒ the kind's tuning / harness default
         // stands — only absolute spiralling is caught). Loosen-only; see `withComplexityAllowance`.
@@ -1152,9 +1169,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Render the prompt's linked-context summary index from exactly the items that were
     // materialised (some may have been dropped at the byte cap), so the agent is never
     // pointed at a `.cat-context/` file that doesn't exist.
-    const promptContext: AgentRunContext = contextFiles.length
-      ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
-      : context
+    // Also folds in the tool servers resolved above: they are a DISPATCH-level fact (the harness
+    // decides what MCP is possible), so the engine cannot put them on the context — but the prompt
+    // and the agent-context snapshot must both see exactly what was wired.
+    const promptContext: AgentRunContext = {
+      ...context,
+      ...(contextFiles.length
+        ? { block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
+        : {}),
+      ...(tools.toolServers.length ? { toolServers: tools.toolServers } : {}),
+      ...(tools.unavailableToolServers.length
+        ? { unavailableToolServers: tools.unavailableToolServers }
+        : {}),
+    }
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
     // the per-kind hint (coder/mocker/analysis/… and any custom container kind) is applied here.
@@ -1218,7 +1245,30 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(repo.baseBranch ? { baseBranch: repo.baseBranch } : {}),
         provider: origin.provider,
       },
+      toolServers: tools,
     }
+  }
+
+  /**
+   * Resolve this dispatch's tool servers (MCP) — narrowing the running kind's declarations to what
+   * this harness/auth mode can serve and whose credentials resolve. A thin binding of the executor's
+   * injected deps onto the pure {@link resolveToolServers}; separated so `buildJobBody` stays under
+   * its complexity ceiling.
+   */
+  private resolveToolServersFor(
+    context: AgentRunContext,
+    args: { harness: HarnessKind; ambientAuth: boolean; workspaceId: string; blockId: string },
+  ): Promise<ResolvedToolServers> {
+    return resolveToolServers({
+      context,
+      agentKindRegistry: this.agentKindRegistry,
+      harness: args.harness,
+      ...(args.ambientAuth ? { ambientAuth: true } : {}),
+      workspaceId: args.workspaceId,
+      blockId: args.blockId,
+      ...(this.deps.resolveToolSecrets ? { resolveToolSecrets: this.deps.resolveToolSecrets } : {}),
+      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
+    })
   }
 
   /**
@@ -1297,14 +1347,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Read-only reference repos + apriori reference branches: both independent of the fan-out above.
     // Extracted to keep this method under the complexity ceiling; the branch flag reflects whether
     // the job is already multi-repo (a fan-out section OR reference-repo section is present).
-    const { referenceRepos, referenceReposSection } = this.resolveReferenceRepos(context, repo)
-    const { referenceBranches, referenceBranchesSection } = await this.resolveReferenceBranches(
+    const { referenceRepos, referenceReposSection } = resolveReferenceRepos(
       context,
-      {
-        repo,
-        workBranch,
-        multiRepo: Boolean(multiRepoSection || referenceReposSection),
-      },
+      repo,
+      this.deps,
+    )
+    const { referenceBranches, referenceBranchesSection } = await resolveReferenceBranches(
+      context,
+      { repo, workBranch, multiRepo: Boolean(multiRepoSection || referenceReposSection) },
+      this.deps,
     )
 
     return {
@@ -1316,99 +1367,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(referenceReposSection ? { referenceReposSection } : {}),
       ...(referenceBranches ? { referenceBranches } : {}),
       ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
-    }
-  }
-
-  /**
-   * Read-only reference repos (document-authoring tasks): the doc-writer clones each attached repo
-   * as a READ-ONLY sibling checkout it may read but never writes to. The spec carries NO branch/PR
-   * fields, so it is structurally unpushable; the harness clones it at its own default branch and
-   * skips it in the push phase. Auth reuses the run's already-resolved `ghToken` (the run
-   * initiator's own token when they have one, per `mintInstallationToken`), so no extra token mint.
-   * A reference repo may be outside the workspace projection, so its clone identity comes straight
-   * from the persisted attachment. Provider-neutral: the clone URL + provider come from
-   * `resolveRepoOrigin` (the same deployment-level seam the primary rides), so a GitLab deployment
-   * clones from GitLab. Extracted from {@link resolveAuxiliaryRepos} to keep it under the ceiling.
-   */
-  private resolveReferenceRepos(
-    context: AgentRunContext,
-    repo: RepoTarget,
-  ): { referenceRepos?: { repo: Record<string, unknown> }[]; referenceReposSection?: string } {
-    const attachedReferenceRepos = context.referenceRepos ?? []
-    if (attachedReferenceRepos.length === 0 || !REFERENCE_REPO_KINDS.has(context.agentKind)) {
-      return {}
-    }
-    const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-    // Dedup against the primary and each other by the harness's sibling-checkout key
-    // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
-    // claiming the same directory would make the second `git clone` fail into a non-empty dir.
-    // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
-    // primary checkout), and duplicate attachments collapse to one.
-    const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
-    const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
-    const targets: RepoTarget[] = []
-    for (const r of attachedReferenceRepos) {
-      const key = siblingKey(r.owner, r.name)
-      if (seen.has(key)) continue
-      seen.add(key)
-      targets.push({
-        installationId: r.connectionId ?? repo.installationId,
-        // A reference repo already carries the id it was attached by; the neutral
-        // `VcsRepoRef.repoId` vocabulary is the stringified form.
-        repoId: String(r.repoId),
-        owner: r.owner,
-        name: r.name,
-        baseBranch: r.defaultBranch,
-      })
-    }
-    if (targets.length === 0) {
-      return {}
-    }
-    return {
-      referenceRepos: targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) })),
-      referenceReposSection: renderReferenceReposSection(repo, targets),
-    }
-  }
-
-  /**
-   * Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
-   * of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike the
-   * reference REPOS above, these are not sibling checkouts — they ride the primary clone as
-   * `origin/<b>` refs the harness fetches before the agent runs (see the harness
-   * `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
-   * architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
-   * branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a reference
-   * is garnish, so a stale/typo'd one is silently omitted rather than failing the run. When probing
-   * isn't wired (tests / no GitHub) every named branch is forwarded and the harness fetch is
-   * best-effort. A run that already carries a PR still reads reference branches (they are context,
-   * independent of the work branch). Extracted from {@link resolveAuxiliaryRepos} for the ceiling.
-   */
-  private async resolveReferenceBranches(
-    context: AgentRunContext,
-    args: { repo: RepoTarget; workBranch: string; multiRepo: boolean },
-  ): Promise<{ referenceBranches?: string[]; referenceBranchesSection?: string }> {
-    const { repo, workBranch, multiRepo } = args
-    if (!REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
-      return {}
-    }
-    const named = aprioriReferenceBranches(context.aprioriBranches)
-    // Drop any that collide with the resolved work branch (a reference and the working branch are
-    // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
-    const candidates = named.filter((b) => b !== workBranch)
-    let present: string[]
-    if (this.deps.ensureWorkBranch) {
-      const probe = this.deps.ensureWorkBranch
-      const existence = await Promise.all(candidates.map((b) => probe(repo, b, { create: false })))
-      present = candidates.filter((_b, i) => existence[i])
-    } else {
-      present = candidates
-    }
-    if (present.length === 0) {
-      return {}
-    }
-    return {
-      referenceBranches: present,
-      referenceBranchesSection: renderReferenceBranchesSection(present, { multiRepo }),
     }
   }
 

@@ -27,7 +27,8 @@ interface MetricRow {
   tool_count: number
   request_max_tokens: number | null
   prompt_tokens: number
-  cached_prompt_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   completion_tokens: number
   total_tokens: number
   finish_reason: string | null
@@ -58,7 +59,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
     promptTokens: row.prompt_tokens,
-    cachedPromptTokens: row.cached_prompt_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     finishReason: row.finish_reason,
@@ -82,22 +84,29 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
  */
 const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
   created_at, streaming, message_count, tool_count, request_max_tokens, prompt_tokens,
-  cached_prompt_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
+  cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
   length(prompt_text)    AS prompt_chars,
   length(response_text)  AS response_chars,
   length(reasoning_text) AS reasoning_chars`
 
 /**
- * The three body columns, SLICED to `bodyChars`.
+ * The three body columns, sliced to `bodyChars` — three cases, each a different SQL shape:
  *
- * A budget of 0 selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over
- * a long run never makes SQLite materialise (or D1 transfer) a single prompt byte — which is
- * the whole reason bodies are opt-in on this surface. Lengths are still reported by
- * {@link PAGE_METADATA_COLUMNS}, because a size is what tells the caller which rows are worth a
- * point read. Mirrors the Drizzle repo's `llmPageColumns`.
+ *  - `undefined` (no budget) selects the columns RAW. Not `substr(col, 1, <huge sentinel>)`:
+ *    SQLite returns an EMPTY string for a length that large, so a "give me everything" point
+ *    read would silently hand back nothing while still reporting the real `totalChars`.
+ *  - `0` selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over a
+ *    long run never makes SQLite materialise (or D1 transfer) a single prompt byte — the
+ *    whole reason bodies are opt-in here.
+ *  - anything else slices to the caller's budget.
+ *
+ * Lengths are always reported by {@link PAGE_METADATA_COLUMNS} regardless, because a size is
+ * what tells the caller which rows are worth a point read. Mirrors the Drizzle repo's
+ * `llmPageColumns`.
  */
-function bodyColumns(bodyChars: number): string {
+function bodyColumns(bodyChars: number | undefined): string {
+  if (bodyChars === undefined) return `prompt_text, response_text, reasoning_text`
   if (bodyChars <= 0) {
     return `'' AS prompt_text, '' AS response_text, '' AS reasoning_text`
   }
@@ -107,8 +116,8 @@ function bodyColumns(bodyChars: number): string {
 }
 
 /** The slice-length binds `bodyColumns` needs, in the order its placeholders appear. */
-function bodyBinds(bodyChars: number): number[] {
-  return bodyChars > 0 ? [bodyChars, bodyChars, bodyChars] : []
+function bodyBinds(bodyChars: number | undefined): number[] {
+  return bodyChars !== undefined && bodyChars > 0 ? [bodyChars, bodyChars, bodyChars] : []
 }
 
 /**
@@ -146,7 +155,8 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
     promptTokens: row.prompt_tokens,
-    cachedPromptTokens: row.cached_prompt_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     finishReason: row.finish_reason,
@@ -186,10 +196,11 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         `INSERT INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
             streaming, message_count, tool_count, request_max_tokens,
-            prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, finish_reason,
+            prompt_tokens, cache_read_tokens, cache_write_tokens, completion_tokens,
+            total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .bind(
@@ -205,7 +216,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.toolCount,
         metric.requestMaxTokens,
         metric.promptTokens,
-        metric.cachedPromptTokens,
+        metric.cacheReadTokens,
+        metric.cacheWriteTokens,
         metric.completionTokens,
         metric.totalTokens,
         metric.finishReason,
@@ -306,7 +318,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
   async get(
     workspaceId: string,
     id: string,
-    bodyChars = Number.MAX_SAFE_INTEGER,
+    bodyChars?: number,
   ): Promise<LlmCallMetricPage | null> {
     const row = await this.db
       .prepare(
@@ -331,7 +343,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
            agent_kind                                                   AS agent_kind,
            COUNT(*)                                                     AS calls,
            COALESCE(SUM(prompt_tokens), 0)                              AS prompt_tokens,
-           COALESCE(SUM(cached_prompt_tokens), 0)                       AS cached_prompt_tokens,
+           COALESCE(SUM(cache_read_tokens), 0)                          AS cache_read_tokens,
+           COALESCE(SUM(cache_write_tokens), 0)                         AS cache_write_tokens,
            COALESCE(SUM(completion_tokens), 0)                          AS completion_tokens,
            COALESCE(MAX(completion_tokens), 0)                          AS peak_completion_tokens,
            MAX(request_max_tokens)                                      AS max_output_tokens,
@@ -349,7 +362,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         agent_kind: string
         calls: number
         prompt_tokens: number
-        cached_prompt_tokens: number
+        cache_read_tokens: number
+        cache_write_tokens: number
         completion_tokens: number
         peak_completion_tokens: number
         max_output_tokens: number | null
@@ -363,7 +377,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       agentKind: r.agent_kind,
       calls: r.calls,
       promptTokens: r.prompt_tokens,
-      cachedPromptTokens: r.cached_prompt_tokens,
+      cacheReadTokens: r.cache_read_tokens,
+      cacheWriteTokens: r.cache_write_tokens,
       completionTokens: r.completion_tokens,
       peakCompletionTokens: r.peak_completion_tokens,
       maxOutputTokens: r.max_output_tokens,

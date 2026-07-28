@@ -88,6 +88,36 @@ Bootstrap differs at the ends — it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### Skills and tool servers
+
+A job body may carry `skills[]` (procedural playbooks) and `mcpServers[]` (MCP tool servers) — the
+harness MATERIALISES both and decides nothing about them; the backend has already resolved which
+apply and dropped what this harness cannot serve (see
+[`backend/docs/adr/0029-agent-kind-capabilities.md`](../../docs/adr/0029-agent-kind-capabilities.md)).
+
+- **Skills** install natively under `CLAUDE_CONFIG_DIR/skills/<name>/` for a leased-credential
+  claude-code run (the CLI discovers and invokes them), and under
+  `.cat-context/skill/<name>/` in the checkout for Pi, Codex, and an AMBIENT claude-code run —
+  whose prompt carries the instructions instead, because there is no isolated config home to
+  install into and the runner refuses to write into the developer's own `~/.claude`.
+- **Tool servers** become a per-run `--mcp-config` file plus `--strict-mcp-config` for claude-code
+  (so an ambient run never picks up the developer's personal servers), and `[mcp_servers.*]` blocks
+  in the per-run `CODEX_HOME/config.toml` for Codex — stdio only, and skipped entirely under
+  ambient auth, which has no per-run home to write into. `--allowedTools` is passed ONLY when a
+  server actually narrows its tools, and then carries the CLI's built-in tool names alongside the
+  `mcp__*` patterns — an allow-list is whole-session, not MCP-scoped, so a bare list of MCP
+  patterns would leave the agent unable to read, edit or build anything. Whether the CLI gates on
+  that list at all is permission-mode dependent, so treat the narrowing as scoping rather than
+  enforcement; the prompt states it either way.
+- **An `http` tool server must be `https`, or loopback.** Its headers carry a resolved credential,
+  so the job boundary refuses a cleartext off-box URL (the backend refuses the same at
+  registration). `secretKeys` names which `env`/`headers` entries are credentials, so exactly those
+  values are registered for redaction — scrubbing the whole map would turn ordinary config strings
+  into `***` in every later log line.
+
+Both config files carry this job's resolved credentials, so they are written to a per-job directory
+(mode `0600`) and never into the checkout or a HOME-global path — see the next section.
+
 ## Per-job state: never a process- or HOME-global
 
 A job's staging state (the tester's secrets, private-registry auth, a repo-sourced Claude
@@ -153,6 +183,9 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/captured-command.ts` | The one way the harness runs a declared shell command on its own behalf: `sh -c` with a per-command watchdog, abort handling, conventional exit codes (124/127/130) and a scrub-then-bound output capture. Shared by both pre-PR verification phases so a fix to one cannot miss the other. |
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic — keyed off the job body, never the agent kind. |
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic — keyed off the job body, never the agent kind. |
+| `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries — the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers) — with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
+| `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
+| `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 
 ## Runner lifecycle knobs

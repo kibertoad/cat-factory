@@ -515,7 +515,8 @@ describe('HttpRunnerPoolProvider', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
     }
@@ -539,6 +540,42 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.state).toBe('done')
     // The well-formed entry survives with every field; the malformed one is dropped.
     expect(view.result?.callMetrics).toEqual([good])
+  })
+
+  it('keeps call telemetry from a harness image that predates the cache-class split', async () => {
+    // A pool runs whatever harness image its WORKSPACE pinned, so an image older than the
+    // fresh/read/write split is a normal operating state, not a malformed envelope. Its
+    // entries carry no cache fields; requiring them would fail every entry and drop ALL of
+    // that pool's telemetry silently — the run would report zero model calls rather than
+    // "cache breakdown unknown". The call, its tokens and its bodies must survive, with the
+    // split it never measured reading as 0.
+    const legacy = {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"user","content":"u"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+    }
+    capture('/api/jobs/job-9b', 'GET', {
+      state: 'succeeded',
+      result: { summary: 'coded', callMetrics: [legacy] },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-9b',
+      resolveSecret: () => 't',
+    })
+    expect(view.result?.callMetrics).toEqual([
+      { ...legacy, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    ])
   })
 
   // D2: every runner-pool failure carries the UI-first remedy naming where the pool is

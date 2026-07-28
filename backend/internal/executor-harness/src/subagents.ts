@@ -236,7 +236,16 @@ export function startSubagentWatcher(root: string, opts: SubagentWatcherOptions)
     if (event.type !== 'assistant' || !isObject(event.message)) return
     const message = event.message as Record<string, unknown>
     const u = claudeCallUsage(message.usage)
-    if (u.inputTokens === 0 && u.outputTokens === 0) return
+    // Every input class counts towards "did this turn report usage at all": a turn riding a
+    // warm cache legitimately reports 0 fresh input, and skipping it would drop precisely the
+    // cache-heavy calls this telemetry exists to weigh.
+    if (
+      u.inputTokens === 0 &&
+      u.cacheReadTokens === 0 &&
+      u.cacheWriteTokens === 0 &&
+      u.outputTokens === 0
+    )
+      return
     const content = Array.isArray(message.content) ? message.content : []
     const { text, reasoning } = claudeAssistantContent(content)
     publishCallMetric(
@@ -254,13 +263,18 @@ export function startSubagentWatcher(root: string, opts: SubagentWatcherOptions)
         responseText: redactBody(text, secrets),
         reasoningText: redactBody(reasoning, secrets),
         inputTokens: u.inputTokens,
-        cachedInputTokens: u.cachedInputTokens,
+        cacheReadTokens: u.cacheReadTokens,
+        cacheWriteTokens: u.cacheWriteTokens,
         outputTokens: u.outputTokens,
         finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
       },
       opts.onCallMetric,
     )
-    usage.inputTokens += u.inputTokens
+    // The run-level `usage` is the COARSE rotation-window weight, which counts every billed
+    // input bucket — unlike the per-call metric above, whose `inputTokens` is fresh-only. Sum
+    // all three classes back together here or a cache-heavy subagent looks nearly free to the
+    // rotation.
+    usage.inputTokens += u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens
     usage.outputTokens += u.outputTokens
   }
 

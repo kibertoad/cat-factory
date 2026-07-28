@@ -19,8 +19,11 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     startedAt: 1_000,
     endedAt: 1_500,
     promptTokens: 100,
+    cacheReadTokens: 900,
+    cacheWriteTokens: 40,
     completionTokens: 40,
-    totalTokens: 140,
+    // 100 fresh + 900 cache read + 40 cache write + 40 output (see the fetch-exporter suite).
+    totalTokens: 1_080,
     finishReason: 'stop',
     ok: true,
     errorMessage: null,
@@ -105,7 +108,8 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
         p.value,
       ]),
     )
-    expect(byType).toEqual({ input: 100, output: 40 })
+    // One data point per input CLASS (fresh / cache read / cache write) plus output.
+    expect(byType).toEqual({ input: 100, cache_read: 900, cache_write: 40, output: 40 })
 
     const duration = metrics.find((m) => m.descriptor.name === 'gen_ai.client.operation.duration')!
     expect(duration.descriptor.unit).toBe('s')

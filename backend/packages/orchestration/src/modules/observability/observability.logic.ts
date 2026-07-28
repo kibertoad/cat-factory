@@ -44,13 +44,22 @@ export function transportOverheadRatio(upstreamMs: number, overheadMs: number): 
 }
 
 /**
- * Share of prompt tokens served from the provider's prefix cache (0..1), or null when
- * there were no prompt tokens. A low rate on a multi-turn run flags a cache-less hot
- * path (e.g. a Workers-AI flavour) re-billing the whole prompt every turn.
+ * Share of the input side served by the cache: `(read + write) / (fresh + read + write)`, or
+ * null when the run processed no input at all. A low rate on a multi-turn run flags a
+ * cache-less hot path (e.g. a Workers-AI flavour) re-billing the whole prompt every turn.
+ *
+ * The denominator is the WHOLE input now that the three classes are orthogonal, so the ratio
+ * is a genuine 0..1 share and needs no clamp — the old form divided by a `promptTokens` that
+ * did not contain the cache reads on the Anthropic shape, which is why it could exceed 1.
  */
-export function cacheHitRate(cachedPromptTokens: number, promptTokens: number): number | null {
-  if (promptTokens <= 0) return null
-  return Math.min(1, cachedPromptTokens / promptTokens)
+export function cacheHitRate(
+  cacheReadTokens: number,
+  cacheWriteTokens: number,
+  promptTokens: number,
+): number | null {
+  const input = promptTokens + cacheReadTokens + cacheWriteTokens
+  if (input <= 0) return null
+  return (cacheReadTokens + cacheWriteTokens) / input
 }
 
 // --- Delta prompt storage --------------------------------------------------
@@ -199,7 +208,8 @@ export function buildLlmMetricsExport(
 
   const insights: LlmExportInsight[] = [...byKind.entries()].map(([agentKind, kindCalls]) => {
     const promptTokens = sum(kindCalls, (c) => c.promptTokens)
-    const cachedPromptTokens = sum(kindCalls, (c) => c.cachedPromptTokens)
+    const cacheReadTokens = sum(kindCalls, (c) => c.cacheReadTokens)
+    const cacheWriteTokens = sum(kindCalls, (c) => c.cacheWriteTokens)
     const completionTokens = sum(kindCalls, (c) => c.completionTokens)
     const peakCompletionTokens = kindCalls.reduce((m, c) => Math.max(m, c.completionTokens), 0)
     const maxOutputTokens = maxNullable(kindCalls.map((c) => c.requestMaxTokens))
@@ -209,8 +219,9 @@ export function buildLlmMetricsExport(
       agentKind,
       calls: kindCalls.length,
       promptTokens,
-      cachedPromptTokens,
-      cacheHitRate: cacheHitRate(cachedPromptTokens, promptTokens),
+      cacheReadTokens,
+      cacheWriteTokens,
+      cacheHitRate: cacheHitRate(cacheReadTokens, cacheWriteTokens, promptTokens),
       completionTokens,
       peakCompletionTokens,
       maxOutputTokens,
@@ -226,6 +237,9 @@ export function buildLlmMetricsExport(
 
   const upstreamMs = sum(calls, (c) => c.upstreamMs)
   const overheadMs = sum(calls, (c) => c.overheadMs)
+  const totalPromptTokens = sum(calls, (c) => c.promptTokens)
+  const totalCacheReadTokens = sum(calls, (c) => c.cacheReadTokens)
+  const totalCacheWriteTokens = sum(calls, (c) => c.cacheWriteTokens)
   return {
     kind: 'cat-factory.llm-metrics-export',
     version: 1,
@@ -233,12 +247,10 @@ export function buildLlmMetricsExport(
     generatedAt,
     totals: {
       calls: calls.length,
-      promptTokens: sum(calls, (c) => c.promptTokens),
-      cachedPromptTokens: sum(calls, (c) => c.cachedPromptTokens),
-      cacheHitRate: cacheHitRate(
-        sum(calls, (c) => c.cachedPromptTokens),
-        sum(calls, (c) => c.promptTokens),
-      ),
+      promptTokens: totalPromptTokens,
+      cacheReadTokens: totalCacheReadTokens,
+      cacheWriteTokens: totalCacheWriteTokens,
+      cacheHitRate: cacheHitRate(totalCacheReadTokens, totalCacheWriteTokens, totalPromptTokens),
       completionTokens: sum(calls, (c) => c.completionTokens),
       upstreamMs,
       overheadMs,

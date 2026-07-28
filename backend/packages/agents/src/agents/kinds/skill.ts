@@ -54,7 +54,7 @@ const SKILL_SYSTEM_PROMPT = [
 function skillUserPrompt(context: AgentRunContext): string {
   const lines = [
     `Pipeline: ${context.pipelineName}`,
-    ...(context.skill ? [`Skill: ${context.skill.name}`] : []),
+    ...(context.skills?.length ? [`Skills: ${context.skills.map((s) => s.name).join(', ')}`] : []),
     `Task: ${context.block.title}`,
     `Brief: ${context.block.description?.trim() || '(none provided — infer the scope from the title and the skill)'}`,
   ]

@@ -350,8 +350,17 @@ export const debugLlmCallSchema = v.object({
   /** Tools offered to the model (0 ⇒ the agent could not edit anything). */
   toolCount: v.number(),
   requestMaxTokens: v.nullable(v.number()),
+  /** FRESH (uncached) input tokens — exclusive of both cache classes below. */
   promptTokens: v.number(),
-  cachedPromptTokens: v.number(),
+  /** Input tokens served from the provider's prefix cache (priced around 0.1x fresh). */
+  cacheReadTokens: v.number(),
+  /**
+   * Input tokens WRITTEN into the provider's cache (priced 1.25-2x fresh). Kept apart from
+   * the reads because summed together, a loop that keeps invalidating and re-writing its
+   * prefix is indistinguishable from one riding a warm cache — and telling those apart is
+   * often the whole question when a run costs more than it should.
+   */
+  cacheWriteTokens: v.number(),
   completionTokens: v.number(),
   totalTokens: v.number(),
   upstreamMs: v.number(),

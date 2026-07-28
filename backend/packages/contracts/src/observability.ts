@@ -23,9 +23,15 @@ export const llmCallMetricSchema = v.object({
   toolCount: v.number(),
   /** The `max_tokens` the request asked for (the output ceiling), or null. */
   requestMaxTokens: v.nullable(v.number()),
+  /**
+   * FRESH input tokens: the prompt the model processed from scratch, exclusive of both
+   * cache classes. Total input = `promptTokens + cacheReadTokens + cacheWriteTokens`.
+   */
   promptTokens: v.number(),
-  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
-  cachedPromptTokens: v.optional(v.number(), 0),
+  /** Input tokens served from the provider's prefix cache (~0.1× base input). */
+  cacheReadTokens: v.optional(v.number(), 0),
+  /** Input tokens written INTO the cache this call (1.25–2× base input — dearer than fresh). */
+  cacheWriteTokens: v.optional(v.number(), 0),
   completionTokens: v.number(),
   totalTokens: v.number(),
   /** Upstream finish reason (`stop` | `length` | `tool_calls` | `content_filter` | …). */
@@ -87,10 +93,11 @@ export const llmCallActivitySchema = v.object({
   toolCount: v.number(),
   requestMaxTokens: v.nullable(v.number()),
   promptTokens: v.number(),
-  // Always supplied by the proxy emit (unlike the persisted metric, which defaults it
-  // for rows that predate delta storage), so it is required here — matching the SPA's
-  // `LlmCallActivity` type, which derives it as a required field from `LlmCallMetric`.
-  cachedPromptTokens: v.number(),
+  // Always supplied by the proxy emit (unlike the persisted metric, which defaults them
+  // for rows that predate delta storage), so they are required here — matching the SPA's
+  // `LlmCallActivity` type, which derives them as required fields from `LlmCallMetric`.
+  cacheReadTokens: v.number(),
+  cacheWriteTokens: v.number(),
   completionTokens: v.number(),
   totalTokens: v.number(),
   finishReason: v.nullable(v.string()),
@@ -117,10 +124,13 @@ export type LlmMetricsResponse = v.InferOutput<typeof llmMetricsResponseSchema>
 export const llmExportInsightSchema = v.object({
   agentKind: v.string(),
   calls: v.number(),
+  /** Fresh (uncached) input tokens. */
   promptTokens: v.number(),
-  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
-  cachedPromptTokens: v.number(),
-  /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+  /** Input tokens served from the prefix cache. */
+  cacheReadTokens: v.number(),
+  /** Input tokens written into the cache. */
+  cacheWriteTokens: v.number(),
+  /** (read + write) / (prompt + read + write), 0..1; null when there was no input at all. */
   cacheHitRate: v.nullable(v.number()),
   completionTokens: v.number(),
   peakCompletionTokens: v.number(),
@@ -145,10 +155,13 @@ export type LlmExportInsight = v.InferOutput<typeof llmExportInsightSchema>
  */
 export const llmExportTotalsSchema = v.object({
   calls: v.number(),
+  /** Fresh (uncached) input tokens. */
   promptTokens: v.number(),
-  /** Prompt tokens served from the prefix cache (subset on OpenAI/DeepSeek; may exceed promptTokens on Anthropic, which reports cache reads separately). */
-  cachedPromptTokens: v.number(),
-  /** cachedPromptTokens / promptTokens, 0..1; null when there were no prompt tokens. */
+  /** Input tokens served from the prefix cache. */
+  cacheReadTokens: v.number(),
+  /** Input tokens written into the cache. */
+  cacheWriteTokens: v.number(),
+  /** (read + write) / (prompt + read + write), 0..1; null when there was no input at all. */
   cacheHitRate: v.nullable(v.number()),
   completionTokens: v.number(),
   upstreamMs: v.number(),

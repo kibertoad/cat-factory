@@ -130,7 +130,8 @@ export function toDebugLlmCall(call: LlmCallMetricPage): DebugLlmCall {
     toolCount: call.toolCount,
     requestMaxTokens: call.requestMaxTokens,
     promptTokens: call.promptTokens,
-    cachedPromptTokens: call.cachedPromptTokens,
+    cacheReadTokens: call.cacheReadTokens,
+    cacheWriteTokens: call.cacheWriteTokens,
     completionTokens: call.completionTokens,
     totalTokens: call.totalTokens,
     upstreamMs: call.upstreamMs,
@@ -207,8 +208,9 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
     agentKind: s.agentKind,
     calls: s.calls,
     promptTokens: s.promptTokens,
-    cachedPromptTokens: s.cachedPromptTokens,
-    cacheHitRate: cacheHitRate(s.cachedPromptTokens, s.promptTokens),
+    cacheReadTokens: s.cacheReadTokens,
+    cacheWriteTokens: s.cacheWriteTokens,
+    cacheHitRate: cacheHitRate(s.cacheReadTokens, s.cacheWriteTokens, s.promptTokens),
     completionTokens: s.completionTokens,
     peakCompletionTokens: s.peakCompletionTokens,
     maxOutputTokens: s.maxOutputTokens,
@@ -223,15 +225,17 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
   const total = <K extends keyof LlmCallMetricSummary>(key: K): number =>
     summaries.reduce((acc, s) => acc + (s[key] as number), 0)
   const promptTokens = total('promptTokens')
-  const cachedPromptTokens = total('cachedPromptTokens')
+  const cacheReadTokens = total('cacheReadTokens')
+  const cacheWriteTokens = total('cacheWriteTokens')
   const upstreamMs = total('upstreamMs')
   const overheadMs = total('overheadMs')
   return {
     totals: {
       calls: total('calls'),
       promptTokens,
-      cachedPromptTokens,
-      cacheHitRate: cacheHitRate(cachedPromptTokens, promptTokens),
+      cacheReadTokens,
+      cacheWriteTokens,
+      cacheHitRate: cacheHitRate(cacheReadTokens, cacheWriteTokens, promptTokens),
       completionTokens: total('completionTokens'),
       upstreamMs,
       overheadMs,

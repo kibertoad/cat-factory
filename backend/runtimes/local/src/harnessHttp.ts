@@ -134,7 +134,18 @@ async function postMortemOf(opts: {
 export interface InlineJobResult {
   text: string
   finishReason?: 'stop' | 'length'
-  usage?: { inputTokens?: number; outputTokens?: number }
+  /**
+   * The input side split into its three orthogonal classes (`inputTokens` is FRESH input,
+   * exclusive of both caches), mirroring the harness's `InlineResult.usage`. A harness image
+   * predating the split omits the cache fields, which reads as 0 — the same answer it gave
+   * when it reported one lumped count.
+   */
+  usage?: {
+    inputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+    outputTokens?: number
+  }
 }
 
 /** The harness `/jobs/{id}` view for an `inline` job (its own result shape, not RunnerJobView). */

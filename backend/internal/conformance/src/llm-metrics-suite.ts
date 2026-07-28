@@ -23,7 +23,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     toolCount: 1,
     requestMaxTokens: 1000,
     promptTokens: 100,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -153,7 +154,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
           workspaceId: ws,
           executionId: e1,
           promptTokens: 100,
-          cachedPromptTokens: 40,
+          cacheReadTokens: 40,
+          cacheWriteTokens: 15,
           completionTokens: 50,
           requestMaxTokens: 1000,
           upstreamMs: 100,
@@ -166,7 +168,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
           workspaceId: ws,
           executionId: e1,
           promptTokens: 100,
-          cachedPromptTokens: 60,
+          cacheReadTokens: 60,
+          cacheWriteTokens: 25,
           completionTokens: 990,
           requestMaxTokens: 1000,
           finishReason: 'length',
@@ -193,7 +196,11 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       const s = summaries[0]!
       expect(s.agentKind).toBe('coder')
       expect(s.calls).toBe(3)
-      expect(s.cachedPromptTokens).toBe(100)
+      // The two cache classes are aggregated APART: a lumped sum cannot tell a run riding a
+      // warm cache from one re-writing its prefix, and they are priced an order of magnitude
+      // apart (~0.1x vs 1.25-2x base input).
+      expect(s.cacheReadTokens).toBe(100)
+      expect(s.cacheWriteTokens).toBe(40)
       expect(s.completionTokens).toBe(1040)
       expect(s.peakCompletionTokens).toBe(990)
       expect(s.maxOutputTokens).toBe(1000)
@@ -239,7 +246,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         responseText: '',
         reasoningText: '',
         inputTokens: 0,
-        cachedInputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         outputTokens: 0,
         finishReason: 'end_turn',
         ...overrides,
@@ -256,7 +264,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
             messageCount: 2,
             responseText: 'hi',
             inputTokens: 120,
-            cachedInputTokens: 20,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 10,
             outputTokens: 30,
           }),
           call({
@@ -276,8 +285,12 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       const first = byResp['hi']!
       expect(first.provider).toBe('claude')
       expect(first.model).toBe('claude-opus-4-8') // the call's own model wins
+      // The harness's three input classes map across one-for-one; `promptTokens` is the FRESH
+      // count, so the row's total input is prompt + read + write.
       expect(first.promptTokens).toBe(120)
-      expect(first.cachedPromptTokens).toBe(20)
+      expect(first.cacheReadTokens).toBe(20)
+      expect(first.cacheWriteTokens).toBe(10)
+      expect(first.totalTokens).toBe(180)
       expect(first.completionTokens).toBe(30)
       // The CLIs expose no per-HTTP timing, so the split is zero.
       expect(first.totalMs).toBe(0)
@@ -315,7 +328,8 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         responseText,
         reasoningText: '',
         inputTokens: 10,
-        cachedInputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         outputTokens: 5,
         finishReason: 'end_turn',
         seq,
@@ -376,7 +390,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         provider: 'claude',
         model: 'claude:claude-opus-4-8',
       }
-      const tokens = { inputTokens: 10, cachedInputTokens: 0, outputTokens: 5 }
+      const tokens = { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 }
       const parent = (messageCount: number, responseText: string): HarnessCallMetric => ({
         model: 'claude-opus-4-8',
         promptText: JSON.stringify(

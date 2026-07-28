@@ -94,7 +94,8 @@ function input(overrides: Partial<RecordLlmCallInput> = {}): RecordLlmCallInput 
     toolCount: 0,
     requestMaxTokens: 1000,
     promptTokens: 100,
-    cachedPromptTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     completionTokens: 50,
     totalTokens: 150,
     finishReason: 'stop',
@@ -443,7 +444,8 @@ describe('makeHarnessCallRecorder', () => {
       responseText: 'hi',
       reasoningText: '',
       inputTokens: 120,
-      cachedInputTokens: 20,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 10,
       outputTokens: 30,
       finishReason: 'end_turn',
       ...overrides,
@@ -473,10 +475,14 @@ describe('makeHarnessCallRecorder', () => {
     expect(m.provider).toBe('claude')
     // The call's own model wins over the dispatch `provider:model`.
     expect(m.model).toBe('claude-opus-4-8')
+    // The harness reports the three input classes ORTHOGONALLY, so they map across one-for-one
+    // and the recorded total is their sum plus the output — re-lumping the two cache classes
+    // here is what made a repair loop indistinguishable from a warm-cache one.
     expect(m.promptTokens).toBe(120)
-    expect(m.cachedPromptTokens).toBe(20)
+    expect(m.cacheReadTokens).toBe(20)
+    expect(m.cacheWriteTokens).toBe(10)
     expect(m.completionTokens).toBe(30)
-    expect(m.totalTokens).toBe(150)
+    expect(m.totalTokens).toBe(180)
     expect(m.finishReason).toBe('end_turn')
     expect(m.responseText).toBe('hi')
     // The CLIs expose no per-HTTP timing, so both are zero (overhead derives zero).

@@ -37,7 +37,19 @@ export interface InlineCliResult {
   text: string
   /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
   finishReason?: 'stop' | 'length'
-  usage?: { inputTokens?: number; outputTokens?: number }
+  /**
+   * The call's token usage, with the input side split into its three orthogonal classes:
+   * `inputTokens` is FRESH input only, exclusive of both caches, so the total input is
+   * `inputTokens + cacheReadTokens + cacheWriteTokens`. A harness CLI that reports no cache
+   * breakdown leaves the two cache fields absent (⇒ 0), which is honest: on that shape the
+   * fresh count IS the whole input.
+   */
+  usage?: {
+    inputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+    outputTokens?: number
+  }
 }
 
 /** Runs one inline completion through the harness CLI; supplied by the facade. */
@@ -61,10 +73,20 @@ function flattenPrompt(prompt: LanguageModelV3Prompt): { system: string; user: s
 }
 
 function toUsage(usage: InlineCliResult['usage']): LanguageModelV3GenerateResult['usage'] {
-  const input = usage?.inputTokens
+  const fresh = usage?.inputTokens
+  const cacheRead = usage?.cacheReadTokens ?? 0
+  const cacheWrite = usage?.cacheWriteTokens ?? 0
   const output = usage?.outputTokens
+  // `noCache` is the fresh count the runner reported; `total` is the whole input side, so the
+  // cache classes are added back onto it. Reporting fresh as the total would make a
+  // cache-heavy subscription run look nearly free on the trace sink.
   return {
-    inputTokens: { total: input, noCache: input, cacheRead: 0, cacheWrite: 0 },
+    inputTokens: {
+      total: fresh == null ? undefined : fresh + cacheRead + cacheWrite,
+      noCache: fresh,
+      cacheRead,
+      cacheWrite,
+    },
     outputTokens: { total: output, text: output, reasoning: 0 },
   }
 }

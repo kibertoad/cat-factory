@@ -213,7 +213,8 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
     promptTokens: row.prompt_tokens,
-    cachedPromptTokens: row.cached_prompt_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     finishReason: row.finish_reason,
@@ -250,17 +251,27 @@ function llmOutcomeFilter(outcome: LlmCallOutcomeFilter | undefined) {
 }
 
 /**
- * The column set for a bounded page: every metadata column, plus each text body SLICED to the
- * caller's budget and its full `length()` alongside.
+ * The column set for a bounded page: every metadata column, plus each text body sliced to the
+ * caller's budget and its full `length()` alongside. Three cases, kept in step with the D1
+ * repo's `bodyColumns`:
  *
- * A budget of 0 selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over
- * a long run never makes the database materialise (or the driver transfer) a single prompt byte
- * — which is the whole reason bodies are opt-in on this surface. The lengths are still reported,
- * because a size is what tells the caller which rows are worth a point read.
+ *  - `undefined` (no budget) selects the column RAW. Deliberately not a huge sentinel length:
+ *    SQLite returns an EMPTY string for one of those, so a shared "give me everything"
+ *    sentinel would make the two stores disagree on the point read that exists to return
+ *    whole bodies.
+ *  - `0` selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over a
+ *    long run never makes the database materialise (or the driver transfer) a single prompt
+ *    byte — the whole reason bodies are opt-in on this surface.
+ *  - anything else slices to the budget.
+ *
+ * The lengths are reported either way, because a size is what tells the caller which rows are
+ * worth a point read.
  */
-function llmPageColumns(bodyChars: number) {
-  const slice = (column: AnyPgColumn) =>
-    bodyChars > 0 ? sql<string>`substr(${column}, 1, ${bodyChars})` : sql<string>`''`
+function llmPageColumns(bodyChars: number | undefined) {
+  const slice = (column: AnyPgColumn) => {
+    if (bodyChars === undefined) return column
+    return bodyChars > 0 ? sql<string>`substr(${column}, 1, ${bodyChars})` : sql<string>`''`
+  }
   return {
     id: llmCallMetrics.id,
     workspace_id: llmCallMetrics.workspace_id,
@@ -274,7 +285,8 @@ function llmPageColumns(bodyChars: number) {
     tool_count: llmCallMetrics.tool_count,
     request_max_tokens: llmCallMetrics.request_max_tokens,
     prompt_tokens: llmCallMetrics.prompt_tokens,
-    cached_prompt_tokens: llmCallMetrics.cached_prompt_tokens,
+    cache_read_tokens: llmCallMetrics.cache_read_tokens,
+    cache_write_tokens: llmCallMetrics.cache_write_tokens,
     completion_tokens: llmCallMetrics.completion_tokens,
     total_tokens: llmCallMetrics.total_tokens,
     finish_reason: llmCallMetrics.finish_reason,
@@ -310,7 +322,8 @@ function rowToLlmCallPage(row: LlmPageRow): LlmCallMetricPage {
     tool_count: number
     request_max_tokens: number | null
     prompt_tokens: number
-    cached_prompt_tokens: number
+    cache_read_tokens: number
+    cache_write_tokens: number
     completion_tokens: number
     total_tokens: number
     finish_reason: string | null
@@ -341,7 +354,8 @@ function rowToLlmCallPage(row: LlmPageRow): LlmCallMetricPage {
     toolCount: r.tool_count,
     requestMaxTokens: r.request_max_tokens,
     promptTokens: r.prompt_tokens,
-    cachedPromptTokens: r.cached_prompt_tokens,
+    cacheReadTokens: r.cache_read_tokens,
+    cacheWriteTokens: r.cache_write_tokens,
     completionTokens: r.completion_tokens,
     totalTokens: r.total_tokens,
     finishReason: r.finish_reason,
@@ -382,7 +396,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         tool_count: metric.toolCount,
         request_max_tokens: metric.requestMaxTokens,
         prompt_tokens: metric.promptTokens,
-        cached_prompt_tokens: metric.cachedPromptTokens,
+        cache_read_tokens: metric.cacheReadTokens,
+        cache_write_tokens: metric.cacheWriteTokens,
         completion_tokens: metric.completionTokens,
         total_tokens: metric.totalTokens,
         finish_reason: metric.finishReason,
@@ -495,7 +510,7 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   async get(
     workspaceId: string,
     id: string,
-    bodyChars = Number.MAX_SAFE_INTEGER,
+    bodyChars?: number,
   ): Promise<LlmCallMetricPage | null> {
     const rows = await this.db
       .select(llmPageColumns(bodyChars))
@@ -519,7 +534,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         agentKind: llmCallMetrics.agent_kind,
         calls: sql<number>`count(*)::int`,
         promptTokens: sql<number>`coalesce(sum(${llmCallMetrics.prompt_tokens}), 0)::int`,
-        cachedPromptTokens: sql<number>`coalesce(sum(${llmCallMetrics.cached_prompt_tokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${llmCallMetrics.cache_read_tokens}), 0)::int`,
+        cacheWriteTokens: sql<number>`coalesce(sum(${llmCallMetrics.cache_write_tokens}), 0)::int`,
         completionTokens: sql<number>`coalesce(sum(${llmCallMetrics.completion_tokens}), 0)::int`,
         peakCompletionTokens: sql<number>`coalesce(max(${llmCallMetrics.completion_tokens}), 0)::int`,
         maxOutputTokens: sql<number | null>`max(${llmCallMetrics.request_max_tokens})`,
@@ -545,7 +561,8 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       agentKind: r.agentKind,
       calls: Number(r.calls),
       promptTokens: Number(r.promptTokens),
-      cachedPromptTokens: Number(r.cachedPromptTokens),
+      cacheReadTokens: Number(r.cacheReadTokens),
+      cacheWriteTokens: Number(r.cacheWriteTokens),
       completionTokens: Number(r.completionTokens),
       peakCompletionTokens: Number(r.peakCompletionTokens),
       maxOutputTokens: r.maxOutputTokens == null ? null : Number(r.maxOutputTokens),

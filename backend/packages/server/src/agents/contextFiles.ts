@@ -70,7 +70,7 @@ export function buildContextFiles(context: AgentRunContext): {
   return { files, contextDocs: keptDocs, contextTasks: keptTasks }
 }
 
-/** The top-level `skill` job-body field the harness materialises (harness-aware). */
+/** One entry of the top-level `skills` job-body field the harness materialises (harness-aware). */
 export interface SkillJobBody {
   name: string
   description: string
@@ -80,69 +80,91 @@ export interface SkillJobBody {
 }
 
 /**
- * Render a resolved `skill` for the running harness (repo-sourced Claude Skills, slice 2). The
- * skill payload always travels as the dedicated top-level `skill` job-body field (NEVER a context
- * file — the agent-context snapshot copies context files verbatim, whereas an unknown top-level
- * field is omitted by its allow-list). The harness materialises it HARNESS-AWARE from that field:
- * `CLAUDE_CONFIG_DIR/skills/<name>/` natively for claude-code (the CLI loads it), or
- * `.cat-context/skill/<relPath>` for Pi/codex (which read the checkout).
+ * Render the dispatch's resolved skills for the running harness — a step's picked skill and/or
+ * the skills the running agent KIND declared. The payload always travels as the dedicated
+ * top-level `skills` job-body field (NEVER a context file — the agent-context snapshot copies
+ * context files verbatim, whereas an unknown top-level field is omitted by its allow-list). The
+ * harness materialises them HARNESS-AWARE from that field: `CLAUDE_CONFIG_DIR/skills/<name>/`
+ * natively for claude-code (the CLI loads and INVOKES them on its own judgement), or
+ * `.cat-context/skill/<name>/<relPath>` for Pi/codex (which read the checkout).
  *
- * Only the PROMPT differs: a NATIVE install gets a short pointer (its instructions live in the
+ * Only the PROMPT differs: a NATIVE install gets a short pointer (the instructions live in the
  * installed SKILL.md, so they are not duplicated into the prompt), while every checkout-reading
  * case gets the full instructions folded in plus a pointer to the materialised resources. A
  * resource whose body couldn't be fetched (oversized / binary / unreadable) is referenced by its
- * repo path in the prompt rather than materialised. No skill ⇒ everything empty.
+ * repo path in the prompt rather than materialised. No skills ⇒ everything empty.
  *
  * `ambientAuth` decides this as much as the harness does. An ambient claude-code run has no
- * isolated `CLAUDE_CONFIG_DIR` to install into, and the harness REFUSES to write a repo's skill
- * into the developer's own `~/.claude` (it would outlive the run, and two concurrent native jobs
- * carrying same-named skills would clobber each other), so it reads the checkout exactly like
- * codex. Rendering such a run the native way would point the agent at a skill that was never
- * installed, with its instructions nowhere in the prompt.
+ * isolated `CLAUDE_CONFIG_DIR` to install into, and the harness REFUSES to write a skill into the
+ * developer's own `~/.claude` (it would outlive the run, and two concurrent native jobs carrying
+ * same-named skills would clobber each other), so it reads the checkout exactly like codex.
+ * Rendering such a run the native way would point the agent at a skill that was never installed,
+ * with its instructions nowhere in the prompt.
  */
-export function renderSkillForHarness(
-  skill: AgentRunContext['skill'],
+export function renderSkillsForHarness(
+  skills: AgentRunContext['skills'],
   harness: HarnessKind,
   ambientAuth = false,
-): { body?: SkillJobBody; section?: string } {
-  if (!skill) return {}
-  const withBody = skill.resources.filter(
-    (r): r is { path: string; relPath: string; body: string } => typeof r.body === 'string',
-  )
+): { body?: SkillJobBody[]; section?: string } {
+  if (!skills?.length) return {}
+  const native = harness === 'claude-code' && !ambientAuth
+  const body = skills.map(toSkillJobBody)
+  const sections = skills.map((skill) => renderSkillSection(skill, native))
+  return {
+    body,
+    section:
+      skills.length === 1
+        ? sections[0]!
+        : // Numbered when several apply, so the agent reads them as a set of playbooks to
+          // combine rather than as one run-on instruction block whose parts blur together.
+          [
+            'Apply these skills to this task, all of them:',
+            ...sections.map((s, i) => `${i + 1}. ${s}`),
+          ].join('\n\n'),
+  }
+}
+
+function toSkillJobBody(skill: NonNullable<AgentRunContext['skills']>[number]): SkillJobBody {
+  return {
+    name: skill.name,
+    description: skill.description,
+    instructions: skill.instructions,
+    resources: skill.resources
+      .filter(
+        (r): r is { path: string; relPath: string; body: string } => typeof r.body === 'string',
+      )
+      .map((r) => ({ relPath: r.relPath, content: r.body })),
+  }
+}
+
+/** The prompt directive for ONE skill — a pointer when natively installed, the full text otherwise. */
+function renderSkillSection(
+  skill: NonNullable<AgentRunContext['skills']>[number],
+  native: boolean,
+): string {
+  const withBody = skill.resources.filter((r) => typeof r.body === 'string')
   const withoutBody = skill.resources.filter((r) => typeof r.body !== 'string')
   const missingNote = withoutBody.length
     ? ` Some resources were too large or binary to include — read them from the repo if you need them: ${withoutBody
         .map((r) => r.path)
         .join(', ')}.`
     : ''
-  const body: SkillJobBody = {
-    name: skill.name,
-    description: skill.description,
-    instructions: skill.instructions,
-    resources: withBody.map((r) => ({ relPath: r.relPath, content: r.body })),
+  if (native) {
+    return (
+      `Apply the "${skill.name}" skill, installed for this step as a Claude skill (its SKILL.md ` +
+      `and resource files are available to you). Follow it precisely.${missingNote}`
+    )
   }
-
-  if (harness === 'claude-code' && !ambientAuth) {
-    return {
-      body,
-      section:
-        `Apply the "${skill.name}" skill, installed for this step as a Claude skill (its SKILL.md ` +
-        `and resource files are available to you). Follow it precisely.${missingNote}`,
-    }
-  }
-
   // Pi / codex / AMBIENT claude-code: fold the instructions into the prompt; the harness
-  // materialises the resources under `.cat-context/skill/` (see the harness `skill` handling),
-  // which the prompt points at.
+  // materialises the resources under `.cat-context/skill/<name>/` (see the harness `skills`
+  // handling), which the prompt points at.
   const resourceNote = withBody.length
-    ? ` The skill's resource files are available under \`.cat-context/skill/\`: ${withBody
+    ? ` The skill's resource files are available under \`.cat-context/skill/${skill.name}/\`: ${withBody
         .map((r) => r.relPath)
         .join(', ')}.`
     : ''
-  return {
-    body,
-    section:
-      `Apply the following skill "${skill.name}" to this task — follow its steps and honour its ` +
-      `constraints:\n\n${skill.instructions}\n${resourceNote}${missingNote}`,
-  }
+  return (
+    `Apply the following skill "${skill.name}" to this task — follow its steps and honour its ` +
+    `constraints:\n\n${skill.instructions}\n${resourceNote}${missingNote}`
+  )
 }

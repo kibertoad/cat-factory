@@ -34,14 +34,29 @@ export interface LlmCallMetric {
   toolCount: number
   /** The `max_tokens` the request asked for (the effective output ceiling), or null. */
   requestMaxTokens: number | null
-  /** Prompt (input) tokens the model reported. */
+  /**
+   * FRESH (uncached) input tokens: what the model processed from scratch, exclusive of
+   * BOTH cache classes. Every population site normalises to this — subtracting the cached
+   * share on the providers that report an inclusive prompt count (OpenAI/DeepSeek), or
+   * reading the already-exclusive field on those that report the classes separately
+   * (Anthropic). Total input = `promptTokens + cacheReadTokens + cacheWriteTokens`.
+   */
   promptTokens: number
   /**
-   * Prompt tokens served from the provider's prompt cache (a subset of
-   * {@link promptTokens}), across the field names providers use. 0 when the provider
-   * reported none or does not cache. Lets the dashboard show the actual cache hit rate.
+   * Input tokens served from the provider's prompt cache, across the field names providers
+   * use. Priced at roughly 0.1× base input — cheap, but NOT free and not weightless: they
+   * occupy the context window exactly like fresh tokens do. 0 when the provider reported
+   * none or does not cache.
    */
-  cachedPromptTokens: number
+  cacheReadTokens: number
+  /**
+   * Input tokens WRITTEN into the provider's cache on this call (Anthropic's
+   * `cache_creation_input_tokens`). Priced at 1.25–2× base input, i.e. dearer than fresh,
+   * which is why it is a class of its own rather than lumped with the reads: summed
+   * together, a loop that keeps invalidating and re-writing the prefix is indistinguishable
+   * from one that rides a warm cache. 0 on providers with no separate write class.
+   */
+  cacheWriteTokens: number
   /** Completion (output) tokens the model reported. */
   completionTokens: number
   /** Total tokens the model reported. */
@@ -98,15 +113,12 @@ export interface LlmCallMetricSummary {
   agentKind: string
   /** Number of calls recorded for this agent kind in the run. */
   calls: number
-  /** Sum of prompt (input) tokens. */
+  /** Sum of FRESH (uncached) input tokens — exclusive of both cache classes. */
   promptTokens: number
-  /**
-   * Sum of prompt tokens served from the provider's prefix cache. On OpenAI/DeepSeek
-   * this is a subset of `promptTokens`; on Anthropic cache reads are reported SEPARATELY
-   * from input tokens (not included in `promptTokens`), so this can exceed it — hence
-   * `cacheHitRate` is clamped to 1.
-   */
-  cachedPromptTokens: number
+  /** Sum of input tokens served from the provider's prefix cache. */
+  cacheReadTokens: number
+  /** Sum of input tokens written into the provider's cache. */
+  cacheWriteTokens: number
   /** Sum of completion (output) tokens. */
   completionTokens: number
   /** The largest single completion the model produced (closest approach to the limit). */

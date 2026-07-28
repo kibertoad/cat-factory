@@ -1160,6 +1160,47 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
   skip. `runRepoOps` lives in `@cat-factory/agents` so orchestration doesn't import the server layer.
 - **`RepoFiles`** (`kernel/ports/repo-files.ts`) is a per-run, checkout-free facade over the Git
   Data + contents API: pure HTTP, so runtime-symmetric.
+- **CAPABILITIES — what the kind KNOWS and what it can REACH**
+  ([ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md)): `skills` (procedural playbooks)
+  and `toolServers` (MCP), declared on the kind and resolved per dispatch. Reusable definitions
+  register on the SAME `AgentKindRegistry` (`registerSkill` / `registerToolServer`) — they are
+  capabilities OF agent kinds, like traits, so they do NOT get their own registries — and
+  `assignSkills` / `assignToolServers` attach them to an EXISTING (built-in) kind without
+  redefining it, exactly like `assignTraits`.
+  - **Skills resolve in the ENGINE** (`resolveRunSkills` → `context.skills`, catalog versions
+    pinned onto `step.skillVersions`); **tool servers resolve in the container EXECUTOR**
+    (`resolveToolServers`), because what is servable depends on the resolved HARNESS and the
+    facade-wired credential resolver, neither of which the runtime-neutral engine knows.
+  - **A BUNDLED skill ships in the deployment's own code** — no library, no GitHub, no pin — which
+    is what lets a shipped agent package carry its own playbook. A `{ catalogSkillId }` ref is the
+    tenant-authored repo-synced kind (ADR 0024) and FAILS the dispatch when it can't resolve unless
+    it declares `optional`.
+  - **A tool-server credential is declared BY NAME** (`secretKeys`) and resolved through the kernel
+    `ToolSecretResolver` port — both facades wire `createEnvToolSecretResolver` (the deployment's
+    own env), so a server needs no table and no UI. The VALUE rides the job body's `mcpServers`
+    field only; `context.toolServers` is the non-secret projection the prompt AND the telemetry
+    snapshot see. The job spec also NAMES which `env`/`headers` keys are credentials, so the
+    harness registers exactly those for redaction rather than scrubbing declared config too.
+    That default resolver is a TRUST BOUNDARY: a definition names both the key it wants and the
+    endpoint it reaches, so a deployment installing third-party agent packages passes
+    `{ allowKeys }` (convention: an `MCP_…` prefix).
+  - **`allowedTools` is SCOPING, never a security boundary.** Stated in the prompt on every
+    harness; additionally sent to claude-code's `--allowedTools`, which must ALWAYS carry the
+    CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). Whether the
+    CLI gates on it is permission-mode dependent, so the harness is written to be correct either
+    way. An `http` server must be `https` or loopback — refused at registration AND at the job
+    boundary, because its credential rides a request header.
+  - **A capability on a NON-container kind is inert and boot says so**
+    (`skills_without_container` / `tool_servers_without_container`).
+  - **A server that can't be wired is STATED to the agent, never silently dropped** (Pi has no MCP
+    client; an ambient Codex run has no per-run config home; a required secret didn't resolve), so
+    it plans around the gap instead of discovering it mid-run. A required secret defaults to
+    `required: true` — a tool whose first call 401s is worse than one the agent knows it lacks.
+  - **The harness MATERIALISES, never decides**: `skills[]` → native
+    `CLAUDE_CONFIG_DIR/skills/<name>/` or `.cat-context/skill/<name>/`; `mcpServers[]` → a per-run
+    `--mcp-config` + `--strict-mcp-config` (claude-code) or `[mcp_servers.*]` in the per-run
+    `CODEX_HOME/config.toml`. Both are PER-JOB paths — never HOME-global, never the checkout.
+    Changing either means an image bump.
 - **Frontend**: the workspace snapshot carries `customAgentKinds`, merged into the palette via
   `useAgentsStore().registerCustomKinds`; a structured kind's `result.custom` renders through the
   shared `generic-structured` view. No bespoke UI.
@@ -1208,6 +1249,29 @@ error handling — and the phased plan to close them — are tracked in
   - **`latestChainTip` skips `message_count = 0` rows.** A subagent call carries no re-sendable
     chain, and those interleave with the parent's now that telemetry streams; a tip nothing can
     chain onto loses delta compression on exactly the subagent-heavy runs where it matters.
+
+  **The input side is THREE orthogonal classes, never a lump.** `promptTokens` is FRESH input,
+  with `cacheReadTokens` + `cacheWriteTokens` beside it, so total input is their sum. They are
+  priced ~1x / ~0.1x / 1.25-2x base input respectively — a cache WRITE costs more than fresh —
+  so any producer summing them makes a loop that keeps invalidating its prefix read exactly like
+  one riding a warm cache. A new producer normalises to fresh at the source through the SINGLE
+  `readInputTokenClasses`, never a read-the-classes helper paired by hand with a subtract-them
+  one: it subtracts where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex)
+  and leaves the already-exclusive field alone where it reports them apart (Anthropic), and
+  **reads the two cache classes INDEPENDENTLY** — an OpenAI-shaped gateway fronting Anthropic
+  (`litellm`, OpenRouter) reports a read field AND a write field on one payload, so detecting one
+  must never suppress the other. Only Anthropic reports a write class — 0
+  elsewhere, never guessed. A count that survives a wire boundary is read LENIENTLY on the way in
+  (`coerceCallMetrics`): a runner pool runs whatever harness image its workspace pinned, so
+  requiring a field a new image added would drop that pool's telemetry wholesale instead of
+  losing the one class the old image never measured. Distinct from the harness's
+  `PiRunOutcome.usage`, which is the
+  key-rotation WEIGHT and deliberately keeps summing every billed bucket. **On every SPA surface the
+  headline `↑` is the TOTAL of the three (`totalInputTokens`), with the classes as the breakdown** —
+  the like-for-like of Claude Code's context gauge, which counts the same buckets. Splitting the
+  classes makes COST readable; leading with the fresh figure would make VOLUME unreadable, and did
+  (a ~31M-token run rendered as 685). Design + the gotchas:
+  [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
 
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
@@ -1481,7 +1545,15 @@ basic mode always STARTS railed). Full model:
 - **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
   `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
   RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
-  un-disentangleable in the specs (and a consumer item loses the declarative flag).
+  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar for
+  setting it is ROUTE COUNT, not how advanced the surface feels**: hiding the SOLE route to a
+  capability removes that capability from the tier, while hiding a shortcut into a surface a basic
+  destination also opens removes nothing. So it belongs on a surface beside the delivery path
+  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Integrations
+  hub already offers — never on the pipeline builder, the fragment library, the
+  infrastructure/PREnv windows, or the operator/reports views, however deep those feel.
+  `nav-contributions.spec.ts` pins the advanced set against a table naming each item's
+  alternative route, so a promotion has to write that claim down rather than assume it.
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
   disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
   field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred

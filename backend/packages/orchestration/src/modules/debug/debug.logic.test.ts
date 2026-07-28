@@ -44,7 +44,8 @@ function summary(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSu
     agentKind: 'coder',
     calls: 2,
     promptTokens: 100,
-    cachedPromptTokens: 40,
+    cacheReadTokens: 40,
+    cacheWriteTokens: 0,
     completionTokens: 60,
     peakCompletionTokens: 50,
     maxOutputTokens: 100,
@@ -156,7 +157,8 @@ describe('toDebugLlmCall', () => {
     toolCount: 3,
     requestMaxTokens: 1_000,
     promptTokens: 900,
-    cachedPromptTokens: 100,
+    cacheReadTokens: 100,
+    cacheWriteTokens: 0,
     completionTokens: 1_000,
     totalTokens: 1_900,
     finishReason: 'length',
@@ -194,14 +196,16 @@ describe('foldLlmRollup', () => {
         agentKind: 'tester',
         calls: 1,
         promptTokens: 100,
-        cachedPromptTokens: 0,
+        cacheReadTokens: 0,
         errors: 1,
       }),
     ])
     expect(totals.calls).toBe(3)
     expect(totals.promptTokens).toBe(200)
-    expect(totals.cachedPromptTokens).toBe(40)
-    expect(totals.cacheHitRate).toBeCloseTo(0.2)
+    expect(totals.cacheReadTokens).toBe(40)
+    // (read + write) / (fresh + read + write) = 40 / 240 — a share of the WHOLE input side,
+    // not of the fresh count, so it can never exceed 1.
+    expect(totals.cacheHitRate).toBeCloseTo(40 / 240)
     expect(totals.errors).toBe(1)
     expect(totals.transportOverheadRatio).toBeCloseTo(200 / 2_000)
     expect(byAgentKind.map((i) => i.agentKind)).toEqual(['coder', 'tester'])
@@ -283,14 +287,14 @@ describe('deriveSignals', () => {
     const small = deriveSignals({
       ...base,
       execution: run(),
-      ...foldLlmRollup([summary({ promptTokens: 1_000, cachedPromptTokens: 0 })]),
+      ...foldLlmRollup([summary({ promptTokens: 1_000, cacheReadTokens: 0 })]),
     })
     expect(small.map((s) => s.code)).not.toContain('prompt_cache_cold')
 
     const large = deriveSignals({
       ...base,
       execution: run(),
-      ...foldLlmRollup([summary({ promptTokens: 200_000, cachedPromptTokens: 0 })]),
+      ...foldLlmRollup([summary({ promptTokens: 200_000, cacheReadTokens: 0 })]),
     })
     expect(large.map((s) => s.code)).toContain('prompt_cache_cold')
   })

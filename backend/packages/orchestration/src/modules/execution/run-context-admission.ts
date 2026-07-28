@@ -47,6 +47,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'inlineHarnessRef'
   | 'resolveWorkspaceModelDefault'
   | 'assertAgentBackendConfigured'
+  | 'logger'
 >
 
 export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
@@ -72,6 +73,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     resolveValidationChecks: deps.resolveValidationChecks,
     fragmentResolver: deps.fragmentResolver,
     skillResolver: deps.skillResolver,
+    logger: deps.logger,
   })
   // The run-admission preflights (the shared start/retry/restart `assert*` gate family).
   // The admission-only seams are forwarded here rather than stored on the engine.

@@ -121,16 +121,29 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     })
   })
 
-/** Sum Anthropic input buckets (fresh + cache read/write) the CLI reports, mirroring the harness. */
+/**
+ * Read the CLI's Anthropic usage into the three ORTHOGONAL input classes, mirroring the
+ * harness's `claudeCallUsage`. `input_tokens` is already exclusive of both caches, so nothing
+ * is subtracted here — and the classes are deliberately NOT summed into one figure: this path
+ * is the one place a local deployment's inline steps are observable at all, and a lumped count
+ * cannot say whether a run is riding a warm cache (~0.1× base input) or re-writing it every
+ * turn (1.25–2×).
+ */
 function claudeUsage(raw: unknown): InlineCliResult['usage'] {
   if (typeof raw !== 'object' || raw === null) return undefined
   const r = raw as Record<string, unknown>
   const num = (v: unknown): number => (typeof v === 'number' ? v : 0)
-  const input =
-    num(r.input_tokens) + num(r.cache_read_input_tokens) + num(r.cache_creation_input_tokens)
+  const input = num(r.input_tokens)
+  const cacheRead = num(r.cache_read_input_tokens)
+  const cacheWrite = num(r.cache_creation_input_tokens)
   const output = num(r.output_tokens)
-  if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, outputTokens: output }
+  if (input === 0 && cacheRead === 0 && cacheWrite === 0 && output === 0) return undefined
+  return {
+    inputTokens: input,
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
+    outputTokens: output,
+  }
 }
 
 // Claude Code reports failures IN-BAND (process exit 0) via `is_error` / an `error_*` subtype,
@@ -351,6 +364,12 @@ function makeContainerRunner(
             usage: {
               ...(result.usage.inputTokens != null
                 ? { inputTokens: result.usage.inputTokens }
+                : {}),
+              ...(result.usage.cacheReadTokens != null
+                ? { cacheReadTokens: result.usage.cacheReadTokens }
+                : {}),
+              ...(result.usage.cacheWriteTokens != null
+                ? { cacheWriteTokens: result.usage.cacheWriteTokens }
                 : {}),
               ...(result.usage.outputTokens != null
                 ? { outputTokens: result.usage.outputTokens }
