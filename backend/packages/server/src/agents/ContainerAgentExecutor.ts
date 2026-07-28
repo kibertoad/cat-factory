@@ -1399,7 +1399,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         provider: ref.provider,
         model: ref.model,
       })
-      return { auth: { harness, proxyBaseUrl: this.deps.proxyBaseUrl, sessionToken } }
+      // `proxyPhasePath` states what THIS backend serves: the phase-tagged completions route
+      // the harness tags Pi's base URL with, so each call is attributed to the run phase that
+      // spent it (`docs/initiatives/token-burn-instrumentation.md`). Unconditional — the route
+      // is part of `llmProxyController`, so any backend running this code has it. It is the
+      // harness that may be older or newer, and telling it what we serve is what keeps an
+      // image pinned by a runner pool (or `LOCAL_HARNESS_IMAGE`) from posting every model call
+      // to a 404. Same shape as `webSearch` below: the backend declares, the harness points.
+      return {
+        auth: {
+          harness,
+          proxyBaseUrl: this.deps.proxyBaseUrl,
+          proxyPhasePath: true,
+          sessionToken,
+        },
+      }
     }
     // Native local execution: the harness runs the developer's own CLI with its ambient
     // login, so we lease NOTHING and gate NOTHING — just flag ambient auth for the harness.

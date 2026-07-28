@@ -18,6 +18,18 @@ export const llmCallMetricSchema = v.object({
   /** When the call completed (epoch ms). */
   createdAt: v.number(),
   streaming: v.boolean(),
+  /**
+   * Which slice of the run spent the call (`agent` / `validation-repair` /
+   * `reproduction-repair` / …), carried from the producer that owns the phase boundary.
+   * `''` = nothing could attribute it, which is a real slice rather than a hidden one.
+   * Optional/defaulted so exports predating the phase axis still parse.
+   */
+  phase: v.optional(v.string(), ''),
+  /**
+   * The call's 0-based ordinal within its job's telemetry sequence, or null where the
+   * producing channel has no turn concept (the proxy, which orders by `createdAt`).
+   */
+  turnIndex: v.optional(v.nullable(v.number()), null),
   messageCount: v.number(),
   /** Tools offered to the model (0 = the agent could not edit anything). */
   toolCount: v.number(),
@@ -89,6 +101,12 @@ export const llmCallActivitySchema = v.object({
   model: v.string(),
   createdAt: v.number(),
   streaming: v.boolean(),
+  /**
+   * The run phase that spent the call. Always supplied by the proxy emit (`''` when the
+   * request carried no phase segment), so it is required here — the live row and the row the
+   * panel later loads from the store must agree on the axis they are grouped by.
+   */
+  phase: v.string(),
   messageCount: v.number(),
   toolCount: v.number(),
   requestMaxTokens: v.nullable(v.number()),

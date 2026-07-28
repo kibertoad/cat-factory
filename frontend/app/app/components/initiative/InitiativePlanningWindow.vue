@@ -127,6 +127,25 @@ async function flushThen(action: (id: string) => Promise<unknown>) {
 
 const onContinue = () => flushThen((id) => initiatives.continuePlanning(id))
 const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
+
+/**
+ * The escape hatch for a planning run that stalled. It belongs HERE, not only in the inspector's
+ * execution panel behind this window: submit and plan-now are the two things that wedge, so the
+ * human who needs a way out is looking at exactly this footer. Offered whenever a run still owns
+ * the block — including mid-pass and after a failed pass, which is where a wedge actually shows up
+ * and where neither of the other two buttons is even rendered.
+ *
+ * Discarding returns the block to `planned`, which re-enables "Run planning"; the interviewer gate
+ * drops the previous run's round bookkeeping on that fresh start, so the re-run genuinely
+ * re-interviews instead of force-converging on its first pass. Close on success — leaving the
+ * window open on the now-empty idle state would read as another dead end.
+ */
+const { resetting, resetRun } = useRunReset()
+const canDiscard = computed(() => !!block.value?.executionId)
+async function onDiscard() {
+  if (!blockId.value) return
+  if (await resetRun(blockId.value)) close()
+}
 </script>
 
 <template>
@@ -221,28 +240,51 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
       </template>
     </div>
 
-    <!-- Action rail. Only while the run is actually parked on the human: mid-pass these would
-         re-submit a question set already in flight, and the resume is a no-op once it isn't. -->
+    <!-- Action rail. The submit/plan-now pair shows only while the run is actually parked on the
+         human: mid-pass they would re-submit a question set already in flight, and the resume is a
+         no-op once it isn't. Discard is the opposite — it is offered for as long as a run owns the
+         block, because the phases where those two are hidden (working, failed) are exactly the ones
+         a wedged run sits in. -->
     <footer
-      v-if="initiative && phase === 'awaiting' && questions.length > 0"
+      v-if="initiative && (canDiscard || (phase === 'awaiting' && questions.length > 0))"
       class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
     >
-      <p class="text-[11px] text-slate-500">
-        <span
-          v-if="unanswered > 0"
-          class="text-amber-400/90"
-          data-testid="initiative-planning-unanswered"
-        >
-          {{ t('initiative.planning.unanswered', { count: unanswered }) }}
-        </span>
-        <span v-else>{{ t('initiative.planning.hint') }}</span>
-      </p>
-      <div class="flex items-center gap-2">
+      <UButton
+        v-if="canDiscard"
+        color="error"
+        variant="ghost"
+        size="sm"
+        icon="i-lucide-trash-2"
+        :loading="resetting"
+        :disabled="resuming"
+        :title="t('initiative.planning.discardTitle')"
+        data-testid="initiative-planning-discard"
+        @click="onDiscard"
+      >
+        {{ t('initiative.planning.discard') }}
+      </UButton>
+      <!-- `ms-auto` rather than relying on `justify-between`: discard is conditional, and without
+           it this group left-aligns on the (transient) render where it is the only child. -->
+      <div
+        v-if="phase === 'awaiting' && questions.length > 0"
+        class="ms-auto flex items-center gap-2"
+      >
+        <p class="text-[11px] text-slate-500">
+          <span
+            v-if="unanswered > 0"
+            class="text-amber-400/90"
+            data-testid="initiative-planning-unanswered"
+          >
+            {{ t('initiative.planning.unanswered', { count: unanswered }) }}
+          </span>
+          <span v-else>{{ t('initiative.planning.hint') }}</span>
+        </p>
         <UButton
           color="neutral"
           variant="ghost"
           size="sm"
           :loading="resuming"
+          :disabled="resetting"
           :title="t('initiative.planning.proceedTitle')"
           data-testid="initiative-planning-proceed"
           @click="onProceed"
@@ -253,7 +295,7 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
           color="primary"
           size="sm"
           :loading="resuming"
-          :disabled="unanswered > 0"
+          :disabled="unanswered > 0 || resetting"
           :title="
             unanswered > 0
               ? t('initiative.planning.unanswered', { count: unanswered })

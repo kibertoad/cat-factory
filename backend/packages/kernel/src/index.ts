@@ -50,6 +50,7 @@ export {
   TASK_RUNNER_DETECTORS,
   VALIDATION_DETECTION_CONTENT_FILES,
 } from './domain/validation-detectors.js'
+export { UNATTRIBUTED_CALL_PHASE, normalizeCallPhase } from './domain/llm-phase.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,

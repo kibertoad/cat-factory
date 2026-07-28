@@ -143,7 +143,7 @@ feature is. Retrofitting is what the slice-by-slice `pending` backlog in the tra
 to it.
 
 This applies to every feature, not only ones that feel "org-scoped": the classification below has
-exactly three outcomes, and **"it doesn't apply to mothership mode" is not one of them**.
+exactly four outcomes, and **"it doesn't apply to mothership mode" is not one of them**.
 
 - **New repository method → decide its bucket IN THE SAME PR**, and make the decision real:
   - **`remote`** (the default for org/durable state) — add it to `REMOTE_PERSISTENCE_METHODS`
@@ -153,6 +153,13 @@ exactly three outcomes, and **"it doesn't apply to mothership mode" is not one o
   - **`local-sqlite`** (a per-user/per-deployment credential or local-runner knob) — implement the
     `node:sqlite` repo per the tracker's bucket pattern and thread the `NodeContainerOptions`
     override, so the feature is ON in mothership mode rather than silently off for lack of a `db`.
+  - **`telemetry`** (append-heavy, hot-path, short-retention run observability) — implement the
+    `node:sqlite` repo in the local facade's `sqlite/telemetryStore.ts`, name it in
+    `LOCAL_FIRST_PERSISTENCE_REPOSITORIES` (`rpc-allowlist.ts` — this TYPES the composition, so
+    omitting it fails to compile), and give it a prune in `telemetryRetention.ts`. Do NOT also
+    allow-list it: the two tables are complements and the drift guard asserts they stay disjoint.
+    The test for whether state belongs here rather than `remote` is what READS it — the spend
+    ledger has this write profile but its rollups gate org budgets, so it is `remote`.
   - **`excluded`** (admin-gated, a sweeper, or otherwise mothership-internal) — say so in the drift
     guard's classification map with the reason. `pending` is a _migration_ state, not a landing pad
     for new work.
@@ -1286,6 +1293,31 @@ error handling — and the phased plan to close them — are tracked in
   (a ~31M-token run rendered as 685). Design + the gotchas:
   [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
 
+  **Every row is stamped with the PHASE that spent it and its TURN ordinal**, so a run's burn can
+  be attributed to the slice that caused it (the agent's own loop vs a pre-PR validation repair
+  round vs a reproduction-proof repair round) instead of piling into one figure per agent kind.
+  Design: [`docs/initiatives/token-burn-instrumentation.md`](./docs/initiatives/token-burn-instrumentation.md).
+  - **The phase is stamped by whoever OWNS the boundary, never reconstructed downstream.** The
+    harness drives those loops, so its job registry stamps `phase` on each streamed call at EMIT
+    time (not drain time — a poll lands long after the phase moved on), and the Pi path, whose
+    calls are metered server-side, carries it on the proxy URL (`${proxyBaseUrl}/phase/<phase>`,
+    rewritten per pass) because Pi makes those requests from a config with no per-request header
+    to set. Reconstructing phase from wall-clock timestamps is the brittle inference this avoids.
+  - **`''` is a REAL slice, not a gap** — an unphased call (an older image, an inline call, the
+    unphased proxy path) is filed as unattributed rather than guessed at from the agent kind. Every
+    boundary the free-text label crosses runs it through kernel's `normalizeCallPhase`, since two of
+    the three producing paths (a request path, a pool's JSON) arrive over HTTP. The harness carries
+    a COPY of that normaliser (`normalizeProxyPhase`) because the image depends on no workspace
+    package, pinned by `test/llm-phase.conformity.test.ts` exactly as `host-markdown.ts` is.
+  - **The BACKEND declares the phase-tagged route** (`proxyPhasePath` on the job body, the same
+    shape as `webSearch`); the harness tags Pi's base URL only when told. Never assume the harness
+    image and the backend are a matched set: that holds for the Cloudflare deployment, but a runner
+    pool pins its own image and `LOCAL_HARNESS_IMAGE` overrides the recommended pin, and an image
+    ahead of its backend would 404 EVERY model call rather than merely lose its telemetry.
+  - **`turn_index` is NULLABLE, not 0.** It is the harness's job-scoped `seq` (the same number the
+    row id is minted from); the proxy has no job-scoped counter, and a 0 there would sort every
+    proxied call to the front of its phase as "the first turn".
+
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files
   (which the agent reads via tools, so they never reach proxy telemetry). A redacted allow-list
@@ -1526,21 +1558,35 @@ basic mode always STARTS railed). Full model:
 - **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
   `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
   RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
-  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar for
-  setting it is ROUTE COUNT, not how advanced the surface feels**: hiding the SOLE route to a
-  capability removes that capability from the tier, while hiding a shortcut into a surface a basic
-  destination also opens removes nothing. So it belongs on a surface beside the delivery path
-  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Integrations
-  hub already offers — never on the pipeline builder, the fragment library, the
-  infrastructure/PREnv windows, or the operator/reports views, however deep those feel.
-  `nav-contributions.spec.ts` pins the advanced set against a table naming each item's
-  alternative route, so a promotion has to write that claim down rather than assume it.
+  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar is
+  whether the EVERYDAY DELIVERY LOOP needs it** — plan work on a board, run it, review and merge
+  it — not how advanced the surface feels. Marking an item does one of two things and the
+  difference must be stated, because only one of them is free:
+  - **reached-another-way** — a shortcut into a surface a basic destination also opens, so
+    nothing is lost (the Merge / Service-best-practices palette entries, the local-models knob).
+  - **out-of-tier** — the SOLE route, hidden deliberately, so the capability is ABSENT from basic
+    mode and the tier switch is the way to it (sandbox, Kaizen, `bootstrap-repo`, and the
+    deployment-wide `operator-dashboard` / `reports` rollups, which answer an operator's question
+    rather than a delivery one).
+
+  A sole route stays in basic when the loop runs on it: the pipeline builder, `add-from-repo`,
+  the fragment library, the infrastructure/PREnv windows, and the workspace/model configuration a
+  run actually reads. `nav-contributions.spec.ts` pins the advanced set against a table naming
+  each item's kind AND reason, so a promotion has to write that claim down rather than assume it.
+
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
   disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
   field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred
   flag), so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an
   input NOTHING else supplies stays in BOTH tiers however advanced it feels — the e2e suite caught
   exactly this on the apriori-branch picker, which has no default to fall back to.
+- **A whole AUTHORING affordance may be tier-scoped**, but only when the tier hides the ability to
+  CREATE and never the ability to SEE. The frame header's recurring-schedule and initiative
+  buttons are advanced-only; both are safe because existing state stays legible in basic mode
+  through its normal surfaces (a live schedule badges its task card and opens `recurring-schedule`
+  in the inspector; an initiative is a block on the board with its own inspector). Hide a create
+  button whose product is only visible behind that same button and a basic-mode user is acted on
+  by state they cannot find — which is the override rule's failure mode wearing different clothes.
 - **Gate an override control on `showOverrideField(isAdvanced, ...values)`, NOT on `isAdvanced`
   alone** (`utils/uiMode.ts`). The rule above holds only while the override is UNSET, which is
   guaranteed at CREATION time (a fresh form starts from the defaults) but never for an EXISTING
@@ -1549,6 +1595,11 @@ basic mode always STARTS railed). Full model:
   settings they can neither see nor clear — the exact divergence the rule forbids. The helper keeps
   the control whenever any value it edits is set (`false` counts — a tri-state `false` is a choice,
   not absence), so basic stays clean for the common case without ever concealing a deviation.
+  **It gates SECTIONS as readily as fields**, and post-release health is the reference case: the
+  Integrations-hub row and the service inspector's monitor/SLO panel are both advanced-tier (that
+  gate acts AFTER delivery, outside the loop basic serves), but each reveals itself once the
+  workspace has a connection / the frame has a mapping — otherwise basic mode would hide a live
+  Datadog watch, and an on-call agent that can spawn from it, behind a tier the user never chose.
 - **The env pin makes the switcher READ-ONLY** (`envPinned`), and `setMode` refuses to write. A
   persisted preference the resolver would then ignore is a lie to the user, not a fallback. That
   refusal is hygiene, not the invariant — a persisted setup store must return its state to persist

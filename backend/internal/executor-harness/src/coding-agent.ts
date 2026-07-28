@@ -93,6 +93,8 @@ export interface CodingAgentSpec extends HarnessAuthFields {
   webToolsGuidance?: string
   /** Enable proxy-backed web search for this run (see {@link AgentRunSpec.webSearchProxy}). */
   webSearchProxy?: boolean
+  /** Backend serves the phase-tagged completions route (see {@link AgentRunSpec.proxyPhasePath}). */
+  proxyPhasePath?: boolean
   /** Per-knob progress-guard overrides (loosen-only), set per agent kind by the backend. */
   guardLimits?: Partial<ProgressGuardLimits>
   /**
@@ -352,6 +354,7 @@ export async function runCodingAgent(
             subscriptionBaseUrl: spec.subscriptionBaseUrl,
             ambientAuth: spec.ambientAuth,
             proxyBaseUrl: spec.proxyBaseUrl,
+            proxyPhasePath: spec.proxyPhasePath,
             sessionToken: spec.sessionToken,
             serviceDirectory,
             webToolsGuidance: spec.webToolsGuidance,
@@ -1052,6 +1055,7 @@ export async function runMultiRepoCoding(
           subscriptionBaseUrl: job.subscriptionBaseUrl,
           ambientAuth: job.ambientAuth,
           proxyBaseUrl: job.proxyBaseUrl,
+          proxyPhasePath: job.proxyPhasePath,
           sessionToken: job.sessionToken,
           webToolsGuidance: job.webToolsGuidance,
           webSearchProxy: job.webSearch,

@@ -33,6 +33,66 @@ import {
  */
 export const PI_MAX_OUTPUT_TOKENS = 32_768
 
+/**
+ * Longest phase label the backend keeps. Mirrors kernel's `MAX_PHASE_CHARS`; see
+ * {@link normalizeProxyPhase} for why this is a copy rather than an import.
+ */
+const MAX_PHASE_CHARS = 32
+
+/**
+ * Normalise a phase label to what the backend will actually store: trimmed, lowercased,
+ * `[a-z0-9-]` only, bounded. `''` when the label is not a phase at all.
+ *
+ * A deliberate COPY of kernel's `normalizeCallPhase` — the container image is built from `src/`
+ * plus typescript alone, so the harness can carry no runtime dependency on a workspace package
+ * (the same constraint that forced `src/host-markdown.ts`). A copy that can drift is worse than
+ * no copy: if the harness rejected a label the backend would have accepted, the call would take
+ * the plain path and land unattributed, and if it accepted one the backend rejects it would
+ * spend a request on a segment destined for `''`. `test/llm-phase.conformity.test.ts` pins the
+ * two to identical verdicts over a corpus, so the alphabet can only be changed in both.
+ */
+export function normalizeProxyPhase(phase: string | undefined): string {
+  if (typeof phase !== 'string') return ''
+  const trimmed = phase.trim().toLowerCase()
+  if (!trimmed || trimmed.length > MAX_PHASE_CHARS) return ''
+  return /^[a-z0-9-]+$/.test(trimmed) ? trimmed : ''
+}
+
+/**
+ * Point Pi's provider at the phase-tagged completions path for the pass about to run, so the
+ * backend can stamp WHICH slice of the run spent each call (the agent's own loop vs a pre-PR
+ * validation repair round vs a reproduction-proof repair round) — see
+ * `docs/initiatives/token-burn-instrumentation.md`. The harness drives those loops, so it is
+ * the only component that knows; reconstructing the boundary downstream from wall-clock
+ * timestamps is exactly the brittle inference this avoids.
+ *
+ * A URL segment because the harness does not make these requests: Pi does, from a config whose
+ * only per-run knobs are the base URL and the token — there is no per-request header to set.
+ *
+ * `supported` is the BACKEND's declaration that it serves the phase-tagged route, carried on the
+ * job body exactly as `webSearch` carries "point the search tool at my `/web-search`". Without it
+ * this function would encode a routing shape the receiving backend may not have: a runner pool
+ * pins its OWN harness image (`RunnerPoolManifest`), and `LOCAL_HARNESS_IMAGE` overrides the
+ * recommended pin outright, so "the image and the backend are a matched set" holds for the
+ * Cloudflare deployment and nowhere else. An image ahead of its backend would 404 EVERY model
+ * call — a dead run, not degraded telemetry. Absent/false ⇒ the plain path, and the calls land
+ * in the backend's unattributed slice.
+ *
+ * Pure so the join is unit-testable without spawning anything.
+ */
+export function phasedProxyBaseUrl(
+  proxyBaseUrl: string,
+  phase: string | undefined,
+  supported: boolean | undefined,
+): string {
+  if (!supported) return proxyBaseUrl
+  // A label the backend would discard would be sent only to be thrown away, so send the plain
+  // path instead — the call is then honestly unattributed rather than attributed to nothing.
+  const normalized = normalizeProxyPhase(phase)
+  if (!normalized) return proxyBaseUrl
+  return `${proxyBaseUrl.replace(/\/+$/, '')}/phase/${normalized}`
+}
+
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
   model: string
@@ -548,6 +608,17 @@ export interface HarnessCallMetric {
    * falls back to the array index, which is what it always used before streaming existed.
    */
   seq?: number
+  /**
+   * The run PHASE that spent this call (`agent` / `validation-repair` / `reproduction-repair` /
+   * …), stamped by the job registry from the same marker the handlers set as they enter each
+   * phase — so the phase axis on `llm_call_metrics` comes from the component that owns the
+   * boundary rather than from a downstream guess
+   * (`docs/initiatives/token-burn-instrumentation.md`).
+   *
+   * Stamped on the SAME object as {@link seq}, so the live drain and the terminal result can
+   * never disagree about which phase billed a call.
+   */
+  phase?: string
 }
 
 /**
