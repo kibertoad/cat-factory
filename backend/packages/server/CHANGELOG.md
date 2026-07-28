@@ -1,5 +1,17 @@
 # @cat-factory/server
 
+## 0.161.0
+
+### Minor Changes
+
+- 2ed7b50: Complete mothership-mode real-time in both directions, and fix the fan-out read that made every mothership-mode publish fail.
+
+  - **Inbound event subscription (`GET /internal/events/subscribe/:workspaceId`).** A mothership-mode node can now RECEIVE org activity, not just publish it — a hosted teammate's run, or a peer laptop's, animates the local board live instead of waiting for a manual refresh. The mothership side is not a new fan-out: the machine-authed handshake is handed to the SAME per-workspace realtime transport the browser stream uses (`gateways.realtime.upgrade`), so a subscribed node is just another socket in the workspace's room and the Cloudflare Durable Object needed no change. Authorisation is the shared `authorizeMachineSubscribe` (machine-audience pin first, then capability, then the workspace → account scope with a uniform 404), reached by the Worker through the shared controller and by Node from its HTTP-server `upgrade` listener — the same split, and the same reason, as the browser stream's `?ticket=`.
+  - **Demand-driven on the laptop.** `MothershipEventSubscriber` holds one upstream stream per workspace with at least one local subscriber, driven by a new room-transition seam on `NodeRealtimeHub`; an idle node holds none, and it never needs to enumerate the org's workspaces. Inbound events are broadcast to the bare hub (never back through the layered propagator, which would re-publish them upstream), and the node's stable `?cid=` is now stamped as the outbound publish's `originConnectionId` — replacing the originating tab's id, which means nothing on the mothership — so a node's own events are not fanned back down to it.
+  - **The subscription keeps itself honest.** Liveness is client-driven because the two mothership runtimes disagree about who provides it: a Node mothership pings at the protocol level and reaps a dead socket, while a Cloudflare mothership's hibernating Durable Object never pings — so a half-open socket there would never fire `close` and the workspace would stay dark indefinitely while the node still believed it was subscribed. The subscriber therefore heartbeats and drops a socket that has been silent past an idle deadline, treating any inbound frame (its `"ping"` auto-answered at the Cloudflare edge, or Node's own protocol ping) as proof of life. A refused handshake is now reported rather than swallowed, rate-limited so an unbounded retry stays visible without flooding, and the reconnect backoff is jittered so a fleet doesn't retry in lockstep after a mothership restart.
+  - **Fix: `workspaceMountRepository.listWorkspaceIdsMountingBlock` was not remotely callable.** `FanOutEventPublisher` calls it on EVERY engine event publish, and a mothership-mode node wires the same decorator, so the call came back `unknown_method`, the remote proxy threw, and the rejection propagated out of the run-state emit. It is now allow-listed under the `workspace` rule (it returns workspace ids only, and a service can only be mounted inside its own account). `blockRepository.countActiveInternal` is allow-listed alongside it, completing the headless public-API surface whose paginated reads were already remote.
+  - The persistence allow-list moved into its own module (`persistence/rpc-allowlist.ts`) — same exported name and import path, but the initiative's fast-growing surface no longer shares a file with the stable protocol.
+
 ## 0.160.0
 
 ### Minor Changes

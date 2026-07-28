@@ -1,6 +1,6 @@
 # Initiative: mothership mode for local mode
 
-**Status:** in progress (board-load + run functional over the RPC; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
+**Status:** in progress (board-load + run functional over the RPC; real-time complete BOTH directions; later slices widen the surface) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking
 > up the next slice; update the checklist at the end of each PR.
@@ -70,9 +70,8 @@
   the Cloudflare `events-stream.spec.ts` (relay delivery + `buildContainer` wiring-parity assertion),
   and `runtimes/local/src/mothership.test.ts`. The relay-wiring parity is asserted per-facade (Node
   `mothership.test.ts`, Cloudflare `events-stream.spec.ts`); folding an end-to-end relay assertion into
-  the shared cross-runtime suite rides with the INBOUND leg + the mothership conformance-server binding
-  below (the mothership harness has no realtime sink today). The INBOUND (subscribe) leg is the
-  remaining PR 2 work (see "Cross-cutting delegation").
+  the shared cross-runtime suite still rides with the mothership conformance-server binding (that
+  harness has no realtime sink today). The INBOUND (subscribe) leg has since landed — see below.
 - **Repository conformance** — the shared conformance suite runs a THIRD `[mothership]` config (a
   no-Postgres node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership), so
   an un-proxied / mis-scoped / non-serializing run-path method fails an EXISTING assertion. The static
@@ -286,6 +285,79 @@
   consumer today — and mothership-SIDE delivery of a notification a HOSTED teammate raised whose
   Slack connection was sealed by a LAPTOP (the secrets-delegation residual, unchanged).
 
+**Real-time INBOUND subscribe — PR 2 COMPLETE**
+
+- **`GET /internal/events/subscribe/:workspaceId`** closes the loop the upstream publish opened, so
+  real-time is finally bidirectional: org activity raised on the mothership (a hosted teammate) or
+  relayed up by a peer laptop now reaches THIS laptop's SPA. Before it, a mothership-mode board was
+  write-only in real time — it animated for work the laptop drove and stayed frozen for everyone
+  else's, with only a manual refresh to reconcile.
+  - **The mothership SERVE side is NOT a new fan-out.** The tracker previously deferred this leg on
+    the grounds that a long-lived subscriber registry is genuinely runtime-shaped (in-process on
+    Node vs DO-held on Cloudflare). That premise turned out to be avoidable: the handshake is handed
+    to the SAME per-workspace realtime transport the browser stream already uses
+    (`gateways.realtime.upgrade` — the `WorkspaceEventsHub` DO / the `NodeRealtimeHub`), so a
+    subscribed node is just another socket in the workspace's room. No registry to invent, no
+    per-runtime divergence, and events reach laptops and browsers through ONE path. The Durable
+    Object needed no change at all.
+  - **Auth is the shared `authorizeMachineSubscribe`** (`@cat-factory/server`), in the same order as
+    every other `/internal/*` surface: machine-audience pin FIRST (so availability isn't probeable),
+    then the capability probe (503), then the workspace → account scope binding (uniform 404, no
+    existence leak). It lives beside `wsTicket.ts` and for the same reason — Cloudflare authorises
+    in the shared controller, Node in its HTTP-server `upgrade` listener (`@hono/node-server` can't
+    upgrade from a Hono `Response`), and one implementation keeps the two identical. Deliberately
+    role-blind, which is sound because the subscription is READ-ONLY and workspace-scoped: it
+    carries exactly the frames any member of the account already receives.
+  - **The laptop side is DEMAND-DRIVEN**: `MothershipEventSubscriber` holds one upstream socket per
+    workspace with at least one local subscriber, opened off a new `RealtimeRoomWatcher` seam on
+    `NodeRealtimeHub` (first-socket / last-socket transitions). An idle laptop holds none, and the
+    node never needs to enumerate the org's workspaces. It is NOT expressed as a
+    `WebSocketPropagator` adapter: that port's `start(deliver)` receives no workspace list, so
+    forcing it through would mean subscribing to nothing or inventing that enumeration.
+  - **Two invariants keep it from looping or double-delivering.** Inbound events are broadcast to
+    the BARE hub, never back through the layered propagator (which would re-publish them upstream) —
+    the same rule `LayeredEventPropagator.start` follows for Redis. And the node's stable `?cid=` is
+    now stamped as the outbound publish's `originConnectionId`, REPLACING the originating tab's id:
+    the tab id means nothing on the mothership (which holds no laptop-local socket) and was already
+    honoured locally, while the node id is precisely the one socket that must not receive its own
+    event back.
+  - A dropped subscription reconnects with jittered capped backoff, and a token-less node simply
+    doesn't connect until the SPA login completes (then the pending retry picks the token up — no
+    restart). A refused handshake is REPORTED (rate-limited), because the retry loop is unbounded
+    by design and an invisible one is indistinguishable from a healthy node.
+  - **Liveness is CLIENT-driven, and has to be, because the two mothership runtimes disagree.** A
+    Node mothership pings at the protocol level and reaps a socket that stops answering, so a drop
+    surfaces as a `close` the subscriber retries. A Cloudflare mothership does not: the
+    `WorkspaceEventsHub` uses the hibernation API, which sends no pings, so a half-open socket
+    never fires `close` and the workspace would go dark FOREVER while the node still believed it
+    was subscribed. So the subscriber runs its own heartbeat and treats any inbound frame as proof
+    of life — its app-level `"ping"` is auto-answered at the Cloudflare edge (the DO's existing
+    `setWebSocketAutoResponse` pair, no DO wake), while Node's own protocol ping arrives as a
+    `ping` event. Neither hub reads subscriber frames, so the text ping is inert where unneeded.
+    Silence past the idle deadline drops the socket and reconnects.
+  - Tested in `packages/server/test/eventsRelay.spec.ts` (the gate + the gateway hand-off),
+    `runtimes/node/test/machineEventSubscribe.spec.ts` (the Node upgrade listener authorising
+    identically, an accepted node landing in the same hub room with its `?cid=` honoured over a
+    real handshake, and the hub's room seam), `runtimes/local/src/mothershipSubscriber.test.ts`
+    (the demand-driven lifecycle, verbatim delivery, backoff, the idle deadline, failure
+    reporting), `runtimes/local/src/mothership.test.ts` (the wiring + the echo-suppression
+    contract), and the shared cross-runtime suite (`core-workspaces.ts` asserts the endpoint is
+    mounted + machine-gated on BOTH facades).
+
+**Real-time fan-out read (a defect the inbound leg surfaced)**
+
+- **`workspaceMountRepository.listWorkspaceIdsMountingBlock` is now allow-listed** — and it was
+  never optional. `FanOutEventPublisher` calls it on EVERY engine event publish to expand the
+  changed block to the set of boards mounting its service, and a mothership-mode node wires the same
+  decorator; with the method off the allow-list the call came back `unknown_method`, the remote proxy
+  threw, and the rejection propagated out of `RunStateMachine`'s unguarded emit. The earlier
+  mount-management slice classified this method as a "later slice" fan-out read, which was true of
+  its mount/unmount role and wrong about its hot-path one. It takes the plain `workspace` rule
+  (arg0 is the origin workspaceId) and returns workspace IDS only.
+- **`blockRepository.countActiveInternal`** joins it, completing the headless public-API surface
+  whose paginated reads (`listServiceTasks`, `executionRepository.listInternal`) were already remote:
+  without the cap read a mothership-mode node refused every public-API run start.
+
 **Login (PR 3)**
 
 - **Login-based machine-token minting** — the static `LOCAL_MOTHERSHIP_TOKEN` is replaced by a token
@@ -467,7 +539,7 @@ never remotely invocable (mothership-internal cron).
 | Port                                     | Status  | Remote surface / what's still off                                                                  |
 | ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
 | `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                         |
-| `blockRepository`                        | ◑ part  | board/run reads+writes; `listByService`/`countActiveInternal` (public API) pending                 |
+| `blockRepository`                        | ◑ part  | board/run reads+writes + public-API `countActiveInternal`; unbatched `listByService` unused        |
 | `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                          |
 | `pipelineRepository`                     | ✅ done | full CRUD                                                                                          |
 | `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                  |
@@ -481,7 +553,7 @@ never remotely invocable (mothership-internal cron).
 | `trackerSettingsRepository`              | ✅ done | get/put                                                                                            |
 | `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                            |
 | `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                 |
-| `workspaceMountRepository`               | ◑ part  | mount mgmt; fan-out/batch cleanup reads pending                                                    |
+| `workspaceMountRepository`               | ◑ part  | mount mgmt + the per-publish fan-out read; batch cleanup / rehome reads pending                    |
 | `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                           |
 | `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                                      |
 | `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                               |
@@ -570,15 +642,15 @@ never remotely invocable (mothership-internal cron).
   mothership projects. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain
   mothership-owned; the repo-write projection-refresh slice is still open.)
 
-  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, the
-  > real-time UPSTREAM publish, and notification DELIVERY delegation (below) are IMPLEMENTED. The
-  > remaining bullets below are the DESIGN for PR 4's email half / PR 5 and are **NOT yet in code** —
-  > no `/internal/email` or `/internal/telemetry` endpoint exists yet (a grep finds them only in this
-  > doc + ADR 0009). The four live `/internal/*` routes today are `POST /internal/persistence`,
-  > `POST /internal/github/installation-token`, `POST /internal/events/publish`, and
-  > `POST /internal/notifications/deliver`.
+  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
+  > in BOTH directions, and notification DELIVERY delegation (below) are IMPLEMENTED. The remaining
+  > bullets below are the DESIGN for PR 4's email half / PR 5 and are **NOT yet in code** — no
+  > `/internal/email` or `/internal/telemetry` endpoint exists yet (a grep finds them only in this
+  > doc + ADR 0009). The five live `/internal/*` routes today are `POST /internal/persistence`,
+  > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
+  > `GET /internal/events/subscribe/:workspaceId`, and `POST /internal/notifications/deliver`.
 
-- **Real-time — UPSTREAM (outbound) ✅ landed; INBOUND (subscribe) planned.** The OUTBOUND leg is
+- **Real-time — BOTH directions ✅ landed.** The OUTBOUND leg is
   built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a
   `MothershipWebSocketPropagator` (`@cat-factory/local-server`) POSTs each engine event to the new
   machine-authed `POST /internal/events/publish`, layered over the local hub so every event fans to
@@ -587,14 +659,14 @@ never remotely invocable (mothership-internal cron).
   — `LocalMachineEventRelay` (the Node hub / propagator) and `DurableObjectMachineEventRelay` (the
   per-workspace `WorkspaceEventsHub` Durable Object) — so hosted teammates see the local node's
   activity live. Account-scoped + default-deny exactly like the persistence RPC.
-  The INBOUND leg — the local node opening a subscription (`GET /internal/events/subscribe`) and
-  re-broadcasting org activity into its `NodeRealtimeHub` — is a distinct, runtime-shaped follow-up:
-  the mothership SERVE side is a long-lived fan-out that is genuinely different per runtime (an
-  in-process subscriber registry on Node vs. DO-held connections on Cloudflare), so it is not
-  half-wired here. The cleanest design reuses the SAME per-workspace realtime `upgrade` seam
-  (`gateways.realtime.upgrade`) with machine auth, and suppresses the origin node's echo by threading
-  its stable subscribe `?cid=` through the outbound publish as `originConnectionId` (the mechanism the
-  outbound leg already carries). SPA wire protocol unchanged in both directions.
+  The INBOUND leg landed on exactly the design sketched here and NOT on the per-runtime subscriber
+  registry once feared: `GET /internal/events/subscribe/:workspaceId` hands the machine-authed
+  handshake to the SAME per-workspace realtime `upgrade` seam (`gateways.realtime.upgrade`), so a
+  subscribed node is just another socket in the workspace's room on either runtime, and the origin
+  node's echo is suppressed by threading its stable subscribe `?cid=` through the outbound publish as
+  `originConnectionId`. On the laptop, `MothershipEventSubscriber` holds one stream per workspace with
+  a local subscriber (driven by the hub's new room-transition seam) and re-broadcasts into the bare
+  hub. SPA wire protocol unchanged in both directions. See "Landed so far" for the full shape.
 - **Notifications ✅ landed.** Row persists via the remote `notificationRepository`; IN-APP delivery
   rides the real-time upstream relay (the laptop's own in-app channel publishes through the layered
   propagator, so the frame reaches the mothership's browsers); **EXTERNAL** (Slack) delivery is
@@ -624,11 +696,11 @@ never remotely invocable (mothership-internal cron).
 - **PR 1 — vertical slice (the SPINE).** ✅ landed — the persistence-RPC spine + local consumer side.
   See "Landed so far". The board-load + run end-to-end surface that makes it functional landed under
   Phase 3 (the merge gate, **MET**).
-- **PR 2 — real-time both directions + durable SQLite work queue.** Durable SQLite work queue **✅
-  landed**. Real-time **UPSTREAM (outbound)** **✅ landed** — see "Landed so far". **Remaining:** the
-  INBOUND (subscribe) leg (the local node receiving org events raised on the mothership / by peer
-  laptops and re-broadcasting them to the laptop's SPA) and the local-sqlite conformance binding via
-  a fake mothership server.
+- **PR 2 — real-time both directions + durable SQLite work queue.** ✅ **landed.** Durable SQLite
+  work queue, real-time UPSTREAM (outbound) and real-time INBOUND (subscribe) are all in — see
+  "Landed so far". **Remaining (carried to PR 6):** the local-sqlite conformance binding via a fake
+  mothership server, which is a test-harness gap rather than a product one (the inbound leg is
+  covered per-facade plus by the shared mounted-and-machine-gated assertion).
 
 ### Phase 3 — Functional repository surface (THE MERGE GATE)
 

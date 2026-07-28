@@ -920,6 +920,9 @@ importers:
       drizzle-orm:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260726.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+      ws:
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@cat-factory/conformance':
         specifier: workspace:*
@@ -930,6 +933,9 @@ importers:
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       typescript:
         specifier: 7.0.2
         version: 7.0.2
