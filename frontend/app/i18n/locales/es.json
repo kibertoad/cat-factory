@@ -2202,7 +2202,12 @@
       "test": {
         "button": "Probar conexión",
         "ok": "Conexión correcta",
-        "failed": "Falló la conexión"
+        "failed": "Falló la conexión",
+        "warningsTitle": "Carencias en esta configuración",
+        "warnings": {
+          "runner_manifest_no_release": "Sin plantilla de release: al cancelar una ejecución no se puede indicar al pool que detenga su trabajo, así que un trabajo huérfano ocupa su runner hasta que el pool lo recupere por su cuenta.",
+          "runner_manifest_no_status_path": "Sin ruta de estado: cada sondeo se interpreta como todavía en ejecución, así que un trabajo solo puede terminar agotando el presupuesto de sondeo de la ejecución."
+        }
       },
       "toast": {
         "saved": "{title} guardado",

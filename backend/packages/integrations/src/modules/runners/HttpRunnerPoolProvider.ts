@@ -17,7 +17,11 @@ import type {
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { isHarnessFailureCause, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import {
+  CONTAINER_EVICTION_ERROR,
+  isHarnessFailureCause,
+  STRICT_URL_SAFETY_POLICY,
+} from '@cat-factory/kernel'
 import { DOCS } from '../../docs.js'
 import * as environmentsLogic from '../environments/environments.logic.js'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
@@ -104,12 +108,38 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {
-    const json = await this.execute(
-      req.manifest,
-      req.manifest.poll,
-      this.scope(req.jobId),
-      req.resolveSecret,
-    )
+    let json: unknown
+    try {
+      json = await this.execute(
+        req.manifest,
+        req.manifest.poll,
+        this.scope(req.jobId),
+        req.resolveSecret,
+      )
+    } catch (error) {
+      // The scheduler no longer knows this job (404 Not Found / 410 Gone): its runner is gone
+      // and the job with it. Report it as an EVICTION rather than letting the throw count
+      // against the poll-failure tolerance, so the engine re-dispatches onto a fresh pool
+      // member instead of spending ~3 minutes of retries and then failing the run. Mirrors the
+      // Cloudflare container and Kubernetes transports, which map their own 404 the same way.
+      //
+      // The status leads the sentinel, and the scheduler's own account rides `detail`, because
+      // a 404 is NOT proof of an eviction: a mistyped `poll` path template (dispatch uses a
+      // different one, so it can be right while this is wrong) and a scheduler that 404s an
+      // unauthorized read both land here. Those are misconfigurations, and an operator handed a
+      // bare "container evicted or crashed" has nothing to work from — the raw status line plus
+      // this provider's fix-it remedy is what names the real problem. `evicted or crashed` stays
+      // a SUBSTRING, which is all `isContainerEvictionError` needs.
+      if (error instanceof RunnerPoolApiError && (error.status === 404 || error.status === 410)) {
+        return {
+          state: 'failed',
+          error: `Runner pool poll → ${error.status}: ${CONTAINER_EVICTION_ERROR}`,
+          evicted: 'crash',
+          detail: error.message,
+        }
+      }
+      throw error
+    }
     return this.mapJobView(req.manifest, json)
   }
 
@@ -354,10 +384,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
   private mapJobView(manifest: RunnerPoolManifest, json: unknown): RunnerJobView {
     const r = manifest.response
     const rawStatus = environmentsLogic.extractString(json, r.statusPath)
-    const state = runnersLogic.mapJobState(rawStatus, r.statusMap)
+    const { state, evicted } = runnersLogic.classifyJobStatus(rawStatus, r.statusMap)
     const error = environmentsLogic.extractString(json, r.errorPath)
 
     const view: RunnerJobView = { state }
+    // A scheduler that reports its runner was reclaimed (evicted / preempted / OOM-killed /
+    // node lost) describes INFRASTRUCTURE loss, not the job's own verdict, so it rides the
+    // structured eviction field and the engine retries on a fresh pool member.
+    if (evicted) view.evicted = evicted
 
     const progress = this.mapProgress(manifest, json)
     if (progress) view.progress = progress
@@ -404,7 +438,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (detail) view.detail = detail
 
     if (state === 'failed') {
-      view.error = error ?? 'Runner pool reported the job failed'
+      view.error =
+        error ??
+        (evicted
+          ? `Runner pool reported the runner was reclaimed ('${rawStatus}') — ${CONTAINER_EVICTION_ERROR}`
+          : 'Runner pool reported the job failed')
       return view
     }
 

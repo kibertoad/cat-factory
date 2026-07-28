@@ -285,6 +285,26 @@ describe('MergeResolver replay safety', () => {
     })
   })
 
+  it('raises the review card BEFORE flipping the block to `pr_ready`', async () => {
+    const { resolver, raise, update } = makeResolver()
+    await resolver.resolveMergerStep('ws', INSTANCE, assessment({ complexity: 0.99 }))
+    expect(raise).toHaveBeenCalledOnce()
+    expect(update).toHaveBeenCalledOnce()
+    expect(raise.mock.invocationCallOrder[0]!).toBeLessThan(update.mock.invocationCallOrder[0]!)
+  })
+
+  it('leaves the block alone when the review card cannot be raised', async () => {
+    // The card is the ONLY actionable prompt this outcome produces, so a raise failure must not
+    // leave a `pr_ready` block that looks finished-and-waiting with an empty inbox — the throw
+    // fails the run instead, which the board surfaces (and which is retryable).
+    const { resolver, raise, update } = makeResolver()
+    raise.mockRejectedValue(new Error('notification store down'))
+    await expect(
+      resolver.resolveMergerStep('ws', INSTANCE, assessment({ complexity: 0.99 })),
+    ).rejects.toThrow('notification store down')
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('records a `pending_review` decision and puts the record on the review card', async () => {
     const { resolver, recordDecision, raise } = makeResolver({ changeClass: 'source' })
     await resolver.resolveMergerStep('ws', INSTANCE, assessment({ complexity: 0.99 }))

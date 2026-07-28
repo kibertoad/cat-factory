@@ -298,7 +298,12 @@
       "test": {
         "button": "Testa la connessione",
         "ok": "Connessione OK",
-        "failed": "Connessione fallita"
+        "failed": "Connessione fallita",
+        "warningsTitle": "Lacune in questa configurazione",
+        "warnings": {
+          "runner_manifest_no_release": "Nessun template di release: annullare un'esecuzione non può dire al pool di fermare il suo job, quindi un job orfano tiene occupato il suo runner finché il pool non lo recupera da solo.",
+          "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione."
+        }
       },
       "toast": {
         "saved": "{title} salvato",

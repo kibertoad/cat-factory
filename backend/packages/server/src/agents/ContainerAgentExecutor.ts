@@ -164,14 +164,15 @@ type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
  * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
  *
  * A step RE-dispatched within the run (the Tester→Fixer loop's re-test, a fixer round, a
- * polling gate's helper retry) carries a non-zero `dispatchEpoch` so each round gets a
- * distinct id. The harness re-attaches to an EXISTING job id rather than re-running (replay
- * idempotency), and a container-reusing transport (a warm local pool / a self-hosted runner
- * pool) keeps that registry alive across rounds — reclaiming a pooled member does NOT
- * destroy it — so without the epoch a re-test would replay the first round's stale report
- * (the bug where the Tester appeared to "pass regardless" and never actually re-ran). Epoch
- * 0 (a step dispatched once) keeps the original unsuffixed id, so single-dispatch steps are
- * unaffected. See {@link AgentRunContext.dispatchEpoch}.
+ * polling gate's helper retry, a container-eviction recovery) carries a non-zero
+ * `dispatchEpoch` so each round gets a distinct id. The harness re-attaches to an EXISTING job
+ * id rather than re-running (replay idempotency), and a container-reusing transport (a warm
+ * local pool / a self-hosted runner pool) keeps that registry alive across rounds — reclaiming
+ * a pooled member does NOT destroy it — so without the epoch a re-test would replay the first
+ * round's stale report (the bug where the Tester appeared to "pass regardless" and never
+ * actually re-ran), and an eviction recovery would land back on the job whose runner just died
+ * rather than on a fresh one. Epoch 0 (a step dispatched once) keeps the original unsuffixed
+ * id, so single-dispatch steps are unaffected. See {@link AgentRunContext.dispatchEpoch}.
  */
 function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
   const base = `${executionId}-${agentKind}`

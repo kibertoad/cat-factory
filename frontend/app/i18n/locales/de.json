@@ -298,7 +298,12 @@
       "test": {
         "button": "Verbindung testen",
         "ok": "Verbindung OK",
-        "failed": "Verbindung fehlgeschlagen"
+        "failed": "Verbindung fehlgeschlagen",
+        "warningsTitle": "Lücken in dieser Konfiguration",
+        "warnings": {
+          "runner_manifest_no_release": "Kein Release-Template: Beim Abbrechen eines Laufs kann dem Pool nicht mitgeteilt werden, dass er seinen Job stoppen soll. Ein verwaister Job belegt seinen Runner, bis der Pool ihn von selbst zurücknimmt.",
+          "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist."
+        }
       },
       "toast": {
         "saved": "{title} gespeichert",
