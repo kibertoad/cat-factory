@@ -147,7 +147,7 @@ exactly three outcomes, and **"it doesn't apply to mothership mode" is not one o
 
 - **New repository method → decide its bucket IN THE SAME PR**, and make the decision real:
   - **`remote`** (the default for org/durable state) — add it to `REMOTE_PERSISTENCE_METHODS`
-    (`backend/packages/server/src/persistence/rpc.ts`) with a correct scope rule, plus a round-trip
+    (`backend/packages/server/src/persistence/rpc-allowlist.ts`) with a correct scope rule, plus a round-trip
     AND a cross-account-refusal test in `packages/server/test/persistenceRpc.spec.ts`. If no
     existing rule binds your arguments, add a rule — never widen an existing one to fit.
   - **`local-sqlite`** (a per-user/per-deployment credential or local-runner knob) — implement the

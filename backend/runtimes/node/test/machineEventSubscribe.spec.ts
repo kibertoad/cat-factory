@@ -1,7 +1,9 @@
-import type { IncomingMessage } from 'node:http'
+import { type IncomingMessage, type Server, createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { mintMachineToken } from '@cat-factory/server'
 import type { AuthConfig } from '@cat-factory/server'
+import { WebSocket } from 'ws'
 import { describe, expect, it } from 'vitest'
 import { NodeRealtimeHub, attachRealtime } from '../src/realtime.js'
 
@@ -92,10 +94,13 @@ describe('machine event subscription (Node upgrade listener)', () => {
     stop()
   })
 
-  it('503s an authenticated caller on a deployment that is not a mothership, and 404s the route entirely when unwired', async () => {
+  it('404s the route entirely on a deployment that is not a mothership, and on a resolver failure', async () => {
     // No `machineSubscribe` deps ⇒ this Node deployment does not serve the route at all, and the
     // path falls through to the listener's generic refusal. That is the correct shape: a facade
-    // that can't scope the request must not half-serve it.
+    // that can't scope the request must not half-serve it. (The shared controller — which is how a
+    // CLOUDFLARE mothership reaches the same handshake — answers 503 here instead, because it is
+    // mounted unconditionally and must distinguish "no route" from "cannot scope you";
+    // `packages/server/test/eventsRelay.spec.ts` pins that half.)
     const unwired = harness()
     const res = await unwired.upgrade('/internal/events/subscribe/ws_1', await token())
     expect(res.written[0]).toContain('404')
@@ -111,7 +116,65 @@ describe('machine event subscription (Node upgrade listener)', () => {
     expect(failed.written[0]).toContain('404')
     broken.stop()
   })
+
+  // The ACCEPT half, over a real listener and a real `ws` client. It cannot be driven through the
+  // stub-socket harness above (that one resolves on `socket.destroy()`, which only a REFUSAL
+  // reaches), and it is the half that carries the load-bearing detail: the accepted node has to
+  // land in the same hub room a browser does, WITH its `?cid=` recorded, or the mothership fans a
+  // node's own relayed events straight back at it and the laptop's browsers see them twice.
+  it('accepts an in-scope handshake into the workspace room, honouring the node cid', async () => {
+    const hub = new NodeRealtimeHub()
+    const rooms: string[] = []
+    hub.watchRooms({ roomOpened: (id) => rooms.push(id), roomClosed: () => {} })
+    const server = createServer()
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const stop = attachRealtime(
+      server as never,
+      hub,
+      AUTH,
+      { info: () => {}, warn: () => {} },
+      {
+        accountOf,
+      },
+    )
+    const port = (server.address() as AddressInfo).port
+
+    const client = new WebSocket(
+      `ws://127.0.0.1:${port}/internal/events/subscribe/ws_1?cid=mothership-node-abc`,
+      { headers: { authorization: `Bearer ${await token()}` } },
+    )
+    const frames: string[] = []
+    client.on('message', (data) => void frames.push(String(data)))
+    await new Promise<void>((resolve, reject) => {
+      client.on('open', resolve)
+      client.on('error', reject)
+    })
+
+    // Same room as a browser: the machine handshake fires the same first-subscriber transition.
+    expect(rooms).toEqual(['ws_1'])
+
+    // An event this node did NOT originate reaches it; one stamped with its own cid does not.
+    // Ordering on a single socket makes the negative deterministic — the sentinel proves the
+    // suppressed frame was skipped rather than merely slow.
+    hub.broadcast('ws_1', '{"type":"board","reason":"teammate"}')
+    hub.broadcast('ws_1', '{"type":"board","reason":"our-own-echo"}', 'mothership-node-abc')
+    hub.broadcast('ws_1', '{"type":"board","reason":"sentinel"}')
+    await expect.poll(() => frames.length).toBe(2)
+    expect(frames).toEqual([
+      '{"type":"board","reason":"teammate"}',
+      '{"type":"board","reason":"sentinel"}',
+    ])
+
+    client.close()
+    stop()
+    await closeServer(server)
+  })
 })
+
+/** Release the test listener, so a spec file can't leave a port bound behind it. */
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve) => server.close(() => resolve()))
+}
 
 describe('NodeRealtimeHub room observation', () => {
   it('reports only the FIRST-subscriber / LAST-unsubscriber transitions', () => {

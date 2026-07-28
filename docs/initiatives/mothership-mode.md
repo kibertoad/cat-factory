@@ -321,14 +321,28 @@
     the tab id means nothing on the mothership (which holds no laptop-local socket) and was already
     honoured locally, while the node id is precisely the one socket that must not receive its own
     event back.
-  - A dropped subscription reconnects with capped backoff, and a token-less node simply doesn't
-    connect until the SPA login completes (then the pending retry picks the token up — no restart).
+  - A dropped subscription reconnects with jittered capped backoff, and a token-less node simply
+    doesn't connect until the SPA login completes (then the pending retry picks the token up — no
+    restart). A refused handshake is REPORTED (rate-limited), because the retry loop is unbounded
+    by design and an invisible one is indistinguishable from a healthy node.
+  - **Liveness is CLIENT-driven, and has to be, because the two mothership runtimes disagree.** A
+    Node mothership pings at the protocol level and reaps a socket that stops answering, so a drop
+    surfaces as a `close` the subscriber retries. A Cloudflare mothership does not: the
+    `WorkspaceEventsHub` uses the hibernation API, which sends no pings, so a half-open socket
+    never fires `close` and the workspace would go dark FOREVER while the node still believed it
+    was subscribed. So the subscriber runs its own heartbeat and treats any inbound frame as proof
+    of life — its app-level `"ping"` is auto-answered at the Cloudflare edge (the DO's existing
+    `setWebSocketAutoResponse` pair, no DO wake), while Node's own protocol ping arrives as a
+    `ping` event. Neither hub reads subscriber frames, so the text ping is inert where unneeded.
+    Silence past the idle deadline drops the socket and reconnects.
   - Tested in `packages/server/test/eventsRelay.spec.ts` (the gate + the gateway hand-off),
     `runtimes/node/test/machineEventSubscribe.spec.ts` (the Node upgrade listener authorising
-    identically + the hub's room seam), `runtimes/local/src/mothershipSubscriber.test.ts` (the
-    demand-driven lifecycle, verbatim delivery, backoff), `runtimes/local/src/mothership.test.ts`
-    (the wiring + the echo-suppression contract), and the shared cross-runtime suite
-    (`core-workspaces.ts` asserts the endpoint is mounted + machine-gated on BOTH facades).
+    identically, an accepted node landing in the same hub room with its `?cid=` honoured over a
+    real handshake, and the hub's room seam), `runtimes/local/src/mothershipSubscriber.test.ts`
+    (the demand-driven lifecycle, verbatim delivery, backoff, the idle deadline, failure
+    reporting), `runtimes/local/src/mothership.test.ts` (the wiring + the echo-suppression
+    contract), and the shared cross-runtime suite (`core-workspaces.ts` asserts the endpoint is
+    mounted + machine-gated on BOTH facades).
 
 **Real-time fan-out read (a defect the inbound leg surfaced)**
 

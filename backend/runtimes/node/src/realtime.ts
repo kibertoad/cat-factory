@@ -105,11 +105,20 @@ export class NodeRealtimeHub implements LocalEventSink, RealtimeRoomWatcher {
   private roomListener: RealtimeRoomListener | null = null
 
   /**
-   * Observe room open/close transitions (see {@link RealtimeRoomWatcher}). Best-effort: a
-   * listener that throws must never break a subscribe/unsubscribe, since the socket lifecycle
-   * is the transport's core job and the listener is an optional mothership-mode add-on.
+   * Observe room open/close transitions (see {@link RealtimeRoomWatcher}). Best-effort in the one
+   * direction that matters: a listener that throws must never break a subscribe/unsubscribe, since
+   * the socket lifecycle is the transport's core job and the listener is an optional
+   * mothership-mode add-on.
+   *
+   * At most ONE listener, and a second registration THROWS rather than replacing the first: silent
+   * replacement would leave the displaced observer believing it is still watching (a mothership
+   * node that never learns a room opened holds no upstream stream and the board just stays frozen),
+   * which is precisely the class of quiet breakage this seam exists to serve.
    */
   watchRooms(listener: RealtimeRoomListener): () => void {
+    if (this.roomListener) {
+      throw new Error('NodeRealtimeHub already has a room listener; detach before re-registering')
+    }
     this.roomListener = listener
     return () => {
       if (this.roomListener === listener) this.roomListener = null
@@ -282,7 +291,9 @@ const HEARTBEAT_INTERVAL_MS = 30_000
 /**
  * Status-line reasons for a refused machine subscription. Keyed by the exact statuses
  * {@link authorizeMachineSubscribe} can return, so a new verdict status fails `tsc` here rather
- * than writing `undefined` into a raw HTTP status line.
+ * than writing `undefined` into a raw HTTP status line. `503` is unreachable on THIS runtime (see
+ * {@link MachineSubscribeDeps}) but is kept so the map stays total over the verdict union — a
+ * `Partial` here would trade the compile-time guarantee for a runtime `undefined`.
  */
 const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
   403: 'Forbidden',
@@ -293,8 +304,15 @@ const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
 /**
  * What a Node deployment acting as a MOTHERSHIP needs in order to serve the machine-authed
  * inbound event subscription (`GET /internal/events/subscribe/:ws`) — the workspace → account
- * resolver the scope binding is built on. Absent ⇒ this deployment is not a mothership and the
- * route reports 503 to an authenticated caller (and 403 to everyone else).
+ * resolver the scope binding is built on.
+ *
+ * **Absent ⇒ the route is not served at all on this runtime**, and the handshake falls through to
+ * the upgrade listener's generic `404`. That differs on purpose from the shared controller (which
+ * a Cloudflare mothership reaches), where the same missing capability answers `503` to an
+ * authenticated caller: the controller is mounted unconditionally and must distinguish "no such
+ * route" from "this facade can't scope you", while here an unwired deployment genuinely has no
+ * such WebSocket route. Both agree on the part that matters — an unauthenticated caller learns
+ * nothing either way.
  *
  * Note this is supplied only by the real Node facade's `start()`. A mothership-MODE local node is
  * a machine-API CLIENT, not a server: its account store lives upstream and its session secret is
