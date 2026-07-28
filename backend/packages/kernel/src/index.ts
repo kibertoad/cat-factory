@@ -32,6 +32,7 @@ export {
   type ChangeClassification,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
+export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_RISK_POLICY,
@@ -100,6 +101,7 @@ export {
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
   BUG_TRIAGE_PIPELINE_ID,
+  BUGFIX_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
   DOCUMENT_PIPELINE_ID,

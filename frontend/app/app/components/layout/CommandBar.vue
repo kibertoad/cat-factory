@@ -118,6 +118,14 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
         keywords: t('layout.commandBar.keywords.taskImport'),
         run: () => ui.openTaskImport(null),
       })
+      list.push({
+        id: 'bug-hunt',
+        label: t('layout.commandBar.cmd.bugHunt'),
+        group: groupIntegrations,
+        icon: 'i-lucide-radar',
+        keywords: t('layout.commandBar.keywords.bugHunt'),
+        run: () => ui.openBugHunt(null),
+      })
     }
   }
   return list

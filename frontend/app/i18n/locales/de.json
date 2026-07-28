@@ -1650,7 +1650,8 @@
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
       },
-      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}",
+      "huntBugs": "Fehler jagen"
     }
   },
   "layout": {
@@ -1989,7 +1990,8 @@
         "accountSettings": "Konto-Einstellungen",
         "localModels": "Meine lokalen Runner",
         "sandbox": "Sandbox öffnen",
-        "shortcuts": "Tastenkürzel"
+        "shortcuts": "Tastenkürzel",
+        "bugHunt": "Fehlerjagd"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2009,7 +2011,8 @@
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
         "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
-        "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help"
+        "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
+        "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen"
       }
     },
     "shortcuts": {
@@ -2102,6 +2105,10 @@
         },
         "documentTemplates": {
           "label": "Vorlagen & Beispiele"
+        },
+        "bugHunt": {
+          "label": "Fehlerjagd",
+          "description": "Offene, nicht zugewiesene Fehler eines Boards bewerten und einen zum Beheben auswählen"
         }
       }
     },
@@ -3298,6 +3305,47 @@
       "connect": "Verbinden",
       "oauthButton": "Mit {label} verbinden",
       "oauthOr": "oder mit einem API-Schlüssel verbinden"
+    }
+  },
+  "bugHunt": {
+    "title": "Fehlerjagd",
+    "intro": "Durchsuche ein Tracker-Board nach offenen, nicht zugewiesenen Fehlern und bewerte sie nach Auswirkung im Verhältnis zum geschätzten Aufwand. Wähle einen aus, und er wird zu einer Aufgabe, die die Fehlerbehebungs-Pipeline durchläuft.",
+    "connectFirst": "Verbinde oder aktiviere zuerst eine Aufgabenquelle.",
+    "connectSource": "{label} verbinden",
+    "needFrameFirst": "Füge zuerst einen Service-Rahmen zum Board hinzu, damit ein übernommener Fehler irgendwo landen kann.",
+    "tracker": "Tracker",
+    "board": "Board",
+    "pickBoard": "Board auswählen",
+    "boardPlaceholder": "Projektschlüssel, Team-ID oder owner/repo",
+    "issueType": "Vorgangstyp",
+    "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
+    "labels": "Labels",
+    "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
+    "adoptInto": "Ausgewählten Fehler hinzufügen zu",
+    "run": "Jagen",
+    "running": "Board wird gelesen und die Funde werden bewertet…",
+    "huntFailed": "Die Jagd ist fehlgeschlagen",
+    "notAssessed": "Nicht bewertet",
+    "recommended": "Empfohlen",
+    "adopt": "Diesen wählen",
+    "adopted": "{id} übernommen",
+    "adoptedRunning": "Die Fehlerbehebungs-Pipeline läuft dafür.",
+    "adoptFailed": "Dieser Fehler konnte nicht übernommen werden",
+    "noCandidates": "Auf diesem Board gab es keine offenen, nicht zugewiesenen Fehler.",
+    "ratings": "Auswirkung {impact}/5, Aufwand {complexity}/5, Konfidenz {confidence}",
+    "viaModel": "Bewertet von {model}.",
+    "truncated": "Es wurden nur die ersten {count} passenden Fehler geprüft; dieses Board enthält mehr.",
+    "comments": "{count} Kommentar | {count} Kommentare",
+    "confidence": {
+      "high": "hoch",
+      "medium": "mittel",
+      "low": "niedrig"
+    },
+    "status": {
+      "ranked": "Sortiert nach Auswirkung im Verhältnis zum geschätzten Aufwand.",
+      "unavailable": "Es ist kein Bewertungsmodell konfiguriert, daher sind diese unbewertet.",
+      "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
+      "empty": "Nichts zu bewerten."
     }
   },
   "pipeline": {

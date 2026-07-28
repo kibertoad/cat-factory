@@ -18,6 +18,7 @@ import type {
   ExecutionRepository,
   GateRegistry,
   JudgeAssessor,
+  BugHuntAssessor,
   JudgeRegistry,
   InitiativePresetRegistry,
   StepResolverRegistry,
@@ -526,6 +527,14 @@ export interface ConformanceAppOptions {
    * the facade's model-derived assessor (a pass-through with no model wired).
    */
   judgeAssessor?: JudgeAssessor
+  /**
+   * Inject the bug hunt's ranking producer (a deterministic fake in the suite) so both hunt
+   * outcomes — a RANKED board and the unranked degradation when no model is wired — are driven
+   * on EVERY runtime without a real model. Each facade harness threads it into its core
+   * overrides (the `bugHuntAssessor` seam `createCore` reads); absent ⇒ the facade's
+   * model-derived assessor, which is disabled with no model wired.
+   */
+  bugHuntAssessor?: BugHuntAssessor
   /**
    * Inject the app-owned initiative-preset registry, pre-loaded with a CUSTOM preset, so the suite
    * can assert a deployment-registered preset resolves identically on EVERY runtime (its snapshot

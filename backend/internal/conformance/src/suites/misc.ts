@@ -12,6 +12,7 @@ import {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
+import { defineBugHuntConformance } from './bug-hunt.js'
 import type { ConformanceHarness } from '../harness.js'
 
 export function defineMiscConformance(harness: ConformanceHarness): void {
@@ -1043,6 +1044,10 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(members.some((m) => m.userId === invitee.id)).toBe(true)
       })
     })
+
+    // The interactive bug hunt, in its own module so this group stays readable — same
+    // reasoning as the other extracted conformance describes.
+    defineBugHuntConformance(harness)
   })
 }
 

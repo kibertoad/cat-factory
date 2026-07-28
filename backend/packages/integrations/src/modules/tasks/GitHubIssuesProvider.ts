@@ -1,6 +1,7 @@
 import {
   ConflictError,
   ValidationError,
+  type BugCandidate,
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
@@ -11,6 +12,7 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
@@ -213,6 +215,59 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
           status: hit.state,
           excerpt: '',
         })
+        if (out.length >= query.limit) break
+      }
+      if (hits.length < per) break // a short page is the last page — stop paging
+    }
+    return out
+  }
+
+  /**
+   * List the workspace installation's repositories as hunt boards. No installation ⇒ an empty
+   * list, matching every other read on this provider (GitHub Issues rides the App, so "not
+   * installed" is an absence, not an error).
+   */
+  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const page = await this.deps.githubClient.listInstallationRepos(installation.installationId)
+    return githubIssuesLogic.githubReposToBoards(page.items)
+  }
+
+  /**
+   * Bug-hunt candidate search: the SAME repo-scoped search call as {@link searchIssues} (now
+   * also carrying `no:assignee`, from `query.unassignedOnly`), mapped onto the richer
+   * candidate shape. GitHub's search response already carries the body, labels, age and
+   * comment count, so no per-candidate detail fetch is needed — the whole board scan is one
+   * request per page.
+   */
+  async listBugCandidates(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<BugCandidate[]> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toLowerCase()))
+    const searchText = githubIssuesLogic.buildGitHubIntakeQuery(query)
+    const per = Math.min(query.limit + excluded.size, 100)
+    const out: BugCandidate[] = []
+    for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < query.limit; page++) {
+      const hits = await this.deps.githubClient.searchIssues(
+        installation.installationId,
+        searchText,
+        per,
+        'created-asc',
+        page,
+      )
+      for (const hit of hits) {
+        const candidate = githubIssuesLogic.githubHitToBugCandidate(hit)
+        if (excluded.has(candidate.externalId.toLowerCase())) continue
+        // Defence in depth on the unassigned predicate: `no:assignee` is what actually
+        // narrows the search, but an adapter that reports an assignee while ignoring the
+        // qualifier would otherwise offer up somebody else's in-flight work as free to take.
+        if (query.unassignedOnly && hit.assignee) continue
+        out.push(candidate)
         if (out.length >= query.limit) break
       }
       if (hits.length < per) break // a short page is the last page — stop paging

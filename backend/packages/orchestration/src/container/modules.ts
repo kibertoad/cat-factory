@@ -15,6 +15,7 @@
 import type {
   AppCaches,
   Block,
+  BugHuntAssessor,
   ExecutionEventPublisher,
   JudgeAssessor,
   TrackerIssueEvent,
@@ -24,6 +25,7 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
   BugIntakeService,
+  BugHuntService,
   DocumentConnectionService,
   DocumentContentResolverService,
   DocumentImportService,
@@ -66,6 +68,7 @@ import {
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { JudgeService } from '../modules/execution/JudgeService.js'
+import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
@@ -368,12 +371,51 @@ export function createTasksModule(
         taskRepository,
       })
     : undefined
+  // The interactive bug hunt's read-and-rank helper. Unconditional (unlike the intake helper,
+  // which needs a schedule repository): the board scan works with nothing but a connected
+  // tracker, and the RANKING degrades inside the service when no model is wired — so a
+  // model-less deployment still gets the board read rather than losing the whole surface.
+  const bugHuntService = new BugHuntService({
+    taskSourceRegistry: registry,
+    taskConnectionRepository,
+    taskRepository,
+    importService,
+    linkService,
+    ...(() => {
+      const assessor = createBugHuntAssessor(deps)
+      return assessor ? { assessor } : {}
+    })(),
+  })
   return {
     connectionService,
     importService,
     linkService,
+    bugHuntService,
     ...(bugIntakeService ? { bugIntakeService } : {}),
   }
+}
+
+/**
+ * The inline bug-hunt ranking model, built from the same dependencies the judge/reviewer
+ * assessors ride — so a facade that wired a model gets a working hunt ranking with no
+ * hunt-specific wiring (the judge-registry pattern). Absent provider ⇒ undefined, and the hunt
+ * returns its candidates unranked with a stated reason.
+ */
+function createBugHuntAssessor(deps: CoreDependencies): BugHuntAssessor | undefined {
+  if (deps.bugHuntAssessor) return deps.bugHuntAssessor
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new BugHuntAssessorService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind) =>
+          resolvePresetModelForKind(deps.modelPresetRepository!, workspaceId, agentKind)
+      : undefined,
+    ...(deps.logger ? { logger: deps.logger } : {}),
+  })
 }
 
 /**

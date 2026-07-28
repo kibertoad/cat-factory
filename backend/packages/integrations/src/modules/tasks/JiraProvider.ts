@@ -1,6 +1,7 @@
 import {
   ValidationError,
   atlassianLogic,
+  type BugCandidate,
   type IssueIntakeQuery,
   type TaskComment,
   type TaskContent,
@@ -8,6 +9,7 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import { JIRA_DESCRIPTOR } from './jira.logic.js'
@@ -30,6 +32,9 @@ const USER_AGENT = 'cat-factory'
 
 /** Max child-issue pages walked per epic (100/page) — a sanity bound on the import fan-out. */
 const CHILD_PAGE_CAP = 20
+
+/** How many projects the board picker lists in one page (Jira's project-search maximum). */
+const BOARD_PAGE_SIZE = 50
 
 /** Carries the HTTP status so callers can surface a meaningful error. */
 export class JiraApiError extends Error {
@@ -301,6 +306,59 @@ export class JiraProvider implements TaskSourceProvider {
     query: IssueIntakeQuery,
   ): Promise<TaskSearchResult[]> {
     return this.searchByJql(credentials, jiraLogic.buildJiraIntakeJql(query), query.limit)
+  }
+
+  /**
+   * List the site's projects as hunt boards. Jira paginates project search at 50/page; one
+   * page is the picker's whole appetite, and the SPA filters client-side — a site with more
+   * projects than that is served by the free-text board entry the picker also offers.
+   */
+  async listBoards(credentials: TaskCredentials): Promise<TrackerBoard[]> {
+    const json = await this.getJson(
+      credentials,
+      `/rest/api/3/project/search?maxResults=${BOARD_PAGE_SIZE}&orderBy=name`,
+    )
+    return jiraLogic.parseJiraBoards(json)
+  }
+
+  /**
+   * Bug-hunt candidate search: the same predicate JQL the intake builds (plus
+   * `assignee IS EMPTY`, from `query.unassignedOnly`), asked for the richer
+   * {@link jiraLogic.JIRA_CANDIDATE_FIELDS} selection. ONE request returns every field the
+   * ranking reasons over.
+   */
+  async listBugCandidates(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<BugCandidate[]> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    const jql = encodeURIComponent(jiraLogic.buildJiraIntakeJql(query))
+    const json = await this.getJson(
+      credentials,
+      `/rest/api/3/search/jql?jql=${jql}&fields=${jiraLogic.JIRA_CANDIDATE_FIELDS}&maxResults=${query.limit}`,
+    )
+    return jiraLogic.parseJiraBugCandidates(json, base)
+  }
+
+  /** Authenticated GET against the connection's site, re-validating the stored base URL. */
+  private async getJson(credentials: TaskCredentials, path: string): Promise<unknown> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    atlassianLogic.assertSafeAtlassianBaseUrl(base)
+    const url = `${base}${path}`
+    const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        authorization: `Basic ${auth}`,
+        accept: 'application/json',
+        'user-agent': USER_AGENT,
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new JiraApiError(res.status, `Jira GET ${url} → ${res.status}: ${text.slice(0, 300)}`)
+    }
+    return await res.json().catch(() => null)
   }
 
   /** Run a JQL search and map the hits (shared by the free-text and intake searches). */

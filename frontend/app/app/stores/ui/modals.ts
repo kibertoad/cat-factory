@@ -180,6 +180,10 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // the create-in target AND scopes the issue search to the frame's linked repo.
   // Null → the unscoped "import an issue" surface (workspace-wide search).
   const taskImport = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
+  // Bug hunt: pick a tracker + one of its boards, rank its open unassigned bugs, adopt one.
+  // `containerId` (a service frame or module) preselects where an adopted bug lands; null →
+  // opened standalone, and the modal offers every container on the board.
+  const bugHunt = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
 
   // Add-task modal: the container (service frame or module) a new task is being
   // added to, or null when closed. The user types the title + description; nothing
@@ -255,6 +259,13 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeTaskImport() {
     taskImport.value = null
   }
+  function openBugHunt(source: TaskSourceKind | null = null, containerId: string | null = null) {
+    resetHubReturn()
+    bugHunt.value = { source, containerId }
+  }
+  function closeBugHunt() {
+    bugHunt.value = null
+  }
   function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
     addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
@@ -289,6 +300,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     spawnPreview,
     taskConnect,
     taskImport,
+    bugHunt,
     addTaskContainerId,
     addTaskPrefill,
     reviewFrictionContext,
@@ -306,6 +318,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskConnect,
     openTaskImport,
     closeTaskImport,
+    openBugHunt,
+    closeBugHunt,
     openAddTask,
     closeAddTask,
     openReviewFriction,

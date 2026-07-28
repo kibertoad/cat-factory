@@ -250,10 +250,13 @@ export type {
   TaskContent,
   TaskSearchRepoScope,
   IssueIntakeQuery,
+  BugCandidate,
+  TrackerBoard,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,
 } from './task-source.js'
+export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
   TaskSourceWebhookAdapter,
   TrackerCommentAuthor,

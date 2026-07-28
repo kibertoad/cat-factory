@@ -130,6 +130,15 @@ export type {
   TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
+  // Bug hunt: the interactive dual of the recurring `bug-intake` step.
+  TrackerBoard,
+  BugCandidate,
+  BugHuntAnalysis,
+  BugHuntAnalysisStatus,
+  BugHuntCandidate,
+  BugHuntConfidence,
+  BugHuntResult,
+  RunBugHuntInput,
   // Ephemeral environment provider shapes.
   EnvironmentSecretRef,
   EnvironmentAuthScheme,

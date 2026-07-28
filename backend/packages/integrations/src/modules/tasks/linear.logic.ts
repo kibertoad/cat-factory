@@ -1,4 +1,5 @@
 import type {
+  BugCandidate,
   IssueIntakeQuery,
   TaskComment,
   TaskContent,
@@ -136,6 +137,9 @@ export function buildLinearIntakeFilter(query: IssueIntakeQuery): Record<string,
   }
   if (query.board.linearTeamId) filter.team = { id: { eq: query.board.linearTeamId } }
   if (query.titleFragment) filter.title = { containsIgnoreCase: query.titleFragment }
+  // `assignee: { null: true }` is Linear's unassigned predicate — pushed into the filter like
+  // every other, so a hunt never spends its bounded page walk on issues somebody already owns.
+  if (query.unassignedOnly) filter.assignee = { null: true }
   const labels = query.labels ?? []
   if (labels.length > 0) {
     filter.and = labels.map((label) => ({ labels: { some: { name: { eq: label } } } }))
@@ -395,4 +399,92 @@ export function mapLinearTeams(data: {
     out.push({ id: node.id, name: node.name ?? node.id, key: node.key ?? '' })
   }
   return out
+}
+
+// ---- Bug hunt: rich candidate listing -------------------------------------
+
+/**
+ * How many comments the candidate query pulls per issue purely to COUNT them. Linear's
+ * GraphQL comment connection exposes no total, so the count is a bounded one: an issue with
+ * more than this many comments reports the cap. That is a floor, not a guess — and the count
+ * only feeds the ranking's "how contested is this" signal, where "50+" and "63" mean the same
+ * thing. Anything that needed an exact total would have to page, which is the opposite of this
+ * method's one-call contract.
+ */
+export const LINEAR_COMMENT_PROBE = 50
+
+/**
+ * Bug-hunt candidate search. Same `IssueFilter` + oldest-first ordering as the intake query,
+ * but projecting the fields the ranking reasons over — so one call returns the whole candidate
+ * set with its reports, never a per-issue follow-up.
+ */
+export const LINEAR_CANDIDATE_ISSUES_QUERY = `query BugCandidates($filter: IssueFilter, $first: Int!, $after: String, $comments: Int!) {
+  issues(filter: $filter, first: $first, after: $after, sort: [{ createdAt: { order: Ascending } }]) {
+    nodes {
+      identifier
+      title
+      url
+      description
+      createdAt
+      priorityLabel
+      state { name }
+      labels { nodes { name } }
+      comments(first: $comments) { nodes { id } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+
+/** One node of the candidate `issues` connection (the slice we read). */
+export interface LinearCandidateNode {
+  identifier?: string
+  title?: string
+  url?: string
+  description?: string
+  createdAt?: string
+  priorityLabel?: string | null
+  state?: { name?: string } | null
+  labels?: { nodes?: { name?: string }[] } | null
+  comments?: { nodes?: unknown[] } | null
+}
+
+/** One page of the candidate `issues` connection (nodes + the cursor for the bounded walk). */
+export interface LinearCandidatePage {
+  issues?: { nodes?: LinearCandidateNode[]; pageInfo?: LinearPageInfo | null }
+}
+
+/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
+const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+
+/**
+ * Map a candidate `issues` payload onto {@link BugCandidate} rows: drop the excluded (already
+ * worked) identifiers, order oldest-created-first, cap at `limit`. Linear has no issue-type
+ * notion, so `type` stays empty rather than being inferred from a label.
+ */
+export function mapLinearBugCandidates(
+  data: { issues?: { nodes?: LinearCandidateNode[] } },
+  limit: number,
+  excludeExternalIds: string[] = [],
+): BugCandidate[] {
+  const excluded = new Set(excludeExternalIds.map((id) => id.toUpperCase()))
+  const nodes = (data.issues?.nodes ?? []).filter(
+    (node): node is LinearCandidateNode & { identifier: string } =>
+      !!node.identifier && !excluded.has(node.identifier.toUpperCase()),
+  )
+  nodes.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+  return nodes.slice(0, limit).map((node) => ({
+    source: 'linear' as const,
+    externalId: node.identifier,
+    title: node.title ?? '(untitled)',
+    url: node.url ?? `https://linear.app/issue/${node.identifier}`,
+    status: node.state?.name ?? '',
+    type: '',
+    priority: node.priorityLabel || null,
+    labels: (node.labels?.nodes ?? [])
+      .map((label) => label?.name ?? '')
+      .filter((name) => name.length > 0),
+    description: (node.description ?? '').trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
+    createdAt: node.createdAt ?? '',
+    commentCount: node.comments?.nodes?.length ?? 0,
+  }))
 }

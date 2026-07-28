@@ -1,8 +1,11 @@
 import type {
+  BugCandidate,
+  GitHubIssueSearchHit,
   IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchRepoScope,
   TaskSourceDescriptor,
+  TrackerBoard,
 } from '@cat-factory/kernel'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
@@ -182,6 +185,9 @@ export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
   const parts: string[] = []
   if (query.board.githubRepo) parts.push(`repo:${query.board.githubRepo.trim()}`)
   parts.push('is:open')
+  // `no:assignee` is GitHub search's unassigned qualifier — pushed down like the rest, so a
+  // hunt never spends its overscan window on issues somebody already owns.
+  if (query.unassignedOnly) parts.push('no:assignee')
   if (query.issueType) parts.push(`type:${quoteQualifierValue(query.issueType)}`)
   for (const label of query.labels ?? []) parts.push(`label:${quoteQualifierValue(label)}`)
   // Quote the fragment as a literal phrase so a value that happens to contain a search
@@ -213,4 +219,48 @@ export function detectExactGitHubIssueRef(
     return githubIssueExternalId({ owner: scope.owner, repo: scope.repo, number: Number(trimmed) })
   }
   return null
+}
+
+/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
+const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+
+/**
+ * Project a search hit onto a {@link BugCandidate}. GitHub's `/search/issues` response carries
+ * the whole issue payload, so every field here comes from the SAME call the hunt already
+ * makes — see the optional fields on {@link GitHubIssueSearchHit} for why they may be absent
+ * (an adapter projecting another backend onto the GitHub shape).
+ *
+ * GitHub has no priority field, so `priority` is always null; `type` echoes the issue's own
+ * labels-based convention only when the org uses issue types, which the search hit doesn't
+ * report — so it stays empty rather than being guessed from a label.
+ */
+export function githubHitToBugCandidate(hit: GitHubIssueSearchHit): BugCandidate {
+  return {
+    source: 'github',
+    externalId: githubIssueExternalId(hit),
+    title: hit.title,
+    url: hit.url,
+    status: hit.state,
+    type: '',
+    priority: null,
+    labels: hit.labels ?? [],
+    description: (hit.body ?? '').trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
+    createdAt: hit.createdAt ?? '',
+    commentCount: hit.commentCount ?? 0,
+  }
+}
+
+/**
+ * Map an installation's repositories onto hunt boards. A GitHub board scope is the
+ * `owner/repo` slug (what `buildGitHubIntakeQuery` puts in `repo:`), so `id` and `key` are the
+ * same value; `name` is the bare repo name, which is what a human scans a list of repos by.
+ */
+export function githubReposToBoards(repos: { owner: string; name: string }[]): TrackerBoard[] {
+  return repos
+    .filter((repo) => repo.owner && repo.name)
+    .map((repo) => ({
+      id: `${repo.owner}/${repo.name}`,
+      name: repo.name,
+      key: `${repo.owner}/${repo.name}`,
+    }))
 }

@@ -39,6 +39,7 @@ import { githubProjection as gp } from '@cat-factory/integrations'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { postPrReview } from './reviewPosting.js'
+import { searchCode, searchIssues } from './searchApi.js'
 import {
   decodeBase64Utf8,
   numHeader,
@@ -165,23 +166,6 @@ interface GhIssueCommentPayload {
   body?: string
   created_at?: string
   user?: { login?: string } | null
-}
-
-/** The slice of a `/search/issues` item `searchIssues` reads. */
-interface GhSearchIssueItem {
-  number?: number
-  title?: string
-  state?: string
-  html_url?: string
-  /** Present (and truthy) only on pull requests, which we filter out. */
-  pull_request?: unknown
-}
-
-/** The slice of a `/search/code` item `searchCode` reads. */
-interface GhSearchCodeItem {
-  path?: string
-  html_url?: string
-  repository?: { name?: string; owner?: { login?: string } }
 }
 
 export class FetchGitHubClient implements GitHubClient {
@@ -745,6 +729,8 @@ export class FetchGitHubClient implements GitHubClient {
     )
   }
 
+  // The two `/search/*` endpoints live in `searchApi.ts` (a cohesive extraction like
+  // `reviewPosting.ts`); these stay as thin delegates over the shared `request` executor.
   async searchIssues(
     installationId: number,
     query: string,
@@ -752,35 +738,14 @@ export class FetchGitHubClient implements GitHubClient {
     order?: 'created-asc',
     page = 1,
   ): Promise<GitHubIssueSearchHit[]> {
-    const q = encodeURIComponent(`${query} is:issue`)
-    const per = Math.min(Math.max(limit, 1), 100)
-    // Oldest-first (issue intake) rides the search API's sort/order params — the
-    // in-query `sort:` syntax is a web-UI affordance the REST API doesn't honor.
-    const sort = order === 'created-asc' ? '&sort=created&order=asc' : ''
-    const pageParam = page > 1 ? `&page=${page}` : ''
-    const { json } = await this.request(
-      `/search/issues?q=${q}&per_page=${per}${sort}${pageParam}`,
-      {
-        installationId,
-      },
+    return searchIssues(
+      (path, opts) => this.request(path, opts),
+      installationId,
+      query,
+      limit,
+      order,
+      page,
     )
-    const items = ((json as { items?: GhSearchIssueItem[] } | null)?.items ?? []).filter(
-      (i) => !i.pull_request,
-    )
-    const hits: GitHubIssueSearchHit[] = []
-    for (const item of items) {
-      const parts = parseIssueHtmlUrl(item.html_url ?? '')
-      if (!parts) continue
-      hits.push({
-        owner: parts.owner,
-        repo: parts.repo,
-        number: item.number ?? parts.number,
-        title: item.title ?? '(untitled)',
-        state: item.state ?? '',
-        url: item.html_url ?? '',
-      })
-    }
-    return hits.slice(0, limit)
   }
 
   async searchCode(
@@ -788,26 +753,7 @@ export class FetchGitHubClient implements GitHubClient {
     query: string,
     limit = 20,
   ): Promise<GitHubCodeSearchHit[]> {
-    const per = Math.min(Math.max(limit, 1), 100)
-    const { json } = await this.request(
-      `/search/code?q=${encodeURIComponent(query)}&per_page=${per}`,
-      { installationId },
-    )
-    const items = (json as { items?: GhSearchCodeItem[] } | null)?.items ?? []
-    const hits: GitHubCodeSearchHit[] = []
-    for (const item of items) {
-      const owner = item.repository?.owner?.login
-      const repo = item.repository?.name
-      const path = item.path
-      if (!owner || !repo || !path) continue
-      hits.push({
-        owner,
-        repo,
-        path,
-        url: item.html_url ?? `https://github.com/${owner}/${repo}/blob/HEAD/${path}`,
-      })
-    }
-    return hits.slice(0, limit)
+    return searchCode((path, opts) => this.request(path, opts), installationId, query, limit)
   }
 
   async listCommits(

@@ -714,6 +714,36 @@ Design: [`docs/initiatives/tracker-webhook-intake.md`](./docs/initiatives/tracke
 - **Commit the state, THEN talk to the tracker.** The reply is applied and its marker settled before
   the `postReviewReplyAck` follow-up, so a tracker outage costs the ack and never the answer.
 
+### Bug hunt (interactive board scan + impact/effort rating)
+
+The human-driven dual of the recurring `bug-intake` step: pick a connected tracker + one of its
+boards, rate that board's open + UNASSIGNED bugs on impact against complexity, confirm one, and it
+is adopted as a `bug` task on `pl_bugfix` with its run started. Design:
+[`backend/docs/bug-hunt.md`](./backend/docs/bug-hunt.md).
+
+- **It persists NOTHING** — no table, no migration. A hunt is a live provider read plus a model
+  call, and the response IS the state. Runtime symmetry is therefore by construction (providers +
+  the shared `createTasksModule`); what conformance pins is the WIRING, not a schema.
+- **`listBoards` / `listBugCandidates` are new OPTIONAL `TaskSourceProvider` capabilities** riding
+  the SAME `IssueIntakeQuery` vocabulary as intake (which gained `unassignedOnly`). **One vendor
+  call per scan is a hard requirement**: every vendor's list endpoint already returns the whole
+  issue payload, so a per-candidate detail fetch would be 40 round trips for data we were
+  discarding. Predicates are pushed into the vendor query, the already-adopted exclusion is one
+  batched `listByWorkspace` read.
+- **The model RATES; the platform RANKS.** `bugHuntScore` computes the impact/effort ratio from the
+  two 1-5 judgements — never read off the reply, or the list is sorted by something its own
+  rationale doesn't explain. Verdicts are joined onto the PROVIDER's rows by `externalId`, so a
+  verdict naming an issue the board never returned is dropped rather than surfaced.
+- **Degradation is stated, never silent.** `analysisStatus` distinguishes `unavailable` (no model
+  configured) from `failed` (wired but broken) because they need different fixes; either way the
+  scan is still returned, with unassessed candidates carrying `analysis: null` and sorting last. A
+  swallowed ranking failure is LOGGED by the assessor, or a revoked key surfaces only as a
+  permanently unranked hunt.
+- **The adopt is split like intake's**: `BugHuntService` imports + creates the task (through
+  `createTaskFromIssue`'s new optional `taskType`/`pipelineId` shape), the CONTROLLER starts the run
+  behind the personal-credential gate. A failed start deliberately KEEPS the task — unlike the
+  public API's anonymous anchor, it is one the user explicitly adopted.
+
 ### Implementation-fork decision (two-phase Coder step)
 
 Optional phase on the `coder` step surfacing materially different implementations BEFORE code is

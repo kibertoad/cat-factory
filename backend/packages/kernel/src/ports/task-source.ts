@@ -1,10 +1,12 @@
 import type {
+  BugCandidate,
   TaskSourceKind,
   TaskSourceDescriptor,
   TaskSourceDiagnostic,
   TaskComment,
   TaskDependencyLink,
   TaskSearchResult,
+  TrackerBoard,
 } from '../domain/types.js'
 import type { TaskSourceWebhookAdapter } from './tracker-webhook.js'
 
@@ -74,11 +76,16 @@ export interface TaskSearchRepoScope {
 }
 
 /**
- * A predicate search for issue intake (the recurring `bug-intake` step): find
- * **open** issues on one vendor board matching the schedule's predicates,
- * **oldest first** (deterministic pickup order). Providers push every predicate
- * into the vendor query wherever the vendor can express it (JQL / GitHub search
- * qualifiers / a Linear GraphQL filter) — never fetch-all-then-filter.
+ * A predicate search for issue intake (the recurring `bug-intake` step) and for the
+ * interactive bug hunt: find **open** issues on one vendor board matching the caller's
+ * predicates, **oldest first** (deterministic pickup order). Providers push every
+ * predicate into the vendor query wherever the vendor can express it (JQL / GitHub
+ * search qualifiers / a Linear GraphQL filter) — never fetch-all-then-filter.
+ *
+ * The same query vocabulary backs two result shapes: {@link TaskSourceProvider.searchIssues}
+ * returns lean hits (intake picks exactly one and imports it straight away), while
+ * {@link TaskSourceProvider.listBugCandidates} returns the richer
+ * {@link BugCandidate} rows the bug hunt's ranking model needs.
  */
 export interface IssueIntakeQuery {
   /** The vendor's "board"/project scope; exactly the field for the provider's source is read. */
@@ -90,6 +97,12 @@ export interface IssueIntakeQuery {
   /** Issue type name (Jira issue type / GitHub org issue type). Sources without a type notion ignore it. */
   issueType?: string
   /**
+   * Restrict to issues with NO assignee. The bug hunt sets it (an unowned bug is what
+   * makes a candidate free to pick up); the recurring intake leaves it unset. Absent is
+   * treated as `false`, so every existing caller is unaffected.
+   */
+  unassignedOnly?: boolean
+  /**
    * External ids to skip — issues already imported AND linked to a block (being
    * or been worked). Pushed into the vendor query where expressible (Jira
    * `issuekey NOT IN`), else filtered from a bounded overscan.
@@ -98,6 +111,18 @@ export interface IssueIntakeQuery {
   /** Max hits to return. Small — the intake step picks exactly one. */
   limit: number
 }
+
+/**
+ * A selectable "board" on a tracker (Jira project / Linear team / GitHub repository) and one
+ * open bug read off one. Both are wire types (`@cat-factory/contracts`, re-exported through
+ * `domain/types`), so the provider port, the HTTP layer and the SPA share one definition —
+ * see the module comment on `contracts/bug-hunt.ts` for the shape rationale.
+ *
+ * A `TrackerBoard.id` is vendor-shaped: whatever the matching {@link IssueIntakeQuery.board}
+ * field expects (a Jira project KEY, a Linear team id, an `owner/repo` slug), so a listed
+ * board can be handed straight back as a query scope.
+ */
+export type { BugCandidate, TrackerBoard }
 
 /** The result of validating + normalizing connect credentials. */
 export interface NormalizedTaskConnection {
@@ -156,6 +181,26 @@ export interface TaskSourceProvider {
     query: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<TaskSearchResult[]>
+  /**
+   * List the boards a hunt can be scoped to — Jira projects, Linear teams, GitHub
+   * repositories. Optional: a provider without it can't back the bug hunt's board
+   * picker, and the hunt surface says so rather than offering an empty list.
+   * `workspaceId` serves the same per-workspace out-of-band authentication as
+   * {@link TaskSourceProvider.search}.
+   */
+  listBoards?(credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]>
+  /**
+   * Predicate search returning the RICH {@link BugCandidate} rows the bug hunt ranks —
+   * the same query vocabulary as {@link TaskSourceProvider.searchIssues}, but with the
+   * body/labels/priority/age the ranking model needs. Implementations MUST gather the
+   * whole page in ONE vendor call (vendor field selection / GraphQL projection), never a
+   * per-candidate detail fetch. Optional: a provider without it can't back a hunt.
+   */
+  listBugCandidates?(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<BugCandidate[]>
   /**
    * Live "check setup" probe: actually authenticate against the source and read a
    * minimal slice of its issues API, classifying any failure (App not installed,

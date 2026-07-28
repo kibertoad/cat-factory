@@ -1,4 +1,11 @@
-import type { Block, Position, SourceTask, TaskContent, TaskSourceKind } from '@cat-factory/kernel'
+import type {
+  Block,
+  CreateTaskType,
+  Position,
+  SourceTask,
+  TaskContent,
+  TaskSourceKind,
+} from '@cat-factory/kernel'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
@@ -93,6 +100,11 @@ export class TaskLinkService {
    * of truth (re-importing refreshes it) and is fed to every agent step via the
    * link. Reuses BoardService.addTask so scope/placement rules stay in one place.
    * `createdBy` (the signed-in user) flows onto the new task for notification routing.
+   *
+   * `shape` lets a caller that already KNOWS what kind of work the issue is pre-classify the
+   * new task — the bug hunt adopts a candidate as a `bug` on the bug-fix pipeline. Omitted
+   * (every pre-existing caller) leaves both to `BoardService.addTask`'s defaults, so the
+   * generic import path is unchanged.
    */
   async createTaskFromIssue(
     workspaceId: string,
@@ -100,6 +112,7 @@ export class TaskLinkService {
     source: TaskSourceKind,
     externalId: string,
     createdBy?: string | null,
+    shape?: { taskType?: CreateTaskType; pipelineId?: string },
   ): Promise<TaskFromIssue> {
     const issue = assertFound(
       await this.deps.taskRepository.get(workspaceId, source, externalId),
@@ -125,6 +138,8 @@ export class TaskLinkService {
       {
         title: issueTaskTitle(issue),
         description: issueTaskDescription(issue),
+        ...(shape?.taskType ? { taskType: shape.taskType } : {}),
+        ...(shape?.pipelineId ? { pipelineId: shape.pipelineId } : {}),
       },
       createdBy ?? null,
     )

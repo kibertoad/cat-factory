@@ -81,6 +81,7 @@ import {
   linearOAuthController,
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
+import { bugHuntController } from './modules/bugHunt/BugHuntController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
@@ -216,6 +217,7 @@ function registerWorkspaceRunControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', executionController())
   app.route('/workspaces/:workspaceId', documentSourceController())
   app.route('/workspaces/:workspaceId', taskSourceController())
+  app.route('/workspaces/:workspaceId', bugHuntController())
   app.route('/workspaces/:workspaceId', environmentController())
   app.route('/workspaces/:workspaceId', runnerPoolController())
   app.route('/workspaces/:workspaceId', provisioningLogController())

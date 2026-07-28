@@ -1,0 +1,154 @@
+# Bug hunt
+
+The interactive dual of the recurring [`bug-triage` pipeline](./bug-triage-pipeline.md): a human
+picks a connected tracker and one of its boards, the platform reads that board's **open,
+unassigned** bugs and rates each on impact against implementation complexity, and the human
+confirms one candidate. That candidate is adopted onto the board as a `bug` task with the issue
+linked for context, and the standard bug-fix pipeline (`pl_bugfix`: investigate → triage →
+spec → architect → coder → review → merge tail) starts on it immediately.
+
+Same reading, same ranking vocabulary and the same downstream pipeline as the recurring triage
+schedule. The one difference is **who decides**: triage claims the oldest match unattended on a
+cadence, while a hunt shows a rated shortlist and waits for a person. That is the whole reason it
+exists — a backlog worker is right for churning through known bugs, and useless for the question
+"we have an afternoon, what is actually worth fixing?".
+
+## 1. Shape
+
+Three steps, one per user action, all under `/workspaces/:ws/bug-hunt/:source`:
+
+| Step  | Route             | Effect                                                           |
+| ----- | ----------------- | ---------------------------------------------------------------- |
+| Board | `GET /boards`     | Lists the source's boards (Jira projects / Linear teams / repos) |
+| Hunt  | `POST /hunts`     | Reads + rates the board's open unassigned bugs. **No writes.**   |
+| Adopt | `POST /adoptions` | Imports the issue, creates the bug task, starts the run          |
+
+`BugHuntController` (`@cat-factory/server`) is member-tier, deliberately NOT mounted alongside the
+admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection, and what it does
+— create a task, start a run — is exactly what the member tier is for. Gating it on
+`integrations.manage` would mean only admins could pick up a bug.
+
+## 2. It persists nothing
+
+There is **no hunt table, no migration and no runtime-symmetry surface of its own**. A hunt is a
+live provider read plus a model call; the response IS the state, and the SPA store drops it on
+close. A stale ranking of a board that has since moved on is worse than no ranking.
+
+The only durable effects happen at adopt time, and they are all pre-existing: an imported issue
+row, a board task, an execution. Runtime symmetry therefore comes for free — every part is either
+a provider (runtime-neutral by construction) or a service built in the shared `createTasksModule`.
+What conformance pins is the **wiring**, not a schema: a facade that forgets to thread the ranking
+assessor through `createCore` fails `defineBugHuntConformance` rather than silently offering a
+board scan that never rates anything.
+
+## 3. Reading the board
+
+`TaskSourceProvider` gains two optional capabilities beside `searchIssues`:
+
+- **`listBoards`** — the picker's options. A provider without it is not silently reduced to an
+  empty list: the service raises, and the SPA turns that into a free-text board field, which is a
+  usable answer where an empty picker is not.
+- **`listBugCandidates`** — the same `IssueIntakeQuery` vocabulary the recurring intake uses (now
+  carrying `unassignedOnly`), returning the richer `BugCandidate` rows the rating reasons over
+  (body excerpt, labels, priority, age, comment count).
+
+**One vendor call per scan is a hard requirement, not an optimisation.** Every vendor's list
+endpoint already returns the full issue payload, so a per-candidate detail fetch would be forty
+extra round trips against a rate-limited API for data we were throwing away. Jira asks for a wider
+`fields=` selection; GitHub reads the fields its `/search/issues` response already carries (which
+is why `GitHubIssueSearchHit` grew optional `body`/`labels`/`createdAt`/`commentCount`); Linear
+projects them in its GraphQL query.
+
+**Every predicate is pushed into the vendor query**, including the unassigned narrowing
+(`assignee IS EMPTY` / `no:assignee` / `assignee: { null: true }`) — never fetch-all-then-filter.
+The exclusion of already-adopted issues is one batched `listByWorkspace` read indexed in memory,
+the same shape `BugIntakeService` uses.
+
+The scan is capped at `BUG_HUNT_SCAN_LIMIT` (40) because the whole set goes into one rating
+prompt. A board with more matching bugs comes back `truncated: true` and the UI says so — a
+silently shortened list reads exactly like an exhaustive one.
+
+## 4. Rating
+
+`BugHuntAssessor` is a kernel port and the inline `BugHuntAssessorService` is its default
+implementation — structurally the `JudgeService` twin (resolve model → `generateText` → return the
+raw extracted JSON for the caller's parser), built in `createTasksModule` from the model
+dependencies every facade already wires. So rating needs no per-facade wiring, and a test harness
+swaps in a deterministic fake through the same seam.
+
+One difference shapes the class: **a hunt has no block.** It runs before any task exists, which is
+the point, so there is no block pin and no per-task model preset to honour; the scope is the
+workspace and the model is its `bug-hunter` default falling back to the routing default.
+
+Three rules govern what the model is allowed to contribute:
+
+- **It rates; it does not rank.** `impact` and `complexity` are 1-5 judgements on anchored scales;
+  the **score is computed by `bugHuntScore`**, never read off the reply. A model asked for both a
+  ratio and its operands will sometimes return a ratio that contradicts them, at which point the
+  list a human reads is sorted by something its own rationale does not explain.
+- **Tracker facts and model judgement never mix.** A candidate row is built from the provider's
+  response and the assessment is joined onto it by `externalId` (case-insensitively — the vendors
+  disagree with themselves about issue-key case). A verdict naming an issue the board did not
+  return is **dropped**, because a hallucinated bug is one a human would try to fix.
+- **It judges from the report only.** It has no checkout, so the prompt forbids asserting where a
+  bug lives or how the fix is written, and requires a low confidence over invented detail. It must
+  also rate every candidate it was given: a model that silently shortlists leaves a human believing
+  the omitted bugs were considered and rejected.
+
+Bug bodies are written by anyone who can file a ticket, so they are `redactSecrets`-scrubbed before
+they leave the deployment, and the prompt frames them as data with the real instruction restated
+**after** them.
+
+### Degradation is stated, never silent
+
+`analysisStatus` is the field the UI acts on, and the two failure modes are kept distinct because
+they need different fixes from whoever reads them:
+
+| Status        | Meaning                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `ranked`      | The model rated the candidates.                                  |
+| `unavailable` | No rating model is configured on this deployment.                |
+| `failed`      | A model is wired but the assessment failed; scan still returned. |
+| `empty`       | Nothing matched on the board.                                    |
+
+A failed rating never costs the user the scan — the board read is useful on its own — but it is
+never presented as a ranking either. A candidate the rating skipped carries `analysis: null` and
+sorts last, rendered as "not assessed": a missing assessment must never read as a zero score.
+
+The assessor **logs** the cause before throwing, because the service deliberately swallows the
+error; without that a revoked key would surface to an operator as nothing but a permanently
+unranked hunt.
+
+## 5. Adopting
+
+`BugHuntService.adopt` imports the issue and materialises it through the existing
+`TaskLinkService.createTaskFromIssue`, now taking an optional shape (`taskType` + `pipelineId`) so
+a caller that already KNOWS what the work is can pre-classify it. A hunted issue is a bug by
+construction and the human just confirmed the pipeline, so the task lands as `taskType: 'bug'`
+pinned to `BUGFIX_PIPELINE_ID` rather than as a generic `feature` to be re-classified by hand.
+
+The service stops there. Starting the run needs the execution engine and the initiator's
+personal-credential gate, so the controller composes it — the same split `BugIntakeService` uses
+(read-and-claim in integrations, the engine half outside it), and the same shape
+`PublicApiController` already uses for create-task-then-start.
+
+**A failed start deliberately leaves the task on the board.** Unlike the public API's anonymous
+initiative anchor (which rolls back, because nobody would ever find it), this is a task the user
+explicitly adopted, carrying the issue link and the imported body. Deleting it would throw that
+work away and leave them to redo the pick; they can press Run instead.
+
+## 6. Where things live
+
+| Piece                        | Location                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| Wire contracts               | `contracts/src/bug-hunt.ts`, `contracts/src/routes/bug-hunt.ts`           |
+| Provider capabilities        | `kernel/src/ports/task-source.ts`                                         |
+| Rating port                  | `kernel/src/ports/bug-hunt.ts`                                            |
+| Scoring / parsing / ordering | `kernel/src/domain/bug-hunt-logic.ts`                                     |
+| Prompt                       | `agents/src/agents/prompts/bug-hunt.ts`                                   |
+| Vendor queries + mappers     | `integrations/src/modules/tasks/{jira,github-issues,linear}.logic.ts`     |
+| Read + rate + adopt          | `integrations/src/modules/tasks/BugHuntService.ts`                        |
+| Inline rating model          | `orchestration/src/modules/bugHunt/BugHuntAssessorService.ts`             |
+| HTTP                         | `server/src/modules/bugHunt/BugHuntController.ts`                         |
+| SPA                          | `frontend/app/app/components/tasks/BugHuntModal.vue`, `stores/bugHunt.ts` |
+| Cross-runtime assertions     | `internal/conformance/src/suites/bug-hunt.ts`                             |

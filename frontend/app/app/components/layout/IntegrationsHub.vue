@@ -241,6 +241,13 @@ const groups = computed<IntegrationGroup[]>(() => {
         description: t('layout.integrationsHub.items.taskImport.description'),
         onClick: () => go(() => ui.openTaskImport(null)),
       })
+      trackers.push({
+        key: 'task:bug-hunt',
+        icon: 'i-lucide-radar',
+        label: t('layout.integrationsHub.items.bugHunt.label'),
+        description: t('layout.integrationsHub.items.bugHunt.description'),
+        onClick: () => go(() => ui.openBugHunt(null)),
+      })
     }
     // Choosing the filing tracker / writeback is workspace CONFIG, not an integration, so it
     // sits as a quiet footer link under the sources rather than a competing row.

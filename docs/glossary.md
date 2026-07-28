@@ -147,6 +147,29 @@ introduces three kinds whose names invite confusion:
   the `coder.reproductionProof` tri-state, published on the run's PR report. See
   [`docs/initiatives/bugfix-reproduction-proof.md`](./initiatives/bugfix-reproduction-proof.md).
 
+### Bug hunt vs bug intake vs bug triage
+
+Three names that all mean "get a bug off a tracker board and fix it", and pointing at the wrong
+one is the usual confusion:
+
+- **`bug-triage`** (`pl_bug_triage`) — the recurring PIPELINE. A schedule fires it on a cadence and
+  it claims the OLDEST matching open issue unattended. `availability: 'recurring'`, so a one-off
+  manual start is refused. Full design in
+  [`backend/docs/bug-triage-pipeline.md`](../backend/docs/bug-triage-pipeline.md).
+- **`bug-intake`** — the non-LLM engine STEP inside that pipeline (see the step vocabulary above).
+  It is the part that does the claiming; it exists only as a pipeline step and has no interactive
+  surface.
+- **Bug hunt** — the INTERACTIVE surface, and not a pipeline or a step at all. A human picks a
+  tracker board, a `bug-hunter` inline model rates its open + UNASSIGNED bugs on impact against
+  complexity, and the human confirms one; the confirmed candidate is adopted as a `bug` task on
+  `pl_bugfix` (the ONE-OFF bug-fix pipeline, not `pl_bug_triage`). It persists nothing of its own.
+  Full design in [`backend/docs/bug-hunt.md`](../backend/docs/bug-hunt.md).
+
+Two traps. **`bug-hunter` is an inline agent kind for the RATING only** — it never touches a
+checkout and never becomes a pipeline step; the actual work runs through `pl_bugfix` afterwards.
+And a hunt filters to UNASSIGNED issues while the recurring intake does not: intake works a
+backlog the team already agreed to, a hunt looks for work nobody has taken.
+
 ### D1 ⇄ Drizzle migration parity
 
 Every persisted table has two schemas that must stay in step (`CLAUDE.md` → "Keep the runtimes
