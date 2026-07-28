@@ -19,6 +19,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     model: 'm',
     createdAt: 1,
     streaming: false,
+    phase: 'agent',
+    turnIndex: null,
     messageCount: 2,
     toolCount: 1,
     requestMaxTokens: 1000,
@@ -297,6 +299,100 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(first.upstreamMs).toBe(0)
       // The second call chained onto the first as a prompt delta on the real store.
       expect(byResp['done']!.promptPrefixCount).toBe(2)
+    })
+
+    it('round-trips the phase and turn axes, including the unattributed slice', async () => {
+      // The token-burn instrument's two columns (docs/initiatives/token-burn-instrumentation.md).
+      // They exist to tell a repair round's spend apart from the agent's own loop, so what a
+      // store must not do is flatten either one — an integer column that drops NULL to 0 would
+      // sort every proxied call to the front of its phase as "turn 0".
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({
+          id: `${ws}-p1`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          phase: 'validation-repair',
+          turnIndex: 7,
+        }),
+      )
+      // A proxied call: a real row with a real phase, but no job-scoped turn counter behind it.
+      await repo.record(
+        metric({
+          id: `${ws}-p2`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 20,
+          turnIndex: null,
+        }),
+      )
+      // Nothing could attribute this one — the unattributed slice is a REAL group, not a gap.
+      await repo.record(
+        metric({
+          id: `${ws}-p3`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 30,
+          phase: '',
+          turnIndex: null,
+        }),
+      )
+      const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
+      expect(rows[`${ws}-p1`]!.phase).toBe('validation-repair')
+      expect(rows[`${ws}-p1`]!.turnIndex).toBe(7)
+      expect(rows[`${ws}-p2`]!.turnIndex).toBeNull()
+      expect(rows[`${ws}-p3`]!.phase).toBe('')
+      expect(rows[`${ws}-p3`]!.turnIndex).toBeNull()
+    })
+
+    it('carries the harness phase onto the row and the turn index off `seq`', async () => {
+      // The producing path for those columns: the harness stamps the phase it is IN when the
+      // call is emitted, and its job-scoped `seq` doubles as the turn ordinal — the same number
+      // the row id is minted from, so the two can never disagree. An older image that reports no
+      // phase must land in the unattributed slice rather than be guessed at from the agent kind.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      let n = 0
+      const record = makeHarnessCallRecorder(
+        new LlmObservabilityService({
+          llmCallMetricRepository: repo,
+          idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+          clock: { now: () => 1 },
+        }),
+      )
+      const call = (seq: number, phase?: string): HarnessCallMetric => ({
+        model: 'claude-opus-4-8',
+        promptText: JSON.stringify(Array.from({ length: seq + 1 }, () => ({ role: 'user' }))),
+        messageCount: seq + 1,
+        responseText: `r${seq}`,
+        reasoningText: '',
+        inputTokens: 10,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 5,
+        finishReason: 'end_turn',
+        seq,
+        ...(phase !== undefined ? { phase } : {}),
+      })
+      await record({
+        workspaceId: ws,
+        executionId: e1,
+        agentKind: 'coder',
+        provider: 'claude',
+        model: 'claude:claude-opus-4-8',
+        jobId: `${ws}-job`,
+        calls: [call(0, 'agent'), call(1, 'validation-repair'), call(2)],
+      })
+
+      const rows = Object.fromEntries((await repo.listByExecution(ws, e1)).map((r) => [r.id, r]))
+      expect(rows[`${ws}-job-hc-0`]!.phase).toBe('agent')
+      expect(rows[`${ws}-job-hc-0`]!.turnIndex).toBe(0)
+      expect(rows[`${ws}-job-hc-1`]!.phase).toBe('validation-repair')
+      expect(rows[`${ws}-job-hc-1`]!.turnIndex).toBe(1)
+      expect(rows[`${ws}-job-hc-2`]!.phase).toBe('')
+      expect(rows[`${ws}-job-hc-2`]!.turnIndex).toBe(2)
     })
 
     it('ignores a re-recorded call instead of duplicating or overwriting its row', async () => {

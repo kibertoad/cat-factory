@@ -99,6 +99,15 @@ export interface HarnessCallMetric {
    * harness image (which streams nothing), where the recorder falls back to the array index.
    */
   seq?: number
+  /**
+   * The run phase that spent this call (`agent` / `validation-repair` / `reproduction-repair` /
+   * …), stamped by the job registry from the marker the handlers set as they ENTER each phase —
+   * the point of truth, since the harness is what drives the repair loops. Rides the SAME object
+   * as {@link seq}, so the live drain and the terminal list can never disagree about it.
+   *
+   * Absent on an older harness image; the recorder then stores the unattributed `''` phase.
+   */
+  phase?: string
 }
 
 /** The structured work product a finished job records. */
