@@ -33,7 +33,8 @@ const GENERATION: LlmGenerationEvent = {
   cacheReadTokens: 4_000,
   cacheWriteTokens: 200,
   completionTokens: 87,
-  totalTokens: 408,
+  // 321 fresh + 4000 cache read + 200 cache write + 87 output.
+  totalTokens: 4_608,
   finishReason: 'stop',
   ok: true,
   errorMessage: null,

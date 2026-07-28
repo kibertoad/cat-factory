@@ -69,7 +69,10 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     cacheReadTokens: 900,
     cacheWriteTokens: 40,
     completionTokens: 40,
-    totalTokens: 140,
+    // The three input classes are orthogonal, so the total is their sum plus the output
+    // (100 + 900 + 40 + 40). A fixture that kept the pre-split 140 here would be asserting
+    // against a call that cannot exist.
+    totalTokens: 1_080,
     finishReason: 'stop',
     ok: true,
     errorMessage: null,
@@ -102,7 +105,16 @@ describe('LangfuseTraceSink', () => {
     expect(trace.body.id).toBe('exec1')
     expect(gen.body.traceId).toBe('exec1')
     expect(gen.body.model).toBe('gpt-4o-mini')
-    expect(gen.body.usage).toMatchObject({ input: 100, output: 40, total: 140 })
+    // Langfuse's `input` is the WHOLE input side, so the three orthogonal classes are summed
+    // back for it — reporting fresh alone would make a cache-heavy run look nearly free here.
+    expect(gen.body.usage).toMatchObject({ input: 1_040, output: 40, total: 1_080 })
+    // …and the split rides the metadata, which is the half that makes the summed figure safe:
+    // without it a cache-read-dominated generation is indistinguishable from a fresh one.
+    expect(gen.body.metadata).toMatchObject({
+      freshInputTokens: 100,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 40,
+    })
     expect(gen.body.input).toBe('[{"role":"user","content":"hi"}]')
     expect(gen.body.output).toBe('hello')
     expect(gen.body.level).toBe('DEFAULT')
@@ -118,7 +130,7 @@ describe('LangfuseTraceSink', () => {
     expect(gen.body.input).toBeUndefined()
     expect(gen.body.output).toBeUndefined()
     // Usage/timing/metadata are still present.
-    expect(gen.body.usage).toMatchObject({ input: 100, output: 40 })
+    expect(gen.body.usage).toMatchObject({ input: 1_040, output: 40 })
   })
 
   it('marks failed calls as ERROR with a status message and a standalone trace when no run', async () => {

@@ -43,7 +43,9 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     cacheReadTokens: 900,
     cacheWriteTokens: 40,
     completionTokens: 40,
-    totalTokens: 140,
+    // 100 fresh + 900 cache read + 40 cache write + 40 output: the classes are orthogonal,
+    // so a fixture keeping the pre-split 140 would describe a call that cannot exist.
+    totalTokens: 1_080,
     finishReason: 'stop',
     ok: true,
     errorMessage: null,

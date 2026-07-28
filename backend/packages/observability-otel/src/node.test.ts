@@ -22,7 +22,8 @@ function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEv
     cacheReadTokens: 900,
     cacheWriteTokens: 40,
     completionTokens: 40,
-    totalTokens: 140,
+    // 100 fresh + 900 cache read + 40 cache write + 40 output (see the fetch-exporter suite).
+    totalTokens: 1_080,
     finishReason: 'stop',
     ok: true,
     errorMessage: null,
