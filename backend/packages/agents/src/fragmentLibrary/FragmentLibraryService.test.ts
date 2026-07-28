@@ -435,6 +435,27 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
     expect(await svc.resolveBodiesForRun('ws1', ['org.review-standard'])).toEqual([])
   })
 
+  // The prompt composer folds a fragment's condensed `brief` for implementer kinds. The brief must
+  // therefore be resolved ALONGSIDE the winning body, never re-looked-up by id downstream: a
+  // workspace/account row overriding a built-in id supplies no brief (managed rows have no such
+  // column), so the override's own full body is what gets folded. Re-resolving by id would paste
+  // the built-in's condensed text over the tenant's standard for exactly the kinds it targets.
+  it('resolves the built-in brief, and NO brief for a tenant row overriding that id', async () => {
+    const builtin = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(builtin[0]?.brief).toBeTruthy()
+
+    await svc.create('workspace', 'ws1', {
+      id: 'node.performance',
+      title: 'Our perf rules',
+      summary: 'House performance guidance.',
+      body: 'TENANT-PERF-BODY',
+    })
+
+    const overridden = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(overridden[0]?.body).toBe('TENANT-PERF-BODY')
+    expect(overridden[0]?.brief).toBeUndefined()
+  })
+
   it('drops an id the catalog does not know at all', async () => {
     expect(await svc.resolveBodiesForRun('ws1', ['gone.stale-id'])).toEqual([])
   })

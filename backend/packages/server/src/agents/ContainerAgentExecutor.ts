@@ -38,6 +38,7 @@ import {
   type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
+  withComplexityAllowance,
   DOC_WRITER_KIND,
   READ_ONLY_AGENT_KINDS,
   defaultAgentKindRegistry,
@@ -1137,7 +1138,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         repoSpec: buildRepoSpec(repo, origin),
         contextFiles,
         skillBody: skillRender.body,
-        guardLimits: tuning?.guardLimits,
+        // Extend the no-edit exploration allowance by the task-estimator's complexity when a
+        // prior estimator step produced one (absent ⇒ the kind's tuning / harness default
+        // stands — only absolute spiralling is caught). Loosen-only; see `withComplexityAllowance`.
+        guardLimits: withComplexityAllowance(
+          tuning?.guardLimits,
+          context.block.estimate?.complexity,
+        ),
       },
       this.deps,
     )

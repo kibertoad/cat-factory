@@ -262,7 +262,17 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       // The coder step ran as a polled job but still produced its normal work product.
       const coder = exec.steps.find((s) => s.agentKind === 'coder')!
       expect(coder.output).toContain('[coder]')
+      // An async job's result carries no model of its own — the model is known only at DISPATCH,
+      // so the durable poll site must re-supply it on the handle. When it didn't, every
+      // subscription-harness step recorded model 'unknown', which `SpendService.parseModel` split
+      // into provider "unknown" / model "" on the token_usage row.
       expect(coder.model).toBe('fake')
+      expect(coder.model).not.toBe('unknown')
+      // The rest of the dispatch-time attribution the poll site can't re-derive either, and which
+      // it re-supplies off these very fields: the leased pool row (pooled-token usage feedback →
+      // usage-aware rotation) and the run initiator (the quota-cycle counters' fallback target
+      // for a personal subscription run, which leases no pooled token).
+      expect(coder.subscriptionTokenId).toBe('fake-pool-token')
       // The container reached `up` (the cold-boot lifecycle advanced past `starting`),
       // and a finished job never reads as still booting.
       expect(coder.container?.status).toBe('up')

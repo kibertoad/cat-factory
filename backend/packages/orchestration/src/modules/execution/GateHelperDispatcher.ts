@@ -10,6 +10,7 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { recordDispatchAttribution } from './step-fold.logic.js'
 
 // ---------------------------------------------------------------------------
 // The gate ESCALATION half of the polling-gate machine: when a gate's precheck fails and the
@@ -90,7 +91,7 @@ export class GateHelperDispatcher {
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
+    recordDispatchAttribution(step, handle)
     step.gate = {
       // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
       // keeps showing what the helper is fixing while it works.

@@ -19,6 +19,7 @@ import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
+import { recordDispatchAttribution } from './step-fold.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -291,7 +292,7 @@ export class VisualConfirmationController {
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
+    recordDispatchAttribution(step, handle)
     // The dispatch returned, so the helper's per-run container is up; surface it via the
     // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
     // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".

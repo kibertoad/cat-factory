@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RepoSpec, SkillSpec } from './job.js'
@@ -8,13 +8,10 @@ import {
   type ContextFileInfo,
   type PiRunOutcome,
   type PiRunStats,
-  type ProgressGuardLimits,
   type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
   materializeSkillResources,
-  mergeGuardLimits,
-  progressGuardLimitsFromEnv,
   runPi,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
@@ -22,6 +19,11 @@ import {
   writePiModelsConfig,
   writeWebToolsConfig,
 } from './pi.js'
+import {
+  type ProgressGuardLimits,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from './progress-guard.js'
 import type { RunOptions } from './runner.js'
 import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
 
@@ -227,6 +229,31 @@ export interface AgentRunSpec {
 }
 
 /**
+ * Whether the run's checkout actually ships a `blueprints/` folder — what gates the blueprint
+ * orientation note in AGENTS.md (an external repo has none, so the note would be ~10 lines of
+ * dead guidance pointing at files that don't exist, re-sent on every turn).
+ *
+ * A MULTI-REPO run's `dir` is the workspace ROOT with each repo checked out as a sibling under
+ * it, so the root itself never holds `blueprints/`: the legs are checked too, and the note is
+ * included when ANY leg ships one (it orients the agent to the concept, and the agent finds the
+ * per-repo folder from there). Best-effort throughout — any stat/readdir failure simply omits
+ * the note rather than failing the dispatch.
+ */
+export async function checkoutHasBlueprints(dir: string, multiRepo: boolean): Promise<boolean> {
+  const isBlueprintDir = (path: string): Promise<boolean> =>
+    stat(join(path, 'blueprints'))
+      .then((s) => s.isDirectory())
+      .catch(() => false)
+  if (await isBlueprintDir(dir)) return true
+  if (!multiRepo) return false
+  const legs = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const checks = await Promise.all(
+    legs.filter((e) => e.isDirectory()).map((e) => isBlueprintDir(join(dir, e.name))),
+  )
+  return checks.some(Boolean)
+}
+
+/**
  * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
@@ -272,6 +299,13 @@ export async function runAgentInWorkspace(
       ...(spec.skill ? { skill: spec.skill } : {}),
       ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
       signal: opts.signal,
+      // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
+      // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
+      // no-edit allowance, so a claude-code run that stops making progress is killed early
+      // instead of burning the full wall-clock budget. The claude runner consumes it; codex
+      // ignores it for now (its stream isn't wired to the guard).
+      guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+      expectsEdits: spec.expectsEdits ?? true,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
       // Stream this run's per-call telemetry to the job's live drain. The subscription
@@ -303,11 +337,13 @@ export async function runAgentInWorkspace(
   }
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)
+  const hasBlueprints = await checkoutHasBlueprints(spec.dir, spec.multiRepo === true)
   await writeAgentsContext(spec.systemPrompt, {
     webSearch: Boolean(webSearch),
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
+    hasBlueprints,
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })

@@ -19,6 +19,8 @@ export const nodeFragments: PromptFragment[] = [
       '- Cache expensive, idempotent computations and hot lookups; set explicit TTLs.',
       '- Measure before optimising: profile with --prof / clinic and quote concrete numbers, not guesses.',
     ].join('\n'),
+    brief:
+      'Node performance: never block the event loop (offload CPU-bound work); stream large payloads instead of buffering; reuse pooled clients/connections; cache hot idempotent lookups with TTLs; profile before optimising.',
     appliesTo: { blockTypes: ['service', 'api', 'queue', 'integration'] },
   },
   {
@@ -35,6 +37,8 @@ export const nodeFragments: PromptFragment[] = [
       '- Emit structured (JSON) logs with correlation ids; do not log secrets.',
       '- Handle SIGTERM/SIGINT for graceful shutdown: stop accepting work, drain, then exit.',
     ].join('\n'),
+    brief:
+      'Node best practices: async/await with try/catch (no unhandled promises); config from env, never hard-code secrets; validate external input at the boundary; structured logs with correlation ids, never secrets; graceful SIGTERM/SIGINT shutdown.',
     appliesTo: { blockTypes: ['service', 'api', 'queue', 'integration', 'external'] },
   },
 ]

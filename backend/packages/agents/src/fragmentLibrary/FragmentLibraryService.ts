@@ -422,7 +422,12 @@ export class FragmentLibraryService implements FragmentResolver {
     // Emit in stable catalog order for replay-stable prompts.
     const ordered = catalog.filter((e) => seen.has(e.id))
     return {
-      fragments: ordered.map((e) => ({ id: e.id, title: e.title, body: e.body })),
+      fragments: ordered.map((e) => ({
+        id: e.id,
+        title: e.title,
+        body: e.body,
+        ...(e.brief ? { brief: e.brief } : {}),
+      })),
       selectedIds: ordered.map((e) => e.id),
     }
   }
@@ -448,12 +453,12 @@ export class FragmentLibraryService implements FragmentResolver {
     workspaceId: string,
     ids: string[],
     catalog?: ResolvedCatalogEntry[],
-  ): Promise<{ id: string; title: string; body: string }[]> {
+  ): Promise<{ id: string; title: string; body: string; brief?: string }[]> {
     if (ids.length === 0) return []
     const entries = catalog ?? (await this.resolveCatalog(workspaceId))
     const byId = new Map(entries.map((e) => [e.id, e]))
 
-    const out: { id: string; title: string; body: string }[] = []
+    const out: { id: string; title: string; body: string; brief?: string }[] = []
     const seen = new Set<string>()
     for (const id of ids) {
       if (seen.has(id)) continue
@@ -464,8 +469,10 @@ export class FragmentLibraryService implements FragmentResolver {
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body
       // Carry the human title so the prompt composer can render each standard as its own labelled
-      // block (and a code/PR reviewer can cite it by title in its adherence report).
-      out.push({ id, title: entry.title, body })
+      // block (and a code/PR reviewer can cite it by title in its adherence report), plus the
+      // WINNING tier's condensed variant (built-in only today) so the implementer-kind fold can
+      // never pair a tenant override's body with a built-in's brief.
+      out.push({ id, title: entry.title, body, ...(entry.brief ? { brief: entry.brief } : {}) })
     }
     return out
   }

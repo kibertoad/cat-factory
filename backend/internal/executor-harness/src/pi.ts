@@ -8,6 +8,12 @@ import { redactSecrets } from './redact.js'
 import { HarnessFailure } from './failure.js'
 import { log } from './logger.js'
 import type { EffortReport } from './effort.js'
+import {
+  ProgressGuard,
+  progressGuardLimitsFromEnv,
+  toolCallSignal,
+  type ProgressGuardLimits,
+} from './progress-guard.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -106,21 +112,12 @@ for a module that is directly relevant to your task, when you need its summary a
 exact code references. \`blueprints/version.json\` is a tiny manifest for quick
 staleness checks. Treat the blueprint as orientation, not a task list.`
 
-// Appended to every AGENTS.md so an agent treats the persisted spec as the
-// PRESCRIPTIVE source (what must be true) and the acceptance scenarios its work must
-// satisfy. Harmless when no spec exists yet — the files simply aren't there.
-const SPEC_GUIDANCE = `
-
-## Service specification (the prescriptive spec)
-
-If a \`spec/\` folder exists, it is the specification for this service. It is sharded
-by a module (domain) → feature (group) taxonomy. **Read \`spec/overview.md\` first** —
-it states what MUST be true and indexes the modules and their features (with links).
-Open \`spec/modules/<module>/<feature>.md\` (or its \`.json\` for exact detail) for the
-feature you are working on — it carries that feature's requirements AND the domain
-rules scoped to it. \`spec/features/<module>/<feature>.feature\` are the Gherkin
-acceptance scenarios your work must satisfy — treat them as the source of truth for
-behaviour and tests. Read only the modules/features relevant to your task.`
+// NOTE: the spec-reading guidance is NOT appended here. It is contributed once, backend-side, by
+// the `spec-aware` trait (`SPEC_AWARE_GUIDANCE` in @cat-factory/agents), which lands in the
+// composed system prompt for every spec-aware kind on BOTH harness paths. This harness used to
+// append a near-duplicate block, so a spec-aware Pi run carried the guidance twice; the claude-code
+// path never appended it. Sourcing it solely from the trait dedupes the Pi prompt and makes the two
+// paths consistent. (A non-spec-aware kind is deliberately not told to read the spec.)
 
 /**
  * Write the composed system prompt as Pi's GLOBAL agent context
@@ -144,6 +141,12 @@ export async function writeAgentsContext(
     serviceDirectory?: string
     contextFiles?: ContextFileInfo[]
     multiRepo?: boolean
+    /**
+     * Whether the checkout actually ships a `blueprints/` folder. The blueprint orientation
+     * note is only appended when it does — otherwise it is ~10 lines of dead guidance (re-sent
+     * every turn) pointing at files that don't exist. Absent/false ⇒ the note is omitted.
+     */
+    hasBlueprints?: boolean
   } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
@@ -167,9 +170,14 @@ export async function writeAgentsContext(
   // Point the agent at any linked context the backend materialised into the checkout
   // (requirements / RFCs / PRDs / tracker issues) so it reads them on demand.
   const context = contextGuidance(opts.contextFiles ?? [])
+  // Only orient the agent to `blueprints/` when the checkout actually has them — otherwise the
+  // note is dead weight re-sent on every turn. The spec-reading guidance is NOT appended here
+  // (see the note above `writeAgentsContext`): it comes solely from the backend `spec-aware`
+  // trait, so a spec-aware run no longer carries it twice.
+  const blueprint = opts.hasBlueprints ? BLUEPRINT_GUIDANCE : ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
+    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
     'utf8',
   )
 }
@@ -727,242 +735,8 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
 
   return undefined
 }
-
-/** Tool-call signal read off a streamed Pi event, or undefined if not a tool call. */
-function toolCallSignal(
-  event: Record<string, unknown>,
-): { name: string; isError: boolean } | undefined {
-  // `tool_execution_end` is the canonical per-call stream event (statsFromEvents
-  // counts the same one), so the guard reads it and nothing else — no double count.
-  if (event.type !== 'tool_execution_end') return undefined
-  const name = typeof event.toolName === 'string' ? event.toolName : ''
-  return { name, isError: event.isError === true }
-}
-
-/** Tunable bounds for the {@link ProgressGuard}. */
-export interface ProgressGuardLimits {
-  /**
-   * Abort once the agent has made this many NON-exploration tool calls without ever
-   * using a file-editing tool (see `FILE_EDIT_TOOLS`). The signature of the credential
-   * rabbit-hole that motivated this: probing the environment (`bash`/exec) endlessly
-   * without implementing anything. Read-only exploration (`read`/`grep`/… — see
-   * `EXPLORATION_TOOLS`) and planning (`todo`) do NOT count, so a large task that
-   * legitimately reads/searches many files before its first edit is not killed for it.
-   * Disabled when `expectsEdits` is false (e.g. the assess-only merger / Blueprinter,
-   * which legitimately edit nothing). Note this bound only guards the run UNTIL its
-   * first edit: once the agent has edited a file at all, it has demonstrably started
-   * the work, so only `maxConsecutiveErrors` guards a later stall.
-   */
-  maxToolCallsWithoutEdit: number
-  /**
-   * Abort after this many consecutive failing tool calls — the agent is stuck
-   * retrying an operation that keeps failing rather than making progress.
-   */
-  maxConsecutiveErrors: number
-  /**
-   * Abort after this many consecutive web-search/web-fetch calls with no other tool
-   * call in between. Web tools are read-only exploration (they don't count toward the
-   * no-edit bound), so without this a model could rabbit-hole on searches indefinitely
-   * without ever tripping a guard. Any non-web tool call resets the streak. Optional:
-   * defaults to {@link DEFAULT_PROGRESS_GUARD_LIMITS} when a caller builds limits
-   * without it.
-   */
-  maxConsecutiveWebCalls?: number
-}
-
-// `satisfies` (not a type annotation) so each property keeps its concrete `number`
-// type — `maxConsecutiveWebCalls` is optional on the interface (callers may omit it),
-// but the defaults always define it, so consumers reading it off here get a `number`.
-export const DEFAULT_PROGRESS_GUARD_LIMITS = {
-  // Counts only non-exploration, non-planning calls (see EXPLORATION_TOOLS), so the
-  // ceiling can be generous without risking a false kill on a read-heavy large task.
-  maxToolCallsWithoutEdit: 40,
-  maxConsecutiveErrors: 12,
-  // A genuine research burst is a handful of searches; an uninterrupted run of this
-  // many web calls (with no read/edit/bash between) is a search loop, not progress.
-  maxConsecutiveWebCalls: 25,
-} satisfies ProgressGuardLimits
-
-// Tool names that mutate files, so a call to one clears the no-edit suspicion. Kept
-// broad on purpose: different models/extensions name the same capability differently
-// (`edit`/`write`, but also `apply_patch`/`patch`/`str_replace`/`multiedit`/`create`),
-// and a false "no edits" reading would kill a run that IS making changes. Matched
-// case-insensitively. NOTE: a file written purely via `bash` (e.g. a heredoc) is not
-// recognised here — broaden or move to a working-tree signal if that becomes common.
-const FILE_EDIT_TOOLS = new Set([
-  'edit',
-  'write',
-  'apply_patch',
-  'patch',
-  'str_replace',
-  'multiedit',
-  'create',
-])
-
-// Planning/bookkeeping tools that are neither file edits nor the environment-probing
-// the no-edit bound targets — the todo list the agent maintains as it works. These do
-// NOT count toward `maxToolCallsWithoutEdit`: a run that diligently updates a long
-// todo list before its first edit (common on a large task) would otherwise be killed
-// for "no edits" purely from planning calls. They still reset the consecutive-error
-// streak (a successful call means the agent isn't wedged). Matched case-insensitively.
-const PLANNING_TOOLS = new Set(['todo'])
-
-// Read-only exploration tools: reading/searching the repo is legitimate work-up to an
-// edit, NOT the environment-probing the no-edit bound targets, so they don't count
-// toward `maxToolCallsWithoutEdit` (a large task may read/search dozens of files
-// before its first edit). The bound thus counts only "action" calls — chiefly `bash`
-// (the credential rabbit-hole's vector) — that have yet to produce an edit. Kept broad
-// since models/extensions name the same capability differently. Matched case-insensitively.
-const EXPLORATION_TOOLS = new Set([
-  'read',
-  'grep',
-  'search',
-  'glob',
-  'ls',
-  'list',
-  'find',
-  'tree',
-  'cat',
-  'view',
-  'head',
-  'tail',
-  'stat',
-  // rpiv-web-tools: querying/reading the web is read-only research up to an edit,
-  // not the environment-probing the no-edit bound targets, so it doesn't count.
-  'web_search',
-  'web_fetch',
-])
-
-// The rpiv-web-tools calls, tracked separately so an unbounded run of them (with no
-// other tool call between) can be caught as a search loop — see `maxConsecutiveWebCalls`.
-const WEB_TOOLS = new Set(['web_search', 'web_fetch'])
-
-/** Read {@link ProgressGuardLimits} from the environment, falling back to the defaults. */
-export function progressGuardLimitsFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): ProgressGuardLimits {
-  const num = (raw: string | undefined, fallback: number): number => {
-    const n = Number(raw)
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
-  }
-  return {
-    maxToolCallsWithoutEdit: num(
-      env.JOB_MAX_TOOLCALLS_WITHOUT_EDIT,
-      DEFAULT_PROGRESS_GUARD_LIMITS.maxToolCallsWithoutEdit,
-    ),
-    maxConsecutiveErrors: num(
-      env.JOB_MAX_CONSECUTIVE_TOOL_ERRORS,
-      DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveErrors,
-    ),
-    maxConsecutiveWebCalls: num(
-      env.JOB_MAX_CONSECUTIVE_WEB_CALLS,
-      DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
-    ),
-  }
-}
-
-/**
- * Apply per-knob overrides onto a base set of guard limits, ENFORCING loosen-only: an
- * override can only RAISE a knob (more headroom), never lower it below the base. A
- * larger value is more lenient for every knob (more no-edit tool calls / errors / web
- * calls tolerated), so each result is `max(base, override)`. This is a hard guarantee,
- * not a convention — a tuning entry (built-in or a custom kind's, which reaches this via
- * an untrusted job body) that supplies a value TIGHTER than the base is clamped back up
- * to the base rather than aborting a legitimately-progressing run. An absent/undefined
- * knob keeps the base value untouched.
- */
-export function mergeGuardLimits(
-  base: ProgressGuardLimits,
-  overrides: Partial<ProgressGuardLimits> | undefined,
-): ProgressGuardLimits {
-  if (!overrides) return base
-  const loosen = (b: number, o: number | undefined): number =>
-    typeof o === 'number' ? Math.max(b, o) : b
-  return {
-    maxToolCallsWithoutEdit: loosen(
-      base.maxToolCallsWithoutEdit,
-      overrides.maxToolCallsWithoutEdit,
-    ),
-    maxConsecutiveErrors: loosen(base.maxConsecutiveErrors, overrides.maxConsecutiveErrors),
-    // `maxConsecutiveWebCalls` is optional on the interface (callers may omit it), so
-    // fall back to the default before loosening — keeps `loosen`'s base a concrete number.
-    maxConsecutiveWebCalls: loosen(
-      base.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls,
-      overrides.maxConsecutiveWebCalls,
-    ),
-  }
-}
-
-/**
- * Live anti-rabbithole guard: fed each streamed Pi event, it returns a diagnostic
- * reason the moment a run has plainly stopped making progress, so the harness can
- * kill Pi early instead of letting it burn the whole budget (and then surface a
- * useful failure instead of a generic "no file changes"). Pure and incremental so
- * it can be unit-tested over a fixed event sequence.
- */
-export class ProgressGuard {
-  private toolCalls = 0
-  private edits = 0
-  private consecutiveErrors = 0
-  private consecutiveWebCalls = 0
-
-  constructor(
-    private readonly limits: ProgressGuardLimits,
-    /** When false (assess-only runs like the merger), the no-edit bound is skipped. */
-    private readonly expectsEdits: boolean = true,
-  ) {}
-
-  /** Feed one parsed Pi event; returns a diagnostic reason when the run should abort, else null. */
-  observe(event: Record<string, unknown>): string | null {
-    const tool = toolCallSignal(event)
-    if (!tool) return null
-    const name = tool.name.toLowerCase()
-    // The error streak tracks ANY tool call (a planning call still proves the agent
-    // isn't wedged in a failing-op loop), so it's updated before the planning skip.
-    this.consecutiveErrors = tool.isError ? this.consecutiveErrors + 1 : 0
-    if (this.consecutiveErrors >= this.limits.maxConsecutiveErrors) {
-      return (
-        `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
-        `retrying a failing operation rather than making progress. Aborting.`
-      )
-    }
-
-    // Web search/fetch loop: web tools are read-only (they don't count toward the
-    // no-edit bound), so guard them separately — an uninterrupted streak of them is a
-    // research rabbit-hole. Any non-web tool call resets the streak.
-    if (WEB_TOOLS.has(name)) {
-      this.consecutiveWebCalls++
-      const webCap =
-        this.limits.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls
-      if (this.consecutiveWebCalls >= webCap) {
-        return (
-          `no progress: ${this.consecutiveWebCalls} consecutive web search/fetch calls without ` +
-          `any other action — the agent is stuck researching instead of doing the work. Aborting.`
-        )
-      }
-    } else {
-      this.consecutiveWebCalls = 0
-    }
-
-    // Planning and read-only exploration calls don't count toward the no-edit bound
-    // (see PLANNING_TOOLS / EXPLORATION_TOOLS) — only "action" calls without an edit do.
-    if (PLANNING_TOOLS.has(name) || EXPLORATION_TOOLS.has(name)) return null
-    this.toolCalls++
-    if (FILE_EDIT_TOOLS.has(name)) this.edits++
-
-    if (
-      this.expectsEdits &&
-      this.edits === 0 &&
-      this.toolCalls >= this.limits.maxToolCallsWithoutEdit
-    ) {
-      return (
-        `no progress: ${this.toolCalls} tool calls and not one file edit — the agent is exploring or ` +
-        `probing the environment without implementing anything. Aborting before it burns the whole run.`
-      )
-    }
-    return null
-  }
-}
+// The no-progress guard (its limits, tool vocabulary and the `ProgressGuard` itself) lives in
+// `progress-guard.ts` — it is shared with the claude-code runner, so it is no longer Pi's.
 
 /**
  * Run Pi non-interactively against `cwd` and return its assistant summary. Uses

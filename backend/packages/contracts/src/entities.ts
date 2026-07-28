@@ -506,6 +506,22 @@ export const promptFragmentSchema = v.object({
   summary: v.string(),
   /** The guidance injected into the agent system prompt. */
   body: v.string(),
+  /**
+   * Optional CONDENSED variant of `body`, folded for implementer kinds that run a long
+   * agentic loop (coder / fixer / ci-fixer / conflict-resolver) where the system prompt is
+   * re-sent on every turn — the SAME standard stated tersely, so the per-turn context cost is
+   * a fraction of the full `body`. Reviewer / deep kinds (and any kind not marked
+   * `brief-standards`) still get the full `body`, as does any fragment that omits `brief`.
+   * Absent ⇒ the full `body` is used for everyone (unchanged behaviour). See the fold in
+   * `@cat-factory/agents` `foldStandards`.
+   *
+   * AUTHORED ON BUILT-IN FRAGMENTS ONLY today: managed (account/workspace-tier) rows have no
+   * `brief` column, so a tenant fragment — including one that OVERRIDES a built-in id — resolves
+   * without one and folds its own full `body`. That is deliberate, not a gap to paper over: the
+   * brief must always be the condensed form of the body that actually won the tier merge, never
+   * a built-in's text pasted over a tenant's override.
+   */
+  brief: v.optional(v.string()),
   /** Optional hints for filtering which blocks/agents a fragment suits. */
   appliesTo: v.optional(
     v.object({

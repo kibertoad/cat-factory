@@ -9,14 +9,14 @@ tenant-scoped [prompt-fragment library](../../docs/adr/0006-prompt-fragment-libr
 ## What's here
 
 - `src/collections/*.ts` — fragments authored per topic. Today: `node`, `react`,
-  `acceptance`. Each exports an array of `PromptFragment`.
+  `acceptance`, `design`, `style`, `migration`. Each exports an array of `PromptFragment`.
 - `src/index.ts` — merges the collections into a single `FRAGMENTS` registry plus
   `FRAGMENTS_BY_ID` and `getFragment(id)` for O(1) lookup during composition.
 
 A `PromptFragment` (shape defined in [`@cat-factory/contracts`](../contracts))
 carries an `id`, `version`, `title`, optional `category`, a `summary` (used by the
-relevance selector), the `body` (injected text), and an optional `appliesTo`
-hint (`blockTypes` / `agentKinds`).
+relevance selector), the `body` (injected text), an optional condensed `brief`
+(see below), and an optional `appliesTo` hint (`blockTypes` / `agentKinds`).
 
 ## How it's used
 
@@ -33,6 +33,27 @@ hint (`blockTypes` / `agentKinds`).
   three-tier merge (built-in ∪ account ∪ workspace); ids here can be shadowed or
   suppressed by higher tiers. See
   [ADR 0006](../../docs/adr/0006-prompt-fragment-library.md).
+
+### Two-tier bodies: `body` and `brief`
+
+An **implementer** kind (`coder` / `fixer` / `ci-fixer` / `conflict-resolver` — the kinds
+carrying the `brief-standards` trait) runs a long agentic loop whose system prompt, standards
+included, is re-sent on **every turn**. Those kinds fold a fragment's optional `brief` — the
+same standard stated tersely — instead of its full `body`. Reviewer / planner / investigator
+kinds keep the full text: they run few turns and benefit from it when judging built work.
+
+Two rules govern authoring one:
+
+- **A `brief` must not drop a rule, only its elaboration.** It is the same standard compressed,
+  not a subset — an agent folding the brief is held to everything the body demands.
+- **`brief` travels WITH the body it condenses** and is never re-resolved by id downstream. A
+  higher tier that overrides a built-in id supplies no brief (managed rows have no such column),
+  so the override's own full `body` is folded — never the built-in's condensed text over a
+  tenant's standard.
+
+Omitting `brief` is always safe: the full `body` is used for every kind, unchanged. Fragments
+that can reach an implementer kind carry one; the ones scoped to `spec-writer` / `playwright` /
+document-authoring kinds (which are not implementers) deliberately do not.
 
 ## Programmatic deployment seams (custom fragments + per-task-type defaults)
 

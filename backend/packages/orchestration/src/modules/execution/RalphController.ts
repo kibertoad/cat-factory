@@ -15,6 +15,7 @@ import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { decideRalphNext, describeRalphVerdict, RALPH_AGENT_KIND } from './ralph.logic.js'
+import { recordDispatchAttribution } from './step-fold.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
 export interface RalphControllerDeps {
@@ -156,7 +157,7 @@ export class RalphController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
+    recordDispatchAttribution(step, handle)
     step.container = { status: 'up' }
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)

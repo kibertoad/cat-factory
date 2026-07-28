@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
+import { standardsVerbosityFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
@@ -180,6 +181,7 @@ export class AiAgentExecutor implements AgentExecutor {
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
       standardsDeliveredAsFiles(context.injectedContextFiles),
+      standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
     )
 
     // Provider-hosted web search for the allow-listed design/research kinds, when

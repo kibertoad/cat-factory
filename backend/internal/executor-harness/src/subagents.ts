@@ -1,7 +1,13 @@
 import { readdir, stat } from 'node:fs/promises'
 import { createReadStream, type Dirent } from 'node:fs'
 import { basename, join } from 'node:path'
-import { claudeAssistantContent, claudeCallUsage, isObject, redactBody } from './claude-stream.js'
+import {
+  claudeAssistantContent,
+  claudeCallUsage,
+  isObject,
+  redactBody,
+  SUBAGENT_TOOL_NAMES,
+} from './claude-stream.js'
 import type { Logger } from './logger.js'
 import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './pi.js'
 
@@ -41,21 +47,6 @@ import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './
 // ---------------------------------------------------------------------------
 // Slice / progress tracking off the PARENT stream (D2.1)
 // ---------------------------------------------------------------------------
-
-/**
- * The tool names the Claude Code CLI dispatches a parallel subagent under. `Agent` is what the
- * shipped schema declares (`AgentInput` in `sdk-tools.d.ts`, carrying `description` / `prompt` /
- * `subagent_type`); `Task` is the older name for the same dispatch. Both are matched because the
- * harness runs against whatever CLI the image happens to bundle, and matching only the old name
- * is what left a CLI 2.1.x pr-review reporting no slices at all.
- *
- * Note the asymmetry: keeping the legacy `Task` here is the one place a CLI rename could produce a
- * FALSE signal rather than merely no signal — if a future build were to name a plain task-list
- * tool `Task`, its writes would be counted as in-flight slices. We accept that because no shipped
- * build does (the incremental plan tool is `TaskCreate`/`TaskUpdate`, tracked separately in
- * `progress.ts`), and dropping legacy coverage is the more likely regression.
- */
-const SUBAGENT_TOOL_NAMES = new Set(['Agent', 'Task'])
 
 interface TrackedSlice {
   /** The dispatch's tool_use id, used to pair the terminal tool_result. */

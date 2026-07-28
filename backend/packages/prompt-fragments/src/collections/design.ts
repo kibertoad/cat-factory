@@ -28,6 +28,8 @@ export const designFragments: PromptFragment[] = [
       '- Any `### References` URL (e.g. a rendered preview) is reference-only — do not depend on fetching it; the',
       '  textual layout/text/tokens above are the authoritative description.',
     ].join('\n'),
+    brief:
+      'Design context: build UI from the `.cat-context/` design — follow each block’s `### Layout` for structure; reuse an existing repo component before creating one from the `### Components` inventory; honour `### Design tokens` via the project’s theme system instead of ad-hoc values; `### Text content` is copy, not markup; `### References` URLs are reference-only.',
     appliesTo: { blockTypes: ['frontend'] },
   },
 ]

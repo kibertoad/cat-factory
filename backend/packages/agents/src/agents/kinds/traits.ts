@@ -71,6 +71,20 @@ export const BINARY_STORAGE_TRAIT: AgentTrait = 'binary-storage'
  */
 export const INTERVIEW_GATE_TRAIT: AgentTrait = 'interview-gate'
 
+/**
+ * Implementer kinds: code-writing agents that run a LONG agentic loop (coder, fixer,
+ * ci-fixer, conflict-resolver) whose system prompt — including every folded best-practice
+ * standard — is re-sent on each of their many turns. A pure MARKER trait (no prompt
+ * guidance): {@link standardsVerbosityFor} reads it to fold the CONDENSED `brief` variant of
+ * each standard instead of the full `body`, cutting the per-turn (and cache-read) context
+ * cost without dropping the standard. Reviewer / planner / investigator kinds (reviewer,
+ * architect, on-call) deliberately DON'T carry it — they run few turns and benefit from the
+ * full standard text when polishing/judging what was built. A custom kind opts in by carrying
+ * the trait. Orthogonal to `standardsDelivery`: `context-files` kinds skip the fold entirely,
+ * so the trait only affects kinds whose standards are folded into the prompt.
+ */
+export const BRIEF_STANDARDS_TRAIT: AgentTrait = 'brief-standards'
+
 /** The guidance appended to a spec-aware kind's system prompt — explains the spec format. */
 export const SPEC_AWARE_GUIDANCE = [
   `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:`,
@@ -78,7 +92,11 @@ export const SPEC_AWARE_GUIDANCE = [
   `- \`${SPEC_MODULES_DIR}/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.`,
   `- \`${SPEC_MODULES_DIR}/<module>/<feature>.json\` is the canonical machine-readable shard the markdown is rendered from; consult it when you need exact detail.`,
   `- \`${SPEC_FEATURES_DIR}/<module>/<feature>.feature\` for the Gherkin (Given/When/Then) acceptance scenarios.`,
-  `Read only the modules/features relevant to your task rather than the whole tree. Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.`,
+  // Kept to one imperative line ON PURPOSE: this rides the system prompt of every spec-aware
+  // kind, re-sent on every turn of the implementer kinds whose per-turn cost the `brief`
+  // standards exist to cut — so arguing the case at length here would spend back the saving.
+  `Navigate, don't dredge: read \`${SPEC_OVERVIEW_PATH}\` to map the service, then open ONLY the shards for the feature(s) you are changing PLUS any module your change calls into or that depends on it. Reading the whole tree wastes your context budget; reading only your own shard breaks the neighbours you touch.`,
+  `Treat the spec as authoritative for required behaviour: make your change satisfy it, and if your change conflicts with the spec, follow the spec or call out the discrepancy rather than silently diverging.`,
 ].join('\n')
 
 /**
@@ -95,11 +113,11 @@ export const SPEC_AWARE_GUIDANCE = [
  */
 export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  coder: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+  coder: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
   reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  'conflict-resolver': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+  'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
+  fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
+  'conflict-resolver': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
   'tester-api': [SPEC_AWARE_TRAIT],
   // The UI Tester captures screenshots and uploads them to the binary-artifact store
   // (the visual-confirmation gate reads them back), so it needs storage configured.
@@ -147,6 +165,7 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: DOC_AWARE_TRAIT },
   { id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE },
   { id: INTERVIEW_GATE_TRAIT },
+  { id: BRIEF_STANDARDS_TRAIT },
 ]
 
 /**
@@ -164,6 +183,21 @@ export function traitsFor(kind: AgentKind, registry: AgentKindRegistry): Set<Age
 /** Whether `kind` carries `trait`. */
 export function hasTrait(kind: AgentKind, trait: AgentTrait, registry: AgentKindRegistry): boolean {
   return traitsFor(kind, registry).has(trait)
+}
+
+/**
+ * How verbose a kind's folded best-practice standards should be: `brief` for an implementer
+ * kind (carries {@link BRIEF_STANDARDS_TRAIT}), `full` otherwise. Read at the dispatch
+ * chokepoint (`buildKindBody`) and the inline executor, then threaded into
+ * `composeBlockSystemPrompt`. Returns the literal union rather than importing the runtime
+ * package's `StandardsVerbosity` type to keep `@cat-factory/agents/kinds` free of a runtime
+ * dependency on the composer; the two unions are identical.
+ */
+export function standardsVerbosityFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): 'full' | 'brief' {
+  return hasTrait(kind, BRIEF_STANDARDS_TRAIT, registry) ? 'brief' : 'full'
 }
 
 /**

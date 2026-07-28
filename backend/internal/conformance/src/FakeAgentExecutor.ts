@@ -745,7 +745,17 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     }
     const jobId = this.jobIdFor(context)
     if (!this.jobs.has(jobId)) this.jobs.set(jobId, { polled: 0, context })
-    return { jobId, model: 'fake', workspaceId: context.workspaceId }
+    // The attribution a real dispatch resolves and the poll site can only get back off the step:
+    // the model, the leased pool row, and the run initiator. Carried here so the conformance
+    // suite pins that the engine PERSISTS them at dispatch and RE-SUPPLIES them when polling —
+    // without which a subscription run's usage is attributed to nobody.
+    return {
+      jobId,
+      model: 'fake',
+      workspaceId: context.workspaceId,
+      subscriptionTokenId: 'fake-pool-token',
+      ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+    }
   }
 
   /**
@@ -814,12 +824,29 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     // STALE job id replay the prior round — exactly the production bug the epoch fix prevents.
     if (this.pooledContainer) {
       if (!job.result) job.result = await this.run(job.context)
-      return { state: 'done', result: job.result, ...(followUps ? { followUps } : {}) }
+      return {
+        state: 'done',
+        result: withHandleModel(job.result, handle),
+        ...(followUps ? { followUps } : {}),
+      }
     }
     return {
       state: 'done',
-      result: await this.run(job.context),
+      result: withHandleModel(await this.run(job.context), handle),
       ...(followUps ? { followUps } : {}),
     }
   }
+}
+
+/**
+ * Model the container executor's attribution rule: an ASYNC job's result carries no model of its
+ * own (the harness reports a job view, which has no model field) — the only source is the model
+ * captured at dispatch and re-supplied by the engine on the poll handle. Reproducing that here is
+ * what makes the conformance suite's `step.model` assertions actually pin the poll site: forget to
+ * re-supply `handle.model` there and the model resolves to 'unknown', exactly as it did in
+ * production, instead of the fake quietly stamping its own.
+ */
+function withHandleModel(result: AgentRunResult, handle: AgentJobHandle): AgentRunResult {
+  const { model: _ownModel, ...rest } = result
+  return handle.model ? { ...rest, model: handle.model } : rest
 }

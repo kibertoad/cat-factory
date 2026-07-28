@@ -1,19 +1,14 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import {
-  DEFAULT_PROGRESS_GUARD_LIMITS,
-  ProgressGuard,
-  type ProgressGuardLimits,
   classifyLlmUpstreamError,
-  mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,
-  progressGuardLimitsFromEnv,
   runDiagnostics,
   summarizePiRun,
   terminalRunError,
@@ -22,6 +17,13 @@ import {
   writeAgentsContext,
   writeWebToolsConfig,
 } from '../src/pi.js'
+import {
+  DEFAULT_PROGRESS_GUARD_LIMITS,
+  ProgressGuard,
+  type ProgressGuardLimits,
+  mergeGuardLimits,
+  progressGuardLimitsFromEnv,
+} from '../src/progress-guard.js'
 import {
   authenticatedCloneUrl,
   branchAheadOfBase,
@@ -35,6 +37,7 @@ import {
   unmergedPaths,
 } from '../src/git.js'
 import { producedRepoContent } from '../src/agent.js'
+import { checkoutHasBlueprints } from '../src/pi-workspace.js'
 import { stubTempHome } from './helpers.js'
 
 const exec = promisify(execFile)
@@ -785,6 +788,55 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(guard.observe({ type: 'agent_end', messages: [] })).toBeNull()
   })
 
+  // The claude-code runner drives the SAME guard via observeSignal (it correlates a tool_use
+  // name with its tool_result's is_error), so Claude Code's tool names must classify the same
+  // way Pi's do: Read/Grep/Glob = exploration, TodoWrite = planning, WebSearch/WebFetch = web
+  // (all exempt from the no-edit bound), Bash = action, NotebookEdit = a file edit.
+  it('runs the same no-edit logic over claude-code tool signals (observeSignal)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    const exempt = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Read', 'Grep', 'Glob', 'TodoWrite', 'WebSearch', 'WebFetch']) {
+      for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name, isError: false })
+    }
+    expect(reason).toBeNull()
+    // Bash (an action) without an edit past the threshold still trips the no-edit bound.
+    for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name: 'Bash', isError: false })
+    expect(reason).toMatch(/no progress/i)
+
+    // A NotebookEdit counts as a file edit, so the no-edit bound never trips.
+    const edits = new ProgressGuard(limits)
+    for (const name of ['Bash', 'Read', 'NotebookEdit', 'Bash', 'Bash', 'Bash', 'Bash']) {
+      reason = edits.observeSignal({ name, isError: false })
+    }
+    expect(reason).toBeNull()
+  })
+
+  // A subagent dispatch is the one call whose EDITS the guard cannot see: the parent stream
+  // carries the dispatch and its terminal result, while every Edit/Write the subagent makes
+  // happens on a transcript this guard never reads. Counting those dispatches as actions would
+  // therefore kill a coder that is delegating its implementation and making real progress.
+  it('never trips the no-edit bound on subagent dispatches (their edits are invisible here)', () => {
+    const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
+    // Both the current (`Agent`) and legacy (`Task`) dispatch names, well past the bound.
+    for (const name of ['Agent', 'Task']) {
+      const guard = new ProgressGuard(limits)
+      let reason: string | null = null
+      for (let i = 0; i < 10; i++) reason = guard.observeSignal({ name, isError: false })
+      expect(reason, `${name} dispatches must not trip the no-edit bound`).toBeNull()
+    }
+
+    // They are NEUTRAL, not edits: a dispatch does not satisfy the bound either, so genuine
+    // environment-probing after one is still caught (a read-only research subagent must not
+    // clear the suspicion the bound exists to hold).
+    const guard = new ProgressGuard(limits)
+    let reason: string | null = null
+    for (const name of ['Agent', 'Bash', 'Bash', 'Bash']) {
+      reason = guard.observeSignal({ name, isError: false })
+    }
+    expect(reason).toMatch(/no progress/i)
+  })
+
   it('reads limits from the environment, falling back to defaults', () => {
     expect(progressGuardLimitsFromEnv({})).toEqual(DEFAULT_PROGRESS_GUARD_LIMITS)
     expect(
@@ -928,12 +980,59 @@ describe('web search (rpiv-web-tools) configuration', () => {
   })
 })
 
+describe('checkoutHasBlueprints', () => {
+  let root: string
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'blueprints-test-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('detects blueprints/ at the checkout root', async () => {
+    expect(await checkoutHasBlueprints(root, false)).toBe(false)
+    await mkdir(join(root, 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(true)
+  })
+
+  // A multi-repo run's dir is the WORKSPACE ROOT with each repo checked out beside its siblings,
+  // so the root itself never holds `blueprints/` — checking only it would drop the orientation
+  // note for every multi-repo run, including ones whose legs are managed services.
+  it('detects blueprints/ in a leg of a multi-repo checkout', async () => {
+    await mkdir(join(root, 'service-a', 'src'), { recursive: true })
+    await mkdir(join(root, 'service-b', 'blueprints'), { recursive: true })
+    expect(await checkoutHasBlueprints(root, false)).toBe(false) // single-repo: root only
+    expect(await checkoutHasBlueprints(root, true)).toBe(true)
+  })
+
+  it('is false (never throws) for a directory that does not exist', async () => {
+    const missing = join(root, 'nope')
+    expect(await checkoutHasBlueprints(missing, false)).toBe(false)
+    expect(await checkoutHasBlueprints(missing, true)).toBe(false)
+  })
+})
+
 describe('writeAgentsContext', () => {
-  async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
+  async function readContext(opts?: {
+    webSearch?: boolean
+    guidance?: string
+    hasBlueprints?: boolean
+  }): Promise<string> {
     const home = await stubTempHome()
     await writeAgentsContext('ROLE PROMPT', opts)
     return readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
   }
+
+  it('appends the blueprint orientation note only when the checkout ships blueprints/', async () => {
+    expect(await readContext()).not.toMatch(/Service blueprint/i)
+    expect(await readContext({ hasBlueprints: true })).toMatch(/Service blueprint/i)
+  })
+
+  it('does not append its own spec-reading block (sourced from the backend spec-aware trait)', async () => {
+    // The harness used to emit a near-duplicate "Service specification" block; it is now
+    // contributed once by the spec-aware trait, so a spec-aware Pi run no longer carries it twice.
+    expect(await readContext({ hasBlueprints: true })).not.toMatch(/Service specification/i)
+  })
 
   it('omits the web-tools guidance by default', async () => {
     const md = await readContext()

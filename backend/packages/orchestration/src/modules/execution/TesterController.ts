@@ -23,6 +23,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
+import { recordDispatchAttribution } from './step-fold.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -360,7 +361,7 @@ export class TesterController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
+    recordDispatchAttribution(step, handle)
     // The dispatch returned, so the container is up; the live phase + id/url arrive on the
     // first poll, surfaced via the same `container` projection identically to the Coder.
     step.container = { status: 'up' }
@@ -560,7 +561,7 @@ export class TesterController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    if (handle.model) step.model = handle.model
+    recordDispatchAttribution(step, handle)
     // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
     // on the first poll.
     step.container = { status: 'up' }

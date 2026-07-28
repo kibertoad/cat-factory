@@ -16,12 +16,34 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 // Unknown ids (e.g. a fragment removed from the catalog after selection) are
 // skipped so a stale selection never breaks a run.
 
+/**
+ * How verbose the folded best-practice standards should be:
+ *  - `full` (default) — the fragment's full `body`. Reviewer / deep kinds, and any kind not
+ *    marked as an implementer, get this.
+ *  - `brief` — the fragment's condensed `brief` variant when it defines one (else its full
+ *    `body`). Chosen for implementer kinds (coder / fixer / …) that run a long agentic loop
+ *    whose system prompt is re-sent on EVERY turn, so a terser standard cuts the per-turn
+ *    (and cache-read) context cost without dropping the standard entirely.
+ * Resolved per kind by `standardsVerbosityFor` (the `brief-standards` trait) at the dispatch
+ * chokepoint and threaded through {@link composeBlockSystemPrompt}.
+ */
+export type StandardsVerbosity = 'full' | 'brief'
+
 /** One resolved best-practice standard to fold into the prompt: its body + reference label. */
 export interface ComposableFragment {
   id: string
   /** The fragment's human title, used as the citation label when present (else the id). */
   title?: string
   body: string
+  /**
+   * The condensed variant of {@link body}, folded instead of it under `brief` verbosity. Supplied
+   * by WHOEVER RESOLVED THE BODY, never re-looked-up here by id: a workspace/account-tier row (or
+   * a live document-backed one) may OVERRIDE a built-in id, and re-resolving the brief from the
+   * static pool would fold the built-in's condensed text over the tenant's override — silently
+   * ignoring their standard for exactly the implementer kinds `brief` targets. A resolver with no
+   * brief for the id leaves this absent, which correctly falls back to the full `body`.
+   */
+  brief?: string
 }
 
 /** A block's fragment selection, as the prompt composer needs it. */
@@ -45,13 +67,22 @@ function escapeAttr(value: string): string {
  * — rather than concatenated into one blob, so the agent can tell the standards apart and cite
  * a specific one by title (what the code/PR reviewers' adherence report relies on).
  */
-function foldStandards(baseSystem: string, fragments: ComposableFragment[]): string {
+function foldStandards(
+  baseSystem: string,
+  fragments: ComposableFragment[],
+  verbosity: StandardsVerbosity = 'full',
+): string {
   if (fragments.length === 0) return baseSystem
   const blocks = fragments.map((fragment) => {
     const label = fragment.title?.trim() || fragment.id
+    // Implementer kinds fold the condensed `brief` when the RESOLVED fragment carries one;
+    // everyone else (and any fragment resolved without a brief) gets the full `body`. See
+    // `ComposableFragment.brief` for why this must never re-resolve the brief by id.
+    const brief = verbosity === 'brief' ? fragment.brief?.trim() : undefined
+    const body = brief || fragment.body.trim()
     return [
       `<best-practice-standard id="${escapeAttr(fragment.id)}" title="${escapeAttr(label)}">`,
-      fragment.body.trim(),
+      body,
       '</best-practice-standard>',
     ].join('\n')
   })
@@ -66,12 +97,22 @@ function foldStandards(baseSystem: string, fragments: ComposableFragment[]): str
   ].join('\n')
 }
 
-export function composeSystemPrompt(baseSystem: string, fragmentIds: string[] = []): string {
+export function composeSystemPrompt(
+  baseSystem: string,
+  fragmentIds: string[] = [],
+  verbosity: StandardsVerbosity = 'full',
+): string {
   const fragments = fragmentIds
     .map((id) => getFragment(id))
     .filter((fragment): fragment is NonNullable<typeof fragment> => fragment !== undefined)
-    .map((fragment) => ({ id: fragment.id, title: fragment.title, body: fragment.body }))
-  return foldStandards(baseSystem, fragments)
+    .map((fragment) => ({
+      id: fragment.id,
+      title: fragment.title,
+      body: fragment.body,
+      // This path resolves the body from the pool, so the pool's brief is the matching one.
+      ...(fragment.brief ? { brief: fragment.brief } : {}),
+    }))
+  return foldStandards(baseSystem, fragments, verbosity)
 }
 
 /** How a kind's resolved best-practice standards reach the agent. See {@link composeBlockSystemPrompt}. */
@@ -118,10 +159,11 @@ export function composeBlockSystemPrompt(
   block: ComposableBlock,
   delivery: StandardsDelivery,
   standardsDelivered = false,
+  verbosity: StandardsVerbosity = 'full',
 ): string {
   if (delivery === 'context-files' && standardsDelivered) return baseSystem
   if (block.resolvedFragments && block.resolvedFragments.length > 0) {
-    return foldStandards(baseSystem, block.resolvedFragments)
+    return foldStandards(baseSystem, block.resolvedFragments, verbosity)
   }
-  return composeSystemPrompt(baseSystem, block.fragmentIds)
+  return composeSystemPrompt(baseSystem, block.fragmentIds, verbosity)
 }

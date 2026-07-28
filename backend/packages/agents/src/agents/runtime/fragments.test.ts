@@ -1,3 +1,4 @@
+import { getFragment } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
 
@@ -72,6 +73,96 @@ describe('composeBlockSystemPrompt', () => {
       expect(out).toContain('<best-practice-standard id="be-errors" title="Backend errors">')
       expect(out).toContain('Wrap errors.')
     })
+  })
+})
+
+// Implementer kinds (coder/fixer/…) fold each standard's CONDENSED `brief` instead of its full
+// `body`, to shrink the system prompt that is re-sent on every turn of their long agentic loop.
+// The brief travels WITH the resolved fragment (never re-looked-up by id), so it is always the
+// condensed form of the body that actually won the tier merge.
+describe("foldStandards verbosity: 'brief'", () => {
+  it("folds a fragment's condensed brief for an implementer kind, not its full body", () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      {
+        resolvedFragments: [
+          {
+            id: 'node.performance',
+            title: 'Node performance',
+            body: 'FULL_BODY_MARKER',
+            brief: 'BRIEF_MARKER',
+          },
+        ],
+      },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain('BRIEF_MARKER')
+    expect(out).not.toContain('FULL_BODY_MARKER')
+  })
+
+  it('folds the built-in brief when the ids resolve against the static pool', () => {
+    const brief = getFragment('node.performance')?.brief
+    expect(brief).toBeTruthy() // the built-in defines one
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      { fragmentIds: ['node.performance'] },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain(brief as string)
+  })
+
+  it('falls back to the full body when the resolved fragment carries no brief', () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      { resolvedFragments: [{ id: 'not-in-pool', title: 'X', body: 'FULL_ONLY' }] },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain('FULL_ONLY')
+  })
+
+  // The tier merge lets a workspace/account row OVERRIDE a built-in id. Re-resolving the brief
+  // from the static pool would then fold the BUILT-IN's condensed text over the tenant's body —
+  // silently ignoring their standard for exactly the kinds `brief` targets. The resolver supplies
+  // no brief for a managed row, so the override's own full body must be folded.
+  it("folds a tenant override's own body, never the built-in brief for the same id", () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      {
+        resolvedFragments: [
+          { id: 'node.performance', title: 'Node performance (house rules)', body: 'TENANT_BODY' },
+        ],
+      },
+      'prompt',
+      false,
+      'brief',
+    )
+    expect(out).toContain('TENANT_BODY')
+    expect(out).not.toContain(getFragment('node.performance')?.brief as string)
+  })
+
+  it("uses the full body under the default 'full' verbosity even when a brief exists", () => {
+    const out = composeBlockSystemPrompt(
+      'BASE',
+      {
+        resolvedFragments: [
+          {
+            id: 'node.performance',
+            title: 'Node performance',
+            body: 'FULL_BODY_MARKER',
+            brief: 'BRIEF_MARKER',
+          },
+        ],
+      },
+      'prompt',
+    )
+    expect(out).toContain('FULL_BODY_MARKER')
+    expect(out).not.toContain('BRIEF_MARKER')
   })
 })
 

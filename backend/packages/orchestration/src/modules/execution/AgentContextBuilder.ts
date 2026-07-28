@@ -130,7 +130,7 @@ export interface FragmentBodyResolver {
   resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
-  ): Promise<{ id: string; title?: string; body: string }[]>
+  ): Promise<{ id: string; title?: string; body: string; brief?: string }[]>
 }
 
 /**
@@ -963,7 +963,7 @@ export class AgentContextBuilder {
     step: PipelineStep,
     block: Block,
     serviceFrame: Block | null,
-  ): Promise<{ fragments: { id: string; title?: string; body: string }[] } | null> {
+  ): Promise<{ fragments: { id: string; title?: string; body: string; brief?: string }[] } | null> {
     // Recorded per dispatch, so it always reflects the kind that actually ran. A step
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
     // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
@@ -988,9 +988,19 @@ export class AgentContextBuilder {
         : ids
             .map((id) => {
               const fragment = getFragment(id)
-              return fragment ? { id, title: fragment.title, body: fragment.body } : null
+              // The brief travels WITH the body it condenses — see `ComposableFragment.brief`.
+              return fragment
+                ? {
+                    id,
+                    title: fragment.title,
+                    body: fragment.body,
+                    ...(fragment.brief ? { brief: fragment.brief } : {}),
+                  }
+                : null
             })
-            .filter((f): f is { id: string; title: string; body: string } => f !== null)
+            .filter(
+              (f): f is { id: string; title: string; body: string; brief?: string } => f !== null,
+            )
       // Re-recorded per dispatch — including clearing it when a re-dispatch resolves to
       // nothing (the selection was emptied between rounds), so the step never keeps
       // reporting fragments a later round no longer received.

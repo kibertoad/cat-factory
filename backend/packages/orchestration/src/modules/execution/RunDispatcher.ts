@@ -57,6 +57,7 @@ import {
   applyContainerRunning,
   applyLastActivity,
   applySubtaskProgress,
+  recordDispatchAttribution,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
 import { applyReproductionReport, recordReproductionOutcome } from './reproductionProof.logic.js'
@@ -653,7 +654,7 @@ export class RunDispatcher {
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
-        if (handle.model) step.model = handle.model
+        recordDispatchAttribution(step, handle)
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search
@@ -882,6 +883,20 @@ export class RunDispatcher {
       runId: executionId,
       workspaceId,
       agentKind: step.agentKind,
+      // Re-supply the whole attribution set captured at dispatch (`recordDispatchAttribution`).
+      // The poll site can resolve NONE of it — it rebuilds the handle from the step alone — and
+      // the container executor reads all three off the handle:
+      //  - `model`: without it `recordStepResult` records 'unknown', which
+      //    `SpendService.parseModel` splits into provider "unknown" / model "" — corrupting the
+      //    token_usage row for EVERY subscription-harness (container) step.
+      //  - `subscriptionTokenId`: gates the pooled-token usage feedback that drives usage-aware
+      //    rotation; absent, it is skipped outright.
+      //  - `initiatedByUserId`: the quota-cycle counters' fallback target for a PERSONAL
+      //    (individual-usage) run, which leases no pooled token; absent, the target is null.
+      // The sync `run()` path already carried the rich handle; this fixes the durable poll path.
+      model: step.model,
+      subscriptionTokenId: step.subscriptionTokenId,
+      initiatedByUserId: step.initiatedByUserId,
     })
     if (update.state === 'running') {
       return this.handleRunningPoll(workspaceId, executionId, instance, update, step.jobId)
