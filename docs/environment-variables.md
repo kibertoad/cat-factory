@@ -170,8 +170,8 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Mothership mode
 
-| Variable                                                                                                                     | Modes | Default          | Description                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------- | ----- | ---------------- | ------------------------------------------------------------------------------------- |
-| `LOCAL_MOTHERSHIP_URL`                                                                                                       | MS    | none (off)       | Enables mothership mode: the local node delegates persistence to this hosted backend. |
-| `LOCAL_MOTHERSHIP_TOKEN`                                                                                                     | MS    | minted via login | Headless/CI machine-token override.                                                   |
-| `LOCAL_MOTHERSHIP_TOKEN_DB` / `LOCAL_MOTHERSHIP_CREDENTIAL_DB` / `LOCAL_MOTHERSHIP_SETTINGS_DB` / `LOCAL_MOTHERSHIP_WORK_DB` | MS    | default paths    | Override paths for the laptop's local `node:sqlite` stores.                           |
+| Variable                                                                                                                                                       | Modes | Default          | Description                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ---------------- | ------------------------------------------------------------------------------------- |
+| `LOCAL_MOTHERSHIP_URL`                                                                                                                                         | MS    | none (off)       | Enables mothership mode: the local node delegates persistence to this hosted backend. |
+| `LOCAL_MOTHERSHIP_TOKEN`                                                                                                                                       | MS    | minted via login | Headless/CI machine-token override.                                                   |
+| `LOCAL_MOTHERSHIP_TOKEN_DB` / `LOCAL_MOTHERSHIP_CREDENTIAL_DB` / `LOCAL_MOTHERSHIP_SETTINGS_DB` / `LOCAL_MOTHERSHIP_TELEMETRY_DB` / `LOCAL_MOTHERSHIP_WORK_DB` | MS    | default paths    | Override paths for the laptop's local `node:sqlite` stores.                           |

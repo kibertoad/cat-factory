@@ -44,6 +44,40 @@ export async function checkServiceMountScope(
 }
 
 /**
+ * The spend ledger's `tokenUsageRepository.record(record)`. Bind on the row's `workspaceId` FIELD
+ * (must be in scope) AND pin the two DENORMALIZED rollup keys the account- and user-tier budget
+ * reads index on directly: `accountId` must be absent/null or exactly the workspace's own owning
+ * account, and `userId` must be absent/null or the token's user.
+ *
+ * That second half is the point of the rule. `workspaceField` alone would let a node scoped to
+ * account A write ledger rows into its OWN workspace while stamping account B's id (or a
+ * teammate's user id) on them — inflating a budget it has no entitlement to and pausing that
+ * account's runs, without ever addressing one of its workspaces. Null is allowed because the
+ * recorder legitimately writes it when a run has no resolvable account/initiator. A non-object
+ * arg, a missing/non-string `workspaceId`, an out-of-scope workspace, or a mismatched
+ * account/user id → `denied`, else `undefined`.
+ */
+export async function checkUsageRecordScope(
+  record: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!record || typeof record !== 'object') return denied
+  const { workspaceId, accountId, userId } = record as {
+    workspaceId?: unknown
+    accountId?: unknown
+    userId?: unknown
+  }
+  if (typeof workspaceId !== 'string') return denied
+  const workspaceAccount = await opts.resolveAccountId(workspaceId)
+  if (!inScope(workspaceAccount)) return denied
+  if (accountId != null && accountId !== workspaceAccount) return denied
+  if (userId != null && userId !== opts.scope.userId) return denied
+  return undefined
+}
+
+/**
  * Resolve a tenant-library owner PAIR (ownerKind, ownerId) to an account and enforce token scope,
  * shared by the `owner` (positional) and `ownerField` (record-field) kinds. Returns `denied` when
  * the pair is malformed or out of scope, else `undefined`. A `workspace` owner resolves through the
