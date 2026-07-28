@@ -1515,21 +1515,35 @@ basic mode always STARTS railed). Full model:
 - **A nav destination declares `advanced: true`** in `modular/nav-contributions.ts`; the shared
   `navSlotFilter` drops it in basic mode across all three shells. It is a SEPARATE axis from the
   RBAC `gate` and both must pass — never fold the tier into a `gate` predicate, or the two become
-  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar for
-  setting it is ROUTE COUNT, not how advanced the surface feels**: hiding the SOLE route to a
-  capability removes that capability from the tier, while hiding a shortcut into a surface a basic
-  destination also opens removes nothing. So it belongs on a surface beside the delivery path
-  (sandbox, Kaizen), a palette shortcut into a Workspace-settings tab, or a knob the Integrations
-  hub already offers — never on the pipeline builder, the fragment library, the
-  infrastructure/PREnv windows, or the operator/reports views, however deep those feel.
-  `nav-contributions.spec.ts` pins the advanced set against a table naming each item's
-  alternative route, so a promotion has to write that claim down rather than assume it.
+  un-disentangleable in the specs (and a consumer item loses the declarative flag). **The bar is
+  whether the EVERYDAY DELIVERY LOOP needs it** — plan work on a board, run it, review and merge
+  it — not how advanced the surface feels. Marking an item does one of two things and the
+  difference must be stated, because only one of them is free:
+  - **reached-another-way** — a shortcut into a surface a basic destination also opens, so
+    nothing is lost (the Merge / Service-best-practices palette entries, the local-models knob).
+  - **out-of-tier** — the SOLE route, hidden deliberately, so the capability is ABSENT from basic
+    mode and the tier switch is the way to it (sandbox, Kaizen, `bootstrap-repo`, and the
+    deployment-wide `operator-dashboard` / `reports` rollups, which answer an operator's question
+    rather than a delivery one).
+
+  A sole route stays in basic when the loop runs on it: the pipeline builder, `add-from-repo`,
+  the fragment library, the infrastructure/PREnv windows, and the workspace/model configuration a
+  run actually reads. `nav-contributions.spec.ts` pins the advanced set against a table naming
+  each item's kind AND reason, so a promotion has to write that claim down rather than assume it.
+
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. **HIDE, never
   disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the hidden
   field would have shown (a workspace merge preset, the service-seeded fragments, an engine-inferred
   flag), so a basic-mode user gets fewer choices, never different behaviour. Anything carrying an
   input NOTHING else supplies stays in BOTH tiers however advanced it feels — the e2e suite caught
   exactly this on the apriori-branch picker, which has no default to fall back to.
+- **A whole AUTHORING affordance may be tier-scoped**, but only when the tier hides the ability to
+  CREATE and never the ability to SEE. The frame header's recurring-schedule and initiative
+  buttons are advanced-only; both are safe because existing state stays legible in basic mode
+  through its normal surfaces (a live schedule badges its task card and opens `recurring-schedule`
+  in the inspector; an initiative is a block on the board with its own inspector). Hide a create
+  button whose product is only visible behind that same button and a basic-mode user is acted on
+  by state they cannot find — which is the override rule's failure mode wearing different clothes.
 - **Gate an override control on `showOverrideField(isAdvanced, ...values)`, NOT on `isAdvanced`
   alone** (`utils/uiMode.ts`). The rule above holds only while the override is UNSET, which is
   guaranteed at CREATION time (a fresh form starts from the defaults) but never for an EXISTING
@@ -1538,6 +1552,11 @@ basic mode always STARTS railed). Full model:
   settings they can neither see nor clear — the exact divergence the rule forbids. The helper keeps
   the control whenever any value it edits is set (`false` counts — a tri-state `false` is a choice,
   not absence), so basic stays clean for the common case without ever concealing a deviation.
+  **It gates SECTIONS as readily as fields**, and post-release health is the reference case: the
+  Integrations-hub row and the service inspector's monitor/SLO panel are both advanced-tier (that
+  gate acts AFTER delivery, outside the loop basic serves), but each reveals itself once the
+  workspace has a connection / the frame has a mapping — otherwise basic mode would hide a live
+  Datadog watch, and an on-call agent that can spawn from it, behind a tier the user never chose.
 - **The env pin makes the switcher READ-ONLY** (`envPinned`), and `setMode` refuses to write. A
   persisted preference the resolver would then ignore is a lie to the user, not a fallback. That
   refusal is hygiene, not the invariant — a persisted setup store must return its state to persist

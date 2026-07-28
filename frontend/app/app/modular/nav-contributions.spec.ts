@@ -99,36 +99,71 @@ describe('navSlotFilter', () => {
     expect(kept).toContain('integrations-hub')
     expect(kept).toContain('workspace-settings')
     expect(kept).toContain('model-config')
-    // ...and so does every destination that is the SOLE route to its capability, however deep
-    // it feels: authoring a flow, the standards library, the PREnv/runner plumbing, and the
-    // aggregate run-health / spend views.
+    // ...and so does everything the everyday delivery loop runs on, however deep it feels:
+    // authoring a flow, the standards library, and the PREnv/runner plumbing.
     expect(kept).toContain('build-pipeline')
     expect(kept).toContain('fragments')
     expect(kept).toContain('infrastructure')
     expect(kept).toContain('environment-setup')
-    expect(kept).toContain('operator-dashboard')
-    expect(kept).toContain('reports')
-    // What drops is beside the delivery path (experimentation) or a shortcut into a surface
-    // basic mode already reaches another way.
+    // What drops is either a shortcut basic mode reaches another way, or a capability
+    // deliberately kept out of the tier (experimentation, one-off repo setup, the
+    // deployment-wide operator rollups).
     expect(kept).not.toContain('sandbox')
     expect(kept).not.toContain('kaizen')
     expect(kept).not.toContain('merge-thresholds')
+    expect(kept).not.toContain('bootstrap-repo')
+    expect(kept).not.toContain('operator-dashboard')
+    expect(kept).not.toContain('reports')
   })
 
-  it('never makes an advanced item the only route to its capability', () => {
-    // The tier's governing rule (see the catalog comment): every advanced destination either
-    // sits beside the delivery path, or is a shortcut into a surface a basic destination also
-    // opens. Spelled out here as a table so promoting an item to `advanced` forces an explicit
-    // claim about how basic mode still reaches it, rather than a silent capability loss.
-    const ALTERNATIVE_ROUTE: Record<string, string> = {
-      sandbox: 'none needed - experimentation surface, not on the delivery path',
-      kaizen: 'none needed - self-grading history, not on the delivery path',
-      'merge-thresholds': 'workspace-settings -> Merge tab',
-      'service-fragment-defaults': 'workspace-settings -> Service best practices tab',
-      'local-models': 'integrations-hub -> Local runners',
+  it('states, per advanced item, whether basic mode still reaches its capability', () => {
+    // Marking an item `advanced` does one of two things, and which one has to be said out
+    // loud. `reached-another-way` promises a basic destination opens the same surface, so
+    // nothing is lost. `out-of-tier` concedes the opposite: the capability is ABSENT from
+    // basic mode and the tier switch is the only way to it. Both are legitimate; a silent
+    // one is not. The table is the claim, and it must match the catalog exactly, so adding
+    // `advanced: true` fails here until the reason is written down.
+    const REASON: Record<string, { kind: 'reached-another-way' | 'out-of-tier'; why: string }> = {
+      'merge-thresholds': {
+        kind: 'reached-another-way',
+        why: 'workspace-settings -> Merge tab',
+      },
+      'service-fragment-defaults': {
+        kind: 'reached-another-way',
+        why: 'workspace-settings -> Service best practices tab',
+      },
+      'local-models': {
+        kind: 'reached-another-way',
+        why: 'integrations-hub -> Local runners',
+      },
+      sandbox: {
+        kind: 'out-of-tier',
+        why: 'experimentation surface, beside the delivery path',
+      },
+      kaizen: {
+        kind: 'out-of-tier',
+        why: 'self-grading history, beside the delivery path',
+      },
+      'bootstrap-repo': {
+        kind: 'out-of-tier',
+        why: 'one-off new-repo setup, not part of running work on an existing board',
+      },
+      'operator-dashboard': {
+        kind: 'out-of-tier',
+        why: 'deployment-wide health rollup - an operator job, not a delivery one',
+      },
+      reports: {
+        kind: 'out-of-tier',
+        why: 'deployment-wide spend/activity rollup - an operator job, not a delivery one',
+      },
     }
     const advanced = NAV_CONTRIBUTIONS.filter((i) => i.advanced).map((i) => i.id)
-    expect(advanced.sort()).toEqual(Object.keys(ALTERNATIVE_ROUTE).sort())
+    expect(advanced.sort()).toEqual(Object.keys(REASON).sort())
+    // An `out-of-tier` item is a real capability loss, so the switcher back must survive basic
+    // mode — pinned by the next case. Assert here only that every claim carries a reason.
+    for (const [id, reason] of Object.entries(REASON)) {
+      expect(reason.why.length, `${id} has no stated reason`).toBeGreaterThan(0)
+    }
   })
 
   it('keeps the tier switch itself reachable in basic mode', () => {

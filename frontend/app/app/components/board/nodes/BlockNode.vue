@@ -24,6 +24,7 @@ const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
 const access = useWorkspaceAccess()
+const uiMode = useUiModeStore()
 const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
@@ -491,8 +492,18 @@ const ITEM_ICON: Record<string, string> = {
                   :title="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
+                <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
+                     work rather than do it (a schedule that fires runs on a cadence, an
+                     initiative that groups tasks under a goal), and the basic frame header is
+                     the most-used control strip on the board. Hiding the CREATE affordance
+                     removes neither's existing state from basic mode — a live schedule still
+                     badges its task card and opens its inspector panel, and an initiative is
+                     still a block on the board with its own inspector — so what a basic-mode
+                     user loses is the ability to author a new one, not sight of one. -->
                 <UButton
+                  v-if="uiMode.isAdvanced"
                   class="nodrag"
+                  data-testid="frame-add-recurring"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
@@ -501,6 +512,7 @@ const ITEM_ICON: Record<string, string> = {
                   @click.stop="addRecurring"
                 />
                 <UButton
+                  v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-initiative"
                   :size="isTouch ? 'sm' : 'xs'"
