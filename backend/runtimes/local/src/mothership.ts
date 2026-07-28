@@ -15,6 +15,7 @@ import {
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
+import { MothershipEventSubscriber } from './mothershipSubscriber.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
 import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
 import {
@@ -103,6 +104,15 @@ export interface MothershipComposition {
    */
   realtimeAdapter: MothershipWebSocketPropagator
   /**
+   * The real-time INBOUND subscriber: holds one machine-authed WebSocket to the mothership's
+   * `GET /internal/events/subscribe/:ws` per workspace someone is watching locally, and
+   * re-broadcasts what arrives into the laptop's own hub. Without it a mothership-mode board is
+   * write-only in real time — it animates for work this laptop drove and stays frozen for a hosted
+   * teammate's. `buildLocalContainer` binds it to the injected hub; a token-less node just doesn't
+   * connect until the login completes.
+   */
+  realtimeSubscriber: MothershipEventSubscriber
+  /**
    * The mothership-delegated notification channel: asks the mothership to deliver a notification
    * this node raised (by id) through the ORG's external transports — Slack today. The bot token is
    * sealed with the mothership's key, which never reaches this machine (product decision 3), so
@@ -153,12 +163,24 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
   // the exact connect/expiry lifecycle of the rest of the machine API.
   const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
-  // Real-time upstream: the SAME base URL + per-request token, so this node's engine events reach
-  // the mothership's fan-out under the same connect/expiry lifecycle. A token-less node just doesn't
-  // publish upstream (its own SPA still gets every event locally).
+  // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
+  // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
+  // publishes nor subscribes (its own SPA still gets every locally produced event).
+  //
+  // The two legs share ONE stable per-process connection id: the subscriber connects with it as
+  // `?cid=`, the publisher stamps it as `originConnectionId`, and the mothership's fan-out skips
+  // that socket — so this node's own events never come back down and reach its browsers twice.
+  const nodeConnectionId = `mothership-node-${crypto.randomUUID()}`
   const realtimeAdapter = new MothershipWebSocketPropagator(
     new HttpMachineEventClient({ baseUrl, token: machineToken }),
+    nodeConnectionId,
   )
+  const realtimeSubscriber = new MothershipEventSubscriber({
+    baseUrl,
+    token: machineToken,
+    connectionId: nodeConnectionId,
+    log: logger,
+  })
   // Notification delivery delegation: same base URL + per-request token again, so the org's Slack
   // reaches the team for a run this laptop drove. A token-less node simply doesn't delegate (the
   // row is still persisted and the in-app card still renders).
@@ -181,12 +203,14 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     repos,
     githubTokenSource,
     realtimeAdapter,
+    realtimeSubscriber,
     notificationChannel,
     credentialStore,
     localSettingsStore,
     workQueue,
     machineTokenStore,
     close: () => {
+      realtimeSubscriber.stop()
       credentialStore.close()
       localSettingsStore.close()
       workQueue.close()
