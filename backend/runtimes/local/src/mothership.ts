@@ -7,6 +7,7 @@ import {
   HttpMachineEventClient,
   HttpMachineNotificationClient,
   HttpPersistenceRpcClient,
+  type LocalFirstPersistenceRepository,
   type Logger,
   type MothershipConnector,
   RemoteNotificationChannel,
@@ -18,6 +19,7 @@ import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
 import { MothershipEventSubscriber } from './mothershipSubscriber.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
 import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
+import { type LocalTelemetryStore, createLocalTelemetryStore } from './sqlite/telemetryStore.js'
 import {
   type LocalMachineTokenStore,
   createLocalMachineTokenStore,
@@ -28,9 +30,11 @@ import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 // database. Org/durable state lives on a hosted "mothership" cat-factory (Node or Cloudflare)
 // and is reached over the authenticated `/internal/persistence` machine API; agent/model
 // CREDENTIALS stay on the laptop in a file-based `node:sqlite` store, sealed with the LOCAL
-// key (the mothership's ENCRYPTION_KEY never reaches the machine). This module composes those
-// two halves into the seams `buildLocalContainer` threads into `buildNodeContainer`, and
-// supplies the in-process work runner that replaces pg-boss when there is no Postgres.
+// key (the mothership's ENCRYPTION_KEY never reaches the machine); and run TELEMETRY is
+// local-first in a second `node:sqlite` store (append-heavy and hot-path, so it must never
+// ride the per-call RPC). This module composes those halves into the seams
+// `buildLocalContainer` threads into `buildNodeContainer`, and supplies the in-process work
+// runner that replaces pg-boss when there is no Postgres.
 
 /** True when this local node should boot in mothership mode (a mothership URL is configured). */
 export function isMothershipMode(env: NodeJS.ProcessEnv): boolean {
@@ -59,7 +63,8 @@ function localDbPath(explicit: string | undefined, fileName: string): string {
 /** The composed mothership persistence: remote org repos + the local credential store. */
 export interface MothershipComposition {
   /**
-   * The full {@link CoreRepositories} surface, every entry remote (RPC-backed). The server-side
+   * The full {@link CoreRepositories} surface, remote (RPC-backed) except the local-first
+   * TELEMETRY bucket layered over it from {@link telemetryStore}. The server-side
    * allow-list (`REMOTE_PERSISTENCE_METHODS`) gates which repo+method actually executes on the
    * mothership; an un-allow-listed call returns `unknown_method`. The allow-list covers the
    * board-load + run paths (resolved by the Phase-3 merge gate — see
@@ -83,6 +88,16 @@ export interface MothershipComposition {
    * facade's own differentiator — so it lives on the laptop, not the mothership.
    */
   localSettingsStore: LocalSettingsStore
+  /**
+   * The local-sqlite TELEMETRY store (product decision 5: telemetry/logs are local-first). Holds
+   * the per-call LLM metrics, agent-context snapshots, performed web searches, provisioning log
+   * and modeled subscription quota cycles a run produces on this machine — append-heavy,
+   * high-volume, short-retention state that must never ride the per-call persistence RPC. Layered
+   * over the remote registry in {@link repos}, so every consumer (recorders, the observability
+   * endpoints, the board's per-step rollups) resolves it with no per-consumer wiring; the local
+   * retention sweep prunes it to the deployment's configured window.
+   */
+  telemetryStore: LocalTelemetryStore
   /**
    * Delegated GitHub token source: installation tokens minted BY THE MOTHERSHIP over
    * `POST /internal/github/installation-token` (the mothership owns the GitHub App; its
@@ -159,7 +174,24 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const envToken = env.LOCAL_MOTHERSHIP_TOKEN?.trim()
   const machineToken = () => envToken || validCachedToken(machineTokenStore)
   const client = new HttpPersistenceRpcClient({ baseUrl, token: machineToken })
-  const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
+  // Telemetry is LOCAL-FIRST (product decision 5), so its repositories are layered over the
+  // remote registry rather than proxied: they are written on the hot path of every LLM call,
+  // dispatch and provisioning attempt, and none of their methods is (or should be) allow-listed
+  // on the machine API. Opened before the registry so the composition is a single expression.
+  const telemetryStore = createLocalTelemetryStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_TELEMETRY_DB, 'telemetry.sqlite'),
+  )
+  // Typed by `LocalFirstPersistenceRepository` (the server-side declaration of the bucket), so
+  // the map can never be HALF-wired: omitting an entry fails to typecheck rather than silently
+  // leaving that repository on a remote proxy the allow-list only ever answers `unknown_method`.
+  const localFirst: Record<LocalFirstPersistenceRepository, unknown> = {
+    llmCallMetricRepository: telemetryStore.llmCallMetricRepository,
+    agentContextSnapshotRepository: telemetryStore.agentContextSnapshotRepository,
+    agentSearchQueryRepository: telemetryStore.agentSearchQueryRepository,
+    provisioningLogRepository: telemetryStore.provisioningLogRepository,
+    subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
+  }
+  const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
   // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
   // the exact connect/expiry lifecycle of the rest of the machine API.
   const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
@@ -207,12 +239,14 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     notificationChannel,
     credentialStore,
     localSettingsStore,
+    telemetryStore,
     workQueue,
     machineTokenStore,
     close: () => {
       realtimeSubscriber.stop()
       credentialStore.close()
       localSettingsStore.close()
+      telemetryStore.close()
       workQueue.close()
       machineTokenStore.close()
     },

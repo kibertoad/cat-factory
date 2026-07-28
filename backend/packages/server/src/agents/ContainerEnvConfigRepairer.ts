@@ -141,6 +141,9 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       userPrompt: spec.prompt,
       model: this.deps.model.model,
       proxyBaseUrl: this.deps.proxyBaseUrl,
+      // This backend serves the phase-tagged completions route (see `ContainerAgentExecutor`),
+      // so this flow's calls are attributed rather than landing in the unattributed slice.
+      proxyPhasePath: true,
       sessionToken,
       ghToken,
       repo: { owner, name: repo, baseBranch: gitRef, cloneUrl },
