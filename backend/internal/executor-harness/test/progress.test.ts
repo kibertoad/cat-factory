@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   createTaskPlanTracker,
+  mergeProgress,
   parseCreatedTaskId,
   pickProgress,
+  sliceLabelKey,
+  toProgress,
   todosToProgress,
 } from '../src/progress.js'
 import type { TodoProgress } from '../src/pi.js'
@@ -172,7 +175,7 @@ describe('createTaskPlanTracker', () => {
   })
 })
 
-describe('pickProgress (ADR 0027 Defect B)', () => {
+describe('pickProgress (the two plan vocabularies)', () => {
   const p = (completed: number, inProgress: number, total: number): TodoProgress => ({
     completed,
     inProgress,
@@ -186,17 +189,9 @@ describe('pickProgress (ADR 0027 Defect B)', () => {
     expect(pickProgress(undefined, p(0, 2, 2))).toEqual(p(0, 2, 2))
   })
 
-  it('prefers the slice tracker when the once-written plan is stale', () => {
-    // The pr-reviewer shape: the plan is written ONCE (5 slices + an aggregate entry), all
-    // pending, and never marked done. The parallel subagent slices are what actually advance
-    // — first in flight, then all returned — so the slice tracker must win in both states.
-    const stalePlan = p(0, 0, 6)
-    expect(pickProgress(stalePlan, p(0, 4, 4))).toEqual(p(0, 4, 4)) // in-flight beats all-pending
-    expect(pickProgress(stalePlan, p(4, 0, 4))).toEqual(p(4, 0, 4)) // all returned beats 0 done
-  })
-
-  it('prefers the advancing plan for the sequential shape', () => {
-    expect(pickProgress(p(3, 1, 6), undefined)).toEqual(p(3, 1, 6))
+  it('prefers whichever view is further along', () => {
+    expect(pickProgress(p(0, 0, 6), p(0, 4, 4))).toEqual(p(0, 4, 4)) // in-flight beats all-pending
+    expect(pickProgress(p(0, 0, 6), p(4, 0, 4))).toEqual(p(4, 0, 4)) // done beats 0 done
     expect(pickProgress(p(3, 1, 6), p(0, 2, 2))).toEqual(p(3, 1, 6)) // more completed wins
   })
 
@@ -205,16 +200,116 @@ describe('pickProgress (ADR 0027 Defect B)', () => {
     const todo = p(2, 1, 5)
     expect(pickProgress(todo, p(2, 1, 5))).toBe(todo) // full tie keeps the plan
   })
+})
 
-  it('composes over both plan vocabularies, as the runner chains it', () => {
-    // The runner reconciles TodoWrite -> TaskCreate/Update -> slices. A run that plans through
-    // TaskCreate/Update (no TodoWrite at all) must still surface its plan.
-    const chained = (
-      todo: TodoProgress | undefined,
-      plan: TodoProgress | undefined,
-      slice: TodoProgress | undefined,
-    ) => pickProgress(pickProgress(todo, plan), slice)
-    expect(chained(undefined, p(1, 1, 3), undefined)).toEqual(p(1, 1, 3))
-    expect(chained(undefined, p(0, 0, 6), p(0, 5, 5))).toEqual(p(0, 5, 5))
+describe('sliceLabelKey', () => {
+  it('reduces both vocabularies of the same slice to the same key', () => {
+    expect(sliceLabelKey('Review identity/auth slice')).toBe('identity auth')
+    expect(sliceLabelKey('identity/auth')).toBe('identity auth')
+    expect(sliceLabelKey('Aggregate findings')).toBe('aggregate findings')
+  })
+
+  it('is empty for a label made entirely of boilerplate', () => {
+    expect(sliceLabelKey('review the slice')).toBe('')
+    expect(sliceLabelKey('   ')).toBe('')
+  })
+})
+
+describe('mergeProgress (plan inventory + live dispatch status)', () => {
+  const plan = (...items: [string, 'pending' | 'in_progress' | 'completed'][]): TodoProgress =>
+    toProgress(items.map(([label, status]) => ({ label, status })))
+  const dispatched = (...items: [string, 'in_progress' | 'completed'][]): TodoProgress =>
+    toProgress(items.map(([label, status]) => ({ label, status })))
+
+  it('returns whichever single source is present (or neither)', () => {
+    expect(mergeProgress(undefined, undefined)).toBeUndefined()
+    expect(mergeProgress(plan(['a', 'pending']), undefined)).toEqual(plan(['a', 'pending']))
+    expect(mergeProgress(undefined, dispatched(['a', 'in_progress']))).toEqual(
+      dispatched(['a', 'in_progress']),
+    )
+  })
+
+  it('keeps every queued slice visible once the first subagent returns', () => {
+    // The regression this exists for. The plan names 5 slices + the aggregate pass; only two
+    // subagents have been dispatched and the first has come back. Picking the "further along"
+    // view used to collapse the window to those two rows and drop the other four.
+    const merged = mergeProgress(
+      plan(
+        ['identity/auth', 'pending'],
+        ['security/ACL', 'pending'],
+        ['contact services', 'pending'],
+        ['migration SQL', 'pending'],
+        ['Aggregate findings', 'pending'],
+      ),
+      dispatched(
+        ['Review identity/auth slice', 'completed'],
+        ['Review security/ACL slice', 'in_progress'],
+      ),
+    )
+    expect(merged).toEqual(
+      plan(
+        ['identity/auth', 'completed'],
+        ['security/ACL', 'in_progress'],
+        ['contact services', 'pending'],
+        ['migration SQL', 'pending'],
+        ['Aggregate findings', 'pending'],
+      ),
+    )
+  })
+
+  it('pairs on a partial label match, then positionally, in dispatch order', () => {
+    // "database layer" contains the plan's "database"; "auth" shares no word with "session
+    // handling", so it lands on the first still-pending entry.
+    expect(
+      mergeProgress(
+        plan(['database', 'pending'], ['session handling', 'pending'], ['aggregate', 'pending']),
+        dispatched(
+          ['Review database layer slice', 'completed'],
+          ['Review auth slice', 'in_progress'],
+        ),
+      ),
+    ).toEqual(
+      plan(
+        ['database', 'completed'],
+        ['session handling', 'in_progress'],
+        ['aggregate', 'pending'],
+      ),
+    )
+  })
+
+  it('appends a dispatch the plan never mentioned rather than dropping it', () => {
+    expect(
+      mergeProgress(
+        plan(['db', 'completed']),
+        dispatched(['Review db slice', 'completed'], ['Review a late extra slice', 'in_progress']),
+      ),
+    ).toEqual(plan(['db', 'completed'], ['Review a late extra slice', 'in_progress']))
+  })
+
+  it('never walks a status back', () => {
+    // The agent marked the slice done in its plan; a re-dispatch of the same slice must not
+    // re-open it (and an in-flight dispatch must not un-complete a finished plan entry).
+    expect(
+      mergeProgress(plan(['db', 'completed']), dispatched(['Review db slice', 'in_progress'])),
+    ).toEqual(plan(['db', 'completed']))
+  })
+
+  it('grows the list monotonically as slices are dispatched', () => {
+    const inventory = plan(['a', 'pending'], ['b', 'pending'], ['c', 'pending'])
+    const totals = [
+      mergeProgress(inventory, undefined),
+      mergeProgress(inventory, dispatched(['Review a slice', 'in_progress'])),
+      mergeProgress(inventory, dispatched(['Review a slice', 'completed'])),
+      mergeProgress(
+        inventory,
+        dispatched(['Review a slice', 'completed'], ['Review b slice', 'in_progress']),
+      ),
+    ].map((p) => p?.total)
+    expect(totals).toEqual([3, 3, 3, 3])
+  })
+
+  it('falls back to picking when a side carries counts but no item list', () => {
+    const countsOnly: TodoProgress = { completed: 0, inProgress: 4, total: 4 }
+    expect(mergeProgress(plan(['a', 'pending']), countsOnly)).toEqual(countsOnly)
   })
 })

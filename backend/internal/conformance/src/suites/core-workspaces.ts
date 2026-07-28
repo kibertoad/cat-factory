@@ -82,6 +82,17 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       })
       expect(res.status).toBe(403)
     })
+
+    it('serves /internal/events/subscribe/:ws with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The INBOUND real-time leg (a mothership-mode node subscribing to a workspace's stream so
+      // org activity reaches the laptop's SPA). Mounted by the shared controller on both facades
+      // and machine-gated FIRST — before the upgrade-shape check and before any realtime-transport
+      // probe — so an unauthenticated call is a 403 everywhere, whatever this facade wires. The
+      // drift guard that the endpoint exists and cannot be probed without a token.
+      const res = await call('GET', '/internal/events/subscribe/ws_x')
+      expect(res.status).toBe(403)
+    })
   })
 
   describe('workspaces', () => {

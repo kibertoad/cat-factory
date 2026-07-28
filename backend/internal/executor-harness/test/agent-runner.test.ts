@@ -264,57 +264,60 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
     expect(outcome.stats.toolCalls).toBe(2)
   })
 
-  it('leaves a subagent’s turns to the transcript watcher instead of counting them twice', async () => {
-    // Subagent turns ride the parent's stdout tagged with the dispatch that spawned them, AND
-    // land in `subagents/*.jsonl`. Recording both channels double-counted every subagent call
-    // and spliced a second conversation into the parent's prompt chain.
-    fakeCli('claude', [
-      JSON.stringify({
-        type: 'assistant',
-        message: {
-          id: 'msg_1',
-          model: 'claude-opus-5',
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 100, output_tokens: 10 },
-          content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
-        },
-      }),
-      JSON.stringify({
-        type: 'assistant',
-        parent_tool_use_id: 'toolu_01',
-        message: {
-          id: 'msg_sub',
-          model: 'claude-opus-5',
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 19_430, output_tokens: 400 },
-          content: [{ type: 'text', text: 'slice findings' }],
-        },
-      }),
-      JSON.stringify({
-        type: 'user',
-        parent_tool_use_id: 'toolu_01',
-        message: { content: [{ type: 'tool_result', content: 'subagent tool output' }] },
-      }),
-      JSON.stringify({
-        type: 'user',
-        message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
-      }),
-      JSON.stringify({
-        type: 'assistant',
-        message: {
-          id: 'msg_2',
-          model: 'claude-opus-5',
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 200, output_tokens: 20 },
-          content: [{ type: 'text', text: 'aggregated' }],
-        },
-      }),
-      JSON.stringify({
-        type: 'result',
-        result: 'done',
-        usage: { input_tokens: 300, output_tokens: 30 },
-      }),
-    ])
+  /** A parent turn that dispatches a subagent, the subagent's own tagged turns, then the join. */
+  const subagentDispatchStream = (): string[] => [
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        model: 'claude-opus-5',
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 100, output_tokens: 10 },
+        content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
+      },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      parent_tool_use_id: 'toolu_01',
+      message: {
+        id: 'msg_sub',
+        model: 'claude-opus-5',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 19_430, output_tokens: 400 },
+        content: [{ type: 'text', text: 'slice findings' }],
+      },
+    }),
+    JSON.stringify({
+      type: 'user',
+      parent_tool_use_id: 'toolu_01',
+      message: { content: [{ type: 'tool_result', content: 'subagent tool output' }] },
+    }),
+    JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_2',
+        model: 'claude-opus-5',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 200, output_tokens: 20 },
+        content: [{ type: 'text', text: 'aggregated' }],
+      },
+    }),
+    JSON.stringify({
+      type: 'result',
+      result: 'done',
+      usage: { input_tokens: 300, output_tokens: 30 },
+    }),
+  ]
+
+  it('never splices a subagent’s turns into the PARENT’s prompt chain', async () => {
+    // Subagent turns ride the parent's stdout tagged with the dispatch that spawned them. Folding
+    // them into the parent's reconstruction produced a `promptText` interleaving two conversations
+    // — a request that was never sent — whichever channel ends up billing them.
+    fakeCli('claude', subagentDispatchStream())
 
     const outcome = await runClaudeCode({
       cwd,
@@ -325,17 +328,62 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
     })
 
     const calls = outcome.callMetrics ?? []
-    expect(calls.map((c) => c.inputTokens)).toEqual([100, 200])
+    const parent = calls.filter((c) => c.promptText.includes('SYS'))
+    expect(parent.map((c) => c.inputTokens)).toEqual([100, 200])
     // The parent's chain holds its own dispatch and the Agent's result, never the subagent's
-    // internal turns — otherwise `promptText` describes a request that was never sent.
-    expect(JSON.parse(calls[1]!.promptText).map((m: { role: string }) => m.role)).toEqual([
+    // internal turns.
+    expect(JSON.parse(parent[1]!.promptText).map((m: { role: string }) => m.role)).toEqual([
       'system',
       'user',
       'assistant',
       'tool',
     ])
-    expect(calls[1]!.promptText).toContain('the Agent result')
-    expect(calls[1]!.promptText).not.toContain('subagent tool output')
+    expect(parent[1]!.promptText).toContain('the Agent result')
+    expect(parent[1]!.promptText).not.toContain('subagent tool output')
+  })
+
+  it('records a subagent’s tokens off the parent stream when no transcript watcher will run', async () => {
+    // `startSubagentWatcher` is wired only when the CLI has an isolated config home to watch, which
+    // an `ambientAuth` run has none of. Filtering the tagged turns out unconditionally would leave
+    // this run's subagent spend recorded by NEITHER channel — an under-count reads as a cheap run,
+    // which is strictly worse than the double count the filter removes.
+    fakeCli('claude', subagentDispatchStream())
+
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    const subagent = calls.filter((c) => !c.promptText.includes('SYS'))
+    expect(subagent.map((c) => c.inputTokens)).toEqual([19_430])
+    // On its OWN chain: seeded empty, because the CLI minted that prompt and it never crossed
+    // this stream.
+    expect(subagent[0]!.messageCount).toBe(0)
+    expect(subagent[0]!.responseText).toBe('slice findings')
+  })
+
+  it('counts a subagent’s work in the run stats whichever channel bills it', async () => {
+    // `stats` answers "did the agent ACT at all" (`agentNeverActed`), which is true of a
+    // subagent's turns however their telemetry rows are attributed. Riding the ownership split
+    // would make an identical run report different activity on two deployments.
+    fakeCli('claude', subagentDispatchStream())
+
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    // The parent's `Agent` dispatch is the only tool_use; 'slice findings' + 'aggregated' is the
+    // assistant text, and the subagent's half of it is counted.
+    expect(outcome.stats.toolCalls).toBe(1)
+    expect(outcome.stats.assistantChars).toBe('slice findings'.length + 'aggregated'.length)
   })
 
   it('streams every costed call live, with the same objects the terminal list carries', async () => {

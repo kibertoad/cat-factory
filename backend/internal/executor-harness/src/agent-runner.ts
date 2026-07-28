@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { isObject, numberOf, redactBody } from './claude-stream.js'
-import { createClaudeStreamTelemetry, isSubagentEvent } from './claude-call-aggregator.js'
+import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
+import { createClaudeRunTelemetry, subagentDispatchId } from './claude-call-aggregator.js'
 import type { Logger } from './logger.js'
 import {
   createCallMetricPublisher,
@@ -20,6 +20,7 @@ import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
   createTaskPlanTracker,
+  mergeProgress,
   normalizeStatus,
   pickProgress,
   toProgress,
@@ -366,7 +367,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // Streams each call as the CLI yields it, EXCEPT one whose tokens `attributeCumulativeUsage`
   // may still rewrite below (a published call must be final — see the publisher).
   const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
-  const telemetry = createClaudeStreamTelemetry({
+  // `watcherOwnsSubagents` tracks the `startSubagentWatcher` wiring below: it is started only when
+  // the CLI has an isolated config home to watch, which an `ambientAuth` run does not have. The
+  // telemetry routes the CLI's tagged subagent turns accordingly — see `createClaudeRunTelemetry`.
+  const telemetry = createClaudeRunTelemetry({
     seed: folded
       ? [{ role: 'user', content: prompt }]
       : [
@@ -374,29 +378,30 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           { role: 'user', content: opts.userPrompt },
         ],
     secrets,
-    stats,
+    watcherOwnsSubagents: !opts.ambientAuth,
     publish: (metric) => publisher.publish(metric),
   })
 
-  // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
-  // sources. The parent's subagent dispatches + their terminal tool_results appear on this
-  // stream (as do the subagents' own turns, tagged — see `isSubagentEvent`), so `sliceTracker`
-  // derives per-slice
-  // progress for the parallel shape; the parent's own plan (the sequential shape) is tracked
-  // by `planTracker` + `lastTodo`. `pickProgress` picks whichever is further along on each
-  // update, so neither masks the other — the pr-reviewer prompt writes its plan ONCE and never
-  // marks it done, which used to gate the slice signal off and pin progress at 0%.
+  // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from the two views the run
+  // produces of the SAME slicing. The parent's subagent dispatches + their terminal tool_results
+  // appear on this stream (as do the subagents' own intermediate turns, tagged with the dispatch
+  // that spawned them — see `isSubagentEvent`), so `sliceTracker` knows which slices are in flight
+  // and which have returned; the parent's own plan (tracked by `planTracker` + `lastTodo`) is the
+  // only place a not-yet-dispatched slice is named at all.
   //
   // The plan arrives in one of two tool vocabularies depending on the bundled CLI build:
   // `TodoWrite` (whole-list snapshots, tracked in `lastTodo`) or the incremental
   // `TaskCreate`/`TaskUpdate` pair (tracked by `planTracker`, which needs the tool RESULTS too
-  // because the task id is minted there). Both are read — see ./progress.ts.
+  // because the task id is minted there). Both are read, and `pickProgress` resolves that
+  // either/or; the plan then MERGES with the dispatch view (`mergeProgress`) rather than
+  // competing with it — picking the further-along view collapsed the list to the dispatched
+  // slices alone the moment the first subagent returned. See ./progress.ts.
   const sliceTracker = createSliceTracker()
   const planTracker = createTaskPlanTracker()
   let lastTodo: TodoProgress | undefined
   const emitProgress = (): void => {
     if (!opts.onProgress) return
-    const progress = pickProgress(
+    const progress = mergeProgress(
       pickProgress(lastTodo, planTracker.progress()),
       sliceTracker.progress(),
     )
@@ -440,17 +445,19 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
-    // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them, and
-    // the watcher records the same turns off `subagents/*.jsonl`. The watcher is the channel that
-    // owns them (it reads the settled transcript, so its usage and stop reason are the final ones),
-    // so the parent loop's telemetry and message chain skip them — see `isSubagentEvent`. Progress
-    // and guard signals below still see every event: a subagent grinding on errors should trip the
-    // guard exactly as the parent would.
-    const subagent = isSubagentEvent(event)
+    // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them;
+    // `telemetry` routes them off the parent's chain (and decides who bills them). Progress, slice
+    // tracking, the guard and `stats` below deliberately see EVERY event: a subagent grinding on
+    // errors should trip the guard exactly as the parent would, and whether the agent acted at all
+    // does not depend on which channel billed it.
+    const dispatchId = subagentDispatchId(event)
     if (type === 'assistant' && isObject(event.message)) {
       const message = event.message as Record<string, unknown>
       const content = Array.isArray(message.content) ? message.content : []
-      if (!subagent) telemetry.onAssistant(message)
+      const { text, toolUses } = claudeAssistantContent(content)
+      stats.assistantChars += text.length
+      stats.toolCalls += toolUses
+      telemetry.onAssistant(dispatchId, message)
       for (const block of content) {
         if (!isObject(block) || block.type !== 'tool_use') continue
         // Remember each call's name against its id so the guard can pair it with the
@@ -476,7 +483,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)
-        if (!subagent) telemetry.onToolResult(content)
+        telemetry.onToolResult(dispatchId, content)
       }
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
@@ -585,16 +592,20 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       publisher,
       usage,
       subagents,
+      expectSubagentCalls: telemetry.expectsWatcherCalls(),
+      ...(opts.log ? { log: opts.log } : {}),
     })
   } catch (err) {
+    // The stream ended abnormally (guard trip, watchdog kill, CLI crash). Complete the call in
+    // flight anyway, and release whatever the publisher was withholding: a killed run never
+    // returns an outcome, so the live channel is the ONLY record of what it spent, and dropping
+    // its last turn is what the streaming exists to avoid.
+    telemetry.flush()
+    publisher.flush()
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
     // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
     // it attached, since that is usually the only evidence of what the CLI was doing when it was
     // killed. Byte-for-byte the shape `runPi` fails with.
-    // The stream ended abnormally (guard trip, watchdog kill, CLI crash). Complete the call in
-    // flight anyway: a killed run never returns an outcome, so the live channel is the ONLY
-    // record of what it spent, and dropping its last turn is what the streaming exists to avoid.
-    telemetry.flush()
     if (guardReason) {
       const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
       throw new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason)
@@ -649,6 +660,10 @@ function buildClaudeEnv(
  * terminal `result` event's cumulative) covers ONLY the parent loop, and the subagent tokens live
  * exclusively in the per-session `subagents/*.jsonl` transcripts the watcher reads. Extracted from
  * {@link runClaudeCode} verbatim to keep its cyclomatic complexity down.
+ *
+ * The invariant is about the aggregate `usage` only. `calls` was NEVER disjoint from the watcher's
+ * on its own: the CLI streams a subagent's turns onto the parent's stdout as well, so the parent
+ * loop's telemetry must filter them (`subagentDispatchId`) for this concatenation to hold.
  */
 async function assembleClaudeOutcome(args: {
   summary: string
@@ -659,6 +674,14 @@ async function assembleClaudeOutcome(args: {
   publisher: CallMetricPublisher
   usage: { inputTokens: number; outputTokens: number } | undefined
   subagents: ReturnType<typeof startSubagentWatcher> | undefined
+  /**
+   * The parent stream carried subagent turns AND the watcher was the channel meant to record them.
+   * A watcher that then yields nothing means the run lost its subagent rows entirely — the CLI's
+   * transcript layout is not a stable contract (ADR 0027 Defect A moved it once already), so say
+   * so rather than under-reporting the spend in silence.
+   */
+  expectSubagentCalls: boolean
+  log?: Logger
 }): Promise<PiRunOutcome> {
   const { summary, stats, stderrTail, calls, publisher, usage, subagents } = args
   // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
@@ -673,6 +696,12 @@ async function assembleClaudeOutcome(args: {
   await subagents?.stop()
   const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
   const subCalls = subagents?.calls() ?? []
+  if (args.expectSubagentCalls && !subCalls.length) {
+    args.log?.warn(
+      'subagent turns were streamed but the transcript watcher captured no calls; their token ' +
+        'spend is missing from this run’s telemetry (check the CLI’s subagents/*.jsonl layout)',
+    )
+  }
   const mergedCalls = [...calls, ...subCalls]
   const mergedUsage =
     usage || subUsage.inputTokens || subUsage.outputTokens

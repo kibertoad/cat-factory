@@ -15,11 +15,14 @@ import type { RealtimeMessage, WebSocketPropagator } from '@cat-factory/node-ser
 // (the laptop's own SPA) AND to each adapter's `publish` — so wiring this adapter makes the local
 // node's events reach the laptop's browser AND the mothership with no engine change.
 //
-// Only the OUTBOUND (publish) leg is implemented in this slice. The INBOUND (subscribe) leg — the
-// local node receiving org events raised ON the mothership / by peer laptops and re-broadcasting them
-// to the laptop's SPA — is a distinct, runtime-shaped follow-up (see the tracker), so `start`/`stop`
-// are no-ops here: publishing is a stateless fire-and-forget HTTP POST that needs no live connection
-// (unlike the Redis adapter, which must connect before it can publish).
+// This adapter carries the OUTBOUND (publish) leg only. Its INBOUND counterpart is
+// {@link MothershipEventSubscriber}, which is NOT expressed through this port on purpose: a
+// cross-node adapter's `start(deliver)` receives no workspace list, while the mothership's inbound
+// streams are per-workspace and opened on demand from the local hub's rooms. Forcing it through
+// `start` would mean either subscribing to nothing or inventing a workspace enumeration the node
+// doesn't have. So `start`/`stop` stay no-ops here — publishing is a stateless fire-and-forget HTTP
+// POST needing no live connection (unlike the Redis adapter, which must connect before it can
+// publish).
 
 /**
  * A {@link WebSocketPropagator} whose "peer" is the hosted mothership: it forwards each locally
@@ -31,19 +34,32 @@ import type { RealtimeMessage, WebSocketPropagator } from '@cat-factory/node-ser
 export class MothershipWebSocketPropagator implements WebSocketPropagator {
   readonly name = 'mothership'
 
-  constructor(private readonly client: MachineEventClient) {}
+  /**
+   * `connectionId` is this NODE's stable id — the same `?cid=` its inbound subscriptions connect
+   * with. Stamping it on every publish is what stops the mothership fanning our own events back
+   * down our own subscription, where they would reach the laptop's browsers a second time.
+   */
+  constructor(
+    private readonly client: MachineEventClient,
+    private readonly connectionId: string,
+  ) {}
 
   publish(message: RealtimeMessage): void {
     this.client.publish({
       workspaceId: message.workspaceId,
       payload: message.payload,
-      originConnectionId: message.originConnectionId ?? null,
+      // Deliberately REPLACES the originating tab's `?cid=` rather than passing it through. That
+      // id only means something to the sockets of the node that produced the event — all of which
+      // are local, and were already served (with correct per-tab echo suppression) by the layered
+      // hub before this adapter ran. On the mothership the tab id matches nothing, while OUR id
+      // matches the one socket that must not receive this event back.
+      originConnectionId: this.connectionId,
     })
   }
 
-  // The subscribe leg is not part of this (outbound) slice, so there is nothing to connect or
-  // release. `LayeredEventPropagator.start` still calls this (with a deliver callback we ignore) —
-  // a no-op keeps the layer's lifecycle uniform for when the inbound leg lands.
+  // See the file header: the inbound leg is a per-workspace subscriber, not a propagator adapter.
+  // `LayeredEventPropagator.start` still calls this (with a deliver callback we ignore) — a no-op
+  // keeps the layer's lifecycle uniform.
   async start(_deliver: (message: RealtimeMessage) => void): Promise<void> {}
 
   async stop(): Promise<void> {}

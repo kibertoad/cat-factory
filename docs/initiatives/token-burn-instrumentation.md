@@ -111,14 +111,14 @@ conformance suite):
 
 ## Per-slice checklist
 
-| #   | Slice                      | Scope                                                                                                             | Status     | PR  |
-| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- | --- |
-| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; leave subagent turns to the transcript watcher | ✅ done    |     |
-| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                 | ⬜ blocked |     |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers)  | ⬜ todo    |     |
-| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless                | ⬜ todo    |     |
-| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever               | ⬜ todo    |     |
-| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                      | ⬜ todo    |     |
+| #   | Slice                      | Scope                                                                                                            | Status     | PR    |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ----- |
+| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done    | #1430 |
+| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ⬜ blocked |       |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ⬜ todo    |       |
+| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo    |       |
+| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo    |       |
+| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo    |       |
 
 ### Slice 0 — what the instrument was actually reporting (2026-07-28)
 
@@ -146,6 +146,20 @@ The `assembleClaudeOutcome` invariant ("the two sources are disjoint") holds for
 `usage`, which comes from the terminal `result` event and covers only the parent loop. It never
 held for `callMetrics`.
 
+**Deduplicating is not the same as having a source.** The obvious fix — always skip the tagged
+events, the watcher owns them — under-counts wherever the watcher does not run, and an under-count
+reads as a cheap run rather than as an error. Two places it does not run: an `ambientAuth` run has
+no isolated config home to watch at all, and the CLI's `subagents/*.jsonl` layout is not a stable
+contract (it moved once already, ADR 0027 Defect A). So ownership is decided ONCE per run from
+whether a watcher exists, not per event: with no watcher the parent stream carries the subagent
+calls through per-dispatch transcripts of their own (`createSubagentStreamTelemetry`), and a
+watcher that was wired but captured nothing while tagged turns crossed the stream is logged rather
+than left to look like a run with no subagents.
+
+The per-dispatch split matters as much as the filter: concurrent subagents interleave on ONE
+stdout, so a single fallback chain would reproduce the interleaved-`promptText` defect one level
+down. `parent_tool_use_id` is the only thing separating those conversations.
+
 **Slice 5 (the residual).** Stream-sourced rows carry the output count as of the message start, not
 the total: across that run every parent-channel row reported ~14 output tokens, and every
 substantial count came from a transcript row. With Slice 0 in, subagent calls are transcript-sourced
@@ -162,6 +176,15 @@ output split for the PARENT's own turns. Fixing it means deciding which source o
   which channel owns it. A cross-check that catches this early: distinct `prompt_tokens` values
   should be close to the row count, since a real call's prompt is strictly larger than its
   predecessor's.
+- **Every channel you silence needs a channel that speaks.** Deduplicating by dropping one side is
+  only correct while the other side is guaranteed to run; where it is best-effort (a watcher over a
+  file layout the vendor can change), decide ownership from whether that channel EXISTS and keep
+  the other as the fallback. Where neither can be guaranteed, log the gap — a telemetry defect that
+  under-counts is invisible in exactly the way an over-count is not.
+- **`PiRunStats` is not telemetry.** `toolCalls` / `assistantChars` answer "did the agent act at
+  all" (`agentNeverActed`), so they are accumulated off the raw stream and deliberately do NOT ride
+  the telemetry ownership split — otherwise the same run reports different activity depending on
+  which channel billed it.
 - **Cache reads are NOT free and NOT cosmetic.** They occupy the context window and count toward
   Claude Code's own gauge. Any framing that discounts them because the dollar cost is low is
   measuring the wrong thing — the quota/latency/volume cost is what this tracker exists to measure.

@@ -86,23 +86,52 @@ later turn. A large file read early costs many times what it looks like. So:
   too big: split it and dispatch the parts separately.`
 
 /**
+ * The most slice subagents the reviewer may keep in flight at once.
+ *
+ * The fan-out is unbounded otherwise, and a large PR slices into dozens: every one of them is a
+ * concurrent model conversation against the same account, so an uncapped wave is what turns a
+ * review into provider rate-limiting (each 429 costs a retry, and the parent sits idle through
+ * it) and lands every slice's findings back in one burst at the end. A window of
+ * {@link MAX_PARALLEL_SLICE_SUBAGENTS} keeps the review saturated while its slices return
+ * steadily, which is also what makes the live per-slice progress readable rather than a
+ * single 0% → 100% jump.
+ *
+ * This is a PROMPT-level budget: the CLI owns tool dispatch, so the harness can observe the
+ * in-flight count (`SliceTracker`) but cannot refuse a call. Treat an over-wide wave as a prompt
+ * adherence problem, not a broken guard.
+ */
+export const MAX_PARALLEL_SLICE_SUBAGENTS = 5
+
+/**
  * How to fan the slices out. Each subagent starts with a FRESH context, which is exactly why
  * parallel slices are cheaper than one sequential pass — the slice's reading never accumulates
  * onto the parent's transcript. The parent's job is to stay small: plan, dispatch, aggregate.
  *
- * The two rules with teeth here — dispatch every slice in ONE turn, and give each slice a turn
- * budget — come from a measured 26-minute review of a 14-file / 286-line PR. Its first slice ran
- * ~70 turns ALONE before the other three were dispatched, and slices with 16 and 59 changed lines
- * each pulled 21–28k tokens of standards and then ran 40+ turns carrying them, reaching a 119k
- * context. Cost is turns × context, so an unbounded slice on a tiny diff is the whole overrun.
+ * The two rules with teeth here — fill the {@link MAX_PARALLEL_SLICE_SUBAGENTS} window in ONE
+ * response, and give each slice a turn budget — come from a measured 26-minute review of a
+ * 14-file / 286-line PR. Its first slice ran ~70 turns ALONE before the other three were
+ * dispatched, and slices with 16 and 59 changed lines each pulled 21–28k tokens of standards and
+ * then ran 40+ turns carrying them, reaching a 119k context. Cost is turns × context, so an
+ * unbounded slice on a tiny diff is the whole overrun.
+ *
+ * Note the window and the single-response rule are NOT in tension: the defect was serialising
+ * dispatches, not the cap. Filling the window at once is what the cap always intended; widening
+ * it past {@link MAX_PARALLEL_SLICE_SUBAGENTS} is what buys rate-limiting instead of speed.
  */
 const SLICE_DISPATCH_GUIDANCE = `
 Review the slices by dispatching ONE subagent per slice. Each subagent gets a fresh context, so
 the files it reads never land on yours — this is the single biggest reason a large review stays
-affordable. Dispatch ALL of them in a SINGLE turn (parallel tool calls in one response), not one
-at a time: a slice you dispatch after the previous one returns runs on wall-clock you did not need
-to spend, and every turn you take between dispatches is re-sent for the rest of the review. In
-each subagent's prompt:
+affordable. Run them in parallel, but keep AT MOST ${MAX_PARALLEL_SLICE_SUBAGENTS} in flight at
+once: dispatch the first ${MAX_PARALLEL_SLICE_SUBAGENTS} as parallel tool calls in ONE response —
+never one at a time, waiting for each to return — and each time one returns, dispatch the next
+queued slice. A slice you hold back until its predecessor returns runs on wall-clock you did not
+need to spend, and every turn you take between dispatches is re-sent for the rest of the review.
+Do not fan every slice out in one wave either — a wider wave gets rate-limited rather than
+finishing sooner. As you go, mark a slice's task entry in progress when you dispatch it and
+completed when its subagent returns; that is what the user watches the review by.
+Describe each dispatch as \`Review <slice short name> slice\`, reusing the SAME short name as that
+slice's task entry — the two are matched by name to show one row per slice.
+In each subagent's prompt:
 - Name the slice's files and the base/head refs, and tell it to read the diffs ITSELF.
 - Name which \`.cat-context/standard-*.md\` files apply — ONLY those. A standard that does not
   bear on the slice's files costs the slice its full size on every one of that slice's turns.

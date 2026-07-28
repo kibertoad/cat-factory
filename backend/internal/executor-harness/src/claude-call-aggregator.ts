@@ -1,5 +1,5 @@
 import { claudeAssistantContent, claudeCallUsage, isObject, redactBody } from './claude-stream.js'
-import type { HarnessCallMetric, PiRunStats } from './pi.js'
+import type { HarnessCallMetric } from './pi.js'
 
 // Claude Code's `stream-json` does NOT emit one `assistant` envelope per model call. It emits one
 // per CONTENT BLOCK of a call's response — a turn that answers with text and then fires five
@@ -142,19 +142,25 @@ export interface ClaudeStreamTelemetry {
 }
 
 /**
- * Assemble the run's per-call telemetry from the CLI stream: the growing request transcript, the
- * per-call token/body metrics, and the run's tool/output counters.
+ * Assemble ONE conversation's per-call telemetry from the CLI stream: the growing request
+ * transcript and the per-call token/body metrics.
  *
  * Owns the transcript because the two are one concern — a call's `promptText` is the transcript as
  * of that call, and its turns may only be appended once the call that produced them is complete.
  * `seed` is what the harness supplied and the stream therefore never shows (the system + first user
  * message, or the single folded user turn), so the reconstruction never claims a system turn that
- * was not sent. Bodies are credential-scrubbed; they can echo the leased token.
+ * was not sent. A subagent's conversation seeds EMPTY — its prompt was minted by the CLI and never
+ * crosses this stream — which is also why its first call carries `messageCount: 0` (the backend's
+ * `latestChainTip` skips those on purpose: there is no re-sendable chain to delta against).
+ * Bodies are credential-scrubbed; they can echo the leased token.
+ *
+ * Deliberately does NOT touch {@link PiRunStats}: the run's tool/output counters describe whether
+ * the agent ACTED at all (`agentNeverActed`), which is true of a subagent's turns whichever channel
+ * ends up owning their telemetry rows. The caller accumulates them off the raw stream instead.
  */
 export function createClaudeStreamTelemetry(opts: {
   seed: TranscriptTurn[]
   secrets: string[]
-  stats: PiRunStats
   publish: (metric: HarnessCallMetric) => void
 }): ClaudeStreamTelemetry {
   const messages: TranscriptTurn[] = [...opts.seed]
@@ -172,8 +178,6 @@ export function createClaudeStreamTelemetry(opts: {
       callMessageCount = messages.length
     },
     onCall: (call) => {
-      opts.stats.assistantChars += call.text.length
-      opts.stats.toolCalls += call.toolUses
       opts.publish({
         ...(call.model ? { model: call.model } : {}),
         promptText: callPrompt,
@@ -194,16 +198,130 @@ export function createClaudeStreamTelemetry(opts: {
 }
 
 /**
- * Whether a stream envelope describes a SUBAGENT's turn rather than the parent loop's.
+ * The dispatch (`Agent`/`Task` tool_use) id a stream envelope is tagged with, or `undefined` for a
+ * parent-loop turn.
  *
  * Claude Code streams the turns of the subagents it dispatches onto the parent's stdout, tagged
- * with the `Agent`/`Task` tool_use id that spawned them. Those same turns are also written to the
- * per-session `subagents/*.jsonl` transcripts the watcher reads, so recording both channels counted
- * every subagent call twice — and splicing them into the parent's message reconstruction produced a
+ * with the tool_use id that spawned them. Those same turns are also written to the per-session
+ * `subagents/*.jsonl` transcripts the watcher reads, so recording both channels counted every
+ * subagent call twice — and splicing them into the parent's message reconstruction produced a
  * `promptText` chain that interleaves several conversations and therefore matches no real request.
+ *
+ * The id is what makes the fallback below possible: concurrent subagents interleave on one stdout,
+ * so it is the ONLY thing separating their conversations.
  */
+export function subagentDispatchId(event: Record<string, unknown>): string | undefined {
+  if (!isObject(event)) return undefined
+  const id = event.parent_tool_use_id
+  return typeof id === 'string' && id ? id : undefined
+}
+
+/** Whether a stream envelope describes a SUBAGENT's turn rather than the parent loop's. */
 export function isSubagentEvent(event: Record<string, unknown>): boolean {
-  return (
-    isObject(event) && typeof event.parent_tool_use_id === 'string' && !!event.parent_tool_use_id
-  )
+  return subagentDispatchId(event) !== undefined
+}
+
+/**
+ * Per-call telemetry for the subagents whose turns ride the parent's stdout — the FALLBACK channel,
+ * used only when no `subagents/*.jsonl` watcher will run (see `startSubagentWatcher`, which is
+ * wired only when the CLI has an isolated config home; an `ambientAuth` run has none).
+ *
+ * Without this, filtering tagged events out of the parent's telemetry leaves a subagent-heavy run
+ * with its spend recorded by NEITHER channel — an under-count, which reads as a cheap run and is
+ * the worse failure direction than the double-count the filter exists to fix.
+ *
+ * Each dispatch id gets its OWN transcript, because concurrent subagents interleave arbitrarily on
+ * one stream: folding them into a single chain is exactly the defect this whole module removes,
+ * one level down.
+ */
+function createSubagentStreamTelemetry(opts: {
+  secrets: string[]
+  publish: (metric: HarnessCallMetric) => void
+}): {
+  onAssistant(dispatchId: string, message: Record<string, unknown>): void
+  onToolResult(dispatchId: string, content: unknown[]): void
+  flush(): void
+} {
+  const perDispatch = new Map<string, ClaudeStreamTelemetry>()
+  const forDispatch = (dispatchId: string): ClaudeStreamTelemetry => {
+    let telemetry = perDispatch.get(dispatchId)
+    if (!telemetry) {
+      // Seeded EMPTY: the CLI minted this subagent's prompt and it never crossed the stream.
+      telemetry = createClaudeStreamTelemetry({
+        seed: [],
+        secrets: opts.secrets,
+        publish: opts.publish,
+      })
+      perDispatch.set(dispatchId, telemetry)
+    }
+    return telemetry
+  }
+  return {
+    onAssistant: (dispatchId, message) => forDispatch(dispatchId).onAssistant(message),
+    // Only against a dispatch already seen: a result for a subagent whose assistant turns never
+    // reached us has no conversation to attach to, and minting one would publish a call that is
+    // all tool output and no request.
+    onToolResult: (dispatchId, content) => perDispatch.get(dispatchId)?.onToolResult(content),
+    flush: () => {
+      for (const telemetry of perDispatch.values()) telemetry.flush()
+    },
+  }
+}
+
+/** All per-call telemetry for ONE claude-code run: the parent loop, and whoever bills the subagents. */
+export interface ClaudeRunTelemetry {
+  /** Fold an `assistant` envelope in, routed by its dispatch tag (`undefined` ⇒ the parent loop). */
+  onAssistant(dispatchId: string | undefined, message: Record<string, unknown>): void
+  /** Fold a `user` turn's tool_result content in, against the same conversation. */
+  onToolResult(dispatchId: string | undefined, content: unknown[]): void
+  /** Publish every conversation's call in flight. Idempotent; safe on the clean and error paths. */
+  flush(): void
+  /**
+   * Subagent turns crossed the stream AND the watcher was the channel meant to record them — so a
+   * watcher that captured nothing means this run's subagent rows are simply missing.
+   */
+  expectsWatcherCalls(): boolean
+}
+
+/**
+ * Assemble a run's per-call telemetry, routing each envelope to the conversation it belongs to.
+ *
+ * The routing is the whole point. A subagent's turns ride the parent's stdout tagged with the
+ * dispatch that spawned them, and they must never join the PARENT's chain — that splice produced a
+ * `promptText` interleaving several conversations, matching no request that was ever sent.
+ *
+ * Who RECORDS them is a separate question, decided once per run rather than per event:
+ * `watcherOwnsSubagents` says a `subagents/*.jsonl` watcher will run, and it is the better source
+ * (it reads the settled transcript, so its usage and stop reason are final). With no watcher — an
+ * `ambientAuth` run has no isolated config home to watch — the tagged turns are recorded here
+ * instead, on per-dispatch transcripts of their own. Dropping them in that case would leave the run
+ * billed by neither channel, and an under-count reads as a cheap run rather than as an error.
+ */
+export function createClaudeRunTelemetry(opts: {
+  seed: TranscriptTurn[]
+  secrets: string[]
+  watcherOwnsSubagents: boolean
+  publish: (metric: HarnessCallMetric) => void
+}): ClaudeRunTelemetry {
+  const parent = createClaudeStreamTelemetry(opts)
+  const subagents = opts.watcherOwnsSubagents ? undefined : createSubagentStreamTelemetry(opts)
+  let sawSubagentTurn = false
+
+  return {
+    onAssistant(dispatchId, message) {
+      if (!dispatchId) return parent.onAssistant(message)
+      sawSubagentTurn = true
+      subagents?.onAssistant(dispatchId, message)
+    },
+    onToolResult(dispatchId, content) {
+      if (!dispatchId) return parent.onToolResult(content)
+      sawSubagentTurn = true
+      subagents?.onToolResult(dispatchId, content)
+    },
+    flush() {
+      parent.flush()
+      subagents?.flush()
+    },
+    expectsWatcherCalls: () => opts.watcherOwnsSubagents && sawSubagentTurn,
+  }
 }

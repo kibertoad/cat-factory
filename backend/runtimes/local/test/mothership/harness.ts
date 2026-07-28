@@ -528,6 +528,7 @@ export function makeMothershipConformanceApp(
     seedIncorporatedClarityReview,
     // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
     executionRepository: () => ms.container.executionRepository,
+    requirementReviewRepository: () => mothershipRepos().requirementReviewRepository,
     agentRunRepository: () => ms.container.agentRunRepository,
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,

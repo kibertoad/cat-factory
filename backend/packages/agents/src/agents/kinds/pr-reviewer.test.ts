@@ -10,6 +10,7 @@ import { defaultAgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, hasTrait } from './traits.js'
 import { composeBlockSystemPrompt } from '../runtime/fragments.js'
 import {
+  MAX_PARALLEL_SLICE_SUBAGENTS,
   PR_DIFF_CONTEXT_FILE,
   PR_EXISTING_COMMENTS_CONTEXT_FILE,
   PR_REVIEWER_KIND,
@@ -470,6 +471,43 @@ describe('prReviewerExistingCommentsPreOp', () => {
     expect(
       await prReviewerExistingCommentsPreOp(ctxWithThreads(async () => [], { prNumber: 12 })),
     ).toBeUndefined()
+  })
+})
+
+describe('slice dispatch guidance', () => {
+  // This block is rewritten by roughly every turn-reduction slice, and two of its rules are
+  // load-bearing OUTSIDE the prompt: the in-flight cap is the only thing standing between a
+  // large PR and a rate-limited fan-out, and the dispatch DESCRIPTION is what `SliceTracker`
+  // matches against the parent's task entries to render one progress row per slice. Neither
+  // has a runtime guard (the CLI owns tool dispatch), so a rewrite that drops one is invisible
+  // until a review misbehaves in production. Pin them here.
+
+  it('caps the slices in flight, and states the cap as the shared constant', () => {
+    expect(MAX_PARALLEL_SLICE_SUBAGENTS).toBeGreaterThan(0)
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain(
+      `keep AT MOST ${MAX_PARALLEL_SLICE_SUBAGENTS} in flight`,
+    )
+    // The cap only holds if the reviewer refills as slices return, rather than stopping at one wave.
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('dispatch the next')
+  })
+
+  it('requires the window to be filled in ONE response — the cap is not a licence to serialise', () => {
+    // The measured run dispatched slice 1 alone and let it run ~70 turns to completion before
+    // slices 2-4 went out. Capping concurrency and filling the window at once are complementary;
+    // a rewrite that reads the cap as "one at a time" reintroduces that.
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('parallel tool calls in ONE response')
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('never one at a time')
+  })
+
+  it('keeps the dispatch-description contract SliceTracker matches slices by name on', () => {
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('Review <slice short name> slice')
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain("mark a slice's task entry in progress")
+  })
+
+  it('gives each slice a turn budget, since ProgressGuard cannot see a productive overrun', () => {
+    // A slice grinding through a 16-line change for 40 turns trips nothing: it is making
+    // progress, just not progress worth its carry.
+    expect(PR_REVIEWER_SYSTEM_PROMPT).toContain('TURN BUDGET')
   })
 })
 

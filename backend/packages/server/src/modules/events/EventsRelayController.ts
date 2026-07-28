@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { type MachinePayload, TOKEN_AUDIENCE, signerFor } from '../../auth/signing.js'
 import type { RelayedRealtimeEvent } from '../../events/machineEvents.js'
+import { authorizeMachineSubscribe } from '../../events/machineSubscribe.js'
 import type { AppEnv } from '../../http/env.js'
+import { param } from '../../http/params.js'
 
 /**
  * Upper bound on a relayed `payload` frame (characters). A serialized `WorkspaceEvent` is small
@@ -12,7 +14,9 @@ import type { AppEnv } from '../../http/env.js'
 const MAX_RELAYED_PAYLOAD_CHARS = 1_000_000
 
 /**
- * The mothership-mode real-time UPSTREAM machine API: `POST /internal/events/publish`.
+ * The mothership-mode real-time machine API — BOTH directions:
+ * `POST /internal/events/publish` (upstream) and
+ * `GET /internal/events/subscribe/:workspaceId` (inbound).
  *
  * A mothership-mode local node runs the engine locally but delegates org/durable state to the
  * mothership. Its engine events must ALSO reach the mothership's real-time fan-out, so a hosted
@@ -116,6 +120,57 @@ export function eventsRelayController(): Hono<AppEnv> {
       // Swallowed by contract (see above).
     }
     return c.json({ ok: true })
+  })
+
+  // The INBOUND leg: the node subscribes to a workspace's stream so org activity raised on the
+  // mothership (a hosted teammate, or a peer laptop relaying upstream) reaches the laptop's SPA.
+  //
+  // It is deliberately NOT a new fan-out. The upgrade is handed to the SAME per-workspace realtime
+  // transport the browser stream uses (`gateways.realtime.upgrade` — the `WorkspaceEventsHub`
+  // Durable Object on Cloudflare), so a subscribed node is just another socket in the workspace's
+  // room and every event reaches laptops and browsers through one code path. The node's stable
+  // `?cid=` rides through to that transport, which is what lets the mothership skip echoing the
+  // node's OWN relayed events back to it (the outbound leg stamps the same id as
+  // `originConnectionId`).
+  //
+  // Auth is the shared `authorizeMachineSubscribe` (token pin → capability → account scope), the
+  // same helper the Node facade calls from its HTTP-server `upgrade` listener — Node can't upgrade
+  // from a Hono `Response`, so this handler is unreachable there, exactly like the browser stream's
+  // GET in `eventsController`.
+  app.get(`/internal/events/subscribe/:workspaceId`, async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+
+    // The scope resolution reuses the mothership's own repository registry (attached alongside the
+    // relay on every mothership), exactly like the publish handler above. The registry is
+    // reflective (`Record<string, Record<string, fn>>`), so narrow the one method we call.
+    const workspaceRepository = container.repositories?.workspaceRepository
+    const auth = await authorizeMachineSubscribe({
+      auth: container.config.auth,
+      token: c.req.header('authorization'),
+      workspaceId,
+      accountOf: workspaceRepository?.accountOf
+        ? (id) => workspaceRepository.accountOf!(id) as Promise<string | null | undefined>
+        : undefined,
+    })
+    if (!auth.ok) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: auth.status === 404 ? 'not_found' : 'forbidden', message: auth.message },
+        },
+        auth.status,
+      )
+    }
+
+    // Checked AFTER auth so the handshake shape isn't probeable without a token.
+    if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
+      return c.text('expected a websocket upgrade', 426)
+    }
+
+    const upgraded = await container.gateways.realtime.upgrade(workspaceId, c.req.raw)
+    if (!upgraded) return c.text('real-time events are not enabled', 501)
+    return upgraded
   })
 
   return app

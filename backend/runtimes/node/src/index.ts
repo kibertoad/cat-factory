@@ -20,6 +20,9 @@ export {
   NodeEventPublisher,
   attachRealtime,
   type LocalEventSink,
+  type MachineSubscribeDeps,
+  type RealtimeRoomListener,
+  type RealtimeRoomWatcher,
 } from './realtime.js'
 // The layered cross-node real-time propagator (Redis today; more adapters later). A multi-node
 // Node deployment sets REDIS_URL and every browser sees every event regardless of which node

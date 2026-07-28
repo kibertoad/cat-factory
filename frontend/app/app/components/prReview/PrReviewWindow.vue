@@ -314,16 +314,26 @@ async function onDismiss(id: string): Promise<void> {
               />
             </div>
 
-            <!-- The chunk(s) being actively reviewed right now, called out on their own. -->
+            <!-- The chunk(s) being actively reviewed right now, called out on their own. Kept
+                 MOUNTED for the whole reviewing phase: the reviewer runs a bounded window of
+                 slice subagents, so between two waves nothing is in flight for a moment, and
+                 dropping the callout there made the window look like it had lost a list. -->
             <div
-              v-if="activeChunks.length"
               data-testid="pr-review-active-chunks"
-              class="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-2.5 py-2"
+              class="mt-3 rounded-lg border px-2.5 py-2"
+              :class="
+                activeChunks.length
+                  ? 'border-indigo-500/30 bg-indigo-500/5'
+                  : 'border-slate-800 bg-slate-900/40'
+              "
             >
-              <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
+              <p
+                class="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+                :class="activeChunks.length ? 'text-indigo-300' : 'text-slate-500'"
+              >
                 {{ t('prReview.reviewing.activeHeading') }}
               </p>
-              <ul class="space-y-1">
+              <ul v-if="activeChunks.length" class="space-y-1">
                 <li
                   v-for="(label, i) in activeChunks"
                   :key="i"
@@ -336,6 +346,9 @@ async function onDismiss(id: string): Promise<void> {
                   <span class="min-w-0">{{ label }}</span>
                 </li>
               </ul>
+              <p v-else data-testid="pr-review-active-idle" class="text-[12px] text-slate-400">
+                {{ t('prReview.reviewing.activeIdle') }}
+              </p>
             </div>
 
             <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->

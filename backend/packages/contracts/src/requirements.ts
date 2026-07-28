@@ -198,6 +198,16 @@ export const requirementReviewSchema = v.object({
    * the re-review item churn — see {@link requirementRecommendationSchema}. Empty by default.
    */
   recommendations: v.optional(v.array(requirementRecommendationSchema), []),
+  /**
+   * Monotonic optimistic-concurrency token, bumped by the store on every persisted write.
+   * A review is one JSON blob whose items/recommendations several writers touch at once (two
+   * people answering different findings; a human dismissing one while the durable driver's
+   * incorporation pass writes back), so a blind whole-row write silently drops the loser's
+   * edit. Every mutation instead re-reads, re-applies and `compareAndSwap`s on this value, and
+   * a lost race reloads rather than clobbers. Absent (a row written before the column existed)
+   * reads as 0.
+   */
+  rev: v.optional(v.number(), 0),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
