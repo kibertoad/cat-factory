@@ -57,6 +57,21 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return results.map((r) => ({ id: r.id, blockId: r.block_id ?? '', status: r.status }))
   }
 
+  async countActiveByWorkspace(workspaceId: string): Promise<number> {
+    // Admission-control capacity read: the COUNT is pushed into SQL (never rows reduced in JS),
+    // over the SAME live predicate as `listLive` and served by the same
+    // idx_agent_runs_ws_kind_status (workspace_id, kind, status) index.
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM agent_runs
+         WHERE workspace_id = ? AND kind = 'execution'
+           AND status IN ('running', 'blocked', 'paused')`,
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
+  }
+
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {
     const { results } = await this.db
       .prepare(

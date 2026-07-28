@@ -183,6 +183,23 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     }))
   }
 
+  async countActiveByWorkspace(workspaceId: string): Promise<number> {
+    // Admission-control capacity read: the COUNT is pushed into SQL (never rows reduced in JS),
+    // over the SAME live predicate as `listLive` and served by the same
+    // idx_agent_runs_ws_kind_status (workspace_id, kind, status) index. Mirrors the D1 repo.
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          this.isExecution,
+          inArray(agentRuns.status, ['running', 'blocked', 'paused']),
+        ),
+      )
+    return row?.n ?? 0
+  }
+
   async listInternal(
     workspaceId: string,
     opts: {

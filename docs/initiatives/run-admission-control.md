@@ -1,6 +1,6 @@
 # Initiative: run admission control (concurrency caps, queueing, prioritization)
 
-**Status:** planned (tracker only — no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slice 1 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -52,7 +52,7 @@ Interactive (human-started) runs outrank background (recurring/initiative/Kaizen
 
 | #   | Slice                                                                                                         | Status  | PR  |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | `countActiveByWorkspace` (+ list-queued-ordered) port methods, D1 ⇄ Drizzle + conformance                     | ⬜ todo |     |
+| 1   | `countActiveByWorkspace` port method, D1 ⇄ Drizzle + conformance + machine-RPC route                          | ✅ done |     |
 | 2   | `queued` run state + admission check in `start`/`retry` (re-count backstop) — cap unset ⇒ no behaviour change | ⬜ todo |     |
 | 3   | Terminal-hook promotion + sweeper backstop (both runtimes)                                                    | ⬜ todo |     |
 | 4   | Priority derivation (interactive vs background) + ordered promotion                                           | ⬜ todo |     |
@@ -62,6 +62,20 @@ Interactive (human-started) runs outrank background (recurring/initiative/Kaizen
 | 8   | Public API: `start` over cap returns `queued` (not an error); document in the public-api tracker's surface    | ⬜ todo |     |
 
 ## Conventions & gotchas
+
+- **The queued-run listing moved OUT of slice 1 and into slice 2/3, on purpose.** Slice 1 was
+  scoped as "`countActiveByWorkspace` **+ list-queued-ordered**", but the ordered listing selects
+  on a `queued` status that does not exist until slice 2 introduces it. Landing it early would
+  mean either a repository method whose predicate can never match (dead code with a conformance
+  test that only ever asserts an empty list), or introducing the `queued` `ExecutionStatus` with
+  no producer — which ripples straight into the SPA's status rendering and every locale, i.e.
+  slice 6, and would ship a status a user can be shown but the engine can never reach. The
+  listing belongs with the promotion path that consumes it.
+- **`countActive*` must stay the SQL-COUNT form of exactly what `listLive` projects.** Both read
+  `running`/`blocked`/`paused` scoped to `kind = 'execution'`. A parked run holds no container,
+  but it holds its block and resumes WITHOUT re-passing admission, so it occupies a slot: exclude
+  it and a workspace exceeds its cap just by parking. If a later slice narrows what "active" means,
+  it narrows BOTH, or the ledger and the board disagree with no visible cause.
 
 - **Do not build a scheduler service.** The durable layer stays Workflows/pg-boss; admission
   is a persisted state + a promotion hook, the same shape as the spend pause. No new

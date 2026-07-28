@@ -455,6 +455,19 @@ export function defineCoreRunsConformance(harness: ConformanceHarness): void {
       // A workspace with no live runs projects to an empty list.
       const emptyWs = await app.createWorkspace()
       expect(await execs.listLive(emptyWs.workspace.id)).toEqual([])
+
+      // `countActiveByWorkspace` is run admission control's capacity read: the SQL-COUNT form of
+      // the SAME live set `listLive` projects (docs/initiatives/run-admission-control.md). The
+      // two are asserted TOGETHER, and against each other, because a cap checked against a count
+      // that disagrees with the runs the board shows as live is worse than no cap at all — it
+      // would queue runs the workspace has capacity for, or admit runs past it, with no visible
+      // cause. So terminal rows (done/failed) and the live BOOTSTRAP job seeded above must both
+      // be outside it.
+      expect(await execs.countActiveByWorkspace(workspace.id)).toBe(3)
+      expect(await execs.countActiveByWorkspace(workspace.id)).toBe(liveRows.length)
+      // A workspace with nothing live counts zero, never null/undefined — the admission check
+      // compares it numerically against a cap.
+      expect(await execs.countActiveByWorkspace(emptyWs.workspace.id)).toBe(0)
     })
   })
 }

@@ -246,6 +246,24 @@ export interface ExecutionRepository {
    */
   listLive(workspaceId: string): Promise<LiveRunSummary[]>
   /**
+   * How many of the workspace's execution runs currently OCCUPY A CONCURRENCY SLOT, as one
+   * SQL `COUNT` over the same `(workspace_id, kind, status)` index {@link listLive} rides.
+   * Backs run admission control: the cap check in front of the durable driver reads a number,
+   * never a row set, so it costs the same whether the workspace has three live runs or three
+   * hundred (`docs/initiatives/run-admission-control.md`).
+   *
+   * "Active" is deliberately the SAME predicate as {@link listLive} — `running`, `blocked`
+   * (parked on a human decision) and `paused` (spend-paused). A parked run has no container in
+   * flight, but it holds its block and resumes WITHOUT passing admission again, so excluding it
+   * would let a workspace exceed its cap simply by parking: every parked run that resumes lands
+   * on top of whatever was admitted in its place. The two methods must stay in step, or the
+   * admission ledger and the runs the board shows as live disagree.
+   *
+   * Scoped to `kind = 'execution'`, so a live bootstrap job sharing the `agent_runs` table is
+   * never counted against a run cap it has nothing to do with.
+   */
+  countActiveByWorkspace(workspaceId: string): Promise<number>
+  /**
    * Every execution belonging to a service, regardless of which workspace it ran under.
    * Backs the board snapshot for a service mounted from another workspace in the same org,
    * so its run progress/status renders identically on every board that mounts it (not just
