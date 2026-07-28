@@ -71,7 +71,7 @@ const selectedPreset = computed(() => riskPolicies.resolve(props.block.riskPolic
 // explains what that policy does, so the row itself stays a bare name.
 const defaultPresetLabel = computed(() =>
   riskPolicies.defaultPreset
-    ? t('inspector.runSettings.defaultPreset', { name: riskPolicies.defaultPreset.name })
+    ? t('inspector.runSettings.defaultRiskPolicy', { name: riskPolicies.defaultPreset.name })
     : t('inspector.runSettings.workspaceDefault'),
 )
 function setPreset(id: string) {
@@ -99,7 +99,7 @@ const modelPresetMenu = computed(() => [
   [
     {
       label: modelPresets.defaultPreset
-        ? t('inspector.runSettings.defaultPreset', { name: modelPresets.defaultPreset.name })
+        ? t('inspector.runSettings.defaultModelPreset', { name: modelPresets.defaultPreset.name })
         : t('inspector.runSettings.workspaceDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setModelPreset(''),
@@ -299,6 +299,7 @@ const technicalLabel = computed(() => {
         <RiskPolicyPicker
           :model-value="block.riskPolicyId ?? ''"
           :options="riskPolicies.presets"
+          :default-policy="riskPolicies.defaultPreset"
           :none-label="defaultPresetLabel"
           @update:model-value="setPreset"
         >

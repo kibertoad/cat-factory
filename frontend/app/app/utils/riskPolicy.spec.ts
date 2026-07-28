@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RiskPolicy } from '~/types/merge'
-import { riskPolicyCeilings } from '~/utils/riskPolicy'
+import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD, riskPolicyCeilings } from '~/utils/riskPolicy'
 
 const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
   ({
@@ -44,11 +44,10 @@ describe('riskPolicyCeilings', () => {
     ])
   })
 
-  it('reports the ceilings of a policy that never auto-merges too', () => {
-    // Auto-merge off means the ceilings don't apply, but they're still the policy's stored
-    // values — the picker decides whether to show them, this helper never filters.
-    expect(riskPolicyCeilings(policy({ autoMergeEnabled: false })).map((c) => c.max)).toEqual([
-      0.4, 0.5, 0.6,
-    ])
+  it('follows the shared axis order, which the settings editor iterates too', () => {
+    // The point of the exported order: the picker preview, the inspector summary and the
+    // settings editor all read it, so none of them can drift into its own sequence.
+    expect(riskPolicyCeilings(policy()).map((c) => c.axis)).toEqual([...RISK_POLICY_AXES])
+    expect(Object.keys(RISK_POLICY_CEILING_FIELD).sort()).toEqual([...RISK_POLICY_AXES].sort())
   })
 })

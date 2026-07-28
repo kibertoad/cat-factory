@@ -1318,7 +1318,8 @@
       "unassigned": "Non assegnato",
       "workspaceDefault": "Predefinito del workspace",
       "workspaceDefaultParen": "(predefinito del workspace)",
-      "defaultPreset": "Predefinito ({name})",
+      "defaultRiskPolicy": "Predefinito ({name})",
+      "defaultModelPreset": "Predefinito ({name})",
       "noDefault": "Nessun predefinito",
       "inheritWorkspace": "Eredita dal workspace",
       "on": "Attivo",
@@ -5143,7 +5144,7 @@
       "manualHeading": "Solo revisione manuale",
       "manualExplainer": "Questo criterio non unisce mai da solo, quindi ogni pull request attende una revisione umana qualunque sia il punteggio.",
       "ciHeading": "Correzioni CI",
-      "ciAttempts": "L'esecuzione puo fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione puo fare {count} tentativi per rimettere in verde la CI prima di arrendersi."
+      "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi."
     }
   },
   "modelPreset": {

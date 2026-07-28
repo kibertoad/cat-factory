@@ -1,11 +1,30 @@
 import type { RiskPolicy } from '~/types/merge'
 
 /**
- * The three axes a `merger` agent scores a pull request on, each carrying an auto-merge
- * ceiling on a risk policy. Presentation order is risk → impact → complexity: what the PR
- * could break first, then how far it reaches, then how hard it was to write.
+ * The three axes a `merger` agent scores a pull request on. Presentation order is
+ * risk → impact → complexity: what the PR could break first, then how far it reaches, then
+ * how hard it was to write.
+ *
+ * This array IS the order — every surface that shows the three axes iterates it rather than
+ * hard-coding a sequence, so the picker's preview, the inspector's summary line and the
+ * settings editor cannot drift into three different orders (which is exactly what they had).
  */
-export type RiskPolicyAxis = 'risk' | 'impact' | 'complexity'
+export const RISK_POLICY_AXES = ['risk', 'impact', 'complexity'] as const
+
+export type RiskPolicyAxis = (typeof RISK_POLICY_AXES)[number]
+
+/**
+ * Which `RiskPolicy` field carries each axis's auto-merge ceiling. Exhaustive over the axis
+ * union, so adding an axis fails the typecheck here rather than silently rendering two.
+ */
+export const RISK_POLICY_CEILING_FIELD: Record<
+  RiskPolicyAxis,
+  'maxRisk' | 'maxImpact' | 'maxComplexity'
+> = {
+  risk: 'maxRisk',
+  impact: 'maxImpact',
+  complexity: 'maxComplexity',
+}
 
 /** One axis of a policy, with the ceiling a score must stay at or below to auto-merge. */
 export interface RiskPolicyCeiling {
@@ -19,9 +38,5 @@ export interface RiskPolicyCeiling {
  * surface that explains a policy groups the three axes the same way.
  */
 export function riskPolicyCeilings(p: RiskPolicy): RiskPolicyCeiling[] {
-  return [
-    { axis: 'risk', max: p.maxRisk },
-    { axis: 'impact', max: p.maxImpact },
-    { axis: 'complexity', max: p.maxComplexity },
-  ]
+  return RISK_POLICY_AXES.map((axis) => ({ axis, max: p[RISK_POLICY_CEILING_FIELD[axis]] }))
 }

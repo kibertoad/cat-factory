@@ -1129,6 +1129,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               <RiskPolicyPicker
                 :model-value="riskPolicyId"
                 :options="riskPolicies.presets"
+                :default-policy="riskPolicies.defaultPreset"
                 :none-label="defaultPresetLabel"
                 trigger-class="w-full justify-between"
                 @update:model-value="riskPolicyId = $event"
