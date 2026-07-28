@@ -80,6 +80,7 @@ describe('WorkspaceEventsHub', () => {
       model: 'qwen3-max',
       createdAt: 1,
       streaming: false,
+      phase: 'agent',
       messageCount: 2,
       toolCount: 1,
       requestMaxTokens: null,

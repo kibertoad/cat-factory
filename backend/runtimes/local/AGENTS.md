@@ -25,12 +25,19 @@ transport + the GitHub token/client seams differ.
 - `container.ts` — threads the transport + GitHub seams into Node's `buildNodeContainer`.
 - `mothership.ts` + `sqlite/` — **mothership mode** (`LOCAL_MOTHERSHIP_URL`): a third boot shape
   with NO local Postgres, where org/durable state is served by a hosted cat-factory over the
-  `/internal/*` machine API and only credentials/settings/the work queue stay on the laptop in
-  `node:sqlite`. `mothershipPropagator.ts` (outbound engine events) and `mothershipSubscriber.ts`
-  (inbound per-workspace subscriptions, opened on demand from the local hub's rooms) are the two
-  halves of its real-time channel. Read `docs/initiatives/mothership-mode.md` before touching any
-  of it — and `CLAUDE.md` → "Every new feature ships MOTHERSHIP-READY" before adding a repository
-  method anywhere in the backend.
+  `/internal/*` machine API and only credentials/settings/the work queue/**telemetry** stay on the
+  laptop in `node:sqlite`. `mothershipPropagator.ts` (outbound engine events) and
+  `mothershipSubscriber.ts` (inbound per-workspace subscriptions, opened on demand from the local
+  hub's rooms) are the two halves of its real-time channel. Read
+  `docs/initiatives/mothership-mode.md` before touching any of it — and `CLAUDE.md` → "Every new
+  feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
+- `sqlite/telemetryStore.ts` + `telemetryRetention.ts` — the LOCAL-FIRST telemetry bucket (per-call
+  LLM metrics, agent-context snapshots, performed web searches, the provisioning log, modeled quota
+  cycles) and its hourly prune. Layered over the remote registry by `composeMothership`, so every
+  consumer resolves it with no per-consumer wiring; the bucket's membership is declared once in
+  `@cat-factory/server`'s `LOCAL_FIRST_PERSISTENCE_REPOSITORIES`, which TYPES the composition —
+  adding a telemetry repository without listing it there fails to compile rather than silently
+  resolving a remote proxy the allow-list will only answer `unknown_method`.
 - `harnessImage.ts` — `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
   boot (must stay a matched set with the backend — `CLAUDE.md` → "Releases & changesets").
 
