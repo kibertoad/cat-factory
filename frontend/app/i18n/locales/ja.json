@@ -3551,7 +3551,11 @@
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致する課題がありません。",
       "emptySearchable": "タイトルで検索するか、インポート済みの課題を選択してください。",
-      "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。"
+      "emptyRefOnly": "課題の URL またはキーを貼り付けて添付します。",
+      "sourceLabel": "ソース",
+      "noSource": "ソースを選択",
+      "connectSource": "{label} を接続",
+      "enableSource": "{label} を有効化"
     },
     "contextIssues": {
       "title": "コンテキスト課題",
@@ -3664,10 +3668,12 @@
     },
     "preview": {
       "stepCount": "{count}ステップ | {count}ステップ",
+      "gateCount": "{count}件の承認 | {count}件の承認",
       "gated": "このステップの後に人による承認"
     },
     "picker": {
-      "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。"
+      "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。",
+      "hoverHint": "パイプラインにカーソルを合わせると、実行されるステップが表示されます。"
     },
     "builder": {
       "title": "パイプラインビルダー",
@@ -4003,6 +4009,11 @@
     "recommendationRequested": "推奨をリクエストしました。下記の提案を確認してください。",
     "recommendedDefault": "推奨される既定値です。そのまま使うか、編集するか、指摘を破棄してください。",
     "needsYourInput": "あなたの入力が必要です",
+    "group": {
+      "action": "対応が必要",
+      "waiting": "提案を待機中",
+      "settled": "対応済み"
+    },
     "mode": {
       "answer": "回答する",
       "dismiss": "破棄",

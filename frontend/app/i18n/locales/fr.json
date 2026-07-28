@@ -3539,7 +3539,11 @@
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucun ticket correspondant.",
       "emptySearchable": "Recherchez par titre ou choisissez un ticket importé.",
-      "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre."
+      "emptyRefOnly": "Collez l'URL ou la clé d'un ticket pour le joindre.",
+      "sourceLabel": "Source",
+      "noSource": "Choisir une source",
+      "connectSource": "Connecter {label}",
+      "enableSource": "Activer {label}"
     },
     "contextIssues": {
       "title": "Tickets de contexte",
@@ -3652,10 +3656,12 @@
     },
     "preview": {
       "stepCount": "{count} étape | {count} étapes",
+      "gateCount": "{count} validation | {count} validations",
       "gated": "Validation humaine après cette étape"
     },
     "picker": {
-      "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche."
+      "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche.",
+      "hoverHint": "Survolez un pipeline pour voir les étapes qu'il exécute."
     },
     "builder": {
       "title": "Constructeur de pipelines",
@@ -3991,6 +3997,11 @@
     "recommendationRequested": "Recommandation demandée — consultez la suggestion ci-dessous.",
     "recommendedDefault": "Valeur recommandée par défaut : conservez-la, modifiez-la ou rejetez la constatation.",
     "needsYourInput": "Nécessite votre intervention",
+    "group": {
+      "action": "Nécessite votre réaction",
+      "waiting": "En attente de suggestions",
+      "settled": "Traitées"
+    },
     "mode": {
       "answer": "Répondre",
       "dismiss": "Ignorer",

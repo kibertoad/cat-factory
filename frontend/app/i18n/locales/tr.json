@@ -3551,7 +3551,11 @@
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sorun yok.",
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir sorun seç.",
-      "emptyRefOnly": "Eklemek için bir sorun URL'si veya anahtarı yapıştır."
+      "emptyRefOnly": "Eklemek için bir sorun URL'si veya anahtarı yapıştır.",
+      "sourceLabel": "Kaynak",
+      "noSource": "Bir kaynak seç",
+      "connectSource": "{label} bağla",
+      "enableSource": "{label} etkinleştir"
     },
     "contextIssues": {
       "title": "Bağlam sorunları",
@@ -3664,10 +3668,12 @@
     },
     "preview": {
       "stepCount": "{count} adım | {count} adım",
+      "gateCount": "{count} onay | {count} onay",
       "gated": "Bu adımdan sonra insan onayı"
     },
     "picker": {
-      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin."
+      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin.",
+      "hoverHint": "Çalıştırdığı adımları görmek için bir pipeline'ın üzerine gelin."
     },
     "builder": {
       "title": "Pipeline oluşturucu",
@@ -4003,6 +4009,11 @@
     "recommendationRequested": "Öneri istendi — aşağıdaki öneriyi inceleyin.",
     "recommendedDefault": "Önerilen varsayılan: koruyun, düzenleyin ya da bulguyu yok sayın.",
     "needsYourInput": "Sizin girdiniz gerekiyor",
+    "group": {
+      "action": "Tepkinizi bekliyor",
+      "waiting": "Öneriler bekleniyor",
+      "settled": "Ele alındı"
+    },
     "mode": {
       "answer": "Yanıtla",
       "dismiss": "Yok say",

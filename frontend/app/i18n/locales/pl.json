@@ -3539,7 +3539,11 @@
       "attachByReference": "Dołącz {ref} przez odniesienie",
       "noMatches": "Brak pasujących zgłoszeń.",
       "emptySearchable": "Szukaj według tytułu lub wybierz zaimportowane zgłoszenie.",
-      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć."
+      "emptyRefOnly": "Wklej adres URL lub klucz zgłoszenia, aby je dołączyć.",
+      "sourceLabel": "Źródło",
+      "noSource": "Wybierz źródło",
+      "connectSource": "Połącz {label}",
+      "enableSource": "Włącz {label}"
     },
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",
@@ -3652,10 +3656,12 @@
     },
     "preview": {
       "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "gateCount": "{count} zatwierdzenie | {count} zatwierdzenia | {count} zatwierdzeń",
       "gated": "Ręczne zatwierdzenie po tym kroku"
     },
     "picker": {
-      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania."
+      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania.",
+      "hoverHint": "Najedź na pipeline, aby zobaczyć kroki, które wykonuje."
     },
     "builder": {
       "title": "Kreator pipeline'ów",
@@ -3991,6 +3997,11 @@
     "recommendationRequested": "Poproszono o rekomendację — sprawdź sugestię poniżej.",
     "recommendedDefault": "Zalecana wartość domyślna: zachowaj ją, edytuj lub odrzuć uwagę.",
     "needsYourInput": "Wymaga Twojej reakcji",
+    "group": {
+      "action": "Wymaga Twojej reakcji",
+      "waiting": "Oczekują na sugestie",
+      "settled": "Rozpatrzone"
+    },
     "mode": {
       "answer": "Odpowiedz",
       "dismiss": "Odrzuć",

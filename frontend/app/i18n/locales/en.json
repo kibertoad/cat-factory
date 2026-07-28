@@ -3644,7 +3644,11 @@
       "attachByReference": "Attach {ref} by reference",
       "noMatches": "No matching issues.",
       "emptySearchable": "Search by title, or pick an imported issue.",
-      "emptyRefOnly": "Paste an issue URL or key to attach it."
+      "emptyRefOnly": "Paste an issue URL or key to attach it.",
+      "sourceLabel": "Source",
+      "noSource": "Choose a source",
+      "connectSource": "Connect {label}",
+      "enableSource": "Enable {label}"
     },
     "contextIssues": {
       "title": "Context issues",
@@ -3763,10 +3767,12 @@
     },
     "preview": {
       "stepCount": "{count} step | {count} steps",
+      "gateCount": "{count} approval gate | {count} approval gates",
       "gated": "Human approval gate after this step"
     },
     "picker": {
-      "noneHint": "No default pipeline. You choose one when you run the task."
+      "noneHint": "No default pipeline. You choose one when you run the task.",
+      "hoverHint": "Hover a pipeline to see the steps it runs."
     },
     "builder": {
       "title": "Pipeline builder",
@@ -4140,6 +4146,11 @@
     "recommendationRequested": "Recommendation requested — review the suggestion below.",
     "recommendedDefault": "Recommended default — keep it, edit it, or dismiss the finding.",
     "needsYourInput": "Needs your input",
+    "group": {
+      "action": "Needs your reaction",
+      "waiting": "Waiting on suggestions",
+      "settled": "Handled"
+    },
     "mode": {
       "answer": "Answer",
       "dismiss": "Dismiss",

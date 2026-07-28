@@ -3245,7 +3245,11 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna issue corrispondente.",
       "emptySearchable": "Cerca per titolo, oppure scegli una issue importata.",
-      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla."
+      "emptyRefOnly": "Incolla l'URL o la chiave di una issue per allegarla.",
+      "sourceLabel": "Fonte",
+      "noSource": "Scegli una fonte",
+      "connectSource": "Collega {label}",
+      "enableSource": "Abilita {label}"
     },
     "contextIssues": {
       "title": "Issue di contesto",
@@ -3358,10 +3362,12 @@
     },
     "preview": {
       "stepCount": "{count} step | {count} step",
+      "gateCount": "{count} approvazione | {count} approvazioni",
       "gated": "Approvazione umana dopo questo step"
     },
     "picker": {
-      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita."
+      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita.",
+      "hoverHint": "Passa il mouse su una pipeline per vedere gli step che esegue."
     },
     "builder": {
       "title": "Costruttore di pipeline",
@@ -3587,6 +3593,11 @@
     "recommendationRequested": "Raccomandazione richiesta — rivedi il suggerimento qui sotto.",
     "recommendedDefault": "Valore predefinito consigliato: mantienilo, modificalo o ignora il rilievo.",
     "needsYourInput": "Richiede il tuo intervento",
+    "group": {
+      "action": "Richiede la tua reazione",
+      "waiting": "In attesa di suggerimenti",
+      "settled": "Gestiti"
+    },
     "mode": {
       "answer": "Rispondi",
       "dismiss": "Ignora",

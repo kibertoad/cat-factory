@@ -3245,7 +3245,11 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Issues.",
       "emptySearchable": "Nach Titel suchen oder ein importiertes Issue auswählen.",
-      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Issue-URL oder einen -Schlüssel ein, um es anzuhängen.",
+      "sourceLabel": "Quelle",
+      "noSource": "Quelle wählen",
+      "connectSource": "{label} verbinden",
+      "enableSource": "{label} aktivieren"
     },
     "contextIssues": {
       "title": "Kontext-Issues",
@@ -3358,10 +3362,12 @@
     },
     "preview": {
       "stepCount": "{count} Schritt | {count} Schritte",
+      "gateCount": "{count} Freigabe | {count} Freigaben",
       "gated": "Manuelle Freigabe nach diesem Schritt"
     },
     "picker": {
-      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus."
+      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus.",
+      "hoverHint": "Fahre über eine Pipeline, um die Schritte zu sehen, die sie ausführt."
     },
     "builder": {
       "title": "Pipeline-Builder",
@@ -3587,6 +3593,11 @@
     "recommendationRequested": "Empfehlung angefordert — prüfen Sie den Vorschlag unten.",
     "recommendedDefault": "Empfohlene Vorgabe: behalten, bearbeiten oder die Feststellung verwerfen.",
     "needsYourInput": "Benötigt Ihre Eingabe",
+    "group": {
+      "action": "Benötigt Ihre Reaktion",
+      "waiting": "Warten auf Vorschläge",
+      "settled": "Erledigt"
+    },
     "mode": {
       "answer": "Beantworten",
       "dismiss": "Verwerfen",

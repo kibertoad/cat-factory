@@ -1,5 +1,23 @@
 # @cat-factory/agents
 
+## 0.76.0
+
+### Minor Changes
+
+- 68f0edd: Add the Bug hunt: pick a connected tracker and one of its boards, get its open and unassigned bugs
+  rated on impact against implementation complexity, and confirm one candidate to adopt it as a bug
+  task running the standard bug-fix pipeline. The interactive counterpart of the recurring bug-triage
+  schedule; it persists nothing of its own.
+
+### Patch Changes
+
+- Updated dependencies [68f0edd]
+- Updated dependencies [71ea4ec]
+- Updated dependencies [6dbd864]
+  - @cat-factory/contracts@0.179.0
+  - @cat-factory/kernel@0.172.0
+  - @cat-factory/prompt-fragments@0.15.2
+
 ## 0.75.2
 
 ### Patch Changes

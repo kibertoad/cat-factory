@@ -3550,7 +3550,11 @@
       "attachByReference": "צרף {ref} לפי הפניה",
       "noMatches": "אין ניושנים תואמים.",
       "emptySearchable": "חפש לפי כותרת, או בחר ניושן מיובא.",
-      "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו."
+      "emptyRefOnly": "הדבק URL או מפתח של ניושן כדי לצרף אותו.",
+      "sourceLabel": "מקור",
+      "noSource": "בחר מקור",
+      "connectSource": "חבר {label}",
+      "enableSource": "הפעל {label}"
     },
     "contextIssues": {
       "title": "ניושני הקשר",
@@ -3663,10 +3667,12 @@
     },
     "preview": {
       "stepCount": "שלב {count} | {count} שלבים",
+      "gateCount": "אישור {count} | {count} אישורים",
       "gated": "אישור אנושי אחרי שלב זה"
     },
     "picker": {
-      "noneHint": "אין צינור ברירת מחדל. בוחרים אחד כשמריצים את המשימה."
+      "noneHint": "אין צינור ברירת מחדל. בוחרים אחד כשמריצים את המשימה.",
+      "hoverHint": "העבירו את העכבר מעל צינור כדי לראות את השלבים שהוא מריץ."
     },
     "builder": {
       "title": "בונה הצינור",
@@ -4002,6 +4008,11 @@
     "recommendationRequested": "התבקשה המלצה — סקור את ההצעה שלהלן.",
     "recommendedDefault": "ברירת מחדל מומלצת: השאר אותה, ערוך אותה או דחה את הממצא.",
     "needsYourInput": "דורש את הקלט שלך",
+    "group": {
+      "action": "דורש את תגובתך",
+      "waiting": "ממתין להצעות",
+      "settled": "טופלו"
+    },
     "mode": {
       "answer": "ענה",
       "dismiss": "דחה",

@@ -1,5 +1,59 @@
 # @cat-factory/kernel
 
+## 0.172.0
+
+### Minor Changes
+
+- 68f0edd: Add the Bug hunt: pick a connected tracker and one of its boards, get its open and unassigned bugs
+  rated on impact against implementation complexity, and confirm one candidate to adopt it as a bug
+  task running the standard bug-fix pipeline. The interactive counterpart of the recurring bug-triage
+  schedule; it persists nothing of its own.
+- 6dbd864: Introduce a central, pino-backed structured logger behind a kernel `Logger` port, so the whole
+  domain engine can log — previously only `@cat-factory/server` and the runtime facades could, which
+  forced the domain packages to swallow failures silently.
+
+  - **New**: `Logger` / `noopLogger` / `createRecordingLogger` (`@cat-factory/kernel`,
+    `ports/logging.ts`), and `runBestEffort` / `describeError` (`shared/best-effort.ts`) as the
+    replacement for `.catch(() => {})`. `@cat-factory/server` exports `createPinoLogger`,
+    `parseLogLevel`, `setLogLevel` and `getLogLevel` alongside the process-wide `logger`.
+  - **`LOG_LEVEL`** is now honoured (`process.env` on Node/local, a wrangler var on the Worker);
+    it was previously read from a global nothing ever assigned.
+  - **Node/local** register `unhandledRejection`/`uncaughtException` guards and subscribe to
+    pg-boss's `error` event (an unhandled one on an EventEmitter throws). The guards add the
+    structured line only — both still exit non-zero, matching what Node already did (since Node 15
+    an unhandled rejection is raised as an uncaught exception), so process lifetime is unchanged.
+
+  **Breaking (pre-1.0, no shims):**
+
+  - The logger's calling convention is now **message-first**: `logger.warn(msg, fields)`, not pino's
+    `logger.warn(fields, msg)`. `Logger` is the kernel port type, no longer pino's own.
+  - Every ad-hoc logger interface is **removed**, not deprecated: `PrReportLogger`,
+    `PlatformMetricsSweepLogger`, `GitHubDocsLogger`, `OtelLogger`, `OtlpLogger`, `LangfuseLogger`,
+    `ResetLogger`, `InfraSetupLogger`, `PlatformHealthSweepLogger`, `KeyFingerprintLogger`,
+    `GateWiringLogger`, `DriveLogger`, `PropagatorLogger`. Every `logger?:` dependency now takes the
+    kernel `Logger`.
+  - `@cat-factory/node-server` no longer exports `pinoKeyFingerprintLogger` (the shapes match, so the
+    bridge is gone). `@cat-factory/orchestration`'s `Core` gains a required `logger`.
+  - **`CoreDependencies.logger` is REQUIRED**, not optional. A facade or harness assembling the bag
+    by hand must pass one (`noopLogger` if it does not care) or it will not typecheck — the guard
+    that would have caught the Worker shipping with no logger wired at all.
+
+  Also fixes `MergeTrackRecordService.classify` losing the repo identity when `listChangedFiles`
+  throws, which permanently broke external-merge attribution for that record.
+
+### Patch Changes
+
+- 71ea4ec: Fix a service frame jumping to a different spot on the board right after it is resized (and after
+  any other frame edit, including a rename or an archive/restore). A frame's board position is a
+  per-workspace layout override carried on its mount, so the shared block row keeps whatever
+  coordinates it was created with — but the single-block mutation responses were built straight from
+  that row, and the SPA upserts the authoritative block a mutation returns. Frame-returning reads now
+  project through the same `applyMountLayout` the board snapshot uses. Importing a repo that already
+  backs a shared service likewise returns the frame placed where this board just mounted it, instead
+  of at the home board's coordinates.
+- Updated dependencies [68f0edd]
+  - @cat-factory/contracts@0.179.0
+
 ## 0.171.0
 
 ### Minor Changes

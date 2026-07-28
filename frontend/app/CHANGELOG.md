@@ -1,5 +1,46 @@
 # @cat-factory/app
 
+## 0.165.0
+
+### Minor Changes
+
+- 48cfe96: Order the requirements-review findings by what still needs a reaction: unanswered findings and
+  Writer suggestions awaiting accept/reject float to the top, findings whose suggestion is still
+  being generated sit below them, and everything already answered or dismissed sinks to the bottom
+  (severity remains the order within each group). The list is labelled once it spans more than one
+  group, and holds still while an answer is being typed so a card can't slide out from under the
+  cursor when the auto-save on blur re-sorts it.
+
+## 0.164.0
+
+### Minor Changes
+
+- 576629d: Show the tracker being searched whenever a context issue is attached to a task, and let a tracker be
+  added from the same place. The context-issue picker's source selector used to appear only once a
+  second tracker was offered, so a single-tracker workspace never saw which tracker a pasted issue key
+  would resolve against; it is now always rendered, and its menu carries the not-yet-offered trackers
+  as connect/enable entries that open the connect modal over the caller's form. A tracker connected
+  that way becomes the picker's selection as soon as it is offered.
+- 900380b: Explain a pipeline by its steps wherever one is picked. The picker's preview pane now lists every
+  step a run will execute — numbered and in order, each with the agent's label and what it does, and
+  the human approval gates flagged — instead of a wrapped row of interchangeable chips. The two
+  surfaces that offered only a list of pipeline NAMES, the recurring-schedule modal and the focus
+  view's Run menu, now use that same picker.
+
+## 0.163.0
+
+### Minor Changes
+
+- 68f0edd: Add the Bug hunt: pick a connected tracker and one of its boards, get its open and unassigned bugs
+  rated on impact against implementation complexity, and confirm one candidate to adopt it as a bug
+  task running the standard bug-fix pipeline. The interactive counterpart of the recurring bug-triage
+  schedule; it persists nothing of its own.
+
+### Patch Changes
+
+- Updated dependencies [68f0edd]
+  - @cat-factory/contracts@0.179.0
+
 ## 0.162.2
 
 ### Patch Changes

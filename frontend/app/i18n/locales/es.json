@@ -3539,7 +3539,11 @@
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay incidencias coincidentes.",
       "emptySearchable": "Busca por título o elige una incidencia importada.",
-      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla."
+      "emptyRefOnly": "Pega la URL o clave de una incidencia para adjuntarla.",
+      "sourceLabel": "Fuente",
+      "noSource": "Elige una fuente",
+      "connectSource": "Conectar {label}",
+      "enableSource": "Habilitar {label}"
     },
     "contextIssues": {
       "title": "Incidencias de contexto",
@@ -3652,10 +3656,12 @@
     },
     "preview": {
       "stepCount": "{count} paso | {count} pasos",
+      "gateCount": "{count} aprobación | {count} aprobaciones",
       "gated": "Aprobación humana después de este paso"
     },
     "picker": {
-      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea."
+      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea.",
+      "hoverHint": "Pasa el cursor por una pipeline para ver los pasos que ejecuta."
     },
     "builder": {
       "title": "Constructor de pipelines",
@@ -3991,6 +3997,11 @@
     "recommendationRequested": "Recomendación solicitada — revisa la sugerencia más abajo.",
     "recommendedDefault": "Valor recomendado por defecto: consérvalo, edítalo o descarta el hallazgo.",
     "needsYourInput": "Necesita tu intervención",
+    "group": {
+      "action": "Necesita tu reacción",
+      "waiting": "Esperando sugerencias",
+      "settled": "Gestionados"
+    },
     "mode": {
       "answer": "Responder",
       "dismiss": "Descartar",

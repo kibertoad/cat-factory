@@ -29,6 +29,15 @@ export function pipelineDisplaySteps(pipeline: Pipeline): PipelineDisplayStep[] 
     .map(({ kind, gated }) => ({ kind, gated }))
 }
 
+/**
+ * How many times a run of `pipeline` will stop for a human. Counted off the DISPLAYED steps, not
+ * `pipeline.gates`, because a gate declared on a step that is disabled by default gates nothing —
+ * that step never runs, so promising a stop there would misstate what the pipeline does.
+ */
+export function pipelineGateCount(pipeline: Pipeline): number {
+  return pipelineDisplaySteps(pipeline).filter((s) => s.gated).length
+}
+
 // Re-exported so a picker can import the task-type gate from the same module as the
 // launch/frame gates it composes with (the classifier itself lives in `@cat-factory/contracts`).
 export { pipelineAllowedForTaskType }

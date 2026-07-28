@@ -1288,6 +1288,15 @@ workspace / service / task type, and a spend trend. Design:
   `github_repos` row whose `block_id` matches, else `repos[0]`. So a bootstrapped repo becomes a
   board service only once its projection row is linked to the frame's block id.
 - A workspace has exactly ONE VCS installation but may have MANY repos.
+- **A service frame's board POSITION (and any size override) lives on its `WorkspaceMount`, not on
+  the Block.** One shared service sits at a different spot on every board that mounts it, so
+  `moveBlock` writes the mount and the frame block row's own `position` is frozen at creation —
+  permanently stale for any mounted frame. **Every frame-returning read therefore projects through
+  kernel's `applyMountLayout`**: the snapshot (`WorkspaceService.composeBoard`) and each
+  single-block `BoardService` mutation response alike. Skipping it is silent — nothing fails, the
+  SPA just upserts the authoritative block a mutation returned and the frame JUMPS to coordinates
+  no board shows it at (the resize path is where users hit this, because a `size`-only edit is the
+  one frame patch with no other visible effect). A non-frame block costs no extra query.
 - Drag-drop: `useBlockDrag.ts` → `POST /blocks/:id/reparent` → `BoardService.reparent()`. Tasks move
   into frames or modules, modules into frames; frames cannot nest (`canReparent` in `board.logic.ts`).
 
