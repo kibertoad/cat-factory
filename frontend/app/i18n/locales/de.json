@@ -3551,6 +3551,7 @@
     "title": "Anforderungsprüfung",
     "iteration": "Iteration {current} / {max}",
     "intro": "Ein KI-Prüfer hat die gesammelten Anforderungen dieses {level} untersucht — die Beschreibung sowie alle verknüpften PRDs und Tracker-Issues — und die folgenden Befunde erhoben. {answer} Sie die relevanten und {dismiss} Sie die irrelevanten, arbeiten Sie sie dann ein; der Prüfer prüft erneut, bis die Anforderungen klar sind.",
+    "scopeNote": "Diese Phase umfasst ausschließlich Produkt- und Geschäftsanforderungen: was die Software leisten muss und welche Regeln dafür gelten. Technische Entscheidungen wie Technologieauswahl, Architektur und Datenstrukturen treffen später die Schritte Architekt und Rechercheur, die dabei Zugriff auf die Codebasis haben.",
     "levelFallback": "Element",
     "answerVerb": "Beantworten",
     "dismissVerb": "verwerfen",

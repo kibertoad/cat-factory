@@ -3551,6 +3551,7 @@
     "title": "Revisione dei requisiti",
     "iteration": "Iterazione {current} / {max}",
     "intro": "Un revisore AI ha esaminato i requisiti raccolti di questo {level} — la sua descrizione piu eventuali PRD e issue del tracker collegati — e ha sollevato i rilievi qui sotto. {answer} quelli pertinenti e {dismiss} quelli irrilevanti, poi incorporali; il revisore rivede di nuovo finche i requisiti non sono chiari.",
+    "scopeNote": "Questa fase copre solo i requisiti di prodotto e di business: che cosa il software deve fare e quali regole lo governano. Le decisioni tecniche come la scelta della tecnologia, l'architettura e le strutture dati vengono prese più avanti negli step Architetto e Ricercatore, che lavorano con il codice a disposizione.",
     "levelFallback": "elemento",
     "answerVerb": "Rispondi a",
     "dismissVerb": "ignora",

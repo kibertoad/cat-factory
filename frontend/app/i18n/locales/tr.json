@@ -3967,6 +3967,7 @@
     "title": "Gereksinim incelemesi",
     "iteration": "Yineleme {current} / {max}",
     "intro": "Bir AI incelemecisi bu {level} öğesinin toplanan gereksinimlerini — açıklamasını ve bağlı PRD'leri ile izleyici sorunlarını — inceledi ve aşağıdaki bulguları ortaya çıkardı. İlgili olanları {answer}, ilgisiz olanları {dismiss}, ardından bunları dahil edin; incelemeci, gereksinimler netleşene kadar yeniden inceler.",
+    "scopeNote": "Bu aşama yalnızca ürün ve iş gereksinimlerini kapsar: yazılımın ne yapması gerektiğini ve onu yöneten kuralları. Teknoloji seçimi, mimari ve veri yapıları gibi teknik kararlar daha sonra, kod tabanına erişimi olan Mimar ve Araştırmacı adımlarında verilir.",
     "levelFallback": "öğe",
     "answerVerb": "Yanıtlayın",
     "dismissVerb": "yok sayın",

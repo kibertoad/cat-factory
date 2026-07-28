@@ -1,10 +1,14 @@
 import type { SandboxExpectation } from '@cat-factory/contracts'
 
-// Grading rubrics for the Sandbox judge. These are lifted verbatim (and kept in
-// sync) with the benchmark harness's rubrics (`backend/internal/benchmark-harness/
-// src/rubrics.ts`) so the in-product Sandbox and the offline `cat-bench` grade on
-// the same axes. Reference-free: each dimension is scored 1–5 by the judge model
-// against the task input + the candidate output; the weighted mean is the cell score.
+// Grading rubrics for the Sandbox judge. These are lifted verbatim from the benchmark
+// harness's rubrics (`backend/internal/benchmark-harness/src/rubrics.ts`) so the in-product
+// Sandbox and the offline `cat-bench` grade on the same axes. Reference-free: each dimension
+// is scored 1–5 by the judge model against the task input + the candidate output; the weighted
+// mean is the cell score.
+//
+// The copies are pinned equal by `benchmark-harness/test/rubrics.conformity.test.ts` — a
+// dimension added to one side and not the other does not fail anything on its own, it just
+// quietly makes a Sandbox score and a benchmark score incomparable. Change one, change both.
 
 /** The grading task a Sandbox agent kind maps to (drives which rubric is used). */
 export type SandboxTaskType = 'requirement-review' | 'code-review' | 'implementation'
@@ -26,8 +30,22 @@ const REQUIREMENT_REVIEW: RubricDimension[] = [
     key: 'gap_coverage',
     label: 'Gap coverage',
     description:
-      'Surfaces the genuine gaps, ambiguities and risks that would block confident implementation.',
+      'Surfaces the genuine product-level gaps, ambiguities and risks that would block confident implementation.',
     weight: 3,
+  },
+  // The requirements-review stage settles the product / business layer only; the technical layer
+  // is the architect's and researcher's, which see the repository and the `tech-spec/` and this
+  // stage does not. No other dimension catches a well-written, well-calibrated finding that is
+  // simply not this stage's to raise — `signal_noise` scores volume, not layer.
+  {
+    key: 'product_scope',
+    label: 'Product scope discipline',
+    description:
+      'Raises only product / business questions a product owner who does not read code could ' +
+      'answer. Leaves technology and library choice, architecture, API and schema shape, ' +
+      'algorithms, performance technique and infrastructure to the architect and researcher, ' +
+      'and does not smuggle one in at a low severity.',
+    weight: 2,
   },
   {
     key: 'specificity',

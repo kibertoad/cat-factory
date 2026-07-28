@@ -3955,6 +3955,7 @@
     "title": "Revue des exigences",
     "iteration": "Itération {current} / {max}",
     "intro": "Un relecteur IA a inspecté les exigences collectées de cet {level} — sa description ainsi que les PRD et tickets liés — et a soulevé les observations ci-dessous. {answer} celles qui sont pertinentes et {dismiss} les autres, puis incorporez-les ; le relecteur relit jusqu'à ce que les exigences soient claires.",
+    "scopeNote": "Cette étape couvre uniquement les exigences produit et métier : ce que le logiciel doit faire et les règles qui le régissent. Les décisions techniques comme le choix des technologies, l'architecture et les structures de données sont tranchées plus tard par les étapes Architecte et Chercheur, qui disposent du code source.",
     "levelFallback": "élément",
     "answerVerb": "Répondez à",
     "dismissVerb": "écartez",
