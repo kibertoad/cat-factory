@@ -5170,6 +5170,7 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "planningInProgress": "Planification en cours",
       "pause": "Mettre en pause",
       "resume": "Reprendre",
       "cancel": "Annuler l'initiative",
@@ -5178,13 +5179,21 @@
     "planning": {
       "title": "Planifier l'initiative",
       "subtitle": "Repondez aux questions du planificateur pour cadrer l'initiative",
-      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis continuez, ou procedez a la planification avec ce qu'il a.",
+      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis envoyez-les. Vous pouvez aussi lui demander de planifier maintenant avec ce qu'il a deja.",
       "empty": "Aucune initiative trouvee pour ce bloc.",
       "converged": "Aucune question en attente. Le planificateur dispose de ce qu'il faut et redige le plan.",
+      "idle": "La planification n'a pas encore demarre. Lancez la planification depuis l'initiative pour commencer l'entretien.",
+      "working": "Le planificateur traite vos reponses",
+      "workingHint": "Cela prend un instant. Les questions complementaires apparaitront ici une fois termine, ou il commencera a rediger le plan s'il en a assez.",
+      "failed": "L'execution de planification s'est arretee",
+      "failedHint": "Elle s'est terminee avant que le planificateur puisse repondre. Vos reponses sont enregistrees ; relancez la planification depuis l'initiative.",
       "answerPlaceholder": "Votre reponse",
-      "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
-      "proceed": "Proceder a la planification",
-      "continue": "Continuer"
+      "hint": "Envoyer les reponses permet au planificateur de poser des questions complementaires ; Planifier maintenant redige le plan avec les reponses actuelles.",
+      "unanswered": "Questions sans reponse : {count}",
+      "proceed": "Planifier maintenant",
+      "proceedTitle": "Ignorer les questions restantes et rediger le plan maintenant",
+      "continue": "Envoyer les reponses",
+      "continueTitle": "Envoyez vos reponses ; le planificateur peut poser des questions complementaires"
     },
     "followUpStatus": {
       "open": "Ouvert",

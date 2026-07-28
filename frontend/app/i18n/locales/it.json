@@ -4168,6 +4168,7 @@
     "inspector": {
       "runPlanning": "Esegui pianificazione",
       "answerPlanning": "Rispondi alle domande di pianificazione",
+      "planningInProgress": "Pianificazione in corso",
       "pause": "Pausa",
       "resume": "Riprendi",
       "cancel": "Annulla iniziativa",
@@ -4176,13 +4177,21 @@
     "planning": {
       "title": "Pianifica l'iniziativa",
       "subtitle": "Rispondi alle domande del pianificatore affinche possa definire l'ambito dell'iniziativa",
-      "intro": "Il pianificatore sta definendo l'ambito di questa iniziativa. Rispondi alle sue domande per dare forma all'obiettivo e ai vincoli, poi continua — oppure procedi a pianificare con quello che ha.",
+      "intro": "Il pianificatore sta definendo l'ambito di questa iniziativa. Rispondi alle sue domande per dare forma all'obiettivo e ai vincoli, poi invia le risposte. Puoi anche chiedergli di pianificare subito con quello che ha gia.",
       "empty": "Nessuna iniziativa trovata per questo blocco.",
       "converged": "Nessuna domanda in sospeso. Il pianificatore ha cio che gli serve e sta redigendo il piano.",
+      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa per avviare l'intervista.",
+      "working": "Il pianificatore sta elaborando le tue risposte",
+      "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure iniziera a redigere il piano se ha abbastanza informazioni.",
+      "failed": "L'esecuzione della pianificazione si e interrotta",
+      "failedHint": "Si e conclusa prima che il pianificatore potesse rispondere. Le tue risposte sono salvate; riesegui la pianificazione dall'iniziativa.",
       "answerPlaceholder": "La tua risposta",
-      "hint": "Continua consente al pianificatore di porre domande di follow-up; Procedi pianifica con le risposte fornite finora.",
-      "proceed": "Procedi a pianificare",
-      "continue": "Continua"
+      "hint": "Invia risposte consente al pianificatore di porre domande di follow-up; Pianifica ora redige il piano con le risposte fornite finora.",
+      "unanswered": "Domande senza risposta: {count}",
+      "proceed": "Pianifica ora",
+      "proceedTitle": "Salta le domande rimanenti e redigi subito il piano",
+      "continue": "Invia risposte",
+      "continueTitle": "Invia le tue risposte; il pianificatore potrebbe porre domande di follow-up"
     },
     "followUpStatus": {
       "open": "Aperto",

@@ -5170,6 +5170,7 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancel": "Cancelar iniciativa",
@@ -5178,13 +5179,21 @@
     "planning": {
       "title": "Planificar la iniciativa",
       "subtitle": "Responde las preguntas del planificador para acotar la iniciativa",
-      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, luego continua, o procede a planificar con lo que tiene.",
+      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, y luego envialas. Tambien puedes pedirle que planifique ahora con lo que ya tiene.",
       "empty": "No se encontro ninguna iniciativa para este bloque.",
       "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
+      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa para iniciar la entrevista.",
+      "working": "El planificador esta procesando tus respuestas",
+      "workingHint": "Esto tarda un momento. Las preguntas de seguimiento apareceran aqui cuando termine, o empezara a redactar el plan si ya tiene suficiente.",
+      "failed": "La ejecucion de planificacion se detuvo",
+      "failedHint": "Termino antes de que el planificador pudiera responder. Tus respuestas estan guardadas; vuelve a ejecutar la planificacion desde la iniciativa.",
       "answerPlaceholder": "Tu respuesta",
-      "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
-      "proceed": "Proceder a planificar",
-      "continue": "Continuar"
+      "hint": "Enviar respuestas permite al planificador hacer mas preguntas; Planificar ahora redacta el plan con las respuestas actuales.",
+      "unanswered": "Preguntas sin responder: {count}",
+      "proceed": "Planificar ahora",
+      "proceedTitle": "Omitir las preguntas restantes y redactar el plan ahora",
+      "continue": "Enviar respuestas",
+      "continueTitle": "Envia tus respuestas; el planificador puede hacer preguntas de seguimiento"
     },
     "followUpStatus": {
       "open": "Abierto",

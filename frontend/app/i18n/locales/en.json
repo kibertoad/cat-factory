@@ -5332,6 +5332,7 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "planningInProgress": "Planning in progress",
       "pause": "Pause",
       "resume": "Resume",
       "cancel": "Cancel initiative",
@@ -5340,13 +5341,21 @@
     "planning": {
       "title": "Plan the initiative",
       "subtitle": "Answer the planner's questions so it can scope the initiative",
-      "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then continue — or proceed to plan with what it has.",
+      "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then submit them. You can also have it plan now with what it already has.",
       "empty": "No initiative found for this block.",
       "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
+      "idle": "Planning has not started yet. Run planning from the initiative to begin the interview.",
+      "working": "The planner is working on your answers",
+      "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or it starts drafting the plan if it has enough.",
+      "failed": "The planning run stopped",
+      "failedHint": "It ended before the planner could answer. Your answers are saved; re-run planning from the initiative to try again.",
       "answerPlaceholder": "Your answer",
-      "hint": "Continue lets the planner ask follow-ups; Proceed plans with the answers so far.",
-      "proceed": "Proceed to plan",
-      "continue": "Continue"
+      "hint": "Submit answers lets the planner ask follow-ups; Plan now drafts the plan with the answers so far.",
+      "unanswered": "Unanswered questions: {count}",
+      "proceed": "Plan now",
+      "proceedTitle": "Skip the remaining questions and draft the plan now",
+      "continue": "Submit answers",
+      "continueTitle": "Send your answers; the planner may ask follow-up questions"
     },
     "followUpStatus": {
       "open": "Open",

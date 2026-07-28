@@ -82,6 +82,23 @@ board-surfacing of requirements-review + clarity-review without merging the serv
   slot_, not the fill mechanism.
 - **The `interview-gate` trait** (added in the sibling fix PR) marks the resumable interviewer
   kinds; reuse it rather than kind-ids for any new engine branch.
+- **A resuming window must NOT key its body on the interview entity alone.** Continue/proceed are
+  asynchronous: the HTTP call records the intent on the parked step and wakes the durable driver,
+  which then runs the (slow) interviewer LLM, so the response carries the PRE-resume entity — same
+  questions, same `awaiting` status. Rendered from the entity, the window is byte-identical before
+  and after the click, and a submit whose only effect lands 30s later is indistinguishable from a
+  dead button (it was reported as exactly that). The planning window folds the planning RUN's
+  status in (`initiativeInterviewPhase` in `app/utils/initiative.ts`): a resumed run flips
+  `blocked` → `running` and emits, so `awaiting` + `running` is precisely "a pass is in flight".
+  Derive it from the run rather than a local in-flight flag — that survives a reload and cannot
+  wedge, because a pass that dies takes the run to `failed` instead of spinning forever. The doc
+  interviewer's window (`DocInterviewWindow.vue`) still has the entity-only shape and wants the
+  same treatment when it is next touched.
+- **Name the two controls by what they DO, not by "forward".** "Continue" vs "Proceed to plan"
+  both read as "go on" and were reported as indistinguishable; the pair is now "Submit answers"
+  (the planner may ask follow-ups) vs "Plan now" (skip the rest and draft). Same rule for a
+  disabled control: the planning window renders the unanswered COUNT, because a primary button
+  that is silently greyed out is itself a "nothing happened".
 - **Requirements adoption (6c) uses the slots, not new coupling.** Put its recommend-toggle button
   in the `actions` slot, its severity/category badges in the `badges` slot, drive `requested` from
   `recommend_requested`, and leave its recommendations section OUTSIDE the component — so the

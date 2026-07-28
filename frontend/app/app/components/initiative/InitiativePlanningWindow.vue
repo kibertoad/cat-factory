@@ -1,19 +1,29 @@
 <script setup lang="ts">
 // The interactive-planning Q&A window (slice 2) — the dedicated view of the initiative
 // INTERVIEWER gate. While the planning run is parked, the interviewer's clarifying questions
-// (pending `qa` entries with an empty answer) are shown here; the human answers them, then
-// either CONTINUES (the interviewer re-runs and may ask follow-ups) or PROCEEDS (skip
-// remaining questions — the interviewer converges and the run advances to the analyst/planner).
+// (pending `qa` entries with an empty answer) are shown here; the human answers them, then either
+// SUBMITS them (the `continue` action: the interviewer re-runs and may ask follow-ups) or plans
+// now (the `proceed` action: skip the remaining questions — the interviewer converges and the run
+// advances to the analyst/planner). The labels say submit/plan-now rather than continue/proceed
+// because the latter pair both read as "go forward" and were indistinguishable in use.
 // Opened via the universal result-view host: from the inspector / card
 // (`ui.openInitiativePlanning`) or as the interviewer step's result view. Live `initiative`
 // stream events patch the store, so an open window follows the interview as it progresses.
+//
+// CONTINUE/PROCEED ARE ASYNC. They only record the intent on the parked step and wake the durable
+// driver; the interviewer LLM then runs for as long as it takes, and the response carries the
+// PRE-resume entity. So the window must not key its body on the entity alone — that renders
+// identically before and after the click, which reads as the button having done nothing. The
+// phase below folds the planning RUN's status in, so the wait is visible and a failed pass says
+// so instead of leaving the human staring at questions they already submitted.
 import { computed, reactive, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
-import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
+import { initiativeInterviewPhase, INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
+const execution = useExecutionStore()
 const { t } = useI18n()
 
 const { open, blockId, close } = useResultView('initiative-planning', {
@@ -22,6 +32,7 @@ const { open, blockId, close } = useResultView('initiative-planning', {
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const initiative = computed(() => (blockId.value ? initiatives.forBlock(blockId.value) : null))
+const run = computed(() => (blockId.value ? execution.getByBlock(blockId.value) : undefined))
 
 /** Every interview exchange, with a stable key for the list + draft map. */
 const questions = computed(() =>
@@ -31,8 +42,6 @@ const questions = computed(() =>
 const pending = computed(() =>
   questions.value.filter((q) => q.status !== 'dismissed' && !(q.answer ?? '').trim()),
 )
-/** The interview converged (or never started with a model): nothing left to answer. */
-const converged = computed(() => initiative.value?.interview?.status === 'done')
 
 // Per-question answer drafts, seeded from the entity and refreshed as new rounds arrive
 // without clobbering an answer the human is mid-edit on.
@@ -48,11 +57,26 @@ watch(
 )
 
 const resuming = computed(() => initiatives.resuming)
+
 /**
- * Continue is meaningful once every pending question has a drafted answer. A dismissed question
- * doesn't count (it was set aside), so an all-dismissed round is trivially "answered".
+ * The live phase (see `initiativeInterviewPhase`). `resuming` folds in the request itself so the
+ * body swaps to the waiting state on the click rather than a beat later when the run's `running`
+ * event lands — and if the request fails, `resuming` clears and the phase falls back to whatever
+ * the run actually says, so the questions come back rather than the window sticking on a spinner.
  */
-const allAnswered = computed(() => pending.value.every((q) => drafts[q.key]?.trim()))
+const phase = computed(() =>
+  resuming.value
+    ? 'working'
+    : initiativeInterviewPhase(initiative.value?.interview, run.value?.status),
+)
+
+/**
+ * Questions still missing a drafted answer. Continue is only meaningful once this is empty — but a
+ * disabled button with no stated reason is itself a "nothing happened", so the count is rendered.
+ * A dismissed question doesn't count (it was set aside), so an all-dismissed round is trivially
+ * answered.
+ */
+const unanswered = computed(() => pending.value.filter((q) => !drafts[q.key]?.trim()).length)
 
 /**
  * Persist one answer if its draft differs from what's recorded. A `dismissed` question is skipped:
@@ -135,9 +159,41 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
           {{ t('initiative.planning.intro') }}
         </p>
 
+        <!-- An interviewer pass is running: the human is waiting on the planner. Without this the
+             window is byte-identical to the parked state and the submit reads as a no-op. -->
+        <div
+          v-if="phase === 'working'"
+          class="flex flex-col items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-6 text-center"
+          data-testid="initiative-planning-working"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-indigo-300" />
+          <p class="text-[13px] text-slate-200">{{ t('initiative.planning.working') }}</p>
+          <p class="text-[12px] text-slate-400">{{ t('initiative.planning.workingHint') }}</p>
+        </div>
+
+        <!-- The planning run stopped before the interview settled — a dead end otherwise. -->
+        <div
+          v-else-if="phase === 'failed'"
+          class="rounded-lg border border-red-900/60 bg-red-950/20 p-4 text-center"
+          data-testid="initiative-planning-failed"
+        >
+          <p class="text-[13px] text-red-200">{{ t('initiative.planning.failed') }}</p>
+          <p class="mt-1 text-[12px] text-slate-400">{{ t('initiative.planning.failedHint') }}</p>
+        </div>
+
+        <!-- Planning was never started, so there is nothing to answer YET (distinct from
+             converged, which means the planner already has what it needs). -->
+        <div
+          v-else-if="phase === 'idle' && questions.length === 0"
+          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+          data-testid="initiative-planning-idle"
+        >
+          {{ t('initiative.planning.idle') }}
+        </div>
+
         <!-- Converged / no pending questions -->
         <div
-          v-if="converged || questions.length === 0"
+          v-else-if="phase === 'converged' || questions.length === 0"
           class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
           data-testid="initiative-planning-converged"
         >
@@ -166,13 +222,21 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
       </template>
     </div>
 
-    <!-- Action rail -->
+    <!-- Action rail. Only while the run is actually parked on the human: mid-pass these would
+         re-submit a question set already in flight, and the resume is a no-op once it isn't. -->
     <footer
-      v-if="initiative && !converged && questions.length > 0"
+      v-if="initiative && phase === 'awaiting' && questions.length > 0"
       class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
     >
       <p class="text-[11px] text-slate-500">
-        {{ t('initiative.planning.hint') }}
+        <span
+          v-if="unanswered > 0"
+          class="text-amber-400/90"
+          data-testid="initiative-planning-unanswered"
+        >
+          {{ t('initiative.planning.unanswered', { count: unanswered }) }}
+        </span>
+        <span v-else>{{ t('initiative.planning.hint') }}</span>
       </p>
       <div class="flex items-center gap-2">
         <UButton
@@ -180,6 +244,7 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
           variant="ghost"
           size="sm"
           :loading="resuming"
+          :title="t('initiative.planning.proceedTitle')"
           data-testid="initiative-planning-proceed"
           @click="onProceed"
         >
@@ -189,7 +254,12 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
           color="primary"
           size="sm"
           :loading="resuming"
-          :disabled="!allAnswered"
+          :disabled="unanswered > 0"
+          :title="
+            unanswered > 0
+              ? t('initiative.planning.unanswered', { count: unanswered })
+              : t('initiative.planning.continueTitle')
+          "
           data-testid="initiative-planning-continue"
           @click="onContinue"
         >
