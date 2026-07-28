@@ -7,6 +7,7 @@ import {
   headroomColor,
   headroomRatio,
   pct,
+  totalInputTokens,
   transportRatio,
 } from '~/utils/observability'
 
@@ -22,12 +23,16 @@ defineEmits<{ inspect: [] }>()
 const { t } = useI18n()
 
 const m = computed(() => props.metrics)
-// The headline "↑" is FRESH input: `promptTokens` is exclusive of both cache classes at the
-// source, so no derivation is needed. The two cache classes ride their own chips because they
-// are priced an order of magnitude apart — a read is ~0.1x base input, a write 1.25-2x — and a
-// long run that keeps re-writing its prefix must not look like one riding a warm cache.
+// The headline "↑" is TOTAL input — fresh + both cache classes — the like-for-like measure of
+// Claude Code's own context gauge, which counts the same buckets because a cached token still
+// occupies the context window (see `totalInputTokens`). The three classes then render as the
+// breakdown, because they are priced an order of magnitude apart in opposite directions: a read
+// is ~0.1x base input, a write 1.25-2x. Volume in the headline, cost in the breakdown — leading
+// with fresh made a 31M-token run read as a 685-token one.
+const totalInput = computed(() => totalInputTokens(m.value))
 const cacheRead = computed(() => m.value.cacheReadTokens ?? 0)
 const cacheWrite = computed(() => m.value.cacheWriteTokens ?? 0)
+const hasCache = computed(() => cacheRead.value > 0 || cacheWrite.value > 0)
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
 const headroomTone = computed(() => headroomColor(headroom.value, m.value.truncatedCalls > 0))
@@ -52,23 +57,9 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       <span class="text-slate-500">·</span>
       <span
         class="tabular-nums text-slate-400"
-        :title="t('observability.metricsBar.promptCompletionTokens')"
+        :title="t('observability.metricsBar.inputCompletionTokens')"
       >
-        {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
-      </span>
-      <span
-        v-if="cacheRead > 0"
-        class="tabular-nums text-emerald-400/80"
-        :title="t('observability.metricsBar.cacheReadHint')"
-      >
-        {{ t('observability.metricsBar.cacheRead', { tokens: formatTokens(cacheRead) }) }}
-      </span>
-      <span
-        v-if="cacheWrite > 0"
-        class="tabular-nums text-amber-400/80"
-        :title="t('observability.metricsBar.cacheWriteHint')"
-      >
-        {{ t('observability.metricsBar.cacheWrite', { tokens: formatTokens(cacheWrite) }) }}
+        {{ formatTokens(totalInput) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
       <div class="ms-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
@@ -83,6 +74,29 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
           class="h-3.5 w-3.5 text-slate-600 rtl:-scale-x-100"
         />
       </div>
+    </div>
+
+    <!-- input breakdown: the headline's three classes, priced an order of magnitude apart -->
+    <div v-if="hasCache" class="mt-1.5 flex items-center gap-1.5 text-[11px] tabular-nums">
+      <span class="text-slate-400" :title="t('observability.metricsBar.freshHint')">
+        {{ t('observability.metricsBar.fresh', { tokens: formatTokens(m.promptTokens) }) }}
+      </span>
+      <span v-if="cacheRead > 0" class="text-slate-600">·</span>
+      <span
+        v-if="cacheRead > 0"
+        class="text-emerald-400/80"
+        :title="t('observability.metricsBar.cacheReadHint')"
+      >
+        {{ t('observability.metricsBar.cacheRead', { tokens: formatTokens(cacheRead) }) }}
+      </span>
+      <span v-if="cacheWrite > 0" class="text-slate-600">·</span>
+      <span
+        v-if="cacheWrite > 0"
+        class="text-amber-400/80"
+        :title="t('observability.metricsBar.cacheWriteHint')"
+      >
+        {{ t('observability.metricsBar.cacheWrite', { tokens: formatTokens(cacheWrite) }) }}
+      </span>
     </div>
 
     <!-- output-limit headroom -->

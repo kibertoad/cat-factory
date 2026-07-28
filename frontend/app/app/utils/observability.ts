@@ -11,6 +11,31 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
+/**
+ * TOTAL input tokens: fresh + cache read + cache write. This is the headline "↑" figure on
+ * every LLM surface, and it deliberately COUNTS THE CACHED CLASSES.
+ *
+ * That is the like-for-like measure of Claude Code's own context gauge, which sums exactly these
+ * buckets because a cached token still physically occupies the context window. Leading with the
+ * fresh figure instead (what this surface used to do, on the grounds that the raw sum "reads as a
+ * blow-up") discounts cache reads because their DOLLAR cost is low — but the quota, latency and
+ * context-window cost is the whole thing an autonomous run burns, and hiding it is what let a
+ * ~31M-token run look like a 685-token one. See
+ * `docs/initiatives/token-burn-instrumentation.md`.
+ *
+ * The three classes are still rendered as the breakdown beneath it, because they are priced an
+ * order of magnitude apart in opposite directions — this makes the volume honest WITHOUT making
+ * the cost unreadable. The two fields are optional on an older snapshot, where absent reads as 0
+ * and the total degrades to the fresh count.
+ */
+export function totalInputTokens(m: {
+  promptTokens: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+}): number {
+  return m.promptTokens + (m.cacheReadTokens ?? 0) + (m.cacheWriteTokens ?? 0)
+}
+
 /** Compact duration: 850 → "850ms", 1500 → "1.5s", 90_000 → "1m 30s". */
 export function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`

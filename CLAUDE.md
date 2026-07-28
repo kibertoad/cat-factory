@@ -1198,7 +1198,11 @@ error handling — and the phased plan to close them — are tracked in
   `freshPromptTokens`), read the already-exclusive field where it reports them apart (Anthropic);
   `cacheTokensFromUsage` covers the field names. Only Anthropic reports a write class — 0
   elsewhere, never guessed. Distinct from the harness's `PiRunOutcome.usage`, which is the
-  key-rotation WEIGHT and deliberately keeps summing every billed bucket. Design + the gotchas:
+  key-rotation WEIGHT and deliberately keeps summing every billed bucket. **On every SPA surface the
+  headline `↑` is the TOTAL of the three (`totalInputTokens`), with the classes as the breakdown** —
+  the like-for-like of Claude Code's context gauge, which counts the same buckets. Splitting the
+  classes makes COST readable; leading with the fresh figure would make VOLUME unreadable, and did
+  (a ~31M-token run rendered as 685). Design + the gotchas:
   [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./docs/initiatives/token-telemetry-per-class-and-cost.md).
 
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed

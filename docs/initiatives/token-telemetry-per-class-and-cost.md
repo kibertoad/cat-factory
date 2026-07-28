@@ -139,6 +139,16 @@ runtimes symmetric"):
 - **The AI SDK v3 usage shape already carries the split** (`inputTokens: { total, noCache, cacheRead,
 cacheWrite }`), so the inline path reads it straight off rather than re-deriving; `noCache` is
   preferred over `total − read − write` because it is what the provider itself reported.
-- **The frontend now derives nothing.** `freshPromptTokens` (the SPA heuristic) is deleted, not
-  reimplemented — the whole point of the slice is that the split arrives correct from the source. A
-  new SPA-side derivation over these three fields would be a regression to what this replaced.
+- **The frontend now derives nothing except the TOTAL.** `freshPromptTokens` (the SPA heuristic) is
+  deleted, not reimplemented — the whole point of the slice is that the split arrives correct from
+  the source. The one surviving helper is `totalInputTokens` (fresh + read + write), and it exists
+  for the rule below.
+- **The headline "↑" is the TOTAL, never the fresh figure.** Splitting the classes is about making
+  COST readable; it must not be allowed to make VOLUME unreadable. The surface previously led with
+  fresh on the stated grounds that the raw sum "reads as a blow-up" — which is exactly the framing
+  [`token-burn-instrumentation`](./token-burn-instrumentation.md) exists to reject, and it rendered
+  a ~31M-token run as 685 tokens. A cached token occupies the context window like any other, and
+  Claude Code's own gauge counts the same buckets, so the headline sums all three and the classes
+  render as the breakdown beneath it. `frontend/app/app/utils/observability.spec.ts` pins this.
+  Any new token surface follows the same shape: **total in the headline, classes in the
+  breakdown.**

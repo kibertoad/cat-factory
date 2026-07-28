@@ -32,9 +32,12 @@ DeepSeek / OpenAI), which flips that model's effective flavour `cloudflare → d
 - the model picker shows a `Prompt caching` / `No prompt caching` badge per flavour
   (`ModelConfigurationPanel.vue`, via `cachingBadge` in `stores/models.ts`);
 - the API-keys panel notes which direct keys enable caching (`ApiKeysSection.vue`);
-- the step metrics bar shows the cache split when present, and the per-agent-kind summary
-  carries `cacheReadTokens` + `cacheWriteTokens` as two distinct sums plus a derived
-  `cacheHitRate` (`StepMetricsBar.vue`, `observability.logic.ts`, both repositories).
+- the step metrics bar leads with TOTAL input (fresh + both cache classes, `totalInputTokens` —
+  the like-for-like of Claude Code's context gauge) and shows the three classes as its breakdown,
+  and the per-agent-kind summary carries `cacheReadTokens` + `cacheWriteTokens` as two distinct
+  sums plus a derived `cacheHitRate` (`StepMetricsBar.vue`, `observability.logic.ts`, both
+  repositories). Splitting the classes is about making cost readable — it must never be allowed
+  to shrink the headline VOLUME, which is what a cache-dominated agentic run actually burns.
 
 We deliberately **do not auto-flip the shipped model defaults** — that's a model-quality
 decision that needs benchmark evidence (below), not a blind change.

@@ -8,7 +8,7 @@ import type {
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
-import { formatMs, formatTokens, pct } from '~/utils/observability'
+import { formatMs, formatTokens, pct, totalInputTokens } from '~/utils/observability'
 
 // Drill-down overlay for a run's LLM activity. Opened via
 // `ui.openObservability(instanceId)` from a step surface; loads the full per-call
@@ -127,12 +127,17 @@ const totals = computed(() => {
   const overheadMs = sum(c, (x) => x.overheadMs)
   const total = upstreamMs + overheadMs
   // The three input classes are orthogonal at the source, so they are simply summed —
-  // `promptTokens` IS the fresh figure and needs no heuristic to recover it.
+  // `promptTokens` IS the fresh figure and needs no heuristic to recover it; the headline is
+  // their TOTAL (see `totalInputTokens` — the like-for-like Claude Code context gauge).
+  const promptTokens = sum(c, (x) => x.promptTokens)
+  const cacheReadTokens = sum(c, (x) => x.cacheReadTokens)
+  const cacheWriteTokens = sum(c, (x) => x.cacheWriteTokens)
   return {
     calls: c.length,
-    promptTokens: sum(c, (x) => x.promptTokens),
-    cacheReadTokens: sum(c, (x) => x.cacheReadTokens),
-    cacheWriteTokens: sum(c, (x) => x.cacheWriteTokens),
+    promptTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    inputTokens: totalInputTokens({ promptTokens, cacheReadTokens, cacheWriteTokens }),
     completionTokens: sum(c, (x) => x.completionTokens),
     upstreamMs,
     overheadMs,
@@ -288,31 +293,47 @@ function exportJson() {
                     {{ t('observability.summary.tokensInOut') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
-                    {{ formatTokens(totals.promptTokens) }} /
-                    {{ formatTokens(totals.completionTokens) }}
-                    <span
-                      v-if="totals.cacheReadTokens > 0"
-                      class="ms-1 text-[11px] text-emerald-400/80"
-                      :title="t('observability.summary.cacheReadHint')"
-                    >
-                      ·
-                      {{
-                        t('observability.summary.cacheRead', {
-                          tokens: formatTokens(totals.cacheReadTokens),
-                        })
-                      }}
+                    <span :title="t('observability.summary.inputTokensHint')">
+                      {{ formatTokens(totals.inputTokens) }} /
+                      {{ formatTokens(totals.completionTokens) }}
                     </span>
                     <span
-                      v-if="totals.cacheWriteTokens > 0"
-                      class="ms-1 text-[11px] text-amber-400/80"
-                      :title="t('observability.summary.cacheWriteHint')"
+                      v-if="totals.cacheReadTokens > 0 || totals.cacheWriteTokens > 0"
+                      class="mt-0.5 block text-[11px]"
                     >
-                      ·
-                      {{
-                        t('observability.summary.cacheWrite', {
-                          tokens: formatTokens(totals.cacheWriteTokens),
-                        })
-                      }}
+                      <span class="text-slate-400" :title="t('observability.summary.freshHint')">
+                        {{
+                          t('observability.summary.fresh', {
+                            tokens: formatTokens(totals.promptTokens),
+                          })
+                        }}
+                      </span>
+                      <template v-if="totals.cacheReadTokens > 0">
+                        <span class="text-slate-600"> · </span>
+                        <span
+                          class="text-emerald-400/80"
+                          :title="t('observability.summary.cacheReadHint')"
+                        >
+                          {{
+                            t('observability.summary.cacheRead', {
+                              tokens: formatTokens(totals.cacheReadTokens),
+                            })
+                          }}
+                        </span>
+                      </template>
+                      <template v-if="totals.cacheWriteTokens > 0">
+                        <span class="text-slate-600"> · </span>
+                        <span
+                          class="text-amber-400/80"
+                          :title="t('observability.summary.cacheWriteHint')"
+                        >
+                          {{
+                            t('observability.summary.cacheWrite', {
+                              tokens: formatTokens(totals.cacheWriteTokens),
+                            })
+                          }}
+                        </span>
+                      </template>
                     </span>
                   </dd>
                 </div>
@@ -429,12 +450,14 @@ function exportJson() {
                     <span
                       :title="
                         t('observability.call.tokensTitle', {
-                          prompt: c.promptTokens,
+                          input: totalInputTokens(c),
+                          fresh: c.promptTokens,
                           completion: c.completionTokens,
                         })
                       "
                     >
-                      {{ formatTokens(c.promptTokens) }}↑ {{ formatTokens(c.completionTokens) }}↓
+                      {{ formatTokens(totalInputTokens(c)) }}↑
+                      {{ formatTokens(c.completionTokens) }}↓
                     </span>
                     <span
                       v-if="headroomOf(c) !== null"
@@ -477,6 +500,9 @@ function exportJson() {
                     }}</span>
                     <span v-if="c.requestMaxTokens != null">{{
                       t('observability.call.maxTokens', { value: c.requestMaxTokens })
+                    }}</span>
+                    <span v-if="c.cacheReadTokens > 0 || c.cacheWriteTokens > 0">{{
+                      t('observability.call.fresh', { tokens: c.promptTokens })
                     }}</span>
                     <span v-if="c.cacheReadTokens > 0" class="text-emerald-400">{{
                       t('observability.call.cacheRead', { tokens: c.cacheReadTokens })
