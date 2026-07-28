@@ -70,6 +70,9 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
           traceSink: dependencies.llmTraceSink,
           workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
           workspaceSettingsCache: caches.workspaceSettings,
+          // The trace fan-out is best-effort; without this a sink that rejects every export
+          // (a revoked Langfuse key) leaves the deployment exporting nothing, silently.
+          logger: dependencies.logger,
         })
       : undefined,
   )

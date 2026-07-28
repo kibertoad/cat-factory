@@ -60,6 +60,8 @@ async function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   // LATER — exactly the degraded-pool path this probe exists to detect. Nothing awaits it by then,
   // so attach a no-op handler to swallow that late rejection and avoid an unhandledRejection. This
   // does not hide a pre-timeout failure: the race still observes `promise` rejecting and rejects.
+  // silent-catch-ok: the race above already surfaces this rejection when it lands in time; a
+  // second report here would warn on every probe timeout for a cause the caller already has.
   promise.catch(() => {})
   try {
     await Promise.race([promise, timeout])

@@ -527,7 +527,7 @@ export function llmProxyController(): Hono<AppEnv> {
         // persists. Best-effort: a publish failure (no subscribers, transient hub error)
         // must not break metering.
         waitUntil(
-          Promise.resolve(
+          runBestEffort(log, 'llmProxy.publishCallObserved', () =>
             // `?.` on the publisher itself, not just the method: a minimal container
             // (e.g. the harness's real-proxy acceptance test) may omit it, and the live
             // emit is best-effort — a missing publisher must never break metering.
@@ -555,7 +555,7 @@ export function llmProxyController(): Hono<AppEnv> {
               httpStatus: obs.httpStatus,
               errorMessage: obs.errorMessage,
             }),
-          ).catch(() => {}),
+          ),
         )
 
         if (!llmObservability) return

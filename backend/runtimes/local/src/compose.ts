@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
 import type { ComposeExecResult, ComposeRuntime } from '@cat-factory/integrations'
+import { runBestEffort } from '@cat-factory/kernel'
+import { logger } from '@cat-factory/server'
 
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 16 * 1024 * 1024
@@ -82,7 +84,11 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
       // init + `fetch --depth 1 origin <ref>` + detached checkout (so a raw SHA ref works too), and
       // the token is passed to git via GIT_ASKPASS — never on argv.
       const dir = join(projectDir(project), 'checkout')
-      await rm(dir, { recursive: true, force: true }).catch(() => {})
+      // A stale checkout that survives the wipe makes the clone below fail with a confusing
+      // "already exists"; naming the rm failure is what distinguishes the two.
+      await runBestEffort(logger, 'compose.clearCheckoutDir', () =>
+        rm(dir, { recursive: true, force: true }),
+      )
       await mkdir(dir, { recursive: true })
       // Embed only the `x-access-token` username (no secret) in the remote URL.
       const authUrl = target.cloneUrl.replace(/^https:\/\//, 'https://x-access-token@')
@@ -199,7 +205,14 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
       }
     },
     async cleanupProject(project) {
-      await rm(projectDir(project), { recursive: true, force: true }).catch(() => {})
+      // Best-effort: a failed reap leaves the project's scratch dir on disk, which grows
+      // unboundedly with nothing else to say so.
+      await runBestEffort(
+        logger,
+        'compose.cleanupProject',
+        () => rm(projectDir(project), { recursive: true, force: true }),
+        { project },
+      )
     },
   }
 }

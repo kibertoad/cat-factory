@@ -1,4 +1,6 @@
 import type { Context } from 'hono'
+import { runBestEffort } from '@cat-factory/kernel'
+import { logger } from '../observability/logger.js'
 import type { AppEnv } from './env.js'
 
 /**
@@ -14,7 +16,10 @@ export function makeWaitUntil(c: Context<AppEnv>): (p: Promise<unknown>) => void
     try {
       c.executionCtx.waitUntil(p)
     } catch {
-      void p.catch(() => {})
+      // No `executionCtx` (Node): plain fire-and-forget. The rejection still has to be
+      // handled here or it reaches the process-level `unhandledRejection` guard with no idea
+      // which controller scheduled it — a post-response drop names itself instead.
+      void runBestEffort(logger, 'waitUntil.postResponse', () => p)
     }
   }
 }

@@ -41,6 +41,7 @@ import {
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
   ProviderRoutingGitHubClient,
+  logger,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   makeResolveRepoFilesForCoords,
@@ -574,6 +575,9 @@ function buildNodeIssueWriteback(args: {
       (d) => new DrizzleReviewQuestionPostRepository(d),
     ),
     clock,
+    // Every hook here is fire-and-forget; without a logger a permanently broken tracker
+    // connection produces no symptom but comments that never appear.
+    logger,
     ...(githubClient && resolveWritebackIssue
       ? {
           commentOnGitHubIssue: async (workspaceId, externalId, body) => {

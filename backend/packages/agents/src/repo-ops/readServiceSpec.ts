@@ -39,7 +39,11 @@ const EMPTY = EMPTY_SERVICE_SPEC_VIEW
 // Cap concurrent GitHub reads so a large spec doesn't fire a burst of dozens of parallel
 // requests at once (GitHub flags high concurrency as secondary-rate-limit abuse). The reads
 // are still parallel, just bounded.
-const READ_CONCURRENCY = 12
+//
+// Exported because the spec-promotion post-op re-reads the same tree to diff it, and the two
+// walks must share one bound: a second uncapped walk would reintroduce exactly the burst this
+// number exists to prevent, on the same repo, moments apart.
+export const READ_CONCURRENCY = 12
 
 function parseJson(content: string): unknown {
   try {

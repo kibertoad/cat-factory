@@ -4,10 +4,16 @@ import type {
   InlineObservabilityContext,
   LlmGenerationEvent,
   LlmTraceSink,
+  Logger,
   ModelProvider,
   ModelRef,
 } from '@cat-factory/kernel'
-import { catFactoryObservability, readInlineObservabilityContext } from '@cat-factory/kernel'
+import {
+  catFactoryObservability,
+  noopLogger,
+  readInlineObservabilityContext,
+  runBestEffort,
+} from '@cat-factory/kernel'
 
 // Re-exported so existing `@cat-factory/agents` consumers keep importing the inline
 // observability tag from here; the canonical, dependency-free definition lives in the
@@ -79,6 +85,7 @@ export class InstrumentedModelProvider implements ModelProvider {
   private readonly traceSink: LlmTraceSink
   private readonly recordPrompts: boolean
   private readonly now: () => number
+  private readonly log: Logger
 
   constructor(deps: {
     inner: ModelProvider
@@ -87,11 +94,14 @@ export class InstrumentedModelProvider implements ModelProvider {
     recordPrompts?: boolean
     /** Injectable clock (tests); defaults to `Date.now`. */
     now?: () => number
+    /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
+    logger?: Logger
   }) {
     this.inner = deps.inner
     this.traceSink = deps.traceSink
     this.recordPrompts = deps.recordPrompts ?? true
     this.now = deps.now ?? (() => Date.now())
+    this.log = (deps.logger ?? noopLogger).child({ scope: 'inlineLlmTrace' })
   }
 
   resolve(ref: ModelRef): LanguageModel {
@@ -152,13 +162,15 @@ export class InstrumentedModelProvider implements ModelProvider {
       input: this.recordPrompts ? safeJson((params as { prompt?: unknown })?.prompt) : '',
       output: this.recordPrompts && ok ? readOutputText(result) : '',
     }
-    // Best-effort and fully isolated: the sink itself swallows + logs, but guard the
-    // synchronous build/dispatch too so instrumentation can never break the LLM call.
-    try {
-      void Promise.resolve(this.traceSink.recordGeneration(event)).catch(() => {})
-    } catch {
-      // ignored
-    }
+    // Best-effort and fully isolated — instrumentation must never break the LLM call.
+    // `runBestEffort` covers the synchronous build/dispatch throw as well as the rejection,
+    // which is what the `try` around the old `.catch(() => {})` was there for.
+    void runBestEffort(
+      this.log,
+      'traceSink.recordGeneration',
+      () => this.traceSink.recordGeneration(event),
+      { workspaceId: event.workspaceId, executionId: event.executionId, source: 'inline' },
+    )
   }
 }
 

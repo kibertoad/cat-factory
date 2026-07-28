@@ -127,6 +127,9 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
           notificationService: notifications?.service,
           resolveRunRepoContext: dependencies.resolveRunRepoContext,
           serviceRepository: dependencies.serviceRepository,
+          // Every tick is isolated and swallowed, so without this a permanently-failing
+          // initiative is indistinguishable from an idle one.
+          logger: dependencies.logger,
         })
       : undefined
   setInitiativeLoop(initiativeLoop)

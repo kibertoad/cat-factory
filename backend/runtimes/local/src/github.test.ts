@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import {
   classifyPatProbe,
   describePatProbeVerdict,
@@ -119,59 +120,43 @@ describe('describePatProbeVerdict (A12)', () => {
 
 describe('warnOnGitHubPatProblemInBackground (app-startup item 6)', () => {
   it('returns immediately without blocking (the github.com probe runs in the background)', () => {
-    const warnings: string[] = []
+    const log = createRecordingLogger()
     // A fetch that never settles during this synchronous check: the call must STILL return with no
     // warning yet, so boot never stalls on the github.com round-trip.
     const fetchImpl = (() => new Promise<Response>(() => {})) as typeof fetch
-    warnOnGitHubPatProblemInBackground(
-      { GITHUB_PAT: 'ghp_x' },
-      { warn: (m) => warnings.push(m) },
-      { fetchImpl },
-    )
-    expect(warnings).toEqual([])
+    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, { fetchImpl })
+    expect(log.lines).toEqual([])
   })
 
   it('warns once the deferred probe reports an under-scoped token', async () => {
-    const warnings: string[] = []
+    const log = createRecordingLogger()
     const fetchImpl = (async () =>
       new Response('{}', { status: 200, headers: { 'x-oauth-scopes': 'repo' } })) as typeof fetch
-    warnOnGitHubPatProblemInBackground(
-      { GITHUB_PAT: 'ghp_x' },
-      { warn: (m) => warnings.push(m) },
-      { fetchImpl },
-    )
+    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, { fetchImpl })
     await flush()
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatch(/missing required scope\(s\) workflow/)
+    expect(log.lines).toHaveLength(1)
+    expect(log.lines[0]?.msg).toMatch(/missing required scope\(s\) workflow/)
   })
 
   it('stays silent for a healthy token and swallows a network error (never throws)', async () => {
-    const warnings: string[] = []
+    const log = createRecordingLogger()
     const healthy = (async () =>
       new Response('{}', {
         status: 200,
         headers: { 'x-oauth-scopes': 'repo, workflow' },
       })) as typeof fetch
-    warnOnGitHubPatProblemInBackground(
-      { GITHUB_PAT: 'ghp_x' },
-      { warn: (m) => warnings.push(m) },
-      {
-        fetchImpl: healthy,
-      },
-    )
+    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, {
+      fetchImpl: healthy,
+    })
     // A network error → probeGitHubPat returns undefined → treated as ok → no warning, no throw.
     const boom = (async () => {
       throw new Error('ENOTFOUND')
     }) as typeof fetch
-    warnOnGitHubPatProblemInBackground(
-      { GITHUB_PAT: 'ghp_x' },
-      { warn: (m) => warnings.push(m) },
-      {
-        fetchImpl: boom,
-      },
-    )
+    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, {
+      fetchImpl: boom,
+    })
     await flush()
-    expect(warnings).toEqual([])
+    expect(log.lines).toEqual([])
   })
 })
 

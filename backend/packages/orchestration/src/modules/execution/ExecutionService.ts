@@ -467,6 +467,7 @@ export class ExecutionService {
       initiativeService,
       initiativeInterviewService,
       docInterviewService,
+      logger,
     })
     this.requirementsKind = reviewSubjects.requirementsKind
     this.clarityKind = reviewSubjects.clarityKind
@@ -493,6 +494,7 @@ export class ExecutionService {
       events: executionEventPublisher,
       idGenerator,
       clock,
+      logger,
       spend: spendService,
       stepGraph: this.stepGraph,
       runStateMachine: this.runStateMachine,

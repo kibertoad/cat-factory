@@ -10,7 +10,8 @@ import type {
   RateLimitRepository,
   RateLimitSnapshot,
 } from '@cat-factory/kernel'
-import type { VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
+import type { Logger, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
+import { runBestEffort } from '@cat-factory/kernel'
 import { type AppTokenSource, FetchGitHubClient, GitHubIdentityResolver } from '@cat-factory/server'
 import {
   asGitHubClient,
@@ -294,15 +295,14 @@ export function describePatProbeVerdict(verdict: PatProbeVerdict): string | unde
  */
 export function warnOnGitHubPatProblemInBackground(
   env: NodeJS.ProcessEnv,
-  log: { warn: (msg: string) => void },
+  log: Logger,
   opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): void {
-  void probeGitHubPat(env, opts)
-    .then((verdict) => {
-      const warning = describePatProbeVerdict(verdict ?? { ok: true })
-      if (warning) log.warn(warning)
-    })
-    .catch(() => {})
+  void runBestEffort(log, 'github.patProbe', async () => {
+    const verdict = await probeGitHubPat(env, opts)
+    const warning = describePatProbeVerdict(verdict ?? { ok: true })
+    if (warning) log.warn(warning)
+  })
 }
 
 /**

@@ -16,6 +16,7 @@ import type {
   ModelProviderResolver,
   ModelScope,
 } from '@cat-factory/kernel'
+import { logger } from '../observability/logger.js'
 import { openAiCompatibleBaseUrlError } from './providerErrors.js'
 
 // Builds a {@link ModelProviderResolver} that resolves INLINE LLM calls against the
@@ -101,6 +102,7 @@ export function createScopedModelProviderResolver(
           inner: composite,
           traceSink: opts.instrument.traceSink,
           recordPrompts: opts.instrument.recordPrompts,
+          logger,
         })
       }
       return composite

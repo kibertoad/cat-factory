@@ -6,7 +6,12 @@ import type {
   Pipeline,
   PipelineRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, InitiativePresetRegistry, NoopEventPublisher } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  createRecordingLogger,
+  InitiativePresetRegistry,
+  NoopEventPublisher,
+} from '@cat-factory/kernel'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ExecutionService } from '../execution/ExecutionService.js'
@@ -162,6 +167,7 @@ function harness(opts: {
   start?: (ws: string, blockId: string, pipelineId: string) => Promise<unknown>
   initiativeOverrides?: Partial<Initiative>
 }) {
+  const log = createRecordingLogger()
   const initiatives = makeInitiativeStore()
   const { store: blocks, rows: blockRows } = makeBlockStore()
   blockRows.set(frame.id, { ws: 'ws-1', block: frame })
@@ -198,8 +204,9 @@ function harness(opts: {
     clock,
     idGenerator,
     notificationService,
+    logger: log,
   })
-  return { loop, initiatives, blocks, blockRows, notes, start, service }
+  return { loop, initiatives, blocks, blockRows, notes, start, service, log }
 }
 
 beforeEach(() => {
@@ -540,6 +547,37 @@ describe('InitiativeLoopService', () => {
       // The winner (a separate replica, not modelled here) raises the single card; this losing tick
       // must add none. Pre-fix it raised a spurious second `checkpoint` notification.
       expect(h.notes.filter((n) => n.reason === 'checkpoint')).toHaveLength(0)
+    })
+  })
+
+  // The loop isolates a bad initiative so one can't stall the others — which used to mean an
+  // initiative failing EVERY tick read as idle in the sweeper's aggregate counts.
+  describe('reports the failures it isolates', () => {
+    it('warns per initiative when a tick throws, and keeps sweeping', async () => {
+      const h = harness({ items: [item({ id: 'a' })] })
+      await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))
+      h.blocks.get = () => Promise.reject(new Error('D1_ERROR: no such table blocks'))
+
+      const result = await h.loop.runDue(clockNow)
+
+      expect(result.ticked).toBe(1)
+      expect(result.spawned).toBe(0)
+      const warned = h.log.lines.find((l) => l.msg.includes('initiative tick failed'))
+      expect(warned?.level).toBe('warn')
+      expect(warned?.fields).toMatchObject({ workspaceId: 'ws-1', blockId: initiativeBlock.id })
+      expect(warned?.fields.err).toContain('no such table')
+    })
+
+    it('warns when a poke throws rather than leaving the sweep as the only trace', async () => {
+      const h = harness({ items: [item({ id: 'a' })] })
+      await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))
+      h.initiatives.getByBlock = () => Promise.reject(new Error('connection reset'))
+
+      await h.loop.pokeForInitiativeBlock('ws-1', initiativeBlock.id)
+
+      const warned = h.log.lines.find((l) => l.msg.includes('initiative poke failed'))
+      expect(warned?.level).toBe('warn')
+      expect(warned?.fields.err).toContain('connection reset')
     })
   })
 })
