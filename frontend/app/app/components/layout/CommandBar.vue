@@ -92,7 +92,7 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
         group: groupIntegrations,
         icon: 'i-lucide-file-down',
         keywords: t('layout.commandBar.keywords.documentImport'),
-        run: () => ui.openDocumentImport(null),
+        run: () => ui.openDocumentImport(),
       })
     }
   }

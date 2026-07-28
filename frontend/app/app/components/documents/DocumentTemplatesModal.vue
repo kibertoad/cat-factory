@@ -117,7 +117,7 @@ async function unlink(doc: SourceDocument) {
             color="primary"
             variant="soft"
             icon="i-lucide-file-down"
-            @click="ui.openDocumentImport(null)"
+            @click="ui.openDocumentImport()"
           >
             {{ t('documents.templates.importButton') }}
           </UButton>

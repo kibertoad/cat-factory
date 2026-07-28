@@ -12,7 +12,6 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
-const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
@@ -30,13 +29,6 @@ onMounted(() => {
   fragments.ensureLoaded()
   github.ensureLoaded()
 })
-
-/** Open the document import/spawn flow, targeting this container's frame. */
-function spawnFromDocument() {
-  if (!block.value) return
-  const frameId = isFrame.value ? block.value.id : (board.serviceOf(block.value)?.id ?? null)
-  ui.openDocumentImport(frameId)
-}
 
 const block = computed<Block | undefined>(() =>
   ui.selectedBlockId ? board.getBlock(ui.selectedBlockId) : undefined,
@@ -463,16 +455,6 @@ const showOriginalDescription = ref(false)
           @click="ui.openBugHunt(null, block!.id)"
         >
           {{ t('panels.inspector.huntBugs') }}
-        </UButton>
-        <UButton
-          v-if="isContainer && documents.available && documents.anyConnected"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-wand-sparkles"
-          @click="spawnFromDocument"
-        >
-          {{ t('panels.inspector.spawnFromDocument') }}
         </UButton>
       </div>
 

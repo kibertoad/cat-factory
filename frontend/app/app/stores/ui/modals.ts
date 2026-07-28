@@ -156,23 +156,20 @@ function createMiscModals() {
  * came-from markers (they can be reached from the Integrations hub).
  */
 function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
-  // Document-source integration modals, keyed by source. `documentImport` and
-  // `spawnPreview` carry an optional target frame, so structure spawned from a
-  // frame's inspector lands inside that frame rather than creating new top-level
-  // frames. `documentConnect` carries the source whose connect form to show;
-  // `documentImport`'s source may be null to let the modal pick a connected one.
+  // Document-source integration modals, keyed by source. A spawn always creates new
+  // top-level frames: the planner decomposes a document into services, so spawning
+  // into an existing frame could only flatten those away (discarding the frame titles
+  // and types the preview shows). `documentConnect` carries the source whose connect
+  // form to show; `documentImport`'s source may be null to let the modal pick a
+  // connected one.
   const documentConnect = ref<{ source: DocumentSourceKind } | null>(null)
-  const documentImport = ref<{
-    source: DocumentSourceKind | null
-    targetFrameId: string | null
-  } | null>(null)
+  const documentImport = ref<{ source: DocumentSourceKind | null } | null>(null)
   // The workspace+DocKind template / exemplar management modal (WS1). A single boolean —
   // it manages every kind's links in one place.
   const documentTemplates = ref(false)
   const spawnPreview = ref<{
     source: DocumentSourceKind
     externalId: string
-    targetFrameId: string | null
   } | null>(null)
 
   // Task-source integration modals, keyed by source. `taskConnect` carries the
@@ -222,12 +219,9 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeDocumentConnect() {
     documentConnect.value = null
   }
-  function openDocumentImport(
-    targetFrameId: string | null = null,
-    source: DocumentSourceKind | null = null,
-  ) {
+  function openDocumentImport(source: DocumentSourceKind | null = null) {
     resetHubReturn()
-    documentImport.value = { source, targetFrameId }
+    documentImport.value = { source }
   }
   function closeDocumentImport() {
     documentImport.value = null
@@ -239,12 +233,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeDocumentTemplates() {
     documentTemplates.value = false
   }
-  function openSpawnPreview(
-    source: DocumentSourceKind,
-    externalId: string,
-    targetFrameId: string | null = null,
-  ) {
-    spawnPreview.value = { source, externalId, targetFrameId }
+  function openSpawnPreview(source: DocumentSourceKind, externalId: string) {
+    spawnPreview.value = { source, externalId }
   }
   function closeSpawnPreview() {
     spawnPreview.value = null

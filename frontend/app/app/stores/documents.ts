@@ -106,12 +106,15 @@ export const useDocumentsStore = defineStore('documents', () => {
     return api.planDocument(workspace.requireId(), source, externalId)
   }
 
-  /** Apply a page's structure to the board, then refresh the board snapshot. */
-  async function spawn(source: DocumentSourceKind, externalId: string, frameId?: string) {
-    const { result } = await api.spawnDocument(workspace.requireId(), source, {
-      externalId,
-      frameId,
-    })
+  /**
+   * Apply a page's structure to the board as new top-level frames, then refresh the
+   * board snapshot. The endpoint also accepts a `frameId` that flattens the planned
+   * frames into an existing service; the SPA deliberately never sends one, because the
+   * planner is target-blind and that path discards the frame titles/types the preview
+   * shows. Scoping a spawn to a service needs a target-aware plan first.
+   */
+  async function spawn(source: DocumentSourceKind, externalId: string) {
+    const { result } = await api.spawnDocument(workspace.requireId(), source, { externalId })
     await workspace.refresh()
     return result
   }

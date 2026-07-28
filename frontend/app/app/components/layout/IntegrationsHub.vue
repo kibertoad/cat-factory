@@ -202,7 +202,7 @@ const groups = computed<IntegrationGroup[]>(() => {
         icon: 'i-lucide-file-down',
         label: t('layout.integrationsHub.items.documentImport.label'),
         description: t('layout.integrationsHub.items.documentImport.description'),
-        onClick: () => go(() => ui.openDocumentImport(null)),
+        onClick: () => go(() => ui.openDocumentImport()),
       })
     }
     // Per-DocKind template + exemplar links are workspace CONFIG over the imported corpus, not an
