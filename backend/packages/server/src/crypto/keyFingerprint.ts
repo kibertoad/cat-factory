@@ -1,4 +1,4 @@
-import type { KeyFingerprintStore } from '@cat-factory/kernel'
+import type { KeyFingerprintStore, Logger } from '@cat-factory/kernel'
 import { base64url, base64urlToBytes } from './encoding.js'
 
 // ADR 0026 D6.1 — a non-secret fingerprint of the master ENCRYPTION_KEY and the boot-time
@@ -52,12 +52,6 @@ export type KeyFingerprintCheck =
   | { status: 'drift'; current: string; stored: string }
 
 /** A minimal logger surface (matches both the server and runtime facades' loggers). */
-export interface KeyFingerprintLogger {
-  info(message: string, fields?: Record<string, unknown>): void
-  warn(message: string, fields?: Record<string, unknown>): void
-  error(message: string, fields?: Record<string, unknown>): void
-}
-
 /**
  * Run the boot-time drift check: compute the current key's fingerprint, compare it to the
  * persisted one, and NEVER overwrite a mismatching value (that would erase the drift signal —
@@ -69,7 +63,7 @@ export interface KeyFingerprintLogger {
 export async function checkKeyFingerprint(deps: {
   store: KeyFingerprintStore
   masterKeyBase64: string
-  logger: KeyFingerprintLogger
+  logger: Logger
 }): Promise<KeyFingerprintCheck> {
   const { store, masterKeyBase64, logger } = deps
   const current = await computeKeyFingerprint(masterKeyBase64)

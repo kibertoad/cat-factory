@@ -77,10 +77,13 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
         await this.deps.githubClient
           .deleteBranch(installationId, ref, branch)
           .catch((e: unknown) => {
-            logger.warn(
-              { workspaceId, blockId, repo: `${owner}/${name}`, branch, err: e },
-              'mergePullRequests: failed to delete merged work branch (left behind)',
-            )
+            logger.warn('mergePullRequests: failed to delete merged work branch (left behind)', {
+              workspaceId,
+              blockId,
+              repo: `${owner}/${name}`,
+              branch,
+              err: e,
+            })
           })
       }
     }

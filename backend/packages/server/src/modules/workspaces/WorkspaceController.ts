@@ -23,7 +23,13 @@ import type {
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import { resolveWorkspaceAccess } from '@cat-factory/kernel'
-import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
+import type {
+  AccountRole,
+  Logger,
+  ModelRef,
+  TaskTypeRegistry,
+  WorkspaceRole,
+} from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -166,10 +172,10 @@ async function snapshotSkills(
   } catch (err) {
     // Best-effort: log the swallowed fault (like the infra-setup probe above) so a misconfigured
     // library is visible in the operator log, but never let it 500 the board snapshot.
-    sharedLogger.warn(
-      { accountId, err: err instanceof Error ? err.message : String(err) },
-      'skill catalog read failed; degrading snapshot skills to none',
-    )
+    sharedLogger.warn('skill catalog read failed; degrading snapshot skills to none', {
+      accountId,
+      err: err instanceof Error ? err.message : String(err),
+    })
     return undefined
   }
 }
@@ -227,18 +233,13 @@ function snapshotBackendKinds(registries: {
  * `not_applicable` is still diagnosable instead of silently invisible.
  */
 
-/** Structural best-effort logger (the facade's pino logger); a swallowed probe fault is logged here. */
-export interface InfraSetupLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 /** Cap on a single area probe so a slow/stuck backend read can't stall the whole board snapshot. */
 const AREA_PROBE_TIMEOUT_MS = 2000
 
 export async function areaStatus(
   wired: boolean,
   read: () => Promise<unknown>,
-  opts: { area?: string; logger?: InfraSetupLogger; timeoutMs?: number } = {},
+  opts: { area?: string; logger?: Logger; timeoutMs?: number } = {},
 ): Promise<'not_applicable' | 'not_defined' | 'configured'> {
   if (!wired) return 'not_applicable'
   const timeoutMs = opts.timeoutMs ?? AREA_PROBE_TIMEOUT_MS
@@ -255,10 +256,10 @@ export async function areaStatus(
     ])
     return result ? 'configured' : 'not_defined'
   } catch (err) {
-    opts.logger?.warn(
-      { area: opts.area, err: err instanceof Error ? err.message : String(err) },
-      'infra-setup probe failed; degrading area to not_applicable',
-    )
+    opts.logger?.warn('infra-setup probe failed; degrading area to not_applicable', {
+      area: opts.area,
+      err: err instanceof Error ? err.message : String(err),
+    })
     return 'not_applicable'
   } finally {
     if (timer) clearTimeout(timer)
@@ -304,7 +305,7 @@ export interface InfraSetupSources {
 export async function snapshotInfraSetup(
   container: InfraSetupSources,
   workspaceId: string,
-  logger: InfraSetupLogger = sharedLogger,
+  logger: Logger = sharedLogger,
 ): Promise<InfraSetup> {
   const [ephemeralEnvironments, agentExecutor, binaryStorage] = await Promise.all([
     areaStatus(

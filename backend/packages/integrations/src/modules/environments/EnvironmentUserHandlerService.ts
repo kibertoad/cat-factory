@@ -5,6 +5,7 @@ import type {
   EnvironmentUserHandlerRepository,
   InfraEngine,
   InfraHandlerConfig,
+  Logger,
   ProvisionType,
   SecretCipher,
   UrlSafetyPolicy,
@@ -42,7 +43,7 @@ export interface EnvironmentUserHandlerServiceDependencies {
   /** Whether this runtime can honor custom TLS material (a private CA / insecure-skip). */
   customTlsSupported?: boolean
   /** Optional structural logger for best-effort diagnostics (e.g. a dropped override). */
-  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
+  logger?: Logger
 }
 
 export class EnvironmentUserHandlerService {
@@ -144,8 +145,8 @@ export class EnvironmentUserHandlerService {
       const backendKind = this.backendKindFor(record.engine as InfraEngine)
       if (!backendKind) {
         this.deps.logger?.info(
-          { userId, workspaceId, provisionType: record.provisionType, engine: record.engine },
           'Dropping per-user environment handler override: no backend registered for its engine',
+          { userId, workspaceId, provisionType: record.provisionType, engine: record.engine },
         )
         continue
       }

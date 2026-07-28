@@ -91,10 +91,10 @@ function selectNodeSlackDeps(
       // Best-effort delivery still surfaces failures (revoked token, missing channel
       // invite) through the structured logger so a broken route is diagnosable.
       onError: (error, ctx) =>
-        logger.warn(
-          { err: error instanceof Error ? error.message : String(error), ...ctx },
-          'slack notification delivery failed',
-        ),
+        logger.warn('slack notification delivery failed', {
+          err: error instanceof Error ? error.message : String(error),
+          ...ctx,
+        }),
     }),
     slackConnectionRepository,
     slackSettingsRepository,
@@ -164,10 +164,10 @@ function selectNodeNotificationWebhookSupport(
     // Best-effort delivery still surfaces failures (a dead endpoint, a rejected signature)
     // through the structured logger so a broken receiver is diagnosable.
     onError: (error, ctx) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), ...ctx },
-        'notification webhook delivery failed',
-      ),
+      logger.warn('notification webhook delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
 }
 

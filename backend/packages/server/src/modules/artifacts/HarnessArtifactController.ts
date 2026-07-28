@@ -66,7 +66,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
       }
       const secret = container.config.auth.sessionSecret
       if (!secret) {
-        logger.error({ scope: 'artifactIngest' }, 'artifact ingest: session secret not configured')
+        logger.error('artifact ingest: session secret not configured', { scope: 'artifactIngest' })
         return c.json(
           { error: { code: 'unavailable', message: 'Artifact ingest not configured' } },
           503,
@@ -75,10 +75,9 @@ export function harnessArtifactController(): Hono<AppEnv> {
       const sessions = new ContainerSessionService({ secret })
       const session = await sessions.verify(bearerToken(c))
       if (!session) {
-        logger.warn(
-          { scope: 'artifactIngest' },
-          'artifact ingest: invalid or expired session token',
-        )
+        logger.warn('artifact ingest: invalid or expired session token', {
+          scope: 'artifactIngest',
+        })
         return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired token' } }, 401)
       }
 
@@ -106,10 +105,11 @@ export function harnessArtifactController(): Hono<AppEnv> {
       // DB-level atomic counter.
       const existingCount = await store.countByExecution(session.workspaceId, session.executionId)
       if (existingCount >= MAX_SCREENSHOTS_PER_RUN) {
-        logger.warn(
-          { scope: 'artifactIngest', executionId: session.executionId, count: existingCount },
-          'artifact ingest: per-run screenshot limit reached',
-        )
+        logger.warn('artifact ingest: per-run screenshot limit reached', {
+          scope: 'artifactIngest',
+          executionId: session.executionId,
+          count: existingCount,
+        })
         return c.json(
           { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
           429,
@@ -176,8 +176,8 @@ export function harnessArtifactController(): Hono<AppEnv> {
           if (overflow.has(record.id)) {
             await store.delete(session.workspaceId, record.id)
             logger.warn(
-              { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
               'artifact ingest: per-run screenshot limit reached (post-insert reconcile)',
+              { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
             )
             return c.json(
               { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },

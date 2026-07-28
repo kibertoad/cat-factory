@@ -1,7 +1,6 @@
 import type { KeyDriftAffected } from '@cat-factory/contracts'
-import type { SealedSecretRef, SecretCipher } from '@cat-factory/kernel'
+import type { Logger, SealedSecretRef, SecretCipher } from '@cat-factory/kernel'
 import { sweepKeyDrift } from '../crypto/keyDriftSweep.js'
-import type { KeyFingerprintLogger } from '../crypto/keyFingerprint.js'
 import type { ServerContainer } from '../http/env.js'
 
 // ADR 0026 D6.2 — the runtime-neutral driver that turns the drift sweep into ONE surfaced issue,
@@ -53,7 +52,7 @@ function cardContent(affected: KeyDriftAffected[]): { title: string; body: strin
 export async function sweepKeyDriftAndRaise(
   container: ServerContainer,
   cipherFor: (info: string) => SecretCipher,
-  logger?: KeyFingerprintLogger,
+  logger?: Logger,
 ): Promise<{ raised: number; cleared: number; affected: number }> {
   const inventory = container.sealedSecretInventory
   const notifications = container.notifications

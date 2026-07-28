@@ -12,6 +12,7 @@ import type {
   BinaryBlobBackend,
   Clock,
   IdGenerator,
+  Logger,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
 import { createBinaryArtifactStore } from '@cat-factory/kernel'
@@ -68,7 +69,7 @@ export interface MakeResolveBinaryArtifactStoreDeps {
   /** Backend used when an account has no content-storage config (the runtime default). */
   defaultBackend: ContentStorageBackend
   /** Optional structural logger, forwarded to the composed store to surface partial reclaims. */
-  logger?: { warn(obj: Record<string, unknown>, msg?: string): void }
+  logger?: Logger
 }
 
 /**

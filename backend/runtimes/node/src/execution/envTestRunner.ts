@@ -59,7 +59,7 @@ async function driveEnvTest(
   // job is about to COMPLETE (not fail), so pg-boss will never retry it and nothing else
   // would ever settle the run. The stale-run sweep below is only the backstop for a
   // drive whose worker died.
-  log.warn({ workspaceId, id }, 'env-test drive exhausted its poll budget; finalizing as failed')
+  log.warn('env-test drive exhausted its poll budget; finalizing as failed', { workspaceId, id })
   await service.expire(
     workspaceId,
     id,
@@ -102,17 +102,17 @@ export function startEnvTestSweeper(
     try {
       const stale = await repository.listStale(Date.now() - cfg.leaseMs)
       for (const run of stale) {
-        log.warn(
-          { workspaceId: run.workspaceId, runId: run.id, stage: run.stage },
-          're-driving stale env-test run',
-        )
+        log.warn('re-driving stale env-test run', {
+          workspaceId: run.workspaceId,
+          runId: run.id,
+          stage: run.stage,
+        })
         await runner.startRun(run.workspaceId, run.id)
       }
     } catch (error) {
-      log.error(
-        { err: error instanceof Error ? error.message : String(error) },
-        'env-test sweep failed',
-      )
+      log.error('env-test sweep failed', {
+        err: error instanceof Error ? error.message : String(error),
+      })
     }
   }
   const timer = setInterval(() => void tick(), cfg.intervalMs)
@@ -139,10 +139,11 @@ export async function startEnvTestWorker(
         try {
           await driveEnvTest(container, workspaceId, id, cfg, log)
         } catch (error) {
-          log.error(
-            { workspaceId, id, err: error instanceof Error ? error.message : String(error) },
-            'env-test drive failed',
-          )
+          log.error('env-test drive failed', {
+            workspaceId,
+            id,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

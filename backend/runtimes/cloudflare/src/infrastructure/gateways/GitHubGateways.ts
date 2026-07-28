@@ -3,7 +3,8 @@ import type {
   GitHubWebhookIngest,
   TrackerWebhookIngest,
 } from '@cat-factory/server'
-import type { TrackerWebhookEvent } from '@cat-factory/kernel'
+import { describeError, type TrackerWebhookEvent } from '@cat-factory/kernel'
+import { logger } from '../observability/logger'
 import type { Queue, Workflow } from '@cloudflare/workers-types'
 import type { GitHubSyncMessage, TrackerSyncMessage } from '../env'
 
@@ -18,12 +19,21 @@ export class WorkflowsBackfillScheduler implements GitHubBackfillScheduler {
 
   async scheduleBackfill(installationId: number): Promise<boolean> {
     if (!this.workflow) return false
-    await this.workflow
-      .create({
+    // The create is swallowed but the return is still `true`: the caller uses the boolean to
+    // decide whether to run the backfill INLINE instead, and re-running it inline on top of a
+    // Workflows instance that did start would double the work. So a quota rejection or an
+    // unbound namespace reports "scheduled" — it just no longer does so silently.
+    try {
+      await this.workflow.create({
         id: `backfill-${installationId}-${Date.now()}`,
         params: { installationId },
       })
-      .catch(() => {})
+    } catch (error) {
+      logger.warn('github backfill workflow create failed; reported as scheduled anyway', {
+        installationId,
+        ...describeError(error),
+      })
+    }
     return true
   }
 }

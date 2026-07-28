@@ -4,23 +4,22 @@ import {
   CORS_ALLOWED_HEADERS,
   type ConfigProblem,
   type ServerContainer,
-  checkKeyFingerprint,
   corsReflectsWhenUnset,
   createMisconfiguredApp,
   formatConfigProblems,
   handleError,
   isConfigValidationError,
   logger,
-  requireEnv,
+  parseLogLevel,
   mountAuthGate,
+  setLogLevel,
   registerCoreControllers,
   resolveCorsOrigin,
   sweepKeyDriftAndRaise,
   WebCryptoSecretCipher,
 } from '@cat-factory/server'
-import { DrizzleKeyFingerprintStore } from './repositories/drizzle/settings.js'
-import { pinoKeyFingerprintLogger } from './keyFingerprint.js'
-import { loadNodeConfig } from './config.js'
+import { bootPersistence } from './bootPersistence.js'
+import { installProcessFailureGuards } from './processGuards.js'
 import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -30,7 +29,6 @@ import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
 import { buildCacheNotifications } from './cacheNotifications.js'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
-import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
@@ -65,6 +63,7 @@ import { DrizzleSubscriptionActivationRepository } from './repositories/personal
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
 // Worker mounts, served over `@hono/node-server`. The middleware order mirrors the
@@ -164,7 +163,7 @@ export function serveAppWithRealtime(opts: {
   // per-workspace Durable Object; `@hono/node-server` doesn't upgrade on its own, so attach a
   // `ws` server here).
   const stopRealtime = attachRealtime(server, opts.realtimeHub, opts.auth, logger)
-  logger.info({ port, host: hostname ?? '0.0.0.0' }, `${opts.label} listening`)
+  logger.info(`${opts.label} listening`, { port, host: hostname ?? '0.0.0.0' })
   return { server, stopRealtime }
 }
 
@@ -193,13 +192,13 @@ export function serveMisconfigured(
   host?: string,
 ): ReturnType<typeof serve> {
   logger.error(
-    { problems: problems.map((p) => p.key) },
     `cat-factory node server is MISCONFIGURED — serving the fallback error backend so the UI can explain what to fix.\n${formatConfigProblems(problems)}`,
+    { problems: problems.map((p) => p.key) },
   )
   const app = createMisconfiguredApp(problems)
   const { port, hostname } = resolveBind(env, host)
   const server = serve({ fetch: app.fetch, port, ...(hostname ? { hostname } : {}) })
-  logger.info({ port, host: hostname ?? '0.0.0.0' }, 'cat-factory misconfigured fallback listening')
+  logger.info('cat-factory misconfigured fallback listening', { port, host: hostname ?? '0.0.0.0' })
   return server
 }
 
@@ -286,6 +285,12 @@ export async function start(
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
+  // Before ANYTHING else: apply the configured verbosity and arm the process-level guards, so a
+  // failure inside boot itself (a bad binding, a Postgres that never answers) is logged at the
+  // operator's chosen level rather than lost. `LOG_LEVEL` is a plain env var, not part of
+  // `AppConfig`, precisely so it applies before config validation can reject the boot.
+  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  installProcessFailureGuards(logger)
   try {
     return await bootServer(options, env)
   } catch (err) {
@@ -455,7 +460,7 @@ function startBackgroundSweepers(deps: {
  */
 export async function backfillEnvironmentHandlerSeeds(
   container: Pick<ServerContainer, 'environmentHandlerSeeder' | 'workspaceService'>,
-  log: { warn(obj: object, msg?: string): void },
+  log: Logger,
 ): Promise<void> {
   const seeder = container.environmentHandlerSeeder
   if (!seeder) return
@@ -465,17 +470,16 @@ export async function backfillEnvironmentHandlerSeeds(
       try {
         await seeder.ensureForWorkspace(ws.id)
       } catch (err) {
-        log.warn(
-          { workspaceId: ws.id, err: err instanceof Error ? err.message : String(err) },
-          'environment-handler seed backfill failed for workspace',
-        )
+        log.warn('environment-handler seed backfill failed for workspace', {
+          workspaceId: ws.id,
+          err: err instanceof Error ? err.message : String(err),
+        })
       }
     }
   } catch (err) {
-    log.warn(
-      { err: err instanceof Error ? err.message : String(err) },
-      'environment-handler seed backfill could not enumerate workspaces',
-    )
+    log.warn('environment-handler seed backfill could not enumerate workspaces', {
+      err: err instanceof Error ? err.message : String(err),
+    })
   }
 }
 
@@ -488,68 +492,7 @@ async function bootServer(
   // line below reports where the boot seconds actually go. Cheap `performance.now()` marks; the
   // summary is logged once, after listen.
   const bootClock = startBootClock()
-  const databaseUrl = requireEnv(env, 'DATABASE_URL')
-  // Validate the full config UP FRONT — it is pure (no I/O), so an ENCRYPTION_KEY / auth-provider
-  // problem surfaces as a ConfigValidationError here, BEFORE we open a Postgres connection or run
-  // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
-  // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
-  loadNodeConfig(env)
-  bootClock.mark('config')
-  // Optional schema overrides for a SHARED database (where `public` is unavailable, or another
-  // service already owns the default `drizzle`/`pgboss` schemas). All default to the prior
-  // behaviour, so a stock deployment is unchanged:
-  //   - DB_SCHEMA — the default (`public`) app tables, relocated via the connection search_path.
-  //   - DB_MIGRATIONS_SCHEMA — the drizzle migration ledger (`drizzle`), so cat-factory's ledger
-  //     can't collide with another drizzle-using service's `drizzle.__drizzle_migrations`.
-  //   - DB_PGBOSS_SCHEMA — pg-boss's queue schema (`pgboss`).
-  // The named app schemas (telemetry/sandbox/provisioning) are always explicitly qualified and
-  // unaffected.
-  const dbSchema = env.DB_SCHEMA
-  const migrationsSchema = env.DB_MIGRATIONS_SCHEMA
-  const { db, pool } = createDbClient(databaseUrl, dbSchema)
-  const boss = new PgBoss({
-    connectionString: databaseUrl,
-    // Default (`pgboss`) when unset — a single object literal (not a string|object union) so it
-    // resolves to pg-boss's options-constructor overload.
-    ...(env.DB_PGBOSS_SCHEMA?.trim() ? { schema: env.DB_PGBOSS_SCHEMA.trim() } : {}),
-  })
-  // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are
-  // independent — neither reads the other's tables. Run the app migration FIRST and on its
-  // own: a migration failure (drift guard / a bad lineage) is then the clean, unambiguous
-  // top-level rejection the entrypoint reports, rather than racing pg-boss's own schema
-  // provisioning inside a `Promise.all` (which would half-provision pg-boss on a doomed boot
-  // and could mask the real migration error). The small overlap we give up is worth the
-  // debuggability. `migrate()` throws a MigrationFailedError / DbSchemaInconsistentError with
-  // a recovery hint when the DB is wedged.
-  await migrate(db, pool, { schema: dbSchema, migrationsSchema, databaseUrl })
-  bootClock.mark('migrate')
-  // ADR 0026 D6.1: an O(1) ENCRYPTION_KEY drift check, right after the schema is up (the
-  // `key_fingerprint` table exists) and before any request/run touches a stale secret. It
-  // seeds the fingerprint on first boot and logs a definitive drift signal on a key change.
-  // Best-effort: wrapped so a store hiccup logs and never blocks boot.
-  const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  if (encryptionKey) {
-    await checkKeyFingerprint({
-      store: new DrizzleKeyFingerprintStore(db),
-      masterKeyBase64: encryptionKey,
-      logger: pinoKeyFingerprintLogger(logger),
-    }).catch((error: unknown) =>
-      logger.warn({ err: String(error) }, 'key fingerprint check failed'),
-    )
-  }
-  await boss.start()
-  bootClock.mark('bossStart')
-  // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops
-  // being ready when it emits `stopped` (graceful shutdown) or `draining` flips at SIGTERM. The
-  // pool's own health is probed live per request (a `SELECT 1`), so it needs no flag.
-  // NOTE: this tracks the GRACEFUL `stopped` transition only — a boss that crashes/wedges without
-  // emitting `stopped` still reads healthy here. That's an accepted residual gap: such an outage is
-  // almost always a shared-database failure the live `SELECT 1` probe catches, and flipping the
-  // flag off every transient `error` event would drain the replica on recoverable blips.
-  let bossRunning = true
-  boss.on('stopped', () => {
-    bossRunning = false
-  })
+  const { db, pool, boss, encryptionKey, isBossRunning } = await bootPersistence(env, bootClock)
   let draining = false
 
   // Build the repositories once and share them with both the container and the
@@ -606,8 +549,8 @@ async function bootServer(
     void sweepKeyDriftAndRaise(
       container,
       (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
-      pinoKeyFingerprintLogger(logger),
-    ).catch((error: unknown) => logger.warn({ err: String(error) }, 'key drift sweep failed'))
+      logger.child({ sweep: 'key-drift' }),
+    ).catch((error: unknown) => logger.warn('key drift sweep failed', { err: String(error) }))
   }
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
@@ -632,7 +575,7 @@ async function bootServer(
     gateRegistry: container.gateRegistry,
     pipelineRegistry: container.pipelineRegistry,
     taskTypeRegistry: container.taskTypeRegistry,
-    onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+    onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 
   const runtime = executionRuntime(container.config, env)
@@ -683,7 +626,7 @@ async function bootServer(
     ping: async () => {
       await pool.query('SELECT 1')
     },
-    pgBossHealthy: () => bossRunning,
+    pgBossHealthy: isBossRunning,
     isDraining: () => draining,
   })
   const app = createApp(container, env, { readiness })
@@ -699,7 +642,7 @@ async function bootServer(
   // One structured line naming where the boot seconds went (app-startup initiative, item 1). The
   // per-phase breakdown is what every later optimization slice reports its before/after against.
   const timings = bootClock.summary()
-  logger.info(timings, `cat-factory node server ready in ${timings.totalMs} ms`)
+  logger.info(`cat-factory node server ready in ${timings.totalMs} ms`, timings)
 
   // The background sweepers only schedule `setInterval`s (no work runs until a timer fires), so
   // start them AFTER the listener binds — the server accepts requests a few ms sooner. The pg-boss
@@ -735,7 +678,7 @@ async function bootServer(
     // Flip `/ready` to not-ready FIRST so a load balancer drains this replica out of rotation
     // before we start tearing down — new requests go elsewhere while in-flight ones finish.
     draining = true
-    logger.info({ signal }, 'shutting down cat-factory node server')
+    logger.info('shutting down cat-factory node server', { signal })
     stopSweeper()
     stopEnvTestSweeper()
     stopRetention()
@@ -758,7 +701,7 @@ async function bootServer(
       await boss.stop()
       await pool.end()
     } catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
+      logger.error('shutdown error', { err: err instanceof Error ? err.message : String(err) })
     }
     try {
       // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
@@ -767,7 +710,7 @@ async function bootServer(
       // backstop.
       await container.onShutdown?.()
     } catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'onShutdown error')
+      logger.error('onShutdown error', { err: err instanceof Error ? err.message : String(err) })
     }
     process.exit(0)
   }

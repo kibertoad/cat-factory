@@ -29,7 +29,7 @@ export function startNotificationEscalationSweeper(
     failureMessage: 'notification escalation failed',
     tick: async () => {
       const escalated = await escalateStaleNotifications(container, clock.now())
-      if (escalated > 0) log.info({ escalated }, 'escalated notifications')
+      if (escalated > 0) log.info('escalated notifications', { escalated })
     },
   })
 }

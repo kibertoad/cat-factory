@@ -58,10 +58,10 @@ async function driveBootstrap(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn(
-    { workspaceId, jobId },
-    'bootstrap drive exhausted its poll budget; sweeper will re-drive',
-  )
+  log.warn('bootstrap drive exhausted its poll budget; sweeper will re-drive', {
+    workspaceId,
+    jobId,
+  })
 }
 
 export class PgBossBootstrapRunner implements BootstrapRunner {
@@ -99,10 +99,11 @@ export async function startBootstrapWorker(
         try {
           await driveBootstrap(container, workspaceId, jobId, cfg, log)
         } catch (error) {
-          log.error(
-            { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
-            'bootstrap drive failed',
-          )
+          log.error('bootstrap drive failed', {
+            workspaceId,
+            jobId,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

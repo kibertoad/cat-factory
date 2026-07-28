@@ -88,8 +88,8 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
         // budget + container watchdogs (not a throw-count) decide the end.
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'bootstrap poll could not read job status; treating as still running and retrying',
+          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
         )
         continue
       }
@@ -99,7 +99,7 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'bootstrap run failed')
+        log.warn('bootstrap run failed', { error: result.error })
         return
       }
       // still running — loop and poll again after the next durable sleep.

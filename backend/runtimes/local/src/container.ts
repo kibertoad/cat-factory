@@ -591,10 +591,9 @@ function resolveLocalRunnerTransports(params: {
     // -effort — if the container runtime is down this throws, but a later dispatch then
     // fails loudly with a clearer message, so swallow it here.
     await transport.reapExited().catch((err) => {
-      logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
-        'local mode: could not reap / pre-warm job containers at startup',
-      )
+      logger.warn('local mode: could not reap / pre-warm job containers at startup', {
+        err: err instanceof Error ? err.message : String(err),
+      })
     })
     // Also reap per-run containers left RUNNING by a crashed previous process whose run is
     // now terminal/gone (release() never ran). A run that is still live is left for the
@@ -602,13 +601,12 @@ function resolveLocalRunnerTransports(params: {
     await transport
       .reapOrphanedRuns((ids) => repos.agentRunRepository.liveRunIds(ids))
       .then((n) => {
-        if (n > 0) logger.warn({ reaped: n }, 'local mode: reaped orphaned per-run containers')
+        if (n > 0) logger.warn('local mode: reaped orphaned per-run containers', { reaped: n })
       })
       .catch((err) => {
-        logger.warn(
-          { err: err instanceof Error ? err.message : String(err) },
-          'local mode: could not reap orphaned run containers at startup',
-        )
+        logger.warn('local mode: could not reap orphaned run containers at startup', {
+          err: err instanceof Error ? err.message : String(err),
+        })
       })
     return transport
   }

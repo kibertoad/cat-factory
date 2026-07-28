@@ -80,6 +80,7 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
   LlmTraceSink,
+  Logger,
   MembershipRepository,
   MergeTrackRecordRepository,
   ModelPresetRepository,
@@ -199,15 +200,14 @@ export interface CoreDependencies {
    */
   appBaseUrl?: string
   /**
-   * Optional structural logger (the facade's pino logger) for best-effort diagnostics.
-   * `warn` is required alongside `info` because the paths that need it most are the ones
-   * designed to swallow their failures (the PR verification report) — a logger that can only
-   * report success is no use to them.
+   * The structured logger every domain service emits through (`backend/docs/logging.md`).
+   * A facade injects its pino-backed instance from `@cat-factory/server`; absent (tests,
+   * harnesses) ⇒ `createCore` substitutes `noopLogger`, so a service never null-checks it
+   * and construction stays cheap. Services that swallow their own failures — the PR
+   * verification report, the track-record side channel — depend on this being present in
+   * production: it is the only account of a drop they will ever leave.
    */
-  logger?: {
-    info(obj: Record<string, unknown>, msg?: string): void
-    warn(obj: Record<string, unknown>, msg?: string): void
-  }
+  logger?: Logger
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository

@@ -135,7 +135,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     const owner = installation.accountLogin
     const repoName = request.target.name
     const ref = { owner, repo: repoName }
-    log.info({ target: `${owner}/${repoName}` }, 'bootstrap: pre-flighting target repo')
+    log.info('bootstrap: pre-flighting target repo', { target: `${owner}/${repoName}` })
 
     let target
     try {
@@ -264,10 +264,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // implementation executor: it hits the harness `POST /jobs` (kind `agent`), starts the
     // background job and returns once accepted; we then poll via the same transport.
     // Idempotent per job id — a replayed dispatch re-attaches rather than duplicating.
-    log.info(
-      { reference: reference ? `${reference.owner}/${reference.name}` : null },
-      'bootstrap: dispatching container',
-    )
+    log.info('bootstrap: dispatching container', {
+      reference: reference ? `${reference.owner}/${reference.name}` : null,
+    })
     // A bootstrap is a single-job flow: its run IS its one job, so the run id and job
     // id coincide (no per-step fan-out into a shared container).
     await this.jobs.dispatch(
@@ -362,10 +361,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       { ...repo, provider: installation.provider },
     ])
     await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
-    log.info(
-      { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
-      'bootstrap: projected repo for service frame',
-    )
+    log.info('bootstrap: projected repo for service frame', {
+      repo: `${outcome.owner}/${outcome.name}`,
+      githubId: repo.githubId,
+    })
     return { installationId: installation.installationId, githubId: repo.githubId }
   }
 

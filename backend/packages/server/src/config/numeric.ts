@@ -44,9 +44,10 @@ export function parseNumericEnv(name: string, value: string | undefined): number
   if (value === undefined || value.trim() === '') return undefined
   const n = Number(value)
   if (Number.isFinite(n)) return n
-  logger.warn(
-    { var: name, value, docsUrl: DOCS.envVars() },
-    describeRejectedNumericEnv(name, value),
-  )
+  logger.warn(describeRejectedNumericEnv(name, value), {
+    var: name,
+    value,
+    docsUrl: DOCS.envVars(),
+  })
   return undefined
 }

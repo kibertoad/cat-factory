@@ -4,6 +4,7 @@ import type {
   RegisterHandlerInput,
 } from './EnvironmentConnectionService.js'
 import { createEnvironmentHandlerSeeder } from './EnvironmentHandlerSeeder.js'
+import { createRecordingLogger } from '@cat-factory/kernel'
 
 // The seeder only ever reads `provisionType` + `manifestId` off a listed handler and hands a seed
 // straight to `registerHandler`, so the fakes below carry just those fields (cast to the full view
@@ -80,12 +81,12 @@ describe('createEnvironmentHandlerSeeder', () => {
       }
       return Promise.resolve(view(input.provisionType, input.manifestId ?? null))
     })
-    const warn = vi.fn()
+    const log = createRecordingLogger()
     const seeder = createEnvironmentHandlerSeeder({
       connectionService: cs,
       // The bad seed is FIRST, so we also prove it doesn't abort the ones after it.
       seeds: [seed('docker-compose'), seed('kubernetes')],
-      logger: { info: vi.fn(), warn },
+      logger: log,
     })
 
     await expect(seeder.ensureForWorkspace('ws-1')).resolves.toBeUndefined()
@@ -96,8 +97,8 @@ describe('createEnvironmentHandlerSeeder', () => {
       expect.objectContaining({ provisionType: 'kubernetes' }),
     )
     // The swallowed failure is surfaced (warn), not silent, and only for the one bad seed.
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]?.[0]).toMatchObject({
+    expect(log.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
+    expect(log.lines.find((l) => l.level === 'warn')?.fields).toMatchObject({
       workspaceId: 'ws-1',
       provisionType: 'docker-compose',
     })

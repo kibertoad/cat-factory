@@ -42,6 +42,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   merely gained an optional field); `config/` — the `AppConfig`
   contract; `runtime/gateways.ts` — the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
+- `observability/logger.ts` — the **only place a logging library is named**: pino adapted onto the
+  kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
+  destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the
+  top of its boot path). Patterns and rules: [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts` — the dialect-agnostic row↔domain mappers shared by **both** stores.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades — see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +

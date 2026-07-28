@@ -31,7 +31,7 @@ export function startScheduleSweeper(
     tick: async () => {
       const { fired, skipped } = await recurring.service.runDue(clock.now())
       if (fired > 0 || skipped > 0) {
-        log.info({ fired, skipped }, 'fired recurring pipelines')
+        log.info('fired recurring pipelines', { fired, skipped })
       }
     },
   })

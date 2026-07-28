@@ -6,14 +6,16 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   type ConsensusSession,
-  type ConsensusStrategy,
   type ConsensusSessionRepository,
+  type ConsensusStrategy,
+  describeError,
   type ExecutionEventPublisher,
+  inlineModelRef,
+  isAsyncAgentExecutor,
+  type Logger,
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
-  inlineModelRef,
-  isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
@@ -75,7 +77,7 @@ export interface ConsensusAgentExecutorDependencies {
   /** Epoch-ms clock; defaults to Date.now. */
   now?: () => number
   /** Structured logger; optional. */
-  logger?: { info(obj: unknown, msg?: string): void; warn?(obj: unknown, msg?: string): void }
+  logger?: Logger
   /** Inject the LLM call (tests); defaults to the Vercel AI SDK wrapper. */
   generate?: GenerateFn
   /**
@@ -235,17 +237,14 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       updatedAt: this.now(),
     }
     await this.emit(context, session)
-    this.deps.logger?.info(
-      {
-        msg: 'consensus.start',
-        strategy: cfg.strategy,
-        agentKind: context.agentKind,
-        participants: participants.length,
-        executionId: context.executionId,
-        stepIndex: context.stepIndex,
-      },
-      'consensus session started',
-    )
+    this.deps.logger?.info('consensus session started', {
+      msg: 'consensus.start',
+      strategy: cfg.strategy,
+      agentKind: context.agentKind,
+      participants: participants.length,
+      executionId: context.executionId,
+      stepIndex: context.stepIndex,
+    })
 
     const tags = {
       agentKind: context.agentKind,
@@ -276,10 +275,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       session.status = 'done'
       session.updatedAt = this.now()
       await this.emit(context, session)
-      this.deps.logger?.info(
-        { msg: 'consensus.done', strategy: cfg.strategy, confidence: result.confidence },
-        'consensus session complete',
-      )
+      this.deps.logger?.info('consensus session complete', {
+        msg: 'consensus.done',
+        strategy: cfg.strategy,
+        confidence: result.confidence,
+      })
       return {
         output: result.synthesis,
         model: `consensus:${cfg.strategy}:${synthesizer.modelLabel}`,
@@ -290,10 +290,10 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       session.error = error instanceof Error ? error.message : String(error)
       session.updatedAt = this.now()
       await this.emit(context, session)
-      this.deps.logger?.warn?.(
-        { msg: 'consensus.failed', error: session.error },
-        'consensus session failed',
-      )
+      this.deps.logger?.warn('consensus session failed', {
+        sessionId: session.id,
+        ...describeError(error),
+      })
       throw error
     }
   }

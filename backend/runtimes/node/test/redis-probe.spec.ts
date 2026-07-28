@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { noopLogger } from '@cat-factory/kernel'
 import {
   DEFAULT_REDIS_PROBE_TIMEOUT_MS,
   describeRedisUnreachable,
@@ -20,7 +21,11 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 function collectWarnings() {
   const warnings: { obj: object; msg?: string }[] = []
   return {
-    log: { info: () => {}, warn: (obj: object, msg?: string) => warnings.push({ obj, msg }) },
+    log: {
+      ...noopLogger,
+      warn: (msg: string, fields?: Record<string, unknown>) =>
+        warnings.push({ obj: fields ?? {}, msg }),
+    },
     warnings,
   }
 }

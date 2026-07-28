@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { noopLogger } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
 import { describe, expect, it } from 'vitest'
 import {
@@ -13,7 +14,7 @@ import {
 // bus, so no Redis server is needed (the redisPropagator tests' pattern). Two
 // AppCaches instances stand in for two Node replicas.
 
-const log = { info: () => {}, warn: () => {} }
+const log = noopLogger
 
 class FakeBus extends EventEmitter {}
 

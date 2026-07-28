@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import type { Workspace } from '@cat-factory/kernel'
 import type { PlatformObservabilityService } from '@cat-factory/orchestration'
-import type { Logger, OtelConfig } from '@cat-factory/server'
+import type { OtelConfig } from '@cat-factory/server'
 import { runPlatformMetricsSweep } from '../src/infrastructure/observability/platformMetrics'
 
 // Guards the per-facade WIRING of the platform-metrics OTLP push on the Worker (the cron
@@ -58,7 +59,7 @@ const observability = {
 const workspaceRepository = {
   listVisible: async () => [{ accountId: 'acc-1' } as Workspace, { accountId: null } as Workspace],
 }
-const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger
+const log = createRecordingLogger()
 
 function capturingFetch(): { urls: string[]; fetchImpl: typeof fetch } {
   const urls: string[] = []

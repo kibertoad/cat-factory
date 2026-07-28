@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
-import type { LlmGenerationEvent } from '@cat-factory/kernel'
+import { createRecordingLogger, type LlmGenerationEvent } from '@cat-factory/kernel'
 import { LangfuseTraceSink } from './index.js'
 
 // The sink POSTs to Langfuse's ingestion API over the global `fetch`. We intercept that real
@@ -140,11 +140,11 @@ describe('LangfuseTraceSink', () => {
       .get(CLOUD)
       .intercept({ path: INGEST, method: 'POST' })
       .replyWithError(new Error('network down'))
-    const warn = vi.fn()
-    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk', logger: { warn } })
+    const logger = createRecordingLogger()
+    const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk', logger })
 
     await expect(sink.recordGeneration(baseEvent())).resolves.toBeUndefined()
-    expect(warn).toHaveBeenCalled()
+    expect(logger.lines.some((l) => l.level === 'warn')).toBe(true)
   })
 
   it('emits one span-create per tool span under the run trace, skipping when no run', async () => {

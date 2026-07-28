@@ -75,8 +75,8 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
       } catch (error) {
         pollReadFailures += 1
         log.warn(
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'env-config-repair poll could not read job status; treating as still running and retrying',
+          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
         )
         // Keep the instance ALIVE and keep polling — see BootstrapWorkflow (F2): returning on a
         // transient read failure would make the instance terminal and get the still-`running`
@@ -91,7 +91,7 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
         return
       }
       if (result.state === 'failed') {
-        log.warn({ error: result.error }, 'env-config-repair run failed')
+        log.warn('env-config-repair run failed', { error: result.error })
         return
       }
       // still running — loop and poll again after the next durable sleep.

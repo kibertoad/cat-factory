@@ -6,6 +6,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
+  Logger,
   Pipeline,
   PipelineRepository,
   PipelineSchedule,
@@ -25,6 +26,7 @@ import {
   ConflictError,
   CredentialRequiredError,
   getErrorMessage,
+  noopLogger,
   requireWorkspace,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -74,7 +76,7 @@ export interface RecurringPipelineServiceDependencies {
    * otherwise leave a webhook-fired schedule failing with NO trace anywhere — the operator sees
    * only "push intake never happens". Absent ⇒ those paths stay silent, as they were.
    */
-  log?: (event: Record<string, unknown>, msg: string) => void
+  logger?: Logger
 }
 
 /**
@@ -137,7 +139,7 @@ export class RecurringPipelineService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly taskConnectionService?: TaskConnectionService
   private readonly events?: ExecutionEventPublisher
-  private readonly log?: (event: Record<string, unknown>, msg: string) => void
+  private readonly log: Logger
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -152,7 +154,7 @@ export class RecurringPipelineService {
     this.workspaceMountRepository = deps.workspaceMountRepository
     this.taskConnectionService = deps.taskConnectionService
     this.events = deps.executionEventPublisher
-    this.log = deps.log
+    this.log = deps.logger ?? noopLogger
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -480,16 +482,13 @@ export class RecurringPipelineService {
         // delivery still 202s, `fired` just comes back lower, and a consistently-failing schedule
         // reads as "push intake simply doesn't work" with nothing to grep for. So it must leave a
         // log line, exactly as `TrackerWebhookService` does for its own silent drop.
-        this.log?.(
-          {
-            workspaceId,
-            scheduleId: schedule.id,
-            source: event.source,
-            externalId: event.externalId,
-            err: getErrorMessage(error),
-          },
-          'webhook-triggered schedule fire failed',
-        )
+        this.log.warn('webhook-triggered schedule fire failed', {
+          workspaceId,
+          scheduleId: schedule.id,
+          source: event.source,
+          externalId: event.externalId,
+          err: getErrorMessage(error),
+        })
       }
     }
     return fired

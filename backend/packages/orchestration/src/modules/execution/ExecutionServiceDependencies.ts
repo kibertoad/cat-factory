@@ -3,9 +3,9 @@ import type {
   AgentExecutor,
   BlockRepository,
   BlueprintService,
-  BranchUpdater,
   BrainstormSessionRepository,
   BrainstormStage,
+  BranchUpdater,
   ClarityReviewRepository,
   Clock,
   DocInterviewRepository,
@@ -13,18 +13,19 @@ import type {
   ExecutionEventPublisher,
   ExecutionRepository,
   GateRegistry,
-  JudgeAssessor,
-  JudgeRegistry,
   GroupCacheHandle,
   IdGenerator,
   InitiativePresetRegistry,
   InitiativeRepository,
   IssueWritebackProvider,
+  JudgeAssessor,
+  JudgeRegistry,
+  Logger,
   ModelRef,
   PipelineRepository,
-  PrVerificationReportPublisher,
   ProviderCapabilities,
   ProviderRegistry,
+  PrVerificationReportPublisher,
   PullRequestMerger,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
@@ -67,7 +68,6 @@ import type {
   SkillResolver,
 } from './AgentContextBuilder.js'
 import type { ForkChatService } from './ForkChatService.js'
-import type { PrReportLogger } from './PrVerificationReportController.js'
 import type { KaizenScheduler } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 
@@ -483,5 +483,5 @@ export interface ExecutionServiceDependencies {
    * today the PR verification report, whose whole contract is that it never fails a run. Absent
    * ⇒ those failures are silent, which is why every facade wires it.
    */
-  logger?: PrReportLogger
+  logger?: Logger
 }

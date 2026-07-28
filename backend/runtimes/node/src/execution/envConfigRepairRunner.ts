@@ -58,10 +58,10 @@ async function driveEnvConfigRepair(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn(
-    { workspaceId, jobId },
-    'env-config-repair drive exhausted its poll budget; sweeper will re-drive',
-  )
+  log.warn('env-config-repair drive exhausted its poll budget; sweeper will re-drive', {
+    workspaceId,
+    jobId,
+  })
 }
 
 export class PgBossEnvConfigRepairRunner implements EnvConfigRepairRunner {
@@ -99,10 +99,11 @@ export async function startEnvConfigRepairWorker(
         try {
           await driveEnvConfigRepair(container, workspaceId, jobId, cfg, log)
         } catch (error) {
-          log.error(
-            { workspaceId, jobId, err: error instanceof Error ? error.message : String(error) },
-            'env-config-repair drive failed',
-          )
+          log.error('env-config-repair drive failed', {
+            workspaceId,
+            jobId,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

@@ -61,14 +61,16 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
+  describeError,
 } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
 import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFingerprintStore'
 import {
-  type KeyFingerprintLogger,
   WebCryptoSecretCipher,
   checkKeyFingerprint,
+  parseLogLevel,
+  setLogLevel,
   sweepKeyDriftAndRaise,
 } from '@cat-factory/server'
 
@@ -179,12 +181,8 @@ function errInfo(error: unknown): { message: string; stack?: string } {
   return { message: String(error) }
 }
 
-/** Bridge the pino-style worker logger to the message-first {@link KeyFingerprintLogger}. */
-const keyFingerprintLogger: KeyFingerprintLogger = {
-  info: (message, fields) => logger.info({ cron: 'key-fingerprint', ...fields }, message),
-  warn: (message, fields) => logger.warn({ cron: 'key-fingerprint', ...fields }, message),
-  error: (message, fields) => logger.error({ cron: 'key-fingerprint', ...fields }, message),
-}
+/** The boot/cron key-fingerprint check's logger, tagged so its lines are greppable by cron. */
+const keyFingerprintLogger = logger.child({ cron: 'key-fingerprint' })
 
 /** A run is treated as orphaned if its lease is older than this. */
 const SWEEP_LEASE_MS = 5 * 60 * 1000
@@ -243,10 +241,10 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         masterKeyBase64: encryptionKey,
         logger: keyFingerprintLogger,
       }).catch((error) =>
-        logger.error(
-          { cron: 'key-fingerprint', err: errInfo(error) },
-          'key fingerprint check failed',
-        ),
+        logger.error('key fingerprint check failed', {
+          cron: 'key-fingerprint',
+          err: errInfo(error),
+        }),
       ),
     )
     // ADR 0026 D6.2: the drift sweep — decrypt every sealed credential and raise/clear ONE
@@ -257,7 +255,7 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
         keyFingerprintLogger,
       ).catch((error) =>
-        logger.error({ cron: 'key-drift', err: errInfo(error) }, 'key drift sweep failed'),
+        logger.error('key drift sweep failed', { cron: 'key-drift', err: errInfo(error) }),
       ),
     )
   }
@@ -295,9 +293,9 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
       clock,
       policy: loadConfig(env).retention,
     })
-      .then((result) => logger.info({ cron: 'retention', ...result }, 'retention sweep complete'))
+      .then((result) => logger.info('retention sweep complete', { cron: 'retention', ...result }))
       .catch((error) =>
-        logger.error({ cron: 'retention', err: errInfo(error) }, 'retention sweep failed'),
+        logger.error('retention sweep failed', { cron: 'retention', err: errInfo(error) }),
       ),
   )
   // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
@@ -327,16 +325,16 @@ function runDailyRetentionSweeps(env: Env, ctx: ExecutionContext, clock: SystemC
         now: clock.now(),
       })
         .then((removed) =>
-          logger.info(
-            { cron: 'retention', binaryArtifacts: removed },
-            'artifact retention sweep complete',
-          ),
+          logger.info('artifact retention sweep complete', {
+            cron: 'retention',
+            binaryArtifacts: removed,
+          }),
         )
         .catch((error) =>
-          logger.error(
-            { cron: 'retention', err: errInfo(error) },
-            'artifact retention sweep failed',
-          ),
+          logger.error('artifact retention sweep failed', {
+            cron: 'retention',
+            err: errInfo(error),
+          }),
         ),
     )
   }
@@ -430,11 +428,11 @@ function redriveStuckAgentRuns(env: Env, ctx: ExecutionContext, clock: SystemClo
         // Only log when it actually acted.
         .then(({ redriven, finalized, stalled }) => {
           if (redriven > 0 || finalized > 0 || stalled > 0) {
-            logger.warn({ cron: 'run-sweeper', redriven, finalized, stalled }, 'swept stuck runs')
+            logger.warn('swept stuck runs', { cron: 'run-sweeper', redriven, finalized, stalled })
           }
         })
         .catch((error) =>
-          logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+          logger.error('run sweep failed', { cron: 'run-sweeper', err: errInfo(error) }),
         ),
     )
   }
@@ -467,14 +465,15 @@ function redriveStuckEnvTests(env: Env, ctx: ExecutionContext, clock: SystemCloc
       })
         .then(({ redriven, finalized }) => {
           if (redriven > 0 || finalized > 0) {
-            logger.warn(
-              { cron: 'env-test-sweeper', redriven, finalized },
-              'swept stuck env-test runs',
-            )
+            logger.warn('swept stuck env-test runs', {
+              cron: 'env-test-sweeper',
+              redriven,
+              finalized,
+            })
           }
         })
         .catch((error) =>
-          logger.error({ cron: 'env-test-sweeper', err: errInfo(error) }, 'env-test sweep failed'),
+          logger.error('env-test sweep failed', { cron: 'env-test-sweeper', err: errInfo(error) }),
         ),
     )
   }
@@ -493,13 +492,13 @@ function reclaimExpiredActivations(env: Env, ctx: ExecutionContext, clock: Syste
       .deleteExpired(clock.now())
       .then((reclaimed) => {
         if (reclaimed > 0)
-          logger.info({ cron: 'activation-sweeper', reclaimed }, 'reclaimed activations')
+          logger.info('reclaimed activations', { cron: 'activation-sweeper', reclaimed })
       })
       .catch((error) =>
-        logger.error(
-          { cron: 'activation-sweeper', err: errInfo(error) },
-          'activation sweep failed',
-        ),
+        logger.error('activation sweep failed', {
+          cron: 'activation-sweeper',
+          err: errInfo(error),
+        }),
       ),
   )
 }
@@ -526,10 +525,10 @@ function reapStaleContainers(env: Env, ctx: ExecutionContext, clock: SystemClock
         .reapStaleBefore(clock.now() - maxAgeMs)
         .then(({ reaped }) => {
           if (reaped > 0)
-            logger.warn({ cron: 'container-reaper', reaped }, 'reaped leaked containers')
+            logger.warn('reaped leaked containers', { cron: 'container-reaper', reaped })
         })
         .catch((error) =>
-          logger.error({ cron: 'container-reaper', err: errInfo(error) }, 'container reap failed'),
+          logger.error('container reap failed', { cron: 'container-reaper', err: errInfo(error) }),
         ),
     )
   }
@@ -548,13 +547,13 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
     escalateStaleNotifications(buildContainer(env), clock.now())
       .then((escalated) => {
         if (escalated > 0)
-          logger.info({ cron: 'notification-escalation', escalated }, 'escalated notifications')
+          logger.info('escalated notifications', { cron: 'notification-escalation', escalated })
       })
       .catch((error) =>
-        logger.error(
-          { cron: 'notification-escalation', err: errInfo(error) },
-          'notification escalation failed',
-        ),
+        logger.error('notification escalation failed', {
+          cron: 'notification-escalation',
+          err: errInfo(error),
+        }),
       ),
   )
 
@@ -565,14 +564,14 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
     Promise.resolve(buildContainer(env).recurring?.service.runDue(clock.now()))
       .then((result) => {
         if (result && (result.fired > 0 || result.skipped > 0)) {
-          logger.info({ cron: 'recurring-pipelines', ...result }, 'fired recurring pipelines')
+          logger.info('fired recurring pipelines', { cron: 'recurring-pipelines', ...result })
         }
       })
       .catch((error) =>
-        logger.error(
-          { cron: 'recurring-pipelines', err: errInfo(error) },
-          'recurring-pipeline sweep failed',
-        ),
+        logger.error('recurring-pipeline sweep failed', {
+          cron: 'recurring-pipelines',
+          err: errInfo(error),
+        }),
       ),
   )
 
@@ -583,14 +582,14 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
     Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now()))
       .then((result) => {
         if (result && (result.spawned > 0 || result.completed > 0)) {
-          logger.info({ cron: 'initiative-loop', ...result }, 'ticked initiative loop')
+          logger.info('ticked initiative loop', { cron: 'initiative-loop', ...result })
         }
       })
       .catch((error) =>
-        logger.error(
-          { cron: 'initiative-loop', err: errInfo(error) },
-          'initiative-loop sweep failed',
-        ),
+        logger.error('initiative-loop sweep failed', {
+          cron: 'initiative-loop',
+          err: errInfo(error),
+        }),
       ),
   )
 
@@ -610,10 +609,10 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       )
         .then((processed) => {
           if (processed && processed > 0)
-            logger.info({ cron: 'kaizen-sweeper', processed }, 'ran pending kaizen gradings')
+            logger.info('ran pending kaizen gradings', { cron: 'kaizen-sweeper', processed })
         })
         .catch((error) =>
-          logger.error({ cron: 'kaizen-sweeper', err: errInfo(error) }, 'kaizen sweep failed'),
+          logger.error('kaizen sweep failed', { cron: 'kaizen-sweeper', err: errInfo(error) }),
         )
         .finally(() => {
           kaizenSweeping = false
@@ -629,10 +628,10 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
         if (scheduled > 0)
           // `sweep:` (not `cron:`) so the summary shares a field with the pass's
           // per-repo lines, which the shared reconcile core emits on both facades.
-          logger.info({ sweep: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
+          logger.info('scheduled repo resyncs', { sweep: 'github-reconcile', scheduled })
       })
       .catch((error) =>
-        logger.error({ sweep: 'github-reconcile', err: errInfo(error) }, 'github reconcile failed'),
+        logger.error('github reconcile failed', { sweep: 'github-reconcile', err: errInfo(error) }),
       ),
   )
 
@@ -640,7 +639,7 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
   // environment integration is configured).
   ctx.waitUntil(
     sweepExpiredEnvironments(env, clock).catch((error) =>
-      logger.error({ cron: 'env-sweeper', err: errInfo(error) }, 'environment sweep failed'),
+      logger.error('environment sweep failed', { cron: 'env-sweeper', err: errInfo(error) }),
     ),
   )
 
@@ -671,13 +670,13 @@ function runPeriodicBackstops(env: Env, ctx: ExecutionContext, clock: SystemCloc
       sweepPlatformHealth(buildContainer(env), logger)
         .then(({ raised, cleared }) => {
           if (raised > 0 || cleared > 0)
-            logger.info({ cron: 'platform-health', raised, cleared }, 'platform health sweep')
+            logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
         })
         .catch((error) =>
-          logger.error(
-            { cron: 'platform-health', err: errInfo(error) },
-            'platform health sweep failed',
-          ),
+          logger.error('platform health sweep failed', {
+            cron: 'platform-health',
+            err: errInfo(error),
+          }),
         ),
     )
   }
@@ -689,17 +688,22 @@ export default {
   // an unknown resultView then fails loudly at boot instead of mid-run. The once-guard keeps
   // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    // The Worker has no process env, so the configured verbosity is read off the request's
+    // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
+    // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
+    setLogLevel(parseLogLevel(env.LOG_LEVEL))
     validateRegistrationsOnce({
       agentKindRegistry,
       gateRegistry,
       pipelineRegistry,
       taskTypeRegistry,
-      onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
+      onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
     })
     return app.fetch(request, env, ctx)
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    setLogLevel(parseLogLevel(env.LOG_LEVEL))
     const clock = new SystemClock()
 
     // Daily pass: prune the unbounded ledgers/projections to their retention windows.
@@ -720,6 +724,7 @@ export default {
     batch: MessageBatch<ExecutionStartMessage | GitHubSyncMessage | TrackerSyncMessage>,
     env: Env,
   ): Promise<void> {
+    setLogLevel(parseLogLevel(env.LOG_LEVEL))
     // Route by source queue — the single handler serves all three queues.
     if (batch.queue === GITHUB_SYNC_QUEUE_NAME) {
       await handleGitHubSyncBatch(batch as MessageBatch<GitHubSyncMessage>, env)
@@ -734,6 +739,10 @@ export default {
 
     // Execution admission queue: create the Workflows instance per message.
     if (!env.EXECUTION_WORKFLOW) {
+      logger.warn('execution admission: no EXECUTION_WORKFLOW binding; acking without starting', {
+        queue: batch.queue,
+        messages: batch.messages.length,
+      })
       for (const message of batch.messages) message.ack()
       return
     }
@@ -742,7 +751,17 @@ export default {
       try {
         await runner.create(message.body.workspaceId, message.body.executionId)
         message.ack()
-      } catch {
+      } catch (error) {
+        // Retrying blind used to be the WHOLE handling: a run that can never start burned its
+        // retries and then vanished, with no evidence it was ever admitted. The tracker-sync
+        // sibling has always logged; this matches it.
+        logger.warn('execution admission failed; retrying message', {
+          queue: batch.queue,
+          workspaceId: message.body.workspaceId,
+          executionId: message.body.executionId,
+          attempts: message.attempts,
+          ...describeError(error),
+        })
         message.retry()
       }
     }

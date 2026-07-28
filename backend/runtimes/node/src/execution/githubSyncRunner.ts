@@ -189,10 +189,10 @@ export async function startGitHubSyncWorker(
         try {
           await applyGitHubSyncJob(container, job.data)
         } catch (error) {
-          log.error(
-            { kind: job.data.kind, err: error instanceof Error ? error.message : String(error) },
-            'github sync job failed',
-          )
+          log.error('github sync job failed', {
+            kind: job.data.kind,
+            err: error instanceof Error ? error.message : String(error),
+          })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }
       }

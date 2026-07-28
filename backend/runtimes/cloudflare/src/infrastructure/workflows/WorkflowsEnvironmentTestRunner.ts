@@ -24,8 +24,8 @@ export class WorkflowsEnvironmentTestRunner implements EnvironmentTestRunner {
       // regardless: a GENUINE create failure (rate limit, outage) strands the run until
       // the cron env-test sweep re-drives it, and this line is the only trace of why.
       logger.warn(
-        { workspaceId, runId: id, err: error instanceof Error ? error.message : String(error) },
         'env-test workflow create was rejected; relying on the existing instance or the sweeper',
+        { workspaceId, runId: id, err: error instanceof Error ? error.message : String(error) },
       )
     }
   }

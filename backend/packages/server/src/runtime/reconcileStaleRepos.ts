@@ -1,11 +1,12 @@
-import type {
-  Clock,
-  GitHubInstallationRepository,
-  RepoProjectionRepository,
+import {
+  describeError,
+  type Clock,
+  type GitHubInstallationRepository,
+  type Logger,
+  type RepoProjectionRepository,
 } from '@cat-factory/kernel'
 import { GitHubApiError } from '../github/FetchGitHubClient.js'
 import { installationTokenMintStatusOf } from '../github/GitHubAppAuth.js'
-import type { Logger } from '../observability/logger.js'
 
 // The runtime-neutral core of the periodic GitHub reconciliation pass, shared by both
 // facades' sweeps (the Worker's every-2-min `github-reconcile` cron and the Node
@@ -79,16 +80,16 @@ export async function reconcileStaleRepos(
         }
       }
       log[gone ? 'warn' : 'error'](
+        gone
+          ? 'skipping stale repo whose GitHub App installation is gone (uninstalled/revoked); reinstall the app to re-enable it'
+          : 'repo resync failed',
         {
           sweep: 'github-reconcile',
           workspaceId: repo.workspaceId,
           repoGithubId: repo.githubId,
           installationId: repo.installationId,
-          err: error instanceof Error ? error.message : String(error),
+          ...describeError(error),
         },
-        gone
-          ? 'skipping stale repo whose GitHub App installation is gone (uninstalled/revoked); reinstall the app to re-enable it'
-          : 'repo resync failed',
       )
     }
   }

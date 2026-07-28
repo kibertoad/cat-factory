@@ -65,7 +65,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       kind: AgentFailureKind = 'agent',
       detail: string | null = null,
     ): Promise<void> => {
-      logger.warn({ workspaceId, executionId, step: i }, `failing run: ${message}`)
+      logger.warn(`failing run: ${message}`, { workspaceId, executionId, step: i })
       await step.do(`fail-${i}`, () =>
         container.executionService.failRun(workspaceId, executionId, message, kind, detail),
       )
@@ -110,10 +110,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         )
         if (attempt.kind === 'read_failed') {
           pollReadFailures += 1
-          logger.warn(
-            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
-            'poll could not read job status; treating as still running and retrying',
-          )
+          logger.warn('poll could not read job status; treating as still running and retrying', {
+            workspaceId,
+            executionId,
+            step: i,
+            poll: p,
+            pollReadFailures,
+            err: attempt.message,
+          })
           if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
           await failRun(
             i,
@@ -157,8 +161,8 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         if (attempt.kind === 'read_failed') {
           pollReadFailures += 1
           logger.warn(
-            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
             'gate poll could not read its precheck; treating as still pending and retrying',
+            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
           )
           if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
           await failRun(

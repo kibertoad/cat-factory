@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import type { Clock, Workspace } from '@cat-factory/kernel'
 import type { PlatformObservabilityService } from '@cat-factory/orchestration'
@@ -58,7 +59,7 @@ const observability = {
 const workspaceRepository = {
   listVisible: async () => [{ accountId: 'acc-1' } as Workspace, { accountId: null } as Workspace],
 }
-const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never
+const log = createRecordingLogger()
 
 const stops: (() => void)[] = []
 afterEach(() => {

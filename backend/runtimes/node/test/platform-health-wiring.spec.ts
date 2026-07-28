@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import type { Clock, Workspace } from '@cat-factory/kernel'
 import type { ServerContainer } from '@cat-factory/server'
@@ -30,7 +31,7 @@ const UNHEALTHY: PlatformObservability = {
 }
 
 const clock: Clock = { now: () => 0 }
-const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never
+const log = createRecordingLogger()
 
 function container(enabled: boolean, raises: string[]): ServerContainer {
   return {

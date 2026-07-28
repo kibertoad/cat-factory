@@ -1,10 +1,9 @@
 import {
-  getErrorMessage,
-  redactSecrets,
-  TRACKER_COMMENT_INGEST_CLAIM_TTL_MS,
-  TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
   type Clock,
+  getErrorMessage,
   type IssueWritebackProvider,
+  type Logger,
+  redactSecrets,
   type RequirementReview,
   type RequirementReviewItem,
   type ResolveRequirementsExceededChoice,
@@ -14,6 +13,8 @@ import {
   type ReviewReplyRejection,
   type TaskConnectionRepository,
   type TaskRepository,
+  TRACKER_COMMENT_INGEST_CLAIM_TTL_MS,
+  TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
   type TrackerCommentEvent,
   type TrackerCommentIngestRepository,
   type TrackerIssueEvent,
@@ -107,8 +108,8 @@ export interface TrackerWebhookServiceDependencies {
   /** Resolve the run parked on a block, so the ack can name it. Absent ⇒ the ack omits the id. */
   resolveRunId?: (workspaceId: string, blockId: string) => Promise<string | null>
   clock?: Clock
-  /** Structured log sink for the silent-drop paths (an unauthorized reply leaves no other trace). */
-  log?: (event: Record<string, unknown>) => void
+  /** Structured logger for the silent-drop paths (an unauthorized reply leaves no other trace). */
+  logger?: Logger
 }
 
 /**
@@ -188,8 +189,7 @@ export class TrackerWebhookService {
     const allowList = connection?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? ''
     if (!isAllowedReplyAuthor(event.author, allowList)) {
       // The one path that leaves NO other trace, so it must leave a log line.
-      this.deps.log?.({
-        msg: 'tracker reply ignored: author not allowed',
+      this.deps.logger?.warn('tracker reply ignored: author not allowed', {
         workspaceId,
         source: event.source,
         externalId: event.externalId,

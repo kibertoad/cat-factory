@@ -1,4 +1,4 @@
-import type { Logger } from '@cat-factory/server'
+import { describeError, type Logger } from '@cat-factory/kernel'
 import { AsyncTask, SimpleIntervalJob, ToadScheduler } from 'toad-scheduler'
 
 // The Node facade has no cron, so every periodic task the Worker runs on a schedule is an
@@ -41,7 +41,7 @@ export function startSweeper(options: SweeperOptions): () => void {
   const { name, intervalMs, log, failureMessage, tick } = options
   const scheduler = new ToadScheduler()
   const task = new AsyncTask(name, tick, (error) => {
-    log.error({ err: error instanceof Error ? error.message : String(error) }, failureMessage)
+    log.error(failureMessage, describeError(error))
   })
   const job = new SimpleIntervalJob({ milliseconds: intervalMs, runImmediately: true }, task, {
     preventOverrun: true,

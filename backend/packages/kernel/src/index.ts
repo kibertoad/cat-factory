@@ -335,6 +335,7 @@ export {
   redactSecrets,
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
+export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
   type RepoScanEntry,
   type CheckoutFreeRepoReader,

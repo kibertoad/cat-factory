@@ -26,6 +26,7 @@ import type {
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
+  Logger,
 } from '@cat-factory/kernel'
 import {
   type MappedSpan,
@@ -41,7 +42,6 @@ import {
   randomSpanId,
   randomTraceId,
 } from './mapping.js'
-import type { OtelLogger } from './index.js'
 
 // The OpenTelemetry exporter built on the OFFICIAL `@opentelemetry/*` SDK — the Node
 // facade uses this instead of the fetch exporter in `./index`. It emits the SAME
@@ -64,7 +64,7 @@ export interface NodeOtelSinkConfig {
   /** OTLP resource `service.name`; defaults to `cat-factory`. */
   serviceName?: string
   /** Optional logger for swallowed errors. */
-  logger?: OtelLogger
+  logger?: Logger
   /** Test seam: override the span processor (e.g. a SimpleSpanProcessor over an in-memory exporter). */
   spanProcessor?: SpanProcessor
   /** Test seam: override the metric reader (e.g. one over an InMemoryMetricExporter). */
@@ -92,7 +92,7 @@ export class NodeOtelTraceSink implements LlmTraceSink {
   private readonly tracerProvider: NodeTracerProvider
   private readonly meterProvider: MeterProvider
   private readonly idGenerator: RunIdGenerator
-  private readonly logger?: OtelLogger
+  private readonly logger?: Logger
   private readonly startSpanForRun: (
     name: string,
     traceId: string,
@@ -210,10 +210,10 @@ export class NodeOtelTraceSink implements LlmTraceSink {
   }
 
   private warn(err: unknown): void {
-    this.logger?.warn(
-      { scope: 'otel', err: err instanceof Error ? err.message : String(err) },
-      'otel: failed to record telemetry',
-    )
+    this.logger?.warn('otel: failed to record telemetry', {
+      scope: 'otel',
+      err: err instanceof Error ? err.message : String(err),
+    })
   }
 }
 

@@ -54,15 +54,12 @@ export function runPlatformMetricsSweep(deps: WorkerPlatformMetricsDeps): Promis
   })
     .then((exported) => {
       if (exported > 0)
-        logger.info({ cron: 'platform-metrics', exported }, 'exported platform metrics')
+        logger.info('exported platform metrics', { cron: 'platform-metrics', exported })
     })
     .catch((error) =>
-      logger.error(
-        {
-          cron: 'platform-metrics',
-          err: error instanceof Error ? error.message : String(error),
-        },
-        'platform metrics sweep failed',
-      ),
+      logger.error('platform metrics sweep failed', {
+        cron: 'platform-metrics',
+        err: error instanceof Error ? error.message : String(error),
+      }),
     )
 }

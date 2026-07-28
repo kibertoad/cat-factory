@@ -26,5 +26,4 @@ export {
 export {
   PasswordResetService,
   type PasswordResetServiceDependencies,
-  type ResetLogger,
 } from './modules/auth/PasswordResetService.js'

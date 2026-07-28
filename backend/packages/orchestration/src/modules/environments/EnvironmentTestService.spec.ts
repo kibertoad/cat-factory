@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type {
   Block,
   Clock,
@@ -211,13 +212,8 @@ function makeService(opts: {
     opts.repoContext === undefined
       ? { repo: fakeRepo().repo, baseBranch: 'main', repoId: 'repo_1' }
       : opts.repoContext
-  const logs: Array<{ obj: Record<string, unknown>; msg?: string }> = []
-  const logger = {
-    info: () => {},
-    warn: (obj: Record<string, unknown>, msg?: string) => {
-      logs.push({ obj, msg })
-    },
-  }
+  const logger = createRecordingLogger()
+  const logs = logger.lines
   const service = new EnvironmentTestService({
     environmentTestRunRepository: runRepo,
     workspaceRepository,
@@ -461,9 +457,9 @@ describe('EnvironmentTestService', () => {
     // carrying the corrected stage, the message, and the cause's stack.
     expect(logs).toHaveLength(1)
     expect(logs[0]!.msg).toBe('environment self-test failed')
-    expect(logs[0]!.obj).toMatchObject({ runId: run.id, failedStage: 'provisioning' })
-    expect(logs[0]!.obj.err).toContain('no deploy runner wired')
-    expect(typeof logs[0]!.obj.stack).toBe('string')
+    expect(logs[0]!.fields).toMatchObject({ runId: run.id, failedStage: 'provisioning' })
+    expect(logs[0]!.fields.err).toContain('no deploy runner wired')
+    expect(typeof logs[0]!.fields.stack).toBe('string')
   })
 
   it('fails at provisioning: releases the runner, finalizes the failed view, tears down + deletes', async () => {

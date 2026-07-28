@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { defaultProviderRegistry, type ProviderRegistry } from '@cat-factory/kernel'
-import { warnUnwiredGates, wireCiStatusProvider, type GateWiringLogger } from './providers.js'
+import {
+  createRecordingLogger,
+  defaultProviderRegistry,
+  type ProviderRegistry,
+} from '@cat-factory/kernel'
+import { warnUnwiredGates, wireCiStatusProvider } from './providers.js'
 
-function capturingLogger(): { warnings: Record<string, unknown>[]; log: GateWiringLogger } {
-  const warnings: Record<string, unknown>[] = []
-  return { warnings, log: { warn: (obj) => warnings.push(obj) } }
+/** The `gate` field of every warning recorded so far. */
+function warnedGateNames(log: ReturnType<typeof createRecordingLogger>): unknown[] {
+  return log.lines.filter((l) => l.level === 'warn').map((l) => l.fields.gate)
 }
 
 // A fresh provider registry per test (no module global to clear). NOTE: `warnUnwiredGates`
@@ -17,28 +21,26 @@ beforeEach(() => {
 
 describe('warnUnwiredGates', () => {
   it('warns once for each gate whose provider is not wired', () => {
-    const { warnings, log } = capturingLogger()
+    const log = createRecordingLogger()
     warnUnwiredGates(providerRegistry, log)
-    const gates = warnings.map((w) => w.gate)
     // ci is unwired here and must be reported (the headline pass-through risk).
-    expect(gates).toContain('ci')
-    expect(warnings.every((w) => w.passThrough === true)).toBe(true)
+    expect(warnedGateNames(log)).toContain('ci')
+    expect(log.lines.every((l) => l.fields.passThrough === true)).toBe(true)
   })
 
   it('does not re-warn a gate already reported (per-process dedupe)', () => {
-    const first = capturingLogger()
-    warnUnwiredGates(providerRegistry, first.log)
-    const second = capturingLogger()
-    warnUnwiredGates(providerRegistry, second.log)
+    warnUnwiredGates(providerRegistry, createRecordingLogger())
+    const second = createRecordingLogger()
+    warnUnwiredGates(providerRegistry, second)
     // ci was warned on the first call, so the second call (still unwired) stays silent for it.
-    expect(second.warnings.map((w) => w.gate)).not.toContain('ci')
+    expect(warnedGateNames(second)).not.toContain('ci')
   })
 
   it('a wired gate is never reported as a pass-through', () => {
     // Note: ci was already deduped above; assert on the mergeability gate via wiring instead.
     wireCiStatusProvider(providerRegistry, { getStatus: async () => ({ repos: [] }) } as never)
-    const { warnings, log } = capturingLogger()
+    const log = createRecordingLogger()
     warnUnwiredGates(providerRegistry, log)
-    expect(warnings.map((w) => w.gate)).not.toContain('ci')
+    expect(warnedGateNames(log)).not.toContain('ci')
   })
 })

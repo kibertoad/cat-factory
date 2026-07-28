@@ -346,6 +346,11 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # GITHUB_COMMIT_RETENTION_DAYS = "90"
 # NOTIFICATION_RETENTION_DAYS = "90"  # resolved (acted/dismissed) cards; open ones never pruned
 
+# Emit threshold for the structured (pino) logger: "debug" | "info" | "warn" | "error".
+# "debug" is deliberately chatty — turn it on during an incident, then turn it back. An
+# unrecognised value falls back to "info". See backend/docs/logging.md.
+# LOG_LEVEL = "info"
+
 # LLM observability. The proxy records one metric per container-agent model call.
 # By default each metric keeps the complete prompt sent to the model; set this to
 # "false" to drop the prompt body (the numeric telemetry — tokens, timing, finish

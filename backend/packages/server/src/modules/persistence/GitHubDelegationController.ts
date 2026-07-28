@@ -103,7 +103,7 @@ export function githubDelegationController(
     if (!bucket || nowMs - bucket.windowStart >= windowMs) {
       mintWindows.set(payload.nodeId, { windowStart: nowMs, count: 1 })
     } else if (++bucket.count > limit) {
-      log.warn({ limit, windowMs }, 'github delegation: mint rate limit exceeded')
+      log.warn('github delegation: mint rate limit exceeded', { limit, windowMs })
       return c.json(
         { error: { code: 'rate_limited', message: 'too many token mints, retry shortly' } },
         429,
@@ -160,7 +160,7 @@ export function githubDelegationController(
       )) as GitHubInstallation | null
       const accountId = installation && !installation.deletedAt ? installation.accountId : null
       if (typeof accountId !== 'string' || !payload.scope.accountIds.includes(accountId)) {
-        log.warn({ installationId }, 'github delegation: installation out of scope, denied')
+        log.warn('github delegation: installation out of scope, denied', { installationId })
         return denied()
       }
 
@@ -180,7 +180,7 @@ export function githubDelegationController(
       ]
       if (repositoryIds.length === 0) {
         // Nothing in scope to grant — same uniform denial as an out-of-scope installation.
-        log.warn({ installationId }, 'github delegation: no linked repos to scope, denied')
+        log.warn('github delegation: no linked repos to scope, denied', { installationId })
         return denied()
       }
 
@@ -190,18 +190,19 @@ export function githubDelegationController(
         repositoryIds,
       })
       // Audit trail: who minted what, scoped how wide. NEVER log the token itself.
-      log.info(
-        { installationId, forceRefresh, repoCount: repositoryIds.length },
-        'github delegation: minted repo-scoped installation token',
-      )
+      log.info('github delegation: minted repo-scoped installation token', {
+        installationId,
+        forceRefresh,
+        repoCount: repositoryIds.length,
+      })
       return c.json({ token: minted }, 200)
     } catch (error) {
       // Server-side diagnostics only — the client-facing 500 stays opaque so an internal
       // error's message never leaks over the machine API.
-      log.error(
-        { installationId, err: error instanceof Error ? error.message : String(error) },
-        'github delegation: mint failed',
-      )
+      log.error('github delegation: mint failed', {
+        installationId,
+        err: error instanceof Error ? error.message : String(error),
+      })
       return c.json({ error: { code: 'internal', message: 'Internal error' } }, 500)
     }
   })

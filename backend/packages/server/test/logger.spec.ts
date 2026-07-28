@@ -1,0 +1,87 @@
+import { Writable } from 'node:stream'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  createPinoLogger,
+  getLogLevel,
+  parseLogLevel,
+  setLogLevel,
+} from '../src/observability/logger.js'
+
+// The pino adapter is the ONE place the platform's message-first `Logger` port meets a logging
+// library, and the level gate lives beside it rather than on the pino instance (a facade
+// configures `LOG_LEVEL` after module load, and pino children snapshot their parent's level at
+// creation). Both properties are pinned here.
+
+afterEach(() => setLogLevel('info'))
+
+/** A logger writing into an array, plus the parsed lines it has emitted so far. */
+function capturing(): { logger: ReturnType<typeof createPinoLogger>; lines: () => unknown[] } {
+  const chunks: string[] = []
+  const stream = new Writable({
+    write(chunk: unknown, _enc, cb) {
+      chunks.push(String(chunk))
+      cb()
+    },
+  })
+  return {
+    logger: createPinoLogger(stream),
+    lines: () =>
+      chunks
+        .join('')
+        .split('\n')
+        .filter((l) => l.trim() !== '')
+        .map((l) => JSON.parse(l) as unknown),
+  }
+}
+
+describe('parseLogLevel', () => {
+  it('accepts the four supported levels, case- and space-insensitively', () => {
+    expect(parseLogLevel('debug')).toBe('debug')
+    expect(parseLogLevel(' WARN ')).toBe('warn')
+    expect(parseLogLevel('error')).toBe('error')
+  })
+
+  it('falls back to info for anything else, including absent', () => {
+    // An operator typo must not silence the deployment, so the fallback is the default tier
+    // rather than the nearest match or a throw.
+    expect(parseLogLevel(undefined)).toBe('info')
+    expect(parseLogLevel('')).toBe('info')
+    expect(parseLogLevel('verbose')).toBe('info')
+  })
+})
+
+describe('the pino-backed logger', () => {
+  it('emits the message and the fields as one structured line', () => {
+    const { logger, lines } = capturing()
+    logger.info('run advanced', { workspaceId: 'ws_1', step: 'coder' })
+    expect(lines()).toEqual([
+      expect.objectContaining({ msg: 'run advanced', workspaceId: 'ws_1', step: 'coder' }),
+    ])
+  })
+
+  it("folds a child logger's bound fields into every line", () => {
+    const { logger, lines } = capturing()
+    logger.child({ workspaceId: 'ws_1' }).child({ executionId: 'exec_1' }).warn('poll failed')
+    expect(lines()).toEqual([
+      expect.objectContaining({ msg: 'poll failed', workspaceId: 'ws_1', executionId: 'exec_1' }),
+    ])
+  })
+
+  it('drops lines below the active level', () => {
+    const { logger, lines } = capturing()
+    logger.debug('chatty')
+    expect(lines()).toEqual([])
+  })
+
+  it('applies a level raised AFTER a child was derived', () => {
+    // The reason the gate is a module-level check rather than `pinoInstance.level`: a facade
+    // resolves LOG_LEVEL from config, which can happen after loggers are already handed out.
+    const { logger, lines } = capturing()
+    const child = logger.child({ scope: 'test' })
+    child.debug('invisible at info')
+    setLogLevel('debug')
+    child.debug('visible at debug')
+    expect(lines().map((l) => (l as { msg: string }).msg)).toEqual(['visible at debug'])
+    expect(getLogLevel()).toBe('debug')
+  })
+})

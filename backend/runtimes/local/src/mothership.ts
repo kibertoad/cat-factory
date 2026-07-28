@@ -165,10 +165,10 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const notificationChannel = new RemoteNotificationChannel({
     client: new HttpMachineNotificationClient({ baseUrl, token: machineToken }),
     onError: (error, ctx) =>
-      logger.warn(
-        { err: error instanceof Error ? error.message : String(error), ...ctx },
-        'mothership notification delivery failed',
-      ),
+      logger.warn('mothership notification delivery failed', {
+        err: error instanceof Error ? error.message : String(error),
+        ...ctx,
+      }),
   })
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
@@ -349,10 +349,9 @@ export class SqliteWorkRunner implements WorkRunner {
     // drives nothing yet), so reclaim it for an immediate re-drive.
     const orphans = this.queue.resetOrphans()
     if (orphans > 0) {
-      this.log.warn(
-        { orphans },
-        'mothership work queue: re-driving runs orphaned by a prior process',
-      )
+      this.log.warn('mothership work queue: re-driving runs orphaned by a prior process', {
+        orphans,
+      })
     }
     this.drain()
     // Boot-time storage reconciliation: re-enqueue any run `running` in storage with no queue row
@@ -452,10 +451,11 @@ export class SqliteWorkRunner implements WorkRunner {
       }
     } catch (err) {
       if (this.stopped) return
-      this.log.error(
-        { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
-        'mothership in-process execution driver failed',
-      )
+      this.log.error('mothership in-process execution driver failed', {
+        workspaceId,
+        executionId,
+        err: err instanceof Error ? err.message : String(err),
+      })
       // Hold the run for a backoff'd retry, bumping the consecutive-failure count; once it reaches
       // the cap the next drain evicts it (and fails it loudly) rather than re-driving forever.
       this.queue.deferFailure(executionId, this.now() + this.opts.errorBackoffMs)
@@ -485,10 +485,11 @@ export class SqliteWorkRunner implements WorkRunner {
     executionId: string,
     attempts: number,
   ): Promise<void> {
-    this.log.error(
-      { workspaceId, executionId, attempts },
-      'mothership work queue: evicting run after repeated drive failures',
-    )
+    this.log.error('mothership work queue: evicting run after repeated drive failures', {
+      workspaceId,
+      executionId,
+      attempts,
+    })
     try {
       await this.exec?.failRun(
         workspaceId,
@@ -498,10 +499,11 @@ export class SqliteWorkRunner implements WorkRunner {
         null,
       )
     } catch (err) {
-      this.log.error(
-        { workspaceId, executionId, err: err instanceof Error ? err.message : String(err) },
-        'mothership work queue: failed to mark an evicted run failed',
-      )
+      this.log.error('mothership work queue: failed to mark an evicted run failed', {
+        workspaceId,
+        executionId,
+        err: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 
@@ -531,8 +533,8 @@ export class SqliteWorkRunner implements WorkRunner {
     }
     if (recovered > 0) {
       this.log.warn(
-        { recovered },
         'mothership work queue: re-enqueued runs still running in storage with no queue row',
+        { recovered },
       )
       this.drain()
     }

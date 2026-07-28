@@ -17,6 +17,7 @@ import type {
   StepReviewComment,
   SubscriptionActivationRepository,
   IssueWritebackProvider,
+  Logger,
 } from '@cat-factory/kernel'
 import {
   allPullRequests,
@@ -46,7 +47,7 @@ import {
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
+import { DEFAULT_RISK_POLICY, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
@@ -225,6 +226,11 @@ export class ExecutionService {
   private readonly notifications?: NotificationService
   private readonly mergePolicy: RunMergePolicy
   private readonly issueWriteback?: IssueWritebackProvider
+  /**
+   * The engine's structured logger, resolved once so the best-effort paths below can report
+   * their drops without a null-check. `noopLogger` when a facade wired none.
+   */
+  private readonly log: Logger
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly pokeInitiativeLoop?: (
     workspaceId: string,
@@ -537,6 +543,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
+    this.log = logger ?? noopLogger
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
@@ -1192,7 +1199,12 @@ export class ExecutionService {
       companionStep.technicalCorroborated,
     )
     if (technical === undefined) return
-    await this.blockRepository.update(workspaceId, block.id, { technical }).catch(() => {})
+    await runBestEffort(
+      this.log,
+      'block.updateTechnicalSummary',
+      () => this.blockRepository.update(workspaceId, block.id, { technical }),
+      { workspaceId, blockId: block.id },
+    )
   }
 
   // ---- iterative review gates (requirements + clarity) --------------------
@@ -1538,9 +1550,12 @@ export class ExecutionService {
     // setting + per-task override; fire-and-forget so a tracker outage never fails
     // the run (the merge already happened).
     if (this.issueWriteback && block.pullRequest) {
-      await this.issueWriteback
-        .onPullRequestMerged(workspaceId, block, block.pullRequest)
-        .catch(() => {})
+      await runBestEffort(
+        this.log,
+        'issueWriteback.onPullRequestMerged',
+        () => this.issueWriteback!.onPullRequestMerged(workspaceId, block, block.pullRequest!),
+        { workspaceId, blockId },
+      )
     }
     if ((block.level ?? 'frame') === 'task') {
       await this.applyModuleAssignment(workspaceId, blockId)
@@ -1548,7 +1563,14 @@ export class ExecutionService {
       // that depends on it whose other dependencies are now also done. Best-effort — the
       // merge already happened, so a dependent that fails to start must never roll it back.
       if (block.autoStartDependents) {
-        await this.autoStartDependents(workspaceId, blockId).catch(() => {})
+        // The consequential one: a swallow here means dependent tasks silently never start,
+        // and "the board just stopped moving" is the only symptom a user ever sees.
+        await runBestEffort(
+          this.log,
+          'execution.autoStartDependents',
+          () => this.autoStartDependents(workspaceId, blockId),
+          { workspaceId, blockId },
+        )
       }
       // A spawned initiative task's PR merging pokes its owning initiative's loop so it
       // reconciles the item + spawns the next wave immediately (the manual-merge path, which

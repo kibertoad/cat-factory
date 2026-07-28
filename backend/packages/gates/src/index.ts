@@ -56,7 +56,6 @@ export {
   applyGateProviders,
   warnUnwiredGates,
   type GateProviderOverrides,
-  type GateWiringLogger,
 } from './providers.js'
 export {
   ciGate,

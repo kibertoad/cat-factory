@@ -4,9 +4,10 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IssueWritebackProvider,
+  Logger,
   PipelineStep,
-  RequirementConcernLevel,
   RequestRecommendationItem,
+  RequirementConcernLevel,
   ResolveRequirementsExceededChoice,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -14,7 +15,6 @@ import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel
 import { hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 import type { AdvanceResult } from './advance.js'
-import type { PrReportLogger } from './PrVerificationReportController.js'
 import {
   buildReviewQuestionPost,
   shouldPostReviewQuestions,
@@ -136,7 +136,7 @@ export interface ReviewGateControllerDeps {
    */
   issueWriteback?: IssueWritebackProvider
   /** Structured logger for the best-effort writeback above. Absent → failures are silent. */
-  logger?: PrReportLogger
+  logger?: Logger
   resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
@@ -301,16 +301,20 @@ export class ReviewGateController {
         buildReviewQuestionPost(instance, fresh),
       )
       if (outcome.failed > 0) {
-        this.deps.logger?.warn(
-          { workspaceId, runId: instance.id, reviewId: fresh.id, ...outcome },
-          'review question writeback failed for some linked issues',
-        )
+        this.deps.logger?.warn('review question writeback failed for some linked issues', {
+          workspaceId,
+          runId: instance.id,
+          reviewId: fresh.id,
+          ...outcome,
+        })
       }
     } catch (e) {
-      this.deps.logger?.warn(
-        { workspaceId, runId: instance.id, reviewId: fresh.id, err: String(e) },
-        'review question writeback threw',
-      )
+      this.deps.logger?.warn('review question writeback threw', {
+        workspaceId,
+        runId: instance.id,
+        reviewId: fresh.id,
+        err: String(e),
+      })
     }
   }
 

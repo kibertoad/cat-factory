@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import {
   areaStatus,
   type InfraSetupSources,
@@ -56,8 +57,7 @@ describe('areaStatus', () => {
   })
 
   it('logs the swallowed fault so a persistent misconfig stays diagnosable', async () => {
-    const warns: Array<Record<string, unknown>> = []
-    const logger = { warn: (obj: Record<string, unknown>) => warns.push(obj) }
+    const logger = createRecordingLogger()
     await areaStatus(
       true,
       async () => {
@@ -65,6 +65,7 @@ describe('areaStatus', () => {
       },
       { area: 'agentExecutor', logger },
     )
+    const warns = logger.lines.map((l) => l.fields)
     expect(warns).toHaveLength(1)
     expect(warns[0]).toMatchObject({ area: 'agentExecutor', err: 'boom' })
   })

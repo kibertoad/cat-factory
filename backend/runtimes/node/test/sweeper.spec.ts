@@ -1,4 +1,4 @@
-import type { Logger } from '@cat-factory/server'
+import { noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import { startSweeper } from '../src/sweeper.js'
 
@@ -8,11 +8,7 @@ import { startSweeper } from '../src/sweeper.js'
 // timers + `vi.waitFor` rather than fake timers (the job's immediate run + interval are
 // async, which fake timers interleave awkwardly).
 
-const noopLog = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-} as unknown as Logger
+const noopLog = noopLogger
 
 describe('startSweeper', () => {
   it('runs the tick once immediately, before the first interval', async () => {
@@ -77,7 +73,7 @@ describe('startSweeper', () => {
 
   it('logs a failing pass (best-effort) and keeps sweeping', async () => {
     const error = vi.fn()
-    const log = { info: () => {}, warn: () => {}, error } as unknown as Logger
+    const log = { ...noopLogger, error }
     let runs = 0
     const stop = startSweeper({
       name: 'test-sweep',
@@ -92,9 +88,11 @@ describe('startSweeper', () => {
     await vi.waitFor(() => expect(runs).toBeGreaterThanOrEqual(2))
     stop()
     expect(error).toHaveBeenCalled()
-    const [payload, message] = error.mock.calls[0] as [{ err: string }, string]
+    const [message, fields] = error.mock.calls[0] as [string, { err: string }]
     expect(message).toBe('kaizen sweep failed')
-    expect(payload.err).toBe('boom')
+    // The cause is bound (and scrubbed) rather than discarded — the whole point of the
+    // failure message being a fixed string is that the variable part rides the fields.
+    expect(fields.err).toBe('boom')
   })
 
   it('stops ticking after the returned stop is called', async () => {

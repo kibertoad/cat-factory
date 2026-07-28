@@ -208,10 +208,10 @@ function resolveProviderCaps(env: NodeJS.ProcessEnv): ProviderCapabilities {
   const cfHalfSet = cloudflareCredsHalfSet(env)
   if (cfHalfSet) {
     logger.warn(
-      { ...cfHalfSet, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
       `${cfHalfSet.set} is set but ${cfHalfSet.missing} is missing — Cloudflare Workers AI ` +
         `(over REST) needs both, so it stays DISABLED. Set ${cfHalfSet.missing} too, or unset ` +
         `${cfHalfSet.set}. See ${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
+      { ...cfHalfSet, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
     )
   }
   return {

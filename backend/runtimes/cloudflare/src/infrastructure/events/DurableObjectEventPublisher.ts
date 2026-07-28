@@ -15,7 +15,8 @@ import type {
   RequirementReview,
   WorkspaceEvent,
 } from '@cat-factory/contracts'
-import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import { describeError, type ExecutionEventPublisher } from '@cat-factory/kernel'
+import { logger } from '../observability/logger'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
 
@@ -28,6 +29,15 @@ import type { WorkspaceEventsHub } from '../durable-objects/WorkspaceEventsHub'
  */
 export class DurableObjectEventPublisher implements ExecutionEventPublisher {
   constructor(private readonly namespace: DurableObjectNamespace<WorkspaceEventsHub>) {}
+
+  /**
+   * Publishes stay best-effort, but no longer SILENT. A persistently-broken hub — a DO that
+   * throws on every fetch, a serialisation error on a new event shape — used to leave every
+   * browser stale with zero log lines, indistinguishable from "nobody is watching this board".
+   * `warn`, not `error`: the DB write is authoritative and the client's reconnect-resync
+   * recovers, so this degrades the UI's liveness, it does not lose work.
+   */
+  private readonly log = logger.child({ publisher: 'durable-object' })
 
   async executionChanged(
     workspaceId: string,
@@ -128,9 +138,12 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
         headers,
         body: JSON.stringify(event),
       })
-    } catch {
-      // No subscribers / transient DO error — the DB write is authoritative and
-      // the client's reconnect-resync covers any missed event.
+    } catch (error) {
+      this.log.warn('realtime publish failed; browsers may be stale until they resync', {
+        workspaceId,
+        eventType: event.type,
+        ...describeError(error),
+      })
     }
   }
 }

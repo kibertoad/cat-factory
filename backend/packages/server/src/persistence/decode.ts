@@ -52,7 +52,7 @@ export function decodeEnum<T>(
   const result = v.safeParse(schema, value)
   if (result.success) return result.output
   const ctx = { ...context, value: preview(value) }
-  logger.error(ctx, 'persistence: stored value is not a valid enum member')
+  logger.error('persistence: stored value is not a valid enum member', ctx)
   throw new DataIntegrityError(
     `Invalid stored value '${preview(value)}' for ${String(context.column ?? context.field ?? 'enum')}`,
     ctx,
@@ -72,10 +72,11 @@ export function decodeEnumOr<T>(
 ): T {
   const result = v.safeParse(schema, value)
   if (result.success) return result.output
-  logger.warn(
-    { ...context, value: preview(value), fallback },
-    'persistence: unknown enum value, falling back',
-  )
+  logger.warn('persistence: unknown enum value, falling back', {
+    ...context,
+    value: preview(value),
+    fallback,
+  })
   return fallback
 }
 
@@ -94,7 +95,7 @@ export function decodeJson<T>(
     parsed = JSON.parse(raw)
   } catch (err) {
     const ctx = { ...context, raw: preview(raw) }
-    logger.error({ ...ctx, err }, 'persistence: stored JSON failed to parse')
+    logger.error('persistence: stored JSON failed to parse', { ...ctx, err })
     throw new DataIntegrityError(
       `Malformed JSON for ${String(context.column ?? context.field ?? 'column')}`,
       ctx,
@@ -103,10 +104,10 @@ export function decodeJson<T>(
   const result = v.safeParse(schema, parsed)
   if (result.success) return result.output
   const ctx = { ...context, raw: preview(raw) }
-  logger.error(
-    { ...ctx, issues: result.issues.map((i) => i.message) },
-    'persistence: stored JSON does not match its contract',
-  )
+  logger.error('persistence: stored JSON does not match its contract', {
+    ...ctx,
+    issues: result.issues.map((i) => i.message),
+  })
   throw new DataIntegrityError(
     `Stored JSON for ${String(context.column ?? context.field ?? 'column')} violates its contract`,
     ctx,
@@ -124,7 +125,7 @@ export function tryDecodeRow<T>(map: () => T, context: Record<string, unknown>):
     return map()
   } catch (err) {
     if (err instanceof DataIntegrityError) {
-      logger.error({ ...context, ...err.context }, 'persistence: dropping corrupt row from list')
+      logger.error('persistence: dropping corrupt row from list', { ...context, ...err.context })
       return null
     }
     throw err

@@ -1,5 +1,5 @@
 import { DOCS } from '@cat-factory/server'
-import type { PropagatorLogger } from './propagator.js'
+import type { Logger } from '@cat-factory/kernel'
 
 // Boot-time reachability probe for the optional Redis bus (error-message coverage A7).
 //
@@ -143,17 +143,16 @@ export async function probeRedisReachable(
  */
 export async function warnIfRedisUnreachable(
   env: NodeJS.ProcessEnv,
-  log: PropagatorLogger,
+  log: Logger,
   opts: { connectProbe?: RedisConnectProbe; timeoutMs?: number } = {},
 ): Promise<void> {
   const url = env.REDIS_URL?.trim()
   if (!url) return
   const reachable = await probeRedisReachable(url, opts)
   if (reachable === false) {
-    log.warn(
-      { target: redisTargetLabel(url) },
-      describeRedisUnreachable(url, opts.timeoutMs ?? DEFAULT_REDIS_PROBE_TIMEOUT_MS),
-    )
+    log.warn(describeRedisUnreachable(url, opts.timeoutMs ?? DEFAULT_REDIS_PROBE_TIMEOUT_MS), {
+      target: redisTargetLabel(url),
+    })
   }
 }
 
@@ -167,7 +166,7 @@ export async function warnIfRedisUnreachable(
  */
 export function warnIfRedisUnreachableInBackground(
   env: NodeJS.ProcessEnv,
-  log: PropagatorLogger,
+  log: Logger,
   opts: { connectProbe?: RedisConnectProbe; timeoutMs?: number } = {},
 ): void {
   void warnIfRedisUnreachable(env, log, opts).catch(() => {})

@@ -42,6 +42,13 @@ else imports its **ports** and domain types from here.
   tracker-issue writebacks (integrations) render through it — a second copy is how one of them
   drifts into paging a stranger. Anything host-bound picks one of the three renderers; never a
   bare template hole.
+- `ports/logging.ts` — the **`Logger` port**: `debug`/`info`/`warn`/`error` (`(msg, fields?)`)
+  plus `child(bound)`, with `noopLogger` and the test-facing `createRecordingLogger`. Injected
+  like `Clock`/`IdGenerator`, which is what lets the whole domain engine log without depending on
+  a runtime facade; `@cat-factory/server` adapts pino onto it. Its companion is
+  `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
+  `.catch(() => {})` — keep the swallow, add one scrubbed `warn`. See
+  [`backend/docs/logging.md`](../../docs/logging.md).
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,
@@ -49,4 +56,4 @@ else imports its **ports** and domain types from here.
   `CustomManifestDetectionContext` authoring types).
 
 **See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)", "Custom agents",
-"Merge track record".
+"Merge track record", "Logging goes through the kernel `Logger` port".

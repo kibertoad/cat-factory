@@ -3,6 +3,7 @@ import type {
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
+  Logger,
 } from '@cat-factory/kernel'
 import {
   type MappedSpan,
@@ -44,11 +45,6 @@ const SPAN_KIND_INTERNAL = 1
 const STATUS_UNSET = 0
 const STATUS_ERROR = 2
 
-/** Minimal structured logger (pino-compatible); optional. */
-export interface OtelLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 export interface OtelSinkConfig {
   /** OTLP/HTTP base URL, e.g. `http://collector:4318` (the `/v1/*` paths are appended). */
   endpoint: string
@@ -57,7 +53,7 @@ export interface OtelSinkConfig {
   /** OTLP resource `service.name`; defaults to `cat-factory`. */
   serviceName?: string
   /** Optional logger for swallowed errors. */
-  logger?: OtelLogger
+  logger?: Logger
   /** Injectable fetch (tests); defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
 }
@@ -89,7 +85,7 @@ export class OtelTraceSink implements LlmTraceSink {
   private readonly metricsEndpoint: string
   private readonly headers: Record<string, string>
   private readonly serviceName: string
-  private readonly logger?: OtelLogger
+  private readonly logger?: Logger
   private readonly fetchImpl: typeof fetch
 
   constructor(config: OtelSinkConfig) {

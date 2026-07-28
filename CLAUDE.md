@@ -148,6 +148,38 @@ is BANNED**, in the service layer, the facade repos, and the HTTP layer alike. I
 Good citizens: `WorkspaceMountRepository.countByServiceIds`, `ServiceRepository.listByIds`,
 `AccountRepository.listByIds`, `TaskRepository.listByRefs`, `BoardService.removeBlock`.
 
+## Logging goes through the kernel `Logger` port, never a local logger interface
+
+Every package logs through ONE injected interface — kernel's `Logger` (`ports/logging.ts`):
+`debug`/`info`/`warn`/`error`, each `(msg, fields?)`, plus `child(bound)`. Message FIRST, fields
+second (the shape the executor-harness already declares, so backend and container lines share a
+convention). `@cat-factory/server`'s `observability/logger.ts` is the ONLY place a logging library
+is named: it adapts pino onto the port. Full patterns:
+[`backend/docs/logging.md`](./backend/docs/logging.md).
+
+- **Declaring a local `interface XLogger { warn(obj, msg?) }` is BANNED.** That was the pre-port
+  stopgap and every instance has been retired; a package that can't see kernel is in the wrong
+  layer. Same for a bespoke `log?: (event, msg) => void` callback dependency.
+- **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`).
+  `createCore` re-binds the resolved logger onto the dependency bag, so production always has a real
+  one and no call site null-checks. `container.logger` exposes the same instance to controllers and
+  facade sweepers.
+- **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps
+  the swallow — a best-effort path must NEVER propagate into its caller — and adds one `warn` naming
+  the operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the
+  cause with `describeError(error)` instead of discarding it.
+- **`describeError` scrubs through `redactSecrets`**, because a `fetch`/spawn/SDK error routinely
+  echoes the request URL or an auth header. Any OTHER field carrying command output, a URL, or model
+  text goes through `redactSecrets` at the emit site. Never log an auth header or a decrypted
+  credential — not even at `debug`, which is a level operators turn on in production.
+- **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the
+  top of the scope so a deeply nested emit still carries them.
+- **`LOG_LEVEL`** (`process.env` on Node/local, a wrangler var on the Worker) is applied FIRST in
+  each boot path; an unrecognised value falls back to `info`. The threshold is checked in the
+  adapter, not on the pino instance — pino children snapshot their parent's level at creation.
+- **Assert the evidence in tests** with kernel's `createRecordingLogger()`; a child writes into the
+  same `lines` array, so correlation fields are assertable too.
+
 ## Caching goes through the app cache seam, never a homebrew Map
 
 A per-service `Map` with a manual TTL, a module-global memo, or an ad-hoc `{ value, expiresAt }`

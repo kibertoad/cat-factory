@@ -78,12 +78,12 @@ export function taskWebhookController(): Hono<AppEnv> {
       // entirely different remedy — pointing an operator at `GITHUB_WEBHOOK_SECRET` here would send
       // them to the wrong place.
       logger.warn(
-        { event: 'tracker_webhook_signature_rejected', source: sourceParam, workspaceId },
         `A ${sourceParam} webhook delivery for workspace ${workspaceId} was rejected (401 Invalid ` +
           `signature). The secret configured on the tracker's webhook and the one stored on this ` +
           `workspace's ${sourceParam} connection differ — re-mint the secret via ` +
           `POST /workspaces/${workspaceId}/task-sources/${sourceParam}/webhook and paste the ` +
           `returned value into the tracker.`,
+        { event: 'tracker_webhook_signature_rejected', source: sourceParam, workspaceId },
       )
       return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
     }

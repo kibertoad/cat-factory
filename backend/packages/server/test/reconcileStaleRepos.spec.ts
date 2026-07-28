@@ -1,4 +1,5 @@
 import type { Clock, StaleRepoRef } from '@cat-factory/kernel'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import { GitHubApiError } from '../src/github/FetchGitHubClient.js'
 import { InstallationTokenMintError } from '../src/github/GitHubAppAuth.js'
@@ -124,23 +125,23 @@ describe('reconcileStaleRepos (shared)', () => {
   // The log-level classifier reads the structured status off BOTH errors the sync throws: a
   // repo-level GitHubApiError(404) is an expected "gone repo" state → warn, not error.
   it('logs a repo-level GitHubApiError(404) at warn (gone), not error, without tombstoning', async () => {
-    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger
+    const log = createRecordingLogger()
     const deps = makeDeps([staleRepo()], async () => {
       throw new GitHubApiError(404, 'repo gone')
     })
     await reconcileStaleRepos(deps, clock, STALE_MS, log)
-    expect(log.warn).toHaveBeenCalledOnce()
-    expect(log.error).not.toHaveBeenCalled()
+    expect(log.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
+    expect(log.lines.filter((l) => l.level === 'error')).toHaveLength(0)
     expect(deps.softDeleted).toEqual([])
   })
 
   it('logs a genuine (non-gone) fault at error', async () => {
-    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger
+    const log = createRecordingLogger()
     const deps = makeDeps([staleRepo()], async () => {
       throw new GitHubApiError(500, 'server error')
     })
     await reconcileStaleRepos(deps, clock, STALE_MS, log)
-    expect(log.error).toHaveBeenCalledOnce()
-    expect(log.warn).not.toHaveBeenCalled()
+    expect(log.lines.filter((l) => l.level === 'error')).toHaveLength(1)
+    expect(log.lines.filter((l) => l.level === 'warn')).toHaveLength(0)
   })
 })

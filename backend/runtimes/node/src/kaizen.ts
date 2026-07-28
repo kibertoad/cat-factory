@@ -36,7 +36,7 @@ export function startKaizenSweeper(
         clock.now() - KAIZEN_STALE_MS,
         KAIZEN_SWEEP_BATCH,
       )
-      if (processed > 0) log.info({ processed }, 'ran pending kaizen gradings')
+      if (processed > 0) log.info('ran pending kaizen gradings', { processed })
     },
   })
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type {
   BinaryArtifactStore,
   GroupCacheHandle,
@@ -33,7 +34,7 @@ function fakeWorkspaceRepository(deleteSpy: WorkspaceRepository['delete']): Work
 
 const baseDeps = (resolveBinaryArtifactStore?: ResolveBinaryArtifactStore) => {
   const deleteSpy = vi.fn(() => Promise.resolve())
-  const logger = { info: vi.fn() }
+  const logger = createRecordingLogger()
   const service = new WorkspaceService({
     workspaceRepository: fakeWorkspaceRepository(deleteSpy),
     blockRepository: {} as never,
@@ -123,7 +124,7 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
     await expect(service.delete(WS.id)).resolves.toBeUndefined()
     expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
     // The swallowed failure is surfaced (not silent) so the residual leak is visible.
-    expect(logger.info).toHaveBeenCalledTimes(1)
-    expect(logger.info.mock.calls[0]?.[0]).toMatchObject({ workspaceId: WS.id })
+    expect(logger.lines.filter((l) => l.level === 'info')).toHaveLength(1)
+    expect(logger.lines[0]?.fields).toMatchObject({ workspaceId: WS.id })
   })
 })

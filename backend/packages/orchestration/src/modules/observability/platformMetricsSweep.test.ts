@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
 import {
   type PlatformMetricsSink,
@@ -88,7 +89,7 @@ describe('sweepPlatformMetrics', () => {
 
   it('is best-effort per account: one failure does not abort the others', async () => {
     const { sink, calls } = recordingSink()
-    const warn = vi.fn()
+    const logger = createRecordingLogger()
     const exported = await sweepPlatformMetrics({
       listAccountIds: async () => ['ok1', 'boom', 'ok2'],
       summarize: async (accountId, window) => {
@@ -97,17 +98,17 @@ describe('sweepPlatformMetrics', () => {
       },
       sink,
       window: '1h',
-      logger: { warn },
+      logger,
     })
 
     expect(exported).toBe(2)
     expect(calls.map((c) => c.accountId)).toEqual(['ok1', 'ok2'])
-    expect(warn).toHaveBeenCalledOnce()
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
   })
 
   it('returns 0 and logs when the account list itself fails', async () => {
     const { sink, calls } = recordingSink()
-    const warn = vi.fn()
+    const logger = createRecordingLogger()
     const exported = await sweepPlatformMetrics({
       listAccountIds: async () => {
         throw new Error('db down')
@@ -115,16 +116,16 @@ describe('sweepPlatformMetrics', () => {
       summarize: async (_a, w) => snapshot(w, 1),
       sink,
       window: '1h',
-      logger: { warn },
+      logger,
     })
 
     expect(exported).toBe(0)
     expect(calls).toEqual([])
-    expect(warn).toHaveBeenCalledOnce()
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
   })
 
   it('surfaces a sink failure as a skipped account, not a thrown sweep', async () => {
-    const warn = vi.fn()
+    const logger = createRecordingLogger()
     const failingSink: PlatformMetricsSink = {
       export: async () => {
         throw new Error('collector down')
@@ -135,10 +136,10 @@ describe('sweepPlatformMetrics', () => {
       summarize: async (_a, w) => snapshot(w, 1),
       sink: failingSink,
       window: '1h',
-      logger: { warn },
+      logger,
     })
 
     expect(exported).toBe(0)
-    expect(warn).toHaveBeenCalledOnce()
+    expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
   })
 })

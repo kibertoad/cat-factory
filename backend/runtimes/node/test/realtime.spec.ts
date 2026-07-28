@@ -1,4 +1,5 @@
 import { type Server, createServer } from 'node:http'
+import { noopLogger } from '@cat-factory/kernel'
 import type { AddressInfo } from 'node:net'
 import type { AuthConfig } from '@cat-factory/server'
 import { mintWsTicket } from '@cat-factory/server'
@@ -11,7 +12,7 @@ import { NodeEventPublisher, NodeRealtimeHub, attachRealtime } from '../src/real
 // up a plain HTTP server + the `ws`-backed transport (no DB) and exercise the three
 // behaviours that matter: ticket authorisation, per-workspace fan-out, and isolation.
 
-const silentLog = { info: () => {}, warn: () => {} }
+const silentLog = noopLogger
 
 /** A minimal AuthConfig — `authorizeWsUpgrade` only reads enabled/devOpen/sessionSecret. */
 function authConfig(over: Partial<AuthConfig>): AuthConfig {

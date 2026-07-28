@@ -7,6 +7,7 @@ import {
   type ProviderToken,
   type PullRequestMergeabilityProvider,
   type PullRequestReviewProvider,
+  type Logger,
   type ReleaseHealthProvider,
 } from '@cat-factory/kernel'
 
@@ -105,11 +106,6 @@ export function clearGateProviders(registry: ProviderRegistry): void {
   }
 }
 
-/** Minimal structured-logger shape (the facade's pino logger satisfies it). */
-export interface GateWiringLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 // Each built-in gate that, when its provider is UNWIRED, silently passes through — and
 // what that pass-through actually means, so the warning names the operational risk.
 const PASS_THROUGH_GATES: ReadonlyArray<{
@@ -156,14 +152,15 @@ const warnedGates = new Set<string>()
  * per process. Pass-through stays the behaviour — this only makes the misconfiguration
  * visible.
  */
-export function warnUnwiredGates(registry: ProviderRegistry, log: GateWiringLogger): void {
+export function warnUnwiredGates(registry: ProviderRegistry, log: Logger): void {
   for (const { gate, token, effect } of PASS_THROUGH_GATES) {
     if (registry.isWired(token) || warnedGates.has(gate)) continue
     warnedGates.add(gate)
-    log.warn(
-      { gate, effect, passThrough: true },
-      `gate '${gate}' has no provider wired — passing through (${effect})`,
-    )
+    log.warn(`gate '${gate}' has no provider wired — passing through (${effect})`, {
+      gate,
+      effect,
+      passThrough: true,
+    })
   }
 }
 

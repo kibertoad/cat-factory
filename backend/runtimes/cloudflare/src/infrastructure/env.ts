@@ -116,6 +116,13 @@ export interface Env {
    * branch + dispatches provisioning) but isn't auto-advanced.
    */
   ENV_TEST_WORKFLOW?: Workflow
+  /**
+   * Emit threshold for the structured logger: `debug` | `info` | `warn` | `error`.
+   * Default `info`. Set it to `debug` (a `wrangler.toml` var, or `wrangler secret`-free
+   * `[vars]` edit) to turn on the verbose tier during an incident, then set it back —
+   * `debug` is deliberately chatty. An unrecognised value falls back to `info`.
+   */
+  LOG_LEVEL?: string
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**

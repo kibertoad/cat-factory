@@ -1,6 +1,6 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** analysis complete, no slices started · **Owner:** core · **Started:** 2026-07-28
+**Status:** Phase 1 landed (1.1–1.5); Phases 2–6 open · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
 
@@ -16,7 +16,7 @@ signal distinguishes from healthy. The headline findings:
 
 - **~113k LOC of business logic cannot log at all.** There is no logger port in the kernel, so
   `orchestration`, `integrations`, `agents` and `kernel` (together the entire domain engine) have
-  no structural access to a logger. This *forces* the ~115 silent `.catch(() => {})` drops in
+  no structural access to a logger. This _forces_ the ~115 silent `.catch(() => {})` drops in
   those packages — the swallow is mandatory, not stylistic.
 - **The deployed Cloudflare runtime discards `AgentFailure.reason` on every failure path**, so the
   SPA's machine-readable remedies (the "Connect GitHub" jump action, the deploy-runner hint) never
@@ -34,11 +34,11 @@ signal distinguishes from healthy. The headline findings:
 Three initiatives already own adjacent ground; this doc records only what they do **not** cover
 and cross-references where a fix belongs to them:
 
-- [`error-message-coverage.md`](./error-message-coverage.md) — owns the *content* of error
+- [`error-message-coverage.md`](./error-message-coverage.md) — owns the _content_ of error
   messages (remedies, doc URLs, structured cause codes). This doc owns whether the error is
   **logged/propagated at all** and whether the structured code **survives the trip**.
 - [`stuck-run-audit.md`](./stuck-run-audit.md) — owns runs that wedge or get wrongly killed
-  (F4/F6/F8/F9/F11–F13 still open). This doc owns the *visibility* of those events: whether a
+  (F4/F6/F8/F9/F11–F13 still open). This doc owns the _visibility_ of those events: whether a
   re-drive, an eviction, or a stall is countable and diagnosable after the fact.
 - [`platform-operator-observability.md`](./platform-operator-observability.md) — owns the
   operator dashboard + `platform_health` alert (slices 4b/6/7 still open). This doc records the
@@ -55,6 +55,7 @@ Severity: **P1** = operators/users are blind to a failure class that occurs rout
 ### A. Logging infrastructure
 
 **A1 — No logger port in the kernel; the domain engine is silent by construction. (P1)**
+_(FIXED in Phase 1.1 — kept here as the record of what the port was for.)_
 `backend/packages/kernel/src/ports/` has ~90 port files and no logger. The only logger lives in
 `@cat-factory/server` (`src/observability/logger.ts`, pino-over-console), which the domain
 packages must not import. Consequence: `orchestration` (45k LOC), `integrations` (33k),
@@ -62,7 +63,7 @@ packages must not import. Consequence: `orchestration` (45k LOC), `integrations`
 is local and optional (`GitHubDocsProvider.ts:36-42`, `logger?: GitHubDocsLogger`), and several
 services document the resulting hole outright —
 [`pr-verification-report.md`](./pr-verification-report.md): "an unwired logger means a revoked
-token or a rejected body leaves no trace anywhere". Raw `console.*` is *not* the problem (near
+token or a rejected body leaves no trace anywhere". Raw `console.*` is _not_ the problem (near
 zero in non-test source); silence is.
 
 **A2 — No request logging, no request/correlation id; every 4xx is invisible. (P1)**
@@ -81,13 +82,17 @@ the `${executionId}-${agentKind}` naming convention (`ContainerAgentExecutor.ts:
 per-call instead of binding a child (`BootstrapWorkflow`/`EnvConfigRepairWorkflow` do it right).
 
 **A4 — `LOG_LEVEL` is inert; no debug tier exists. (P2)**
+_(Backend half FIXED in Phase 1.3; the harness logger still has no level filtering — see 5.5.)_
 `logger.ts:10` reads `(globalThis as { LOG_LEVEL?: string }).LOG_LEVEL ?? 'info'` — nothing ever
 assigns it (not `process.env`, not a wrangler var, absent from `.env.example`). The harness logger
 has no level filtering at all, and `logger.debug`/`log.debug` has **zero** call sites repo-wide,
 so there is no verbose tier to turn on during an incident.
 
 **A5 — Harness log fields bypass `redactSecrets`; the scrubber is triplicated. (P2)**
-The harness scrubs *captured output* (`captured-command.ts:106`) but its logger emits every field
+_(Backend half addressed in Phase 1: `describeError` scrubs every error message it emits, and the
+convention is documented. The HARNESS logger is unchanged — it is image-bumping, so it batches
+into 5.5.)_
+The harness scrubs _captured output_ (`captured-command.ts:106`) but its logger emits every field
 verbatim (`executor-harness/src/logger.ts` — no redaction), including spawn-failure `err.message`
 and caller-supplied `logFields` for `sh -c` commands that can embed credentials
 (`captured-command.ts:73,129-131`). Traces are scrubbed; logs are not. `redactSecrets` exists as
@@ -101,16 +106,16 @@ Zero literal empty `catch {}` blocks exist in non-test source, but silent promis
 widespread (integrations 39, executor-harness 30, server 20, orchestration 20). The consequential
 ones:
 
-| Site | What vanishes |
-| --- | --- |
-| `ExecutionService.ts:1551` `autoStartDependents(...).catch(() => {})` | dependent tasks silently never start |
-| `MergeTrackRecordService.ts:112,156,200,236` | all four track-record reads/writes; the class has **no logger dep at all** |
-| `InitiativeLoopService.ts:142,186,291,312,428,604` | loop tick, tracker recommits, block deletion, notification raise |
-| `PublicApiController.ts:246-247` | rollback of a half-created run → orphaned rows |
-| `LlmProxyController.ts:637` `recordUsage(...).catch(() => {})` | usage/billing attribution lost |
-| `DeployerStepController.ts:569,611` | leaked provisioning leases |
-| `GitHubGateways.ts:25` `workflow.create(...).catch(() => {})` then `return true` | backfill reported scheduled when it wasn't |
-| `RunDispatcher.ts:1681,1829`, `review-kinds.ts:302`, `ExecutionService.ts:1543` | every issue-writeback hook |
+| Site                                                                             | What vanishes                                                              |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `ExecutionService.ts:1551` `autoStartDependents(...).catch(() => {})`            | dependent tasks silently never start                                       |
+| `MergeTrackRecordService.ts:112,156,200,236`                                     | all four track-record reads/writes; the class has **no logger dep at all** |
+| `InitiativeLoopService.ts:142,186,291,312,428,604`                               | loop tick, tracker recommits, block deletion, notification raise           |
+| `PublicApiController.ts:246-247`                                                 | rollback of a half-created run → orphaned rows                             |
+| `LlmProxyController.ts:637` `recordUsage(...).catch(() => {})`                   | usage/billing attribution lost                                             |
+| `DeployerStepController.ts:569,611`                                              | leaked provisioning leases                                                 |
+| `GitHubGateways.ts:25` `workflow.create(...).catch(() => {})` then `return true` | backfill reported scheduled when it wasn't                                 |
+| `RunDispatcher.ts:1681,1829`, `review-kinds.ts:302`, `ExecutionService.ts:1543`  | every issue-writeback hook                                                 |
 
 There is no `runBestEffort(fn, logger)` helper and nothing counts the drops. Blocked on A1 for
 the domain packages.
@@ -136,6 +141,7 @@ site — `DeployerStepController.ts:360`). Downstream, `AgentFailureCard.vue:52,
 branches can never fire. This is a live runtime-symmetry violation.
 
 **B4 — No process-level failure handlers on Node/local; pg-boss `error` can crash the process. (P1)**
+_(FIXED in Phase 1.5.)_
 Neither Node nor local registers `process.on('unhandledRejection'|'uncaughtException')` (only
 SIGTERM/SIGINT). `server.ts:550` registers `boss.on('stopped')` but **no `boss.on('error')`** —
 pg-boss emits `error` for maintenance faults, and an unhandled `'error'` event on an EventEmitter
@@ -172,8 +178,10 @@ cause-loss on Node/local. Both sweepers also run their whole pass in one `try`: 
 `pgBossRunner.ts:312-381`), logged as "sweep failed" with no run id.
 
 **B8 — `MergeTrackRecordService` drops the repo identity its own comment promises to keep. (P2)**
+_(FIXED in Phase 1.2 — `repo` is now bound outside the `try` and re-attached in the catch. 2.3 is
+therefore closed; the service also gained the logger it had no way to report through.)_
 `MergeTrackRecordService.ts:105-114`: the comment says the repo identity is captured even when
-the changed-file list is unreadable, but `repo` is bound *inside* the `try` — a **throwing**
+the changed-file list is unreadable, but `repo` is bound _inside_ the `try` — a **throwing**
 `listChangedFiles` (403/404/rate-limit, the common case) returns bare `absent`, so external-merge
 attribution by `(repoId, prNumber)` fails permanently for that record.
 
@@ -279,7 +287,7 @@ binding returns `'alive'`, silently exempting that kind from sweeping forever.
 `recordDispatchDiagnostics` runs **after** `startJob` returns, so dispatch/preflight failures —
 the class where "which model / which repo / which backend" matters most — carry no `lastDispatch`.
 Inline steps never stamp diagnostics at all. And the whole block is write-only: zero frontend
-references to run `diagnostics`, `firstEvictionDetail` (for runs that *recovered*), or the
+references to run `diagnostics`, `firstEvictionDetail` (for runs that _recovered_), or the
 `evictionRecoveries` counters. The schema's stated purpose ("after-the-fact investigation") is
 served today only by hand-written SQL.
 
@@ -314,70 +322,129 @@ Every slice obeys the standing rules: runtime symmetry with a conformance assert
 behaviour is shared; harness changes are image-bumping and batch together; best-effort paths stay
 best-effort (a fix adds a log/counter, never a throw into the caller).
 
-### Phase 1 — Logging foundations (prerequisite for everything else)
+### Phase 1 — Logging foundations (prerequisite for everything else) — **LANDED**
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 1.1 | Add a `Logger` port to kernel (`ports/logging.ts`: 4 levels + `child`, the shape the harness already declares); thread it through `CoreDependencies` and the facade containers; wire the pino logger in all three facades. A `noopLogger` default keeps construction cheap. | A1 | P1 |
-| 1.2 | Add `runBestEffort(label, fn, logger)` (kernel, beside the port) and convert the B1 table's sites to it — log-and-swallow, never rethrow. Give `MergeTrackRecordService` and the `RepoOp` ctx a logger dep. | B1, D3, B8's sibling sites | P1 |
-| 1.3 | Wire `LOG_LEVEL` for real: read `process.env.LOG_LEVEL` (Node/local) and a wrangler var (Worker) into the pino level; add level filtering to the harness logger; document in `.env.example`. | A4 | P2 |
-| 1.4 | One-line cause recoveries: bind + log the poll error in `drive.ts` and append `(last error: …)` to the failure message (copy `ExecutionWorkflow`); log the two silent CF queue consumers (copy `handleTrackerSyncBatch`); `log.warn` in both realtime publishers; log every `WorkflowsWorkRunner` swallow and `buildWorkflowRuntime` retry. | B7, B5 (logging half), D7, D6 (logging half) | P1 |
-| 1.5 | Process-level guards on Node/local: `process.on('unhandledRejection'/'uncaughtException')` (log structured, exit on uncaught), and `boss.on('error', log)`. | B4 | P1 |
+| #   | Step                                                                                                                                                                                                                                                                                                                                        | Fixes                                        | Sev | Status                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
+| 1.1 | Add a `Logger` port to kernel (`ports/logging.ts`: 4 levels + `child`, the shape the harness already declares); thread it through `CoreDependencies` and the facade containers; wire the pino logger in all three facades. A `noopLogger` default keeps construction cheap.                                                                 | A1                                           | P1  | ✅                                                                                       |
+| 1.2 | Add `runBestEffort(label, fn, logger)` (kernel, beside the port) and convert the B1 table's sites to it — log-and-swallow, never rethrow. Give `MergeTrackRecordService` and the `RepoOp` ctx a logger dep.                                                                                                                                 | B1, D3, B8's sibling sites                   | P1  | ◐ helper + the highest-value sites; the long tail and the `RepoOp` ctx remain (see 1.2b) |
+| 1.3 | Wire `LOG_LEVEL` for real: read `process.env.LOG_LEVEL` (Node/local) and a wrangler var (Worker) into the pino level; add level filtering to the harness logger; document in `.env.example`.                                                                                                                                                | A4                                           | P2  | ◐ backend done; the HARNESS half moves to 5.5 (image-bumping)                            |
+| 1.4 | One-line cause recoveries: bind + log the poll error in `drive.ts` and append `(last error: …)` to the failure message (copy `ExecutionWorkflow`); log the two silent CF queue consumers (copy `handleTrackerSyncBatch`); `log.warn` in both realtime publishers; log every `WorkflowsWorkRunner` swallow and `buildWorkflowRuntime` retry. | B7, B5 (logging half), D7, D6 (logging half) | P1  | ✅                                                                                       |
+| 1.5 | Process-level guards on Node/local: `process.on('unhandledRejection'/'uncaughtException')` (log structured, exit on uncaught), and `boss.on('error', log)`.                                                                                                                                                                                 | B4                                           | P1  | ✅                                                                                       |
+
+#### What Phase 1 actually shipped
+
+- **`kernel/src/ports/logging.ts`** — `Logger` (`debug`/`info`/`warn`/`error` as `(msg, fields?)`,
+  plus `child`), `noopLogger`, and `createRecordingLogger` (a recording fake, shipped rather than
+  duplicated per package, so a best-effort path's evidence is assertable everywhere).
+- **`kernel/src/shared/best-effort.ts`** — `runBestEffort(logger, label, fn, fields)` and
+  `describeError(error)` (message + constructor name, scrubbed through `redactSecrets`).
+- **`@cat-factory/server`'s `observability/logger.ts`** is now the ONLY place a logging library is
+  named: pino adapted onto the port, plus `createPinoLogger(destination?)`, `parseLogLevel` and
+  `setLogLevel`. The level gate lives in the adapter, NOT on the pino instance — pino children
+  snapshot their parent's level at creation, so a facade configuring `LOG_LEVEL` after module load
+  would otherwise miss every logger already derived.
+- **Every ad-hoc logger interface was retired** (the stopgap this initiative named): `PrReportLogger`,
+  `PlatformMetricsSweepLogger`, `GitHubDocsLogger`, `OtelLogger`, `OtlpLogger`, `LangfuseLogger`,
+  `ResetLogger`, `InfraSetupLogger`, `PlatformHealthSweepLogger`, `KeyFingerprintLogger`,
+  `GateWiringLogger`, `DriveLogger`, `PropagatorLogger`, `RealtimeLogger`, plus the inline
+  `{ warn(obj, msg?) }` shapes and the `log?: (event, msg) => void` callbacks on
+  `RecurringPipelineService` / `TrackerWebhookService`. Both pino→port bridges
+  (`node/src/keyFingerprint.ts`, the Worker's `keyFingerprintLogger`) were deleted — the shapes
+  now match, so a `logger.child({ … })` is the whole adaptation.
+- **~230 call sites migrated** from pino's `(fields, msg)` to the port's `(msg, fields)`. The
+  signature change makes an un-migrated site a typecheck failure, so coverage is complete by
+  construction.
+- **A facade-parity gap surfaced while wiring**: the Worker's `buildWorkerCoreDependencies` passed
+  no logger into `createCore` at all, so on the DEPLOYED runtime every domain service would have
+  silently fallen back to `noopLogger` — putting exactly the best-effort paths this initiative
+  exists to surface back in the dark. Both facades now wire it at the TOP of their dependency
+  literal, next to each other, so the pair reads as the obligation it is.
+- **Docs**: [`backend/docs/logging.md`](../../backend/docs/logging.md) (the patterns), a CLAUDE.md
+  convention section, `LOG_LEVEL` in `docs/environment-variables.md` and all three deployment
+  examples.
+
+#### Notes for the next implementer
+
+- **`runBestEffort` swallows a SYNCHRONOUS throw, `.catch(() => {})` does not.** A straight port of
+  the old idiom at a site whose function can throw before returning a promise is a small behaviour
+  change (for the better) — worth knowing when converting the tail.
+- **`layered-loader` keeps its own pino-shaped `Logger`.** `@cat-factory/caching` adapts ours onto
+  it in `asLayeredLoaderLogger`; that is the one place the two conventions meet, and it should stay
+  the only one.
+- **`CoreDependencies.logger` stays OPTIONAL** so a harness can build a container cheaply, but
+  `createCore` re-binds the resolved instance onto the dependency bag before any service is
+  constructed — so production always has a real logger and no service null-checks. A new service
+  takes `logger?: Logger` and normalises once (`this.log = deps.logger ?? noopLogger`).
+- **Drive-by, unrelated to logging**: `backend/packages/caching/src/appCaches.test.ts` was failing
+  to typecheck on `main` (a `ResolvedCatalogEntry` fixture missing the `brief` field added by the
+  two-tier standards work). Fixed here because it blocked the repo-wide typecheck this change
+  needed. `backend/packages/observability-langfuse`'s undici-mocked tests fail in a proxied sandbox
+  both before and after; untouched.
+
+### Phase 1b — Finish the conversion (the tail Phase 1 deliberately left)
+
+| #    | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Fixes  | Sev |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
+| 1.2b | Convert the REMAINING `.catch(() => {})` sites to `runBestEffort` — the B1 table's `InitiativeLoopService` (6), `DeployerStepController` (2, leaked provisioning leases), `PublicApiController` (the half-created-run rollback), `RunDispatcher`/`review-kinds` issue-writeback hooks — and thread a logger into the `RepoOp` ctx so spec promotion stops being a silent no-op. Prefer a `grep -rn 'catch(() => {})'` sweep over a hand-list: the count moves. | B1, D3 | P1  |
+| 1.2c | Add a lint rule (oxlint `no-restricted-syntax`) banning `.catch(() => {})` and a bare `catch {}` in non-test source, so the tail can't regrow while it is being drained. Land it only AFTER 1.2b, or it fails the tree.                                                                                                                                                                                                                                        | B1     | P2  |
+| 1.4b | Bind a `child({ workspaceId, executionId })` in the remaining engine drivers that still pass ids inline per call (`ExecutionWorkflow` — `BootstrapWorkflow`/`EnvConfigRepairWorkflow` already do it right), so a run's Worker-side lines are greppable the way `driveExecution`'s now are.                                                                                                                                                                     | A3     | P2  |
 
 ### Phase 2 — Error identity survives the trip
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 2.1 | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes. | B3 | P1 |
-| 2.2 | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2 | P1 |
-| 2.3 | Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify` so a throwing `listChangedFiles` still records `(repoId, prNumber)`. | B8 | P2 |
-| 2.4 | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks. | C2 (privacy half) | P1 |
+| #       | Step                                                                                                                                                                                                                                                                                                                                                                                            | Fixes             | Sev |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --- |
+| 2.1     | Thread `reason` through the Cloudflare driver's `failRun` helper (match `drive.ts:192-197`), and call `getErrorReason(error)` on the advance-throw path of **both** drivers. Conformance-assert that a `ConflictError` thrown mid-advance reaches `AgentFailure.reason` on both runtimes.                                                                                                       | B3                | P1  |
+| 2.2     | Add `UnavailableError`/`UnauthorizedError`/`RateLimitedError` `DomainError` subclasses (with `details.reason` support) and migrate the ~40 hand-rolled envelopes; normalize the `code`-less envelopes in `LlmProxyController` + `WebSearchProxyController`; stop echoing the raw upstream exception at `LlmProxyController.ts:196`; rethrow instead of hand-mapping at `AuthController.ts:790`. | B2                | P1  |
+| ~~2.3~~ | ~~Hoist `repo` resolution out of the `try` in `MergeTrackRecordService.classify`.~~ **Done in Phase 1.2** (the service needed a logger anyway, and the two changes are one file).                                                                                                                                                                                                               | B8                | P2  |
+| 2.4     | Fix the inline-path privacy gate: `InstrumentedModelProvider` must consult the same per-workspace `storeAgentContext` gate as the proxy path before shipping bodies to trace sinks.                                                                                                                                                                                                             | C2 (privacy half) | P1  |
 
 ### Phase 3 — Correlation & request visibility
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable. | A2 | P1 |
-| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers. | A3 | P1 |
-| 3.3 | Propagate W3C `traceparent` into the job body so harness tool spans nest under the run's trace; add real parent ids to the OTel/Langfuse mappings (change in `src/mapping.ts`, conformity-pinned). HTTP server spans can follow as a separate slice. | C1 | P2 |
+| #   | Step                                                                                                                                                                                                                                                                                                          | Fixes | Sev |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --- |
+| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable. | A2    | P1  |
+| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers.                        | A3    | P1  |
+| 3.3 | Propagate W3C `traceparent` into the job body so harness tool spans nest under the run's trace; add real parent ids to the OTel/Langfuse mappings (change in `src/mapping.ts`, conformity-pinned). HTTP server spans can follow as a separate slice.                                                          | C1    | P2  |
 
 ### Phase 4 — Operational metrics, health, alerting
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 4.1 | Extend `PLATFORM_METRIC` with the missing operational gauges/counters: runs re-driven/stalled/finalized per sweep, container dispatch failures + evictions, pg-boss queue depth (one `COUNT` per queue) ⇄ CF queue backlog where readable, dropped telemetry/notification batches, `AppCaches` hit/miss (a counter pair on the caching seam). Persist the per-run re-drive count (a column on `agent_runs`, D1 ⇄ Drizzle) so D4's question is answerable. | C3, D4 | P1 |
-| 4.2 | `platform_health`: add a zero-throughput condition (no runs created in N hours where the trailing window had activity) and a failure-kind-dominant condition (e.g. >80% `evicted`/`dispatch`); alert when the sweep itself fails repeatedly. | C5 | P2 |
-| 4.3 | Harden readiness: real pg-boss round-trip (or last-maintenance-tick age) instead of the boolean; optional Redis + telemetry-store checks; decide and document the Worker story (a `/ready` that probes D1/TELEMETRY_DB bindings, or an explicit ADR that the platform relies on Cloudflare's own health). | C4 | P2 |
-| 4.4 | Isolate retention pruning per table (per-table try/catch + one summary log naming failed tables). | C6 | P2 |
-| 4.5 | Enable DLQs: uncomment + document the `dead_letter_queue` config in `deploy/backend/wrangler.toml`; add `deadLetter` to the pg-boss `createQueue` calls with a sweeper that logs/alerts on dead-lettered jobs. | B5 (policy half) | P2 |
+| #   | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Fixes            | Sev |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | --- |
+| 4.1 | Extend `PLATFORM_METRIC` with the missing operational gauges/counters: runs re-driven/stalled/finalized per sweep, container dispatch failures + evictions, pg-boss queue depth (one `COUNT` per queue) ⇄ CF queue backlog where readable, dropped telemetry/notification batches, `AppCaches` hit/miss (a counter pair on the caching seam). Persist the per-run re-drive count (a column on `agent_runs`, D1 ⇄ Drizzle) so D4's question is answerable. | C3, D4           | P1  |
+| 4.2 | `platform_health`: add a zero-throughput condition (no runs created in N hours where the trailing window had activity) and a failure-kind-dominant condition (e.g. >80% `evicted`/`dispatch`); alert when the sweep itself fails repeatedly.                                                                                                                                                                                                              | C5               | P2  |
+| 4.3 | Harden readiness: real pg-boss round-trip (or last-maintenance-tick age) instead of the boolean; optional Redis + telemetry-store checks; decide and document the Worker story (a `/ready` that probes D1/TELEMETRY_DB bindings, or an explicit ADR that the platform relies on Cloudflare's own health).                                                                                                                                                 | C4               | P2  |
+| 4.4 | Isolate retention pruning per table (per-table try/catch + one summary log naming failed tables).                                                                                                                                                                                                                                                                                                                                                         | C6               | P2  |
+| 4.5 | Enable DLQs: uncomment + document the `dead_letter_queue` config in `deploy/backend/wrangler.toml`; add `deadLetter` to the pg-boss `createQueue` calls with a sweeper that logs/alerts on dead-lettered jobs.                                                                                                                                                                                                                                            | B5 (policy half) | P2  |
 
 ### Phase 5 — Execution-path forensics
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 5.1 | Post-mortem parity: pass `postMortem` to the local pooled poll (method already exists); have the CF container DO capture exit state + a scrubbed log tail and expose it on the eviction view; read `lastState.terminated` in the K8s transport; capture exit code + stderr tail in the native process transport. Pool eviction classification itself is stuck-run F4 — land the visibility with it. | D1 | P1 |
-| 5.2 | Call `recordDispatchDiagnostics` **before** `startJob` so dispatch/preflight failures carry `lastDispatch`; stamp a minimal diagnostics block for inline steps. | D5 | P2 |
-| 5.3 | Surface what's already persisted: `diagnostics.lastDispatch`, `firstEvictionDetail` (recovered runs), `evictionRecoveries`, and the new re-drive count in the SPA (an "investigation" disclosure on `AgentFailureCard` / the run panel). Frontend-only once 4.1 lands. | D5 | P2 |
-| 5.4 | Read `instance.status().error` into the `finalizeOrphan` stop reason; distinguish `instanceState`'s two swallowed error paths from genuine `missing` (log + treat repeated lookup failures as "unknown", not "missing", to prevent outage-triggered mass re-drives); warn once for an unconfigured workflow binding. | D6, D4 | P1 |
-| 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there. | D2, A5 (harness half) | P1 |
-| 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs. | C2 (coverage half) | P2 |
+| #   | Step                                                                                                                                                                                                                                                                                                                                                                                                  | Fixes                 | Sev |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --- |
+| 5.1 | Post-mortem parity: pass `postMortem` to the local pooled poll (method already exists); have the CF container DO capture exit state + a scrubbed log tail and expose it on the eviction view; read `lastState.terminated` in the K8s transport; capture exit code + stderr tail in the native process transport. Pool eviction classification itself is stuck-run F4 — land the visibility with it.   | D1                    | P1  |
+| 5.2 | Call `recordDispatchDiagnostics` **before** `startJob` so dispatch/preflight failures carry `lastDispatch`; stamp a minimal diagnostics block for inline steps.                                                                                                                                                                                                                                       | D5                    | P2  |
+| 5.3 | Surface what's already persisted: `diagnostics.lastDispatch`, `firstEvictionDetail` (recovered runs), `evictionRecoveries`, and the new re-drive count in the SPA (an "investigation" disclosure on `AgentFailureCard` / the run panel). Frontend-only once 4.1 lands.                                                                                                                                | D5                    | P2  |
+| 5.4 | Read `instance.status().error` into the `finalizeOrphan` stop reason; distinguish `instanceState`'s two swallowed error paths from genuine `missing` (log + treat repeated lookup failures as "unknown", not "missing", to prevent outage-triggered mass re-drives); warn once for an unconfigured workflow binding.                                                                                  | D6, D4                | P1  |
+| 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there. | D2, A5 (harness half) | P1  |
+| 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs.                                                                                                                                                                     | C2 (coverage half)    | P2  |
 
 ### Phase 6 — Hardening & polish
 
-| # | Step | Fixes | Sev |
-| --- | --- | --- | --- |
-| 6.1 | Default timeouts on the VCS clients (an `AbortSignal.timeout` per request, generous — e.g. 60s) and honour `Retry-After`/`resetAt` with one bounded retry on rate-limited GETs; give `safeFetch` a default per-hop deadline overridable by callers. | B6 | P2 |
-| 6.2 | Per-item isolation in both stale-run sweepers (per-run try/catch, log the run id, continue the pass). | B7 (sweep half) | P2 |
-| 6.3 | Unify `redactSecrets`: kernel copy as source of truth, harness/deploy-harness copies conformity-pinned byte-for-byte (the `host-markdown.ts` pattern). | A5 | P3 |
-| 6.4 | Local adapter fidelity: distinguish "no logs" from "logs unreadable" and "inspect failed" from "still running"; warn once on Apple's reduced fidelity; count swallowed `remove()` failures. | D8 | P3 |
-| 6.5 | Minimal client-side error reporting: a Nuxt global error handler posting to a backend endpoint (workspace-scoped, rate-limited, scrubbed). | C8 | P3 |
+| #   | Step                                                                                                                                                                                                                                                | Fixes           | Sev |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --- |
+| 6.1 | Default timeouts on the VCS clients (an `AbortSignal.timeout` per request, generous — e.g. 60s) and honour `Retry-After`/`resetAt` with one bounded retry on rate-limited GETs; give `safeFetch` a default per-hop deadline overridable by callers. | B6              | P2  |
+| 6.2 | Per-item isolation in both stale-run sweepers (per-run try/catch, log the run id, continue the pass).                                                                                                                                               | B7 (sweep half) | P2  |
+| 6.3 | Unify `redactSecrets`: kernel copy as source of truth, harness/deploy-harness copies conformity-pinned byte-for-byte (the `host-markdown.ts` pattern).                                                                                              | A5              | P3  |
+| 6.4 | Local adapter fidelity: distinguish "no logs" from "logs unreadable" and "inspect failed" from "still running"; warn once on Apple's reduced fidelity; count swallowed `remove()` failures.                                                         | D8              | P3  |
+| 6.5 | Minimal client-side error reporting: a Nuxt global error handler posting to a backend endpoint (workspace-scoped, rate-limited, scrubbed).                                                                                                          | C8              | P3  |
 
 ## Conventions & gotchas for implementers
 
-- **The logger port lands first.** Most B/D fixes in domain packages are blocked on 1.1; don't
-  work around it by importing `@cat-factory/server` into orchestration or by adding one-off
-  optional logger params (the `GitHubDocsProvider` shape is the stopgap being retired, not the
-  pattern to copy).
+- **The logger port has landed** (`kernel/src/ports/logging.ts`); the B/D fixes in domain packages
+  are no longer blocked. Take a `logger?: Logger` dependency and normalise once
+  (`this.log = deps.logger ?? noopLogger`); never import `@cat-factory/server` into a domain
+  package, and never declare a local logger interface — every one of those has been retired.
+  Patterns: [`backend/docs/logging.md`](../../backend/docs/logging.md).
 - **Best-effort stays best-effort.** Every fix to a swallow site adds a log line and/or counter;
   it must never let the failure propagate into the caller. The PR-verification-report rule
   ("observability must never break agent work") applies to all of it — including the new
@@ -393,7 +460,7 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 - **Secrets**: any new log field that can carry command output, URLs with tokens, or model text
   goes through `redactSecrets` at the emit site. The request-id middleware must not log
   auth headers or query strings verbatim.
-- **Don't double-track**: message *content* improvements discovered during this work go to
+- **Don't double-track**: message _content_ improvements discovered during this work go to
   `error-message-coverage.md`; wedge-behaviour fixes to `stuck-run-audit.md`; dashboard/alert
   slices to `platform-operator-observability.md`. Update the other tracker rather than widening a
   slice here.

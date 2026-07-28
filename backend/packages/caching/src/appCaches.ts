@@ -7,6 +7,7 @@ import type {
   DocumentContent,
   GitHubRepo,
   GroupCacheHandle,
+  Logger,
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
@@ -21,7 +22,21 @@ import { GroupLoader } from 'layered-loader/dist/lib/GroupLoader.js'
 import type { AbstractNotificationConsumer } from 'layered-loader/dist/lib/notifications/AbstractNotificationConsumer.js'
 import type { GroupNotificationPublisher } from 'layered-loader/dist/lib/notifications/GroupNotificationPublisher.js'
 import type { InMemoryGroupCache } from 'layered-loader/dist/lib/memory/InMemoryGroupCache.js'
-import type { Logger } from 'layered-loader/dist/lib/util/Logger.js'
+import type { Logger as LayeredLoaderLogger } from 'layered-loader/dist/lib/util/Logger.js'
+
+/**
+ * layered-loader logs its background failures through a pino-shaped `error(obj, msg?)`.
+ * The platform's own convention is message-first (`kernel`'s {@link Logger}), so the
+ * adaptation lives HERE — one place, rather than every facade re-deriving it.
+ */
+function asLayeredLoaderLogger(logger: Logger): LayeredLoaderLogger {
+  return {
+    error: (objOrMsg: unknown, msg?: string) => {
+      if (typeof objOrMsg === 'string') logger.error(objOrMsg)
+      else logger.error(msg ?? 'cache error', { detail: objOrMsg })
+    },
+  }
+}
 
 // The layered-loader implementation of the kernel `AppCaches` port
 // (docs/initiatives/caching-layer.md). Every cache is IN-MEMORY ONLY: each
@@ -264,7 +279,7 @@ export interface CreateAppCachesOptions {
   profile?: Partial<AppCachesProfile>
   /** Absent ⇒ bare in-memory loaders (single replica, local mode, tests). */
   notificationPairFactory?: GroupNotificationPairFactory
-  /** Error sink for background cache/notification failures (a pino logger fits). */
+  /** Error sink for background cache/notification failures. */
   logger?: Logger
 }
 
@@ -333,7 +348,7 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
             notificationPublisher: notifications.publisher,
           }
         : {}),
-      ...(logger ? { logger } : {}),
+      ...(logger ? { logger: asLayeredLoaderLogger(logger) } : {}),
     })
   }
 

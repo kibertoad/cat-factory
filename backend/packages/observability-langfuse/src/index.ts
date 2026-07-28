@@ -3,6 +3,7 @@ import type {
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
+  Logger,
 } from '@cat-factory/kernel'
 
 // A fetch-based Langfuse trace sink. It speaks Langfuse's public **ingestion API**
@@ -53,11 +54,6 @@ const DEFAULT_BASE_URL = 'https://cloud.langfuse.com'
  */
 const SEND_TIMEOUT_MS = 10_000
 
-/** Minimal structured logger (pino-compatible); optional. */
-export interface LangfuseLogger {
-  warn(obj: Record<string, unknown>, msg?: string): void
-}
-
 export interface LangfuseSinkConfig {
   /** Langfuse public key (`pk-lf-…`). */
   publicKey: string
@@ -66,7 +62,7 @@ export interface LangfuseSinkConfig {
   /** Host of the Langfuse instance. Default: Langfuse Cloud (`https://cloud.langfuse.com`). */
   baseUrl?: string
   /** Optional logger for swallowed errors. */
-  logger?: LangfuseLogger
+  logger?: Logger
   /** Injectable fetch (tests); defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
 }
@@ -90,7 +86,7 @@ function basicAuth(publicKey: string, secretKey: string): string {
 export class LangfuseTraceSink implements LlmTraceSink {
   private readonly endpoint: string
   private readonly authorization: string
-  private readonly logger?: LangfuseLogger
+  private readonly logger?: Logger
   private readonly fetchImpl: typeof fetch
 
   constructor(config: LangfuseSinkConfig) {
@@ -192,16 +188,16 @@ export class LangfuseTraceSink implements LlmTraceSink {
       // 207 = partial success (per-event errors in the body); anything else non-2xx is
       // a hard failure. Either way we only log — observability never breaks the caller.
       if (!res.ok && res.status !== 207) {
-        this.logger?.warn(
-          { scope: 'langfuse', status: res.status },
-          'langfuse: ingestion rejected batch',
-        )
+        this.logger?.warn('langfuse: ingestion rejected batch', {
+          scope: 'langfuse',
+          status: res.status,
+        })
       }
     } catch (err) {
-      this.logger?.warn(
-        { scope: 'langfuse', err: err instanceof Error ? err.message : String(err) },
-        'langfuse: failed to post ingestion batch',
-      )
+      this.logger?.warn('langfuse: failed to post ingestion batch', {
+        scope: 'langfuse',
+        err: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 }

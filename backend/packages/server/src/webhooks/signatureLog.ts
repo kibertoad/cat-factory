@@ -99,8 +99,8 @@ export function describeWebhookSignatureRejection(rejection: WebhookSignatureRej
  * operator in the logs. The `provider` doubles as a structured field for log filtering.
  */
 export function logWebhookSignatureRejection(rejection: WebhookSignatureRejection): void {
-  logger.warn(
-    { provider: rejection.provider, event: 'webhook_signature_rejected' },
-    describeWebhookSignatureRejection(rejection),
-  )
+  logger.warn(describeWebhookSignatureRejection(rejection), {
+    provider: rejection.provider,
+    event: 'webhook_signature_rejected',
+  })
 }
