@@ -307,6 +307,8 @@ export {
   registerServiceForFrame,
 } from './domain/service-registration.js'
 
+export { applyMountLayout } from './domain/mount-layout.js'
+
 export { MapSourceRegistry } from './shared/source-registry.logic.js'
 export * as atlassianLogic from './shared/atlassian.logic.js'
 export {

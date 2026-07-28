@@ -31,6 +31,12 @@ else imports its **ports** and domain types from here.
   deliveries. Its dedup marker port is `ports/tracker-comment-ingest-repositories.ts` — the
   `review_question_posts` claim shape, applied to the other direction of the same loop. See
   CLAUDE.md → "Inbound tracker webhooks".
+- `domain/mount-layout.ts` — `applyMountLayout`, the projection that puts a service frame where
+  THIS board mounts it. A frame's position (and any size override) lives on the `WorkspaceMount`,
+  never on the shared block, so the block row's own coordinates are frozen at creation. Both the
+  board snapshot (`WorkspaceService.composeBoard`) and every frame-returning `BoardService`
+  mutation project through it — a response that skips it hands the SPA coordinates no board shows
+  the frame at, and the SPA upserts them.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

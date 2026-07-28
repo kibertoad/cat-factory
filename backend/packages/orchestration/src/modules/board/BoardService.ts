@@ -30,11 +30,12 @@ import type {
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   TaskTypeRegistry,
+  WorkspaceMount,
   WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
-import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { applyMountLayout, registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import { reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
@@ -290,6 +291,33 @@ export class BoardService {
   }
 
   /**
+   * THIS workspace's mount for `block` when it is a service frame mounted here, else null (a
+   * non-frame, a legacy/unregistered frame, or in-org sharing not wired). The mount carries the
+   * frame's per-workspace layout override, so it is both what a frame move/resize WRITES and what
+   * every frame-returning read must project through. Costs no query for a non-frame.
+   */
+  private async frameMount(workspaceId: string, block: Block): Promise<WorkspaceMount | null> {
+    if (block.level !== 'frame') return null
+    const services = this.serviceRepository
+    const mounts = this.workspaceMountRepository
+    if (!services || !mounts) return null
+    const service = await services.getByFrameBlock(block.id)
+    return service ? await mounts.get(workspaceId, service.id) : null
+  }
+
+  /**
+   * Project a block onto THIS workspace's board before returning it from a mutation. A service
+   * frame's position/size are the mount's per-workspace layout override rather than fields of the
+   * shared block (see {@link applyMountLayout}), so a response built from the block row alone
+   * reports the coordinates the row happened to be created with — and the SPA, which upserts the
+   * authoritative block a mutation returns, would jump the frame to that spot on every edit.
+   * Pass-through for a non-frame.
+   */
+  private async projectForWorkspace(workspaceId: string, block: Block): Promise<Block> {
+    return applyMountLayout(block, await this.frameMount(workspaceId, block))
+  }
+
+  /**
    * The service id a block being added under `container` belongs to: the service of the
    * container's enclosing frame. Undefined when the service repos aren't wired or the
    * frame isn't a registered service (legacy/seeded frame) — the block is then plain
@@ -524,23 +552,27 @@ export class BoardService {
       // mounting a dead frame; the delete cascade normally reclaims such orphans.
       throw new ValidationError('This repository is already linked to a board service')
     }
-    const existingMount = await this.workspaceMountRepository.get(workspaceId, service.id)
-    if (!existingMount) {
+    let mount = await this.workspaceMountRepository.get(workspaceId, service.id)
+    if (!mount) {
       const existingMounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
       // Lay a new mount out on a 5-wide grid (matching ServiceMountService) when no explicit
       // position is given, so shared services don't pile onto the same point.
       const n = existingMounts.length
-      await this.workspaceMountRepository.upsert({
+      mount = {
         workspaceId,
         serviceId: service.id,
         position: position ?? { x: 80 + (n % 5) * 48, y: 80 + Math.floor(n / 5) * 48 },
         size: null,
         createdAt: this.clock.now(),
-      })
+      }
+      await this.workspaceMountRepository.upsert(mount)
       // Fan out from the frame's HOME so every board mounting the shared service refreshes.
       await this.emitBoardChanged(home.workspaceId, 'block-added', home.block.id)
     }
-    return home.block
+    // The frame block is the one homed on ANOTHER board, carrying that board's coordinates —
+    // return it placed where THIS board just mounted it, or the SPA drops the imported service
+    // at the home board's spot until the next full refresh.
+    return applyMountLayout(home.block, mount)
   }
 
   /**
@@ -919,15 +951,16 @@ export class BoardService {
     // (the snapshot renders frames from the mount, so the same shared frame can sit at a
     // different spot on each board). Write it onto THIS workspace's mount — for a home frame as
     // much as one mounted from elsewhere — and leave the shared block untouched.
-    if (block.level === 'frame' && this.serviceRepository && this.workspaceMountRepository) {
-      const service = await this.serviceRepository.getByFrameBlock(id)
-      if (service && (await this.workspaceMountRepository.get(workspaceId, service.id))) {
-        await this.workspaceMountRepository.update(workspaceId, service.id, { position })
-        // The frame's position is this workspace's private layout override — other boards
-        // mounting the service keep their own spot, so this signal is origin-only.
-        await this.emitBoardChanged(workspaceId, 'block-moved', null, originConnectionId)
-        return { ...block, position }
-      }
+    const mount = await this.frameMount(workspaceId, block)
+    if (mount) {
+      // `frameMount` only resolves a mount when the mount repository is wired.
+      await this.workspaceMountRepository?.update(workspaceId, mount.serviceId, { position })
+      // The frame's position is this workspace's private layout override — other boards
+      // mounting the service keep their own spot, so this signal is origin-only.
+      await this.emitBoardChanged(workspaceId, 'block-moved', null, originConnectionId)
+      // Project the mount's SIZE override on too: a response carrying the block's own size would
+      // resize the frame the moment the user finishes dragging it.
+      return applyMountLayout(block, { position, size: mount.size })
     }
     // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
     await this.blockRepository.update(homeWorkspaceId, id, { position })
@@ -1009,7 +1042,13 @@ export class BoardService {
     // "don't refresh off your own mutation" contract move/reparent already follow. Every OTHER
     // subscriber still receives the signal and refreshes.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id, originConnectionId)
-    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+    // A frame's position/size come from THIS board's mount, not the row we just re-read — so a
+    // frame edit (rename, threshold, and above all a RESIZE) must not hand the SPA the block's
+    // own, never-updated coordinates to upsert.
+    return this.projectForWorkspace(
+      workspaceId,
+      assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id),
+    )
   }
 
   /**
@@ -1351,7 +1390,11 @@ export class BoardService {
     await this.blockRepository.update(homeWorkspaceId, id, { archived })
     // Origin = the block's HOME so archiving a shared service fans out to every board mounting it.
     await this.emitBoardChanged(homeWorkspaceId, archived ? 'block-archived' : 'block-restored', id)
-    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+    // Always a frame (asserted above), so it owes the caller this board's layout override.
+    return this.projectForWorkspace(
+      workspaceId,
+      assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id),
+    )
   }
 
   /** Toggle a dependency edge: target dependsOn source. */
