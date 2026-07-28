@@ -26,5 +26,7 @@ BREAKING (telemetry only, no migration path by design): `cachedPromptTokens` is 
 becomes `cacheReadTokens` + `cacheWriteTokens`, and `inlineResult.usage` gains the same split.
 `llm_call_metrics` is pruned to a 3-day window, so rows carrying the old inclusive `prompt_tokens`
 semantics churn out on their own; `cacheHitRate` is now `(read + write) / (fresh + read + write)`
-and no longer needs its clamp. `cachedTokensFromUsage` is replaced by `cacheTokensFromUsage` (which
-returns the two classes) plus `freshPromptTokens`.
+and no longer needs its clamp. `cachedTokensFromUsage` is replaced by `readInputTokenClasses`,
+which returns all three classes from one usage payload (reconciling the inclusive and exclusive
+provider shapes internally, so no caller has to know which it is holding), and
+`ProxyCallObservation.cachedPromptTokens` becomes `inputTokens: InputTokenClasses`.

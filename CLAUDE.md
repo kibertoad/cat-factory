@@ -1204,11 +1204,18 @@ error handling — and the phased plan to close them — are tracked in
   with `cacheReadTokens` + `cacheWriteTokens` beside it, so total input is their sum. They are
   priced ~1x / ~0.1x / 1.25-2x base input respectively — a cache WRITE costs more than fresh —
   so any producer summing them makes a loop that keeps invalidating its prefix read exactly like
-  one riding a warm cache. A new producer normalises to fresh at the source: subtract the cached
-  subset where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex, via
-  `freshPromptTokens`), read the already-exclusive field where it reports them apart (Anthropic);
-  `cacheTokensFromUsage` covers the field names. Only Anthropic reports a write class — 0
-  elsewhere, never guessed. Distinct from the harness's `PiRunOutcome.usage`, which is the
+  one riding a warm cache. A new producer normalises to fresh at the source through the SINGLE
+  `readInputTokenClasses`, never a read-the-classes helper paired by hand with a subtract-them
+  one: it subtracts where the vendor reports an INCLUSIVE prompt count (OpenAI/DeepSeek/Codex)
+  and leaves the already-exclusive field alone where it reports them apart (Anthropic), and
+  **reads the two cache classes INDEPENDENTLY** — an OpenAI-shaped gateway fronting Anthropic
+  (`litellm`, OpenRouter) reports a read field AND a write field on one payload, so detecting one
+  must never suppress the other. Only Anthropic reports a write class — 0
+  elsewhere, never guessed. A count that survives a wire boundary is read LENIENTLY on the way in
+  (`coerceCallMetrics`): a runner pool runs whatever harness image its workspace pinned, so
+  requiring a field a new image added would drop that pool's telemetry wholesale instead of
+  losing the one class the old image never measured. Distinct from the harness's
+  `PiRunOutcome.usage`, which is the
   key-rotation WEIGHT and deliberately keeps summing every billed bucket. **On every SPA surface the
   headline `↑` is the TOTAL of the three (`totalInputTokens`), with the classes as the breakdown** —
   the like-for-like of Claude Code's context gauge, which counts the same buckets. Splitting the

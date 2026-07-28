@@ -782,10 +782,19 @@ function coerceEffortReport(raw: unknown): RunnerJobResult['effortReport'] | und
  * shape, keeping only well-formed entries (the required string/number fields), so a
  * malformed envelope can never inject junk into the telemetry sink. Mirrors the harness's
  * producer field-for-field; a missing optional `model` is passed through when present.
+ *
+ * The two CACHE-CLASS counts are read leniently (absent ⇒ 0) while every other field stays
+ * strict, because a runner pool runs whatever harness IMAGE its workspace pinned — a version
+ * this backend does not control. Requiring them would make an image predating the fresh/read/
+ * write split fail every entry, i.e. drop ALL of that pool's `llm_call_metrics` silently and
+ * report the run as having made zero model calls. Degrading to "no cache breakdown known" keeps
+ * the call, the tokens and the prompt/response bodies, and loses only the split the older image
+ * genuinely never measured — which is the same answer it gave before the field existed.
  */
 function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
   if (!Array.isArray(raw)) return []
   const out: HarnessCallMetric[] = []
+  const count = (value: unknown): number => (typeof value === 'number' ? value : 0)
   for (const entry of raw) {
     if (typeof entry !== 'object' || entry === null) continue
     const e = entry as Record<string, unknown>
@@ -795,8 +804,6 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       typeof e.reasoningText !== 'string' ||
       typeof e.messageCount !== 'number' ||
       typeof e.inputTokens !== 'number' ||
-      typeof e.cacheReadTokens !== 'number' ||
-      typeof e.cacheWriteTokens !== 'number' ||
       typeof e.outputTokens !== 'number'
     ) {
       continue
@@ -808,8 +815,8 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       responseText: e.responseText,
       reasoningText: e.reasoningText,
       inputTokens: e.inputTokens,
-      cacheReadTokens: e.cacheReadTokens,
-      cacheWriteTokens: e.cacheWriteTokens,
+      cacheReadTokens: count(e.cacheReadTokens),
+      cacheWriteTokens: count(e.cacheWriteTokens),
       outputTokens: e.outputTokens,
       finishReason: typeof e.finishReason === 'string' ? e.finishReason : null,
       // The harness's job-scoped sequence number. It MUST survive coercion: it is what keeps a

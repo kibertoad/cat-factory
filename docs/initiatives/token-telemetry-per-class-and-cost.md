@@ -136,6 +136,25 @@ runtimes symmetric"):
   the terms, not the ratio.
 - **Only Anthropic reports a cache-WRITE class.** OpenAI/DeepSeek report reads only, so `write` is 0
   there — never inferred. Guessing one would report spend at 1.25-2x base input that never happened.
+- **ONE function reads a usage payload into all three classes** (`readInputTokenClasses`), never a
+  read-the-classes helper the caller pairs by hand with a subtract-them one. The first cut had two,
+  and the shape rule ("subtract on OpenAI/DeepSeek, don't on Anthropic") then lived in prose beside
+  them rather than in the code: the proxy subtracted unconditionally and was correct only because
+  the exclusive shape happened to leave `prompt_tokens` absent. A rule a caller can get wrong will
+  eventually be got wrong.
+- **The two cache classes are read INDEPENDENTLY of each other.** Detecting a read must never
+  short-circuit the write, because the shapes are not mutually exclusive: an OpenAI-compatible
+  gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under the OpenAI field AND
+  `cache_creation_input_tokens` beside it. A read-first `if` chain zeroes the write on the ONLY
+  path that reports it — the dearest class, silently, on the feature built to expose it.
+- **On the inclusive shape, every class the payload reports is a partition of `prompt_tokens`**, so
+  both come off. That keeps the total we record equal to the vendor's own prompt count rather than
+  minting input it never billed, whichever way a gateway folds its write class.
+- **A count crossing a version boundary is coerced LENIENTLY** (`coerceCallMetrics`). A runner pool
+  runs whatever harness image its workspace pinned, so requiring a field a newer image added fails
+  every entry and drops that pool's telemetry wholesale — the run reports zero model calls instead
+  of "cache breakdown unknown". Strictness belongs on the fields whose absence makes a row
+  meaningless, not on an additive one whose absence IS the older image's honest answer.
 - **The AI SDK v3 usage shape already carries the split** (`inputTokens: { total, noCache, cacheRead,
 cacheWrite }`), so the inline path reads it straight off rather than re-deriving; `noCache` is
   preferred over `total − read − write` because it is what the provider itself reported.

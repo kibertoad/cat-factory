@@ -1,6 +1,6 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { cacheTokensFromUsage, freshPromptTokens, promptCacheParams } from '@cat-factory/agents'
+import { promptCacheParams, readInputTokenClasses } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor, runBestEffort } from '@cat-factory/kernel'
@@ -515,12 +515,11 @@ export function llmProxyController(): Hono<AppEnv> {
       // best-effort and must never break the proxy.
       const observe = (obs: ProxyCallObservation): void => {
         const completionTokens = obs.usage?.completion_tokens ?? 0
-        // The three input classes are recorded ORTHOGONALLY: `promptTokens` is fresh input
-        // only, so total input = prompt + read + write. An OpenAI-shaped upstream reports an
-        // INCLUSIVE `prompt_tokens`, hence the subtraction; a gateway that already knows the
-        // split hands it over directly rather than having it re-derived from the payload.
-        const cache = obs.cacheTokens ?? cacheTokensFromUsage(obs.usage)
-        const promptTokens = freshPromptTokens(obs.usage?.prompt_tokens ?? 0, cache.read)
+        // The three input classes are recorded ORTHOGONALLY, so total input is their sum. An
+        // upstream path that already knows the split (a gateway whose own shape carries it)
+        // hands all three over together; otherwise they are read off the usage payload, which
+        // is where the inclusive-vs-exclusive reconciliation lives.
+        const input = obs.inputTokens ?? readInputTokenClasses(obs.usage)
         const totalMs = Date.now() - t0
 
         // Live activity event — emitted regardless of whether the persistence sink is
@@ -547,11 +546,11 @@ export function llmProxyController(): Hono<AppEnv> {
               messageCount,
               toolCount,
               requestMaxTokens,
-              promptTokens,
-              cacheReadTokens: cache.read,
-              cacheWriteTokens: cache.write,
+              promptTokens: input.fresh,
+              cacheReadTokens: input.cacheRead,
+              cacheWriteTokens: input.cacheWrite,
               completionTokens,
-              totalTokens: promptTokens + cache.read + cache.write + completionTokens,
+              totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
               finishReason: obs.finishReason,
               upstreamMs: obs.upstreamMs,
               overheadMs: Math.max(0, totalMs - obs.upstreamMs),
@@ -577,11 +576,11 @@ export function llmProxyController(): Hono<AppEnv> {
               messageCount,
               toolCount,
               requestMaxTokens,
-              promptTokens,
-              cacheReadTokens: cache.read,
-              cacheWriteTokens: cache.write,
+              promptTokens: input.fresh,
+              cacheReadTokens: input.cacheRead,
+              cacheWriteTokens: input.cacheWrite,
               completionTokens,
-              totalTokens: promptTokens + cache.read + cache.write + completionTokens,
+              totalTokens: input.fresh + input.cacheRead + input.cacheWrite + completionTokens,
               finishReason: obs.finishReason,
               totalMs,
               upstreamMs: obs.upstreamMs,

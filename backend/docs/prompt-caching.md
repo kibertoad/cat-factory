@@ -51,26 +51,34 @@ that needs **no clamp**. (It used to be `cached / prompt` clamped to 1, because 
 Anthropic shape `promptTokens` never contained the reads and the ratio could exceed 1. That
 clamp is gone with the denominator it was papering over.)
 
-Two functions reconcile the provider shapes at the recording sites:
+**One** function reconciles the provider shapes at the recording sites: `readInputTokenClasses`
+takes a usage payload and returns all three classes. It is deliberately not a "read the cache
+classes" helper plus a "subtract them" helper — splitting it made the shape decision a rule the
+CALLER had to know and pair correctly, which is the entire subtlety. The shape is decided by
+WHICH read field the payload carries, and the two cache classes are read INDEPENDENTLY of one
+another:
 
-- **`cacheTokensFromUsage`** returns `{ read, write }`, reading the classes APART across the
-  field names providers use: OpenAI (`prompt_tokens_details.cached_tokens`), DeepSeek
-  (`prompt_cache_hit_tokens`), Anthropic (`cache_read_input_tokens` +
-  `cache_creation_input_tokens`, and the AI SDK's camelCase spellings). Only Anthropic exposes
-  a write class; on the others `write` is 0 rather than guessed. Keeping them apart is not
-  cosmetic either: a read costs ~0.1x base input while a **write costs 1.25-2x — more than
-  fresh** — so summed together, a loop that keeps invalidating and re-writing the prefix is
-  indistinguishable from one riding a warm cache.
-- **`freshPromptTokens`** normalises the prompt count to the fresh figure. For **`auto-prefix`**
-  providers (OpenAI/DeepSeek/Qwen) the cached count is a true SUBSET of the reported prompt
-  tokens, so it is subtracted (clamped at 0); for **Anthropic** (`explicit-anthropic`)
-  `input_tokens` is already exclusive of both classes, so nothing comes off. That is what makes
-  the inline Anthropic path — which opts in via `inlineCacheProviderOptions` — actually
-  measured, rather than silently reported as `0`.
+- **Inclusive** — OpenAI (`prompt_tokens_details.cached_tokens`) and DeepSeek
+  (`prompt_cache_hit_tokens`), i.e. the **`auto-prefix`** providers. `prompt_tokens` is the
+  whole prompt and every cache class the payload reports is a partition of it, so both come
+  off (clamped at 0) to leave fresh. Subtracting **both**, not just the read, is what keeps the
+  recorded total equal to the vendor's own `prompt_tokens`.
+- **Exclusive** — **Anthropic** (`explicit-anthropic`): `cache_read_input_tokens` +
+  `cache_creation_input_tokens` (and the AI SDK's camelCase spellings) sit BESIDE an
+  `input_tokens` that is already fresh-only, so nothing is subtracted. That is what makes the
+  inline Anthropic path — which opts in via `inlineCacheProviderOptions` — actually measured
+  rather than silently reported as `0`.
+
+Reading the two classes independently is what makes the **gateway** shape work: an
+OpenAI-compatible gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under the
+OpenAI field AND a `cache_creation_input_tokens` beside it. Letting the read detection short-
+circuit the write would drop the DEAREST class on the only path that reports it — a read costs
+~0.1x base input while a **write costs 1.25-2x, more than fresh** — which is precisely the spend
+this split exists to expose.
 
 ## Open questions — providers currently `none` that may cache
 
-`cacheTokensFromUsage` already attributes cached tokens for **any** provider that
+`readInputTokenClasses` already attributes cached tokens for **any** provider that
 reports them (the proxy calls it unconditionally), so promoting a provider in
 `providerCachePolicy` changes only (a) the request hint for a key-routed provider and
 (b) the `cachesPrompts` capability the UI advertises. We keep these at `none` until a run

@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cacheTokensFromUsage,
-  freshPromptTokens,
   inlineCacheProviderOptions,
   promptCacheParams,
   providerCachePolicy,
+  readInputTokenClasses,
 } from '@cat-factory/agents'
 
 // Pure prompt-caching policy shared by the in-container proxy path and the inline
@@ -37,34 +36,75 @@ describe('provider cache policy', () => {
     expect(inlineCacheProviderOptions('workers-ai')).toEqual({})
   })
 
-  it('reads the two cache classes APART across the provider field names', () => {
-    // OpenAI/DeepSeek report reads only — a write class they do not expose must be 0, never
-    // guessed, or a run on those providers reports spend at 1.25-2x base input that never
-    // happened.
-    expect(cacheTokensFromUsage({ prompt_tokens_details: { cached_tokens: 1200 } })).toEqual({
-      read: 1200,
-      write: 0,
+  it('splits an INCLUSIVE prompt count into its three classes (OpenAI/DeepSeek)', () => {
+    // The cached share is a SUBSET of prompt_tokens, so it comes off to leave fresh. These
+    // providers expose no write class, so it is 0 — never guessed, or a run on them reports
+    // spend at 1.25-2x base input that never happened.
+    expect(
+      readInputTokenClasses({
+        prompt_tokens: 5000,
+        prompt_tokens_details: { cached_tokens: 1200 },
+      }),
+    ).toEqual({ fresh: 3800, cacheRead: 1200, cacheWrite: 0 })
+    expect(readInputTokenClasses({ prompt_tokens: 5000, prompt_cache_hit_tokens: 800 })).toEqual({
+      fresh: 4200,
+      cacheRead: 800,
+      cacheWrite: 0,
     })
-    expect(cacheTokensFromUsage({ prompt_cache_hit_tokens: 800 })).toEqual({ read: 800, write: 0 })
-    // Anthropic reports both classes under its own fields (raw API + AI SDK camelCase). They
-    // stay apart: a read is ~0.1x base input, a write 1.25-2x, so summing them makes a loop
-    // that keeps re-writing the prefix look like one riding a warm cache.
+    // A fully-cached turn is 0 fresh — not a negative count when the two figures disagree.
     expect(
-      cacheTokensFromUsage({ cache_read_input_tokens: 640, cache_creation_input_tokens: 96 }),
-    ).toEqual({ read: 640, write: 96 })
-    expect(
-      cacheTokensFromUsage({ cacheReadInputTokens: 512, cacheCreationInputTokens: 64 }),
-    ).toEqual({ read: 512, write: 64 })
-    expect(cacheTokensFromUsage({ prompt_tokens: 5000 })).toEqual({ read: 0, write: 0 })
-    expect(cacheTokensFromUsage(null)).toEqual({ read: 0, write: 0 })
+      readInputTokenClasses({
+        prompt_tokens: 1000,
+        prompt_tokens_details: { cached_tokens: 1200 },
+      }),
+    ).toEqual({ fresh: 0, cacheRead: 1200, cacheWrite: 0 })
   })
 
-  it('normalises an inclusive prompt count to fresh input, never below zero', () => {
-    // OpenAI/DeepSeek: the cached share is a SUBSET of prompt_tokens, so it comes off.
-    expect(freshPromptTokens(5000, 1200)).toBe(3800)
-    // A fully-cached turn is 0 fresh — not a negative count when the two figures disagree.
-    expect(freshPromptTokens(1200, 1200)).toBe(0)
-    expect(freshPromptTokens(1000, 1200)).toBe(0)
-    expect(freshPromptTokens(5000, 0)).toBe(5000)
+  it('leaves an EXCLUSIVE prompt count alone and reads both classes beside it (Anthropic)', () => {
+    // `input_tokens` is already fresh-only here, so nothing is subtracted and the three are
+    // simply additive. Both spellings (raw API + AI SDK camelCase) are covered.
+    expect(
+      readInputTokenClasses({
+        input_tokens: 400,
+        cache_read_input_tokens: 640,
+        cache_creation_input_tokens: 96,
+      }),
+    ).toEqual({ fresh: 400, cacheRead: 640, cacheWrite: 96 })
+    expect(
+      readInputTokenClasses({
+        inputTokens: 300,
+        cacheReadInputTokens: 512,
+        cacheCreationInputTokens: 64,
+      }),
+    ).toEqual({ fresh: 300, cacheRead: 512, cacheWrite: 64 })
+  })
+
+  it('keeps the WRITE class on an OpenAI-shaped gateway fronting Anthropic', () => {
+    // The shape that motivated reading the two classes INDEPENDENTLY: a gateway (litellm /
+    // OpenRouter) reports its reads under the OpenAI field AND Anthropic's write field beside
+    // it. Detecting the read must not suppress the write — that would drop the DEAREST class
+    // (1.25-2x base input) on the only path that reports it, i.e. exactly the spend this split
+    // exists to expose. Both come off the inclusive prompt count, so the total we record stays
+    // equal to the vendor's own `prompt_tokens` rather than minting input it never billed.
+    expect(
+      readInputTokenClasses({
+        prompt_tokens: 5000,
+        prompt_tokens_details: { cached_tokens: 4000 },
+        cache_creation_input_tokens: 600,
+      }),
+    ).toEqual({ fresh: 400, cacheRead: 4000, cacheWrite: 600 })
+  })
+
+  it('reports no cache classes for a provider that reports none, and survives junk', () => {
+    expect(readInputTokenClasses({ prompt_tokens: 5000 })).toEqual({
+      fresh: 5000,
+      cacheRead: 0,
+      cacheWrite: 0,
+    })
+    expect(readInputTokenClasses(null)).toEqual({ fresh: 0, cacheRead: 0, cacheWrite: 0 })
+    // A vendor inconsistency degrades to a sane number rather than a negative or a NaN.
+    expect(
+      readInputTokenClasses({ prompt_tokens: -1, prompt_tokens_details: { cached_tokens: 'x' } }),
+    ).toEqual({ fresh: 0, cacheRead: 0, cacheWrite: 0 })
   })
 })
