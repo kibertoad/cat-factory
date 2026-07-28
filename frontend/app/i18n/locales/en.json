@@ -433,6 +433,7 @@
       "dragToResize": "Drag to resize",
       "addFirstTask": "Add the first task",
       "createInitiativeTitle": "Create initiative",
+      "huntBugsTitle": "Hunt bugs",
       "accessDenied": {
         "title": "Permission denied",
         "hint": "You don't have access to the repository backing this service."
@@ -694,12 +695,12 @@
   "inspector": {
     "detectRepoUnresolved": "This block's repository isn't among the connected GitHub repos, so it can't be read. Connect or sync GitHub for it, then retry.",
     "container": {
-      "title": "Contents",
-      "hint": "The modules and tasks inside this block. Click an entry to select it on the board.",
-      "modules": "Modules ({count})",
+      "modulesTitle": "Modules",
+      "modulesHint": "The modules inside this service. Click one to select it on the board.",
       "taskCount": "{count} task | {count} tasks",
-      "allTasks": "All tasks ({count})",
-      "tasks": "Tasks ({count})",
+      "tasksTitle": "Tasks",
+      "allTasksTitle": "All tasks",
+      "tasksHint": "The tasks inside this block. Click one to select it on the board.",
       "addTask": "Add task",
       "noTasks": "No tasks yet. Add one to start work.",
       "servicesHint": "Services are long-lived and don't complete. Work happens in their tasks and modules."
@@ -1404,8 +1405,6 @@
       "lastIncorporatedRequirements": "Last incorporated requirements",
       "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
       "bootstrapping": "Bootstrapping…",
-      "importIssue": "Import issue",
-      "connectTracker": "Connect a tracker",
       "spawnFromDocument": "Spawn from document",
       "viewRequirements": "View Requirements",
       "reRun": "Re-run",
@@ -1419,8 +1418,7 @@
       "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}",
       "@runBlocked": {
         "description": "Count-driven plural: {count} unfinished dependencies, {names} their comma-joined titles. Languages with more than two plural forms (e.g. Polish, Ukrainian: one/few/many) need the extra pipe-separated forms."
-      },
-      "huntBugs": "Hunt bugs"
+      }
     }
   },
   "observability": {

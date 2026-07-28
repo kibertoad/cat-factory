@@ -948,12 +948,12 @@
   "inspector": {
     "detectRepoUnresolved": "Das Repository dieses Blocks gehört nicht zu den verbundenen GitHub-Repos und kann daher nicht gelesen werden. Verbinde oder synchronisiere GitHub dafür und versuche es erneut.",
     "container": {
-      "title": "Inhalte",
-      "hint": "Die Module und Aufgaben innerhalb dieses Blocks. Klicke auf einen Eintrag, um ihn auf dem Board auszuwählen.",
-      "modules": "Module ({count})",
+      "modulesTitle": "Module",
+      "modulesHint": "Die Module innerhalb dieses Service. Klicke auf ein Modul, um es auf dem Board auszuwählen.",
       "taskCount": "{count} Aufgabe | {count} Aufgaben",
-      "allTasks": "Alle Aufgaben ({count})",
-      "tasks": "Aufgaben ({count})",
+      "tasksTitle": "Aufgaben",
+      "allTasksTitle": "Alle Aufgaben",
+      "tasksHint": "Die Aufgaben innerhalb dieses Blocks. Klicke auf eine Aufgabe, um sie auf dem Board auszuwählen.",
       "addTask": "Aufgabe hinzufügen",
       "noTasks": "Noch keine Aufgaben. Füge eine hinzu, um mit der Arbeit zu beginnen.",
       "servicesHint": "Services sind langlebig und werden nicht abgeschlossen. Die Arbeit findet in ihren Aufgaben und Modulen statt."
@@ -1658,8 +1658,6 @@
       "lastIncorporatedRequirements": "Zuletzt eingearbeitete Anforderungen",
       "priorDocHint": "Aus der vorherigen Prüfung. Verwende es als Basis: bearbeite die Beschreibung oben und reiche erneut ein.",
       "bootstrapping": "Wird initialisiert…",
-      "importIssue": "Issue importieren",
-      "connectTracker": "Einen Tracker verbinden",
       "spawnFromDocument": "Aus Dokument erzeugen",
       "viewRequirements": "Anforderungen anzeigen",
       "reRun": "Erneut ausführen",
@@ -1670,8 +1668,7 @@
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
       },
-      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}",
-      "huntBugs": "Fehler jagen"
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
     }
   },
   "layout": {
@@ -2446,6 +2443,7 @@
       "dragToResize": "Zum Ändern der Größe ziehen",
       "addFirstTask": "Die erste Aufgabe hinzufügen",
       "createInitiativeTitle": "Initiative erstellen",
+      "huntBugsTitle": "Fehler jagen",
       "accessDenied": {
         "title": "Zugriff verweigert",
         "hint": "Sie haben keinen Zugriff auf das Repository, das diesem Service zugrunde liegt."

@@ -394,6 +394,7 @@
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
       "addFirstTask": "İlk görevi ekle",
       "createInitiativeTitle": "Girisim olustur",
+      "huntBugsTitle": "Hata avla",
       "accessDenied": {
         "title": "İzin reddedildi",
         "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
@@ -631,12 +632,12 @@
   "inspector": {
     "detectRepoUnresolved": "Bu bloğun deposu bağlı GitHub depoları arasında değil, bu yüzden okunamıyor. Bunun için GitHub'ı bağlayın veya eşitleyin, ardından yeniden deneyin.",
     "container": {
-      "title": "İçerik",
-      "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",
-      "modules": "Modüller ({count})",
+      "modulesTitle": "Modüller",
+      "modulesHint": "Bu servisin içindeki modüller. Panoda seçmek için birine tıklayın.",
       "taskCount": "{count} görev | {count} görev",
-      "allTasks": "Tüm görevler ({count})",
-      "tasks": "Görevler ({count})",
+      "tasksTitle": "Görevler",
+      "allTasksTitle": "Tüm görevler",
+      "tasksHint": "Bu bloğun içindeki görevler. Panoda seçmek için birine tıklayın.",
       "addTask": "Görev ekle",
       "noTasks": "Henüz görev yok. Çalışmaya başlamak için bir tane ekleyin.",
       "servicesHint": "Servisler uzun ömürlüdür ve tamamlanmaz. Çalışma, görevlerinde ve modüllerinde gerçekleşir."
@@ -1318,8 +1319,6 @@
       "lastIncorporatedRequirements": "Son dahil edilen gereksinimler",
       "priorDocHint": "Önceki incelemeden. Bir temel olarak kullanın: yukarıdaki açıklamayı düzenleyip yeniden gönderin.",
       "bootstrapping": "Önyükleniyor…",
-      "importIssue": "Sorunu içe aktar",
-      "connectTracker": "Bir izleyici bağla",
       "spawnFromDocument": "Belgeden oluştur",
       "viewRequirements": "Gereksinimleri Görüntüle",
       "reRun": "Yeniden çalıştır",
@@ -1353,8 +1352,7 @@
         "title": "Bu hizmet arşivlensin mi?",
         "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
       },
-      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}",
-      "huntBugs": "Hata avla"
+      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}"
     }
   },
   "observability": {
