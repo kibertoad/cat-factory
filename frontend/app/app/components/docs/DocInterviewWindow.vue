@@ -2,16 +2,28 @@
 // The interactive document-interview window (WS5) — the dedicated view of the doc-authoring
 // INTERVIEWER gate. While the document run is parked between the outline and the draft, the
 // interviewer's clarifying questions (pending `qa` entries with an empty answer) are shown here;
-// the human answers them, then either CONTINUES (the interviewer re-runs and may ask follow-ups)
-// or PROCEEDS (skip remaining questions — the interviewer converges into an authoring brief and
-// the run advances to the writer). Opened via the universal result-view host as the
+// the human answers them, then either SUBMITS them (the `continue` action: the interviewer re-runs
+// and may ask follow-ups) or drafts now (the `proceed` action: skip the remaining questions — the
+// interviewer converges into an authoring brief and the run advances to the writer). The labels
+// say submit/draft-now rather than continue/proceed because the latter pair both read as "go
+// forward" and were indistinguishable in use. Opened via the universal result-view host as the
 // `doc-interviewer` step's result view. Live `docInterview` stream events patch the store, so an
 // open window follows the interview as it progresses. Mirrors InitiativePlanningWindow.vue.
+//
+// CONTINUE/PROCEED ARE ASYNC. They only record the intent on the parked step and wake the durable
+// driver; the interviewer LLM then runs for as long as it takes, and the response carries the
+// PRE-resume session. So the window must not key its body on the session alone — that renders
+// identically before and after the click, which reads as the button having done nothing. The
+// phase below folds the document RUN's status in, so the wait is visible and a failed pass says
+// so instead of leaving the human staring at questions they already submitted.
 import { computed, reactive, watch } from 'vue'
+import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import { interviewGatePhase } from '~/utils/interviewGate'
 
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
+const execution = useExecutionStore()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
 
@@ -21,14 +33,13 @@ const { open, blockId, close } = useResultView('doc-interview', {
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const session = computed(() => (blockId.value ? docInterview.forBlock(blockId.value) : null))
+const run = computed(() => (blockId.value ? execution.getByBlock(blockId.value) : undefined))
 
 /** Every interview exchange, with a stable key for the list + draft map. */
 const questions = computed(() =>
   (session.value?.qa ?? []).map((q, i) => ({ ...q, key: q.id ?? `q-${i}` })),
 )
 const pending = computed(() => questions.value.filter((q) => !(q.answer ?? '').trim()))
-/** The interview converged (or never started with a model): nothing left to answer. */
-const converged = computed(() => session.value?.status === 'done')
 
 // Per-question answer drafts, seeded from the entity and refreshed as new rounds arrive without
 // clobbering an answer the human is mid-edit on.
@@ -44,8 +55,31 @@ watch(
 )
 
 const resuming = computed(() => docInterview.resuming)
-/** Continue is meaningful once every pending question has a drafted answer. */
-const allAnswered = computed(() => pending.value.every((q) => drafts[q.key]?.trim()))
+
+/**
+ * The live phase (see `interviewGatePhase`). `resuming` folds in the request itself so the body
+ * swaps to the waiting state on the click rather than a beat later when the run's `running` event
+ * lands — and if the request fails, `resuming` clears and the phase falls back to whatever the run
+ * actually says, so the questions come back rather than the window sticking on a spinner.
+ */
+const phase = computed(() =>
+  resuming.value ? 'working' : interviewGatePhase(session.value?.status, run.value?.status),
+)
+/** The interview converged: the synthesized authoring brief is what the window shows. */
+const converged = computed(() => phase.value === 'converged')
+
+/**
+ * Questions still missing a drafted answer. Submit is only meaningful once this is empty — but a
+ * disabled button with no stated reason is itself a "nothing happened", so the count is rendered.
+ */
+const unanswered = computed(() => pending.value.filter((q) => !drafts[q.key]?.trim()).length)
+
+/** Why Submit is unavailable, or undefined when it is. RBAC first: it outranks a draft gap. */
+const continueBlockedReason = computed(() => {
+  if (!access.canExecuteRuns.value) return t('access.noRunExecute')
+  if (unanswered.value > 0) return t('docInterview.unanswered', { count: unanswered.value })
+  return undefined
+})
 
 /** Persist one answer if its draft differs from what's recorded. */
 async function persist(q: { id?: string; key: string; answer?: string }) {
@@ -99,9 +133,28 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
           {{ t('docInterview.intro') }}
         </p>
 
+        <!-- A pass is running: the human is waiting on the interviewer. Without this the window is
+             byte-identical to the parked state and the submit reads as a no-op. -->
+        <InterviewGateNotice
+          v-if="phase === 'working'"
+          variant="working"
+          :title="t('docInterview.working')"
+          :hint="t('docInterview.workingHint')"
+          testid="doc-interview-working"
+        />
+
+        <!-- The document run stopped before the interview settled — a dead end otherwise. -->
+        <InterviewGateNotice
+          v-else-if="phase === 'failed'"
+          variant="failed"
+          :title="t('docInterview.failed')"
+          :hint="t('docInterview.failedHint')"
+          testid="doc-interview-failed"
+        />
+
         <!-- Converged: show the synthesized authoring brief -->
         <div
-          v-if="converged"
+          v-else-if="converged"
           class="rounded-lg border border-slate-800 bg-slate-950/40 p-4"
           data-testid="doc-interview-converged"
         >
@@ -146,13 +199,21 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
       </template>
     </div>
 
-    <!-- Action rail -->
+    <!-- Action rail. Only while the run is actually parked on the human: mid-pass these would
+         re-submit a question set already in flight, and the resume is a no-op once it isn't. -->
     <footer
-      v-if="session && !converged && questions.length > 0"
+      v-if="session && phase === 'awaiting' && questions.length > 0"
       class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
     >
       <p class="text-[11px] text-slate-500">
-        {{ t('docInterview.hint') }}
+        <span
+          v-if="unanswered > 0"
+          class="text-amber-400/90"
+          data-testid="doc-interview-unanswered"
+        >
+          {{ t('docInterview.unanswered', { count: unanswered }) }}
+        </span>
+        <span v-else>{{ t('docInterview.hint') }}</span>
       </p>
       <div class="flex items-center gap-2">
         <UButton
@@ -161,7 +222,9 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
           size="sm"
           :loading="resuming"
           :disabled="!access.canExecuteRuns.value"
-          :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+          :title="
+            access.canExecuteRuns.value ? t('docInterview.proceedTitle') : t('access.noRunExecute')
+          "
           data-testid="doc-interview-proceed"
           @click="onProceed"
         >
@@ -171,8 +234,8 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
           color="primary"
           size="sm"
           :loading="resuming"
-          :disabled="!allAnswered || !access.canExecuteRuns.value"
-          :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+          :disabled="!!continueBlockedReason"
+          :title="continueBlockedReason ?? t('docInterview.continueTitle')"
           data-testid="doc-interview-continue"
           @click="onContinue"
         >
