@@ -603,11 +603,147 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
 
       const whole = await repo.get(ws, `${ws}-a`)
       expect(whole?.response).toEqual({ text: 'hello world', totalChars: 11 })
-      const budgeted = await repo.get(ws, `${ws}-a`, 5)
+      const budgeted = await repo.get(ws, `${ws}-a`, { chars: 5 })
       expect(budgeted?.response).toEqual({ text: 'hello', totalChars: 11 })
       // A foreign workspace reads as missing, never as another tenant's row.
       expect(await repo.get('ws-someone-else', `${ws}-a`)).toBeNull()
       expect(await repo.get(ws, 'llm_nope')).toBeNull()
+    })
+
+    it('windows a point read from an offset, so the tail of a large body is reachable', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({
+          id: `${ws}-a`,
+          workspaceId: ws,
+          executionId: e1,
+          promptText: '0123456789',
+          responseText: 'abcdefghij',
+        }),
+      )
+
+      // `substr(col, offset + 1, chars)` — 1-based, so an off-by-one here shifts every window
+      // by a character on one runtime only.
+      const windowed = await repo.get(ws, `${ws}-a`, { chars: 4, offset: 2 })
+      expect(windowed?.prompt).toEqual({ text: '2345', totalChars: 10 })
+      expect(windowed?.response).toEqual({ text: 'cdef', totalChars: 10 })
+      // No budget from an offset: the REST of the body.
+      const rest = await repo.get(ws, `${ws}-a`, { offset: 7 })
+      expect(rest?.prompt).toEqual({ text: '789', totalChars: 10 })
+      // Past the end: empty text, with the real size still reported.
+      const past = await repo.get(ws, `${ws}-a`, { chars: 4, offset: 50 })
+      expect(past?.prompt).toEqual({ text: '', totalChars: 10 })
+      // A zero budget stays a size-only read regardless of the offset.
+      const none = await repo.get(ws, `${ws}-a`, { chars: 0, offset: 2 })
+      expect(none?.prompt).toEqual({ text: '', totalChars: 10 })
+    })
+
+    it('searches bodies case-insensitively in SQL, with literal wildcards and match offsets', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        metric({
+          id: `${ws}-tool-err`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 10,
+          promptText: '[{"role":"tool","content":"Validation FAILED for tool \\"edit\\""}]',
+          responseText: 'let me retry',
+        }),
+      )
+      await repo.record(
+        metric({
+          id: `${ws}-clean`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 20,
+          promptText: '[{"role":"user","content":"all good"}]',
+          responseText: 'done',
+        }),
+      )
+      // `100%_done` appears LITERALLY here; the row below would match it only if `%`/`_`
+      // behaved as wildcards ("100" + anything + one char + "done").
+      await repo.record(
+        metric({
+          id: `${ws}-literal`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 30,
+          responseText: 'progress: 100%_done',
+        }),
+      )
+      await repo.record(
+        metric({
+          id: `${ws}-wildcard-bait`,
+          workspaceId: ws,
+          executionId: e1,
+          createdAt: 40,
+          responseText: 'progress: 100 is done',
+        }),
+      )
+
+      // Case-insensitive (ASCII), matched against ANY of the three bodies, filtered in SQL.
+      const found = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        contains: 'validation failed',
+      })
+      expect(found.map((c) => c.id)).toEqual([`${ws}-tool-err`])
+      // The matched body reports WHERE (0-based code points, feeding a point-read offset
+      // directly); the others say null — "searched, not here" — never nothing.
+      expect(found[0]!.prompt.matchOffset).toBe('[{"role":"tool","content":"'.length)
+      expect(found[0]!.response.matchOffset).toBeNull()
+
+      // A term full of LIKE metacharacters narrows to the literal text on both stores.
+      const literal = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        contains: '100%_done',
+      })
+      expect(literal.map((c) => c.id)).toEqual([`${ws}-literal`])
+
+      // An unsearched page carries NO match offsets — "no search ran" must stay
+      // distinguishable from "searched, no match".
+      const plain = await repo.listPage(ws, { executionId: e1, limit: 1, bodyChars: 0 })
+      expect(plain[0]!.prompt.matchOffset).toBeUndefined()
+
+      // Search composes with the other SQL narrowings (the limit is spent on matches only).
+      const composed = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        contains: 'done',
+        outcome: 'ok',
+      })
+      expect(composed.map((c) => c.id).sort()).toEqual(
+        [`${ws}-clean`, `${ws}-literal`, `${ws}-wildcard-bait`].sort(),
+      )
+    })
+
+    it('counts match offsets in code points, matching the slicing unit', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // Two astral-plane emoji ahead of the match: 2 code points, 4 UTF-16 units. `instr`
+      // (SQLite) and `position` (Postgres) both count characters, so the reported offset must
+      // feed `substr` — and the wire's code-point windows — without unit conversion.
+      await repo.record(
+        metric({
+          id: `${ws}-emoji`,
+          workspaceId: ws,
+          executionId: e1,
+          responseText: '😀😀error here',
+        }),
+      )
+      const found = await repo.listPage(ws, {
+        executionId: e1,
+        limit: 10,
+        bodyChars: 0,
+        contains: 'error',
+      })
+      expect(found[0]!.response.matchOffset).toBe(2)
     })
 
     it('prunes rows older than a cutoff', async () => {

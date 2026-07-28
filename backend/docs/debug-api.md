@@ -18,7 +18,7 @@ agent-context snapshots that are megabytes apiece (they carry the full body of e
 response on exactly the long, expensive runs someone wants to debug.
 
 So the whole surface is shaped by one rule: **a response's size must be computable before the
-request is made.** Four consequences, each visible in the wire contracts
+request is made.** Five consequences, each visible in the wire contracts
 (`@cat-factory/contracts` → `debug-api.ts`):
 
 1. **Every list is keyset-paginated** with a hard `limit` ceiling (100). Cursors are opaque and
@@ -29,16 +29,40 @@ request is made.** Four consequences, each visible in the wire contracts
    carries sizes (`*Chars`) and identity only. The one opt-in exception is `?bodyChars=` on the
    LLM-call list, because "did this call come back empty?" is a triage question a size alone
    answers ambiguously.
-3. **Truncation is reported, never silent.** Every body is a `debugText`:
-   `{ text, chars, totalChars, truncated }`. A bare truncated string reads exactly like a short
-   one, so a model would confidently report "the agent said nothing" from a payload that merely
-   hit its budget.
-4. **The overview is a map, not a dump.** `GET /debug/runs/:runId` costs a handful of SQL
+3. **Finding is server-side work too.** The LLM-call list takes a `?contains=` body search
+   applied as SQL `LIKE`, so locating a known marker across thousands of calls costs one request
+   — paging every body through the caller's own context to grep it there would be the
+   multi-hundred-megabyte dump re-entering through the side door. Matched rows report **where**
+   the match sits (`matchOffset`), which feeds the point read's window directly.
+4. **Truncation is reported, never silent, and every slice knows its place.** Every body is a
+   `debugText`: `{ text, chars, offset, totalChars, truncated }`. A bare truncated string reads
+   exactly like a short one, so a model would confidently report "the agent said nothing" from a
+   payload that merely hit its budget — and a slice that didn't state its `offset` could not be
+   stitched against its neighbours.
+5. **The overview is a map, not a dump.** `GET /debug/runs/:runId` costs a handful of SQL
    aggregates and reads no body at all. Its `sinks` block says which of the four detail endpoints
    have anything in them, so the expensive reads are only issued for data that exists.
 
-Slicing and filtering happen **in SQL** (`substr` / `length` / the outcome predicate), so an
-un-previewed page does not read the text columns out of the store at all.
+Slicing, filtering **and searching** happen in SQL (`substr` / `length` / `instr` / the outcome
+predicate), so an un-previewed page does not read the text columns out of the store at all, and a
+searched page spends its `limit` on matches only.
+
+## Why the path is `/debug`
+
+Considered against the more resource-oriented alternatives and kept deliberately:
+
+- **Not `/api/v1/runs/:id/…`** — that prefix belongs to the task-scoped public surface
+  (`PublicDecisionController`), which resolves runs through the narrower `loadScopedRun`. Mounting
+  reads with a _different_ (workspace-wide) authorization rule under the same resource path would
+  put two access semantics behind one name, which is a trap for both callers and reviewers.
+- **Not `/observability` or `/telemetry`** — those name the _capture_ subsystems, and this surface
+  is neither: the run index and the provisioning log are not telemetry, and what is served here
+  is a purpose-built diagnostic **projection** (budgeted slices, derived signals, availability
+  flags), not the canonical stores.
+- `/debug` names the caller's intent — the same way `/search` does on APIs that serve
+  purpose-shaped projections — and it is short in every one of the many tool calls an LLM caller
+  makes. The resources under it are still nouns (`runs`, `llm-calls`, `agent-context`); the
+  namespace states what they are _for_.
 
 ## Auth
 
@@ -70,38 +94,90 @@ workspace is a `404`, indistinguishable from one that never existed.
 
 ## Endpoints
 
-| Method / path                                  | Returns                                                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/debug/runs`                       | The workspace's runs, newest first. `?status=`, `?since=`, `?limit=`, `?cursor=`                  |
-| `GET /api/v1/debug/runs/:runId`                | The run's diagnostic **overview** (aggregates + signals)                                          |
-| `GET /api/v1/debug/runs/:runId/llm-calls`      | Recorded model calls. `?agentKind=`, `?outcome=`, `?order=`, `?bodyChars=`, `?limit=`, `?cursor=` |
-| `GET /api/v1/debug/llm-calls/:callId`          | One call, full bodies. `?bodyChars=`                                                              |
-| `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                         |
-| `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`                                  |
-| `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                           |
-| `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                  |
+| Method / path                                  | Returns                                                                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/debug/runs`                       | The workspace's runs, newest first. `?status=`, `?since=`, `?limit=`, `?cursor=`                                |
+| `GET /api/v1/debug/runs/:runId`                | The run's diagnostic **overview** (aggregates + signals)                                                        |
+| `GET /api/v1/debug/runs/:runId/llm-calls`      | Recorded model calls. `?agentKind=`, `?outcome=`, `?contains=`, `?order=`, `?bodyChars=`, `?limit=`, `?cursor=` |
+| `GET /api/v1/debug/llm-calls/:callId`          | One call, full bodies. `?bodyChars=`, `?bodyOffset=`, `?view=raw\|messages`                                     |
+| `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                       |
+| `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                |
+| `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                         |
+| `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                |
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that
 looks well-typed and 404s for a reason the caller cannot see.
 
-## The recommended walk
+## Investigating a run
 
-1. `GET /debug/runs?status=failed` — find the run.
-2. `GET /debug/runs/:runId` — read `signals` first. They are precomputed derivations (failed calls,
-   truncated output per agent kind, container evictions, provisioning failures, a cold prompt
-   cache), ordered most-severe first, each with a `count`. A model that has to rediscover "13 of 40
-   calls were truncated" by arithmetic over a JSON blob will sometimes get it wrong and will always
-   spend context getting it right.
-3. Follow the signal:
-   - a **provisioning failure** → `/logs`. For a run whose container never came up there is no
-     model telemetry at all, and this is the only place its cause of death is written.
-   - **failed or truncated calls** → `/llm-calls?outcome=error` (or `?agentKind=…`), then
-     `/llm-calls/:callId` for the bodies.
-   - **the agent did the wrong thing** → `/agent-context` to see how large each dispatch's context
-     was, then `/agent-context/:snapshotId` for the prompts it actually received.
+### 1. Find it, map it
 
-### Reading a conversation
+`GET /debug/runs?status=failed` finds the run; `GET /debug/runs/:runId` maps it. Read `signals`
+first: they are precomputed derivations (failed calls, truncated output per agent kind, container
+evictions, provisioning failures, a cold prompt cache), ordered most-severe first, each with a
+`count`. A model that has to rediscover "13 of 40 calls were truncated" by arithmetic over a JSON
+blob will sometimes get it wrong and will always spend context getting it right. Signals are
+observations, never a verdict — a wrong confident cause is worse than an ordered list of facts.
+
+### 2. Follow the signal
+
+The failure classes and where each one's evidence lives:
+
+- **`provisioning_failed` — infrastructure.** `/logs` holds the verbatim (scrubbed) provider
+  error. For a run whose container never came up there is no model telemetry at all, and this is
+  the only place its cause of death is written. The overview's per-step `firstEvictionDetail`
+  (exit state + a log tail) covers a container that came up and then died.
+- **`llm_calls_failed` — the model side broke.** `/llm-calls?outcome=error`, then the point read
+  for the bodies. Non-2xx statuses and error messages here mean transport, proxy, or spend-gate
+  trouble — an infrastructure problem wearing model clothes.
+- **`output_truncated` — the model was cut off.** The per-kind insight names which agent kept
+  hitting its output ceiling (`outputHeadroomRatio` ≈ 1). The fix conversation is about output
+  limits or task size, not correctness.
+- **`failure_outside_model_calls` — the run died while every call looks healthy.** This is the
+  most common hard diagnosis, and it has no row of its own: tool-EXECUTION errors (malformed
+  arguments, a stuck edit loop) happen inside the container and exist only as text inside the
+  prompt deltas — each call still reports `ok` with a clean finish reason. The signal points at
+  the search workflow below.
+- **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
+  the three input classes (fresh / cache read / cache write) separately — a loop that keeps
+  invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.
+
+### 3. Grep for the cause (`?contains=`)
+
+When the model side looks healthy, the cause is almost always _in the text_. Search for it
+server-side instead of paging bodies:
+
+```
+GET /debug/runs/:runId/llm-calls?contains=Validation%20failed&order=oldest
+```
+
+`contains` matches the prompt delta, response and reasoning case-insensitively in SQL (`%`/`_`
+match literally), so one request finds the needle across thousands of calls. Markers that have
+repeatedly paid off:
+
+- `Validation failed for tool` / `must have required properties` — the model is emitting
+  malformed tool arguments; if it keeps repeating after the error is fed back, that is a
+  model-quality problem, not a prompt problem.
+- A distinctive fragment of the run's `failure.message` — finds the call where the terminal
+  symptom first appears.
+- `<tool_call>` in **responses** — the model emitted a tool call as prose instead of through the
+  structured channel.
+- A file path, test name, or error string from the task — finds where the agent first met it.
+
+Each matched row reports a per-body `matchOffset` (null = the term is in a sibling body, not this
+one). Feed it to the point read to see the context **around** the match — the `grep -C` of this
+surface:
+
+```
+GET /debug/llm-calls/:callId?bodyOffset=<matchOffset - 500>&bodyChars=2000
+```
+
+`bodyOffset` windows the body from any position, so the middle and the tail of a large body are
+reachable — the last tool result in a long delta and the end of a captured build log are exactly
+where causes sit. Every slice states the `offset` it starts at, so neighbouring windows stitch.
+
+### 4. Read the conversation
 
 `GET /debug/runs/:runId/llm-calls?agentKind=coder&order=oldest&bodyChars=2000` walks one agent
 kind's conversation forwards. Each call's `prompt` is the **delta** — only the messages that call
@@ -111,24 +187,47 @@ the deltas in order reconstructs the conversation, and `elidedLeadingMessages` s
 earlier messages the delta sits on top of. That shape is also why the API never re-sends the shared
 prefix to the caller either.
 
+For one call, `?view=messages` on the point read parses the delta into per-message rows (role,
+tool name, tool calls with their arguments, content), each budgeted **independently** via
+`bodyChars`. In the raw view a 100 kB leading tool result must be paid for in full before anything
+after it is visible; in the messages view every message shows its head. An unparseable delta
+degrades to the raw window with `promptMessages: null` — stated, never guessed at.
+
 ## Sizing a request
 
 A page's worst case is `limit × 3 × bodyChars` characters of body for the LLM-call list, and
 `limit × <row size>` for everything else (agent-context index rows carry no body; search and log
-rows are small by construction). Ceilings: `limit ≤ 100`, `bodyChars ≤ 4 000` on a list and
-`≤ 200 000` on a point read. A caller that wants a 50 kB page asks for `limit=25&bodyChars=650`.
+rows are small by construction). A `?view=messages` point read's worst case is
+`(messageCount − elidedLeadingMessages) × bodyChars` — both factors already on the list row.
+Ceilings: `limit ≤ 100`, `bodyChars ≤ 4 000` on a list and `≤ 200 000` on a point read,
+`bodyOffset ≤ 2 000 000` (above the store's own 512 kB per-body cap, so with `?bodyOffset=` every
+stored character is reachable — a body larger than one window is read in stitched windows, and
+`truncated`/`offset`/`totalChars` always say which part is in hand).
 
-Known bound: the store caps a single body at 512 kB, above the point read's 200 000-character
-ceiling, so the largest bodies are returned as a leading slice. There is no offset parameter — the
-tail of such a body is not reachable through this surface. `truncated` and `totalChars` always say
-so, which is the property that matters: the caller knows it is reasoning over a prefix.
+## Known limitations
+
+- **A conversation is identified by `agentKind`, not by step.** The call rows carry no step
+  index, so a step re-dispatched after an eviction — or repeated fixer attempts — interleaves
+  into one "conversation". A chain restart is visible as `elidedLeadingMessages` dropping back to
+  0 partway through an `order=oldest` walk.
+- **Tool-execution errors are not rows.** The harness's tool loop runs inside the container; its
+  failures reach this surface only as text inside prompt deltas. The
+  `failure_outside_model_calls` signal and `?contains=` exist precisely to compensate; a
+  first-class per-call tool-error count would need harness capture (an image-bumping change) and
+  is deliberately not faked here from pattern-matching at record time.
+- **Search case folding is ASCII.** SQLite's `LIKE` folds only ASCII and Postgres' `ILIKE`
+  follows its locale; conformance pins the ASCII behaviour the two stores share. Search terms are
+  literal substrings, not patterns.
+- **Capture gates act upstream.** `LLM_RECORD_PROMPTS` and `storeAgentContext` govern what text
+  exists at all; this surface cannot see them and reports `available: true, count: 0` for a
+  workspace that opted out.
 
 ## Where it lives
 
 - Wire contracts: `backend/packages/contracts/src/debug-api.ts` (+ `routes/debug-api.ts`)
 - HTTP: `backend/packages/server/src/modules/publicApi/PublicDebugController.ts`
 - Reads + projections: `backend/packages/orchestration/src/modules/debug/`
-  (`RunDebugService.ts`, `debug.logic.ts`)
+  (`RunDebugService.ts`, `debug.logic.ts`, `promptMessages.ts`)
 - Ports: kernel `llm-metrics.ts`, `agent-context.ts`, `agent-search-queries.ts`,
   `provisioning-log-repositories.ts`, and `ExecutionRepository.listRecent`
 - Stores: `D1*` under `backend/runtimes/cloudflare/src/infrastructure/repositories/` ⇄ Drizzle
@@ -136,7 +235,8 @@ so, which is the property that matters: the caller knows it is reasoning over a 
 
 Cross-runtime parity is pinned twice: the per-store suites
 (`llm-metrics-suite`, `agent-context-suite`, `agent-search-queries-suite`,
-`provisioning-log-suite`) drive the real SQL on both runtimes, and
+`provisioning-log-suite`) drive the real SQL on both runtimes — including the search predicate,
+the match offsets (in code points, against astral-plane characters) and the offset windows — and
 `suites/integration-public-debug.ts` drives the HTTP surface end to end and asserts every sink
 reads `available: true` on the conformance facades (all of which wire the stores) — so a facade
 that mounts the routes but forgets a telemetry repository fails there rather than shipping a

@@ -218,6 +218,25 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       )
       expect(overLimit.status).toBe(400)
 
+      // The search and ordering narrowings ride the same route (their SQL semantics are pinned
+      // by the per-store suite; what only this can see is that each facade wired the params).
+      const searched = await app.call<{ calls: unknown[] }>(
+        'GET',
+        `/api/v1/debug/runs/${runId}/llm-calls?contains=${encodeURIComponent('Validation failed')}&order=oldest`,
+        undefined,
+        auth,
+      )
+      expect(searched.status).toBe(200)
+      expect(searched.body.calls).toEqual([])
+      // A search term over the contract's ceiling is refused like every other bound.
+      const longTerm = await app.call(
+        'GET',
+        `/api/v1/debug/runs/${runId}/llm-calls?contains=${'x'.repeat(300)}`,
+        undefined,
+        auth,
+      )
+      expect(longTerm.status).toBe(400)
+
       // The two FLAT point reads (addressed by the row's own id, not nested under the run) are
       // mounted and workspace-scoped too: an unknown id is a 404 through the real controller +
       // service, never a 500 or an empty 200. Their body/slicing semantics are pinned by the
@@ -239,6 +258,22 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(overBudget.status).toBe(400)
+      // The window/view params are wired end to end: a valid ask still 404s on an unknown id
+      // (never a 500 through the changed read path), an out-of-range offset is a 400.
+      const windowed = await app.call(
+        'GET',
+        '/api/v1/debug/llm-calls/llm_nope?bodyChars=100&bodyOffset=500&view=messages',
+        undefined,
+        auth,
+      )
+      expect(windowed.status).toBe(404)
+      const overOffset = await app.call(
+        'GET',
+        '/api/v1/debug/llm-calls/llm_nope?bodyOffset=999999999',
+        undefined,
+        auth,
+      )
+      expect(overOffset.status).toBe(400)
     })
 
     it('hides a run in another workspace, and refuses an unauthenticated call', async () => {

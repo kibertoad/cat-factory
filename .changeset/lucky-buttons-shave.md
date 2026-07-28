@@ -16,6 +16,14 @@ Bodies are opt-in and byte-budgeted, sliced in SQL so an un-previewed page reads
 all, and every truncation reports what it left out. The surface needs only a `read`-scope public API
 key.
 
+Root-causing is server-side work, not client-side paging: the LLM-call list takes a `?contains=`
+body search (SQL LIKE/ILIKE, case-insensitive, wildcards literal) whose matched rows report a
+per-body `matchOffset`; point reads take `?bodyOffset=` so the middle and tail of a large body are
+reachable (every body slice now also states its `offset`); the call point read's `?view=messages`
+parses the stored prompt delta into per-message rows with independent budgets; and the overview
+gains a `failure_outside_model_calls` signal pointing a failed-run-with-clean-calls investigation
+at tool execution, which records no calls of its own.
+
 Compatibility break: `ProvisioningLogQuery.before` (a bare `createdAt` keyset) is replaced by a
 composite `cursor: { createdAt, id }`, and the matching `?before=` query param is removed from
 `GET /workspaces/:ws/provisioning-logs` (the SPA never sent it). The old form dropped rows sharing

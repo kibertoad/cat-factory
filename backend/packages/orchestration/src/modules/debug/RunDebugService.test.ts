@@ -116,6 +116,51 @@ describe('RunDebugService paging', () => {
       }),
     )
   })
+
+  it('passes a search term through to the store — the match happens in SQL, never here', async () => {
+    const listPage = vi.fn(async () => [call('llm_1', 5)])
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      llmCallMetricRepository: { listPage } as unknown as LlmCallMetricRepository,
+    })
+    await service.listLlmCalls('ws', 'exec_1', {
+      limit: 10,
+      bodyChars: 0,
+      contains: 'Validation failed',
+    })
+    expect(listPage).toHaveBeenCalledWith(
+      'ws',
+      expect.objectContaining({ contains: 'Validation failed' }),
+    )
+  })
+
+  it('windows a raw point read in SQL, but reads the row WHOLE for the messages view', async () => {
+    const get = vi.fn(async (_ws: string, _id: string, body?: { chars?: number }) => ({
+      ...call('llm_1', 5),
+      prompt: {
+        text: body?.chars === undefined ? '[{"role":"user","content":"hi"}]' : '[{"ro',
+        totalChars: 31,
+      },
+    }))
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      llmCallMetricRepository: { get } as unknown as LlmCallMetricRepository,
+    })
+
+    const raw = await service.getLlmCall('ws', 'llm_1', { bodyChars: 6, bodyOffset: 3 })
+    // Raw: the window rides to the store so the untaken bytes never leave it.
+    expect(get).toHaveBeenLastCalledWith('ws', 'llm_1', { chars: 6, offset: 3 })
+    expect(raw?.prompt.offset).toBe(3)
+
+    const parsed = await service.getLlmCall('ws', 'llm_1', { bodyChars: 50, view: 'messages' })
+    // Messages: the parse needs the COMPLETE delta (a truncated JSON array parses as nothing),
+    // so the store is asked for the whole row and the budgeting moves into the projection.
+    expect(get).toHaveBeenLastCalledWith('ws', 'llm_1')
+    expect(parsed?.promptMessages).toHaveLength(1)
+    expect(parsed?.promptMessages?.[0]?.content.text).toBe('hi')
+  })
 })
 
 describe('RunDebugService with unwired sinks', () => {

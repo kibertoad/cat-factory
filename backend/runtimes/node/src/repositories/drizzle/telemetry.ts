@@ -15,6 +15,7 @@ import type {
   AgentSearchQueryRepository,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
+  LlmCallBodyWindow,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricRepository,
@@ -31,7 +32,7 @@ import type {
   UsageBilling,
   UsageBreakdownRow,
 } from '@cat-factory/kernel'
-import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
+import { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
 import {
   and,
@@ -41,6 +42,7 @@ import {
   eq,
   gt,
   gte,
+  ilike,
   inArray,
   isNull,
   lt,
@@ -270,28 +272,49 @@ function llmOutcomeFilter(outcome: LlmCallOutcomeFilter | undefined) {
 }
 
 /**
- * The column set for a bounded page: every metadata column, plus each text body sliced to the
- * caller's budget and its full `length()` alongside. Three cases, kept in step with the D1
- * repo's `bodyColumns`:
+ * The column set for a bounded page: every metadata column, plus each text body windowed to
+ * the caller's budget (from `offsetChars` on) and its full `length()` alongside. The cases,
+ * kept in step with the D1 repo's `bodyColumns`:
  *
- *  - `undefined` (no budget) selects the column RAW. Deliberately not a huge sentinel length:
- *    SQLite returns an EMPTY string for one of those, so a shared "give me everything"
- *    sentinel would make the two stores disagree on the point read that exists to return
- *    whole bodies.
+ *  - `undefined` budget at offset 0 selects the column RAW. Deliberately not a huge sentinel
+ *    length: SQLite returns an EMPTY string for one of those, so a shared "give me
+ *    everything" sentinel would make the two stores disagree on the point read that exists
+ *    to return whole bodies.
+ *  - `undefined` budget at a later offset selects the REST of the body (two-argument
+ *    `substr`).
  *  - `0` selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over a
  *    long run never makes the database materialise (or the driver transfer) a single prompt
  *    byte — the whole reason bodies are opt-in on this surface.
- *  - anything else slices to the budget.
+ *  - anything else slices the window; `substr` is 1-based and counts characters, so the
+ *    parameter is `offset + 1`.
  *
  * The lengths are reported either way, because a size is what tells the caller which rows are
  * worth a point read.
+ *
+ * `containsLower` (the search term, ASCII-lowered like the D1 repo's) additionally selects a
+ * per-body first-match offset — `nullif(position(term in lower(col)), 0) - 1`, NULL where
+ * the term does not occur. `position` counts characters like `substr`, so the offset feeds a
+ * point read's window directly.
  */
-function llmPageColumns(bodyChars: number | undefined) {
+function llmPageColumns(bodyChars: number | undefined, offsetChars = 0, containsLower?: string) {
+  const from = Math.max(0, offsetChars) + 1
   const slice = (column: AnyPgColumn) => {
-    if (bodyChars === undefined) return column
-    return bodyChars > 0 ? sql<string>`substr(${column}, 1, ${bodyChars})` : sql<string>`''`
+    if (bodyChars !== undefined && bodyChars <= 0) return sql<string>`''`
+    if (bodyChars === undefined && offsetChars <= 0) return column
+    if (bodyChars === undefined) return sql<string>`substr(${column}, ${from})`
+    return sql<string>`substr(${column}, ${from}, ${bodyChars})`
   }
+  // Selected as literal NULL on an unsearched page (a plain conditional spread would make the
+  // select shape a union type): `rowToLlmCallPage`'s `searched` flag keeps "no search ran"
+  // distinct from "searched, no match" on the domain shape.
+  const match = (column: AnyPgColumn) =>
+    containsLower === undefined
+      ? sql<number | null>`NULL`
+      : sql<number | null>`nullif(position(${containsLower} in lower(${column})), 0) - 1`
   return {
+    prompt_match: match(llmCallMetrics.prompt_text),
+    response_match: match(llmCallMetrics.response_text),
+    reasoning_match: match(llmCallMetrics.reasoning_text),
     id: llmCallMetrics.id,
     workspace_id: llmCallMetrics.workspace_id,
     execution_id: llmCallMetrics.execution_id,
@@ -327,8 +350,11 @@ function llmPageColumns(bodyChars: number | undefined) {
 
 type LlmPageRow = { [K in keyof ReturnType<typeof llmPageColumns>]: unknown }
 
-function rowToLlmCallPage(row: LlmPageRow): LlmCallMetricPage {
+function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage {
   const r = row as {
+    prompt_match: number | string | null
+    response_match: number | string | null
+    reasoning_match: number | string | null
     id: string
     workspace_id: string
     execution_id: string | null
@@ -385,9 +411,27 @@ function rowToLlmCallPage(row: LlmPageRow): LlmCallMetricPage {
     httpStatus: r.http_status,
     errorMessage: r.error_message,
     promptPrefixCount: r.prompt_prefix_count,
-    prompt: { text: r.prompt_text, totalChars: Number(r.prompt_chars ?? 0) },
-    response: { text: r.response_text, totalChars: Number(r.response_chars ?? 0) },
-    reasoning: { text: r.reasoning_text, totalChars: Number(r.reasoning_chars ?? 0) },
+    // A searched row attaches each body's first-match offset (null = the term occurs only in
+    // a sibling body); an unsearched row carries none, so the two states stay distinct.
+    prompt: {
+      text: r.prompt_text,
+      totalChars: Number(r.prompt_chars ?? 0),
+      ...(searched ? { matchOffset: r.prompt_match == null ? null : Number(r.prompt_match) } : {}),
+    },
+    response: {
+      text: r.response_text,
+      totalChars: Number(r.response_chars ?? 0),
+      ...(searched
+        ? { matchOffset: r.response_match == null ? null : Number(r.response_match) }
+        : {}),
+    },
+    reasoning: {
+      text: r.reasoning_text,
+      totalChars: Number(r.reasoning_chars ?? 0),
+      ...(searched
+        ? { matchOffset: r.reasoning_match == null ? null : Number(r.reasoning_match) }
+        : {}),
+    },
   }
 }
 
@@ -502,6 +546,20 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     if (query.agentKind != null) filters.push(eq(llmCallMetrics.agent_kind, query.agentKind))
     const outcome = llmOutcomeFilter(query.outcome)
     if (outcome) filters.push(outcome)
+    if (query.contains != null) {
+      // The surface's grep. ILIKE for case-insensitivity (SQLite's plain LIKE is already
+      // ASCII-insensitive; conformance pins the ASCII behaviour the two share), with `%`/`_`
+      // in the term made literal by the shared escaper — Postgres' default escape character
+      // is the backslash it uses, so no ESCAPE clause is needed here.
+      const pattern = `%${escapeLikePattern(query.contains)}%`
+      filters.push(
+        or(
+          ilike(llmCallMetrics.prompt_text, pattern),
+          ilike(llmCallMetrics.response_text, pattern),
+          ilike(llmCallMetrics.reasoning_text, pattern),
+        )!,
+      )
+    }
     if (query.cursor) {
       // Composite keyset matching the ORDER BY. Calls are recorded off the response path, so a
       // burst genuinely shares a millisecond; a `created_at`-only bound would drop the ties.
@@ -514,8 +572,9 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         )!,
       )
     }
+    const searched = query.contains != null
     const rows = await this.db
-      .select(llmPageColumns(query.bodyChars))
+      .select(llmPageColumns(query.bodyChars, 0, query.contains?.toLowerCase()))
       .from(llmCallMetrics)
       .where(and(...filters))
       .orderBy(
@@ -523,16 +582,16 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         ascending ? asc(llmCallMetrics.id) : desc(llmCallMetrics.id),
       )
       .limit(query.limit)
-    return rows.map(rowToLlmCallPage)
+    return rows.map((row) => rowToLlmCallPage(row, searched))
   }
 
   async get(
     workspaceId: string,
     id: string,
-    bodyChars?: number,
+    body?: LlmCallBodyWindow,
   ): Promise<LlmCallMetricPage | null> {
     const rows = await this.db
-      .select(llmPageColumns(bodyChars))
+      .select(llmPageColumns(body?.chars, body?.offset ?? 0))
       .from(llmCallMetrics)
       .where(and(eq(llmCallMetrics.workspace_id, workspaceId), eq(llmCallMetrics.id, id)))
       .limit(1)

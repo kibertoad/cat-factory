@@ -88,6 +88,7 @@ export type {
 } from './token-usage.js'
 export type {
   LlmCallBodySlice,
+  LlmCallBodyWindow,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricRepository,
@@ -96,7 +97,7 @@ export type {
   LlmCallPageQuery,
   LlmPromptChainTip,
 } from './llm-metrics.js'
-export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
+export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
 export type {
   PlatformDurationStats,
   PlatformFailureCount,

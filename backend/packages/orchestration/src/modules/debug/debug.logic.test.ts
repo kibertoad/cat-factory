@@ -70,18 +70,63 @@ describe('sliceText', () => {
     expect(sliceText('hello world', 5)).toEqual({
       text: 'hello',
       chars: 5,
+      offset: 0,
       totalChars: 11,
       truncated: true,
     })
   })
 
   it('returns no text but the real size at a zero budget (the sweep shape)', () => {
-    expect(sliceText('hello', 0)).toEqual({ text: '', chars: 0, totalChars: 5, truncated: true })
+    expect(sliceText('hello', 0)).toEqual({
+      text: '',
+      chars: 0,
+      offset: 0,
+      totalChars: 5,
+      truncated: true,
+    })
   })
 
   it('marks a body that fits as untruncated, and never pads past the end', () => {
-    expect(sliceText('hi', 100)).toEqual({ text: 'hi', chars: 2, totalChars: 2, truncated: false })
-    expect(sliceText('', 10)).toEqual({ text: '', chars: 0, totalChars: 0, truncated: false })
+    expect(sliceText('hi', 100)).toEqual({
+      text: 'hi',
+      chars: 2,
+      offset: 0,
+      totalChars: 2,
+      truncated: false,
+    })
+    expect(sliceText('', 10)).toEqual({
+      text: '',
+      chars: 0,
+      offset: 0,
+      totalChars: 0,
+      truncated: false,
+    })
+  })
+
+  it('windows from an offset, so the middle and tail of a large body are reachable', () => {
+    expect(sliceText('0123456789', 4, 2)).toEqual({
+      text: '2345',
+      chars: 4,
+      offset: 2,
+      totalChars: 10,
+      truncated: true,
+    })
+    // The final window: still truncated (the head is missing), and never padded.
+    expect(sliceText('0123456789', 100, 8)).toEqual({
+      text: '89',
+      chars: 2,
+      offset: 8,
+      totalChars: 10,
+      truncated: true,
+    })
+    // Past the end: empty, with the offset clamped so `offset + chars <= totalChars` holds.
+    expect(sliceText('0123456789', 4, 50)).toEqual({
+      text: '',
+      chars: 0,
+      offset: 10,
+      totalChars: 10,
+      truncated: true,
+    })
   })
 
   it('counts and cuts in code points, never splitting a surrogate pair', () => {
@@ -89,14 +134,25 @@ describe('sliceText', () => {
     expect(sliceText('😀😀😀😀', 2)).toEqual({
       text: '😀😀',
       chars: 2,
+      offset: 0,
       totalChars: 4,
       truncated: true,
     })
     expect(sliceText('😀😀', 10)).toEqual({
       text: '😀😀',
       chars: 2,
+      offset: 0,
       totalChars: 2,
       truncated: false,
+    })
+    // An OFFSET walks code points too: starting at 1 must skip the whole first emoji, not
+    // land inside its surrogate pair.
+    expect(sliceText('😀ab', 2, 1)).toEqual({
+      text: 'ab',
+      chars: 2,
+      offset: 1,
+      totalChars: 3,
+      truncated: true,
     })
   })
 })
@@ -108,9 +164,27 @@ describe('toDebugText', () => {
     expect(toDebugText({ text: 'abc', totalChars: 40 })).toEqual({
       text: 'abc',
       chars: 3,
+      offset: 0,
       totalChars: 40,
       truncated: true,
     })
+  })
+
+  it('reports the window start the store sliced at, clamped to the body', () => {
+    expect(toDebugText({ text: 'cde', totalChars: 40 }, 2)).toMatchObject({
+      offset: 2,
+      truncated: true,
+    })
+    // An ask past the end reports where the body actually stops, not the fiction asked for.
+    expect(toDebugText({ text: '', totalChars: 40 }, 90).offset).toBe(40)
+  })
+
+  it("passes a search's per-body match offset through, keeping null and absent distinct", () => {
+    // null = searched, no match in THIS body; absent = no search ran. Collapsing them would
+    // make an unsearched page read as "searched everything, found nothing".
+    expect(toDebugText({ text: '', totalChars: 40, matchOffset: 7 }).matchOffset).toBe(7)
+    expect(toDebugText({ text: '', totalChars: 40, matchOffset: null }).matchOffset).toBeNull()
+    expect('matchOffset' in toDebugText({ text: '', totalChars: 40 })).toBe(false)
   })
 
   it('measures the returned slice in code points, matching the SQL total', () => {
@@ -119,6 +193,7 @@ describe('toDebugText', () => {
     expect(toDebugText({ text: '😀😀😀😀😀', totalChars: 10 })).toEqual({
       text: '😀😀😀😀😀',
       chars: 5,
+      offset: 0,
       totalChars: 10,
       truncated: true,
     })
@@ -341,6 +416,49 @@ describe('deriveSignals', () => {
     expect(parked?.severity).toBe('info')
     expect(signals.some((s) => s.severity === 'error')).toBe(false)
   })
+
+  it('points a failed run with clean model calls at tool execution, where no rows are recorded', () => {
+    // The signature the skill's step-3 rule names: every call ok, none truncated, run dead —
+    // the failure happened in tool EXECUTION (or the engine), which this store never sees.
+    // Without this signal the overview reads like a healthy run that inexplicably died.
+    const signals = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      ...foldLlmRollup([summary({ calls: 40, errors: 0, truncatedCalls: 0 })]),
+    })
+    const pointer = signals.find((s) => s.code === 'failure_outside_model_calls')
+    expect(pointer).toMatchObject({ severity: 'warning', count: 40 })
+    expect(pointer!.message).toContain('contains=')
+
+    // Any model-side anomaly claims the diagnosis instead: the pointer must not fire beside
+    // a failed call…
+    const withErrors = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      ...foldLlmRollup([summary({ calls: 40, errors: 1 })]),
+    })
+    expect(withErrors.map((s) => s.code)).not.toContain('failure_outside_model_calls')
+    // …or a truncated one, and never on a run that did not fail, or that made no calls at all
+    // (`no_model_calls` owns that shape).
+    const truncated = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      ...foldLlmRollup([summary({ calls: 40, truncatedCalls: 2 })]),
+    })
+    expect(truncated.map((s) => s.code)).not.toContain('failure_outside_model_calls')
+    const healthy = deriveSignals({
+      ...base,
+      execution: run({ status: 'done' }),
+      ...foldLlmRollup([summary({ calls: 40 })]),
+    })
+    expect(healthy.map((s) => s.code)).not.toContain('failure_outside_model_calls')
+    const noCalls = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      ...foldLlmRollup([]),
+    })
+    expect(noCalls.map((s) => s.code)).not.toContain('failure_outside_model_calls')
+  })
 })
 
 describe('toDebugAgentContextDetail', () => {
@@ -370,6 +488,7 @@ describe('toDebugAgentContextDetail', () => {
     expect(detail.systemPrompt).toEqual({
       text: 'SYST',
       chars: 4,
+      offset: 0,
       totalChars: 13,
       truncated: true,
     })
@@ -379,6 +498,7 @@ describe('toDebugAgentContextDetail', () => {
     expect(detail.contextFiles[1]!.content).toEqual({
       text: 'zz',
       chars: 2,
+      offset: 0,
       totalChars: 2,
       truncated: false,
     })

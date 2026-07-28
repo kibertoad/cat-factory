@@ -28,6 +28,11 @@ import { provisioningLogEntrySchema } from './provisioning-logs.js'
 //     LLM-call list, because "did this call come back empty?" is a triage question that a
 //     size alone answers ambiguously (a reasoning-only turn has a large `reasoningChars`
 //     and an empty response).
+//     Finding WHICH rows matter is a server-side job too: the LLM-call list takes a
+//     `contains` search (SQL LIKE over the bodies) so locating a known marker across
+//     thousands of calls costs one request, not a paged sweep of every body through the
+//     caller's own context — which would be the multi-hundred-megabyte dump re-entering
+//     through the side door.
 //  3. **Truncation is always REPORTED, never silent.** Every {@link debugTextSchema} states
 //     what it returned and what exists, so a model reasoning over the payload can tell "the
 //     agent said nothing" from "we only showed you the first 2 kB".
@@ -61,6 +66,16 @@ export const DEBUG_MAX_PREVIEW_CHARS = 4_000
 
 /** Hard ceiling on the per-field body a POINT READ may return. */
 export const DEBUG_MAX_BODY_CHARS = 200_000
+
+/**
+ * Hard ceiling on a point read's slice offset — comfortably above the store's own per-body
+ * cap (512 kB), so every stored character is reachable, while still rejecting a garbage
+ * offset instead of quietly serving an empty slice for it.
+ */
+export const DEBUG_MAX_BODY_OFFSET = 2_000_000
+
+/** Hard ceiling on a `contains` search term's length. */
+export const DEBUG_MAX_SEARCH_CHARS = 256
 
 const pageLimitSchema = v.pipe(
   v.string(),
@@ -97,6 +112,29 @@ const bodyCharsSchema = v.pipe(
   v.maxValue(DEBUG_MAX_BODY_CHARS),
 )
 
+/**
+ * 0-based code-point offset a point read's slices start at. Absent ⇒ 0 (the head). This is
+ * what makes the MIDDLE and TAIL of a large body reachable: without it, a leading slice is
+ * the only window this surface can serve, and the diagnostic payload of a long delta — the
+ * last tool result the model saw, the end of a captured build log — sits at the end.
+ */
+const bodyOffsetSchema = v.pipe(
+  v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number'),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(0),
+  v.maxValue(DEBUG_MAX_BODY_OFFSET),
+)
+
+/**
+ * A literal substring to search bodies for, matched case-insensitively in SQL. Deliberately
+ * NOT trimmed and NOT a pattern language: the caller is grepping for verbatim tool-error
+ * text, and a term that behaved as a wildcard on one runtime only would be a parity bug.
+ */
+const containsSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(DEBUG_MAX_SEARCH_CHARS))
+
 /** An epoch-ms query filter: digits only, for the same reason as {@link pageLimitSchema}. */
 const epochMsQuerySchema = v.pipe(
   v.string(),
@@ -126,17 +164,30 @@ const nonNegativeIntQuerySchema = v.pipe(
  * full stored length, measured in SQL, even when `text` is empty.
  */
 export const debugTextSchema = v.object({
-  /** The returned slice — the leading `chars` characters of the stored body. */
+  /** The returned slice — `chars` characters of the stored body, starting at `offset`. */
   text: v.string(),
   /**
    * Characters actually returned in {@link debugTextSchema} `text`, in Unicode CODE POINTS —
    * the unit SQL `length()`/`substr()` measure in (an emoji counts once, not twice).
    */
   chars: v.number(),
+  /**
+   * 0-based code-point position `text` starts at within the stored body — 0 unless the caller
+   * asked for a later window via `?bodyOffset=`. Clamped to `totalChars`, so
+   * `offset + chars <= totalChars` always holds.
+   */
+  offset: v.number(),
   /** Characters stored for this field (the full code-point length, regardless of what was returned). */
   totalChars: v.number(),
-  /** True when `chars < totalChars`, i.e. the body was cut to fit the caller's budget. */
+  /** True when `chars < totalChars`, i.e. `text` is not the entire stored body. */
   truncated: v.boolean(),
+  /**
+   * 0-based code-point offset of the first case-insensitive occurrence of the request's
+   * `?contains=` term in this body, or null when the term occurs only in a sibling body.
+   * Present ONLY on rows of a searched list — pair it with the point read's `?bodyOffset=`
+   * to jump straight to the match without transferring the bytes before it.
+   */
+  matchOffset: v.optional(v.nullable(v.number())),
 })
 export type DebugText = v.InferOutput<typeof debugTextSchema>
 
@@ -328,6 +379,36 @@ export type DebugCallOutcome = v.InferOutput<typeof debugCallOutcomeSchema>
 export const debugCallOrderSchema = v.picklist(['newest', 'oldest'])
 export type DebugCallOrder = v.InferOutput<typeof debugCallOrderSchema>
 
+/** How the single-call point read presents the prompt delta. */
+export const debugCallViewSchema = v.picklist(['raw', 'messages'])
+export type DebugCallView = v.InferOutput<typeof debugCallViewSchema>
+
+/**
+ * One message of a parsed prompt delta (`?view=messages` on the point read). The parse is
+ * LENIENT — both telemetry producers store `JSON.stringify` of a `{ role, content }` array,
+ * but the content shapes differ (OpenAI-style strings/parts/`tool_calls` from the proxy,
+ * vendor content blocks from the harness transcript), so unrecognised parts degrade to a
+ * `[type]` placeholder rather than failing the message.
+ */
+export const debugPromptMessageSchema = v.object({
+  /**
+   * The message's absolute position in the FULL conversation (`elidedLeadingMessages` +
+   * its position in the delta), so two calls' parsed views line up without arithmetic.
+   */
+  index: v.number(),
+  /** The message's role verbatim (`system` / `user` / `assistant` / `tool` / …), `unknown` when absent. */
+  role: v.string(),
+  /** The message's `name` field (a named tool/function turn), when the producer recorded one. */
+  name: v.nullable(v.string()),
+  /** The tool invocation a tool-result turn answers, when the producer recorded the id. */
+  toolCallId: v.nullable(v.string()),
+  /** Tool invocations an assistant turn requested: the tool's name plus its budgeted serialized arguments. */
+  toolCalls: v.array(v.object({ name: v.string(), args: debugTextSchema })),
+  /** The message's textual content, budgeted INDEPENDENTLY of every other message's. */
+  content: debugTextSchema,
+})
+export type DebugPromptMessage = v.InferOutput<typeof debugPromptMessageSchema>
+
 /**
  * One recorded model call. The three body fields are always PRESENT but empty unless the
  * caller asked for a preview — their `totalChars` is measured in SQL either way, so a
@@ -381,6 +462,17 @@ export const debugLlmCallSchema = v.object({
   response: debugTextSchema,
   /** The model's separate reasoning channel, when it emits one. */
   reasoning: debugTextSchema,
+  /**
+   * The prompt delta parsed into per-message rows, each budgeted independently — present only
+   * on a `?view=messages` point read. `null` there means the stored delta did not parse as a
+   * message array (the raw `prompt` is served instead, so the view degrades rather than
+   * returning nothing); absent means the caller did not ask for the view. Independent budgets
+   * are the point: in the raw view one enormous leading tool result must be paid for before
+   * anything after it is visible, while here every message shows its head. The response's
+   * worst case stays computable — `(messageCount − elidedLeadingMessages) × bodyChars`, both
+   * factors already on the list row.
+   */
+  promptMessages: v.optional(v.nullable(v.array(debugPromptMessageSchema))),
 })
 export type DebugLlmCall = v.InferOutput<typeof debugLlmCallSchema>
 
@@ -390,6 +482,14 @@ export const listDebugLlmCallsQuerySchema = v.object({
   agentKind: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
   /** Narrow to failing or warning (truncated / filtered) calls only. */
   outcome: v.optional(debugCallOutcomeSchema),
+  /**
+   * Narrow to calls whose prompt delta, response or reasoning CONTAINS this literal substring,
+   * matched case-insensitively in SQL. This is the surface's grep — the way a caller finds a
+   * tool-validation error, a repeated apology, or any known marker across thousands of calls
+   * in ONE request instead of paging every body through its own context. Matched rows report
+   * a per-body `matchOffset`; wildcards (`%`/`_`) match literally.
+   */
+  contains: v.optional(containsSchema),
   /** `newest` (default) for triage; `oldest` to read a conversation forwards. */
   order: v.optional(debugCallOrderSchema),
   /** Cap on rows returned (default 25, hard max {@link DEBUG_MAX_PAGE_LIMIT}). */
@@ -415,8 +515,21 @@ export const getDebugLlmCallQuerySchema = v.object({
   /**
    * Per-field budget, 0..{@link DEBUG_MAX_BODY_CHARS}. Absent ⇒ the ceiling itself: a body
    * longer than {@link DEBUG_MAX_BODY_CHARS} is still cut (and says so via `truncated`).
+   * Under `view=messages` this is the PER-MESSAGE content budget.
    */
   bodyChars: v.optional(bodyCharsSchema),
+  /**
+   * 0-based code-point offset the body slices start at (raw view only; a parsed message view
+   * always reads each message whole and budgets its head). Pair with a searched list row's
+   * `matchOffset` to read the text AROUND a match — the `grep -C` of this surface.
+   */
+  bodyOffset: v.optional(bodyOffsetSchema),
+  /**
+   * `raw` (default) returns the delta as stored JSON; `messages` parses it into per-message
+   * rows with independent budgets (see `promptMessages`). Falls back to `raw` semantics when
+   * the stored delta does not parse.
+   */
+  view: v.optional(debugCallViewSchema),
 })
 export type GetDebugLlmCallQuery = v.InferOutput<typeof getDebugLlmCallQuerySchema>
 
@@ -519,6 +632,12 @@ export const getDebugAgentContextQuerySchema = v.object({
    * longer than {@link DEBUG_MAX_BODY_CHARS} is still cut (and says so via `truncated`).
    */
   bodyChars: v.optional(bodyCharsSchema),
+  /**
+   * 0-based code-point offset every body slice starts at. Applied to ALL of the snapshot's
+   * bodies uniformly (it exists to reach the tail of ONE large body the index sized; the
+   * others simply run out and return empty slices past their end).
+   */
+  bodyOffset: v.optional(bodyOffsetSchema),
 })
 export type GetDebugAgentContextQuery = v.InferOutput<typeof getDebugAgentContextQuerySchema>
 

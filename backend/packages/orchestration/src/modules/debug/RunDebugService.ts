@@ -27,6 +27,7 @@ import {
   toDebugRunStep,
   toDebugRunSummary,
 } from './debug.logic.js'
+import { toDebugLlmCallMessagesView } from './promptMessages.js'
 
 // The read service behind the remote debugging surface (`/api/v1/debug/*`). It owns exactly
 // two responsibilities: issue BOUNDED reads against the run store and the three telemetry
@@ -197,6 +198,8 @@ export class RunDebugService {
       outcome?: LlmCallOutcomeFilter
       order?: 'newest' | 'oldest'
       bodyChars: number
+      /** Narrow to calls whose bodies contain this literal substring (matched in SQL). */
+      contains?: string
     },
   ): Promise<DebugPage<DebugLlmCall>> {
     const repo = this.deps.llmCallMetricRepository
@@ -209,25 +212,38 @@ export class RunDebugService {
       outcome: opts.outcome,
       order: opts.order,
       bodyChars: opts.bodyChars,
+      contains: opts.contains,
     })
     return paginate(
       rows,
       opts.limit,
       (call) => ({ createdAt: call.createdAt, id: call.id }),
-      toDebugLlmCall,
+      (call) => toDebugLlmCall(call),
     )
   }
 
-  /** One recorded call with its bodies budgeted, or null when the workspace has no such call. */
+  /** One recorded call with its bodies windowed, or null when the workspace has no such call. */
   async getLlmCall(
     workspaceId: string,
     callId: string,
-    bodyChars?: number,
+    opts: { bodyChars?: number; bodyOffset?: number; view?: 'raw' | 'messages' } = {},
   ): Promise<DebugLlmCall | null> {
     const repo = this.deps.llmCallMetricRepository
     if (!repo) return null
-    const row = await repo.get(workspaceId, callId, bodyChars)
-    return row ? toDebugLlmCall(row) : null
+    if (opts.view === 'messages') {
+      // The parse needs the COMPLETE delta (a truncated JSON array parses as nothing), so this
+      // view reads the row whole and windows in the projection instead of in SQL. That trades
+      // one whole-row transfer from the store — bounded by the store's own per-body cap — for a
+      // response whose messages are budgeted independently; the HTTP payload stays bounded
+      // either way.
+      const row = await repo.get(workspaceId, callId)
+      return row ? toDebugLlmCallMessagesView(row, opts.bodyChars ?? 0, opts.bodyOffset ?? 0) : null
+    }
+    const row = await repo.get(workspaceId, callId, {
+      chars: opts.bodyChars,
+      offset: opts.bodyOffset,
+    })
+    return row ? toDebugLlmCall(row, opts.bodyOffset ?? 0) : null
   }
 
   /** One bounded page of the run's captured dispatches — identity and sizes, never bodies. */
@@ -257,11 +273,12 @@ export class RunDebugService {
     workspaceId: string,
     snapshotId: string,
     bodyChars: number,
+    bodyOffset = 0,
   ): Promise<DebugAgentContextDetail | null> {
     const repo = this.deps.agentContextSnapshotRepository
     if (!repo) return null
     const snapshot = await repo.get(workspaceId, snapshotId)
-    return snapshot ? toDebugAgentContextDetail(snapshot, bodyChars) : null
+    return snapshot ? toDebugAgentContextDetail(snapshot, bodyChars, bodyOffset) : null
   }
 
   /** One bounded page of the web searches the run's agents performed. */

@@ -157,11 +157,13 @@ export function publicDebugController(): Hono<AppEnv> {
       outcome: query.outcome,
       order: query.order,
       bodyChars: query.bodyChars ?? 0,
+      contains: query.contains,
     })
     return c.json({ calls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
 
-  // One call's full (budgeted) prompt delta, response and reasoning.
+  // One call's full (windowed) prompt delta, response and reasoning — raw, or parsed into
+  // per-message rows via `?view=messages`.
   buildHonoRoute(app, getDebugLlmCallContract, async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) {
@@ -172,11 +174,12 @@ export function publicDebugController(): Hono<AppEnv> {
     }
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
-    const call = await debug.getLlmCall(
-      gate.auth.workspaceId,
-      c.req.valid('param').callId,
-      c.req.valid('query').bodyChars ?? DEFAULT_POINT_READ_BODY_CHARS,
-    )
+    const query = c.req.valid('query')
+    const call = await debug.getLlmCall(gate.auth.workspaceId, c.req.valid('param').callId, {
+      bodyChars: query.bodyChars ?? DEFAULT_POINT_READ_BODY_CHARS,
+      bodyOffset: query.bodyOffset ?? 0,
+      view: query.view ?? 'raw',
+    })
     return call ? c.json(call, 200) : notFound(c, 'call')
   })
 
@@ -216,10 +219,12 @@ export function publicDebugController(): Hono<AppEnv> {
     }
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
+    const query = c.req.valid('query')
     const snapshot = await debug.getAgentContext(
       gate.auth.workspaceId,
       c.req.valid('param').snapshotId,
-      c.req.valid('query').bodyChars ?? DEFAULT_POINT_READ_BODY_CHARS,
+      query.bodyChars ?? DEFAULT_POINT_READ_BODY_CHARS,
+      query.bodyOffset ?? 0,
     )
     return snapshot ? c.json(snapshot, 200) : notFound(c, 'snapshot')
   })

@@ -54,33 +54,45 @@ function codePointLength(text: string): number {
   return count
 }
 
+/** Advance a UTF-16 index by `count` code points (never landing inside a surrogate pair). */
+function advanceCodePoints(text: string, from: number, count: number): number {
+  let index = from
+  for (let taken = 0; taken < count && index < text.length; taken += 1) {
+    const unit = text.charCodeAt(index)
+    index += unit >= 0xd800 && unit <= 0xdbff ? 2 : 1
+  }
+  return index
+}
+
 /**
- * Slice a stored body to a caller's budget and SAY SO. The pair matters more than either
- * half: a bare truncated string reads exactly like a short one, so a model handed the first
+ * Slice a stored body to a caller's window and SAY SO. The metadata matters more than the
+ * text: a bare truncated string reads exactly like a short one, so a model handed the first
  * 2 kB of a 40 kB reply would confidently report that the agent said almost nothing.
  *
  * `budget` of 0 returns no text at all while still reporting the full size — that is the
- * shape a sweep uses, and the reason a size-only page is still worth reading.
+ * shape a sweep uses, and the reason a size-only page is still worth reading. `offset`
+ * starts the window later, which is how the tail of a large body is reached; past the end
+ * it returns an empty slice whose `offset` is clamped to the total, so
+ * `offset + chars <= totalChars` always holds.
  *
- * Budgets and sizes are CODE POINTS (see {@link codePointLength}), matching the SQL-sliced
- * bodies — and the cut walks whole code points, so it can never split a surrogate pair and
- * hand the caller a lone half of one.
+ * Budgets, offsets and sizes are CODE POINTS (see {@link codePointLength}), matching the
+ * SQL-sliced bodies — and the cut walks whole code points, so it can never split a
+ * surrogate pair and hand the caller a lone half of one.
  */
-export function sliceText(text: string, budget: number): DebugText {
+export function sliceText(text: string, budget: number, offset = 0): DebugText {
   const total = codePointLength(text)
-  const chars = Math.max(0, Math.min(budget, total))
+  const start = Math.max(0, Math.min(offset, total))
+  const chars = Math.max(0, Math.min(budget, total - start))
   let sliced = text
-  if (chars < total) {
-    let end = 0
-    for (let taken = 0; taken < chars; taken += 1) {
-      const unit = text.charCodeAt(end)
-      end += unit >= 0xd800 && unit <= 0xdbff ? 2 : 1
-    }
-    sliced = text.slice(0, end)
+  if (start > 0 || chars < total) {
+    const begin = advanceCodePoints(text, 0, start)
+    const end = advanceCodePoints(text, begin, chars)
+    sliced = text.slice(begin, end)
   }
   return {
     text: sliced,
     chars,
+    offset: start,
     totalChars: total,
     truncated: chars < total,
   }
@@ -89,20 +101,27 @@ export function sliceText(text: string, budget: number): DebugText {
 /**
  * Project a body the STORE already sliced. The repository returns `{ text, totalChars }`
  * because it cut the body in SQL (so the untaken bytes never left the database); this only
- * re-derives the two fields the wire shape adds. Deliberately does NOT re-slice: `text` is
- * already within budget, and slicing again would silently disagree with `totalChars`.
+ * re-derives the fields the wire shape adds. Deliberately does NOT re-slice: `text` is
+ * already within the window, and slicing again would silently disagree with `totalChars`.
+ *
+ * `offset` is the window start the caller asked the store for (0 for a list slice), clamped
+ * to the total so an ask past the end reports where the body actually stops. A search's
+ * per-body `matchOffset` rides through untouched — null (no match in this body) and absent
+ * (no search ran) stay distinct on the wire.
  *
  * `chars` and the truncation check count CODE POINTS, because `totalChars` came from SQL
  * `length()` which counts the same — a JS `.length` here reads a SQL-cut emoji-bearing body
  * as untruncated (see {@link codePointLength}).
  */
-export function toDebugText(slice: LlmCallBodySlice): DebugText {
+export function toDebugText(slice: LlmCallBodySlice, offset = 0): DebugText {
   const chars = codePointLength(slice.text)
   return {
     text: slice.text,
     chars,
+    offset: Math.max(0, Math.min(offset, slice.totalChars)),
     totalChars: slice.totalChars,
     truncated: chars < slice.totalChars,
+    ...(slice.matchOffset !== undefined ? { matchOffset: slice.matchOffset } : {}),
   }
 }
 
@@ -148,8 +167,11 @@ export function toDebugRunStep(step: PipelineStep, index: number): DebugRunStep 
   }
 }
 
-/** Project a bounded call-page row onto the wire shape. */
-export function toDebugLlmCall(call: LlmCallMetricPage): DebugLlmCall {
+/**
+ * Project a bounded call-page row onto the wire shape. `bodyOffset` is the window start the
+ * store's slices were taken at (a point read's `?bodyOffset=`; always 0 on a list row).
+ */
+export function toDebugLlmCall(call: LlmCallMetricPage, bodyOffset = 0): DebugLlmCall {
   return {
     callId: call.id,
     runId: call.executionId,
@@ -175,9 +197,9 @@ export function toDebugLlmCall(call: LlmCallMetricPage): DebugLlmCall {
     overheadMs: call.overheadMs,
     totalMs: call.totalMs,
     elidedLeadingMessages: call.promptPrefixCount,
-    prompt: toDebugText(call.prompt),
-    response: toDebugText(call.response),
-    reasoning: toDebugText(call.reasoning),
+    prompt: toDebugText(call.prompt, bodyOffset),
+    response: toDebugText(call.response, bodyOffset),
+    reasoning: toDebugText(call.reasoning, bodyOffset),
   }
 }
 
@@ -206,6 +228,7 @@ export function toDebugAgentContextEntry(row: AgentContextSnapshotIndex): DebugA
 export function toDebugAgentContextDetail(
   snapshot: AgentContextSnapshot,
   bodyChars: number,
+  bodyOffset = 0,
 ): DebugAgentContextDetail {
   return {
     snapshotId: snapshot.id,
@@ -215,14 +238,17 @@ export function toDebugAgentContextDetail(
     createdAt: snapshot.createdAt,
     model: snapshot.model,
     harness: snapshot.harness,
-    systemPrompt: sliceText(snapshot.systemPrompt, bodyChars),
-    userPrompt: sliceText(snapshot.userPrompt, bodyChars),
-    fragments: snapshot.fragments.map((f) => ({ id: f.id, body: sliceText(f.body, bodyChars) })),
+    systemPrompt: sliceText(snapshot.systemPrompt, bodyChars, bodyOffset),
+    userPrompt: sliceText(snapshot.userPrompt, bodyChars, bodyOffset),
+    fragments: snapshot.fragments.map((f) => ({
+      id: f.id,
+      body: sliceText(f.body, bodyChars, bodyOffset),
+    })),
     contextFiles: snapshot.contextFiles.map((f) => ({
       path: f.path,
       title: f.title,
       url: f.url,
-      content: sliceText(f.content, bodyChars),
+      content: sliceText(f.content, bodyChars, bodyOffset),
     })),
     extras: snapshot.extras,
   }
@@ -381,6 +407,25 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
         { count: insight.truncatedCalls, agentKind: insight.agentKind },
       )
     }
+  }
+  // The most common hard diagnosis has NO row of its own: a run that failed while every model
+  // call looks healthy. Tool-EXECUTION errors (malformed arguments, a stuck edit loop) happen
+  // inside the container and are recorded only as text inside the prompt deltas — each call
+  // still reports `ok` with a clean finish reason, so without this pointer the overview reads
+  // like a healthy run that inexplicably died and the caller has nothing to follow.
+  if (
+    execution.status === 'failed' &&
+    sinks.llmCalls.available &&
+    totals.calls > 0 &&
+    totals.errors === 0 &&
+    totals.truncatedCalls === 0
+  ) {
+    push(
+      'failure_outside_model_calls',
+      'warning',
+      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated — the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine, neither of which records calls here. Search the bodies for tool errors (GET /debug/runs/:runId/llm-calls?contains=...), read the newest calls' deltas, and check each step's firstEvictionDetail plus /logs.`,
+      { count: totals.calls },
+    )
   }
   if (
     totals.transportOverheadRatio != null &&

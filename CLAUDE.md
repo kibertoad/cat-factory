@@ -1310,12 +1310,30 @@ a context budget.
   routinely megabytes (it holds every injected context file's full content), so the list
   projection is identity + SQL `length()`. The one opt-in exception is `?bodyChars=` on the
   LLM-call list, where a size alone can't tell an empty reply from an un-previewed one.
-- **Slice and filter IN SQL** (`substr`/`length`, the outcome predicate, the agent-kind narrowing).
-  A zero budget selects a literal `''`, so a sweep reads no body bytes out of the store at all —
-  doing it in TypeScript would transfer everything and then throw it away.
-- **Every body is a `debugText`** (`{ text, chars, totalChars, truncated }`). A bare truncated
-  string reads exactly like a short one, so a model would report "the agent said nothing" from a
-  payload that merely hit its budget.
+- **Slice, filter AND SEARCH in SQL** (`substr`/`length`/`instr`, the outcome predicate, the
+  agent-kind narrowing, the `?contains=` body search). A zero budget selects a literal `''`, so a
+  sweep reads no body bytes out of the store at all — doing it in TypeScript would transfer
+  everything and then throw it away. Same logic for finding: locating a marker (a tool-validation
+  error, a repeated apology) is ONE `LIKE`-filtered request, never a paged sweep of bodies grepped
+  in the caller's context. A searched row reports per-body `matchOffset`s (code points, so they
+  feed `substr` directly); keep the LIKE-escaping on kernel's shared `escapeLikePattern` and the
+  case folding ASCII-parity-tested (SQLite `LIKE` ⇄ Postgres `ILIKE`).
+- **Every body is a `debugText`** (`{ text, chars, offset, totalChars, truncated }`). A bare
+  truncated string reads exactly like a short one, so a model would report "the agent said
+  nothing" from a payload that merely hit its budget. Point reads take `?bodyOffset=`, so the
+  MIDDLE and TAIL of a large body are reachable (the last tool result, the end of a build log —
+  where causes actually sit); the ceiling on the offset sits above the store's per-body cap so no
+  stored byte is unreachable.
+- **The prompt delta has TWO presentations, one storage shape.** `?view=messages` on the call
+  point read parses the stored delta into per-message rows budgeted INDEPENDENTLY (one huge tool
+  result can't hide the messages after it); the parse is lenient across both producers' content
+  shapes and DEGRADES to the raw window with `promptMessages: null` — never a guess, never less
+  than the raw read (`promptMessages.ts`).
+- **A failed run with clean calls gets a POINTER, not silence** (`failure_outside_model_calls`):
+  tool-execution errors happen inside the container and exist only as prompt-delta text, so
+  every call reads `ok` while the run is dead. The signal names the shape and routes the caller
+  to the search. A first-class per-call tool-error count needs harness capture (an image-bumping
+  change) — do NOT fake one by pattern-matching bodies at record time.
 - **Keyset cursors ride the `(createdAt, id)` COMPOSITE**, never a bare timestamp: telemetry is
   appended in same-millisecond bursts and a timestamp-only cursor silently drops the ties.
 - **`available: false` ≠ `count: 0`.** The overview's per-sink block distinguishes "this deployment

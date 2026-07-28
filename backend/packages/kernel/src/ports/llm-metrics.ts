@@ -155,10 +155,37 @@ export interface LlmPromptChainTip {
  * reports every size without the text columns ever leaving the store.
  */
 export interface LlmCallBodySlice {
-  /** The leading `min(budget, totalChars)` characters of the stored body. */
+  /** `min(budget, remaining)` characters of the stored body, starting at the slice offset. */
   text: string
   /** Full stored length of the body. */
   totalChars: number
+  /**
+   * 0-based CODE-POINT offset of the first case-insensitive occurrence of the page query's
+   * `contains` term in THIS body, or null when the term does not occur here (the row matched
+   * via a sibling body). Only set when the query searched — a plain page carries no offsets.
+   * Computed in SQL (`instr`/`position`, both of which count characters like `substr` does),
+   * so it composes directly with a point read's slice offset: a caller jumps to the match
+   * without transferring the bytes before it.
+   */
+  matchOffset?: number | null
+}
+
+/**
+ * Escape a literal term for use inside a SQL `LIKE`/`ILIKE` pattern with `\` as the escape
+ * character (Postgres' default; SQLite is told via `ESCAPE '\'`). Shared by both runtime
+ * stores so a term containing `%`/`_` narrows to the literal text on each, never to a
+ * wildcard match on one runtime only.
+ */
+export function escapeLikePattern(term: string): string {
+  return term.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+}
+
+/** The slice window a point read applies to each stored body, in code points. */
+export interface LlmCallBodyWindow {
+  /** Max characters to return per body; omit for the whole body from `offset` on. */
+  chars?: number
+  /** 0-based code-point offset the slice starts at; omit for 0 (the head). */
+  offset?: number
 }
 
 /**
@@ -213,6 +240,16 @@ export interface LlmCallPageQuery {
    * their `length()`), so a sweep over a long run costs no body bytes.
    */
   bodyChars: number
+  /**
+   * Narrow to calls whose prompt delta, response or reasoning contains this literal substring,
+   * matched case-insensitively IN SQL — the grep a debugging client roots a stuck tool loop
+   * with, collapsed to one indexed-scan query instead of paging every body through the caller.
+   * `%`/`_` in the term match literally (escaped via {@link escapeLikePattern}). Case folding
+   * is ASCII on SQLite (`LIKE`'s default) and locale-aware on Postgres (`ILIKE`); conformance
+   * pins the ASCII behaviour the two share. Matched rows report a per-body
+   * {@link LlmCallBodySlice.matchOffset}.
+   */
+  contains?: string
 }
 
 export interface LlmCallMetricRepository {
@@ -272,12 +309,15 @@ export interface LlmCallMetricRepository {
    */
   listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]>
   /**
-   * One call by id, sliced to `bodyChars` (omit for the whole stored bodies). The point read
-   * behind a page row, keyed by the call's own id — the page hands the caller that id, so
-   * requiring the run id too would only create a mismatched pair that 404s inexplicably.
-   * Scoped to the workspace, so a foreign id is indistinguishable from a missing one.
+   * One call by id, each body sliced to the window (omit for the whole stored bodies). The
+   * window's `offset` is what makes the TAIL of a large body reachable — the last tool result
+   * in a long delta, the end of a build log — without transferring the bytes before it; the
+   * slice happens in SQL (`substr(col, offset + 1, chars)`), like the page's.
+   * Keyed by the call's own id — the page hands the caller that id, so requiring the run id
+   * too would only create a mismatched pair that 404s inexplicably. Scoped to the workspace,
+   * so a foreign id is indistinguishable from a missing one.
    */
-  get(workspaceId: string, id: string, bodyChars?: number): Promise<LlmCallMetricPage | null>
+  get(workspaceId: string, id: string, body?: LlmCallBodyWindow): Promise<LlmCallMetricPage | null>
   /**
    * Per-agent-kind aggregates for a run, for the board rollups. Aggregates in SQL
    * and deliberately selects no text columns, so it is cheap to run on every emit.

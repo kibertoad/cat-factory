@@ -149,5 +149,9 @@ or the board "retry" button) to spin a fresh container.
   `match(/must have required properties (\w+)/g)`.
 - The app also exposes this without SQL:
   `GET /executions/:id/llm-metrics` (per-call list) and
-  `GET /executions/:id/llm-metrics/export` (LLM-friendly JSON bundle). Use D1
+  `GET /executions/:id/llm-metrics/export` (LLM-friendly JSON bundle). With a
+  `read`-scoped public API key, the remote debugging surface (`/api/v1/debug/*`,
+  see `backend/docs/debug-api.md`) covers steps 1–4 end to end: the run
+  overview's `signals` replace step 2's manual reading, and
+  `?contains=` + `matchOffset` + `?bodyOffset=` replace step 4's grep. Use D1
   directly when you need cross-run queries or the app is unreachable.
