@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   deleteNotificationWebhookContract,
   getNotificationWebhookContract,
@@ -11,16 +12,12 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the webhook service or send a 503, returning null when unconfigured. */
-function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookService | null {
-  return c.get('container').notificationWebhooks ?? null
+/** Resolve the webhook service or raise a 503 — it isn't wired on this deployment. */
+function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookService {
+  const notificationWebhooks = c.get('container').notificationWebhooks
+  if (!notificationWebhooks) throw new UnavailableError('Notification webhooks are not configured')
+  return notificationWebhooks
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Notification webhooks are not configured' } },
-    503,
-  )
 
 /**
  * Workspace-scoped management of the OUTBOUND notification webhook: the one HTTPS endpoint a
@@ -39,20 +36,17 @@ export function notificationWebhookController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
     return c.json(await webhooks.get(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, putNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
     const saved = await webhooks.put(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(saved, 200)
   })
 
   buildHonoRoute(app, deleteNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
     await webhooks.remove(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

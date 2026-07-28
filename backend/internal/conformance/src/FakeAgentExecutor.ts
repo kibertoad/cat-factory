@@ -10,7 +10,8 @@ import type {
   PeerPullRequest,
   TestReport,
 } from '@cat-factory/kernel'
-import type { AgentExecutor } from '@cat-factory/kernel'
+import type { AgentExecutor, ConflictReason } from '@cat-factory/kernel'
+import { ConflictError } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
   BLUEPRINTS_AGENT_KIND,
@@ -52,6 +53,15 @@ export interface FakeAgentOptions {
   dispatchThrowKinds?: AgentKind[]
   /** The verbatim error a {@link dispatchThrowKinds} dispatch throws. Default a generic 503. */
   dispatchThrowMessage?: string
+  /**
+   * Agent kinds whose INLINE `run` should throw a {@link ConflictError} carrying this machine
+   * reason, standing in for the engine raising a `DomainError` mid-advance (the shape a facade
+   * with no runner backend produces: `agent_backend_unconfigured`). The driver must lift the
+   * reason onto `AgentFailure.reason` — the field the SPA renders its remedy from — so the suite
+   * can pin it on BOTH runtimes. It went unasserted, and the Cloudflare driver dropped it on
+   * every failure path as a result (observability-logging-gaps.md, B3).
+   */
+  runThrowReason?: { kinds: AgentKind[]; reason: ConflictReason; message?: string }
   /**
    * Agent kinds whose async poll reports a FAILED job carrying the harness's STRUCTURED
    * `failureCause` (and `detail`), so the conformance suite can assert the engine maps the
@@ -437,6 +447,13 @@ export class FakeAgentExecutor implements AgentExecutor {
     // for the container executor, so this is where a conformance case observes what the engine
     // resolved onto the context (and would therefore have put in the harness job body).
     this.options.onContext?.(context)
+    const throwSpec = this.options.runThrowReason
+    if (throwSpec?.kinds.includes(context.agentKind)) {
+      throw new ConflictError(
+        throwSpec.message ?? 'No agent backend is configured for this deployment',
+        throwSpec.reason,
+      )
+    }
     const result = await this.produceResult(context)
     const withValidation = this.options.validationReport
       ? { ...result, validationReport: this.options.validationReport }

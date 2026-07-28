@@ -12,6 +12,7 @@ import {
   type ModelProviderResolver,
   type NotificationChannel,
   composeTraceSinks,
+  createStoreAgentContextGate,
   NoopWorkRunner,
   type ProvisioningSubsystem,
   type ResolveBinaryArtifactStore,
@@ -304,7 +305,17 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     buildOtelSink(loadOtelConfig(env)),
   ])
   const instrument = traceSink
-    ? { traceSink, recordPrompts: loadObservabilityConfig(env).recordPrompts }
+    ? {
+        traceSink,
+        recordPrompts: loadObservabilityConfig(env).recordPrompts,
+        // The per-workspace half of the double gate, from the SAME kernel factory the proxied
+        // path uses — keep this in step with the Node facade's wiring. No cache slice here:
+        // the isolate-safe cache profile disables our own mutable state anyway, so this reads
+        // the row live (once per traced inline call).
+        bodiesEnabled: createStoreAgentContextGate({
+          workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+        }),
+      }
     : undefined
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const scoped = createScopedModelProviderResolver({

@@ -29,6 +29,14 @@ import type {
 // all live here. The runtime-specific bits — resolving an OpenAI-compatible
 // upstream (base URL + key) and the optional in-process path for binding-reached
 // providers (Cloudflare Workers AI) — are delegated to the `llmUpstream` gateway.
+//
+// ERROR ENVELOPES here stay hand-built rather than thrown as a `DomainError`: every
+// failure must first be RECORDED on the call metric (`observe`), and the statuses the
+// OpenAI-compatible client expects (402 / 413 / 502) have no domain class. They still
+// carry a `code`, because a code-less envelope breaks the shape every client assumes.
+// Two codes are specific to the proxy pair (this controller + the web-search proxy):
+//   - `upstream`        — the model provider, not this deployment, failed the call (502).
+//   - `spend_exhausted` — the run's spend budget is spent; this is policy, not a fault (402).
 
 /**
  * Output-token floor applied to every container-agent call on a `workers-ai` provider
@@ -176,7 +184,10 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
       errorMessage: `Provider '${session.provider}' is not available`,
       upstreamMs: 0,
     })
-    return c.json({ error: { message: `Provider '${session.provider}' is not available` } }, 502)
+    return c.json(
+      { error: { code: 'upstream', message: `Provider '${session.provider}' is not available` } },
+      502,
+    )
   }
   try {
     return await inProcess
@@ -192,8 +203,16 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
       errorMessage: message,
       upstreamMs: Date.now() - dispatchAt,
     })
+    // The upstream/SDK exception text is INTERNALS: it routinely carries the request URL, a
+    // provider account id, or an echoed auth header. It is logged above and recorded on the
+    // call metric (`errorMessage`) where an operator looks; the wire gets the model only.
     return c.json(
-      { error: { message: `In-process call failed for model '${session.model}': ${message}` } },
+      {
+        error: {
+          code: 'upstream',
+          message: `In-process call failed for model '${session.model}'`,
+        },
+      },
       502,
     )
   }
@@ -261,7 +280,7 @@ async function resolveUpstreamTarget(
       errorMessage: message,
       upstreamMs: 0,
     })
-    return { failure: c.json({ error: { message } }, 502) }
+    return { failure: c.json({ error: { code: 'upstream', message } }, 502) }
   }
   // Lease the API key for this provider from the DB-backed pool (workspace + owning account + the
   // run initiator), scoped from the signed session claims. Keys are no longer env-baked: an empty
@@ -277,7 +296,12 @@ async function resolveUpstreamTarget(
       errorMessage: 'API-key store is not configured',
       upstreamMs: 0,
     })
-    return { failure: c.json({ error: { message: 'API-key store is not configured' } }, 502) }
+    return {
+      failure: c.json(
+        { error: { code: 'unavailable', message: 'API-key store is not configured' } },
+        502,
+      ),
+    }
   }
   try {
     const leased = await apiKeys.lease(session.workspaceId, session.provider as ApiKeyProvider, {
@@ -358,7 +382,7 @@ async function relayUpstream(
         errorMessage: message,
         upstreamMs: Date.now() - dispatchAt,
       })
-      return c.json({ error: { message } }, 502)
+      return c.json({ error: { code: 'upstream', message } }, 502)
     }
   } else {
     upstreamRes = await fetch(upstreamUrl, upstreamInit)
@@ -430,7 +454,8 @@ export function llmProxyController(): Hono<AppEnv> {
     '/v1/chat/completions',
     bodyLimit({
       maxSize: MAX_PROXY_BODY_BYTES,
-      onError: (c) => c.json({ error: { message: 'Request body exceeds size limit' } }, 413),
+      onError: (c) =>
+        c.json({ error: { code: 'too_large', message: 'Request body exceeds size limit' } }, 413),
     }),
     async (c) => {
       // Proxy-entry clock: everything from here to the upstream dispatch (and after the
@@ -449,14 +474,20 @@ export function llmProxyController(): Hono<AppEnv> {
       const secret = config.auth.sessionSecret
       if (!secret) {
         logger.error('llm proxy: session secret not configured', { scope: 'llmProxy' })
-        return c.json({ error: { message: 'LLM proxy is not configured' } }, 503)
+        return c.json(
+          { error: { code: 'unavailable', message: 'LLM proxy is not configured' } },
+          503,
+        )
       }
 
       const sessions = new ContainerSessionService({ secret })
       const session = await sessions.verify(bearer(c.req.header('authorization')))
       if (!session) {
         logger.warn('llm proxy: invalid or expired session token', { scope: 'llmProxy' })
-        return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+        return c.json(
+          { error: { code: 'unauthorized', message: 'Invalid or expired session token' } },
+          401,
+        )
       }
 
       // Parse + harden the request: lock the model to the session's, and ask for
@@ -466,7 +497,7 @@ export function llmProxyController(): Hono<AppEnv> {
       try {
         payload = (await c.req.json()) as Record<string, unknown>
       } catch {
-        return c.json({ error: { message: 'Invalid JSON body' } }, 400)
+        return c.json({ error: { code: 'validation', message: 'Invalid JSON body' } }, 400)
       }
       payload.model = session.model
 
@@ -622,7 +653,10 @@ export function llmProxyController(): Hono<AppEnv> {
           errorMessage: 'Spend budget exhausted',
           upstreamMs: 0,
         })
-        return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+        return c.json(
+          { error: { code: 'spend_exhausted', message: 'Spend budget exhausted' } },
+          402,
+        )
       }
 
       // Give container agents generous output room for in-process Workers AI models (a no-op

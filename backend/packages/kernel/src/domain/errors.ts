@@ -8,6 +8,9 @@ export type DomainErrorCode =
   | 'conflict'
   | 'credential_required'
   | 'forbidden'
+  | 'unauthorized'
+  | 'unavailable'
+  | 'rate_limited'
 
 export class DomainError extends Error {
   constructor(
@@ -108,6 +111,59 @@ export class CredentialRequiredError extends DomainError {
 export class ForbiddenError extends DomainError {
   constructor(message = 'Forbidden', details?: Record<string, unknown>) {
     super('forbidden', message, details)
+  }
+}
+
+/**
+ * The caller presented no credential, or one the deployment could not accept (→ 401
+ * Unauthorized). Distinct from {@link ForbiddenError}: 401 says "sign in / present a
+ * valid key", 403 says "you are known and still may not do this". Raised by the session
+ * middleware, the API-key/HMAC guards, and every controller that needs a signed-in user
+ * before it can act.
+ */
+export class UnauthorizedError extends DomainError {
+  constructor(
+    message = 'Unauthorized',
+    /** Optional machine-readable context — mirrors {@link DomainError.details}. */
+    details?: Record<string, unknown>,
+  ) {
+    super('unauthorized', message, details)
+  }
+}
+
+/**
+ * The capability the request needs is not wired on this deployment, or its dependency is
+ * currently down (→ 503 Service Unavailable). This is the "opt-in integration is not
+ * configured" answer every controller guard gives when its module is absent from the
+ * container: the request is well-formed and the caller is entitled to it, there is just
+ * nothing behind the route here.
+ *
+ * Prefer this over a hand-built `c.json({ error: { code: 'unavailable' } }, 503)`: an
+ * envelope literal structurally cannot carry `details.reason`, which is the whole reason
+ * the SPA has to string-match these today.
+ */
+export class UnavailableError extends DomainError {
+  constructor(
+    message: string,
+    /** Optional machine-readable context (e.g. a `reason` code) — mirrors {@link DomainError.details}. */
+    details?: Record<string, unknown>,
+  ) {
+    super('unavailable', message, details)
+  }
+}
+
+/**
+ * The caller exceeded a rate limit and should retry later (→ 429 Too Many Requests).
+ * Carries whatever the limiter knows under `details` (e.g. `retryAfterMs`) so a client
+ * can back off precisely instead of guessing from the prose.
+ */
+export class RateLimitedError extends DomainError {
+  constructor(
+    message = 'Too many requests',
+    /** Optional machine-readable context (e.g. `retryAfterMs`) — mirrors {@link DomainError.details}. */
+    details?: Record<string, unknown>,
+  ) {
+    super('rate_limited', message, details)
   }
 }
 

@@ -1,3 +1,4 @@
+import { UnauthorizedError, UnavailableError } from '@cat-factory/kernel'
 import {
   connectSlackContract,
   disconnectSlackContract,
@@ -25,13 +26,12 @@ import { param } from '../../http/params.js'
 // Private channels still require an invite (Slack offers no public-write analogue).
 const SLACK_BOT_SCOPES = ['chat:write', 'chat:write.public', 'channels:read', 'groups:read']
 
-/** Resolve the Slack module or send a 503, returning null when unconfigured. */
-function requireSlack<E extends AppEnv>(c: Context<E>): SlackModule | null {
-  return c.get('container').slack ?? null
+/** Resolve the Slack module or raise a 503 — it isn't wired on this deployment. */
+function requireSlack<E extends AppEnv>(c: Context<E>): SlackModule {
+  const slack = c.get('container').slack
+  if (!slack) throw new UnavailableError('Slack integration is not configured')
+  return slack
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Slack integration is not configured' } }, 503)
 
 /**
  * Workspace-scoped Slack endpoints: per-account connection management (manual
@@ -48,7 +48,6 @@ export function slackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getSlackConnectionContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const connection = await slack.connectionService.getConnection(param(c, 'workspaceId'))
     const oauthEnabled = await slack.connectionService.oauthEnabled(param(c, 'workspaceId'))
     return c.json({ connection, oauthEnabled }, 200)
@@ -59,13 +58,9 @@ export function slackController(): Hono<AppEnv> {
   // (the manual-token path below is then the way to connect).
   buildHonoRoute(app, getSlackInstallUrlContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     if (!(await slack.connectionService.oauthEnabled(workspaceId))) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Slack OAuth is not configured' } },
-        503,
-      )
+      throw new UnavailableError('Slack OAuth is not configured')
     }
     const signer = new StateSigner(c.get('container').config.auth.sessionSecret)
     const state = await signer.sign({
@@ -80,7 +75,6 @@ export function slackController(): Hono<AppEnv> {
   // Manual bot-token paste (the always-available fallback to OAuth).
   buildHonoRoute(app, connectSlackContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const connection = await slack.connectionService.connectWithToken(
       param(c, 'workspaceId'),
       c.req.valid('json').token,
@@ -90,7 +84,6 @@ export function slackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, disconnectSlackContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     await slack.connectionService.disconnect(param(c, 'workspaceId'))
     return c.body(null, 204)
   })
@@ -98,7 +91,6 @@ export function slackController(): Hono<AppEnv> {
   // Channels the bot can post to, for the routing picker.
   buildHonoRoute(app, listSlackChannelsContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const channels = await slack.connectionService.listChannels(param(c, 'workspaceId'))
     return c.json({ channels }, 200)
   })
@@ -107,14 +99,12 @@ export function slackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getSlackSettingsContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const settings = await slack.settingsService.get(param(c, 'workspaceId'))
     return c.json(settings, 200)
   })
 
   buildHonoRoute(app, updateSlackSettingsContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const settings = await slack.settingsService.update(
       param(c, 'workspaceId'),
       c.req.valid('json'),
@@ -126,14 +116,12 @@ export function slackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getSlackMemberMappingContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const entries = await slack.memberMappingService.get(param(c, 'workspaceId'))
     return c.json({ entries }, 200)
   })
 
   buildHonoRoute(app, updateSlackMemberMappingContract, async (c) => {
     const slack = requireSlack(c)
-    if (!slack) return unavailable(c)
     const entries = await slack.memberMappingService.update(
       param(c, 'workspaceId'),
       c.req.valid('json').entries,
@@ -154,8 +142,7 @@ export function slackOAuthController(): Hono<AppEnv> {
 
   app.get('/oauth/callback', async (c) => {
     const container = c.get('container')
-    const slack = container.slack
-    if (!slack) return unavailable(c)
+    const slack = requireSlack(c)
 
     const code = c.req.query('code')
     if (!code) {
@@ -164,7 +151,7 @@ export function slackOAuthController(): Hono<AppEnv> {
     const signer = new StateSigner(container.config.auth.sessionSecret)
     const state = await signer.verify(c.req.query('state') ?? null)
     if (!state) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+      throw new UnauthorizedError('Invalid or expired state')
     }
 
     await slack.connectionService.connectViaOAuth(state.workspaceId, code)

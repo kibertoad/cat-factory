@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   connectGitLabContract,
   disconnectGitLabContract,
@@ -12,12 +13,11 @@ import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the per-workspace VCS PAT connect service, or null when GitLab connect is unconfigured. */
-function requireVcsConnect<E extends AppEnv>(c: Context<E>): VcsPatConnectionService | null {
-  return c.get('container').vcsConnectionService ?? null
+function requireVcsConnect<E extends AppEnv>(c: Context<E>): VcsPatConnectionService {
+  const vcsConnectionService = c.get('container').vcsConnectionService
+  if (!vcsConnectionService) throw new UnavailableError('GitLab integration is not configured')
+  return vcsConnectionService
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'GitLab integration is not configured' } }, 503)
 
 /**
  * Workspace-scoped GitLab connect endpoints: the per-workspace PAT connect flow, the analogue of
@@ -34,7 +34,6 @@ export function gitlabController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getGitLabConnectionContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
     const connection = await vcs.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
@@ -43,7 +42,6 @@ export function gitlabController(): Hono<AppEnv> {
   // seal it, and persist the workspace's GitLab connection. Idempotent per workspace.
   buildHonoRoute(app, connectGitLabContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
     const { pat } = c.req.valid('json')
     const connection = await vcs.connect(param(c, 'workspaceId'), pat)
     return c.json(connection, 201)
@@ -51,7 +49,6 @@ export function gitlabController(): Hono<AppEnv> {
 
   buildHonoRoute(app, disconnectGitLabContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
     await vcs.disconnect(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

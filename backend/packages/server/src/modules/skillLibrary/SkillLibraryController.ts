@@ -1,3 +1,4 @@
+import { UnauthorizedError, UnavailableError } from '@cat-factory/kernel'
 import {
   linkSkillSourceContract,
   listAccountSkillsContract,
@@ -14,26 +15,14 @@ import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the skill-library module or send a 503 when unconfigured. */
-function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule | null {
-  return c.get('container').skillLibrary ?? null
+function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule {
+  const skillLibrary = c.get('container').skillLibrary
+  if (!skillLibrary) throw new UnavailableError('The Claude Skills library is not configured')
+  return skillLibrary
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'The Claude Skills library is not configured' } },
-    503,
-  )
-
-const sourcesUnavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'Repo-sourced skills require the GitHub integration to be configured',
-      },
-    },
-    503,
-  )
+const sourcesUnavailable = () =>
+  new UnavailableError('Repo-sourced skills require the GitHub integration to be configured')
 
 /**
  * The repo-sourced Claude Skills library API (docs/initiatives/repo-skills.md).
@@ -55,7 +44,6 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listAccountSkillsContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     return c.json(await lib.catalogService.list(accountId(c)), 200)
   })
 
@@ -63,38 +51,33 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listSkillSourcesContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(await lib.sourceService.list(accountId(c)), 200)
   })
 
   buildHonoRoute(app, linkSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     const source = await lib.sourceService.link(accountId(c), c.req.valid('json'))
     return c.json(source, 201)
   })
 
   buildHonoRoute(app, unlinkSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     await lib.sourceService.unlink(accountId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, skillSourceStatusContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(await lib.sourceService.status(accountId(c), c.req.valid('param').id), 200)
   })
 
   buildHonoRoute(app, syncSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(await lib.sourceService.sync(accountId(c), c.req.valid('param').id), 200)
   })
 
@@ -105,10 +88,7 @@ export function skillLibraryController(): Hono<AppEnv> {
 async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
   const user = c.get('user')
   if (!user) {
-    return c.json(
-      { error: { code: 'unauthorized', message: 'Sign in to manage the skill library' } },
-      401,
-    )
+    throw new UnauthorizedError('Sign in to manage the skill library')
   }
   // requireMember throws NotFoundError (→ 404) when the user isn't a member.
   await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)

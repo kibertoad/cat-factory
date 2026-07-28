@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   describeRunnerPoolProviderContract,
   getRunnerPoolConnectionContract,
@@ -14,16 +15,12 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the runners module or send a 503, returning null when unconfigured. */
-function requireRunners<E extends AppEnv>(c: Context<E>): RunnersModule | null {
-  return c.get('container').runners ?? null
+/** Resolve the runners module or raise a 503 — it isn't wired on this deployment. */
+function requireRunners<E extends AppEnv>(c: Context<E>): RunnersModule {
+  const runners = c.get('container').runners
+  if (!runners) throw new UnavailableError('Runner pool integration is not configured')
+  return runners
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Runner pool integration is not configured' } },
-    503,
-  )
 
 /**
  * Workspace-scoped runner-pool endpoints: registering the pool scheduler manifest
@@ -37,14 +34,12 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getRunnerPoolConnectionContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     const connection = await runners.connectionService.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
 
   buildHonoRoute(app, registerRunnerPoolContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     const { config, secrets } = c.req.valid('json')
     const connection = await runners.connectionService.register(param(c, 'workspaceId'), {
       config,
@@ -55,7 +50,6 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateRunnerPoolSecretsContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     const connection = await runners.connectionService.updateSecrets(
       param(c, 'workspaceId'),
       c.req.valid('json').secrets,
@@ -65,14 +59,12 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, unregisterRunnerPoolContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     await runners.connectionService.unregister(param(c, 'workspaceId'))
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, describeRunnerPoolProviderContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     return c.json(
       await runners.connectionService.describeProvider(
         param(c, 'workspaceId'),
@@ -84,7 +76,6 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, testRunnerPoolConnectionContract, async (c) => {
     const runners = requireRunners(c)
-    if (!runners) return unavailable(c)
     return c.json(
       await runners.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
       200,

@@ -15,6 +15,7 @@ import type {
   ModelProvider,
   ModelProviderResolver,
   ModelScope,
+  StoreAgentContextGate,
 } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 import { openAiCompatibleBaseUrlError } from './providerErrors.js'
@@ -50,8 +51,19 @@ export interface ScopedModelProviderOptions {
   localEndpointsFor?: (
     userId: string,
   ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
-  /** Wrap the scoped provider so inline calls feed the trace sink (Langfuse). */
-  instrument?: { traceSink: LlmTraceSink; recordPrompts?: boolean }
+  /**
+   * Wrap the scoped provider so inline calls feed the trace sink (Langfuse/OTel).
+   *
+   * `bodiesEnabled` is REQUIRED whenever instrumentation is on: it is the per-workspace
+   * `storeAgentContext` gate, built from kernel's shared `createStoreAgentContextGate` — the
+   * same factory the proxied path uses. Without it an opted-out workspace's inline prompt and
+   * response bodies still reach the external sink (observability-logging-gaps.md, C2).
+   */
+  instrument?: {
+    traceSink: LlmTraceSink
+    recordPrompts?: boolean
+    bodiesEnabled: StoreAgentContextGate
+  }
 }
 
 export function createScopedModelProviderResolver(
@@ -102,6 +114,7 @@ export function createScopedModelProviderResolver(
           inner: composite,
           traceSink: opts.instrument.traceSink,
           recordPrompts: opts.instrument.recordPrompts,
+          bodiesEnabled: opts.instrument.bodiesEnabled,
           logger,
         })
       }

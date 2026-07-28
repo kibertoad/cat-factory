@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   createRiskPolicyContract,
   deleteRiskPolicyContract,
@@ -13,13 +14,12 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the merge-preset module or send a 503, returning null when unconfigured. */
-function requireRiskPolicies<E extends AppEnv>(c: Context<E>): RiskPoliciesModule | null {
-  return c.get('container').riskPolicies ?? null
+/** Resolve the merge-preset module or raise a 503 — it isn't wired on this deployment. */
+function requireRiskPolicies<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
+  const riskPolicies = c.get('container').riskPolicies
+  if (!riskPolicies) throw new UnavailableError('Risk policies are not configured')
+  return riskPolicies
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Risk policies are not configured' } }, 503)
 
 /**
  * CRUD for a workspace's merge threshold presets (the library a task picks its
@@ -32,20 +32,17 @@ export function riskPolicyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listRiskPoliciesContract, async (c) => {
     const presets = requireRiskPolicies(c)
-    if (!presets) return unavailable(c)
     return c.json(await presets.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, createRiskPolicyContract, async (c) => {
     const presets = requireRiskPolicies(c)
-    if (!presets) return unavailable(c)
     const preset = await presets.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(preset, 201)
   })
 
   buildHonoRoute(app, updateRiskPolicyContract, async (c) => {
     const presets = requireRiskPolicies(c)
-    if (!presets) return unavailable(c)
     const preset = await presets.service.update(
       param(c, 'workspaceId'),
       c.req.valid('param').presetId,
@@ -56,14 +53,12 @@ export function riskPolicyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteRiskPolicyContract, async (c) => {
     const presets = requireRiskPolicies(c)
-    if (!presets) return unavailable(c)
     await presets.service.remove(param(c, 'workspaceId'), c.req.valid('param').presetId)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, reseedRiskPolicyContract, async (c) => {
     const presets = requireRiskPolicies(c)
-    if (!presets) return unavailable(c)
     const preset = await presets.service.reseed(
       param(c, 'workspaceId'),
       c.req.valid('param').presetId,

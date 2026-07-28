@@ -1,5 +1,10 @@
 import { Hono } from 'hono'
-import { isTaskSourceKind, trackerWebhookSecret } from '@cat-factory/kernel'
+import {
+  UnauthorizedError,
+  UnavailableError,
+  isTaskSourceKind,
+  trackerWebhookSecret,
+} from '@cat-factory/kernel'
 import type { TrackerWebhookDelivery } from '@cat-factory/kernel'
 import { webhookBodyLimit } from '../../webhooks/bodyLimit.js'
 import { logger } from '../../observability/logger.js'
@@ -34,10 +39,7 @@ export function taskWebhookController(): Hono<AppEnv> {
     const tasks = container.tasks
     const trackerWebhook = container.trackerWebhook
     if (!tasks || !trackerWebhook) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Task sources are not configured' } },
-        503,
-      )
+      throw new UnavailableError('Task sources are not configured')
     }
 
     // A provider with no webhook capability 404s rather than 503s: unlike an unconfigured
@@ -58,10 +60,7 @@ export function taskWebhookController(): Hono<AppEnv> {
       // Fail CLOSED on an unconfigured secret: an empty HMAC key is one an attacker also has, so
       // this must never degrade to "accept anything". 503 (not 401) because the remedy is the
       // operator's — mint a secret on the connection — not the caller's.
-      return c.json(
-        { error: { code: 'unavailable', message: 'No webhook secret configured' } },
-        503,
-      )
+      throw new UnavailableError('No webhook secret configured')
     }
 
     // Verify against the RAW bytes before parsing. Hono's `header()` (no arg) returns every header
@@ -85,7 +84,7 @@ export function taskWebhookController(): Hono<AppEnv> {
           `returned value into the tracker.`,
         { event: 'tracker_webhook_signature_rejected', source: sourceParam, workspaceId },
       )
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
+      throw new UnauthorizedError('Invalid signature')
     }
 
     // Verified but unrecognised ⇒ ack. Trackers send far more event kinds than we consume, and

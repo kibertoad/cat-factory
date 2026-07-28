@@ -10,6 +10,7 @@ import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { requireCapability } from '../../http/guards.js'
 
 /** Resolve the incident-enrichment module or send a 503, returning null when unconfigured. */
 function requireIncidentEnrichment<E extends AppEnv>(
@@ -17,17 +18,6 @@ function requireIncidentEnrichment<E extends AppEnv>(
 ): IncidentEnrichmentModule | null {
   return c.get('container').incidentEnrichmentSettings ?? null
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The incident-enrichment integration is not configured',
-      },
-    },
-    503,
-  )
 
 /**
  * Per-workspace incident-enrichment settings (PagerDuty + incident.io). The credentials
@@ -39,20 +29,26 @@ export function incidentEnrichmentController(): Hono<AppEnv> {
   app.use('*', requireWorkspacePermission('settings.manage'))
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     return c.json(await ie.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, setIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     await ie.service.deleteConnection(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

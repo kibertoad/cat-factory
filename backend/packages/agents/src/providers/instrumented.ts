@@ -7,6 +7,7 @@ import type {
   Logger,
   ModelProvider,
   ModelRef,
+  StoreAgentContextGate,
 } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
@@ -117,6 +118,7 @@ export class InstrumentedModelProvider implements ModelProvider {
   private readonly inner: ModelProvider
   private readonly traceSink: LlmTraceSink
   private readonly recordPrompts: boolean
+  private readonly bodiesEnabled: StoreAgentContextGate
   private readonly now: () => number
   private readonly log: Logger
 
@@ -125,6 +127,18 @@ export class InstrumentedModelProvider implements ModelProvider {
     traceSink: LlmTraceSink
     /** Honour the same `LLM_RECORD_PROMPTS` switch as the local store; default true. */
     recordPrompts?: boolean
+    /**
+     * The per-workspace `storeAgentContext` half of the double gate, built by the facade from
+     * kernel's `createStoreAgentContextGate` — the SAME factory the proxy path's
+     * `LlmObservabilityService` uses.
+     *
+     * REQUIRED, not optional, and for the reason `CoreDependencies.logger` is: this gate was
+     * absent here entirely, so the inline path (judges, consensus, the requirements writer,
+     * every inline kind) honoured only the deployment-wide switch and shipped an opted-out
+     * workspace's prompt and response bodies to Langfuse/OTel. An optional privacy gate is one
+     * a facade can forget, and forgetting it is silent (observability-logging-gaps.md, C2).
+     */
+    bodiesEnabled: StoreAgentContextGate
     /** Injectable clock (tests); defaults to `Date.now`. */
     now?: () => number
     /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
@@ -133,6 +147,7 @@ export class InstrumentedModelProvider implements ModelProvider {
     this.inner = deps.inner
     this.traceSink = deps.traceSink
     this.recordPrompts = deps.recordPrompts ?? true
+    this.bodiesEnabled = deps.bodiesEnabled
     this.now = deps.now ?? (() => Date.now())
     this.log = (deps.logger ?? noopLogger).child({ scope: 'inlineLlmTrace' })
   }
@@ -178,33 +193,40 @@ export class InstrumentedModelProvider implements ModelProvider {
     const endedAt = this.now()
     const context = readInlineObservabilityContext(params)
     const usage = readUsage((result as { usage?: unknown })?.usage)
-    const event: LlmGenerationEvent = {
-      workspaceId: context.workspaceId ?? null,
-      executionId: context.executionId ?? null,
-      agentKind: context.agentKind,
-      provider: ref.provider,
-      model: ref.model,
-      startedAt,
-      endedAt,
-      promptTokens: usage.prompt,
-      cacheReadTokens: usage.cacheRead,
-      cacheWriteTokens: usage.cacheWrite,
-      completionTokens: usage.completion,
-      totalTokens: usage.total,
-      finishReason: ok ? readFinishReason(result) : null,
-      ok,
-      errorMessage: errMessage,
-      input: this.recordPrompts ? safeJson((params as { prompt?: unknown })?.prompt) : '',
-      output: this.recordPrompts && ok ? readOutputText(result) : '',
-    }
+    const workspaceId = context.workspaceId ?? null
     // Best-effort and fully isolated — instrumentation must never break the LLM call.
     // `runBestEffort` covers the synchronous build/dispatch throw as well as the rejection,
-    // which is what the `try` around the old `.catch(() => {})` was there for.
+    // which is what the `try` around the old `.catch(() => {})` was there for. The workspace
+    // gate is read INSIDE it: the read is async (a cached settings lookup) and its failure must
+    // not escape into the model call either.
     void runBestEffort(
       this.log,
       'traceSink.recordGeneration',
-      () => this.traceSink.recordGeneration(event),
-      { workspaceId: event.workspaceId, executionId: event.executionId, source: 'inline' },
+      async () => {
+        // Numeric telemetry always exports; only the BODIES answer to the double gate.
+        const recordBodies = this.recordPrompts && (await this.bodiesEnabled(workspaceId))
+        const event: LlmGenerationEvent = {
+          workspaceId,
+          executionId: context.executionId ?? null,
+          agentKind: context.agentKind,
+          provider: ref.provider,
+          model: ref.model,
+          startedAt,
+          endedAt,
+          promptTokens: usage.prompt,
+          cacheReadTokens: usage.cacheRead,
+          cacheWriteTokens: usage.cacheWrite,
+          completionTokens: usage.completion,
+          totalTokens: usage.total,
+          finishReason: ok ? readFinishReason(result) : null,
+          ok,
+          errorMessage: errMessage,
+          input: recordBodies ? safeJson((params as { prompt?: unknown })?.prompt) : '',
+          output: recordBodies && ok ? readOutputText(result) : '',
+        }
+        await this.traceSink.recordGeneration(event)
+      },
+      { workspaceId, executionId: context.executionId ?? null, source: 'inline' },
     )
   }
 }

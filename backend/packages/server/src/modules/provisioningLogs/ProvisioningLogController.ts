@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import { listProvisioningLogsContract, provisioningLogQuerySchema } from '@cat-factory/contracts'
 import { validate } from '@toad-contracts/core'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -7,13 +8,12 @@ import type { ProvisioningLogsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the provisioning-log module or send a 503, returning null when unconfigured. */
-function requireProvisioningLogs<E extends AppEnv>(c: Context<E>): ProvisioningLogsModule | null {
-  return c.get('container').provisioningLogs ?? null
+/** Resolve the provisioning-log module or raise a 503 — it isn't wired on this deployment. */
+function requireProvisioningLogs<E extends AppEnv>(c: Context<E>): ProvisioningLogsModule {
+  const provisioningLogs = c.get('container').provisioningLogs
+  if (!provisioningLogs) throw new UnavailableError('Provisioning log is not configured')
+  return provisioningLogs
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Provisioning log is not configured' } }, 503)
 
 /** Drop undefined query params so valibot's optionals don't see empty strings. */
 function presentQuery<E extends AppEnv>(c: Context<E>): Record<string, string> {
@@ -36,7 +36,6 @@ export function provisioningLogController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listProvisioningLogsContract, async (c) => {
     const logs = requireProvisioningLogs(c)
-    if (!logs) return unavailable(c)
     // Validate through the contract schema so an invalid query yields the same central
     // `{ code: 'validation' }` 400 every other route does (via `handleError`), instead of a
     // one-off envelope. `presentQuery` still drops empty/absent params so the optionals

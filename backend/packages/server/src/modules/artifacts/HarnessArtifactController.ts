@@ -1,3 +1,4 @@
+import { UnauthorizedError, UnavailableError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { bearerToken } from '../../auth/middleware.js'
@@ -59,18 +60,12 @@ export function harnessArtifactController(): Hono<AppEnv> {
       const container = c.get('container')
       const resolveStore = container.resolveBinaryArtifactStore
       if (!resolveStore) {
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
-          503,
-        )
+        throw new UnavailableError('Artifact storage not configured')
       }
       const secret = container.config.auth.sessionSecret
       if (!secret) {
         logger.error('artifact ingest: session secret not configured', { scope: 'artifactIngest' })
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact ingest not configured' } },
-          503,
-        )
+        throw new UnavailableError('Artifact ingest not configured')
       }
       const sessions = new ContainerSessionService({ secret })
       const session = await sessions.verify(bearerToken(c))
@@ -78,7 +73,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
         logger.warn('artifact ingest: invalid or expired session token', {
           scope: 'artifactIngest',
         })
-        return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired token' } }, 401)
+        throw new UnauthorizedError('Invalid or expired token')
       }
 
       // The store is the run's ACCOUNT's configured backend, resolved from the token's
@@ -86,10 +81,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
       // account's storage. Null ⇒ the account configured no storage.
       const store = await resolveStore(session.workspaceId)
       if (!store) {
-        return c.json(
-          { error: { code: 'unavailable', message: 'Artifact storage not configured' } },
-          503,
-        )
+        throw new UnavailableError('Artifact storage not configured')
       }
 
       // Refuse a grossly oversized body from Content-Length before it is buffered into memory; the

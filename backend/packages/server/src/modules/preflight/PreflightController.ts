@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import { runPreflightsContract } from '@cat-factory/contracts'
 import type { PreflightsModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -6,20 +7,12 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 
 /** Resolve the preflight module, or null when the host-probe runtime isn't wired (non-local facade). */
-function requirePreflight<E extends AppEnv>(c: Context<E>): PreflightsModule | null {
-  return c.get('container').preflight ?? null
+function requirePreflight<E extends AppEnv>(c: Context<E>): PreflightsModule {
+  const preflight = c.get('container').preflight
+  if (!preflight)
+    throw new UnavailableError('Preflight checks are not available on this deployment')
+  return preflight
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'Preflight checks are not available on this deployment',
-      },
-    },
-    503,
-  )
 
 /**
  * Run a set of preflight checks (machine-prerequisite probes with guided remediation) and return
@@ -32,7 +25,6 @@ export function preflightController(): Hono<AppEnv> {
 
   buildHonoRoute(app, runPreflightsContract, async (c) => {
     const preflight = requirePreflight(c)
-    if (!preflight) return unavailable(c)
     const { prerequisites } = c.req.valid('json')
     return c.json(await preflight.service.run(prerequisites), 200)
   })

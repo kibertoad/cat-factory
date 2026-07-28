@@ -19,7 +19,9 @@ import type {
   ResolveUserGitHubToken,
   SubscriptionActivationRepository,
   WorkspaceRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import { createStoreAgentContextGate } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import { type AppConfig, wrapResolverWithLimiter } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
@@ -88,6 +90,12 @@ export interface NodeModelDepsInput {
   ) => ModelProviderResolver
   cloudflareModelsEnabled?: boolean
   caches?: AppCaches
+  /**
+   * The per-workspace settings source, so inline trace export answers to the SAME
+   * `storeAgentContext` opt-out the proxied path honours. Absent ⇒ no per-workspace opinion
+   * exists and the deployment switch alone governs (observability-logging-gaps.md, C2).
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
 }
 
 /**
@@ -117,6 +125,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     wrapModelProviderResolver,
     cloudflareModelsEnabled: cloudflareModelsEnabledOverride,
     caches,
+    workspaceSettingsRepository,
   } = input
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
@@ -199,7 +208,18 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     db,
     apiKeys,
     localModelEndpoints,
-    traceSink ? { traceSink, recordPrompts: config.observability.recordPrompts } : undefined,
+    traceSink
+      ? {
+          traceSink,
+          recordPrompts: config.observability.recordPrompts,
+          // The per-workspace half of the double gate, from the SAME kernel factory the
+          // proxied path uses — keep this in step with the Worker's wiring.
+          bodiesEnabled: createStoreAgentContextGate({
+            workspaceSettingsRepository,
+            workspaceSettingsCache: caches?.workspaceSettings,
+          }),
+        }
+      : undefined,
   )
   const wrappedModelProviderResolver = wrapModelProviderResolver
     ? wrapModelProviderResolver(baseModelProviderResolver, {

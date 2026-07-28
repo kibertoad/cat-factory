@@ -1,3 +1,4 @@
+import { UnauthorizedError } from '@cat-factory/kernel'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { AppEnv } from '../http/env.js'
 import { signerFor, TOKEN_AUDIENCE, type SessionPayload } from './signing.js'
@@ -61,7 +62,7 @@ export function requireAuth<E extends AppEnv>(): MiddlewareHandler<E> {
     // No (valid) session. When auth is on, that's a 401. When off, the local-dev escape
     // hatch passes through anonymously (open API for dev/tests); otherwise fail closed.
     if (cfg.enabled) {
-      return c.json({ error: { code: 'unauthorized', message: 'Authentication required' } }, 401)
+      throw new UnauthorizedError('Authentication required')
     }
     if (cfg.devOpen) return next()
     return c.json(

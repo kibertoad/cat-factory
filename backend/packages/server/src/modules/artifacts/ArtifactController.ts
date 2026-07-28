@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit'
 import type { BinaryArtifactKind, BinaryArtifactStore } from '@cat-factory/kernel'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { requireCapability } from '../../http/guards.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
@@ -17,16 +18,10 @@ import {
  * backend), or null when none is configured (the caller then 503s). All routes here are
  * mounted under `/workspaces/:workspaceId`.
  */
-async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArtifactStore | null> {
+async function resolveStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArtifactStore | null> {
   const resolve = c.get('container').resolveBinaryArtifactStore
   return resolve ? resolve(param(c, 'workspaceId')) : null
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Binary-artifact storage is not configured' } },
-    503,
-  )
 
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
 
@@ -52,8 +47,10 @@ export function artifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const store = await requireStore(c)
-      if (!store) return unavailable(c)
+      const store = requireCapability(
+        await resolveStore(c),
+        'Binary-artifact storage is not configured',
+      )
       // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
       // into memory; the exact per-file ceiling is still enforced after parsing below.
       if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
@@ -118,8 +115,10 @@ export function artifactController(): Hono<AppEnv> {
 
   // Stream a stored blob's bytes (the metadata names its content type).
   app.get('/artifacts/:id/blob', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    const store = requireCapability(
+      await resolveStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const workspaceId = param(c, 'workspaceId')
     const id = param(c, 'id')
     // Read metadata + bytes in a SINGLE metadata lookup (the serve path needs both the
@@ -140,8 +139,10 @@ export function artifactController(): Hono<AppEnv> {
 
   // List a run's artifacts (metadata only; the gate pairs screenshots vs references by view).
   app.get('/executions/:executionId/artifacts', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    const store = requireCapability(
+      await resolveStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const artifacts = await store.listByExecution(param(c, 'workspaceId'), param(c, 'executionId'))
     return c.json({ artifacts }, 200)
   })
@@ -149,8 +150,10 @@ export function artifactController(): Hono<AppEnv> {
   // List a block's artifacts (e.g. its uploaded reference design images, which carry no
   // executionId because they're attached before any run).
   app.get('/blocks/:blockId/artifacts', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    const store = requireCapability(
+      await resolveStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json({ artifacts }, 200)
   })

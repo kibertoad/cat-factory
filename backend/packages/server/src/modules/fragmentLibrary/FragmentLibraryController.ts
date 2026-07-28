@@ -13,7 +13,13 @@ import {
   unlinkFragmentSourceContract,
   updatePromptFragmentContract,
 } from '@cat-factory/contracts'
-import { NotFoundError, ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
+import {
+  NotFoundError,
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+  type FragmentOwnerKind,
+} from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -25,37 +31,18 @@ import { loadWorkspaceAccess, requireWorkspacePermission } from '../../http/work
 type Scope = 'account' | 'workspace'
 
 /** Resolve the fragment-library module or send a 503 when unconfigured. */
-function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule | null {
-  return c.get('container').fragmentLibrary ?? null
+function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule {
+  const fragmentLibrary = c.get('container').fragmentLibrary
+  if (!fragmentLibrary) throw new UnavailableError('Prompt-fragment library is not configured')
+  return fragmentLibrary
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Prompt-fragment library is not configured' } },
-    503,
-  )
+const sourcesUnavailable = () =>
+  new UnavailableError('Repo-sourced fragments require the GitHub integration to be configured')
 
-const sourcesUnavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'Repo-sourced fragments require the GitHub integration to be configured',
-      },
-    },
-    503,
-  )
-
-const documentsUnavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message:
-          'Document-backed fragments require the document-source integration to be configured',
-      },
-    },
-    503,
+const documentsUnavailable = () =>
+  new UnavailableError(
+    'Document-backed fragments require the document-source integration to be configured',
   )
 
 /**
@@ -94,20 +81,17 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   buildHonoRoute(app, listPromptFragmentsContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     return c.json(await lib.libraryService.listTier(ownerKind, ownerId(c)), 200)
   })
 
   buildHonoRoute(app, createPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     const fragment = await lib.libraryService.create(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(fragment, 201)
   })
 
   buildHonoRoute(app, updatePromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     const fragment = await lib.libraryService.update(
       ownerKind,
       ownerId(c),
@@ -119,7 +103,6 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   buildHonoRoute(app, deletePromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     await lib.libraryService.remove(ownerKind, ownerId(c), c.req.valid('param').fragmentId)
     return c.body(null, 204)
   })
@@ -130,16 +113,9 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // exactly like a document fragment's fetch). 503 when no model is wired for the deployment.
   buildHonoRoute(app, generatePromptFragmentTitleContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
     if (!lib.titleService?.enabled) {
-      return c.json(
-        {
-          error: {
-            code: 'unavailable',
-            message: 'Fragment-title generation requires a model provider to be configured',
-          },
-        },
-        503,
+      throw new UnavailableError(
+        'Fragment-title generation requires a model provider to be configured',
       )
     }
     const viaWorkspaceId =
@@ -170,8 +146,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // body's `viaWorkspaceId` at the account scope (credentials are per-workspace).
   buildHonoRoute(app, createDocumentFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!c.get('container').documents) return documentsUnavailable(c)
+    if (!c.get('container').documents) throw documentsUnavailable()
     const input = c.req.valid('json')
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (input.viaWorkspaceId ?? '')
@@ -202,8 +177,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // Force an immediate live re-resolve of a document-backed fragment.
   buildHonoRoute(app, refreshPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!c.get('container').documents) return documentsUnavailable(c)
+    if (!c.get('container').documents) throw documentsUnavailable()
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
     if (!viaWorkspaceId) {
@@ -233,31 +207,27 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   buildHonoRoute(app, listFragmentSourcesContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(await lib.sourceService.list(ownerKind, ownerId(c)), 200)
   })
 
   buildHonoRoute(app, linkFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     const source = await lib.sourceService.link(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(source, 201)
   })
 
   buildHonoRoute(app, unlinkFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     await lib.sourceService.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, fragmentSourceStatusContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(
       await lib.sourceService.status(ownerKind, ownerId(c), c.req.valid('param').id),
       200,
@@ -266,8 +236,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   buildHonoRoute(app, syncFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable(c)
-    if (!lib.sourceService) return sourcesUnavailable(c)
+    if (!lib.sourceService) throw sourcesUnavailable()
     return c.json(await lib.sourceService.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
@@ -276,7 +245,6 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   if (scope === 'workspace') {
     buildHonoRoute(app, resolvedFragmentsContract, async (c) => {
       const lib = requireLibrary(c)
-      if (!lib) return unavailable(c)
       return c.json(await lib.libraryService.resolvedCatalog(param(c, 'workspaceId')), 200)
     })
   }
@@ -318,10 +286,7 @@ async function requireViaWorkspaceAccess(
 async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
   const user = c.get('user')
   if (!user) {
-    return c.json(
-      { error: { code: 'unauthorized', message: 'Sign in to manage the library' } },
-      401,
-    )
+    throw new UnauthorizedError('Sign in to manage the library')
   }
   // requireMember throws NotFoundError (→ 404) when the user isn't a member.
   await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)

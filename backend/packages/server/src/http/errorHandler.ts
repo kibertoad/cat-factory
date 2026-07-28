@@ -14,6 +14,13 @@ const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
   // Forbidden: the caller sees the resource but lacks the capability (workspace RBAC).
   // A caller who may not even see the resource gets a 404, never this — see ForbiddenError.
   forbidden: 403,
+  // Unauthorized: no credential, or one this deployment can't accept. Sign in / present a key.
+  unauthorized: 401,
+  // Service Unavailable: the capability isn't wired here (an opt-in integration the container
+  // has no module for), or its dependency is down.
+  unavailable: 503,
+  // Too Many Requests: a limiter refused the call; `details` may carry a retry hint.
+  rate_limited: 429,
 }
 
 /** Maps domain errors to HTTP responses; anything else is a 500. */

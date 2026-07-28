@@ -3,7 +3,9 @@ import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/inte
 import {
   type LlmTraceSink,
   type ModelProviderResolver,
+  type StoreAgentContextGate,
   composeTraceSinks,
+  createStoreAgentContextGate,
 } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
@@ -23,6 +25,11 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 export interface InlineInstrument {
   traceSink: LlmTraceSink
   recordPrompts: boolean
+  /**
+   * The per-workspace `storeAgentContext` gate. Required alongside the sink so an opted-out
+   * workspace's inline prompt/response bodies never reach it (observability-logging-gaps.md, C2).
+   */
+  bodiesEnabled: StoreAgentContextGate
 }
 
 /**
@@ -53,7 +60,14 @@ function buildInstrumentFromEnv(env: NodeJS.ProcessEnv): InlineInstrument | unde
       : undefined
   const traceSink = composeTraceSinks([langfuseSink, otelSink])
   return traceSink
-    ? { traceSink, recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' }
+    ? {
+        traceSink,
+        recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
+        // This fallback has no repository handle, so there is no per-workspace opinion to
+        // consult; the gate defers to the deployment switch, exactly as the real build does
+        // for a facade that wired no settings store.
+        bodiesEnabled: createStoreAgentContextGate({}),
+      }
     : undefined
 }
 

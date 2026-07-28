@@ -34,6 +34,16 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
 - `auth/` — HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
+- `http/errorHandler.ts` + `http/guards.ts` — the **single error-envelope funnel**. Every facade
+  mounts `handleError` as `app.onError`, so a controller REFUSES by throwing a kernel
+  `DomainError` and never by building `c.json({ error: { code } }, status)` itself: the envelope
+  literal cannot carry `details.reason` (the SPA's machine-readable remedy hook) and is invisible
+  to any future request-logging middleware. `guards.ts` holds the two total accessors this makes
+  possible — `requireCapability(value, message)` (an unwired opt-in module → 503) and
+  `requireUser(c, message)` (no signed-in user → 401), the siblings of `params.ts`'s `param()`.
+  The LLM/web-search proxy pair is the deliberate exception: it must RECORD the failure on the
+  call metric before responding and answers statuses (402/413/502) no domain class covers, so it
+  hand-builds — with a `code`, never without one.
 - `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
   `requireWorkspacePermission` — the admin-tier controller middleware) and `optionalJsonBody`

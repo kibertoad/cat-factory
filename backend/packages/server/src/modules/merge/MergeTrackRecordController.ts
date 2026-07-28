@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import { listMergeClassRollupsContract, tagMergeReviewEffortContract } from '@cat-factory/contracts'
 import type { MergeTrackRecordModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -6,13 +7,12 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the merge track-record module or send a 503, returning null when unconfigured. */
-function requireTrackRecords<E extends AppEnv>(c: Context<E>): MergeTrackRecordModule | null {
-  return c.get('container').mergeTrackRecords ?? null
+/** Resolve the merge track-record module or raise a 503 — it isn't wired on this deployment. */
+function requireTrackRecords<E extends AppEnv>(c: Context<E>): MergeTrackRecordModule {
+  const mergeTrackRecords = c.get('container').mergeTrackRecords
+  if (!mergeTrackRecords) throw new UnavailableError('Merge track records are not configured')
+  return mergeTrackRecords
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Merge track records are not configured' } }, 503)
 
 /**
  * The merge track record's read + tag surface: the per-change-class rollups the preset editor
@@ -30,7 +30,6 @@ export function mergeTrackRecordController(): Hono<AppEnv> {
   // never fans out per class.
   buildHonoRoute(app, listMergeClassRollupsContract, async (c) => {
     const records = requireTrackRecords(c)
-    if (!records) return unavailable(c)
     return c.json(await records.service.rollups(param(c, 'workspaceId')), 200)
   })
 
@@ -39,7 +38,6 @@ export function mergeTrackRecordController(): Hono<AppEnv> {
   // `merge_tag_request` nudge, or the inspector's merge controls.
   buildHonoRoute(app, tagMergeReviewEffortContract, async (c) => {
     const records = requireTrackRecords(c)
-    if (!records) return unavailable(c)
     const updated = await records.service.tag(
       param(c, 'workspaceId'),
       c.req.valid('param').recordId,

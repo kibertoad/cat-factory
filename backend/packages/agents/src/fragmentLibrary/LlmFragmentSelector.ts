@@ -93,7 +93,12 @@ export class LlmFragmentSelector implements FragmentSelector {
         // Headroom for a reasoning model's `<think>` before the (small) id list —
         // a tight cap truncates the output before any ids are emitted.
         maxOutputTokens: 5000,
-        providerOptions: catFactoryObservability({ agentKind: 'fragment-selector' }),
+        // The workspace RIDES the tag: the inline trace export's body gate is per-workspace, so
+        // an untagged call cannot be checked against its opt-out and is refused its bodies.
+        providerOptions: catFactoryObservability({
+          agentKind: 'fragment-selector',
+          workspaceId: context.workspaceId,
+        }),
       })
       const ids = extractIds(text, new Set(candidates.map((c) => c.id)))
       return ids ?? fallback()

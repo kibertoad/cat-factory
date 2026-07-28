@@ -10,6 +10,7 @@ import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { requireCapability, requireUser } from '../../http/guards.js'
 import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
 
 // Per-USER infra handler overrides (local mode). A developer points a provision type at
@@ -19,18 +20,6 @@ import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
 // the local facade (it wires `environmentUserHandlerRepository`), so these endpoints 503 on
 // the Worker/Node facades — the local-only behaviour is enforced by container wiring, not a
 // runtime branch here. See docs/initiatives/per-service-provision-types.md.
-
-const signInRequired = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unauthorized', message: 'Sign in to manage environment handler overrides' } },
-    401,
-  )
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Per-user environment handlers are not configured' } },
-    503,
-  )
 
 /**
  * Workspace-RBAC (workspace-rbac initiative, slice 7). These routes are mounted at `/`, OUTSIDE
@@ -59,6 +48,10 @@ async function requireRunsExecute<E extends AppEnv>(
   }
 }
 
+/** The signed-in user, or a 401 naming the action. */
+const requireSignedIn = <E extends AppEnv>(c: Context<E>) =>
+  requireUser(c, 'Sign in to manage environment handler overrides')
+
 export function environmentUserHandlerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -67,23 +60,25 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
   // wired, so an unwired facade never reveals a board's existence to a non-member.
 
   buildHonoRoute(app, listEnvironmentUserHandlersContract, async (c) => {
-    const user = c.get('user')
-    if (!user) return signInRequired(c)
+    const user = requireSignedIn(c)
     const workspaceId = c.req.valid('param').workspaceId
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    const svc = requireCapability(
+      c.get('container').environments?.userHandlerService,
+      'Per-user environment handlers are not configured',
+    )
     const handlers = await svc.list(user.id, workspaceId)
     return c.json({ handlers }, 200)
   })
 
   buildHonoRoute(app, upsertEnvironmentUserHandlerContract, async (c) => {
-    const user = c.get('user')
-    if (!user) return signInRequired(c)
+    const user = requireSignedIn(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    const svc = requireCapability(
+      c.get('container').environments?.userHandlerService,
+      'Per-user environment handlers are not configured',
+    )
     // The provision type comes from the path; the body's value is overridden by it.
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const view = await svc.upsert(user.id, workspaceId, {
@@ -94,12 +89,13 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, removeEnvironmentUserHandlerContract, async (c) => {
-    const user = c.get('user')
-    if (!user) return signInRequired(c)
+    const user = requireSignedIn(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    const svc = requireCapability(
+      c.get('container').environments?.userHandlerService,
+      'Per-user environment handlers are not configured',
+    )
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const manifestId = c.req.valid('query').manifestId ?? null
     await svc.remove(user.id, workspaceId, provisionType, manifestId)

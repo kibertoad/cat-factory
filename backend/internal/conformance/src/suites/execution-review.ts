@@ -779,6 +779,37 @@ export function defineExecutionReviewConformance(harness: ConformanceHarness): v
       expect(companionStep.state).not.toBe('done')
     })
 
+    it("carries a mid-advance DomainError's machine reason onto AgentFailure.reason", async () => {
+      // The SPA's `AgentFailureCard` branches on `failure.reason` to render its remedies (the
+      // "Connect GitHub" jump, the deploy-runner hint). A `DomainError` raised inside the engine
+      // already knows the cause code, but the driver has to LIFT it off the thrown error onto the
+      // persisted failure — and the Cloudflare driver's `failRun` helper had no `reason` parameter
+      // at all, so on the deployed runtime every remedy branch was dead while Node's worked.
+      // Asserted here because the two drivers are the thing that can diverge, and only a
+      // both-runtimes assertion catches a one-runtime hole (observability-logging-gaps.md, B3).
+      const app = harness.makeApp({
+        runThrowReason: { kinds: ['coder'], reason: 'agent_backend_unconfigured' },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build only',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('failed')
+      expect(exec.failure?.reason).toBe('agent_backend_unconfigured')
+      // The prose survives alongside the code — the reason supplements the message, never
+      // replaces it (an operator still needs to read what happened).
+      expect(exec.failure?.message).toContain('No agent backend is configured')
+    })
+
     it('classifies a container-start (dispatch) failure as `dispatch`, not a generic run failure', async () => {
       // When the container/runner never accepts the job (startJob throws), the engine
       // must classify it as a `dispatch` failure ("Container failed to start") and carry

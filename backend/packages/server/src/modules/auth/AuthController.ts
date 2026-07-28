@@ -31,8 +31,16 @@ import {
 } from '../../auth/signing.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
+import { requireCapability } from '../../http/guards.js'
 import type { UserRecord, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  NotFoundError,
+  RateLimitedError,
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
 // fragment for OAuth redirects, or the JSON body for password login) which it carries
@@ -58,8 +66,9 @@ interface OAuthState {
   exp: number
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Authentication is not configured' } }, 503)
+/** The login method the request asked for isn't enabled on this deployment (→ 503). */
+const AUTH_UNAVAILABLE = 'Authentication is not configured'
+const authUnavailable = () => new UnavailableError(AUTH_UNAVAILABLE)
 
 function authConfig<E extends AppEnv>(c: Context<E>): AuthConfig {
   return c.get('container').config.auth
@@ -272,11 +281,7 @@ function passwordAttemptLimited<E extends AppEnv>(c: Context<E>, email: string):
   return recent.length > MAX_ATTEMPTS
 }
 
-const tooManyAttempts = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'rate_limited', message: 'Too many attempts. Please try again later.' } },
-    429,
-  )
+const tooManyAttempts = () => new RateLimitedError('Too many attempts. Please try again later.')
 
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -328,7 +333,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, githubLoginContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.githubEnabled) return unavailable(c)
+    if (!cfg.githubEnabled) throw authUnavailable()
     const nonce = crypto.randomUUID()
     const state: OAuthState = {
       aud: TOKEN_AUDIENCE.oauthState,
@@ -355,7 +360,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, githubCallbackContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.githubEnabled) return unavailable(c)
+    if (!cfg.githubEnabled) throw authUnavailable()
     const state = await consumeState(c, cfg)
     const code = c.req.query('code')
     if (!code || !state) {
@@ -400,8 +405,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, googleLoginContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable(c)
+    const google = requireCapability(googleClient(cfg), AUTH_UNAVAILABLE)
     const nonce = crypto.randomUUID()
     const state: OAuthState = {
       aud: TOKEN_AUDIENCE.oauthState,
@@ -425,8 +429,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, googleCallbackContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable(c)
+    const google = requireCapability(googleClient(cfg), AUTH_UNAVAILABLE)
     const state = await consumeState(c, cfg)
     const code = c.req.query('code')
     if (!code || !state) {
@@ -475,9 +478,9 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, signupContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) throw authUnavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (passwordAttemptLimited(c, body.email)) throw tooManyAttempts()
     const container = c.get('container')
 
     // New-user creation is gated: an invite addressed to this email OR an allowlisted
@@ -518,12 +521,12 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, passwordLoginContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) throw authUnavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (passwordAttemptLimited(c, body.email)) throw tooManyAttempts()
     const user = await c.get('container').userService.verifyPassword(body)
     if (!user) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid email or password' } }, 401)
+      throw new UnauthorizedError('Invalid email or password')
     }
     const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
@@ -542,15 +545,11 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, patLoginContract, async (c) => {
     const cfg = authConfig(c)
     const container = c.get('container')
-    const registry = container.vcsIdentity
-    if (!registry) return unavailable(c)
+    const registry = requireCapability(container.vcsIdentity, AUTH_UNAVAILABLE)
     const { provider, token } = c.req.valid('json')
     const entry = registry[provider]
     if (!entry) {
-      return c.json(
-        { error: { code: 'unavailable', message: `${provider} sign-in is not available` } },
-        503,
-      )
+      throw new UnavailableError(`${provider} sign-in is not available`)
     }
     const pat = token ?? entry.configuredToken
     if (!pat) {
@@ -566,15 +565,7 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     try {
       identity = await entry.resolver.resolveIdentity(pat)
     } catch {
-      return c.json(
-        {
-          error: {
-            code: 'unauthorized',
-            message: `That ${provider} token is invalid or lacks the required access.`,
-          },
-        },
-        401,
-      )
+      throw new UnauthorizedError(`That ${provider} token is invalid or lacks the required access.`)
     }
     // Hosted facades (remote node) have no anonymous tier, so a PAT login is held to the same
     // login/org/domain allowlist as OAuth — a valid token alone must not admit an arbitrary
@@ -632,10 +623,7 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     const cfg = authConfig(c)
     const container = c.get('container')
     if (!container.repositories) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'This deployment is not a mothership' } },
-        503,
-      )
+      throw new UnavailableError('This deployment is not a mothership')
     }
     // Verify the presented bearer as a SESSION token (pinned `aud: session`), NOT via the
     // authGate — `/internal`-style machine calls bypass that gate, and pinning the audience
@@ -705,9 +693,9 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   // (or logs it when no system sender is configured) and never returns the raw token.
   buildHonoRoute(app, forgotPasswordContract, async (c) => {
     const cfg = authConfig(c)
-    if (!cfg.passwordEnabled) return unavailable(c)
+    if (!cfg.passwordEnabled) throw authUnavailable()
     const body = c.req.valid('json')
-    if (passwordAttemptLimited(c, body.email)) return tooManyAttempts(c)
+    if (passwordAttemptLimited(c, body.email)) throw tooManyAttempts()
     try {
       await c.get('container').passwordReset?.request(body.email)
     } catch {
@@ -723,13 +711,13 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, resetPasswordContract, async (c) => {
     const cfg = authConfig(c)
     const passwordReset = c.get('container').passwordReset
-    if (!cfg.passwordEnabled || !passwordReset) return unavailable(c)
+    if (!cfg.passwordEnabled || !passwordReset) throw authUnavailable()
     const body = c.req.valid('json')
     // Throttle per client IP, NOT per token: a brute-force attacker uses a fresh token
     // each guess, so keying on the token value would hand every guess its own bucket and
     // limit nothing. (Per-IP can't lock out a "victim" here — redeem is token-, not
     // email-, addressed.)
-    if (passwordAttemptLimited(c, 'reset-password')) return tooManyAttempts(c)
+    if (passwordAttemptLimited(c, 'reset-password')) throw tooManyAttempts()
     try {
       await passwordReset.reset(body.token, body.password)
       return c.body(null, 204)
@@ -772,11 +760,11 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, acceptInvitationContract, async (c) => {
     const user = await verifySession(c)
     if (!user) {
-      return c.json({ error: { code: 'unauthorized', message: 'Sign in to accept' } }, 401)
+      throw new UnauthorizedError('Sign in to accept')
     }
     const container = c.get('container')
     if (!container.invitations) {
-      return c.json({ error: { code: 'unavailable', message: 'Invitations not configured' } }, 503)
+      throw new UnavailableError('Invitations not configured')
     }
     try {
       const accountId = await container.invitations.accept(
@@ -786,9 +774,9 @@ function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
       )
       return c.json({ accountId }, 200)
     } catch (err) {
-      if (err instanceof ConflictError) {
-        return c.json({ error: { code: 'conflict', message: err.message } }, 409)
-      }
+      // A `ConflictError` is RETHROWN, not hand-mapped: `handleError` emits the identical
+      // 409 envelope AND carries the error's `details.reason`, which the hand-map dropped —
+      // the SPA's conflict handling keys off exactly that (observability-logging-gaps.md, B2).
       if (err instanceof NotFoundError) {
         return c.json({ error: { code: 'not_found', message: 'Invitation not found' } }, 404)
       }
@@ -805,7 +793,7 @@ function registerSessionRoutes(app: Hono<AppEnv>): void {
     const user = await verifySession(c)
     if (!user) {
       if (!authConfig(c).enabled) return c.json({ user: null, enabled: false }, 200)
-      return c.json({ error: { code: 'unauthorized', message: 'Not authenticated' } }, 401)
+      throw new UnauthorizedError('Not authenticated')
     }
     return c.json(
       {

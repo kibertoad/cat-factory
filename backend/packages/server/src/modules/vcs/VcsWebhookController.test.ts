@@ -4,6 +4,7 @@ import { defaultVcsRegistry, VcsProviderRegistry } from '@cat-factory/kernel'
 import type { VcsConnectionRef, VcsWebhookEvent } from '@cat-factory/kernel'
 import { vcsWebhookController } from './VcsWebhookController.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
+import { handleError } from '../../http/errorHandler.js'
 
 // Exercises the neutral ingest route's behaviour (resolve provider → verify → map → sink)
 // against a FAKE provider bundle registered on an injected `vcsRegistry` — the concrete GitLab
@@ -16,6 +17,9 @@ function appWith(container: Partial<ServerContainer>) {
     await next()
   })
   app.route('/vcs', vcsWebhookController())
+  // The controller refuses through thrown `DomainError`s (401/503), so the harness has to
+  // mount the same `onError` funnel both facades do — without it every refusal reads as a 500.
+  app.onError(handleError)
   return app
 }
 

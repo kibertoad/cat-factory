@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import { connectMothershipContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -25,14 +26,8 @@ export function mothershipConnectController(): Hono<AppEnv> {
   buildHonoRoute(app, connectMothershipContract, async (c) => {
     const connector = c.get('container').mothershipConnect
     if (!connector) {
-      return c.json(
-        {
-          error: {
-            code: 'unavailable',
-            message: 'Mothership connect is only available on a mothership-mode local node',
-          },
-        },
-        503,
+      throw new UnavailableError(
+        'Mothership connect is only available on a mothership-mode local node',
       )
     }
     const { session } = c.req.valid('json')

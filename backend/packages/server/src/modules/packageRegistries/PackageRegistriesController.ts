@@ -1,3 +1,4 @@
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   addPackageRegistryContract,
   deletePackageRegistryContract,
@@ -11,21 +12,13 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
-/** Resolve the package-registries module or send a 503, returning null when unconfigured. */
-function requirePackageRegistries<E extends AppEnv>(c: Context<E>): PackageRegistriesModule | null {
-  return c.get('container').packageRegistries ?? null
+/** Resolve the package-registries module or raise a 503 — it isn't wired on this deployment. */
+function requirePackageRegistries<E extends AppEnv>(c: Context<E>): PackageRegistriesModule {
+  const packageRegistries = c.get('container').packageRegistries
+  if (!packageRegistries)
+    throw new UnavailableError('The package-registry integration is not configured')
+  return packageRegistries
 }
-
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The package-registry integration is not configured',
-      },
-    },
-    503,
-  )
 
 /**
  * Per-workspace private package-registry entries (npm private orgs, GitHub Packages)
@@ -39,19 +32,16 @@ export function packageRegistriesController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listPackageRegistriesContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     return c.json(await registries.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, addPackageRegistryContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     return c.json(await registries.service.add(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deletePackageRegistryContract, async (c) => {
     const registries = requirePackageRegistries(c)
-    if (!registries) return unavailable(c)
     await registries.service.remove(param(c, 'workspaceId'), c.req.valid('param').entryId)
     return c.body(null, 204)
   })

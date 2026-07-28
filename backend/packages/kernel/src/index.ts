@@ -9,6 +9,9 @@ export {
   ConflictError,
   CredentialRequiredError,
   ForbiddenError,
+  UnauthorizedError,
+  UnavailableError,
+  RateLimitedError,
   RunContendedError,
   ReviewContendedError,
   assertFound,
@@ -361,6 +364,10 @@ export {
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
+export {
+  createStoreAgentContextGate,
+  type StoreAgentContextGate,
+} from './shared/agent-context-gate.js'
 export {
   type RepoScanEntry,
   type CheckoutFreeRepoReader,

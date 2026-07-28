@@ -1,3 +1,4 @@
+import { RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { GitHubInstallation, GitHubRepo } from '@cat-factory/kernel'
 import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
@@ -104,24 +105,13 @@ export function githubDelegationController(
       mintWindows.set(payload.nodeId, { windowStart: nowMs, count: 1 })
     } else if (++bucket.count > limit) {
       log.warn('github delegation: mint rate limit exceeded', { limit, windowMs })
-      return c.json(
-        { error: { code: 'rate_limited', message: 'too many token mints, retry shortly' } },
-        429,
-      )
+      throw new RateLimitedError('too many token mints, retry shortly')
     }
 
     const registry = container.repositories
     const delegation = container.githubTokenDelegation
     if (!registry || !delegation) {
-      return c.json(
-        {
-          error: {
-            code: 'unavailable',
-            message: 'GitHub token delegation is not enabled on this deployment',
-          },
-        },
-        503,
-      )
+      throw new UnavailableError('GitHub token delegation is not enabled on this deployment')
     }
 
     let body: { installationId?: unknown; forceRefresh?: unknown }
