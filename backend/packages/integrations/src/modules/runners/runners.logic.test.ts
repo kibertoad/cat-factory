@@ -14,10 +14,20 @@ describe('classifyJobStatus', () => {
     why: string
   }[] = [
     { raw: undefined, state: 'running', why: 'no status reported at all' },
+    { raw: '   ', state: 'running', why: 'a blank status is an ABSENT one, not a word' },
     { raw: 'running', state: 'running', why: 'the canonical literal' },
     { raw: 'RUNNING', state: 'running', why: 'case-insensitive' },
+    { raw: '  Evicted  ', state: 'failed', evicted: 'crash', why: 'padding is not a new word' },
     { raw: 'queued', state: 'running', why: 'a queue state is not a death' },
     { raw: 'provisioning', state: 'running', why: 'a queue state is not a death' },
+    {
+      raw: 'unschedulable',
+      state: 'running',
+      // Kubernetes reports `Unschedulable` on a PENDING pod while the cluster autoscales, so
+      // failing on it would kill a live run on its FIRST poll — the wrong-kill class this
+      // classification exists to avoid. A pool that means it terminally maps it explicitly.
+      why: 'a capacity wait, not a death',
+    },
     { raw: 'wibble', state: 'running', why: 'an unknown word must never kill a live run' },
     { raw: 'done', state: 'done', why: 'the canonical literal' },
     { raw: 'succeeded', state: 'done', why: 'a common success synonym' },
@@ -60,6 +70,15 @@ describe('classifyJobStatus', () => {
     })
   })
 
+  it('matches a statusMap entry through the same normalisation as the status', () => {
+    // Both sides fold to the comparison form, so an operator's pretty-cased/padded mapping
+    // entry still binds the scheduler's word — a mapping that silently missed would hand the
+    // run back to the built-in vocabulary and quietly ignore what the operator declared.
+    expect(classifyJobStatus('  Wibble ', [{ from: 'WIBBLE ', to: 'done' }])).toEqual({
+      state: 'done',
+    })
+  })
+
   it('never tags an eviction on a non-failed state', () => {
     // A manifest that (oddly) maps `evicted → running` gets exactly that: the eviction verdict
     // only qualifies a failure, it can never invent one.
@@ -89,12 +108,28 @@ describe('manifestWarnings', () => {
     const { release: _release, ...withoutRelease } = base
     const warnings = manifestWarnings(withoutRelease as RunnerPoolManifest)
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toContain('no release template')
+    expect(warnings[0]!.code).toBe('runner_manifest_no_release')
+    // The prose is the deployment log's copy (the SPA renders its own from the code), so it
+    // must name the manifest it is about — an operator may run several.
+    expect(warnings[0]!.message).toContain('no release template')
+    expect(warnings[0]!.message).toContain('acme-pool')
   })
 
   it('flags a manifest whose poll can never report an outcome', () => {
     const warnings = manifestWarnings({ ...base, response: {} })
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toContain('no status path')
+    expect(warnings[0]!.code).toBe('runner_manifest_no_status_path')
+    expect(warnings[0]!.message).toContain('no status path')
+  })
+
+  it('reports both gaps independently', () => {
+    // They are unrelated defects with unrelated fixes, so a manifest missing both must hear
+    // about both rather than the first one found.
+    const { release: _release, ...withoutRelease } = base
+    const warnings = manifestWarnings({ ...withoutRelease, response: {} } as RunnerPoolManifest)
+    expect(warnings.map((w) => w.code)).toEqual([
+      'runner_manifest_no_release',
+      'runner_manifest_no_status_path',
+    ])
   })
 })

@@ -234,7 +234,9 @@ export class MergeResolver {
    * threw left a `pr_ready` block with no inbox card: a task that LOOKS finished-and-waiting,
    * masking the failed run behind it. Raising first inverts the surviving failure into the
    * honest one — the run fails, the block stays where it was, and the failure is visible on the
-   * board (retryable) rather than dressed up as a PR awaiting review.
+   * board (retryable) rather than dressed up as a PR awaiting review. The new failure window
+   * this opens (card raised, flip failed) costs nothing on a replay: `NotificationService.raise`
+   * de-dupes the open card on (workspace, block, type), so the re-drive reuses the same row.
    */
   private async raiseReviewAndBlock(
     workspaceId: string,

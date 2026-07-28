@@ -1,4 +1,5 @@
 import type {
+  ConnectionWarning,
   ContainerEvictionKind,
   RunnerJobState,
   RunnerPoolManifest,
@@ -75,6 +76,13 @@ const EVICTION_STATUSES = new Set([
  * Scheduler status words that mean the job is OVER and did not succeed. Without these a
  * pool whose scheduler says `error` / `cancelled` reads as `running` and the run burns its
  * whole ~70-minute poll budget before failing `timeout` — a wedge with a misleading cause.
+ *
+ * Every word here must be TERMINAL in every vocabulary it could come from — a word that can
+ * also name a job still waiting for capacity belongs in neither this set nor
+ * {@link EVICTION_STATUSES}, so it falls back to `running`. `unschedulable` is the instructive
+ * exclusion: Kubernetes reports it as a condition on a PENDING pod while the cluster
+ * autoscales, so failing on it would kill a live run on its FIRST poll — the wrong-kill class
+ * this whole classification exists to avoid.
  */
 const FAILED_STATUSES = new Set([
   'failed',
@@ -91,11 +99,22 @@ const FAILED_STATUSES = new Set([
   'timed-out',
   'deadlineexceeded',
   'deadline_exceeded',
-  'unschedulable',
 ])
 
 /** Scheduler status words that mean the job finished successfully. */
 const DONE_STATUSES = new Set(['done', 'complete', 'completed', 'succeeded', 'success', 'finished'])
+
+/**
+ * Fold a status word (a scheduler's, or an operator's `statusMap.from`) to its comparison form.
+ * Both sides go through this, so a mapping entry and the status it means match whatever
+ * casing/padding either arrives with — a scheduler that pads or pretty-cases its enum
+ * (`' Evicted '`) is describing the same state as one that doesn't. Nothing left ⇒ undefined:
+ * a blank status is an ABSENT one, not a word to classify.
+ */
+function normalizeStatus(raw: string | undefined): string | undefined {
+  const lower = raw?.trim().toLowerCase()
+  return lower ? lower : undefined
+}
 
 /** A poll's classified outcome: the canonical job state plus, on a loss, the eviction flavour. */
 export interface RunnerJobStatusVerdict {
@@ -127,9 +146,11 @@ export function classifyJobStatus(
   raw: string | undefined,
   statusMap: { from: string; to: RunnerJobState }[] | undefined,
 ): RunnerJobStatusVerdict {
-  if (raw === undefined) return { state: 'running' }
-  const lower = raw.toLowerCase()
-  const mapped = statusMap?.find((m) => m.from.toLowerCase() === lower)?.to
+  const lower = normalizeStatus(raw)
+  // No status reported at all (no `statusPath`, an absent field, or a blank string): nothing to
+  // classify, so keep the driver waiting exactly as an unrecognised word does.
+  if (lower === undefined) return { state: 'running' }
+  const mapped = statusMap?.find((m) => normalizeStatus(m.from) === lower)?.to
   const state: RunnerJobState =
     mapped ??
     (FAILED_STATUSES.has(lower) || EVICTION_STATUSES.has(lower)
@@ -143,24 +164,32 @@ export function classifyJobStatus(
 }
 
 /**
- * Non-fatal gaps in a manifest worth telling the operator about at registration. A manifest
- * is valid without these — the pool still runs jobs — but each one silently costs a recovery
- * or cleanup path, which is invisible until an incident.
+ * Non-fatal gaps in a manifest worth telling the operator about. A manifest is valid without
+ * these — the pool still runs jobs — but each one silently costs a recovery or cleanup path,
+ * which is invisible until an incident.
+ *
+ * Each gap carries a machine-readable `code` beside its English `message` because it reaches
+ * two audiences with different needs: the deployment log takes the prose, while the connection
+ * test hands the code to the SPA, which owns the operator-facing (translated) copy.
  */
-export function manifestWarnings(manifest: RunnerPoolManifest): string[] {
-  const warnings: string[] = []
+export function manifestWarnings(manifest: RunnerPoolManifest): ConnectionWarning[] {
+  const warnings: ConnectionWarning[] = []
   if (!manifest.release) {
-    warnings.push(
-      `Manifest '${manifest.providerId}' defines no release template, so cancelling a run ` +
+    warnings.push({
+      code: 'runner_manifest_no_release',
+      message:
+        `Manifest '${manifest.providerId}' defines no release template, so cancelling a run ` +
         `cannot tell the pool to stop its job — an orphaned job keeps its runner until the ` +
         `pool reclaims it on its own.`,
-    )
+    })
   }
   if (!manifest.response.statusPath) {
-    warnings.push(
-      `Manifest '${manifest.providerId}' maps no status path, so every poll reads as still ` +
+    warnings.push({
+      code: 'runner_manifest_no_status_path',
+      message:
+        `Manifest '${manifest.providerId}' maps no status path, so every poll reads as still ` +
         `running and a job can only end by exhausting the run's poll budget.`,
-    )
+    })
   }
   return warnings
 }

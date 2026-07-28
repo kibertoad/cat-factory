@@ -371,13 +371,42 @@ instance.id`. The whole point of the card is that it is a `blocked` run's ONLY r
     resurrect it. The eviction check also runs on a status the manifest mapped to `failed`, so
     `{"from":"evicted","to":"failed"}` still gets the recovery — an operator naming their
     scheduler's word is describing the STATE, not declining the retry.
+  - **Every failure word must be terminal in EVERY vocabulary it could come from.** The first
+    cut had `unschedulable` in the failure set; Kubernetes reports it as a condition on a
+    PENDING pod while the cluster autoscales, so it would have killed a live run on its FIRST
+    poll — the same wrong-kill the bullet above declines. A word that can also mean "waiting
+    for capacity" belongs in no vocabulary; the manifest maps it when a pool means it
+    terminally. Both sides of a `statusMap` comparison are trimmed + lower-cased, so a padded
+    or pretty-cased enum still binds what the operator declared.
   - `crash`, not `transient`: a pool member is ordinary infrastructure, while `transient` is
     reserved for churn a facade knows is expected (a Cloudflare rollout).
-  - The release/status-path warning rides a new optional `warnings(config)` on
-    `RunnerBackendProvider`, logged once at `register()` — the connection service stays
-    kind-agnostic, and "wiring time" means the operator's action, not every dispatch (where
-    `resolve()` would re-log the same line on each job). `RunnerPoolConnectionService` gained
-    `logger?: Logger` (normalised to `noopLogger`), wired in all three composition roots.
+  - **A 404 is not proof of an eviction**, so the view's `error` leads with the raw status
+    (`Runner pool poll → 404: …`) and the scheduler's own message rides `detail`. A mistyped
+    `poll` template (the `dispatch` one can be right while it is wrong) and an endpoint that
+    404s an unauthorized read both land here, and an operator handed a bare "container evicted
+    or crashed" has nothing to act on. `evicted or crashed` stays a SUBSTRING, which is all
+    the dispatch-time `isContainerEvictionError` needs — the wording itself is now kernel's
+    `CONTAINER_EVICTION_ERROR` rather than a constant copied into all four transports.
+  - **An eviction recovery re-dispatches under a FRESH job id** (`dispatchEpochFor` now counts
+    `evictionRecoveries` + `transientEvictionRecoveries`, which the deploy path's
+    `deployEvictionEpoch` had always done). Without it the recovery was close to a no-op for
+    exactly the backend this finding is about: a pool is asked to keep routing **sticky by job
+    id**, so re-dispatching under the same id routes the retry back to the dead job, the next
+    poll 404s again, the budget (1) is spent, and the run fails `evicted` — faster and more
+    honest than the 70-minute wedge, but never the "fresh pool member" the fix promises. A
+    fresh id is correct for every transport: nothing can re-attach to a container that no
+    longer exists. `release` is deliberately NOT called first — the runner is already gone;
+    the pool docs now say a vanished job is the pool's to reap.
+  - The release/status-path gaps ride a new optional `warnings(config)` on
+    `RunnerBackendProvider` — the connection service stays kind-agnostic — and reach an
+    operator on BOTH of their surfaces: logged once at `register()` (the deployment operator's
+    copy; `resolve()` would re-log per dispatch) and returned on the CONNECTION TEST, which is
+    where the person who pasted the config is actually looking. A log line nobody reads is not
+    a warning. Each gap crosses the wire as a `{ code, message }` (the backend does not
+    localize prose), the SPA maps the code through an exhaustive `Record` in
+    `utils/connectionWarnings.ts`, and `message` is the untranslated fallback.
+    `RunnerPoolConnectionService` gained `logger?: Logger` (normalised to `noopLogger`), wired
+    in all three composition roots.
 - **F11** — the ordering swap on both sites, plus tests that pin it AND pin "a failed raise
   leaves the block alone". Pure orchestration, so runtime-symmetric by construction (like F7 and
   F10) and unit-tested rather than conformance-tested — there is no per-facade behaviour to

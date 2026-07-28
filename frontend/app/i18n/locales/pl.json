@@ -2201,7 +2201,12 @@
       "test": {
         "button": "Przetestuj połączenie",
         "ok": "Połączenie poprawne",
-        "failed": "Połączenie nieudane"
+        "failed": "Połączenie nieudane",
+        "warningsTitle": "Braki w tej konfiguracji",
+        "warnings": {
+          "runner_manifest_no_release": "Brak szablonu release: anulowanie przebiegu nie może przekazać puli, że ma zatrzymać zadanie, więc osierocone zadanie zajmuje swojego runnera, dopóki pula sama go nie odzyska.",
+          "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu."
+        }
       },
       "toast": {
         "saved": "Zapisano: {title}",

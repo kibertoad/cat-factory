@@ -2201,7 +2201,12 @@
       "test": {
         "button": "Tester la connexion",
         "ok": "Connexion réussie",
-        "failed": "Échec de la connexion"
+        "failed": "Échec de la connexion",
+        "warningsTitle": "Lacunes dans cette configuration",
+        "warnings": {
+          "runner_manifest_no_release": "Aucun modèle de release : annuler une exécution ne permet pas de demander au pool d'arrêter son job, donc un job orphelin occupe son runner jusqu'à ce que le pool le récupère de lui-même.",
+          "runner_manifest_no_status_path": "Aucun chemin de statut : chaque interrogation est lue comme toujours en cours, donc un job ne peut se terminer qu'en épuisant le budget d'interrogation de l'exécution."
+        }
       },
       "toast": {
         "saved": "{title} enregistré",

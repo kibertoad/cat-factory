@@ -2466,7 +2466,12 @@
       "test": {
         "button": "Test connection",
         "ok": "Connection OK",
-        "failed": "Connection failed"
+        "failed": "Connection failed",
+        "warningsTitle": "Gaps in this configuration",
+        "warnings": {
+          "runner_manifest_no_release": "No release template: cancelling a run cannot tell the pool to stop its job, so an orphaned job keeps its runner until the pool reclaims it on its own.",
+          "runner_manifest_no_status_path": "No status path: every poll reads as still running, so a job can only end by exhausting the run's poll budget."
+        }
       },
       "toast": {
         "saved": "{title} saved",

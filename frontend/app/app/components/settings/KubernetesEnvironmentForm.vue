@@ -10,6 +10,8 @@
 // driven (see docs/initiatives/descriptor-driven-infra-forms.md).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import type { ConnectionTestResult } from '@cat-factory/contracts'
+import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
 
@@ -18,7 +20,7 @@ const props = defineProps<{
   supportsTest: boolean
   testing: boolean
   busy: boolean
-  testResult: { ok: boolean; message?: string } | null
+  testResult: ConnectionTestResult | null
 }>()
 
 const emit = defineEmits<{
@@ -408,6 +410,8 @@ function optional(label: string): string {
         {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
       </span>
     </div>
+
+    <ConnectionWarnings :warnings="testResult?.warnings" />
 
     <div class="flex items-center justify-end gap-3">
       <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">

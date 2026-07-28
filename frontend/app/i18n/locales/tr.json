@@ -2397,7 +2397,12 @@
       "test": {
         "button": "Bağlantıyı test et",
         "ok": "Bağlantı tamam",
-        "failed": "Bağlantı başarısız"
+        "failed": "Bağlantı başarısız",
+        "warningsTitle": "Bu yapılandırmadaki eksikler",
+        "warnings": {
+          "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",
+          "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir."
+        }
       },
       "toast": {
         "saved": "{title} kaydedildi",

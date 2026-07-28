@@ -451,12 +451,16 @@ manifest.
 - The scalar paths (`prUrlPath`, `branchPath`, `summaryPath`) still apply and
   **override** `resultPath` when set — for schedulers that surface those outside any
   envelope.
-- `statusMap` matching is case-insensitive and always wins. A status your manifest does
-  **not** map is matched against a built-in vocabulary of common scheduler words —
-  `done`/`completed`/`succeeded`/… → `done`, `failed`/`error`/`cancelled`/`timeout`/… →
-  `failed` — and anything still unrecognised falls back to `running` (keeps the driver
-  waiting rather than wrongly failing a live run). Map your terminal states explicitly
-  anyway: the vocabulary is a safety net, not a substitute for a mapping.
+- `statusMap` matching is case-insensitive (and ignores surrounding whitespace) and always
+  wins. A status your manifest does **not** map is matched against a built-in vocabulary of
+  common scheduler words — `done`/`completed`/`succeeded`/… → `done`,
+  `failed`/`error`/`cancelled`/`timeout`/… → `failed` — and anything still unrecognised
+  falls back to `running` (keeps the driver waiting rather than wrongly failing a live run).
+  Map your terminal states explicitly anyway: the vocabulary is a safety net, not a
+  substitute for a mapping. Only words that are terminal in EVERY vocabulary they could come
+  from are in it, so a word that can also mean "still waiting for capacity" (Kubernetes'
+  `Unschedulable`, for one) is deliberately absent and reads as `running` — map it yourself
+  if your scheduler means it terminally.
 - **Report a reclaimed runner with a reclaim word and the step is retried on a fresh
   runner.** `evicted` / `preempted` / `oomkilled` / `node_lost` (and friends) are read as
   the RUNNER going away rather than the job failing, so cat-factory re-dispatches the step
@@ -468,7 +472,15 @@ manifest.
   runner died, answering the poll with a 404 is the simplest way to say so — cat-factory
   treats it as a reclaimed runner and re-dispatches. Any other non-2xx is treated as _your
   scheduler_ being unwell (retried a few times, then the run fails), so don't 404 a job that
-  merely hasn't been scheduled yet — report it as `running`.
+  merely hasn't been scheduled yet — report it as `running`. The run's failure detail records
+  the raw status line, since a 404 can also mean a mistyped `poll` path template or an
+  endpoint that hides an unauthorized read behind a 404 — check it before assuming a runner
+  really died.
+- **A re-dispatched step arrives as a NEW `jobId`.** Both retry paths — a Tester→Fixer or
+  gate-helper round, and a recovery after a reclaimed runner — suffix the id
+  (`<executionId>-<agentKind>-<n>`). Combined with the sticky routing below, that is what
+  makes an eviction recovery land on a fresh pool member instead of back on the dead job:
+  treat an unseen id as a new job and place it accordingly.
 - **Set `callMetricsPath` if your poll response proxies the harness view verbatim** (it is
   `callMetrics` there). The harness drains per-model-call telemetry on every poll, so
   mapping it lands a run's token spend and prompt/response bodies in observability WHILE the
@@ -616,20 +628,24 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 
 - cat-factory dispatches one job per pipeline **step** and polls it on the durable
   driver's cadence (`JOB_POLL_INTERVAL`, default 15s). A run executes a _sequence_ of
-  steps, each its own pool job (distinct `jobId` = `<executionId>-<agentKind>`), so a
-  busy workspace produces many short-lived jobs — size your pool for concurrency, not
-  for one job per run.
+  steps, each its own pool job (distinct `jobId` = `<executionId>-<agentKind>`, suffixed
+  `-<n>` on a retry round), so a busy workspace produces many short-lived jobs — size your
+  pool for concurrency, not for one job per run.
 - **Your scheduler owns capacity.** Queue jobs when the pool is saturated and report
   them as `running` until a runner picks them up; cat-factory will keep polling.
 - Keep routing **sticky by `jobId`** so re-dispatches (Workflows replay, a sweeper
-  re-drive) and polls reach the same job.
+  re-drive) and polls reach the same job. Stickiness binds an id to a LIVE job: a retry
+  after a reclaimed runner arrives as a new id (see above), and placing it on a fresh
+  runner is what makes the recovery work.
 - Rely on the harness watchdogs (`JOB_MAX_DURATION_MS` / `JOB_INACTIVITY_MS`) to reap
-  stuck jobs; cat-factory's `release` is best-effort cleanup, not a guaranteed kill.
+  stuck jobs; cat-factory's `release` is best-effort cleanup, not a guaranteed kill. It is
+  also not called on the eviction-recovery path (the runner is already gone), so a job whose
+  runner vanished is yours to reap.
 - **Define `release` even if it only sets a cancel flag.** Without it there is no way to
   tell your pool that a cancelled or failed run's job is no longer wanted, so its runner
-  stays busy until your own TTL reaps it. Registering a manifest with no `release` logs a
-  warning naming this, and the same goes for a manifest with no `response.statusPath` — a
-  poll that can never report an outcome leaves every job to expire on the run's poll budget.
+  stays busy until your own TTL reaps it. A manifest with no `release` — or no
+  `response.statusPath`, which leaves every job to expire on the run's poll budget — reports
+  the gap on its **connection test** in Settings, and logs it once at registration.
 
 ---
 
