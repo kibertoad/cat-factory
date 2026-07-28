@@ -1035,7 +1035,9 @@ rendered by the shared `AgentFailureCard.vue`. A failed execution leaves its blo
 Three sinks live in a dedicated telemetry store, separate from the transactional domain
 (append-heavy, high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare
 and a `telemetry` Postgres schema on Node. All three are pruned to
-`LLM_CALL_METRICS_RETENTION_DAYS` (default 3).
+`LLM_CALL_METRICS_RETENTION_DAYS` (default 3). The known gaps across observability, logging and
+error handling — and the phased plan to close them — are tracked in
+[`docs/initiatives/observability-logging-gaps.md`](./docs/initiatives/observability-logging-gaps.md).
 
 - **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing), recorded via
   `LlmObservabilityService`. The subscription harnesses (Claude Code / Codex) bypass the proxy, so
