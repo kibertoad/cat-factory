@@ -16,6 +16,7 @@ interface RequirementReviewRow {
   iteration: number
   max_iterations: number
   recommendations: string | null
+  rev: number | null
   created_at: number
   updated_at: number
 }
@@ -41,6 +42,7 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
     iteration: row.iteration,
     maxIterations: row.max_iterations,
     recommendations: parseJsonArray<RequirementRecommendation>(row.recommendations),
+    rev: row.rev ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -48,9 +50,10 @@ function rowToReview(row: RequirementReviewRow): RequirementReview {
 
 /**
  * Requirements reviews, stored one row per review in `requirement_reviews`
- * (migration 0021). The reviewed items live as a JSON array in `items`; the
- * service keeps at most one live review per block (it deletes the block's prior
- * review before inserting a fresh one), so `getByBlock` returns the latest.
+ * (migration 0021). The reviewed items live as a JSON array in `items`; a block holds at most
+ * ONE live review, which {@link replaceForBlock} maintains atomically, so `getByBlock` returns
+ * it. Every read-modify-write rides the rev-guarded {@link compareAndSwap} (migration 0065) —
+ * the whole row is one blob, so a blind write would drop a concurrent editor's answer.
  */
 export class D1RequirementReviewRepository implements RequirementReviewRepository {
   private readonly db: D1Database
@@ -79,13 +82,15 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
     return row ? rowToReview(row) : null
   }
 
-  async upsert(workspaceId: string, review: RequirementReview): Promise<void> {
-    await this.db
+  private insertStatement(workspaceId: string, review: RequirementReview) {
+    // A fresh insert starts at rev 0; a force-write over an existing row BUMPS it, so a
+    // concurrent compareAndSwap holding the old revision still detects that the row moved.
+    return this.db
       .prepare(
         `INSERT INTO requirement_reviews
            (workspace_id, id, block_id, status, items, model, incorporated_requirements,
-            iteration, max_iterations, recommendations, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            iteration, max_iterations, recommendations, rev, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            block_id = excluded.block_id,
            status = excluded.status,
@@ -95,7 +100,9 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
            iteration = excluded.iteration,
            max_iterations = excluded.max_iterations,
            recommendations = excluded.recommendations,
-           updated_at = excluded.updated_at`,
+           rev = requirement_reviews.rev + 1,
+           updated_at = excluded.updated_at
+         RETURNING rev`,
       )
       .bind(
         workspaceId,
@@ -111,13 +118,62 @@ export class D1RequirementReviewRepository implements RequirementReviewRepositor
         review.createdAt,
         review.updatedAt,
       )
-      .run()
   }
 
-  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
-    await this.db
-      .prepare(`DELETE FROM requirement_reviews WHERE workspace_id = ? AND block_id = ?`)
-      .bind(workspaceId, blockId)
-      .run()
+  async upsert(workspaceId: string, review: RequirementReview): Promise<void> {
+    const row = await this.insertStatement(workspaceId, review).first<{ rev: number }>()
+    if (row) review.rev = row.rev
+  }
+
+  async compareAndSwap(workspaceId: string, review: RequirementReview): Promise<boolean> {
+    // Conditional update guarded on the rev last read onto this review; writes only while the
+    // stored row is unchanged, and never inserts (a deleted review must stay deleted).
+    const expected = review.rev ?? 0
+    const row = await this.db
+      .prepare(
+        `UPDATE requirement_reviews SET
+           block_id = ?,
+           status = ?,
+           items = ?,
+           model = ?,
+           incorporated_requirements = ?,
+           iteration = ?,
+           max_iterations = ?,
+           recommendations = ?,
+           updated_at = ?,
+           rev = rev + 1
+         WHERE workspace_id = ? AND id = ? AND rev = ?
+         RETURNING rev`,
+      )
+      .bind(
+        review.blockId,
+        review.status,
+        JSON.stringify(review.items),
+        review.model,
+        review.incorporatedRequirements,
+        review.iteration ?? 1,
+        review.maxIterations ?? 1,
+        JSON.stringify(review.recommendations ?? []),
+        review.updatedAt,
+        workspaceId,
+        review.id,
+        expected,
+      )
+      .first<{ rev: number }>()
+    if (!row) return false
+    review.rev = row.rev
+    return true
+  }
+
+  async replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void> {
+    // ONE transaction: `db.batch` so a second review run for the same block can't interleave
+    // its delete between this delete and this insert and leave two live reviews behind.
+    await this.db.batch([
+      this.db
+        .prepare(`DELETE FROM requirement_reviews WHERE workspace_id = ? AND block_id = ?`)
+        .bind(workspaceId, review.blockId),
+      this.insertStatement(workspaceId, review),
+    ])
+    review.rev = 0
   }
 }

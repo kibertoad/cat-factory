@@ -220,45 +220,42 @@ export class RequirementReviewService extends IterativeReviewService<
     opts: { auto?: boolean } = {},
   ): Promise<RequirementReview> {
     const noteByItem = new Map(items.map((i) => [i.itemId, i.note?.trim() || null]))
-    const review = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const now = this.deps.clock.now()
-    const recommendations = [...review.recommendations]
-    let changed = false
-    for (const item of review.items) {
-      if (!noteByItem.has(item.id) || item.status === 'dismissed') continue
-      if (item.status !== 'recommend_requested') {
-        item.status = 'recommend_requested'
-        item.updatedAt = now
+    // Rev-guarded: a second "recommend something" click, or a human answering a different
+    // finding in the same breath, would otherwise write its whole stale `items` +
+    // `recommendations` arrays over this one (race-audit 2.5). The idempotence check rides
+    // inside the mutation so it is re-evaluated against the winning snapshot on a retry.
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      const recommendations = review.recommendations
+      let changed = false
+      for (const item of review.items) {
+        if (!noteByItem.has(item.id) || item.status === 'dismissed') continue
+        if (item.status !== 'recommend_requested') {
+          item.status = 'recommend_requested'
+          item.updatedAt = now
+          changed = true
+        }
+        // Don't queue a second placeholder for a finding the Writer is already working on. Keyed
+        // on the finding id so two findings that share an identical title+detail still each get
+        // their own placeholder.
+        const alreadyPending = recommendations.some(
+          (r) => r.status === 'pending' && r.sourceFinding.itemId === item.id,
+        )
+        if (alreadyPending) continue
+        recommendations.push({
+          id: this.deps.idGenerator.next('rec'),
+          sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
+          recommendedText: '',
+          ...(opts.auto ? { auto: true } : {}),
+          status: 'pending',
+          note: noteByItem.get(item.id) ?? null,
+          groundedInFragment: null,
+          createdAt: now,
+          updatedAt: now,
+        })
         changed = true
       }
-      // Don't queue a second placeholder for a finding the Writer is already working on. Keyed
-      // on the finding id so two findings that share an identical title+detail still each get
-      // their own placeholder.
-      const alreadyPending = recommendations.some(
-        (r) => r.status === 'pending' && r.sourceFinding.itemId === item.id,
-      )
-      if (alreadyPending) continue
-      recommendations.push({
-        id: this.deps.idGenerator.next('rec'),
-        sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
-        recommendedText: '',
-        ...(opts.auto ? { auto: true } : {}),
-        status: 'pending',
-        note: noteByItem.get(item.id) ?? null,
-        groundedInFragment: null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      changed = true
-    }
-    if (!changed) return review
-    const updated: RequirementReview = { ...review, recommendations, updatedAt: now }
-    await this.repository.upsert(workspaceId, updated)
-    return updated
+      return changed
+    })
   }
 
   /**
@@ -373,26 +370,29 @@ export class RequirementReviewService extends IterativeReviewService<
               grounding,
             )
           : new Map<string, { recommendation: string; fromStandard: string | null }>()
-        // Re-read fresh before applying: the human may have acted during the Writer call.
-        const review = assertFound(
-          await this.repository.get(workspaceId, reviewId),
-          this.entityName,
-          reviewId,
-        )
-        const now = this.deps.clock.now()
-        for (const target of targets) {
-          const outcome = this.applyRecommendationToTarget(
-            target,
-            review,
-            suggestions,
-            fragmentById,
-            now,
-          )
-          if (outcome.produced) produced += 1
-          if (outcome.readyForReview) readyForReview += 1
-        }
-        review.updatedAt = now
-        await this.repository.upsert(workspaceId, review)
+        // Re-read fresh before applying — the human may have acted during the Writer call — and
+        // write under CAS, so an answer that lands between that read and this write survives
+        // instead of being overwritten by this chunk's whole-row snapshot (race-audit 2.5).
+        // The tallies are recomputed per attempt so a reload can't double-count them.
+        let chunkProduced = 0
+        let chunkReadyForReview = 0
+        const review = await this.mutateReview(workspaceId, reviewId, (fresh, now) => {
+          chunkProduced = 0
+          chunkReadyForReview = 0
+          for (const target of targets) {
+            const outcome = this.applyRecommendationToTarget(
+              target,
+              fresh,
+              suggestions,
+              fragmentById,
+              now,
+            )
+            if (outcome.produced) chunkProduced += 1
+            if (outcome.readyForReview) chunkReadyForReview += 1
+          }
+        })
+        produced += chunkProduced
+        readyForReview += chunkReadyForReview
         await opts.onProgress?.(review)
       }
     }
@@ -461,22 +461,24 @@ export class RequirementReviewService extends IterativeReviewService<
     reviewId: string,
     onProgress?: (review: RequirementReview) => Promise<void>,
   ): Promise<void> {
-    const review = await this.repository.get(workspaceId, reviewId)
-    if (!review) return
-    const pending = review.recommendations.filter((r) => r.status === 'pending')
-    if (pending.length === 0) return
-    const now = this.deps.clock.now()
-    review.recommendations = review.recommendations.filter((r) => r.status !== 'pending')
-    for (const placeholder of pending) {
-      const item = findSourceItem(review.items, placeholder.sourceFinding)
-      if (item && item.status === 'recommend_requested') {
-        item.status = 'open'
-        item.updatedAt = now
+    if (!(await this.repository.get(workspaceId, reviewId))) return
+    // Rev-guarded, and the pending set is re-derived per attempt: a human accepting one
+    // recommendation while this cleanup runs must not have their answer dropped.
+    let dropped = false
+    const review = await this.mutateReview(workspaceId, reviewId, (fresh, now) => {
+      const pending = fresh.recommendations.filter((r) => r.status === 'pending')
+      dropped = pending.length > 0
+      if (!dropped) return false
+      fresh.recommendations = fresh.recommendations.filter((r) => r.status !== 'pending')
+      for (const placeholder of pending) {
+        const item = findSourceItem(fresh.items, placeholder.sourceFinding)
+        if (item && item.status === 'recommend_requested') {
+          item.status = 'open'
+          item.updatedAt = now
+        }
       }
-    }
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    await onProgress?.(review)
+    })
+    if (dropped) await onProgress?.(review)
   }
 
   /**
@@ -604,19 +606,15 @@ export class RequirementReviewService extends IterativeReviewService<
     recId: string,
     mutate: (rec: RequirementRecommendation, review: RequirementReview, now: number) => void,
   ): Promise<RequirementReview> {
-    const review = assertFound(
-      await this.repository.get(workspaceId, reviewId),
-      this.entityName,
-      reviewId,
-    )
-    const rec = review.recommendations.find((r) => r.id === recId)
-    if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
-    const now = this.deps.clock.now()
-    mutate(rec, review, now)
-    rec.updatedAt = now
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    return review
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      // Re-resolved per attempt: the Writer's fill pass drops a placeholder it couldn't answer,
+      // so a recommendation that vanished under a retry must fail rather than be re-applied to
+      // a stale copy of the array.
+      const rec = review.recommendations.find((r) => r.id === recId)
+      if (!rec) throw new ValidationError(`Recommendation '${recId}' not found`)
+      mutate(rec, review, now)
+      rec.updatedAt = now
+    })
   }
 
   /**

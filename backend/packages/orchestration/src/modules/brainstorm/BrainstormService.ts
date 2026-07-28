@@ -71,7 +71,9 @@ export class BrainstormService extends IterativeReviewService<
       getByBlock: (ws, blockId) => repo.getByBlockStage(ws, blockId, stage),
       get: (ws, id) => repo.get(ws, id),
       upsert: (ws, session) => repo.upsert(ws, session),
-      deleteByBlock: (ws, blockId) => repo.deleteByBlockStage(ws, blockId, stage),
+      compareAndSwap: (ws, session) => repo.compareAndSwap(ws, session),
+      // The stage rides the session itself, so the atomic replace needs no pinned stage here.
+      replaceForBlock: (ws, session) => repo.replaceForBlockStage(ws, session),
     }
   }
 

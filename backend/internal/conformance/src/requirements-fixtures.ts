@@ -21,6 +21,7 @@ export function makeIncorporatedReview(blockId: string, requirements: string): R
     iteration: 1,
     maxIterations: 3,
     recommendations: [],
+    rev: 0,
     createdAt: 1,
     updatedAt: 2,
   }
@@ -72,6 +73,7 @@ export function makeReadyReviewWithOpenItem(blockId: string, openItems = 1): Req
     iteration: 1,
     maxIterations: 3,
     recommendations: [],
+    rev: 0,
     createdAt: 1,
     updatedAt: 2,
   }

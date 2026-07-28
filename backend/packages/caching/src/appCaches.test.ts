@@ -23,6 +23,7 @@ function entry(id: string): ResolvedCatalogEntry {
     category: null,
     summary: `${id} summary`,
     body: `${id} body`,
+    brief: null,
     appliesTo: null,
     tags: null,
     source: null,

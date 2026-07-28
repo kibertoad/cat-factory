@@ -55,26 +55,63 @@ const ITEMS_ONE_HIGH = JSON.stringify({
   ],
 })
 
+/** Two findings, so two writers can settle DIFFERENT items and race each other's whole-row write. */
+const ITEMS_TWO_HIGH = JSON.stringify({
+  items: [
+    { category: 'gap', severity: 'high', title: 'Missing edge case', detail: 'What if empty?' },
+    { category: 'question', severity: 'high', title: 'Retention?', detail: 'How long is it kept?' },
+  ],
+})
+
 interface Stored {
   id: string
   blockId: string
+  /** The optimistic-concurrency token the real stores keep; the fake bumps it on every CAS. */
+  rev: number
 }
 
-function fakeRepo<T extends Stored>() {
+/**
+ * An in-memory review store with FAITHFUL optimistic-concurrency semantics: reads hand back a
+ * COPY (so a caller's in-memory edits aren't already in the store), and `compareAndSwap` writes
+ * only while the stored `rev` still matches the one the caller read. That is what makes the
+ * service's reload-and-re-apply path testable at all — a fake that shared the stored object
+ * would pass no matter how the service wrote.
+ *
+ * `onBeforeCas` runs just before each CAS attempt, so a test can stage a COMPETING writer landing
+ * inside the window between the service's read and its write.
+ */
+function fakeRepo<T extends Stored>(onBeforeCas?: (review: T) => void) {
   const byId = new Map<string, T>()
+  // A JSON round-trip, not `structuredClone`: a review is plain JSON, and this package's
+  // lib target has no `structuredClone`.
+  const copy = (review: T): T => JSON.parse(JSON.stringify(review)) as T
   return {
     byId,
     async get(_ws: string, id: string): Promise<T | null> {
-      return byId.get(id) ?? null
+      const stored = byId.get(id)
+      return stored ? copy(stored) : null
     },
     async getByBlock(_ws: string, blockId: string): Promise<T | null> {
-      return [...byId.values()].find((r) => r.blockId === blockId) ?? null
+      const stored = [...byId.values()].find((r) => r.blockId === blockId)
+      return stored ? copy(stored) : null
     },
     async upsert(_ws: string, review: T): Promise<void> {
-      byId.set(review.id, review)
+      const prior = byId.get(review.id)
+      review.rev = prior ? prior.rev + 1 : 0
+      byId.set(review.id, copy(review))
     },
-    async deleteByBlock(_ws: string, blockId: string): Promise<void> {
-      for (const [k, v] of byId) if (v.blockId === blockId) byId.delete(k)
+    async compareAndSwap(_ws: string, review: T): Promise<boolean> {
+      onBeforeCas?.(review)
+      const stored = byId.get(review.id)
+      if (!stored || stored.rev !== review.rev) return false
+      review.rev = stored.rev + 1
+      byId.set(review.id, copy(review))
+      return true
+    },
+    async replaceForBlock(_ws: string, review: T): Promise<void> {
+      for (const [k, v] of byId) if (v.blockId === review.blockId) byId.delete(k)
+      review.rev = 0
+      byId.set(review.id, copy(review))
     },
   }
 }
@@ -108,7 +145,11 @@ beforeEach(() => {
 
 describe('IterativeReviewService (via RequirementReviewService)', () => {
   function makeService() {
-    const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     const svc = new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
     return { svc }
   }
@@ -120,7 +161,11 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
       harness: 'claude-code',
     }
     function serviceWith(extra: Record<string, unknown>) {
-      const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+      const requirementReviewRepository = fakeRepo<{
+        id: string
+        blockId: string
+        rev: number
+      }>() as never
       return new RequirementReviewService({
         ...baseDeps(),
         requirementReviewRepository,
@@ -185,11 +230,57 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
     const review = await svc.review(WS, BLOCK.id, {})
     await expect(svc.incorporate(WS, review.id, {})).rejects.toThrow(/before incorporating/)
   })
+
+  // Race-audit 2.5. A review is ONE JSON blob holding every finding, so a whole-row write from a
+  // stale read silently drops whatever another writer settled meanwhile — and since incorporation
+  // refuses to run while any finding is still `open`, a lost dismissal wedges the loop on a
+  // phantom open item. The mutation must reload and re-apply on the winner's snapshot instead.
+  it('re-applies an answer that lost a race instead of clobbering the winner', async () => {
+    let competing: (() => void) | null = null
+    const repo = fakeRepo<{ id: string; blockId: string; rev: number }>(() => {
+      // Exactly once, land a COMPETING write in the window between the service's read and its
+      // CAS — the second person in the review window dismissing the OTHER finding.
+      competing?.()
+      competing = null
+    })
+    const svc = new RequirementReviewService({
+      ...baseDeps(),
+      requirementReviewRepository: repo as never,
+    })
+
+    script.push({ text: ITEMS_TWO_HIGH })
+    const review = await svc.review(WS, BLOCK.id, {})
+    const [first, second] = review.items
+    competing = () => {
+      const stored = repo.byId.get(review.id) as unknown as {
+        items: { id: string; status: string }[]
+        rev: number
+      }
+      const item = stored.items.find((i) => i.id === second!.id)!
+      item.status = 'dismissed'
+      stored.rev += 1
+    }
+
+    const after = await svc.replyToItem(WS, review.id, first!.id, 'It returns an empty file.')
+
+    // Both survive: the answer landed, and the concurrent dismissal was NOT reverted.
+    expect(after.items.find((i) => i.id === first!.id)?.reply).toBe('It returns an empty file.')
+    expect(after.items.find((i) => i.id === first!.id)?.status).toBe('answered')
+    expect(after.items.find((i) => i.id === second!.id)?.status).toBe('dismissed')
+    // …so incorporation is no longer blocked on a finding that was in fact settled.
+    script.push({ text: '# Standardized requirements\n...' })
+    const { review: merged } = await svc.incorporate(WS, review.id, {})
+    expect(merged.status).toBe('merged')
+  })
 })
 
 describe('RequirementReviewService recommendations (Requirement Writer, async)', () => {
   function makeService() {
-    const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     return new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
   }
 
@@ -401,7 +492,11 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
 describe('IterativeReviewService (via ClarityReviewService)', () => {
   it('persists to its own document field (clarifiedReport) and threads the investigation', async () => {
-    const clarityReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+    const clarityReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
     const svc = new ClarityReviewService({ ...baseDeps(), clarityReviewRepository })
 
     script.push({ text: ITEMS_ONE_HIGH })

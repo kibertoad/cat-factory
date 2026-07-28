@@ -62,7 +62,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `backend/docs/reports.md`). `ReportsService` lives in its own `reports/` dir beside them.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
-  `recurring/`, `settings/`, … — the other module services.
+  `recurring/`, `settings/`, … — the other module services. In `review/`, EVERY write to a review
+  goes through `IterativeReviewService.mutateReview` (load → apply → rev-guarded
+  `compareAndSwap`, reloading and re-applying on a lost race) and a fresh run publishes with the
+  atomic `replaceForBlock` — a blind `upsert` drops a concurrent editor's answer. See
+  CLAUDE.md → "Requirements review".
 - `validation/` — request validation.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",

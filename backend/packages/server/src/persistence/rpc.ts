@@ -682,9 +682,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The reviewer/incorporation companion persists the review as the gate iterates.
     // Member-level (the requirement-review endpoints are not admin-gated), workspace-scoped.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
-    // The service drops a block's prior review before a fresh review run
+    // Every read-modify-write on a review (answer / dismiss / recommendation / incorporate)
+    // rides the rev-guarded conditional write, so a mothership-mode SPA that can't reach it
+    // could not edit a review at all. Workspace-scoped on arg0, entity as arg1.
+    compareAndSwap: { scope: { kind: 'workspace', arg: 0 } },
+    // A fresh review run atomically replaces the block's prior one
     // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    replaceForBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Interactive document-interview sessions (WS5). The doc-authoring RUN PATH reads the
   // converged brief (`getByBlock`, via the agent-context builder on every doc-writer dispatch),
@@ -751,13 +755,15 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 } },
-    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspace', arg: 0 } },
+    replaceForBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
   brainstormSessionRepository: {
     getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 } },
-    deleteByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspace', arg: 0 } },
+    replaceForBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Initiatives (the long-running multi-task work container): the create/read surface the
   // board + tracker window use, plus the planning pipeline's ingest writes. Every method is

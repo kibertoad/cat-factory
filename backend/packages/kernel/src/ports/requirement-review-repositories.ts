@@ -12,11 +12,26 @@ export interface RequirementReviewRepository {
   /** A review by its id, or null if it does not exist. */
   get(workspaceId: string, id: string): Promise<RequirementReview | null>
   /**
-   * Create or replace a review. Replacing the block's prior review is the caller's
-   * responsibility (the service deletes it before inserting a fresh one), so a
-   * block never accumulates stale reviews.
+   * Force-write a review, bumping its `rev`. Reserved for the paths that legitimately own
+   * the row outright (seeding a review, the initial insert behind {@link replaceForBlock});
+   * every read-modify-write goes through {@link compareAndSwap} instead, or it clobbers a
+   * concurrent editor's answer.
    */
   upsert(workspaceId: string, review: RequirementReview): Promise<void>
-  /** Drop any existing review(s) for a block (called before a fresh review run). */
-  deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /**
+   * Conditional update guarded on the `rev` the caller loaded onto `review`: writes (bumping
+   * `rev` in the store AND on the passed object) only while the stored row still carries that
+   * revision, and NEVER inserts. Returns false when another writer moved — or deleted — the
+   * row, so the caller reloads and re-applies its mutation on the winning snapshot instead of
+   * force-writing a stale whole-row snapshot over it (race-audit 2.5).
+   */
+  compareAndSwap(workspaceId: string, review: RequirementReview): Promise<boolean>
+  /**
+   * ATOMICALLY make `review` the block's one live review: drop the block's existing review(s)
+   * and insert this one in a single transaction. The two halves must not be separate calls —
+   * a double-submitted review run would otherwise interleave as delete/delete/insert/insert and
+   * leave the block with TWO live reviews, so a parked run's decision can key to a different
+   * review than the window loaded.
+   */
+  replaceForBlock(workspaceId: string, review: RequirementReview): Promise<void>
 }

@@ -956,6 +956,9 @@ export const requirementReviews = pgTable(
     max_iterations: integer('max_iterations').notNull().default(1),
     // Requirement-Writer recommendations as a JSON array (text), mirror of D1 migration 0009.
     recommendations: text('recommendations').notNull().default('[]'),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -1089,6 +1092,9 @@ export const clarityReviews = pgTable(
     clarified_report: text('clarified_report'),
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -1115,6 +1121,9 @@ export const brainstormSessions = pgTable(
     converged_direction: text('converged_direction'),
     iteration: integer('iteration').notNull().default(1),
     max_iterations: integer('max_iterations').notNull().default(1),
+    // Optimistic-concurrency token (mirror of the D1 column): every read-modify-write CASes on
+    // it, so two writers editing different findings can't clobber each other.
+    rev: integer('rev').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

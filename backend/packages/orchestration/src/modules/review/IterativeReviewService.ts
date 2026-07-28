@@ -15,6 +15,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   assertFound,
+  ConflictError,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   inlineModelRef,
   resolveScopedModelProvider,
@@ -54,6 +55,8 @@ export interface ReviewCommon {
   model: string | null
   iteration: number
   maxIterations: number
+  /** Optimistic-concurrency token; see the contracts' `rev`. A fresh review starts at 0. */
+  rev: number
   createdAt: number
   updatedAt: number
 }
@@ -63,8 +66,19 @@ export interface ReviewRepository<TReview> {
   getByBlock(workspaceId: string, blockId: string): Promise<TReview | null>
   get(workspaceId: string, id: string): Promise<TReview | null>
   upsert(workspaceId: string, review: TReview): Promise<void>
-  deleteByBlock(workspaceId: string, blockId: string): Promise<void>
+  /** Rev-guarded conditional update; false ⇒ another writer moved (or deleted) the row. */
+  compareAndSwap(workspaceId: string, review: TReview): Promise<boolean>
+  /** Atomically make this the block's (and, for brainstorm, the stage's) one live review. */
+  replaceForBlock(workspaceId: string, review: TReview): Promise<void>
 }
+
+/**
+ * How many times a contended {@link IterativeReviewService.mutateReview} reloads and re-applies
+ * before giving up with a 409. Matches the engine's `RunStateMachine.mutateInstance` budget: the
+ * contending writers here are human clicks and one durable-driver pass, so a handful of retries
+ * covers real contention while still failing loudly on a pathological hot row.
+ */
+const MAX_MUTATE_ATTEMPTS = 8
 
 /** The runtime dependencies shared by every iterative-review service. */
 export interface IterativeReviewDeps {
@@ -259,11 +273,16 @@ export abstract class IterativeReviewService<
       model,
       iteration: 1,
       maxIterations: opts.maxIterations,
+      // A fresh review; the store re-stamps this on insert.
+      rev: 0,
       createdAt: now,
       updatedAt: now,
     })
-    await this.repository.deleteByBlock(workspaceId, block.id)
-    await this.repository.upsert(workspaceId, review)
+    // ATOMIC replace, never delete-then-insert: two review runs for one block (a double-submit,
+    // or a manual run racing the engine's gate) would otherwise interleave their delete/insert
+    // pairs and leave the block with TWO live reviews — the window then loads one while the
+    // parked run's decision keys to the other (race-audit 2.5).
+    await this.repository.replaceForBlock(workspaceId, review)
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return review
   }
@@ -291,20 +310,23 @@ export abstract class IterativeReviewService<
     const doc = this.readDoc(review)
     if (doc) this.applyIncorporatedDoc(context, doc)
     const { ref, items } = await this.runReviewer(workspaceId, block, context)
-    const now = this.deps.clock.now()
-    const iteration = (review.iteration ?? 1) + 1
-    const maxIterations = review.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
-    const disposition = disposeReview(items, { iteration, maxIterations, concernThreshold })
-    const updated: TReview = {
-      ...review,
-      status: statusForDisposition(disposition),
-      items,
-      model: `${ref.provider}:${ref.model}`,
-      iteration,
-      maxIterations,
-      updatedAt: now,
-    }
-    await this.repository.upsert(workspaceId, updated)
+    // The reviewer call is slow, so the snapshot loaded above is stale by the time it returns
+    // (a human can grant an extra round, or answer an item that this pass is about to replace).
+    // Re-derive the counters from the FRESH review under CAS rather than writing the pre-call
+    // snapshot back — the disposition is computed inside so a retry recomputes it too.
+    let disposition: ReviewDisposition = 'auto-pass'
+    const updated = await this.mutateReview(workspaceId, reviewId, (fresh) => {
+      const iteration = (fresh.iteration ?? 1) + 1
+      const maxIterations = fresh.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS
+      disposition = disposeReview(items, { iteration, maxIterations, concernThreshold })
+      Object.assign(fresh, {
+        status: statusForDisposition(disposition),
+        items,
+        model: `${ref.provider}:${ref.model}`,
+        iteration,
+        maxIterations,
+      })
+    })
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return updated
   }
@@ -397,11 +419,14 @@ export abstract class IterativeReviewService<
       throw new ValidationError(this.truncationMessage)
     }
 
-    const now = this.deps.clock.now()
     // `merged`: the document is produced and awaits the human's re-review / redo. It is NOT
-    // yet the final accepted document (that is `incorporated`, set on converge).
-    const updated = { ...this.withDoc(review, revised), status: 'merged' as const, updatedAt: now }
-    await this.repository.upsert(workspaceId, updated)
+    // yet the final accepted document (that is `incorporated`, set on converge). The snapshot
+    // read at the top of this method is stale — the incorporation LLM call is the longest
+    // window in the whole loop, and a human dismissal landing inside it was previously
+    // clobbered (race-audit 2.5) — so fold the document onto the FRESH review under CAS.
+    const updated = await this.mutateReview(workspaceId, reviewId, (fresh) => {
+      Object.assign(fresh, this.withDoc(fresh, revised), { status: 'merged' as const })
+    })
     return { review: updated }
   }
 
@@ -570,15 +595,49 @@ export abstract class IterativeReviewService<
     return assertFound(await this.repository.get(workspaceId, reviewId), this.entityName, reviewId)
   }
 
+  /**
+   * Apply a pure in-memory mutation to a review under OPTIMISTIC CONCURRENCY: load it, run
+   * `mutate`, then `compareAndSwap`. A review is ONE JSON blob holding every finding, so two
+   * writers that each load it, edit a DIFFERENT item and write the whole row back would leave
+   * only the last writer's edit — and because `incorporate` refuses to run while any finding is
+   * still `open`, a lost dismissal blocks incorporation on a phantom open item (race-audit 2.5).
+   * On a lost race this reloads and re-applies `mutate` on the winning snapshot (bounded
+   * retries) rather than force-writing over it.
+   *
+   * `mutate` MUST be idempotent w.r.t. external systems — it can run several times, so do all
+   * non-idempotent work (notifications, driver signals, emits) AFTER this resolves, on the
+   * returned review. A domain error thrown from `mutate` (the fresh state no longer admits the
+   * action) propagates immediately and is NOT retried. `updatedAt` is stamped centrally, so a
+   * mutation never has to remember to. Returning `false` from `mutate` means "the fresh state
+   * already satisfies this" — no write happens at all, so an idempotent re-request doesn't
+   * churn `updatedAt` (and the live event it drives).
+   */
+  protected async mutateReview(
+    workspaceId: string,
+    reviewId: string,
+    mutate: (review: TReview, now: number) => boolean | void,
+  ): Promise<TReview> {
+    for (let attempt = 0; attempt < MAX_MUTATE_ATTEMPTS; attempt++) {
+      const review = await this.load(workspaceId, reviewId)
+      const now = this.deps.clock.now()
+      if (mutate(review, now) === false) return review
+      review.updatedAt = now
+      if (await this.repository.compareAndSwap(workspaceId, review)) return review
+    }
+    throw new ConflictError(
+      `${this.entityName} '${reviewId}' is being modified concurrently; retry`,
+    )
+  }
+
   protected async patchReview(
     workspaceId: string,
     reviewId: string,
     patch: (review: TReview) => TReview,
   ): Promise<TReview> {
-    const review = await this.load(workspaceId, reviewId)
-    const updated = { ...patch(review), updatedAt: this.deps.clock.now() }
-    await this.repository.upsert(workspaceId, updated)
-    return updated
+    // The patch is expressed as a copy, so fold it back onto the loaded instance the CAS guards.
+    return this.mutateReview(workspaceId, reviewId, (review) => {
+      Object.assign(review, patch(review))
+    })
   }
 
   private async mutateItem(
@@ -587,13 +646,13 @@ export abstract class IterativeReviewService<
     itemId: string,
     mutate: (item: RequirementReviewItem, now: number) => void,
   ): Promise<TReview> {
-    const review = await this.load(workspaceId, reviewId)
-    const item = review.items.find((i) => i.id === itemId)
-    if (!item) throw new ValidationError(`Review item '${itemId}' not found`)
-    const now = this.deps.clock.now()
-    mutate(item, now)
-    review.updatedAt = now
-    await this.repository.upsert(workspaceId, review)
-    return review
+    return this.mutateReview(workspaceId, reviewId, (review, now) => {
+      const item = review.items.find((i) => i.id === itemId)
+      // Re-resolved on every attempt: a concurrent re-review replaces the item list wholesale,
+      // so an answer aimed at a finding that no longer exists must fail rather than be re-applied
+      // to a stale copy of the array.
+      if (!item) throw new ValidationError(`Review item '${itemId}' not found`)
+      mutate(item, now)
+    })
   }
 }

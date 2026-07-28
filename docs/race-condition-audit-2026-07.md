@@ -225,6 +225,25 @@ A direct consequence of 2.2, called out separately because the effect is user-vi
   workload the product generates. Partly inherent to post-hoc metering, but there is no
   reservation step or documented overshoot bound.
 
+> **Status: ADDRESSED.** The three review stores now carry a `rev` column (D1 migration `0065` ⇄
+> Drizzle) and a `compareAndSwap` that writes only while the stored revision still matches and
+> NEVER inserts. Every read-modify-write in `IterativeReviewService` /
+> `RequirementReviewService` routes through a new `mutateReview` (load → apply → CAS, reloading
+> and RE-APPLYING on a lost race), including the two that held a snapshot across an LLM call
+> (`incorporate`, `reReview`) and the recommendation paths (`prepareRecommendations`,
+> `fillPendingRecommendations`, `dropPendingRecommendations`, `mutateRecommendation`). The
+> double-run hole is closed by an atomic `replaceForBlock` / `replaceForBlockStage` (D1 `batch()`
+> ⇄ a Postgres transaction) replacing the `deleteByBlock` + `upsert` pair, which is deleted from
+> the port so it can't be reintroduced — so a block can no longer end up with two live reviews,
+> and a parked run's decision can no longer key to a different review than the window loaded.
+> Cross-runtime conformance pins the CAS refusal, the never-resurrects contract and the
+> one-live-review invariant; a service-level unit test pins the reload-and-re-apply.
+>
+> Residual (accepted, not a race): two review runs fired for the same block still each pay their
+> reviewer LLM call — only one of the two reviews survives. Claiming the block BEFORE the reviewer
+> runs would need a placeholder row and is a separate change; the SPA's in-flight flag and the
+> engine's single-driver-per-run already make the double-fire rare.
+
 ### 2.5 Requirement/clarity/brainstorm reviews: whole-JSON last-write-wins on every mutation — CONFIRMED
 
 - `IterativeReviewService.mutateItem` (`.../review/IterativeReviewService.ts:538-552`),
@@ -426,6 +445,22 @@ mitigation in `useWorkspaceStream.ts:134-162`. Of the ~9 stores that reconcile s
 with live pushes, only that slice (fully) and `consensus.upsert` (events only) guard
 monotonicity. The identical bug pattern survives everywhere else:
 
+> **Status (re-verified against the current code, July 28).** Most of this section has since
+> landed: **4.1** (`execution.hydrate`/`upsert` are `rev`-guarded, with the retry-predecessor
+> DROP caveat), **4.2 + 4.3** (`workspace.refresh` carries a `refreshSeq` generation AND
+> re-checks the active board before hydrating), **4.6** (`board.hydrate` takes a
+> `hydrateBaseline()` captured before the fetch and preserves anything live-`upsert`ed since),
+> **4.7's live-event half** (requirements / clarity / brainstorm `upsert` keep the freshest by
+> `updatedAt`), **4.8** (`consensus.load` reconciles instead of writing through) and **4.9**
+> (kaizen's loads carry a ticket). STILL OPEN: **4.4** (`notifications.hydrate` is a bare
+> replace — it resurrects a resolved card and drops a live-added one; `Notification` still has no
+> `updatedAt` on the wire, so this needs a contract field or a tombstone set), **4.5**
+> (`hydrateEnvConfigRepair`/`upsertEnvConfigRepair` are still replace/LWW ten lines below the
+> guarded bootstrap twins, though `EnvConfigRepairJob` HAS `updatedAt`), **4.10** (a second
+> concurrent 428 still overwrites the first prompt's closures, so the first `withCredential`
+> promise never settles), and **4.7's response half** (`store()` also runs on API responses,
+> where a slow response can still regress a newer pushed stage).
+
 | #    | Finding                                                                                                                                                                                                                                                                                                                                                                               | Where                                                                         | Severity           |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------ |
 | 4.1  | `execution.hydrate` is a bare replace, `upsert` LWW — a stale snapshot regresses a terminal run to `running` (terminal runs emit nothing further, so the block is stranded "working…") or drops a live-added run. `ExecutionInstance` already carries a monotonic `rev` (`contracts/src/entities.ts:1522-1530`) — the guard is implementable today, exactly like the bootstrap fix.   | `stores/execution.ts:30-39`                                                   | HIGH, CONFIRMED    |
@@ -533,9 +568,15 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
 4. ~~**CAS the notification status flip before the side effect** (3.1)~~ — **DONE**
    (`claimForAction` atomic `open` → `acted` claim before the side effect, both runtimes +
    conformance); the escalation-sweep half (3.2) was already **DONE** (`escalateStaleOpen`).
-5. **rev/CAS or item-targeted writes for the review repositories** (2.5).
-6. **Frontend**: `rev`-guard `execution.hydrate`, generation-check `workspace.refresh`,
-   replicate the bootstrap guard onto env-config-repair (4.1–4.5).
+5. ~~**rev/CAS or item-targeted writes for the review repositories** (2.5)~~ — **DONE.** A `rev`
+   column + `compareAndSwap` on all three review stores, every read-modify-write routed through
+   `mutateReview`'s reload-and-re-apply, and the racy `deleteByBlock` + `upsert` pair replaced by
+   an atomic `replaceForBlock` (both runtimes + conformance).
+6. **Frontend**: `rev`-guard `execution.hydrate` — **DONE**; generation-check `workspace.refresh`
+   — **DONE** (4.1–4.3, plus 4.6/4.8/4.9). STILL OPEN: replicate the bootstrap guard onto
+   env-config-repair (4.5), give `Notification` a wire `updatedAt` or a tombstone set so
+   `notifications.hydrate` stops resurrecting resolved cards (4.4), and queue the credential
+   prompt (4.10). See the status note in §4.
 7. **Spend gate**: a reservation/estimate or a documented overshoot bound (2.4).
 8. The remaining mediums as touched: bootstrap success ordering (3.3), CI-gate `none`
    window (3.4), sweeper edges (3.5), local-transport set (3.8), D1/Drizzle upsert

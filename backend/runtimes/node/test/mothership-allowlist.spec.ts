@@ -278,8 +278,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listWorkspaceIdsMountingBlock: 'pending',
     removeByServices: 'pending',
   },
-  // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
-  // deleteByBlock — the pre-review-run drop — completes it with the advanced-review slice).
+  // The whole requirement-review repo is remote (getByBlock/get/upsert were exposed earlier; the
+  // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
+  // replaceForBlock that starts a fresh review run complete it).
   requirementReviewRepository: {},
   // `listByWorkspace`/`listByExecution` are now allow-listed (the Kaizen screen's grading-history
   // + per-run status reads); `getByStep`/`upsert` were already remote (the run-path grade). The
@@ -295,7 +296,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   kaizenVerifiedComboRepository: { upsert: 'pending' },
   // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
   // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
-  // get/upsert/deleteBy* for clarity + brainstorm (getByBlock/getByBlockStage were already exposed).
+  // get/upsert/compareAndSwap/replaceFor* for clarity + brainstorm (getByBlock/getByBlockStage
+  // were already exposed).
   consensusSessionRepository: {},
   clarityReviewRepository: {},
   brainstormSessionRepository: {},

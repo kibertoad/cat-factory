@@ -21,6 +21,7 @@ function seedReview(workspaceId: string, blockId: string): RequirementReview {
     iteration: 1,
     maxIterations: 3,
     recommendations: [],
+    rev: 0,
     createdAt: 1,
     updatedAt: 1,
     items: [

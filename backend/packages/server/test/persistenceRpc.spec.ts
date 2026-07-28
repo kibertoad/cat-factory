@@ -299,13 +299,15 @@ function makeRegistry(): {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
       get: async (ws: string, id: string) => ({ ws, id }),
       upsert: async () => undefined,
-      deleteByBlock: async () => undefined,
+      compareAndSwap: async () => undefined,
+      replaceForBlock: async () => undefined,
     },
     clarityReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
       get: async (ws: string, id: string) => ({ ws, id }),
       upsert: async () => undefined,
-      deleteByBlock: async () => undefined,
+      compareAndSwap: async () => undefined,
+      replaceForBlock: async () => undefined,
     },
     brainstormSessionRepository: {
       getByBlockStage: async (ws: string, blockId: string, stage: string) => ({
@@ -315,7 +317,8 @@ function makeRegistry(): {
       }),
       get: async (ws: string, id: string) => ({ ws, id }),
       upsert: async () => undefined,
-      deleteByBlockStage: async () => undefined,
+      compareAndSwap: async () => undefined,
+      replaceForBlockStage: async () => undefined,
     },
     consensusSessionRepository: {
       get: async (ws: string, id: string) => ({ ws, id }),
@@ -1401,7 +1404,8 @@ describe('advanced review / session management surface (workspace-scoped)', () =
     // whole argument list survived the hop in order. Absent → a void write (resolves `undefined`).
     echoed?: Record<string, unknown>
   }> = [
-    // requirement-review: getByBlock/get/upsert were exposed earlier; deleteByBlock completes it.
+    // requirement-review: getByBlock/get/upsert were exposed earlier; the rev-guarded
+    // compareAndSwap + the atomic replaceForBlock complete it.
     {
       repo: 'requirementReviewRepository',
       method: 'get',
@@ -1409,7 +1413,8 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       echoed: { ws: 'ws_in', id: 'rev_1' },
     },
     { repo: 'requirementReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
-    { repo: 'requirementReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    { repo: 'requirementReviewRepository', method: 'compareAndSwap', args: [{ id: 'rev_1' }] },
+    { repo: 'requirementReviewRepository', method: 'replaceForBlock', args: [{ id: 'rev_1' }] },
     // clarity-review (bug-report triage).
     {
       repo: 'clarityReviewRepository',
@@ -1418,7 +1423,8 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       echoed: { ws: 'ws_in', id: 'rev_1' },
     },
     { repo: 'clarityReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
-    { repo: 'clarityReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    { repo: 'clarityReviewRepository', method: 'compareAndSwap', args: [{ id: 'rev_1' }] },
+    { repo: 'clarityReviewRepository', method: 'replaceForBlock', args: [{ id: 'rev_1' }] },
     // brainstorm (structured dialogue, keyed by block+stage).
     {
       repo: 'brainstormSessionRepository',
@@ -1427,10 +1433,11 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       echoed: { ws: 'ws_in', id: 'sess_1' },
     },
     { repo: 'brainstormSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+    { repo: 'brainstormSessionRepository', method: 'compareAndSwap', args: [{ id: 'sess_1' }] },
     {
       repo: 'brainstormSessionRepository',
-      method: 'deleteByBlockStage',
-      args: ['blk_1', 'discovery'],
+      method: 'replaceForBlockStage',
+      args: [{ id: 'sess_1' }],
     },
     // consensus (multi-strategy orchestration, keyed by run step).
     {
@@ -1490,7 +1497,7 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       },
       brainstormSessionRepository: {
         ...registry.brainstormSessionRepository,
-        deleteByBlockStage: async (...a: unknown[]) => void calls.push(a),
+        replaceForBlockStage: async (...a: unknown[]) => void calls.push(a),
       },
     }
     const client = inProcessClient({
@@ -1504,10 +1511,10 @@ describe('advanced review / session management surface (workspace-scoped)', () =
     >
 
     await remote.consensusSessionRepository!.upsert!('ws_in', { id: 'sess_1' })
-    await remote.brainstormSessionRepository!.deleteByBlockStage!('ws_in', 'blk_1', 'discovery')
+    await remote.brainstormSessionRepository!.replaceForBlockStage!('ws_in', { id: 'sess_1' })
 
     expect(calls).toContainEqual(['ws_in', { id: 'sess_1' }])
-    expect(calls).toContainEqual(['ws_in', 'blk_1', 'discovery'])
+    expect(calls.filter((c) => c[0] === 'ws_in')).toHaveLength(2)
   })
 })
 

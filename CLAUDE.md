@@ -642,6 +642,17 @@ rejects a length-truncated document rather than persisting a silently-incomplete
 is `requirement_reviews`, mirrored D1 ⇄ Drizzle, asserted by conformance. Pass-through when the
 reviewer model isn't wired.
 
+**A review row is ONE JSON blob, so every mutation is rev-guarded — never a blind `upsert`.** The
+three iterative-review stores (requirements / clarity / brainstorm) carry a `rev` and a
+`compareAndSwap`; `IterativeReviewService.mutateReview` loads, applies the mutation, CASes, and on
+a lost race RELOADS and RE-APPLIES on the winner's snapshot. A whole-row write from a stale read
+would drop whatever a second writer settled meanwhile — and since incorporation refuses to run
+while any finding is `open`, a lost dismissal wedges the loop on a phantom open item. Two
+consequences for new code: a mutation passed to `mutateReview` must be idempotent (it can run
+several times, so notifications/dispatches go AFTER it resolves, on the returned review), and a
+fresh review run is published with the atomic `replaceForBlock` / `replaceForBlockStage`, never a
+`delete` followed by an `upsert` — the pair can interleave into two live reviews for one block.
+
 **Headless callers drive the SAME loop** over `/api/v1/runs/:runId/decisions`
 (`PublicDecisionController`), delegating to the same service methods, gated on the `decide` rung of
 the scope ladder (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits
