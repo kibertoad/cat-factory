@@ -92,6 +92,15 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     return rows.map(rowToWorkspace)
   }
 
+  async listByAccount(accountId: string): Promise<Workspace[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.account_id, accountId))
+      .orderBy(desc(workspaces.created_at))
+    return rows.map(rowToWorkspace)
+  }
+
   async get(id: string): Promise<Workspace | null> {
     const [row] = await this.db.select().from(workspaces).where(eq(workspaces.id, id))
     return row ? rowToWorkspace(row) : null

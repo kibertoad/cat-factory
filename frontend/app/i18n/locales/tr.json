@@ -3406,7 +3406,8 @@
       "useThisFolder": "Bu klasörü kullan",
       "errors": {
         "listDirectory": "Dizin listelenemedi"
-      }
+      },
+      "selectAllFiles": "{count} dosyayı seç | Tüm {count} dosyayı seç"
     }
   },
   "slack": {
@@ -4805,7 +4806,19 @@
       "link": "Canlı parça olarak bağla",
       "githubBrowseHint": "Depoya göz atın ve bağlanacak bir veya daha fazla dosya seçin.",
       "selectedFiles": "Seçilen dosyalar ({count})",
-      "removeFile": "Dosyayı kaldır"
+      "removeFile": "Dosyayı kaldır",
+      "blockedReason": {
+        "noSource": "Önce yukarıdan bir belge kaynağı seçin.",
+        "noRepo": "Bir depo seçin veya yukarıya bir GitHub dosya ya da klasör URL'si yapıştırın.",
+        "noFiles": "Depo tarayıcısında en az bir dosyayı işaretleyin.",
+        "noRef": "Önce bir sayfa kimliği veya URL girin."
+      },
+      "urlImport": {
+        "placeholder": "GitHub dosya veya klasör URL'si yapıştırın (örn. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Bul",
+        "invalid": "Bu, bir depo dosyası veya klasör URL'sine benzemiyor.",
+        "notFound": "{slug} ile eşleşen erişilebilir bir depo yok. URL'yi kontrol edin veya önce depoyu bağlayın."
+      }
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",

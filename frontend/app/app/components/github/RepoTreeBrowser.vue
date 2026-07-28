@@ -62,6 +62,22 @@ const isEmpty = computed(() =>
   props.mode === 'dir' ? dirEntries.value.length === 0 : treeEntries.value.length === 0,
 )
 
+// file + multiple: the bulk-pick header. "Select all" checks every file of the CURRENT
+// listing that isn't already picked or added elsewhere; unchecking clears only this
+// listing's picks (never the cart entries staged from other folders).
+const selectableFiles = computed(() =>
+  props.mode === 'file' && props.multiple ? fileEntries.value.filter((e) => !isAdded(e.path)) : [],
+)
+const allSelected = computed(
+  () => selectableFiles.value.length > 0 && selectableFiles.value.every((e) => isPicked(e.path)),
+)
+function toggleAllFiles() {
+  const check = !allSelected.value
+  for (const entry of selectableFiles.value) {
+    if (isPicked(entry.path) !== check) emit('toggle', entry.path)
+  }
+}
+
 const breadcrumbs = computed(() => {
   const segments = currentPath.value ? currentPath.value.split('/') : []
   let acc = ''
@@ -175,21 +191,60 @@ watch(
           </UButton>
         </li>
         <template v-if="mode === 'file'">
+          <!-- multiple: a bulk header so a whole directory of documents is one click -->
+          <li
+            v-if="selectableFiles.length > 1"
+            class="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5"
+          >
+            <UCheckbox
+              :model-value="allSelected"
+              :aria-label="
+                t(
+                  'github.repoTree.selectAllFiles',
+                  { count: selectableFiles.length },
+                  selectableFiles.length,
+                )
+              "
+              data-testid="repo-tree-select-all"
+              @update:model-value="toggleAllFiles"
+            />
+            <button
+              type="button"
+              class="text-xs text-slate-400 hover:text-primary-400"
+              @click="toggleAllFiles"
+            >
+              {{
+                t(
+                  'github.repoTree.selectAllFiles',
+                  { count: selectableFiles.length },
+                  selectableFiles.length,
+                )
+              }}
+            </button>
+          </li>
           <li
             v-for="entry in fileEntries"
             :key="entry.path"
             class="flex items-center justify-between gap-2 px-3 py-1.5"
           >
-            <button
-              type="button"
-              class="flex items-center gap-2 truncate text-sm hover:text-primary-400"
-              :class="isPicked(entry.path) ? 'text-primary-400' : 'text-slate-300'"
-              :disabled="isAdded(entry.path)"
-              @click="pick(entry.path)"
-            >
-              <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-slate-400" />
-              <span class="truncate">{{ entry.name }}</span>
-            </button>
+            <div class="flex min-w-0 items-center gap-2">
+              <UCheckbox
+                v-if="multiple && !isAdded(entry.path)"
+                :model-value="isPicked(entry.path)"
+                :aria-label="entry.name"
+                @update:model-value="pick(entry.path)"
+              />
+              <button
+                type="button"
+                class="flex items-center gap-2 truncate text-sm hover:text-primary-400"
+                :class="isPicked(entry.path) ? 'text-primary-400' : 'text-slate-300'"
+                :disabled="isAdded(entry.path)"
+                @click="pick(entry.path)"
+              >
+                <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-slate-400" />
+                <span class="truncate">{{ entry.name }}</span>
+              </button>
+            </div>
             <span
               v-if="isAdded(entry.path)"
               class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
@@ -198,7 +253,7 @@ watch(
               {{ t('github.repoTree.added') }}
             </span>
             <UIcon
-              v-else-if="isPicked(entry.path)"
+              v-else-if="!multiple && isPicked(entry.path)"
               name="i-lucide-check"
               class="h-4 w-4 shrink-0 text-primary-400"
             />

@@ -1,9 +1,9 @@
-import { LlmFragmentSelector } from '@cat-factory/agents'
+import { createTierInstallationResolvers, LlmFragmentSelector } from '@cat-factory/agents'
 import type {
-  FragmentOwnerKind,
   GitHubClient,
   GitHubInstallationRepository,
   ModelProviderResolver,
+  WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { AppConfig } from '@cat-factory/server'
@@ -31,32 +31,27 @@ import {
  * matcher, via `fragmentSelector: undefined`). Disabled → `{}` and the module stays
  * unassembled (the engine falls back to the static built-in catalog).
  */
-export function selectNodeFragmentLibraryDeps(
-  config: AppConfig,
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-  modelProviderResolver: ModelProviderResolver,
-): Partial<CoreDependencies> {
+export function selectNodeFragmentLibraryDeps(opts: {
+  config: AppConfig
+  env: NodeJS.ProcessEnv
+  db: DrizzleDb
+  githubClient: GitHubClient | undefined
+  installations: GitHubInstallationRepository
+  workspaces: WorkspaceRepository
+  modelProviderResolver: ModelProviderResolver
+}): Partial<CoreDependencies> {
+  const { config, db, githubClient, installations, workspaces, modelProviderResolver } = opts
   if (!config.fragmentLibrary.enabled) return {}
-  const resolveFragmentInstallationId = async (
-    ownerKind: FragmentOwnerKind,
-    ownerId: string,
-  ): Promise<number | null> => {
-    if (ownerKind === 'workspace') {
-      return (await installations.getByWorkspace(ownerId))?.installationId ?? null
-    }
-    const active = await installations.listActive()
-    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
-  }
+  // The shared tier resolver: workspace tier by direct binding, account tier through the
+  // account's boards (PAT-connect / local-synthetic rows carry no usable accountId).
+  const resolvers = createTierInstallationResolvers({ installations, workspaces })
   return {
     promptFragmentRepository: new DrizzlePromptFragmentRepository(db),
     fragmentSourceRepository: new DrizzleFragmentSourceRepository(db),
     // Repo-sourced fragments read guideline files through the workspace's App
     // installation; only wired when a real GitHub client is available (parity with
     // the Worker — hand-authored fragments work without it).
-    ...(githubClient ? { githubClient, resolveFragmentInstallationId } : {}),
+    ...(githubClient ? { githubClient, resolveFragmentInstallationId: resolvers.forOwner } : {}),
     ...(config.fragmentLibrary.selector === 'llm'
       ? {
           fragmentSelector: new LlmFragmentSelector({
@@ -80,17 +75,15 @@ export function selectNodeSkillLibraryDeps(
   db: DrizzleDb,
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
+  workspaces: WorkspaceRepository,
 ): Partial<CoreDependencies> {
   if (!config.fragmentLibrary.enabled) return {}
-  const resolveSkillInstallationId = async (accountId: string): Promise<number | null> => {
-    const active = await installations.listActive()
-    return active.find((i) => i.accountId === accountId)?.installationId ?? null
-  }
+  const resolvers = createTierInstallationResolvers({ installations, workspaces })
   return {
     accountSkillRepository: new DrizzleAccountSkillRepository(db),
     skillSourceRepository: new DrizzleSkillSourceRepository(db),
     // Repo-sourced skills read through the account's App installation; the source sync
     // is only wired when a real GitHub client is available (parity with the Worker).
-    ...(githubClient ? { githubClient, resolveSkillInstallationId } : {}),
+    ...(githubClient ? { githubClient, resolveSkillInstallationId: resolvers.forAccount } : {}),
   }
 }

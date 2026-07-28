@@ -3394,7 +3394,8 @@
       "useThisFolder": "Utiliser ce dossier",
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
-      }
+      },
+      "selectAllFiles": "Sélectionner {count} fichier | Sélectionner les {count} fichiers"
     }
   },
   "slack": {
@@ -4793,7 +4794,19 @@
       "link": "Lier comme fragment vivant",
       "githubBrowseHint": "Parcourez le dépôt et choisissez un ou plusieurs fichiers à lier.",
       "selectedFiles": "Fichiers sélectionnés ({count})",
-      "removeFile": "Retirer le fichier"
+      "removeFile": "Retirer le fichier",
+      "blockedReason": {
+        "noSource": "Choisissez d'abord une source de documents ci-dessus.",
+        "noRepo": "Choisissez un dépôt ou collez ci-dessus l'URL d'un fichier ou d'un dossier GitHub.",
+        "noFiles": "Cochez au moins un fichier dans l'explorateur du dépôt.",
+        "noRef": "Saisissez d'abord un id de page ou une URL."
+      },
+      "urlImport": {
+        "placeholder": "Collez l'URL d'un fichier ou d'un dossier GitHub (par ex. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Rechercher",
+        "invalid": "Ceci ne ressemble pas à l'URL d'un fichier ou d'un dossier de dépôt.",
+        "notFound": "Aucun dépôt accessible ne correspond à {slug}. Vérifiez l'URL ou connectez d'abord le dépôt."
+      }
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",

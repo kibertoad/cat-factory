@@ -3502,7 +3502,8 @@
       "useThisFolder": "Use this folder",
       "errors": {
         "listDirectory": "Could not list directory"
-      }
+      },
+      "selectAllFiles": "Select {count} file | Select all {count} files"
     }
   },
   "slack": {
@@ -5009,7 +5010,19 @@
       "link": "Link as living fragment",
       "githubBrowseHint": "Browse the repo and pick one or more files to link.",
       "selectedFiles": "Selected files ({count})",
-      "removeFile": "Remove file"
+      "removeFile": "Remove file",
+      "blockedReason": {
+        "noSource": "Choose a document source above first.",
+        "noRepo": "Pick a repository, or paste a GitHub file or folder URL above.",
+        "noFiles": "Tick at least one file in the repository browser.",
+        "noRef": "Enter a page id or URL first."
+      },
+      "urlImport": {
+        "placeholder": "Paste a GitHub file or folder URL (e.g. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Find",
+        "invalid": "This doesn't look like a repository file or folder URL.",
+        "notFound": "No accessible repository matches {slug}. Check the URL or connect the repository first."
+      }
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",

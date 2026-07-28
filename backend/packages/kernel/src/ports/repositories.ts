@@ -48,6 +48,15 @@ export interface WorkspaceRepository {
    * are returned.
    */
   listVisible(scope: WorkspaceVisibility): Promise<Workspace[]>
+  /**
+   * Every board owned by an account (`account_id = accountId`), in one query. Backs the
+   * account-tier GitHub-installation resolution for the content libraries (fragments /
+   * skills): an installation row's own `account_id` can be null (a per-workspace PAT
+   * connect) or a foreign id (local mode's synthetic rows carry the PAT's GitHub account),
+   * so the account tier resolves through its workspaces' installations instead — which
+   * needs "the account's boards" as a batched read, never a per-installation point lookup.
+   */
+  listByAccount(accountId: string): Promise<Workspace[]>
   get(id: string): Promise<Workspace | null>
   /**
    * The owning user id for a board: a string when owned, `null` for a board with

@@ -16,6 +16,7 @@ import type {
   UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
+import { normalizeRepoSearchQuery, parseOwnerRepoSlug } from '@cat-factory/contracts'
 import pMap from 'p-map'
 
 // How many repos one workspace resyncs at once, and how many workspaces one installation
@@ -112,7 +113,10 @@ export class GitHubSyncService {
   ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
-    const query = opts.q?.trim()
+    // A pasted repository URL must never depend on the provider's name search (which
+    // tokenizes names — a full URL matches nothing): collapse it to its `owner/name` slug
+    // BEFORE searching, and point-read that slug directly alongside the search below.
+    const query = opts.q?.trim() ? normalizeRepoSearchQuery(opts.q.trim()) : undefined
     // The tracked-projection read, the App-side lookup and the viewer-PAT expansion are three
     // independent reads, so run them as one concurrent wave: serially, a cold PAT enumeration
     // would stack its full multi-page walk on top of the App lookup's latency.
@@ -127,7 +131,7 @@ export class GitHubSyncService {
     // App's grant — even on the hosted facades. The App repos win on a github-id collision
     // (they're shared, so a repo reachable both ways is NOT personal). Personal-only repos are
     // badged so the user knows linking one makes a frame others may not see.
-    const [trackedRows, appRepos, personalRepos] = await Promise.all([
+    const [trackedRows, searchedRepos, directRepo, personalRepos] = await Promise.all([
       this.deps.repoProjectionRepository.list(workspaceId),
       query
         ? this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
@@ -137,8 +141,18 @@ export class GitHubSyncService {
         : this.deps.githubClient
             .listInstallationRepos(installation.installationId)
             .then((page) => page.items),
+      // An exact `owner/name` query (typed, or collapsed from a pasted URL) is ALSO resolved
+      // by a direct point-read, because the search leg alone is not sufficient: the GitHub-App
+      // adapter delegates to GitHub's tokenized name search, which can miss an exact slug
+      // (interior tokens, indexing lag). The point-read is authoritative for reachability.
+      query ? this.directRepoLookup(installation.installationId, query) : null,
       this.viewerPatRepos(workspaceId, opts, query),
     ])
+    // The direct hit leads so an exact match is first in the picker; search rows dedup onto it.
+    const appRepos = [
+      ...(directRepo ? [directRepo] : []),
+      ...searchedRepos.filter((r) => r.githubId !== directRepo?.githubId),
+    ]
     const tracked = new Map(trackedRows.map((r) => [r.githubId, r]))
     const appIds = new Set(appRepos.map((r) => r.githubId))
     const merged: GitHubAvailableRepo[] = appRepos.map((r) => ({
@@ -169,6 +183,22 @@ export class GitHubSyncService {
       })
     }
     return merged
+  }
+
+  /**
+   * Point-read an exact `owner/name` query through the installation, so a repo the token can
+   * reach resolves even when the provider's name search misses it (a pasted URL collapsed to
+   * its slug, a single-token name the search tokenizer splits differently, indexing lag).
+   * A non-slug query, or a repo the installation can't see (404/403), resolves to null and
+   * the picker falls back to whatever the search leg found — an expected miss, not an error.
+   */
+  private async directRepoLookup(
+    installationId: number,
+    query: string,
+  ): Promise<GitHubRepo | null> {
+    const slug = parseOwnerRepoSlug(query)
+    if (!slug) return null
+    return this.deps.githubClient.getRepo(installationId, slug).catch(() => null)
   }
 
   /**

@@ -2840,7 +2840,8 @@
       "useThisFolder": "Usa questa cartella",
       "errors": {
         "listDirectory": "Impossibile elencare la directory"
-      }
+      },
+      "selectAllFiles": "Seleziona {count} file | Seleziona tutti i {count} file"
     }
   },
   "personalSubscriptions": {
@@ -3880,7 +3881,19 @@
       "link": "Collega come frammento vivente",
       "githubBrowseHint": "Sfoglia il repository e scegli uno o più file da collegare.",
       "selectedFiles": "File selezionati ({count})",
-      "removeFile": "Rimuovi file"
+      "removeFile": "Rimuovi file",
+      "blockedReason": {
+        "noSource": "Scegli prima una sorgente di documenti qui sopra.",
+        "noRepo": "Scegli un repository o incolla qui sopra l'URL di un file o di una cartella GitHub.",
+        "noFiles": "Spunta almeno un file nel browser del repository.",
+        "noRef": "Inserisci prima un id di pagina o un URL."
+      },
+      "urlImport": {
+        "placeholder": "Incolla l'URL di un file o di una cartella GitHub (ad es. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Cerca",
+        "invalid": "Questo non sembra l'URL di un file o di una cartella di un repository.",
+        "notFound": "Nessun repository accessibile corrisponde a {slug}. Controlla l'URL o collega prima il repository."
+      }
     },
     "sources": {
       "metaSynced": "sincronizzato · ref {ref}",

@@ -2840,7 +2840,8 @@
       "useThisFolder": "Diesen Ordner verwenden",
       "errors": {
         "listDirectory": "Verzeichnis konnte nicht aufgelistet werden"
-      }
+      },
+      "selectAllFiles": "{count} Datei auswählen | Alle {count} Dateien auswählen"
     }
   },
   "personalSubscriptions": {
@@ -3880,7 +3881,19 @@
       "link": "Als lebendes Fragment verknüpfen",
       "githubBrowseHint": "Durchsuchen Sie das Repo und wählen Sie eine oder mehrere zu verknüpfende Dateien.",
       "selectedFiles": "Ausgewählte Dateien ({count})",
-      "removeFile": "Datei entfernen"
+      "removeFile": "Datei entfernen",
+      "blockedReason": {
+        "noSource": "Wählen Sie zuerst oben eine Dokumentquelle aus.",
+        "noRepo": "Wählen Sie ein Repository aus oder fügen Sie oben eine GitHub-Datei- oder Ordner-URL ein.",
+        "noFiles": "Haken Sie im Repository-Browser mindestens eine Datei an.",
+        "noRef": "Geben Sie zuerst eine Seiten-ID oder URL ein."
+      },
+      "urlImport": {
+        "placeholder": "GitHub-Datei- oder Ordner-URL einfügen (z. B. https://github.com/owner/repo/tree/main/docs)",
+        "action": "Suchen",
+        "invalid": "Das sieht nicht nach der URL einer Repository-Datei oder eines Ordners aus.",
+        "notFound": "Kein zugängliches Repository passt zu {slug}. Prüfen Sie die URL oder verbinden Sie das Repository zuerst."
+      }
     },
     "sources": {
       "metaSynced": "synchronisiert · ref {ref}",
