@@ -67,6 +67,31 @@ import { openSqliteDb } from './db.js'
 /** `length` / `content_filter` as a SQL list literal — shared constant, so the two agree. */
 const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join(', ')
 
+/**
+ * The run's calls with each one's total input and the turns left in ITS conversation after it —
+ * the two factors of the carry-cost proxy. Mirrors the D1 store's subquery exactly (same
+ * `PARTITION BY agent_kind` conversation boundary, same `(created_at, message_count, id)`
+ * ordering, chosen because a proxied row's `turn_index` is NULL by design).
+ */
+const CARRY_COST_SUBQUERY_SQL = `SELECT
+       agent_kind,
+       phase,
+       prompt_tokens,
+       cache_read_tokens,
+       cache_write_tokens,
+       completion_tokens,
+       request_max_tokens,
+       finish_reason,
+       upstream_ms,
+       overhead_ms,
+       ok,
+       (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
+       COUNT(*) OVER (PARTITION BY agent_kind)
+         - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
+         AS turns_after
+     FROM llm_call_metrics
+     WHERE workspace_id = ? AND execution_id = ?`
+
 // --- the bounded-page helpers, mirroring `D1LlmCallMetricRepository` -------------------------
 // D1 IS SQLite, so these are the same SQL shapes; see that file for why each case exists. The
 // notes kept here are the ones a reader of THIS file needs to not break it.
@@ -566,6 +591,7 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
       .prepare(
         `SELECT
            agent_kind                                           AS agent_kind,
+           phase                                                AS phase,
            COUNT(*)                                             AS calls,
            COALESCE(SUM(prompt_tokens), 0)                      AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens), 0)                  AS cache_read_tokens,
@@ -577,13 +603,14 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
            COALESCE(SUM(upstream_ms), 0)                        AS upstream_ms,
            COALESCE(SUM(overhead_ms), 0)                        AS overhead_ms,
            COALESCE(SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END), 0) AS errors,
-           COALESCE(SUM(CASE WHEN ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL}) THEN 1 ELSE 0 END), 0) AS warnings
-         FROM llm_call_metrics
-         WHERE workspace_id = ? AND execution_id = ?
-         GROUP BY agent_kind`,
+           COALESCE(SUM(CASE WHEN ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL}) THEN 1 ELSE 0 END), 0) AS warnings,
+           COALESCE(SUM(input_tokens * turns_after), 0)         AS carry_cost_tokens
+         FROM (${CARRY_COST_SUBQUERY_SQL})
+         GROUP BY agent_kind, phase`,
       )
       .all(workspaceId, executionId) as unknown as {
       agent_kind: string
+      phase: string
       calls: number
       prompt_tokens: number
       cache_read_tokens: number
@@ -596,9 +623,11 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
       overhead_ms: number
       errors: number
       warnings: number
+      carry_cost_tokens: number
     }[]
     return rows.map((r) => ({
       agentKind: r.agent_kind,
+      phase: r.phase,
       calls: r.calls,
       promptTokens: r.prompt_tokens,
       cacheReadTokens: r.cache_read_tokens,
@@ -611,6 +640,7 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
       overheadMs: r.overhead_ms,
       errors: r.errors,
       warnings: r.warnings,
+      carryCostTokens: Number(r.carry_cost_tokens),
     }))
   }
 

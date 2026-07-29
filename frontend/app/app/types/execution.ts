@@ -21,6 +21,7 @@ export type {
   PriorStepOutput,
   StepApproval,
   StepMetrics,
+  StepPhaseMetrics,
   LlmCallMetric,
   LlmCallActivity,
   LlmExportInsight,

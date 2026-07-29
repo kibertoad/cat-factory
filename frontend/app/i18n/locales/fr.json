@@ -1408,6 +1408,19 @@
       "cacheWrite": "{tokens} écrits dans le cache",
       "cacheWriteHint": "Tokens d'entrée écrits dans le cache du fournisseur (1,25 à 2 fois le prix d'une entrée fraîche)"
     },
+    "phase": {
+      "title": "Où sont passés les tokens",
+      "subtitle": "par phase de l'exécution, trié par coût de report",
+      "columns": {
+        "phase": "Phase",
+        "turns": "Tours",
+        "tokensInOut": "Tokens (entrée / sortie)",
+        "carryCost": "Coût de report"
+      },
+      "carryCostHint": "Ce que chaque phase a fait peser sur les tours suivants : son contexte compté une fois pour chaque tour ultérieur ayant dû le renvoyer. Comparez les phases d'une exécution entre elles ; isolée, la valeur ne signifie rien. Une phase qui s'exécute en dernier reporte peu, quoi qu'elle ait dépensé : lisez donc cette colonne avec les tokens voisins.",
+      "unattributed": "Non attribué",
+      "unattributedHint": "enregistré par un canal qui ne rapporte aucune phase"
+    },
     "metricsBar": {
       "calls": "{count} appel | {count} appels",
       "inputCompletionTokens": "Total des tokens d'entrée / de sortie. L'entree compte aussi les tokens en cache : ils occupent toujours la fenêtre de contexte, exactement comme les compte la jauge de contexte de Claude Code.",

@@ -1317,6 +1317,17 @@ error handling — and the phased plan to close them — are tracked in
   - **`turn_index` is NULLABLE, not 0.** It is the harness's job-scoped `seq` (the same number the
     row id is minted from); the proxy has no job-scoped counter, and a 0 there would sort every
     proxied call to the front of its phase as "the first turn".
+  - **The rollup is ONE aggregate at the `(agentKind, phase)` grain**, and every coarser view is a
+    pure fold over it (kernel `domain/llm-rollup.ts` → `step.metrics` + `step.metrics.byPhase`, the
+    debug overview's `llm.byAgentKind` + `llm.byPhase`, the panel's run-level table). It runs on
+    EVERY step settlement, so a second `GROUP BY` per axis both doubles the emit's cost and lets
+    two breakdowns of the same rows disagree. **A new consumer folds; it does not add a query.**
+  - **The `carryCostTokens` proxy is charged per CONVERSATION** (`partition by agent_kind`, the
+    key the prompt delta chain uses) — a later step's turns never re-send an earlier step's
+    context. Its window orders by `(created_at, message_count, id)`, never `turn_index`, which is
+    NULL for every proxied row. It is the one column summed as 64-bit: a product of two sums
+    clears int4 on any real run, so the Postgres aggregate casts `::bigint` where its neighbours
+    cast `::int`.
 
 - **`agent_context_snapshots`** — the complete context an agent was PROVIDED per dispatch: composed
   system + user prompts, fragment bodies, and the full content of injected `.cat-context/*` files

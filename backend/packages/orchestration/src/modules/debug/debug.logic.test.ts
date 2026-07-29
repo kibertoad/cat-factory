@@ -42,6 +42,7 @@ function run(overrides: Partial<ExecutionInstance> = {}): ExecutionInstance {
 function summary(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSummary {
   return {
     agentKind: 'coder',
+    phase: 'agent',
     calls: 2,
     promptTokens: 100,
     cacheReadTokens: 40,
@@ -54,6 +55,7 @@ function summary(overrides: Partial<LlmCallMetricSummary> = {}): LlmCallMetricSu
     overheadMs: 100,
     errors: 0,
     warnings: 0,
+    carryCostTokens: 300,
     ...overrides,
   }
 }
@@ -330,11 +332,47 @@ describe('foldLlmRollup', () => {
   })
 
   it('yields zeroed totals with null ratios for a run that made no calls', () => {
-    const { totals, byAgentKind } = foldLlmRollup([])
+    const { totals, byAgentKind, byPhase } = foldLlmRollup([])
     expect(totals.calls).toBe(0)
     expect(totals.cacheHitRate).toBeNull()
     expect(totals.transportOverheadRatio).toBeNull()
     expect(byAgentKind).toEqual([])
+    expect(byPhase).toEqual([])
+  })
+
+  it('cuts the same cells by phase, costliest carry cost first, and shares that sum to 1', () => {
+    const { totals, byAgentKind, byPhase } = foldLlmRollup([
+      summary({ agentKind: 'coder', phase: 'agent', calls: 5, carryCostTokens: 100 }),
+      summary({
+        agentKind: 'coder',
+        phase: 'validation-repair',
+        calls: 2,
+        carryCostTokens: 700,
+      }),
+      summary({ agentKind: 'tester', phase: 'agent', calls: 3, carryCostTokens: 200 }),
+    ])
+    // The breakdown a caller asking "why did this trivial task cost a million tokens" needs:
+    // `byAgentKind` cannot answer it, because one coder step contains every phase.
+    expect(byPhase.map((p) => [p.phase, p.calls, p.carryCostTokens])).toEqual([
+      ['validation-repair', 2, 700],
+      ['agent', 8, 300],
+    ])
+    expect(byPhase.reduce((a, p) => a + (p.carryCostShare ?? 0), 0)).toBeCloseTo(1)
+    // Both axes are folds over ONE aggregate, so neither can drift from the totals above them.
+    expect(byPhase.reduce((a, p) => a + p.calls, 0)).toBe(totals.calls)
+    expect(byAgentKind.reduce((a, k) => a + k.calls, 0)).toBe(totals.calls)
+  })
+
+  it("keeps the unattributed '' phase as a row instead of hiding it", () => {
+    // A run metered by a channel with no phase concept must not read as a run that spent
+    // nothing outside the agent — the table would look complete while under-reporting.
+    const { byPhase } = foldLlmRollup([summary({ phase: '', calls: 4 })])
+    expect(byPhase.map((p) => [p.phase, p.calls])).toEqual([['', 4]])
+  })
+
+  it('reports a null carry-cost share rather than a divide-by-zero when nothing carried', () => {
+    const { byPhase } = foldLlmRollup([summary({ carryCostTokens: 0 })])
+    expect(byPhase[0]!.carryCostShare).toBeNull()
   })
 })
 
