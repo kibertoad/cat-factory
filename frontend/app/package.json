@@ -55,7 +55,7 @@
     "@types/markdown-it": "^14.1.2",
     "happy-dom": "^20.11.1",
     "msw": "^2.15.0",
-    "nuxt": "^4.5.0",
+    "nuxt": "^4.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "vue-i18n-extract": "^2.0.7",
