@@ -1,5 +1,32 @@
 # @cat-factory/server
 
+## 0.169.0
+
+### Minor Changes
+
+- 22d82ac: Autodetect pre-PR validation checks from a service's repository.
+
+  The service inspector's pre-PR validation panel gains a "Detect" button backed by
+  `GET /workspaces/:ws/services/:blockId/validation-checks/detect`. It reads the repo root
+  through the existing checkout-free `RepoFiles` seam and suggests check commands from what
+  the repo declares — npm/composer scripts, Make/just/Task targets, and the tool configs
+  checked in beside them — across node, python, go, rust, maven, gradle, dotnet, ruby, php,
+  elixir and the three generic task runners.
+
+  The endpoint writes nothing: suggestions land in the panel's unsaved rows and the operator
+  saves them as before, so an unconfigured service still behaves exactly as it did.
+
+### Patch Changes
+
+- Updated dependencies [22d82ac]
+  - @cat-factory/contracts@0.187.0
+  - @cat-factory/kernel@0.181.0
+  - @cat-factory/integrations@0.109.0
+  - @cat-factory/agents@0.82.1
+  - @cat-factory/orchestration@0.159.2
+  - @cat-factory/prompt-fragments@0.15.10
+  - @cat-factory/spend@0.12.110
+
 ## 0.168.0
 
 ### Minor Changes
