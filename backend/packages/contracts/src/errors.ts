@@ -85,6 +85,20 @@ export const CONFLICT_REASONS = [
   // merged last-write-wins — the SPA reloads the log and asks the user to re-apply their edit on
   // top of what landed, instead of silently discarding one of the two prompts.
   'prompt_revision_conflict',
+  // The three ways a recurring SCHEDULE blocks a pipeline edit. Each fire resolves its pipeline by
+  // id and reads its config, so all three would break the schedule silently — nobody is watching a
+  // recurring run that simply stops producing work, which is why they are refusals and not warnings.
+  // The remedy differs per case, hence three reasons rather than one:
+  //  - `pipeline_schedule_attached` — DELETING a pipeline a schedule still points at (every future
+  //    fire would fail to resolve it). Detach the schedule, then delete.
+  'pipeline_schedule_attached',
+  //  - `pipeline_schedule_requires_recurring` — making a pipeline one-off-only while a schedule
+  //    still points at it (each fire throws at origin='recurring').
+  'pipeline_schedule_requires_recurring',
+  //  - `pipeline_schedule_intake_unconfigured` — enabling a `bug-intake` step on a pipeline whose
+  //    attached schedule carries no `issueIntake` config, so every fire would no-op. Configure
+  //    issue intake ON THE SCHEDULE first — the remedy is a different panel from the two above.
+  'pipeline_schedule_intake_unconfigured',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

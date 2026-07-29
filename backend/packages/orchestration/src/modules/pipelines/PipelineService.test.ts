@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { REVIEW_PIPELINE_ID, seedPipelines, ValidationError } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  PipelineRegistry,
+  REVIEW_PIPELINE_ID,
+  seedPipelines,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
   IdGenerator,
   Pipeline,
   PipelineRepository,
+  PipelineScheduleRepository,
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import type { PipelineServiceDependencies } from './PipelineService.js'
 import { PipelineService } from './PipelineService.js'
 
 // The post-release-health gate is observability-gated: it is not in any default pipeline
@@ -341,5 +349,127 @@ describe('PipelineService — reseed', () => {
       agentKinds: ['coder'],
     } as Pipeline)
     await expect(svc(store).reseed(WS, REVIEW_PIPELINE_ID)).rejects.toBeInstanceOf(ValidationError)
+  })
+})
+
+describe('PipelineService — retirement (removing a built-in that is no longer relevant)', () => {
+  const RETIRED = 'pl_org_legacy'
+
+  /** A registry whose `RETIRED` pipeline has been withdrawn in favour of a live built-in. */
+  function retiringRegistry(): PipelineRegistry {
+    const registry = new PipelineRegistry()
+    registry.retire(RETIRED, { replacedBy: REVIEW_PIPELINE_ID })
+    return registry
+  }
+
+  function svc(store: Map<string, Pipeline>, opts: Partial<PipelineServiceDependencies> = {}) {
+    return new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+      ...opts,
+    })
+  }
+
+  /** A workspace seeded with the pipeline BEFORE it was retired — the only state this feature acts on. */
+  function storeWithRetiredCopy(): Map<string, Pipeline> {
+    return new Map<string, Pipeline>([
+      [RETIRED, { id: RETIRED, name: 'Legacy org flow', agentKinds: ['coder'], builtin: true }],
+    ])
+  }
+
+  function scheduleRepo(pipelineIds: string[]): PipelineScheduleRepository {
+    return {
+      list: async () => pipelineIds.map((pipelineId, i) => ({ id: `sch_${i}`, pipelineId })),
+    } as unknown as PipelineScheduleRepository
+  }
+
+  it('deletes a retired built-in from a workspace that was seeded with it', async () => {
+    const store = storeWithRetiredCopy()
+    await svc(store, { pipelineRegistry: retiringRegistry() }).remove(WS, RETIRED)
+    expect(store.has(RETIRED)).toBe(false)
+  })
+
+  it('still refuses to delete a LIVE built-in', async () => {
+    // Retirement is the deletion's authorization, so the read-only guarantee is untouched for
+    // every pipeline the catalog still ships — otherwise this feature would be a way to empty
+    // the curated palette.
+    const store = new Map<string, Pipeline>([
+      [REVIEW_PIPELINE_ID, seedPipelines().find((p) => p.id === REVIEW_PIPELINE_ID)!],
+    ])
+    await expect(
+      svc(store, { pipelineRegistry: retiringRegistry() }).remove(WS, REVIEW_PIPELINE_ID),
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(store.has(REVIEW_PIPELINE_ID)).toBe(true)
+  })
+
+  it('refuses to delete a built-in whose retirement this deployment does not declare', async () => {
+    // The stored row is identical either way; without the tombstone there is nothing saying the
+    // pipeline is obsolete, so an unwired registry must not read as "everything is retired".
+    const store = storeWithRetiredCopy()
+    await expect(svc(store).remove(WS, RETIRED)).rejects.toBeInstanceOf(ValidationError)
+    expect(store.has(RETIRED)).toBe(true)
+  })
+
+  it('refuses to delete a pipeline a recurring schedule still points at', async () => {
+    // Every future fire resolves the pipeline by id, so deleting it would break the schedule
+    // silently — the failure only shows up as work that quietly stopped happening. The refusal
+    // carries `details.reason`, not just prose: the SPA maps that to translated remedy copy, and
+    // the raw message is English-only.
+    const store = storeWithRetiredCopy()
+    await expect(
+      svc(store, {
+        pipelineRegistry: retiringRegistry(),
+        pipelineScheduleRepository: scheduleRepo([RETIRED]),
+      }).remove(WS, RETIRED),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { reason: 'pipeline_schedule_attached' },
+    })
+    expect(store.has(RETIRED)).toBe(true)
+  })
+
+  it('blocks the delete on a DISABLED schedule too', async () => {
+    // `enabled` is a pause button, not a detach: filtering on it would let the delete strand a
+    // schedule whose owner re-enables it later, and the breakage would then look like the
+    // re-enable's fault rather than this deletion's.
+    const store = storeWithRetiredCopy()
+    const paused = {
+      list: async () => [{ id: 'sch_0', pipelineId: RETIRED, enabled: false }],
+    } as unknown as PipelineScheduleRepository
+    await expect(
+      svc(store, {
+        pipelineRegistry: retiringRegistry(),
+        pipelineScheduleRepository: paused,
+      }).remove(WS, RETIRED),
+    ).rejects.toBeInstanceOf(ConflictError)
+    expect(store.has(RETIRED)).toBe(true)
+  })
+
+  it('guards a CUSTOM pipeline against the same stranded schedule', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_1', { id: 'pl_1', name: 'Mine', agentKinds: ['coder'] }],
+    ])
+    await expect(
+      svc(store, { pipelineScheduleRepository: scheduleRepo(['pl_1']) }).remove(WS, 'pl_1'),
+    ).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('deletes when the workspace schedules point at OTHER pipelines', async () => {
+    const store = storeWithRetiredCopy()
+    await svc(store, {
+      pipelineRegistry: retiringRegistry(),
+      pipelineScheduleRepository: scheduleRepo(['pl_bug_triage']),
+    }).remove(WS, RETIRED)
+    expect(store.has(RETIRED)).toBe(false)
+  })
+
+  it('refuses to reseed a retired built-in, pointing at removal instead', async () => {
+    // Reseed and remove are the two halves of one lifecycle and must never both claim an id: the
+    // catalog has nothing left to restore this from, so the error has to name the other action.
+    const store = storeWithRetiredCopy()
+    await expect(
+      svc(store, { pipelineRegistry: retiringRegistry() }).reseed(WS, RETIRED),
+    ).rejects.toThrow(/retired/i)
   })
 })

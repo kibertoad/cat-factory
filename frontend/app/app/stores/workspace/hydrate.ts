@@ -62,7 +62,11 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
   useBoardStore().hydrate(snapshot.blocks, boardSince)
   useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
-  usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
+  usePipelinesStore().hydrate(
+    snapshot.pipelines,
+    snapshot.pipelineCatalogVersions,
+    snapshot.retiredPipelines,
+  )
   useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
   useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
   useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])

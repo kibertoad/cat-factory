@@ -3726,14 +3726,20 @@
       "add": "Aggiungi",
       "reseed": "Ripristina",
       "delete": "Elimina",
+      "remove": "Rimuovi",
       "updatesHeading": "Aggiornamenti disponibili",
       "updatesDescription": "E stata rilasciata una versione piu recente di queste pipeline integrate. Ripristinale per adottarla (le tue etichette e lo stato di archiviazione vengono mantenuti).",
+      "retiredHeading": "Pipeline ritirate",
+      "retiredDescription": "Queste pipeline integrate sono state ritirate dal catalogo, quindi non esiste una versione piu recente da adottare. Rimuovile dalla libreria di questa board.",
+      "retiredNote": "Ritirata dal catalogo.",
+      "retiredReplacedBy": "Ritirata dal catalogo. Usa {name} al suo posto.",
       "reseedAll": "Ripristina tutte ({count})",
       "dismiss": "Ignora",
       "done": "Fatto",
       "toast": {
         "reseedFailed": "Impossibile ripristinare la pipeline",
-        "deleteFailed": "Impossibile eliminare la pipeline"
+        "deleteFailed": "Impossibile eliminare la pipeline",
+        "removeFailed": "Impossibile rimuovere la pipeline"
       }
     }
   },
@@ -4630,7 +4636,10 @@
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
         "env_test_no_vcs": "Provider Git non connesso",
         "env_test_connection_failed": "Connessione all'ambiente non riuscita",
-        "prompt_revision_conflict": "Prompt modificato da qualcun altro"
+        "prompt_revision_conflict": "Prompt modificato da qualcun altro",
+        "pipeline_schedule_attached": "Una pianificazione ricorrente usa questa pipeline",
+        "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
+        "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4655,7 +4664,10 @@
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
         "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
         "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
-        "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra."
+        "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra.",
+        "pipeline_schedule_attached": "Una pianificazione ricorrente punta ancora a questa pipeline e ogni esecuzione che avvia la risolve tramite id. Scollega o elimina prima quella pianificazione, poi rimuovi la pipeline.",
+        "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",
+        "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

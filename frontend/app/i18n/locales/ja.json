@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "環境ハンドラーが設定されていません",
         "env_test_no_vcs": "Git プロバイダーが未接続です",
         "env_test_connection_failed": "環境への接続に失敗しました",
-        "prompt_revision_conflict": "別のユーザーがプロンプトを変更しました"
+        "prompt_revision_conflict": "別のユーザーがプロンプトを変更しました",
+        "pipeline_schedule_attached": "定期スケジュールがこのパイプラインを使用しています",
+        "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
+        "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "セルフテストは使い捨てブランチの作成と削除のために Git プロバイダーを必要としますが、このワークスペースはいずれにも接続されていません。",
         "env_test_connection_failed": "このサービスの環境ハンドラーが接続テストに失敗しました。エンドポイント、認証情報、プロジェクト設定を確認してから、接続を再テストしてください。",
         "env_test_connection_failed_detail": "このサービスの環境ハンドラーが接続テストに失敗しました: {detail}。エンドポイント、認証情報、プロジェクト設定を確認してから、接続を再テストしてください。",
-        "prompt_revision_conflict": "このプロンプトへの別の編集が先に反映されました。読み込み直して、その上に変更をやり直してください。"
+        "prompt_revision_conflict": "このプロンプトへの別の編集が先に反映されました。読み込み直して、その上に変更をやり直してください。",
+        "pipeline_schedule_attached": "定期スケジュールがまだこのパイプラインを参照しており、開始する実行はすべて ID でパイプラインを解決します。先にそのスケジュールを解除または削除してから、パイプラインを削除してください。",
+        "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
+        "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -4054,14 +4060,20 @@
       "add": "追加",
       "reseed": "再シード",
       "delete": "削除",
+      "remove": "削除",
       "updatesHeading": "更新あり",
       "updatesDescription": "これらのビルトインパイプラインの新しいバージョンが提供されました。再シードして取り込んでください(ラベルとアーカイブ状態は維持されます)。",
+      "retiredHeading": "廃止されたパイプライン",
+      "retiredDescription": "これらの組み込みパイプラインはカタログから撤回されたため、取り込める新しいバージョンはありません。このボードのライブラリから削除してください。",
+      "retiredNote": "カタログから廃止されました。",
+      "retiredReplacedBy": "カタログから廃止されました。代わりに{name}を使用してください。",
       "reseedAll": "すべて再シード ({count})",
       "dismiss": "閉じる",
       "done": "完了",
       "toast": {
         "reseedFailed": "パイプラインを再シードできませんでした",
-        "deleteFailed": "パイプラインを削除できませんでした"
+        "deleteFailed": "パイプラインを削除できませんでした",
+        "removeFailed": "パイプラインを削除できませんでした"
       }
     }
   },

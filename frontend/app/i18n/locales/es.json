@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Gestor de entorno no configurado",
         "env_test_no_vcs": "Proveedor de Git no conectado",
         "env_test_connection_failed": "Fallo de conexión del entorno",
-        "prompt_revision_conflict": "Otra persona cambió el prompt"
+        "prompt_revision_conflict": "Otra persona cambió el prompt",
+        "pipeline_schedule_attached": "Una programación recurrente usa esta canalización",
+        "pipeline_schedule_requires_recurring": "Una programación recurrente necesita esta canalización",
+        "pipeline_schedule_intake_unconfigured": "La programación no tiene entrada de incidencias"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno.",
         "env_test_connection_failed": "El gestor de entornos de este servicio no superó su prueba de conexión. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
         "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
-        "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima."
+        "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima.",
+        "pipeline_schedule_attached": "Una programación recurrente todavía apunta a esta canalización, y cada ejecución que inicia la resuelve por su id. Desvincule o elimine esa programación antes de quitar la canalización.",
+        "pipeline_schedule_requires_recurring": "Una programación recurrente todavía apunta a esta canalización, así que limitarla a un solo uso rompería cada ejecución futura. Desvincule primero esa programación.",
+        "pipeline_schedule_intake_unconfigured": "Un paso de entrada de errores toma su trabajo de la entrada de incidencias de la programación, y la programación vinculada no la tiene. Configure la entrada de incidencias en la programación primero."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -4042,14 +4048,20 @@
       "add": "Añadir",
       "reseed": "Regenerar",
       "delete": "Eliminar",
+      "remove": "Quitar",
       "updatesHeading": "Actualizaciones disponibles",
       "updatesDescription": "Se ha publicado una versión más reciente de estos pipelines integrados. Regenéralos para adoptarla (se conservan tus etiquetas y el estado de archivo).",
+      "retiredHeading": "Pipelines retirados",
+      "retiredDescription": "Estos pipelines integrados se han retirado del catálogo, así que no hay ninguna versión más reciente que adoptar. Quítalos de la biblioteca de este tablero.",
+      "retiredNote": "Retirado del catálogo.",
+      "retiredReplacedBy": "Retirado del catálogo. Usa {name} en su lugar.",
       "reseedAll": "Regenerar todos ({count})",
       "dismiss": "Descartar",
       "done": "Hecho",
       "toast": {
         "reseedFailed": "No se pudo regenerar el pipeline",
-        "deleteFailed": "No se pudo eliminar el pipeline"
+        "deleteFailed": "No se pudo eliminar el pipeline",
+        "removeFailed": "No se pudo quitar el pipeline"
       }
     }
   },

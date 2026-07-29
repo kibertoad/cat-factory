@@ -673,6 +673,50 @@ to fold in.
 Each flow below is a cross-file runtime path. Where an ADR or initiative doc exists, it is the
 authority.
 
+### Built-in catalog lifecycle: seed → reseed → RETIRE
+
+A built-in pipeline is COPIED into each workspace at creation (`seedPipelines()` → the
+`WorkspaceService.create` seed loop), so the catalog in code and the rows on a board drift apart the
+moment either changes. Three actions reconcile them, and every one of them keys off the CATALOG, not
+the stored row: a NEW built-in is materialised by `reseed` (the row is inserted), an UPDATED one is
+adopted by `reseed` (bump its `version` — that increment is the whole drift signal), and a WITHDRAWN
+one is removed by `remove`. The SPA's pipeline-health advisory offers all three; the same
+persist + version + reseed lifecycle covers risk policies and model presets.
+
+**Retiring a built-in is TWO edits, and doing only the first is a silent no-op.** Delete its
+definition from the builder in `kernel/src/domain/seed.ts` AND name it in `buildRetiredPipelines()`
+there. The deletion alone changes nothing for anyone who already has the row: `reseed` has nothing
+to resolve and `remove` refuses every built-in, so the obsolete pipeline sits in every existing
+board's library forever, still startable. The tombstone is what flips that row from read-only to
+removable — and it must be a POSITIVE assertion rather than inferred from absence, because
+`seedPipelines` takes a `PipelineRegistry`: "not in the catalog" is also what a deployment's own
+pipelines look like whenever their package isn't wired.
+
+- **The two sets are disjoint by construction.** `retiredPipelines()` filters out anything
+  `seedPipelines()` still yields, so a live built-in can never be offered a delete and a retired one
+  can never be offered a reseed. A kernel unit test guards the hand-authored list against naming a
+  pipeline the builders still ship. Note `seedPipelines()` itself does NOT filter — it does not need
+  to, because a retired built-in's definition is deleted — so do not "fix" it by adding one; that
+  would make the tombstone authoritative over the builders and let a stray id delete a live pipeline
+  from every palette.
+- **A deployment retires its OWN pipelines via `PipelineRegistry.retire(id, { replacedBy })`**, the
+  inverse of `register` (each drops the other's entry for that id). It CANNOT retire a built-in —
+  the live entry wins — and `validateRegistrations` raises `retirement_of_live_pipeline` at boot so
+  that ignored call is never silent. Retiring an id nothing currently defines is legitimate and
+  raises nothing: that is the tombstone for a pipeline an older version of the deployment's own
+  package shipped, and reaching boards that still store the row is the entire point.
+- **`replacedBy` is an ID, never prose** — the backend does not localize copy, so the SPA resolves
+  it to the pipeline's name and writes the sentence. Resolve it against the stored row AND the
+  catalog: the usual retirement is superseded-by-a-newly-shipped-built-in, and a new built-in has no
+  row until someone adds it, so a store-only lookup blanks the replacement in the main case. The WHY
+  of a retirement lives in a comment beside its tombstone.
+- **Deleting a pipeline a recurring SCHEDULE points at is refused (409)**, retired or custom alike,
+  and a PAUSED schedule counts (pausing is not detaching): every future fire resolves it by id, so
+  the breakage would be invisible — the work just stops. A task pinned to a deleted pipeline is fine
+  by contrast: it falls back to the run-time picker. All three schedule refusals (this one plus
+  `update`'s one-off and bug-intake edits) carry a `details.reason`, so the SPA words them from the
+  catalog rather than surfacing the English message.
+
 ### Repo bootstrap (async + observable + board-integrated)
 
 Adapts a reference architecture (or scaffolds) into a pre-created empty repo and force-pushes.

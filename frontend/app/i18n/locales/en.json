@@ -559,7 +559,10 @@
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected",
         "env_test_connection_failed": "Environment connection failed",
-        "prompt_revision_conflict": "Prompt changed by someone else"
+        "prompt_revision_conflict": "Prompt changed by someone else",
+        "pipeline_schedule_attached": "Recurring schedule uses this pipeline",
+        "pipeline_schedule_requires_recurring": "Recurring schedule needs this pipeline",
+        "pipeline_schedule_intake_unconfigured": "Schedule has no issue intake"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -587,7 +590,10 @@
         "@env_test_connection_failed_detail": {
           "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
         },
-        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top."
+        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top.",
+        "pipeline_schedule_attached": "A recurring schedule still points at this pipeline, and every run it starts resolves the pipeline by id. Detach or delete that schedule first, then remove the pipeline.",
+        "pipeline_schedule_requires_recurring": "A recurring schedule still points at this pipeline, so making it one-off only would break every future run it starts. Detach that schedule first.",
+        "pipeline_schedule_intake_unconfigured": "A bug intake step draws its work from the schedule issue intake settings, and the attached schedule has none. Configure issue intake on the schedule first."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -4157,14 +4163,20 @@
       "add": "Add",
       "reseed": "Reseed",
       "delete": "Delete",
+      "remove": "Remove",
       "updatesHeading": "Updates available",
       "updatesDescription": "A newer version of these built-in pipelines has shipped. Reseed to adopt it (your labels and archive state are kept).",
+      "retiredHeading": "Retired pipelines",
+      "retiredDescription": "These built-in pipelines have been withdrawn from the catalog, so there is no newer version to adopt. Remove them from this board library.",
+      "retiredNote": "Retired from the catalog.",
+      "retiredReplacedBy": "Retired from the catalog. Use {name} instead.",
       "reseedAll": "Reseed all ({count})",
       "dismiss": "Dismiss",
       "done": "Done",
       "toast": {
         "reseedFailed": "Could not reseed pipeline",
-        "deleteFailed": "Could not delete pipeline"
+        "deleteFailed": "Could not delete pipeline",
+        "removeFailed": "Could not remove pipeline"
       }
     }
   },

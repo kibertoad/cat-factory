@@ -27,14 +27,26 @@ function builtin(agentKinds: string[], over: Partial<Pipeline> = {}): Pipeline {
   }
 }
 
-/** Seed the store with pipelines + their current catalog versions, then scan. */
-function scan(pipelines: Pipeline[], versions: Record<string, number> = {}) {
+/**
+ * Seed the store with pipelines + their current catalog versions (and any RETIREMENTS), then scan.
+ * A retired id is dropped from the derived catalog versions, mirroring the backend where the two
+ * sets are disjoint by construction — a test that seeded both would assert against a snapshot the
+ * facade cannot produce.
+ */
+function scan(
+  pipelines: Pipeline[],
+  versions: Record<string, number> = {},
+  retired: { id: string; replacedBy?: string }[] = [],
+) {
   const store = usePipelinesStore()
-  const catalogVersions = {
-    ...Object.fromEntries(pipelines.filter((p) => p.builtin).map((p) => [p.id, p.version ?? 0])),
-    ...versions,
-  }
-  store.hydrate(pipelines, catalogVersions)
+  const retiredIds = new Set(retired.map((r) => r.id))
+  const catalogVersions = Object.fromEntries(
+    Object.entries({
+      ...Object.fromEntries(pipelines.filter((p) => p.builtin).map((p) => [p.id, p.version ?? 0])),
+      ...versions,
+    }).filter(([id]) => !retiredIds.has(id)),
+  )
+  store.hydrate(pipelines, catalogVersions, retired)
   return usePipelineHealth()
 }
 
@@ -162,6 +174,66 @@ describe('usePipelineHealth', () => {
     const stored = builtin(['coder', 'reviewer'], { id: 'pl_full', version: 1 })
     const { newPipelines, hasIssues } = scan([stored], { pl_full: 1 })
     expect(newPipelines.value).toHaveLength(0)
+    expect(hasIssues.value).toBe(false)
+  })
+  it('reports a stored built-in the catalog retired, with no reseed offer', () => {
+    const stale = builtin(['coder', 'reviewer'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const { retired, invalid, outdated, newPipelines, hasIssues } = scan([stale], {}, [
+      { id: 'pl_gone' },
+    ])
+    expect(retired.value).toHaveLength(1)
+    expect(retired.value[0]!.pipeline.id).toBe('pl_gone')
+    expect(retired.value[0]!.replacement).toBeUndefined()
+    expect(hasIssues.value).toBe(true)
+    // Retirement is answered by a REMOVAL, so the pipeline must appear in no reseed-shaped list.
+    expect(invalid.value).toHaveLength(0)
+    expect(outdated.value).toHaveLength(0)
+    expect(newPipelines.value).toHaveLength(0)
+  })
+
+  it('resolves a retirement replacement to the stored pipeline it names', () => {
+    const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const live = builtin(['coder', 'reviewer'], { id: 'pl_simple', name: 'Simple', version: 1 })
+    const { retired } = scan([stale, live], {}, [{ id: 'pl_gone', replacedBy: 'pl_simple' }])
+    expect(retired.value[0]!.replacement).toEqual({ id: 'pl_simple', name: 'Simple' })
+  })
+
+  it('names a replacement that is in the catalog but NOT yet stored on this board', () => {
+    // The canonical retirement: an old flow superseded by a NEWLY SHIPPED built-in. The replacement
+    // is in `catalogVersions` with no row until someone adds it — it is simultaneously a
+    // `newPipelines` entry — so resolving only against stored pipelines silently dropped the
+    // "Use X instead" sentence in exactly the case `replacedBy` exists to serve.
+    const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const { retired, newPipelines } = scan([stale], { pl_bug_triage: 1 }, [
+      { id: 'pl_gone', replacedBy: 'pl_bug_triage' },
+    ])
+    expect(newPipelines.value.map((p) => p.id)).toContain('pl_bug_triage')
+    expect(retired.value[0]!.replacement).toEqual({ id: 'pl_bug_triage', name: 'bug triage' })
+  })
+
+  it('leaves the replacement unnamed when the id resolves nowhere', () => {
+    // A SPA running against a newer backend can be handed a `replacedBy` it knows nothing about.
+    // The advisory falls back to the un-named copy rather than inventing a name for it.
+    const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const { retired } = scan([stale], {}, [{ id: 'pl_gone', replacedBy: 'pl_from_the_future' }])
+    expect(retired.value[0]!.replacement).toBeUndefined()
+  })
+
+  it('keeps an INVALID retired built-in out of the invalid list (its Reseed could only fail)', () => {
+    // The regression this pins: a retired pipeline that also references an unknown kind used to
+    // land in `invalid` with a built-in Reseed button, and reseed 422s for an id the catalog no
+    // longer defines — an advisory offering a fix that cannot work.
+    const broken = builtin(['coder', 'bogus-kind'], { id: 'pl_gone', version: 1 })
+    const { invalid, retired } = scan([broken], {}, [{ id: 'pl_gone' }])
+    expect(invalid.value).toHaveLength(0)
+    expect(retired.value).toHaveLength(1)
+  })
+
+  it('ignores a retirement for a pipeline this workspace never stored', () => {
+    // Nothing to clean up: the board was created after the withdrawal, so it was never seeded.
+    const stored = builtin(['coder', 'reviewer'], { id: 'pl_full', version: 1 })
+    const { retired, hasIssues } = scan([stored], { pl_full: 1 }, [{ id: 'pl_gone' }])
+    expect(retired.value).toHaveLength(0)
     expect(hasIssues.value).toBe(false)
   })
 })
