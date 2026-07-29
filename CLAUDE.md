@@ -1874,6 +1874,16 @@ auth-enabled or it passes vacuously.
   **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the windows.** The
   shell owns the chrome and the shared trailing section (today `step.effortReport`), resolving the
   step itself rather than via a per-window prop, so a window can't opt out or forget it.
+  **A STEP-BACKED window's run details are the `StepRunMeta` sidebar, resolved through
+  `useResultViewRunMeta(viewId, …)`** — never hand-derived, and never wired straight off
+  `useResultView`'s `stepIndex`. It stays per-window rather than moving into the shell because it
+  is a layout column and several windows are block-keyed with no run at all (`service-spec`), but
+  the RESOLUTION is shared: a window opened OFF-PATH (`ui.openInitiativeTracker`, a board card, an
+  inspector button) carries a block id and NO step index, so reading `stepIndex` alone blanks the
+  model, the run id and the token telemetry on exactly the entry point people use. The composable
+  falls back to the block's live run and picks the step whose kind declares that view id — the
+  last one that actually ran a model, since a window's kind set can also span model-less
+  bookkeeping steps (`initiative-committer`).
 - **Inspector panel seam (frontend)**: the inspector body is a subject-keyed panel group, not a
   `v-if` monolith. Each sub-panel is a `PanelEntry<Block>` (`{ id, component, when(block), order }`)
   contributed to the `inspectorPanels` slot and rendered by `<PanelsOutlet>`. A consumer contributes
