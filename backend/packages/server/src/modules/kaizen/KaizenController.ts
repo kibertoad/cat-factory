@@ -5,15 +5,11 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the Kaizen module or send a 503, returning null when unconfigured. */
-function requireKaizen<E extends AppEnv>(c: Context<E>): KaizenModule | null {
-  return c.get('container').kaizen ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Kaizen is not configured')
+/** Resolve the Kaizen module, or refuse with a 503 naming what isn't wired. */
+function requireKaizen<E extends AppEnv>(c: Context<E>): KaizenModule {
+  return requireCapability(c.get('container').kaizen, 'Kaizen is not configured')
 }
 
 /**
@@ -29,7 +25,6 @@ export function kaizenController(): Hono<AppEnv> {
   // The Kaizen screen: recent grading history + the verified-combo library.
   buildHonoRoute(app, getKaizenOverviewContract, async (c) => {
     const kaizen = requireKaizen(c)
-    if (!kaizen) return unavailable()
     const overview = await kaizen.service.getOverview(param(c, 'workspaceId'))
     return c.json(overview, 200)
   })
@@ -37,7 +32,6 @@ export function kaizenController(): Hono<AppEnv> {
   // The gradings recorded for one run (the run-window status surface).
   buildHonoRoute(app, getKaizenRunGradingsContract, async (c) => {
     const kaizen = requireKaizen(c)
-    if (!kaizen) return unavailable()
     const gradings = await kaizen.service.listForExecution(
       param(c, 'workspaceId'),
       c.req.valid('param').executionId,

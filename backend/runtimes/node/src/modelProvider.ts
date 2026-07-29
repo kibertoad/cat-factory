@@ -9,13 +9,14 @@ import {
   type ModelProviderResolver,
   type WorkspaceSettingsRepository,
   composeTraceSinks,
+  createStoreAgentContextGate,
 } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { parseOtlpHeaders } from '@cat-factory/observability-otel'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
-import { createScopedModelProviderResolver, createStoreAgentContextGate } from '@cat-factory/server'
+import { createScopedModelProviderResolver } from '@cat-factory/server'
 
 // The Node deployment's ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no

@@ -1,11 +1,11 @@
-import {
-  describeError,
-  getErrorReason,
-  noopLogger,
-  type AgentFailureKind,
-  type Logger,
-} from '@cat-factory/kernel'
+import { describeError, noopLogger, type Logger } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
+import {
+  failureFromAdvanceError,
+  failureFromDriver,
+  failureFromResult,
+  type RunFailure,
+} from './runFailure.js'
 import type { ExecutionService } from './ExecutionService.js'
 
 /** Poll cadence + budgets for the gates a parked run waits on. */
@@ -73,12 +73,18 @@ export async function driveExecution(
   // poll-failure warnings below, which fire deep inside `pollUntil` — is greppable by run
   // without each call site re-spreading them.
   const log = (opts.log ?? noopLogger).child({ workspaceId, executionId })
-  const fail = (
-    message: string,
-    kind: AgentFailureKind = 'agent',
-    detail: string | null = null,
-    reason: string | null = null,
-  ) => exec.failRun(workspaceId, executionId, message, kind, detail, reason)
+  // ONE funnel taking the shared {@link RunFailure}, so this driver and the Cloudflare
+  // `ExecutionWorkflow` record byte-identical failures derived by the same three functions
+  // rather than each assembling positional arguments of its own.
+  const fail = (failure: RunFailure) =>
+    exec.failRun(
+      workspaceId,
+      executionId,
+      failure.message,
+      failure.kind,
+      failure.detail,
+      failure.reason,
+    )
 
   // Poll a parked gate (job / CI / conflicts) until it yields a non-awaiting result
   // or the budget is spent. Tolerates a bounded run of status-read failures.
@@ -117,9 +123,11 @@ export async function driveExecution(
         log.warn('run poll failed', { ...cause, label, readFailures })
         if (readFailures >= cfg.jobPollFailureTolerance) {
           await fail(
-            `${label} status was unreadable (${readFailures} polls)` +
-              (cause.err ? ` (last error: ${String(cause.err)})` : ''),
-            'timeout',
+            failureFromDriver(
+              `${label} status was unreadable (${readFailures} polls)` +
+                (cause.err ? ` (last error: ${String(cause.err)})` : ''),
+              'timeout',
+            ),
           )
           return null
         }
@@ -131,7 +139,7 @@ export async function driveExecution(
     // Budget spent. A gate may resolve exhaustion itself (a watch gate PASSES rather than
     // timing out) — let it; otherwise fail the run as a generic timeout.
     if (pollOpts.onExhausted) return pollOpts.onExhausted()
-    await fail(`${label} did not settle within its polling budget`, 'timeout')
+    await fail(failureFromDriver(`${label} did not settle within its polling budget`, 'timeout'))
     return null
   }
 
@@ -145,12 +153,7 @@ export async function driveExecution(
       // remedy for. Lift it onto the run instead of leaving only prose behind; the
       // step-result path below has always forwarded `reason`, so the throw path dropping
       // it was the asymmetry (observability-logging-gaps.md, B3).
-      await fail(
-        error instanceof Error ? error.message : String(error),
-        'agent',
-        null,
-        getErrorReason(error) ?? null,
-      )
+      await fail(failureFromAdvanceError(error))
       return {}
     }
 
@@ -211,18 +214,13 @@ export async function driveExecution(
       // (`companion_rejected`, with its raw reply as detail) — so the run records the
       // accurate kind, hint and detail instead of a generic "container reported a
       // failure". Defaults to `job_failed` for a genuine container-job failure.
-      await fail(
-        result.error,
-        result.failureKind ?? 'job_failed',
-        result.detail ?? null,
-        result.reason ?? null,
-      )
+      await fail(failureFromResult(result))
       return {}
     }
     if (result.kind === 'job_evicted') {
       // Record the transport's container post-mortem as the failure detail — the container is
       // already reclaimed, so this is the only surviving account of why it died.
-      await fail(result.error, 'evicted', result.detail ?? null)
+      await fail(failureFromResult(result))
       return {}
     }
     // done / noop / paused: stop. awaiting_decision: park (resumed on signalDecision).

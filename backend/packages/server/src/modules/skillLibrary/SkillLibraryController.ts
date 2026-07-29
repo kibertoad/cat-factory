@@ -12,19 +12,26 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { requireCapability, requireUser } from '../../http/guards.js'
 
 /** Resolve the skill-library module or send a 503 when unconfigured. */
-function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule | null {
-  return c.get('container').skillLibrary ?? null
+function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule {
+  return requireCapability(
+    c.get('container').skillLibrary,
+    'The Claude Skills library is not configured',
+  )
 }
 
-const unavailable = (): never => {
-  throw new UnavailableError('The Claude Skills library is not configured')
-}
-
-const sourcesUnavailable = (): never => {
-  throw new UnavailableError('Repo-sourced skills require the GitHub integration to be configured')
+/**
+ * The repo-source service, wired only when the GitHub integration is too — a SECOND capability
+ * behind the same module, so it gets its own accessor rather than a guard restated at each of
+ * the five source routes.
+ */
+function requireSources<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    requireLibrary(c).sourceService,
+    'Repo-sourced skills require the GitHub integration to be configured',
+  )
 }
 
 /**
@@ -47,47 +54,36 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listAccountSkillsContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     return c.json(await lib.catalogService.list(accountId(c)), 200)
   })
 
   // ---- repo sources -------------------------------------------------------
 
   buildHonoRoute(app, listSkillSourcesContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable()
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(await lib.sourceService.list(accountId(c)), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.list(accountId(c)), 200)
   })
 
   buildHonoRoute(app, linkSkillSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable()
-    if (!lib.sourceService) return sourcesUnavailable()
-    const source = await lib.sourceService.link(accountId(c), c.req.valid('json'))
+    const sources = requireSources(c)
+    const source = await sources.link(accountId(c), c.req.valid('json'))
     return c.json(source, 201)
   })
 
   buildHonoRoute(app, unlinkSkillSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable()
-    if (!lib.sourceService) return sourcesUnavailable()
-    await lib.sourceService.unlink(accountId(c), c.req.valid('param').id)
+    const sources = requireSources(c)
+    await sources.unlink(accountId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, skillSourceStatusContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable()
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(await lib.sourceService.status(accountId(c), c.req.valid('param').id), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.status(accountId(c), c.req.valid('param').id), 200)
   })
 
   buildHonoRoute(app, syncSkillSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib) return unavailable()
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(await lib.sourceService.sync(accountId(c), c.req.valid('param').id), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.sync(accountId(c), c.req.valid('param').id), 200)
   })
 
   return app
@@ -95,10 +91,7 @@ export function skillLibraryController(): Hono<AppEnv> {
 
 /** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
 async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = c.get('user')
-  if (!user) {
-    throw new UnauthorizedError('Sign in to manage the skill library')
-  }
+  const user = requireUser(c, 'Sign in to manage the skill library')
   // requireMember throws NotFoundError (→ 404) when the user isn't a member.
   await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
   await next()

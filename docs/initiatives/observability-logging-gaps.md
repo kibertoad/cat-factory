@@ -506,7 +506,7 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   `const unavailable = (): never => { throw new UnavailableError(…) }`. Because `never` is
   assignable to every declared response type, the ~90 `return unavailable(c)` call sites became
   `return unavailable()` with no change to their surrounding control flow, so the diff is
-  mechanical rather than a per-handler rewrite.
+  mechanical rather than a per-handler rewrite. **Phase 2b then retired that shape**: see below.
 - **`LlmProxyController` + `WebSearchProxyController` envelopes all carry a `code`** now
   (`upstream_unavailable` / `upstream_error` / `upstream_blocked` / `unavailable` /
   `unauthorized` / `validation` / `payload_too_large` / `spend_exhausted`), and the in-process
@@ -518,6 +518,42 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   prompt/response bodies to Langfuse/OTel — a privacy bug, not a coverage gap. The gate is a
   narrow predicate (`WorkspaceBodiesGate`) built by `createStoreAgentContextGate` in the shared
   server layer, so both facades wire it from one place.
+
+#### Phase 2b — closing the same three holes structurally
+
+Phase 2 fixed all three defects. Each fix, though, left the SHAPE that produced the defect in
+place, so the next field/rule/copy could go missing the same way. 2b removes the shapes. No
+behaviour changes.
+
+- **`RunFailure` + its three derivations** (`orchestration/src/modules/execution/runFailure.ts`):
+  `failureFromAdvanceError` / `failureFromResult` / `failureFromDriver`, now the only way either
+  durable driver fails a run. Threading `reason` into two positional helpers left every parameter
+  defaulted, so a call site that stopped short still compiled and still recorded `null` — which is
+  indistinguishable from "no reason to report", and is why the original divergence survived
+  review. With one shared value, a dropped field is a typecheck failure.
+- **Two shared total accessors** (`server/src/http/guards.ts`: `requireCapability`, `requireUser`),
+  the siblings of `param()`. The per-controller `requireX(c): Module | null` is what forced every
+  route to restate `if (!x) return unavailable()`, and **51 controllers had each declared their
+  own copy of the thrower** to satisfy it. Making the accessor TOTAL deletes the guard line at
+  every route: ~300 call sites. Two throwers remain, both in `AuthController` and both correct:
+  what they guard is a boolean FLAG (`cfg.passwordEnabled` / `cfg.githubEnabled`) and a rate-limit
+  verdict, neither of which has a value to narrow.
+  Each guard has an **`assert*` twin** (`assertCapability` / `assertUser`, plus a per-controller
+  `assertXWired`) for the ~20 routes that need a capability WIRED but read nothing off it,
+  because they call through the execution service instead. Those were the one class the sweep
+  could not convert mechanically, and a discarded `require*` result is indistinguishable from a
+  no-op statement — the next reader, or a mechanical "drop the unused call" pass, deletes the
+  guard and no test fails. The `void` return type is what keeps the intent local to the line.
+  A capability behind a capability (a library module's `sourceService`, wired only when GitHub
+  is) gets its OWN accessor rather than a guard restated per route; so does one whose refusal
+  message differs from its parent's (the environment self-test), or the message names a module
+  the operator has in fact already wired.
+- **`createStoreAgentContextGate` moved to kernel** (`shared/agent-context-gate.ts`) and is now
+  the single implementation, consumed by BOTH `LlmObservabilityService` and
+  `InstrumentedModelProvider`. Phase 2 gave the inline path a gate, but wrote the rule a second
+  time in a second package — leaving the two free to drift exactly as they had. `agents`'
+  `WorkspaceBodiesGate` is an alias of kernel's `StoreAgentContextGate` rather than a second
+  declaration of the same signature.
 
 #### Notes for the next implementer
 
@@ -544,6 +580,18 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 - **`LlmFragmentSelector` was the one inline site tagging no `workspaceId`**, so no workspace
   opt-out could ever apply to it. It had `context.workspaceId` in hand. When adding an inline
   LLM call, tag the workspace — the gate is only as good as the attribution.
+- **The `code` slot is still being used as a REASON slot in ~20 places**, and that residue is
+  NOT migrated: `too_large`, `no_run`, `invalid_body`, `invalid_cursor`, `pipeline_not_public`,
+  `individual_model_unsupported` and friends are causes, not status classes. Each needs a status
+  decision (413 and 402 have no domain class today) and each is a wire change for a specific
+  client, so the work is "move the reason to `details.reason`, pick the class for `code`" — worth
+  doing when Phase 3.1's request middleware makes the `code` axis load-bearing for logging, not
+  before.
+- **The `null`-workspace answer is fail-OPEN, deliberately.** An untagged inline call has no
+  workspace whose opt-out could apply, so the deployment switch alone governs it. The alternative
+  (refuse, on the grounds that an unattributable call is precisely the one whose opt-out can't be
+  checked) was considered and NOT taken: it turns a forgotten tag into silently missing trace
+  bodies. Revisit it only together with a way to catch an untagged call at review time.
 
 ### Phase 3 — Correlation & request visibility
 

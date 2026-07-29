@@ -344,8 +344,13 @@ import { param } from '../../http/params.js'
 import { loadWorkspaceAccess, requirePermission } from '../../http/workspaceAccess.js'
 import { redactBoard, resolveDeniedFrameIds } from './redactFrames.js'
 
-/** The signed-in user, narrowed to what the tenancy layer needs. */
-function accountUser<E extends AppEnv>(c: Context<E>) {
+/**
+ * The signed-in user, narrowed to what the tenancy layer needs, or `null` when there is none.
+ * Deliberately NOT the `requireAccountUser` of the account-scoped controllers: both routes here
+ * answer for an anonymous caller (dev-open runs with auth disabled — board listing falls back to
+ * the unscoped list, board creation to an unscoped board), so a 401 would break that mode.
+ */
+function optionalAccountUser<E extends AppEnv>(c: Context<E>) {
   const user = c.get('user')
   return user ? { id: user.id, login: user.login, name: user.name } : null
 }
@@ -411,7 +416,7 @@ export function workspaceController(): Hono<AppEnv> {
   // one batched member-row read combined with the in-memory account-scope map.
   buildHonoRoute(app, listWorkspacesContract, async (c) => {
     const container = c.get('container')
-    const user = accountUser(c)
+    const user = optionalAccountUser(c)
     if (!user) return c.json(await container.workspaceService.list(null), 200)
     await container.accountService.ensurePersonalAccount(user)
     const { accountIds, adminAccountIds } = await container.accountService.accessibleAccountScopes(
@@ -442,7 +447,7 @@ export function workspaceController(): Hono<AppEnv> {
 
   buildHonoRoute(app, createWorkspaceContract, async (c) => {
     const container = c.get('container')
-    const user = accountUser(c)
+    const user = optionalAccountUser(c)
     const body = c.req.valid('json')
 
     // Resolve the owning account: an explicit one the caller belongs to, else the

@@ -18,15 +18,21 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the requirements module or send a 503, returning null when unconfigured. */
-function requireRequirements<E extends AppEnv>(c: Context<E>): RequirementsModule | null {
-  return c.get('container').requirements ?? null
+/** Resolve the requirements module, or refuse with a 503 naming what isn't wired. */
+function requireRequirements<E extends AppEnv>(c: Context<E>): RequirementsModule {
+  return requireCapability(c.get('container').requirements, 'Requirements review is not configured')
 }
 
-const unavailable = (): never => {
-  throw new UnavailableError('Requirements review is not configured')
+/**
+ * The requirements module as a REFUSAL only. These routes drive their mutations through the
+ * execution service and read nothing off the module itself — but an unwired deployment must
+ * still 503 rather than answer. Discarding a `requireRequirements` result would read as a
+ * no-op statement, so the guard is named for what it does and returns `void`.
+ */
+function assertRequirementsWired<E extends AppEnv>(c: Context<E>): void {
+  requireRequirements(c)
 }
 
 /**
@@ -43,7 +49,6 @@ export function requirementReviewController(): Hono<AppEnv> {
   // The current review for a block (null when none has been run yet).
   buildHonoRoute(app, getRequirementReviewContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const review = await requirements.service.getForBlock(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -55,8 +60,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Routed through the execution service so the off-path surface honours the task's
   // merge-preset knobs (iteration budget + tolerated severity) exactly like the gate.
   buildHonoRoute(app, reviewRequirementsContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.review(
@@ -69,7 +73,6 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Answer a single review item.
   buildHonoRoute(app, replyRequirementItemContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const { reviewId, itemId } = c.req.valid('param')
     const review = await requirements.service.replyToItem(
       param(c, 'workspaceId'),
@@ -83,7 +86,6 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Set a review item's status (resolve / dismiss / reopen).
   buildHonoRoute(app, updateRequirementItemStatusContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const { reviewId, itemId } = c.req.valid('param')
     const review = await requirements.service.setItemStatus(
       param(c, 'workspaceId'),
@@ -101,8 +103,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // calls them back only if the re-review needs input. Blocks scoped (the review is resolved
   // from the block) to match the other run-driving endpoints.
   buildHonoRoute(app, incorporateRequirementsContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.incorporate(
@@ -117,8 +118,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // parked run advances; otherwise the response carries the next cycle's findings (or the
   // iteration-cap state). Returns the updated review.
   buildHonoRoute(app, reReviewRequirementsContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.reReview(
@@ -131,8 +131,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Proceed: settle the requirements (last incorporated doc wins downstream) and advance
   // the parked run. Used when every finding is dismissed.
   buildHonoRoute(app, proceedRequirementsContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.proceed(
@@ -151,7 +150,6 @@ export function requirementReviewController(): Hono<AppEnv> {
   // review exists.
   buildHonoRoute(app, requestRequirementRecommendationsContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const workspaceId = param(c, 'workspaceId')
     const blockId = c.req.valid('param').blockId
     const review = await requirements.service.getForBlock(workspaceId, blockId)
@@ -167,7 +165,6 @@ export function requirementReviewController(): Hono<AppEnv> {
   // incorporation), reject it, or re-request it with a "do it differently" note.
   buildHonoRoute(app, acceptRequirementRecommendationContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const { reviewId, recId } = c.req.valid('param')
     const review = await requirements.service.acceptRecommendation(
       param(c, 'workspaceId'),
@@ -179,7 +176,6 @@ export function requirementReviewController(): Hono<AppEnv> {
 
   buildHonoRoute(app, rejectRequirementRecommendationContract, async (c) => {
     const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
     const { reviewId, recId } = c.req.valid('param')
     const review = await requirements.service.rejectRecommendation(
       param(c, 'workspaceId'),
@@ -192,8 +188,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Re-request a recommendation with a "do it differently" note. ASYNCHRONOUS like the batch:
   // resets the recommendation to `pending` and signals the driver to re-run the Writer.
   buildHonoRoute(app, reRequestRequirementRecommendationContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const { reviewId, recId } = c.req.valid('param')
     const review = await c
       .get('container')
@@ -209,8 +204,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Resolve a review that hit its iteration cap: one more round / proceed anyway / stop
   // and reset the task to phase zero. Returns the updated review.
   buildHonoRoute(app, resolveRequirementsExceededContract, async (c) => {
-    const requirements = requireRequirements(c)
-    if (!requirements) return unavailable()
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.resolveExceeded(

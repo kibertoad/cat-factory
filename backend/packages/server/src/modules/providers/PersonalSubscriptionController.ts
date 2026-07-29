@@ -7,8 +7,9 @@ import {
 import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { requireCapability, requireUser } from '../../http/guards.js'
 
 // Per-USER individual-usage subscription endpoints (Claude). Unlike the workspace
 // vendor-credential pool, these are scoped to the signed-in user: a personal
@@ -17,39 +18,38 @@ import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
 // root (not under a workspace) and require a signed-in user — with auth disabled there
 // is no individual to own a personal credential.
 
-const signInRequired = (): never => {
-  throw new UnauthorizedError('Sign in to manage personal subscriptions')
+/** Resolve the personal-subscription store, or refuse with a 503 naming what isn't wired. */
+function requirePersonalSubscriptions<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').personalSubscriptions,
+    'Personal subscription storage is not configured',
+  )
 }
 
-const unavailable = (): never => {
-  throw new UnavailableError('Personal subscription storage is not configured')
+/** The signed-in caller, or a 401 wording the prompt for what this controller manages. */
+function requireSignedIn<E extends AppEnv>(c: Context<E>) {
+  return requireUser(c, 'Sign in to manage personal subscriptions')
 }
 
 export function personalSubscriptionController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listPersonalSubscriptionsContract, async (c) => {
-    const personal = c.get('container').personalSubscriptions
-    if (!personal) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const personal = requirePersonalSubscriptions(c)
+    const user = requireSignedIn(c)
     return c.json({ subscriptions: await personal.list(user.id) }, 200)
   })
 
   buildHonoRoute(app, storePersonalSubscriptionContract, async (c) => {
-    const personal = c.get('container').personalSubscriptions
-    if (!personal) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const personal = requirePersonalSubscriptions(c)
+    const user = requireSignedIn(c)
     const status = await personal.store(user.id, c.req.valid('json'))
     return c.json(status, 201)
   })
 
   buildHonoRoute(app, removePersonalSubscriptionContract, async (c) => {
-    const personal = c.get('container').personalSubscriptions
-    if (!personal) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const personal = requirePersonalSubscriptions(c)
+    const user = requireSignedIn(c)
     const vendor = v.parse(subscriptionVendorSchema, c.req.valid('param').vendor)
     await personal.remove(user.id, vendor)
     return c.body(null, 204)

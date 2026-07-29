@@ -7,20 +7,17 @@ import {
 import type { PublicApiKeyRecord } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
 // Management of INBOUND public-API keys, mounted under `/workspaces/:workspaceId` — so these
 // routes are session-authed and pass through the per-workspace authorization gate (only a member
 // of the workspace's account reaches them). A workspace owner mints/lists/revokes the keys an
 // external system then presents to the `/api/v1` surface (see PublicApiController). The raw key is
 // returned exactly once, on create; thereafter only metadata is exposed.
-
-const unavailable = (): never => {
-  throw new UnavailableError('Public API keys are not configured')
-}
 
 /** Project a stored record onto the secret-free wire type. */
 function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
@@ -38,21 +35,27 @@ function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
 }
 
 /** Public-API-key management routes, mounted under `/workspaces/:workspaceId`. */
+/** Resolve the public API-key store, or refuse with a 503 naming what isn't wired. */
+function requirePublicApiKeys<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(c.get('container').publicApiKeys, 'Public API keys are not configured')
+}
+
 export function publicApiKeyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   app.use('*', requireWorkspacePermission('secrets.manage'))
 
   buildHonoRoute(app, listPublicApiKeysContract, async (c) => {
-    const publicApiKeys = c.get('container').publicApiKeys
-    if (!publicApiKeys) return unavailable()
+    const publicApiKeys = requirePublicApiKeys(c)
     const keys = await publicApiKeys.list(param(c, 'workspaceId'))
     return c.json({ keys: keys.map(publicApiKeyToWire) }, 200)
   })
 
   buildHonoRoute(app, createPublicApiKeyContract, async (c) => {
     const container = c.get('container')
-    const publicApiKeys = container.publicApiKeys
-    if (!publicApiKeys) return unavailable()
+    const publicApiKeys = requireCapability(
+      container.publicApiKeys,
+      'Public API keys are not configured',
+    )
     const workspaceId = param(c, 'workspaceId')
     // Resolve the owning account; the public API is an account-scoped feature, so refuse to mint a
     // key for a missing workspace (`undefined`) or a legacy account-less board (`null`) rather than
@@ -73,8 +76,7 @@ export function publicApiKeyController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, revokePublicApiKeyContract, async (c) => {
-    const publicApiKeys = c.get('container').publicApiKeys
-    if (!publicApiKeys) return unavailable()
+    const publicApiKeys = requirePublicApiKeys(c)
     await publicApiKeys.revoke(param(c, 'workspaceId'), c.req.valid('param').id)
     return c.body(null, 204)
   })
