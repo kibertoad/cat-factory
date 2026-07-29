@@ -4282,11 +4282,21 @@
     "inspector": {
       "runPlanning": "Planung ausführen",
       "answerPlanning": "Planungsfragen beantworten",
+      "reviewPlan": "Plan prüfen",
+      "resolveDecision": "Auflösen",
       "planningInProgress": "Planung läuft",
       "pause": "Pausieren",
       "resume": "Fortsetzen",
       "cancel": "Initiative abbrechen",
       "hint": "Die Planning-Pipeline erkundet die Codebasis, entwirft den mehrphasigen Plan zur Freigabe und committet dann das Tracker-Dokument ins Repository."
+    },
+    "planReview": {
+      "title": "Dieser Plan wartet auf dich",
+      "body": "Der Planner hat die Phasen und Aufgaben unten entworfen. Gib sie frei, um den Plan zu committen und die Arbeit zu starten, oder schicke den Plan mit deinen Änderungswünschen zurück.",
+      "approve": "Plan freigeben",
+      "requestChanges": "Änderungen anfordern",
+      "feedbackPlaceholder": "Was soll der Planner ändern? Umfang, Reihenfolge der Phasen, fehlende Arbeit, eine Aufgabe, die woanders hingehört …",
+      "sendBack": "An den Planner zurückschicken"
     },
     "planning": {
       "title": "Die Initiative planen",

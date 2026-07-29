@@ -64,7 +64,14 @@ Key shape decisions:
   the inspector's execution panel (step list, live phases, step-detail drill-down, Stop / Discard
   run) and the Focus view. Only the way a run is STARTED differs — an initiative block accepts
   exactly one pipeline, so it keeps a single "Run planning" control instead of the pipeline picker,
-  on all three surfaces (board card, inspector, Focus).
+  on all three surfaces (board card, inspector, Focus). **That parity governs the run's PARKS too.**
+  The planner step is `gate: true`, so a drafted plan parks the run exactly like any other gate:
+  the card and the inspector carry the same `attention` affordance a task card does (resolved from
+  `useInitiativePlanning`, with the interviewer's own park left to its "Answer planning questions"
+  sibling), and the window that park ROUTES to — the tracker, per the planner's `resultView` —
+  owns the approve / request-changes rail. Both halves are load-bearing: the gate first shipped
+  with neither, so a finished plan sat behind a spinning "Run planning" and could be cleared only
+  by a REST call. A park whose offer or whose resolving surface is missing is not "surfaced as one".
 - **A re-run re-interviews: the interviewer gate implements the spine's `resetForFreshRun`.** The
   entity outlives any one run, so on a fresh entry it drops the previous run's round bookkeeping and
   still-pending questions, keeping the answered + dismissed digest (which is also where a preset

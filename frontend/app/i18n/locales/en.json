@@ -5459,11 +5459,21 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "reviewPlan": "Review plan",
+      "resolveDecision": "Resolve",
       "planningInProgress": "Planning in progress",
       "pause": "Pause",
       "resume": "Resume",
       "cancel": "Cancel initiative",
       "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
+    },
+    "planReview": {
+      "title": "This plan is waiting for you",
+      "body": "The planner drafted the phases and items below. Approve them to commit the plan and start the work, or send the plan back with what to change.",
+      "approve": "Approve plan",
+      "requestChanges": "Request changes",
+      "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
+      "sendBack": "Send back to the planner"
     },
     "planning": {
       "title": "Plan the initiative",

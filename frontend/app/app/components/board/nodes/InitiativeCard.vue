@@ -5,12 +5,18 @@
 // initiative's equivalent "Run planning" (and, while parked mid-interview, "Answer
 // planning questions") lives right here on the board — the same actions the
 // inspector offers — so starting an initiative isn't hidden behind selecting it.
+// It likewise mirrors a task card's `attention` affordance: a planning run parked
+// on the plan-approval gate (or on an agent-raised decision) offers the button that
+// opens the window resolving it, instead of leaving the card on a spinning "Run
+// planning" whose only route in was the inspector's execution panel.
 // The tracker button opens the dedicated window directly. Draggable within its
 // frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
+  INITIATIVE_ATTENTION_ICONS,
+  INITIATIVE_ATTENTION_LABEL_KEYS,
   INITIATIVE_STATUS_CHIPS,
   INITIATIVE_STATUS_LABEL_KEYS,
   initiativeProgress,
@@ -40,6 +46,7 @@ const {
   running,
   awaitingAnswers,
   interviewing,
+  attention,
   starting,
   runPlanning,
   openPlanning,
@@ -79,7 +86,10 @@ function onHandle(e: PointerEvent) {
       data-testid="initiative-card"
       :data-status="status"
       class="cursor-pointer rounded-b-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
-      :class="[selected ? 'ring-2 ring-indigo-400/60' : '', awaitingAnswers ? 'board-pulse' : '']"
+      :class="[
+        selected ? 'ring-2 ring-indigo-400/60' : '',
+        awaitingAnswers || attention ? 'board-pulse' : '',
+      ]"
       @click.stop="select"
     >
       <div class="flex items-start justify-between gap-2">
@@ -106,8 +116,23 @@ function onHandle(e: PointerEvent) {
         </div>
       </div>
       <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+        <!-- Parked for a human: the drafted plan awaits approval, or an agent raised a
+             decision. Opens the window that can resolve the park (never the generic panel,
+             which the server refuses for a park a dedicated window owns). -->
         <UButton
-          v-if="awaitingAnswers"
+          v-if="attention"
+          data-testid="initiative-card-review"
+          :data-attention="attention.kind"
+          size="xs"
+          variant="solid"
+          color="warning"
+          :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
+          @click.stop="attention.open()"
+        >
+          {{ t(INITIATIVE_ATTENTION_LABEL_KEYS[attention.kind]) }}
+        </UButton>
+        <UButton
+          v-else-if="awaitingAnswers"
           data-testid="initiative-card-answer-planning"
           size="xs"
           variant="solid"

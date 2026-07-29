@@ -26,8 +26,10 @@ import {
 //     pass over the seeded intake-form qa and the run advances to the planner (the analyst having
 //     already run ahead of it) — no human Q&A needed.
 //   - the `initiative-planner` gate (`gate: true` in `pl_initiative`) parks the run for human
-//     approval, but no SPA surface exposes that gate for an initiative-level block, so it is
-//     approved over REST (a trigger) — see `findParkedApproval` / `approveStep`.
+//     approval. That gate has its own UI path (the card's review button → the tracker window's
+//     plan-review rail, pinned by `initiative-plan-review.spec`); here it is only a trigger on the
+//     way to this spec's subject, so it is approved over REST — see `findParkedApproval` /
+//     `approveStep`.
 
 // The plan the fake `initiative-planner` returns. It MUST carry the five migration template phase
 // ids in order (imported, never retyped — they are the contract the ingest normalizer matches on);

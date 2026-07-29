@@ -89,7 +89,8 @@ async function driveToCheckpointPause(page: Page, request: APIRequestContext, wo
   // the planner human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
-  // Approve the parked planner gate over REST (no SPA affordance exposes it for an initiative block).
+  // Approve the parked planner gate over REST. The gate has a UI path of its own
+  // (`initiative-plan-review.spec`); here it is a trigger on the way to the checkpoint.
   let approval: Awaited<ReturnType<typeof findParkedApproval>> = null
   await expect
     .poll(
