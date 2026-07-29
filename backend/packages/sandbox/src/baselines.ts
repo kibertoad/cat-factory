@@ -1,4 +1,4 @@
-import { PROMPT_VERSIONS, promptVersionLabel, systemPromptFor } from '@cat-factory/agents'
+import { baseSystemPromptFor, PROMPT_VERSIONS, promptVersionLabel } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { SandboxFixtureKind } from '@cat-factory/contracts'
 import type { SandboxPromptVersion } from '@cat-factory/kernel'
@@ -95,7 +95,19 @@ export function sandboxKindMeta(agentKind: string): SandboxAgentKindMeta | undef
   return BY_KIND.get(agentKind)
 }
 
-/** The current shipped system-prompt text + `id@vN` label for a catalog kind. */
+/**
+ * The current shipped system-prompt text + `id@vN` label for a catalog kind.
+ *
+ * The text is the BASE (track) prompt, deliberately WITHOUT the surface directives and trait
+ * guidance the platform appends. That is the same unit a workspace prompt override holds and the
+ * same unit the pipeline builder's editor shows, which is what makes a sandbox version and a
+ * workspace revision interchangeable — a candidate can be promoted to the live prompt, and a live
+ * prompt can be dropped into a matrix, with no reinterpretation of what the text means.
+ *
+ * The directives are re-applied at RUN time (`SandboxRunService`, via the same `systemPromptFor`
+ * override path production dispatch uses), so a candidate is still graded on what would actually
+ * be sent. Storing the composed text instead would double the guidance the moment it was promoted.
+ */
 export function baselinePromptText(
   meta: SandboxAgentKindMeta,
   registry: AgentKindRegistry,
@@ -105,7 +117,7 @@ export function baselinePromptText(
     return { text: versioned.text, label: promptVersionLabel(versioned.id, versioned.version) }
   }
   return {
-    text: systemPromptFor(meta.agentKind, registry),
+    text: baseSystemPromptFor(meta.agentKind, registry),
     label: promptVersionLabel(meta.agentKind, 1),
   }
 }

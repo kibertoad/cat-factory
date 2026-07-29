@@ -709,6 +709,44 @@ describe('ContainerAgentExecutor pre-PR validation checks (job-body gating)', ()
   })
 })
 
+describe('ContainerAgentExecutor dependency prepopulation (job-body gating)', () => {
+  // The install rides the BASE job body, under a deliberately WIDER rule than the pre-PR checks
+  // above: every dispatch that gets a checkout, not only one that opens a pull request. These
+  // tests exist to pin that difference — folding the install in beside `validationChecks` would
+  // typecheck, pass every harness test, and silently leave every read-only agent (the ones whose
+  // complaint motivated the feature) reasoning about a manifest instead of the packages.
+  const dependencyInstall = 'pnpm install --frozen-lockfile'
+
+  it('forwards the install on a PR-opening coding dispatch', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it on a read-only EXPLORE dispatch, which opens no PR', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', {}, undefined, { dependencyInstall }))
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+  })
+
+  it('forwards it to an in-place fixer, which the pre-PR checks deliberately skip', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('ci-fixer', { pullRequest: PR }, undefined, { dependencyInstall }),
+    )
+    expect(captured[0]!.spec.dependencyInstall).toEqual({ command: dependencyInstall })
+    // The two gates are independent, and this is the case that proves it.
+    expect(captured[0]!.spec.validationChecks).toBeUndefined()
+  })
+
+  it('omits it when the service declared none (the unconfigured path is unchanged)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('coder'))
+    // Absent, never an empty object: the harness keys the whole phase off the field's presence.
+    expect(captured[0]!.spec.dependencyInstall).toBeUndefined()
+  })
+})
+
 describe('ContainerAgentExecutor private package registries', () => {
   const REGISTRIES = [
     {

@@ -511,7 +511,8 @@
         "env_test_infraless": "Nie ma czego testować",
         "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
         "env_test_no_vcs": "Dostawca Git nie jest połączony",
-        "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się"
+        "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się",
+        "prompt_revision_conflict": "Prompt zmieniony przez kogoś innego"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -535,7 +536,8 @@
         "env_test_not_provisionable_type_mismatch": "Do typu udostępniania tej usługi może pasować więcej niż jeden mechanizm obsługi środowiska. Przypnij manifest id do tej usługi, aby rozwiązywany był dokładnie jeden, albo usuń nakładający się mechanizm obsługi w sekcji Infrastruktura → Środowiska testowe.",
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym.",
         "env_test_connection_failed": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
-        "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie."
+        "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
+        "prompt_revision_conflict": "Inna zmiana tego promptu trafiła pierwsza. Wczytaj go ponownie i nanieś swoją zmianę na wierzch."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1090,6 +1092,8 @@
     "validationChecks": {
       "title": "Walidacja przed PR",
       "sectionHint": "Polecenia uruchamiane na kopii roboczej po zakończeniu pracy programisty, a przed otwarciem żądania scalenia. Niepowodzenie wraca do agenta do naprawy; tylko czysta kopia otwiera żądanie scalenia.",
+      "dependencyInstall": "Instalacja zależności",
+      "dependencyInstallHint": "Uruchamia się przed startem agenta",
       "hint": "Każde polecenie jest uruchamiane przez `sh -c` w kopii roboczej tej usługi, po kolei. Poprawiaj kod, a nie sprawdzenie — agent ma polecenie ich nie osłabiać.",
       "clear": "Wyczyść",
       "configNoun": "sprawdzenia walidacyjne",
@@ -1109,6 +1113,7 @@
         "action": "Wykryj",
         "hint": "Zaproponuj testy na podstawie repozytorium tej usługi",
         "added": "Dodano {count} test | Dodano {count} testy | Dodano {count} testów",
+        "installOnly": "Uzupełniono instalację zależności",
         "found": "Rozpoznano: {ecosystems}.",
         "capped": "Część propozycji pominięto — usługa przyjmuje najwyżej {max} testów.",
         "nothingNew": "Nie ma czego dodać",
@@ -2087,10 +2092,6 @@
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Prywatne rejestry pakietów",
-          "description": "Tokeny npm i GitHub Packages, których agenci używają do instalowania prywatnych zależności."
-        },
         "apiTokens": {
           "label": "Tokeny dostępu do API",
           "description": "Tokeny, które systemy zewnętrzne przedstawiają, aby wywołać API cat-factory."
@@ -2594,20 +2595,22 @@
       "incidentNoun": "dostawcę incydentów"
     },
     "packageRegistries": {
-      "title": "Prywatne rejestry pakietów",
+      "tab": "Rejestry pakietów",
       "intro": "Połącz prywatne rejestry, z których instalują Twoje repozytoria. Agenci otrzymują je przy pobieraniu repozytorium, dzięki czemu prywatne zależności rozwiązują się podczas instalacji. Tokeny są tylko do zapisu: aby zmienić token, usuń wpis i dodaj go ponownie.",
       "entryNoun": "wpis rejestru",
       "list": {
         "heading": "Połączone rejestry",
         "tokenTail": "token …{tail}",
-        "remove": "Usuń wpis"
+        "remove": "Usuń wpis",
+        "noScopes": "Brak zakresów (token uwierzytelnia tylko ten rejestr)"
       },
       "add": {
         "heading": "Dodaj rejestr",
         "vendor": "Rejestr",
         "host": "Token jest wysyłany tylko do {host}.",
         "scopes": "Zakresy pakietów",
-        "scopesHelp": "Zakresy npm oddzielone przecinkami",
+        "scopesHelp": "Opcjonalne. Zakresy npm oddzielone przecinkami.",
+        "scopesNote": "Opcjonalne. Zakres podany tutaj kieruje do tego rejestru każdy pakiet, który się w nim znajduje, więc zakres zawierający również pakiety opublikowane publicznie przestaje być rozwiązywany. Zostaw puste, gdy repozytorium ma własny plik .npmrc lub gdy pojedyncze zależności są przypinane przedrostkiem nazwanego rejestru, takim jak gh: (pnpm 11.1 lub nowszy) - token i tak uwierzytelnia rejestr.",
         "token": "Token dostępu",
         "save": "Dodaj rejestr"
       },
@@ -3570,6 +3573,8 @@
     "converged": "Brak oczekujących pytań. Ankieter ma to, czego potrzebuje, a dokument jest redagowany.",
     "working": "Ankieter przetwarza Twoje odpowiedzi",
     "workingHint": "To chwilę potrwa. Pytania uzupełniające pojawią się tutaj po zakończeniu, a jeśli informacji wystarczy, rozpocznie się redagowanie.",
+    "preparing": "Badanie dokumentu przed wywiadem",
+    "preparingHint": "Uruchomienie najpierw zbiera materiały i szkicuje konspekt. Pytania pojawią się tutaj po zakończeniu.",
     "failed": "Uruchomienie dokumentu zostało przerwane",
     "failedHint": "Zakończyło się, zanim ankieter zdążył odpowiedzieć. Twoje odpowiedzi są zapisane; uruchom zadanie dokumentu ponownie.",
     "answerPlaceholder": "Twoja odpowiedź",
@@ -3918,7 +3923,9 @@
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
-      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie."
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
+      "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
+      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego"
     },
     "progress": {
       "status": {
@@ -3990,6 +3997,41 @@
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
         "deleteFailed": "Nie udało się usunąć pipeline'u"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Prompt systemowy: {agent}",
+    "description": "Zastępuje polecenie tego agenta we wszystkich uruchomieniach w tym obszarze roboczym.",
+    "customized": "Zmieniony",
+    "usingBuiltin": "Wbudowany",
+    "managedNotice": "Platforma dopisuje własne, nieedytowalne reguły do wszystkiego, co tutaj zapiszesz.",
+    "showAppended": "Pokaż dopisywany tekst",
+    "hideAppended": "Ukryj dopisywany tekst",
+    "appendedHeading": "Dopisywane przez platformę (bez możliwości edycji)",
+    "placeholder": "Opisz, co ten agent ma robić.",
+    "save": "Zapisz jako nową wersję",
+    "revert": "Wróć do wbudowanego",
+    "loadBuiltin": "Wczytaj tekst wbudowany",
+    "showBuiltin": "Porównaj z wbudowanym",
+    "hideBuiltin": "Ukryj wbudowany",
+    "restoringFrom": "Wczytano z wersji {n}. Zapisz, aby znów była aktywna.",
+    "builtinHeading": "Prompt wbudowany",
+    "historyHeading": "Historia wersji",
+    "historyEmpty": "Ten agent nie był jeszcze zmieniany w tym obszarze roboczym.",
+    "live": "Aktywna",
+    "restore": "Wczytaj",
+    "restoreTooltip": "Wczytaj tę wersję do edytora",
+    "revision": {
+      "edit": "Wersja {n} (zmieniona)",
+      "restored": "Wersja {n} (przywrócona z wersji {from})",
+      "builtin": "Wersja {n} (powrót do wbudowanego)"
+    },
+    "toast": {
+      "saved": "Prompt zapisany",
+      "reverted": "Powrót do wbudowanego promptu",
+      "saveFailed": "Nie udało się zapisać promptu",
+      "loadFailed": "Nie udało się wczytać promptu",
+      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
     }
   },
   "palette": {
@@ -5020,7 +5062,12 @@
       "forkOf": "Rozgałęzienie · {name}",
       "newVersionOf": "Nowa wersja · {name}",
       "saveVersion": "Zapisz nową wersję",
-      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom."
+      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom.",
+      "liveInWorkspace": "Aktywny",
+      "fromWorkspace": "Twój obszar roboczy",
+      "promoteTitle": "Ustaw jako aktywny prompt tego agenta",
+      "promoted": "To teraz aktywny prompt dla {agent}",
+      "promoteFailed": "Nie udało się aktywować tego promptu"
     },
     "fixtureKind": {
       "requirements": "wymagania",
@@ -5292,11 +5339,21 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
+      "reviewPlan": "Przejrzyj plan",
+      "resolveDecision": "Rozwiąż",
       "planningInProgress": "Planowanie w toku",
       "pause": "Wstrzymaj",
       "resume": "Wznow",
       "cancel": "Anuluj inicjatywe",
       "hint": "Pipeline planowania bada kod, przygotowuje wielofazowy plan do zatwierdzenia, a nastepnie zapisuje dokument trackera w repozytorium."
+    },
+    "planReview": {
+      "title": "Ten plan czeka na Ciebie",
+      "body": "Planer przygotował poniższe fazy i elementy. Zatwierdź je, aby zapisać plan i rozpocząć pracę, albo odeślij plan z informacją, co zmienić.",
+      "approve": "Zatwierdź plan",
+      "requestChanges": "Poproś o zmiany",
+      "feedbackPlaceholder": "Co planer ma zmienić? Zakres, kolejność faz, brakująca praca, element, który pasuje gdzie indziej…",
+      "sendBack": "Odeślij do planera"
     },
     "planning": {
       "title": "Zaplanuj inicjatywe",
@@ -5304,9 +5361,11 @@
       "intro": "Planista okresla zakres tej inicjatywy. Odpowiedz na pytania, aby uksztaltowac cel i ograniczenia, a nastepnie wyslij odpowiedzi. Mozesz tez poprosic go, aby zaplanowal teraz na podstawie tego, co juz ma.",
       "empty": "Nie znaleziono inicjatywy dla tego bloku.",
       "converged": "Brak oczekujacych pytan. Planista ma to, czego potrzebuje, i tworzy plan.",
-      "idle": "Planowanie jeszcze sie nie rozpoczelo. Uruchom planowanie z poziomu inicjatywy, aby rozpoczac wywiad.",
+      "idle": "Planowanie jeszcze sie nie rozpoczelo. Uruchom planowanie z poziomu inicjatywy: najpierw analizuje kod, a potem przeprowadza z toba wywiad.",
       "working": "Planista przetwarza Twoje odpowiedzi",
       "workingHint": "To chwile potrwa. Pytania uzupelniajace pojawia sie tutaj po zakonczeniu, a jesli informacji wystarczy, planista zacznie tworzyc plan.",
+      "preparing": "Analiza kodu przed wywiadem",
+      "preparingHint": "Planowanie najpierw czyta repozytorium, wiec nie zapyta Cie o to, co wynika z kodu. Pytania pojawia sie tutaj po zakonczeniu.",
       "failed": "Uruchomienie planowania zostalo przerwane",
       "failedHint": "Zakonczylo sie, zanim planista zdazyl odpowiedziec. Twoje odpowiedzi sa zapisane; uruchom planowanie ponownie z poziomu inicjatywy.",
       "answerPlaceholder": "Twoja odpowiedz",

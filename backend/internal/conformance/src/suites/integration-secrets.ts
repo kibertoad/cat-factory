@@ -150,6 +150,27 @@ export function defineSecretsConformance(harness: ConformanceHarness): void {
       const cleared = await app.call<{ entries: unknown[] }>('GET', base)
       expect(cleared.body.entries).toEqual([])
       expect(await probe.resolveForDispatch(workspace.id)).toEqual([])
+
+      // An entry with NO scopes is valid and reaches dispatch intact: a scope mapping is
+      // all-or-nothing, so a workspace whose `@org` also holds publicly published packages
+      // configures the credential alone and pins individual dependencies to the registry
+      // itself. The harness renders the host's `_authToken` line either way.
+      const scopeless = await app.call<{ entries: { scopes: string[] }[] }>('POST', base, {
+        ecosystem: 'npm',
+        vendor: 'npmjs',
+        scopes: [],
+        token: 'npm_scopeless_token_4321',
+      })
+      expect(scopeless.status).toBe(200)
+      expect(scopeless.body.entries[0]?.scopes).toEqual([])
+      expect(await probe.resolveForDispatch(workspace.id)).toEqual([
+        {
+          ecosystem: 'npm',
+          host: 'registry.npmjs.org',
+          scopes: [],
+          token: 'npm_scopeless_token_4321',
+        },
+      ])
     })
   })
 

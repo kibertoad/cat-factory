@@ -628,27 +628,36 @@ function buildSpecialtyPipelines(): Pipeline[] {
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
-      // engine's runnable guard). The INTERVIEWER interviews the human on goals /
+      // engine's runnable guard). The ANALYST reads the repo FIRST and writes a
+      // codebase analysis (including the open questions only a human can settle); the
+      // INTERVIEWER — grounded in that analysis — then interviews the human on goals /
       // constraints (an inline park/answer/resume gate driven by its own controller,
-      // NOT a `gates[]` human gate — hence `false` at its index); the ANALYST reads
-      // the repo and writes a codebase analysis; the PLANNER — grounded in both —
-      // emits the multi-phase plan as structured output; the HUMAN GATE after it
-      // (index 2) holds the run until the plan is approved; the committer then persists
-      // the plan (the `initiatives` entity + the in-repo tracker under
+      // NOT a `gates[]` human gate — hence `false` at its index); the PLANNER —
+      // grounded in both — emits the multi-phase plan as structured output; the HUMAN
+      // GATE after it (index 2) holds the run until the plan is approved; the committer
+      // then persists the plan (the `initiatives` entity + the in-repo tracker under
       // `docs/initiatives/<slug>/`) and arms the execution loop.
+      //
+      // ANALYST-BEFORE-INTERVIEWER is load-bearing, not cosmetic. The interviewer is an
+      // INLINE kind with no checkout, so an interviewer that runs first can only ask the
+      // stakeholder what the repository would have told it — which is exactly what it did,
+      // interrogating humans about their own code instead of reading it. Ordering the
+      // read-only exploration first is what lets the interview spend its rounds on intent,
+      // priorities and tolerances, the facts no amount of exploration can recover.
       id: 'pl_initiative',
       name: 'Plan initiative',
       purpose: 'planning',
       description:
-        'Interview you on the initiative, analyze the codebase, and draft a multi-phase plan for approval before committing it.',
+        'Explore the codebase, interview you on what the code cannot answer, and draft a multi-phase plan for approval before committing it.',
       // Slice 2 added the interviewer + analyst in front of the planner; version bumped for the
       // reseed offer. The interviewer parks via its own controller (not a `gate`); the only human
       // gate is on the planner's output, before the committer persists it. Bumped again for the
-      // pipeline-description reseed, then again for the purpose classifier reseed.
-      version: 4,
+      // pipeline-description reseed, then again for the purpose classifier reseed, then again for
+      // the analyst-before-interviewer reorder (which also rewrote the description).
+      version: 5,
       steps: [
-        'initiative-interviewer',
         'initiative-analyst',
+        'initiative-interviewer',
         { kind: 'initiative-planner', gate: true },
         'initiative-committer',
       ],

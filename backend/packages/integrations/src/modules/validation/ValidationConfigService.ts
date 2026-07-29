@@ -57,9 +57,12 @@ export class ValidationConfigService {
   }
 
   /**
-   * Set/replace a service frame's validation checks. An empty list deletes the row (a service
-   * with no checks carries none), so a cleared inspector restores the exact pre-feature
-   * behaviour rather than leaving an empty config that still has to be resolved.
+   * Set/replace a service frame's validation checks AND its dependency-prepopulation install.
+   * The row is deleted only when BOTH are empty, so a cleared inspector restores the exact
+   * pre-feature behaviour rather than leaving an empty config that still has to be resolved —
+   * while a service that declares only an install (prepopulate the checkout, verify nothing)
+   * still persists. Keying the delete on `checks` alone would silently discard that service's
+   * install the moment it saved with no checks.
    */
   async set(
     workspaceId: string,
@@ -75,7 +78,10 @@ export class ValidationConfigService {
     if (block.level !== 'frame') {
       throw new ValidationError('Validation checks can only be set on a service frame')
     }
-    if (input.checks.length === 0) {
+    // The schema trims, so a whitespace-only submission arrives as `''` — normalise it to
+    // "declared nothing" here rather than persisting a command the harness would try to run.
+    const dependencyInstall = input.dependencyInstall?.trim() || undefined
+    if (input.checks.length === 0 && !dependencyInstall) {
       await this.repo.delete(workspaceId, blockId)
       return toView(blockId, null)
     }
@@ -86,6 +92,7 @@ export class ValidationConfigService {
       blockId,
       checks: input.checks.map((c) => ({ label: c.label, command: c.command })),
       maxAttempts: input.maxAttempts ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
+      ...(dependencyInstall ? { dependencyInstall } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -115,10 +122,14 @@ export class ValidationConfigService {
     frameId: string,
   ): Promise<ResolvedValidationChecks | null> {
     const record = await this.repo.getByBlock(workspaceId, frameId)
-    if (!record || record.checks.length === 0) return null
+    // A frame that declares ONLY a dependency install still resolves — prepopulation and the
+    // checks are independent, and gating on `checks` would make the install unreachable for
+    // exactly the service that wanted prepopulation without a verification suite.
+    if (!record || (record.checks.length === 0 && !record.dependencyInstall)) return null
     return {
       checks: record.checks.map((c) => ({ label: c.label, command: c.command })),
       maxAttempts: record.maxAttempts,
+      ...(record.dependencyInstall ? { dependencyInstall: record.dependencyInstall } : {}),
     }
   }
 }
@@ -129,5 +140,6 @@ function toView(blockId: string, record: ValidationConfigRecord | null): Service
     blockId,
     checks: record?.checks ?? [],
     maxAttempts: record?.maxAttempts ?? VALIDATION_DEFAULT_MAX_ATTEMPTS,
+    ...(record?.dependencyInstall ? { dependencyInstall: record.dependencyInstall } : {}),
   }
 }

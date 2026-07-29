@@ -30,7 +30,6 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
-const packageRegistries = usePackageRegistriesStore()
 const publicApiKeys = usePublicApiKeysStore()
 const userSecrets = useUserSecretsStore()
 const uiMode = useUiModeStore()
@@ -60,7 +59,6 @@ watch(
     if (isOpen) {
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
-      void packageRegistries.ensureLoaded().catch(() => {})
       void publicApiKeys.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
     }
@@ -271,22 +269,10 @@ const groups = computed<IntegrationGroup[]>(() => {
     })
   }
 
-  // --- Development (private package registries + API access tokens) -----------
-  // Each row is gated like observability: hidden until a probe confirms its module is
-  // wired (`available === true`), so an unconfigured backend doesn't show a dead row.
+  // --- Development (API access tokens) ---------------------------------------
+  // Gated like observability: hidden until a probe confirms its module is wired
+  // (`available === true`), so an unconfigured backend doesn't show a dead row.
   const development: IntegrationItem[] = []
-  if (packageRegistries.available) {
-    const hasEntries = packageRegistries.entries.length > 0
-    development.push({
-      key: 'package-registries',
-      icon: 'i-lucide-package',
-      label: t('layout.integrationsHub.items.packageRegistries.label'),
-      description: t('layout.integrationsHub.items.packageRegistries.description'),
-      status: hasEntries ? t('layout.integrationsHub.status.connected') : undefined,
-      connected: hasEntries,
-      onClick: () => go(ui.openPackageRegistries),
-    })
-  }
   if (publicApiKeys.available) {
     const hasKeys = publicApiKeys.keys.length > 0
     development.push({
@@ -303,8 +289,9 @@ const groups = computed<IntegrationGroup[]>(() => {
     out.push({ title: t('layout.integrationsHub.groups.development'), items: development })
 
   // NOTE: Infrastructure (agent-container execution + Tester environments + the local-mode
-  // warm pool/checkout) is no longer listed here — it moved to its OWN top-level navbar menu
-  // (SideBar → "Infrastructure" → the tabbed Infrastructure window). See `ui.openInfrastructure`.
+  // warm pool/checkout + the private package registries a checkout installs from) is no longer
+  // listed here — it moved to its OWN top-level navbar menu (SideBar → "Infrastructure" → the
+  // tabbed Infrastructure window). See `ui.openInfrastructure`.
 
   // --- Personal (only you) — fallback when there is no UserMenu to host "My setup" -------
   // Per-user connections normally live in the My-setup hub; with auth disabled they fold in

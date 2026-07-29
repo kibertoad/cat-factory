@@ -111,6 +111,20 @@ export const useSandboxStore = defineStore('sandbox', () => {
     return saved
   }
 
+  /**
+   * Promote a prompt version to the workspace's live prompt for its agent kind — the deploy half
+   * of the sandbox workflow. Reloads so the projected `workspace` rows (and their `live` marker)
+   * reflect the new head, and refreshes the prompt-override index the pipeline builder badges from
+   * so the two surfaces cannot disagree about what is running.
+   */
+  async function promotePrompt(version: SandboxPromptVersion) {
+    const ws = useWorkspaceStore()
+    const detail = await api.promoteAgentPrompt(ws.requireId(), version.agentKind, version.id)
+    await load()
+    await useAgentPromptsStore().loadIndex()
+    return detail
+  }
+
   async function archivePrompt(promptId: string) {
     const ws = useWorkspaceStore()
     await api.archiveSandboxPrompt(ws.requireId(), promptId)
@@ -164,6 +178,7 @@ export const useSandboxStore = defineStore('sandbox', () => {
     promptsForKind,
     fixturesForKind,
     clonePrompt,
+    promotePrompt,
     saveVersion,
     archivePrompt,
     createExperiment,

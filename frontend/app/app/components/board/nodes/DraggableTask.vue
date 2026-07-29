@@ -10,8 +10,9 @@ const task = computed(() => board.getBlock(props.taskId))
 const { draggingId, startDrag } = useBlockDrag()
 
 // An expanded pipeline grows downward over its neighbours, so it must stack above the
-// other (compact) task cards — never let a neighbour render on top of the pipeline.
-const expanded = computed(() => expansion.allowed.has(props.taskId))
+// other (compact) task cards — never let a neighbour render on top of the pipeline. Reads
+// the same predicate the pipeline itself renders on, so the two can't disagree.
+const expanded = computed(() => expansion.isExpanded(props.taskId))
 
 // Once a task is merged it stops being a unit of work and becomes part of the
 // architecture: it no longer renders as a draggable card (arrows fall back to its

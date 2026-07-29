@@ -27,6 +27,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'accountRepository'
   | 'agentKindRegistry'
   | 'initiativePresetRegistry'
+  | 'agentPromptRepository'
   | 'documentRepository'
   | 'documentUrlResolver'
   | 'taskRepository'
@@ -60,6 +61,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     accountRepository: deps.accountRepository,
     agentKindRegistry: deps.agentKindRegistry,
     initiativePresetRegistry: deps.initiativePresetRegistry,
+    agentPrompts: deps.agentPromptRepository,
     documents: deps.documentRepository,
     documentUrlResolver: deps.documentUrlResolver,
     tasks: deps.taskRepository,

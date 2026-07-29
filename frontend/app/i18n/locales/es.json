@@ -511,7 +511,8 @@
         "env_test_infraless": "Nada que probar",
         "env_test_not_provisionable": "Gestor de entorno no configurado",
         "env_test_no_vcs": "Proveedor de Git no conectado",
-        "env_test_connection_failed": "Fallo de conexión del entorno"
+        "env_test_connection_failed": "Fallo de conexión del entorno",
+        "prompt_revision_conflict": "Otra persona cambió el prompt"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -535,7 +536,8 @@
         "env_test_not_provisionable_type_mismatch": "Más de un gestor de entorno podría coincidir con el tipo de aprovisionamiento de este servicio. Fija un manifest id para este servicio de modo que se resuelva exactamente uno, o elimina el gestor superpuesto en Infraestructura → Entornos de prueba.",
         "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno.",
         "env_test_connection_failed": "El gestor de entornos de este servicio no superó su prueba de conexión. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
-        "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión."
+        "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
+        "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1090,6 +1092,8 @@
     "validationChecks": {
       "title": "Validación previa al PR",
       "sectionHint": "Comandos que se ejecutan sobre la copia de trabajo cuando el programador termina y antes de abrir una solicitud de incorporación. Un fallo vuelve al agente para que lo corrija; solo una copia sin errores abre un PR.",
+      "dependencyInstall": "Instalación de dependencias",
+      "dependencyInstallHint": "Se ejecuta antes de que empiece el agente",
       "hint": "Cada comando se ejecuta con `sh -c` en la copia de trabajo de este servicio, en orden. Hay que arreglar el código, no la comprobación: al agente se le indica que no las debilite.",
       "clear": "Vaciar",
       "configNoun": "comprobaciones de validación",
@@ -1109,6 +1113,7 @@
         "action": "Detectar",
         "hint": "Sugerir comprobaciones a partir del repositorio de este servicio",
         "added": "Se añadió {count} comprobación | Se añadieron {count} comprobaciones",
+        "installOnly": "Se rellenó la instalación de dependencias",
         "found": "Se reconoció {ecosystems}.",
         "capped": "Se omitieron algunas sugerencias: un servicio admite como máximo {max} comprobaciones.",
         "nothingNew": "No hay nada que añadir",
@@ -2087,10 +2092,6 @@
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Registros privados de paquetes",
-          "description": "Tokens de npm y GitHub Packages que los agentes usan para instalar dependencias privadas."
-        },
         "apiTokens": {
           "label": "Tokens de acceso a la API",
           "description": "Tokens que los sistemas externos presentan para llamar a la API de cat-factory."
@@ -2594,20 +2595,22 @@
       "incidentNoun": "el proveedor de incidencias"
     },
     "packageRegistries": {
-      "title": "Registros privados de paquetes",
+      "tab": "Registros de paquetes",
       "intro": "Conecta los registros privados desde los que instalan tus repositorios. Los agentes los reciben al hacer checkout de un repositorio, de modo que las dependencias privadas se resuelven durante la instalación. Los tokens son de solo escritura: para cambiar uno, elimina la entrada y vuelve a agregarla.",
       "entryNoun": "entrada de registro",
       "list": {
         "heading": "Registros conectados",
         "tokenTail": "token …{tail}",
-        "remove": "Eliminar entrada"
+        "remove": "Eliminar entrada",
+        "noScopes": "Sin ámbitos (el token solo autentica este registro)"
       },
       "add": {
         "heading": "Agregar un registro",
         "vendor": "Registro",
         "host": "El token solo se envía a {host}.",
         "scopes": "Ámbitos de paquetes",
-        "scopesHelp": "Ámbitos de npm separados por comas",
+        "scopesHelp": "Opcional. Ámbitos de npm separados por comas.",
+        "scopesNote": "Opcional. Un ámbito indicado aquí dirige a este registro todos los paquetes que contiene, de modo que un ámbito que también incluye paquetes publicados publicamente deja de resolverse. Déjalo vacío cuando el repositorio incluya su propio .npmrc o cuando las dependencias individuales se fijen con un prefijo de registro con nombre como gh: (pnpm 11.1 o posterior); el token autentica el registro en cualquier caso.",
         "token": "Token de acceso",
         "save": "Agregar registro"
       },
@@ -3570,6 +3573,8 @@
     "converged": "No hay preguntas pendientes. El entrevistador tiene lo que necesita y el documento se está redactando.",
     "working": "El entrevistador está procesando tus respuestas",
     "workingHint": "Esto tarda un momento. Las preguntas de seguimiento aparecerán aquí cuando termine, o empezará la redacción si ya tiene suficiente.",
+    "preparing": "Investigando el documento antes de la entrevista",
+    "preparingHint": "La ejecución primero reúne el contexto y esboza un esquema. Las preguntas aparecerán aquí cuando termine.",
     "failed": "La ejecución del documento se detuvo",
     "failedHint": "Terminó antes de que el entrevistador pudiera responder. Tus respuestas están guardadas; vuelve a ejecutar la tarea del documento.",
     "answerPlaceholder": "Tu respuesta",
@@ -3918,7 +3923,9 @@
       "skillNoneAvailable": "No hay habilidades disponibles. Vincula una fuente de habilidades en la configuración de la cuenta.",
       "skillMissing": "Esta habilidad ya no está en el catálogo; elige otra.",
       "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar.",
-      "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo."
+      "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo.",
+      "promptEditTooltip": "Editar el prompt del sistema de este agente",
+      "promptEditedTooltip": "El prompt del sistema de este agente está editado para este espacio de trabajo"
     },
     "progress": {
       "status": {
@@ -3990,6 +3997,41 @@
         "reseedFailed": "No se pudo regenerar el pipeline",
         "deleteFailed": "No se pudo eliminar el pipeline"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Prompt del sistema: {agent}",
+    "description": "Sustituye lo que se le pide a este agente en todas las ejecuciones de este espacio de trabajo.",
+    "customized": "Editado",
+    "usingBuiltin": "Predeterminado",
+    "managedNotice": "La plataforma añade sus propias reglas, no editables, a todo lo que guardes aquí.",
+    "showAppended": "Ver el texto añadido",
+    "hideAppended": "Ocultar el texto añadido",
+    "appendedHeading": "Añadido por la plataforma (no editable)",
+    "placeholder": "Describe qué debe hacer este agente.",
+    "save": "Guardar como versión nueva",
+    "revert": "Volver al predeterminado",
+    "loadBuiltin": "Cargar el texto predeterminado",
+    "showBuiltin": "Comparar con el predeterminado",
+    "hideBuiltin": "Ocultar el predeterminado",
+    "restoringFrom": "Cargado desde la versión {n}. Guarda para volver a activarla.",
+    "builtinHeading": "Prompt predeterminado",
+    "historyHeading": "Historial de versiones",
+    "historyEmpty": "Este agente nunca se ha editado en este espacio de trabajo.",
+    "live": "Activa",
+    "restore": "Cargar",
+    "restoreTooltip": "Cargar esta versión en el editor",
+    "revision": {
+      "edit": "Versión {n} (editada)",
+      "restored": "Versión {n} (restaurada desde la versión {from})",
+      "builtin": "Versión {n} (vuelta al predeterminado)"
+    },
+    "toast": {
+      "saved": "Prompt guardado",
+      "reverted": "De vuelta al prompt predeterminado",
+      "saveFailed": "No se pudo guardar el prompt",
+      "loadFailed": "No se pudo cargar el prompt",
+      "conflict": "Otra persona cambió este prompt. Se recargó: vuelve a aplicar tu edición."
     }
   },
   "palette": {
@@ -5020,7 +5062,12 @@
       "forkOf": "Bifurcación · {name}",
       "newVersionOf": "Nueva versión de · {name}",
       "saveVersion": "Guardar nueva versión",
-      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba."
+      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba.",
+      "liveInWorkspace": "Activo",
+      "fromWorkspace": "Tu espacio de trabajo",
+      "promoteTitle": "Convertir en el prompt activo de este agente",
+      "promoted": "Ahora es el prompt activo de {agent}",
+      "promoteFailed": "No se pudo activar este prompt"
     },
     "fixtureKind": {
       "requirements": "requisitos",
@@ -5292,11 +5339,21 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "reviewPlan": "Revisar plan",
+      "resolveDecision": "Resolver",
       "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancel": "Cancelar iniciativa",
       "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planReview": {
+      "title": "Este plan te está esperando",
+      "body": "El planificador redactó las fases y los elementos de abajo. Apruébalos para confirmar el plan y empezar el trabajo, o devuelve el plan indicando qué cambiar.",
+      "approve": "Aprobar plan",
+      "requestChanges": "Solicitar cambios",
+      "feedbackPlaceholder": "¿Qué debería cambiar el planificador? Alcance, orden de las fases, trabajo que falta, un elemento que va en otro sitio…",
+      "sendBack": "Devolver al planificador"
     },
     "planning": {
       "title": "Planificar la iniciativa",
@@ -5304,9 +5361,11 @@
       "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, y luego envialas. Tambien puedes pedirle que planifique ahora con lo que ya tiene.",
       "empty": "No se encontro ninguna iniciativa para este bloque.",
       "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
-      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa para iniciar la entrevista.",
+      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa: primero analiza el codigo y despues te entrevista.",
       "working": "El planificador esta procesando tus respuestas",
       "workingHint": "Esto tarda un momento. Las preguntas de seguimiento apareceran aqui cuando termine, o empezara a redactar el plan si ya tiene suficiente.",
+      "preparing": "Explorando el codigo antes de la entrevista",
+      "preparingHint": "La planificacion lee primero el repositorio para no preguntarte lo que el codigo ya responde. Las preguntas apareceran aqui cuando termine.",
       "failed": "La ejecucion de planificacion se detuvo",
       "failedHint": "Termino antes de que el planificador pudiera responder. Tus respuestas estan guardadas; vuelve a ejecutar la planificacion desde la iniciativa.",
       "answerPlaceholder": "Tu respuesta",

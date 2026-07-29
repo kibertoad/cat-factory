@@ -12,7 +12,6 @@ import {
   resolvePrNumber,
   standardsDeliveredAsFiles,
   standardsVerbosityFor,
-  systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
 import {
@@ -26,17 +25,16 @@ import {
 } from '@cat-factory/orchestration'
 import {
   MERGE_ASSESSMENT_SHAPE_HINT,
-  MERGER_SYSTEM_PROMPT,
   mergerMultiRepoUserPrompt,
   mergerUserPrompt,
   ON_CALL_ASSESSMENT_SHAPE_HINT,
-  ON_CALL_SYSTEM_PROMPT,
   onCallUserPrompt,
   prBody,
   TEST_REPORT_SHAPE_HINT,
   testerInfraSpec,
   UI_TEST_REPORT_SHAPE_HINT,
 } from './prompts.js'
+import { dispatchSystemPromptFor } from './promptOverrides.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 import type { RepoCheckout } from './resolveRepoTarget.js'
 
@@ -134,7 +132,9 @@ export function buildKindBody(
   // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
   // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
   const baseRoleSystemPrompt = composeBlockSystemPrompt(
-    systemPromptFor(context.agentKind, registry),
+    // The workspace's own prompt for this kind when it has one, else the shipped base — see
+    // `dispatchSystemPromptFor`, which every container-dispatch prompt assembly rides.
+    dispatchSystemPromptFor(context, registry),
     context.block,
     registry.standardsDelivery(context.agentKind),
     standardsDeliveredAsFiles(context.injectedContextFiles),
@@ -933,7 +933,7 @@ function buildMigratedBuiltInBody(
           clone: { branch: 'pr', full: true },
           output: { kind: 'structured', shapeHint: MERGE_ASSESSMENT_SHAPE_HINT },
         },
-        MERGER_SYSTEM_PROMPT,
+        dispatchSystemPromptFor(context, registry),
         registry,
         multiRepo ? mergerMultiRepoUserPrompt(context) : mergerUserPrompt(context, repo),
       )
@@ -953,7 +953,7 @@ function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
         },
         composeBlockSystemPrompt(
-          ON_CALL_SYSTEM_PROMPT,
+          dispatchSystemPromptFor(context, registry),
           context.block,
           registry.standardsDelivery(context.agentKind),
           standardsDeliveredAsFiles(context.injectedContextFiles),

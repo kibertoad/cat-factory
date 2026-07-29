@@ -946,6 +946,68 @@ fresh approval id; `maxChatTurns` (default 15) is a hard budget. Phase B CAS-rec
 re-arms the step, and `AgentContextBuilder` folds `buildImplementationChoice` into the `build`
 prompt as a binding directive. Pass-through everywhere it can't run. Scoped to the primary repo.
 
+### Dependency prepopulation (the install BEFORE the agent's first turn)
+
+A service frame declares ONE install command the harness runs against the checkout before the agent
+starts, so a repo-aware agent reads real installed packages instead of inferring a library's
+capabilities from a manifest entry. Design:
+[`docs/initiatives/agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
+
+- **It shares the `validation_configs` row but NOT the validation gate.** Resolution rides the
+  frame-chain read `resolveValidationChecks` already does on every dispatch, so prepopulation costs
+  ZERO extra round trips — but the two are threaded onto the job body under DIFFERENT rules, and
+  that difference is the feature. `validationChecks` rides only a PR-opening single-repo coding
+  dispatch; `dependencyInstall` rides the BASE body, so every dispatch that gets a checkout (explore
+  kinds, in-place fixers) gets it. Folding it in beside the checks typechecks, passes every harness
+  test, and leaves every read-only agent exactly as blind as before.
+- **A service may declare EITHER independently.** `ValidationConfigService.set` deletes the row only
+  when both are empty and `resolveForFrame` returns a config when either is set — a delete or a
+  resolve keyed on `checks` alone silently drops the install for the very repo shape this exists for
+  (dependencies to install, nothing declared to verify).
+- **NEVER a gate.** A check is a VERDICT about the work; an install is SETUP. Every failure shape
+  becomes a prompt NOTE and the run continues. The note is stated in BOTH directions: on success
+  "installed, don't re-run" (or the agent burns its budget reinstalling), on failure the cause plus
+  "you have network access, install what you need" (or the agent concludes the environment is
+  offline and works around a gap that isn't there).
+- **The harness owns the phase** (`dependency-install.ts`), keyed purely off the job body with no
+  agent-kind switch, running in the service `workDir` through the shared `runCapturedCommand` seam.
+  It carries its OWN 30s heartbeat — a cold install is the canonical activity-silent phase, and
+  `JOB_INACTIVITY_MS` (10 min) is tighter than its watchdog. That watchdog is DERIVED from the
+  configured `JOB_MAX_DURATION_MS` (a third of it, 20 min at the defaults) the same way `git.ts`
+  derives its per-command timeout: setup that can outlast the run it is preparing for is a bug, and
+  a constant sized against a default breaks silently when an operator changes the default. Per-job
+  by construction (command, cwd and env are all arguments), pinned by a concurrency test.
+- **EVERY mode with a checkout runs it, and that is ASSERTED** — explore, its multi-repo fan-out,
+  single-repo coding (the in-place fixers' path too), multi-repo coding and conflict resolution.
+  All of them go through the ONE `prepopulateDependencies` seam, because a mode assembling the
+  run/exclude/note steps itself is one refactor from dropping one: the first cut wired three modes
+  and missed two, and nothing failed. `dependency-install.coverage.test.ts` pins the rule
+  structurally (a function calling `runAgentInWorkspace` must call `prepopulateDependencies`),
+  with `runBootstrap` the one exemption carrying its reason — its target repo is empty, so there
+  is no service config to resolve and nothing on disk to install from. **It runs BEFORE the infra
+  stand-up**, which does its own install and then serves what it built; after it, prepopulation
+  would pay twice and rewrite the `node_modules` a running app resolves out of.
+- **What the install materialises is excluded from git** (`.git/info/exclude`, the same mechanism
+  the harness already uses for its own sentinels), by diffing the untracked paths either side of
+  the install — never a list of well-known directory names, which is both incomplete across
+  ecosystems and would hide a `target/` the agent legitimately authored. Without it a repo whose
+  `.gitignore` omits `node_modules` opens a pull request containing its whole dependency tree, via
+  the agent's own `git add -A` or the conflict flow's whole-tree merge commit.
+- **Captured output reaches a model fenced through `fencedOutput`** (`captured-command.ts`), sized
+  one tick longer than the longest backtick run in the body. A package manager or a failing linter
+  prints backticks often enough that a fixed ``` fence closes mid-tail and spills the rest — plus
+  the instructions after it — into what the model reads as prose. Both consumers of a captured
+  tail use it; that shared seam exists precisely so a fix to one cannot miss the other.
+- **Autodetection had to become un-filtered.** `ecosystem()` no longer nulls an install-only
+  detection; the "an install verifies nothing" rule moved into `detectValidationChecks`, where it
+  filters each OUTPUT separately. Three things are preserved deliberately and each has a test: the
+  task-runner fallback keys off whether a language ecosystem VERIFIES (not whether one was
+  detected), a non-verifying group consumes none of `VALIDATION_MAX_CHECKS`, and `truncated` counts
+  only the cap.
+- **`HARNESS_CLEAN_KEEP` does not help a JVM repo.** It preserves paths inside the CHECKOUT
+  (`node_modules`, `.venv`, `target`); Maven/Gradle/Go/Cargo cache in `HOME`, which the "per-job
+  state, NEVER HOME-global" rule governs. Don't assume a warm cache there without designing it.
+
 ### Pre-PR validation (checks in the container BEFORE the PR opens)
 
 A service frame can declare install/lint/test/build commands the harness runs against the checkout
@@ -1278,6 +1340,86 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
 - **NOT yet done**: the built-in agents aren't migrated to this model; their rendering still lives
   in the harness. Converting them one at a time (parity-gated, image-bumped) is the remaining
   strangler work.
+
+## Per-workspace agent prompt overrides (edited from the pipeline builder)
+
+A workspace can replace any agent kind's system prompt from the pipeline builder — the surface
+where its step is chosen — and switch back through the full history of what it has run.
+
+- **The store is an APPEND-ONLY revision log** (`agent_prompt_revisions`, D1 ⇄ Drizzle, keyed
+  `(workspace, agent_kind, revision)`), and the HIGHEST revision is live. There is no update and
+  no delete: restoring an older prompt appends a copy of it (tagged `restoredFrom`), and going
+  back to what the product ships appends a revision whose `text` is **NULL**. That null is a real
+  state, distinct from a kind nobody ever edited — it keeps the workspace tracking the shipped
+  prompt as it is bumped instead of pinning a stale copy of today's wording, and it records that
+  someone reverted deliberately.
+- **The composite key is the concurrency control, not hygiene.** The next revision number comes
+  from a read, so a second editor's insert COLLIDES; `AgentPromptService` re-reads the head to tell
+  that apart from a store failure (the two runtimes report the violation differently) and raises
+  `prompt_revision_conflict`. **Never turn that insert into an upsert** — last-write-wins would
+  silently discard one of two people's prompts.
+- **An override replaces the SHIPPED TRACK PROMPT, never the whole system prompt.**
+  `systemPromptFor(kind, registry, override?)` re-applies the surface directives and trait guidance
+  on top, because those are invariants of how the platform runs a kind (a read-only kind must not
+  edit; a reasoning kind's answer must land in its visible reply) rather than editorial content. So
+  the editor shows — and an override supplies — `baseSystemPromptFor`, not `systemPromptFor`.
+- **An invariant reaches a shipped prompt by TWO routes, and only one survives an override.**
+  `applySurfaceDirectives` APPENDS; a built-in track prompt carries the same rule INLINE (which is
+  why that function gates its final-answer append on the base being the registry's prompt — a
+  double-append guard). Replace the track prompt and the guard reads "already has it" about a
+  string that no longer exists, so **every kind whose deliverable IS its reply** — spec-writer,
+  the testers, the reviewers, merger, on-call — silently loses the rule and comes back with an
+  empty visible reply the harness fails the run on. `restoreShippedInvariants` (catalog.ts) closes
+  that by diffing the overridden composition against the fully composed SHIPPED prompt and putting
+  back any member of `OVERRIDE_PRESERVED_FRAGMENTS` it lacks. **A new engine-enforced fragment
+  belongs in that list**, or an override can delete it.
+- **`builtInDirectivesFor` MEASURES what gets appended; it never restates it.** It composes the
+  real prompt around a probe and returns the tail, which is what lets the editor SHOW the
+  non-editable text (`AgentPromptDetail.appendedText`) instead of describing it in copy that goes
+  stale the moment a directive is added. Adding a directive needs no change in the controller or
+  the SPA.
+- **The engine resolves it ONCE per dispatch** (`AgentContextBuilder`, in the same read wave as the
+  rest of the context) onto `AgentRunContext.systemPromptOverride`, so the container, inline and
+  consensus paths cannot disagree about which prompt a step ran under. **A new prompt-assembly site
+  must honour it** — the same hazard `standardsVerbosityFor` has. Container dispatch rides
+  `dispatchSystemPromptFor` (`@cat-factory/server`'s `agents/promptOverrides.ts`); the inline and
+  consensus executors pass the override to `systemPromptFor` directly, where it wins over the
+  deployment-wide `AGENT_ROUTING` system prompt (the workspace's edit is the more specific of the two).
+- **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` exists so the editor and the dispatch agree**, and it is
+  SPLIT for the same reason the point above exists. `merger` and `on-call` dispatch a bespoke
+  constant instead of their role prompt, so an editor built on `systemPromptFor` would show a
+  baseline those kinds never run — and "restore the built-in" would restore something that was
+  never running. Each entry is `{ role, directives }`: the role is editable, the directives (the
+  JSON contract the engine parses, on-call's read-only guardrail, the answer-in-your-reply rule)
+  are re-appended on top of an override. Those kinds bypass `applySurfaceDirectives` entirely, so
+  this map IS their equivalent of it. **Adding another such kind means adding it there, split** —
+  one added with its directives inside `role` compiles and dispatches fine, and fails only later
+  as a workspace that edited it losing its guardrail.
+- **The sandbox is the other half of this feature, and they share ONE unit of text.** A stored
+  sandbox `systemText` and a stored prompt override are both the BASE (track) prompt: the sandbox
+  composes the directives at RUN time through the same `systemPromptFor(kind, registry, text)`
+  override path production dispatch uses, so a candidate is graded on what would actually be sent
+  AND a promoted candidate behaves like the graded one. Storing the composed text on either side
+  would double the trait guidance the moment it crossed over.
+  - **The workspace's own prompts are PROJECTED into the sandbox** (`workspacePromptVersions`,
+    `origin: 'workspace'`, synthesized per request from the revision log — never synced, so
+    nothing can fall behind). Without them the sandbox's only control is what the PRODUCT ships,
+    so on a workspace that edited a kind every experiment measures its candidate against text
+    nobody there runs. Read with the batched `listRevisionsByKinds` — a point read per catalog
+    kind would be the banned N+1.
+  - **Promote is `POST /agent-prompts/:kind/promote`, NOT a sandbox route.** It writes the live
+    agent prompt, so it must answer to `settings.manage` rather than the sandbox controller's
+    `integrations.manage`, or the sandbox becomes a way around the gate on editing a prompt. It
+    is an ordinary append: revertible, visible in the history, a no-op when already live, and the
+    TEXT is read server-side from the version so what runs is what was graded.
+- **A step records the prompt revision it ran under** (`PipelineStep.promptRevision`, pinned at
+  dispatch beside `skillVersions`, absent ⇒ the shipped prompt). The log is append-only, so
+  re-reading it later answers about whatever landed since. Kaizen keys its `(prompt, agent, model)`
+  combo off it, or an edited prompt would inherit a verification the shipped one earned.
+- **Writes are `settings.manage`, reads pass through.** The builder is member-tier, but an edited
+  prompt changes every run in the workspace — the same blast radius as the model mapping.
+- **The SPA affordance is an OVERRIDE control**, so it is gated on `showOverrideField`: hidden in
+  basic mode while the kind runs the shipped prompt, revealed as soon as the workspace carries one.
 
 ## Unified agent runs (failure + retry surface)
 

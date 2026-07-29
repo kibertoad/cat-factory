@@ -18,8 +18,13 @@ import * as v from 'valibot'
 // read live from `@cat-factory/agents`. Only candidate versions are stored.
 // ---------------------------------------------------------------------------
 
-/** Whether a prompt version is a read-only shipped baseline or a stored, editable candidate. */
-export const sandboxPromptOriginSchema = v.picklist(['baseline', 'candidate'])
+/**
+ * Where a prompt version came from. `baseline` is the read-only shipped prompt, `candidate` a
+ * stored editable lineage, and `workspace` a read-only projection of the workspace's OWN agent
+ * prompt (edited in the pipeline builder) so an experiment can measure a candidate against the
+ * text that is actually running rather than only against what the product ships.
+ */
+export const sandboxPromptOriginSchema = v.picklist(['baseline', 'candidate', 'workspace'])
 export type SandboxPromptOrigin = v.InferOutput<typeof sandboxPromptOriginSchema>
 
 const labelSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))
@@ -54,6 +59,13 @@ export const sandboxPromptVersionSchema = v.object({
   createdBy: v.nullable(v.string()),
   /** Soft-archive marker; archived versions are hidden from the default listing. */
   archivedAt: v.nullable(v.number()),
+  /**
+   * Set on the `workspace` row whose revision is the one currently RUNNING for that kind. Computed
+   * from the head of the workspace's revision log, not from the highest row here: a "back to the
+   * built-in" revision is the head and is never projected, so on a reverted kind no row is live and
+   * reading the highest number would point at a prompt that stopped running.
+   */
+  live: v.optional(v.boolean()),
 })
 export type SandboxPromptVersion = v.InferOutput<typeof sandboxPromptVersionSchema>
 

@@ -6,6 +6,7 @@ interface ValidationConfigRow {
   block_id: string
   checks: string
   max_attempts: number
+  dependency_install: string | null
   created_at: number
   updated_at: number
 }
@@ -37,6 +38,9 @@ function rowToRecord(row: ValidationConfigRow): ValidationConfigRecord {
     blockId: row.block_id,
     checks: parseChecks(row.checks),
     maxAttempts: row.max_attempts,
+    // Absent rather than empty: the whole feature keys off "did the service declare one", and a
+    // stored `''` would otherwise reach the harness as a command to run.
+    ...(row.dependency_install ? { dependencyInstall: row.dependency_install } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -75,11 +79,12 @@ export class D1ValidationConfigRepository implements ValidationConfigRepository 
     await this.db
       .prepare(
         `INSERT INTO validation_configs
-           (workspace_id, block_id, checks, max_attempts, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+           (workspace_id, block_id, checks, max_attempts, dependency_install, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, block_id) DO UPDATE SET
            checks = excluded.checks,
            max_attempts = excluded.max_attempts,
+           dependency_install = excluded.dependency_install,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -87,6 +92,7 @@ export class D1ValidationConfigRepository implements ValidationConfigRepository 
         record.blockId,
         JSON.stringify(record.checks),
         record.maxAttempts,
+        record.dependencyInstall ?? null,
         record.createdAt,
         record.updatedAt,
       )

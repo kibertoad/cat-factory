@@ -93,9 +93,16 @@ function registerOptionalOnlyPreset() {
 
 function capturingModel() {
   let lastPrompt = ''
+  let lastSystem = ''
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
       lastPrompt = JSON.stringify(options.prompt)
+      // `generateText`'s `system` reaches the model as the leading system message, so this is the
+      // ROLE prompt as dispatched — asserted apart from the task prompt because the two halves make
+      // different promises about the codebase analysis and must agree.
+      lastSystem = JSON.stringify(
+        options.prompt.filter((message) => message.role === 'system').map((m) => m.content),
+      )
       return {
         content: [{ type: 'text', text: JSON.stringify({ done: false, questions: ['Q?'] }) }],
         finishReason: { unified: 'stop', raw: 'stop' },
@@ -107,7 +114,7 @@ function capturingModel() {
       }
     },
   })
-  return { model, prompt: () => lastPrompt }
+  return { model, prompt: () => lastPrompt, system: () => lastSystem }
 }
 
 const BLOCK = {
@@ -394,5 +401,126 @@ describe('InitiativeInterviewService linked context', () => {
       finalize: false,
     })
     expect(withNone.prompt()).toBe(unwired.prompt())
+  })
+})
+
+// The codebase-analysis fold. `pl_initiative` runs the analyst BEFORE this gate precisely so the
+// interviewer has a first-hand reading of the repository to interview AROUND — without it, an inline
+// kind with no checkout can only ask the stakeholder to describe their own code, which is the
+// interrogation the reorder exists to end. A run with no analysis (an unreachable repo, an
+// analyst that produced nothing, the interviewer driven outside `pl_initiative`) must degrade to
+// the previous, un-grounded prompt rather than claim an analysis it does not have.
+describe('InitiativeInterviewService — codebase-analysis grounding', () => {
+  const ANALYSIS = 'Auth lives in `services/auth`; sessions are signed JWTs with no refresh table.'
+  /** A phrase unique to the analysis fold's steering — never in the static system prompt. */
+  const ANALYSIS_STEERING = 'READ THE TARGET REPOSITORY'
+
+  beforeEach(() => {
+    presetRegistry = new InitiativePresetRegistry()
+  })
+
+  it('folds the analysis into the interview prompt and forbids re-asking what it settles', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      { finalize: false },
+    )
+    expect(cap.prompt()).toContain('## Codebase analysis')
+    expect(cap.prompt()).toContain('no refresh table')
+    expect(cap.prompt()).toContain(ANALYSIS_STEERING)
+  })
+
+  it('grounds a recommended answer in the analysis', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).recommendAnswer(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      'How should existing sessions be handled?',
+    )
+    expect(cap.prompt()).toContain('no refresh table')
+  })
+
+  it('leaves both prompts unchanged when there is no analysis', async () => {
+    // Whitespace-only is the shape a model that returned nothing usable lands in, so it must read
+    // as absent rather than emitting an empty "## Codebase analysis" heading the model would then
+    // treat as "the repository was read and holds nothing".
+    for (const analysisSummary of ['', '   ']) {
+      const cap = capturingModel()
+      await makeService(cap.model).runInterview('ws_1', BLOCK, initiative({ analysisSummary }), {
+        finalize: false,
+      })
+      expect(cap.prompt()).not.toContain('## Codebase analysis')
+      expect(cap.prompt()).not.toContain(ANALYSIS_STEERING)
+    }
+  })
+})
+
+// The codebase-questions BAN is a rule about where an ANSWER comes from, so it is only true while
+// the code has actually been read. Left absolute it would strand the degraded run — forbidden from
+// asking about the code AND holding nothing that read it, strictly worse than before the analyst
+// ever led. These pin that the ban and the fold move together: ONE predicate, so the role prompt
+// can never claim a reading the task prompt does not carry.
+describe('InitiativeInterviewService — the ban degrades with the fold', () => {
+  const ANALYSIS = 'Auth lives in `services/auth`; sessions are signed JWTs.'
+  /** The absolute prohibition — only defensible once the repository has been read. */
+  const BAN = 'NEVER ask the stakeholder about the CURRENT STATE OF THE CODE'
+  /** What replaces it: the interviewer is TOLD the repository is unread, and may ask about it. */
+  const UNREAD = 'the repository has NOT been read'
+  /** The interview's proper subject, stated in both variants. */
+  const HUMAN_ONLY = 'risk and downtime tolerance'
+
+  beforeEach(() => {
+    presetRegistry = new InitiativePresetRegistry()
+  })
+
+  it('bans codebase questions when an analysis is in hand', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      { finalize: false },
+    )
+    expect(cap.system()).toContain(BAN)
+    expect(cap.system()).not.toContain(UNREAD)
+    expect(cap.system()).toContain(HUMAN_ONLY)
+  })
+
+  it('lifts the ban — and says why — when there is none', async () => {
+    for (const analysisSummary of ['', '   ']) {
+      const cap = capturingModel()
+      await makeService(cap.model).runInterview('ws_1', BLOCK, initiative({ analysisSummary }), {
+        finalize: false,
+      })
+      expect(cap.system()).not.toContain(BAN)
+      expect(cap.system()).toContain(UNREAD)
+      // Lifting the ban must not lose the priority: the human-only facts still come first.
+      expect(cap.system()).toContain(HUMAN_ONLY)
+    }
+  })
+
+  it('never promises the recommender an analysis it was not given', async () => {
+    // A recommendation is adopted verbatim by a stakeholder, so a role prompt claiming a codebase
+    // reading that never happened invites an invented answer wearing the platform's authority.
+    const withAnalysis = capturingModel()
+    await makeService(withAnalysis.model).recommendAnswer(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      'How should existing sessions be handled?',
+    )
+    expect(withAnalysis.system()).toContain('a codebase analysis of the target repository')
+
+    const without = capturingModel()
+    await makeService(without.model).recommendAnswer(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: '' }),
+      'How should existing sessions be handled?',
+    )
+    expect(without.system()).not.toContain('codebase analysis')
   })
 })

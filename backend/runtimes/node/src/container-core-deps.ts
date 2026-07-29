@@ -295,6 +295,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // undefined and there is no external emission.
     llmTraceSink: buildTraceSink(config),
     modelPresetRepository: repos.modelPresetRepository,
+    agentPromptRepository: repos.agentPromptRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
     // Claude). Applied only at first seed, so a user's later manual default choice wins.

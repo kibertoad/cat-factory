@@ -17,6 +17,18 @@ export type {
 /** The two infrastructure providers configured through the generic connect form. */
 export type ProviderConnectionKind = 'environment' | 'runner-pool'
 
+/**
+ * A tab of the Infrastructure window, and the vocabulary `ui.infrastructureTab` selects from.
+ *
+ * Deliberately WIDER than {@link ProviderConnectionKind}: the window also hosts tabs that are
+ * not a provider connection at all (long-lived shared Compose stacks, the workspace's private
+ * package registries). Typing the store's tab ref as the connection kinds alone is what made
+ * those tabs unreachable by deep link — a banner, a command-palette entry or an Integrations-hub
+ * pointer could open the window but never land the user on the tab it meant. Every tab
+ * `InfrastructureWindow.vue` can render must have a name here.
+ */
+export type InfrastructureTab = ProviderConnectionKind | 'shared-stacks' | 'package-registries'
+
 /** A workspace's provider binding, as exposed to clients (never secret values). */
 export interface ProviderConnection {
   /** The runner-backend kind for a runner-pool connection (`manifest` | `kubernetes`). */
