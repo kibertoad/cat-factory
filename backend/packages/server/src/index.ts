@@ -99,12 +99,13 @@ export {
 } from './agents/toolServers.js'
 export {
   createScopedModelProviderResolver,
+  wrapResolverWithInstrumentation,
   wrapResolverWithLimiter,
+  type InlineInstrumentation,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {
   createInlineInstrumentation,
-  type InlineInstrumentation,
   type InlineInstrumentationOptions,
 } from './agents/inlineInstrumentation.js'
 export {

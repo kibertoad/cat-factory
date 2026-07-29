@@ -112,6 +112,7 @@ import {
   createWebSearchUpstream,
   createInlineInstrumentation,
   createScopedModelProviderResolver,
+  wrapResolverWithInstrumentation,
   wrapResolverWithLimiter,
   ENV_HELP,
   configProblem,
@@ -333,14 +334,20 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     localEndpointsFor: localModelEndpoints
       ? (userId) => localModelEndpoints.listResolved(userId)
       : undefined,
-    instrument,
   })
-  // Cap concurrent inline calls to a subscription vendor. On the Worker the inline path
-  // degrades subscription refs before resolve, so this is a wired pass-through in practice;
-  // it bounds concurrency within one isolate (no cross-isolate/global limiting — see
+  // Observe inline calls as a wrap OUTSIDE the base resolver, not inside it. The Worker has no
+  // facade wrap that substitutes a resolved model today, so the two orders behave identically
+  // here — but the rule is a runtime-symmetry invariant, not a Node detail: instrumenting
+  // innermost is what hid every local-mode subscription-inline call, and a Worker-side wrap
+  // added later would inherit the same blind spot from a divergent composition.
+  const observed = wrapResolverWithInstrumentation(scoped, instrument)
+  // Cap concurrent inline calls to a subscription vendor, outside the instrumentation so a
+  // queue wait is never counted as generation time. On the Worker the inline path degrades
+  // subscription refs before resolve, so this is a wired pass-through in practice; it bounds
+  // concurrency within one isolate (no cross-isolate/global limiting — see
   // backend/docs/concurrency-and-redis.md), symmetric with the Node facade's wrap.
   const resolver = wrapResolverWithLimiter(
-    scoped,
+    observed,
     vendorConcurrencyLimiterFromEnv(
       (key) => (env as unknown as Record<string, string | undefined>)[key],
     ),

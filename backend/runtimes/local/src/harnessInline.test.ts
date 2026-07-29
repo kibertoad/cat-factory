@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
+import type {
+  InlineLlmCall,
+  InlineObservabilityContext,
+  ModelProvider,
+  ModelProviderResolver,
+  ModelRef,
+  ModelScope,
+} from '@cat-factory/kernel'
+import { catFactoryObservability } from '@cat-factory/kernel'
 import { CliInlineLanguageModel, type InlineCliRequest } from '@cat-factory/agents'
+import { wrapResolverWithInstrumentation } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import {
@@ -566,5 +575,138 @@ describe('silenceClause', () => {
     expect(silenceClause(start, start + 10_000, start + 79_000)).toBe('silent for 69s')
     // Nothing ever arrived, so the window is the whole run — the wedge-before-first-token case.
     expect(silenceClause(start, undefined, start + 300_000)).toBe('no output at all in 300s')
+  })
+})
+
+describe('inline call telemetry across the local subscription wrap', () => {
+  // The ORDER guard. This wrap answers a subscription harness ref with its OWN
+  // `CliInlineLanguageModel` instead of delegating downwards, so it is invisible to anything
+  // wrapped BENEATH it. The inline `llm_call_metrics` feeder shipped underneath — inside
+  // `createScopedModelProviderResolver` — and the consequence was silent and selective: on the
+  // default local shape (`LOCAL_NATIVE_INLINE`) every inline step on a host `claude`/`codex`
+  // login recorded zero calls, while the same step on a metered API model recorded fine. The
+  // composition asserted here IS the fix, and no part of it is pinned by the type system.
+  type GenerateOptions = Parameters<CliInlineLanguageModel['doGenerate']>[0]
+  type Generatable = Pick<CliInlineLanguageModel, 'doGenerate'>
+
+  const RESULT_LINE = JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    result: 'RESEARCH BRIEF',
+    usage: {
+      input_tokens: 11,
+      cache_read_input_tokens: 400,
+      cache_creation_input_tokens: 7,
+      output_tokens: 5,
+    },
+  })
+
+  /** A host `claude` that streams one terminal `result` event, exactly as spawnCliExec would. */
+  const exec: CliExec = async (_command, _args, _stdin, opts) => {
+    if (!opts?.onLine) return RESULT_LINE
+    opts.onLine(RESULT_LINE)
+    return ''
+  }
+
+  /** Compose exactly as `buildNodeModelDeps` does: base → this wrap → the instrumentation. */
+  function compose(recorded: InlineLlmCall[], cliExec: CliExec): ModelProviderResolver {
+    const base: ModelProviderResolver = {
+      forScope: async () => ({
+        resolve: () => {
+          throw new Error('the base provider must not be reached for a subscription harness ref')
+        },
+      }),
+    }
+    return wrapResolverWithInstrumentation(
+      wrapResolverWithInlineHarness({
+        inlineHarnesses: ['claude-code'],
+        hostCliVendors: new Set(['claude']),
+        exec: cliExec,
+      })(base),
+      {
+        recordCall: (call) => {
+          recorded.push(call)
+          return Promise.resolve()
+        },
+        recordPrompts: true,
+        workspaceBodiesEnabled: () => Promise.resolve(true),
+      },
+    )
+  }
+
+  /** Resolve the subscription ref through the composition and drive one generation. */
+  async function generate(
+    resolver: ModelProviderResolver,
+    scope: ModelScope,
+    tag?: InlineObservabilityContext,
+  ): Promise<void> {
+    const provider = await resolver.forScope(scope)
+    const model = provider.resolve(CLAUDE_SUB) as unknown as Generatable
+    await model.doGenerate({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'research it' }] }],
+      ...(tag ? { providerOptions: catFactoryObservability(tag) } : {}),
+    } as GenerateOptions)
+  }
+
+  it('records a call the wrap SUBSTITUTED, with the three input classes kept apart', async () => {
+    const recorded: InlineLlmCall[] = []
+    await generate(
+      compose(recorded, exec),
+      { workspaceId: 'ws_1', executionId: 'ex_1' },
+      {
+        agentKind: 'doc-researcher',
+        workspaceId: 'ws_1',
+        executionId: 'ex_1',
+      },
+    )
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]).toMatchObject({
+      workspaceId: 'ws_1',
+      executionId: 'ex_1',
+      agentKind: 'doc-researcher',
+      // A cache-heavy subscription run is the norm here, and summing these would read as a loop
+      // that keeps invalidating its prefix rather than one riding a warm cache.
+      promptTokens: 11,
+      cacheReadTokens: 400,
+      cacheWriteTokens: 7,
+      completionTokens: 5,
+      ok: true,
+    })
+  })
+
+  it('attributes an untagged call to the run its credential SCOPE names', async () => {
+    // Most inline callers tag only the workspace, so without the scope fallback these rows land
+    // with a null execution id: present in the store, absent from every run-scoped read.
+    const recorded: InlineLlmCall[] = []
+    await generate(
+      compose(recorded, exec),
+      { workspaceId: 'ws_1', executionId: 'ex_run' },
+      {
+        agentKind: 'doc-interviewer',
+        workspaceId: 'ws_1',
+      },
+    )
+    expect(recorded[0]?.executionId).toBe('ex_run')
+  })
+
+  it('records a FAILED substituted call rather than losing the run that needs explaining', async () => {
+    const recorded: InlineLlmCall[] = []
+    const dying: CliExec = async () => {
+      throw new CliExecFailure('claude timed out after 300000ms', 'timeout')
+    }
+    const resolver = compose(recorded, dying)
+    await expect(
+      generate(
+        resolver,
+        { workspaceId: 'ws_1', executionId: 'ex_2' },
+        { agentKind: 'doc-researcher', workspaceId: 'ws_1' },
+      ),
+    ).rejects.toThrow(/timed out/)
+    // This is the run from #1521 — a killed host `claude` whose four attempts spent 1.47M
+    // tokens. Its spend now lands in `token_usage`; this pins that the CALL lands too, since a
+    // run that died is the one an operator actually goes looking for.
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]).toMatchObject({ ok: false, executionId: 'ex_2' })
+    expect(recorded[0]?.errorMessage).toMatch(/timed out/)
   })
 })

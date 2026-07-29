@@ -56,7 +56,10 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
     workspaceId: string,
     input: FragmentBriefGeneratorInput,
   ): Promise<FragmentBriefGeneration> {
-    const provider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    const provider = await resolveScopedModelProvider(
+      { workspaceId, ...(input.executionId ? { executionId: input.executionId } : {}) },
+      this.deps,
+    )
     const ref = this.deps.modelRef
     if (!provider || !ref) {
       throw new ValidationError('No model is configured for fragment-brief generation')

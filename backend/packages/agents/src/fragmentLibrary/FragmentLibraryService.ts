@@ -45,6 +45,11 @@ export interface ResolveBodiesOptions {
   catalog?: ResolvedCatalogEntry[]
   /** The dispatching kind's standards verbosity; defaults to `full`. */
   verbosity?: FragmentStandardsVerbosity
+  /**
+   * The run this resolution is for. Only a `brief` dispatch can generate — and therefore
+   * spend a model call — so this is what attributes that call to the step that paid for it.
+   */
+  executionId?: string
 }
 
 export interface FragmentLibraryServiceDependencies {
@@ -528,7 +533,7 @@ export class FragmentLibraryService implements FragmentResolver {
     // them; every other kind gets full bodies and never triggers a condensation.
     const briefs =
       options.verbosity === 'brief' && this.briefs
-        ? await this.briefs.resolveBriefs(workspaceId, resolved)
+        ? await this.briefs.resolveBriefs(workspaceId, resolved, options.executionId)
         : new Map<string, string>()
 
     // Carry the human title so the prompt composer can render each standard as its own labelled

@@ -81,6 +81,8 @@ export class FragmentBriefService {
   async resolveBriefs(
     workspaceId: string,
     candidates: FragmentBriefCandidate[],
+    /** The run whose dispatch is folding these standards, so a generation is attributed to it. */
+    executionId?: string,
   ): Promise<Map<string, string>> {
     const briefs = new Map<string, string>()
     if (candidates.length === 0) return briefs
@@ -141,6 +143,7 @@ export class FragmentBriefService {
               title: candidate.entry.title,
               body: candidate.body,
               ...(candidate.entry.summary ? { summary: candidate.entry.summary } : {}),
+              ...(executionId ? { executionId } : {}),
             })
             // Both outcomes are persisted against the body's fingerprint. Recording the
             // refusal is what stops a standard that cannot be usefully shortened — which is

@@ -52,37 +52,38 @@ export interface ScopedModelProviderOptions {
   localEndpointsFor?: (
     userId: string,
   ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
+}
+
+/**
+ * How inline calls are observed: persisted to `llm_call_metrics` via {@link recordCall}, and/or
+ * emitted to the external trace sink (Langfuse / OTel). At least one exit must be present —
+ * `InstrumentedModelProvider` refuses a wrap that would instrument nothing. Build it with
+ * `createInlineInstrumentation`, which composes both exits from one sink instance.
+ */
+export interface InlineInstrumentation {
   /**
-   * Wrap the scoped provider so inline calls are observed: persisted to `llm_call_metrics`
-   * via {@link recordCall}, and/or emitted to the external trace sink (Langfuse / OTel).
-   * At least one exit must be present — `InstrumentedModelProvider` refuses a wrap that
-   * would instrument nothing.
+   * The external trace sink. Optional now that a facade may retain metrics without one;
+   * when {@link recordCall} is also wired this MUST be the very sink that recorder's
+   * `LlmObservabilityService` was built with, because the service — not this provider —
+   * performs the fan-out for a recorded call.
    */
-  instrument?: {
-    /**
-     * The external trace sink. Optional now that a facade may retain metrics without one;
-     * when {@link recordCall} is also wired this MUST be the very sink that recorder's
-     * `LlmObservabilityService` was built with, because the service — not this provider —
-     * performs the fan-out for a recorded call.
-     */
-    traceSink?: LlmTraceSink
-    /**
-     * Persist each workspace-scoped inline call to the metric store, built with
-     * `makeInlineCallRecorder`. Without it the inline half of the platform's model activity
-     * never reaches `ObservabilityPanel`, the per-step token rollups or `/api/v1/debug/*`.
-     */
-    recordCall?: InlineLlmCallRecorder
-    recordPrompts?: boolean
-    /**
-     * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies
-     * before they leave for the sink — build it with {@link createStoreAgentContextGate}.
-     * Required so a facade cannot instrument inline calls while silently honouring only
-     * the deployment switch, which is how an opted-out workspace's bodies reached
-     * Langfuse/OTel for months (observability-logging-gaps.md, C2). A call taken by
-     * {@link recordCall} is gated by the same rule inside the service instead.
-     */
-    workspaceBodiesEnabled: WorkspaceBodiesGate
-  }
+  traceSink?: LlmTraceSink
+  /**
+   * Persist each workspace-scoped inline call to the metric store, built with
+   * `makeInlineCallRecorder`. Without it the inline half of the platform's model activity
+   * never reaches `ObservabilityPanel`, the per-step token rollups or `/api/v1/debug/*`.
+   */
+  recordCall?: InlineLlmCallRecorder
+  recordPrompts?: boolean
+  /**
+   * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies
+   * before they leave for the sink — build it with `createStoreAgentContextGate`.
+   * Required so a facade cannot instrument inline calls while silently honouring only
+   * the deployment switch, which is how an opted-out workspace's bodies reached
+   * Langfuse/OTel for months (observability-logging-gaps.md, C2). A call taken by
+   * {@link recordCall} is gated by the same rule inside the service instead.
+   */
+  workspaceBodiesEnabled: WorkspaceBodiesGate
 }
 
 export function createScopedModelProviderResolver(
@@ -127,18 +128,49 @@ export function createScopedModelProviderResolver(
           })
         }
       }
-      const composite = new CompositeModelProvider(registry, ...(opts.extraRegistries ?? []))
-      if (opts.instrument) {
-        return new InstrumentedModelProvider({
-          inner: composite,
-          ...(opts.instrument.traceSink ? { traceSink: opts.instrument.traceSink } : {}),
-          ...(opts.instrument.recordCall ? { recordCall: opts.instrument.recordCall } : {}),
-          recordPrompts: opts.instrument.recordPrompts,
-          workspaceBodiesEnabled: opts.instrument.workspaceBodiesEnabled,
-          logger,
-        })
-      }
-      return composite
+      return new CompositeModelProvider(registry, ...(opts.extraRegistries ?? []))
+    },
+  }
+}
+
+/**
+ * Wrap a {@link ModelProviderResolver} so every model it resolves feeds the inline telemetry
+ * exits — `llm_call_metrics` and/or the external trace sink.
+ *
+ * **Apply this AFTER every wrap that can SUBSTITUTE the resolved model, and only the
+ * concurrency limiter outside it.** The instrumentation is an AI-SDK middleware around the
+ * model instance, so it observes exactly the model handed back by the wrap beneath it and
+ * nothing else. It used to live inside {@link createScopedModelProviderResolver} — i.e.
+ * innermost — which made it invisible to the local facade's subscription-inline wrap: that
+ * wrap answers a subscription harness ref with its own `CliInlineLanguageModel` instead of
+ * delegating to the provider below, so on the default local deployment
+ * (`LOCAL_NATIVE_INLINE`) every inline step running on Claude Code / Codex recorded ZERO
+ * calls while the same step on a metered API model recorded fine. The ordering IS the fix;
+ * a facade that composes these the other way round re-opens it silently, because the wrap
+ * still type-checks and every non-substituted call still records.
+ *
+ * The scope's `executionId` is threaded in as the attribution FALLBACK for a call whose
+ * `catFactoryObservability` tag names no run — see `InstrumentedModelProvider`.
+ *
+ * Returns the resolver unchanged when nothing is wired, so a deployment that retains no
+ * metrics and configures no sink pays no middleware.
+ */
+export function wrapResolverWithInstrumentation(
+  resolver: ModelProviderResolver,
+  instrument: InlineInstrumentation | undefined,
+): ModelProviderResolver {
+  if (!instrument) return resolver
+  return {
+    async forScope(scope: ModelScope): Promise<ModelProvider> {
+      return new InstrumentedModelProvider({
+        inner: await resolver.forScope(scope),
+        ...(instrument.traceSink ? { traceSink: instrument.traceSink } : {}),
+        ...(instrument.recordCall ? { recordCall: instrument.recordCall } : {}),
+        recordPrompts: instrument.recordPrompts,
+        workspaceBodiesEnabled: instrument.workspaceBodiesEnabled,
+        ...(scope.executionId ? { scopeExecutionId: scope.executionId } : {}),
+        logger,
+      })
     },
   }
 }
@@ -146,8 +178,8 @@ export function createScopedModelProviderResolver(
 /**
  * Wrap a {@link ModelProviderResolver} so every resolved provider caps concurrent inline calls
  * to a subscription vendor behind the shared {@link VendorConcurrencyLimiter}. Apply this as the
- * OUTERMOST wrap in a facade — after `createScopedModelProviderResolver`'s instrumentation AND
- * after any facade-specific wrap (local's subscription-inline harness) — so the limiter sees the
+ * OUTERMOST wrap in a facade — after {@link wrapResolverWithInstrumentation} AND after any
+ * facade-specific wrap (local's subscription-inline harness) — so the limiter sees the
  * un-degraded subscription ref and its queue wait is excluded from generation timing. A
  * pass-through limiter (nothing capped) returns the resolver unchanged. There are two call sites
  * — the Worker's `buildModelProviderResolver` and Node's `buildNodeContainer` (local inherits

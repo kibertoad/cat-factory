@@ -1620,6 +1620,30 @@ error handling — and the phased plan to close them — are tracked in
     UNGATED — the service applies the same `LLM_RECORD_PROMPTS` + `storeAgentContext` gate, plus
     `redactSecrets` and the delta chain — and reach it as THUNKS, so a prompts-off deployment
     never pays to serialise a prompt the gate is about to drop.
+  - **The instrumentation is the OUTERMOST provider wrap but for the limiter, and that ordering
+    is load-bearing.** It is an AI-SDK middleware around a resolved model, so it sees only what
+    the wrap beneath it returned: each facade composes base resolver →
+    facade wrap → `wrapResolverWithInstrumentation` → `wrapResolverWithLimiter` (outermost, so a
+    queue wait is never counted as generation time). It shipped INSIDE
+    `createScopedModelProviderResolver` — i.e. innermost — where local mode's
+    subscription-inline wrap, which answers a harness ref with its OWN `CliInlineLanguageModel`
+    instead of delegating, was invisible to it: on the default local shape
+    (`LOCAL_NATIVE_INLINE`) every inline step running on a host `claude`/`codex` login recorded
+    zero calls while the same step on a metered API model recorded fine. A facade that composes
+    these the other way round re-opens that silently, so the property is pinned in
+    `local/src/harnessInline.test.ts` rather than left to the type system.
+  - **Run attribution comes from the credential SCOPE when the call's tag omits it.** Every
+    run-scoped inline caller already resolves the block's active run into its `ModelScope` (it
+    must, or a per-run subscription activation could not be leased), so
+    `wrapResolverWithInstrumentation` threads `scope.executionId` in as the fallback and a
+    per-call `catFactoryObservability({ executionId })` still wins. Most inline sites tag only
+    the workspace, and such a row is worse than unrecorded: it is IN the store and absent from
+    every run-scoped read (`listByExecution` / `summarizeByExecution`, a step's token rollup,
+    `/api/v1/debug/runs/*`), which reads as a step that spent nothing. Both `undefined` ⇒ null,
+    the honest answer for a genuinely un-run-scoped call (the document planner, a bug-hunt
+    rating, a fragment title) — never guessed at from anything else. A NEW inline caller on the
+    run path therefore has one obligation: build its scope with the run in it (a call that also
+    generates on the run path, like a fragment brief, carries it on its input).
   - **Any service in front of that store needs its `workspaceSettingsRepository`.** An absent one
     makes `createStoreAgentContextGate` an OPEN gate, so the harness and inline recorders both
     wire it: a subscription harness's `stream-json` carries full bodies, and without the
