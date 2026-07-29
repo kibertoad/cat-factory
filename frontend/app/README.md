@@ -192,6 +192,15 @@ wrong place is invisible until a user cannot find it:
   It also carries a full "how it works / when you need this / when you can skip it"
   explanation there rather than a one-line hint, since the decision to run it has to
   be made before opening a five-minute wizard.
+- **"It talks to an external service" is not what puts a surface in `integrations`.**
+  Private package registries connect to npmjs.com and GitHub Packages and still belong
+  in Infrastructure, because the question they answer is _what may a container install
+  from_ — a property of where agents RUN, which is what the Infrastructure window is
+  for. `integrations` is for a system the WORKSPACE links in and would still be a
+  coherent product without. Ask which question the destination answers, not whether a
+  credential leaves the building. A surface moved between sections must also move its
+  entry point: leaving a hub row behind as a shortcut splits the answer across two
+  places, so the row goes and the window's tab becomes the single route in.
 
 ## Develop & test
 
