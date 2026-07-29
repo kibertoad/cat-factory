@@ -18,6 +18,12 @@ repo's provider) and folds it into the prompt of the agent that just did the wor
 briefing guidance does not, the template wins. Repos shipping no template are byte-for-byte
 unaffected.
 
+A filled template's headings are the REPO's, so the sentinel is read back with the leading-`#` title
+rule switched off: a template whose first heading is its only level-1 one would otherwise have that
+heading lifted as the pull request's title, replacing the platform's own and deleting the heading
+from the body. A template symlinked out of the checkout is refused rather than read, since this is
+the one repo-chosen path the harness reads without the agent asking for it.
+
 A directory holding SEVERAL templates with no `default` is deliberately left alone: that directory
 exists so a human can choose per pull request, and picking one arbitrarily would file every run's
 work under whichever name sorts first while looking deliberate.

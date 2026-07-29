@@ -32,14 +32,24 @@ const OPENS_NO_PULL_REQUEST: Record<string, string> = {
 
 const SOURCES = ['../src/agent.ts', '../src/coding-agent.ts', '../src/bootstrap-mode.ts']
 
-/** Top-level function bodies, keyed by name. Crude on purpose, as in the sibling guard. */
+/**
+ * Top-level function bodies, keyed by name. Crude on purpose, as in the sibling guard — the two
+ * markers only ever appear at statement level in these files.
+ *
+ * Both spellings a top-level mode can take: a `function` declaration, and a `const x = async () =>`
+ * arrow. The arrow form matters because this guard's whole claim is that a NEW mode fails until it
+ * is classified, and a claim that holds for only one of the two ways to write one is not that.
+ */
+const DECLARATION =
+  /^(?:export )?(?:async )?function (\w+)|^(?:export )?const (\w+)\s*[:=][^=\n]*=>/gm
+
 function topLevelFunctions(source: string): Map<string, string> {
   const bodies = new Map<string, string>()
-  const starts = [...source.matchAll(/^(?:export )?(?:async )?function (\w+)/gm)]
+  const starts = [...source.matchAll(DECLARATION)]
   starts.forEach((match, index) => {
     const from = match.index
     const to = starts[index + 1]?.index ?? source.length
-    bodies.set(match[1]!, source.slice(from, to))
+    bodies.set((match[1] ?? match[2])!, source.slice(from, to))
   })
   return bodies
 }

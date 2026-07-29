@@ -74,12 +74,13 @@ The implementation job (`POST /run`) is the canonical sequence:
    [dependency prepopulation](../../../docs/initiatives/agent-dependency-prepopulation.md)),
 4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`)
    — `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
-   GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout. Found, it is folded
-   into the agent's prompt (on EVERY pass, as with the install above) asking it to write its
-   briefing AS that template, filled in. This exists because neither host applies a template to an
-   API-created pull request, so nothing else would: the template only reaches the web form a human
-   opens. A directory of several templates with no `default` is left alone deliberately — it exists
-   so a human can choose per pull request,
+   GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout (a symlinked template
+   is followed only while it resolves INSIDE the checkout — this is the one repo-chosen path the
+   harness reads unprompted). Found, it is folded into the agent's prompt (on EVERY pass, as with
+   the install above) asking it to write its briefing AS that template, filled in. This exists
+   because neither host applies a template to an API-created pull request, so nothing else would:
+   the template only reaches the web form a human opens. A directory of several templates with no
+   `default` is left alone deliberately — it exists so a human can choose per pull request,
 5. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
 6. **validate** the checkout, when the job body carries `validationChecks` — the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
@@ -102,10 +103,13 @@ The implementation job (`POST /run`) is the canonical sequence:
    title), and `src/pr-description.ts` lifts it — secret-scrubbed, size-capped with a visible
    note, made inert for the host by `src/host-markdown.ts`, kept out of the commit like the
    effort/follow-ups sentinels — onto `openPullRequest`. Absent or unusable ⇒ the fallback text,
-   unchanged. When the repo ships a template (step 4) that briefing IS the filled template, and
-   it crosses the same scrub/cap/inert boundary on the way out. On a RESUMED run the PR already exists, so an agent briefing additionally refreshes
-   its title/description in place (carrying the engine's managed report region across); the
-   generic fallback never does, so a human's edit is safe.
+   unchanged. When the repo ships a template (step 4) that briefing IS the filled template: it
+   crosses the same scrub/cap/inert boundary on the way out, but the leading-`#` title rule is
+   switched OFF for it (`titleFromHeading: false`), because those headings are the repo's and
+   lifting the template's top heading would retitle the PR after it and drop it from the body. On a
+   RESUMED run the PR already exists, so an agent briefing additionally refreshes its
+   title/description in place (carrying the engine's managed report region across); the generic
+   fallback never does, so a human's edit is safe.
 
 Bootstrap differs at the ends — it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a

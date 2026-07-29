@@ -1,7 +1,9 @@
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readdir, readFile, realpath } from 'node:fs/promises'
+import { join, sep } from 'node:path'
+import { fencedOutput } from './captured-command.js'
+import type { RepoSpec } from './job.js'
 import type { Logger } from './logger.js'
-import { PR_DESCRIPTION_FILE } from './pr-description.js'
+import { MAX_PR_BODY_CHARS, PR_DESCRIPTION_FILE } from './pr-description.js'
 
 // ---------------------------------------------------------------------------
 // THE REPOSITORY'S OWN PULL-REQUEST TEMPLATE.
@@ -33,11 +35,13 @@ import { PR_DESCRIPTION_FILE } from './pr-description.js'
 // The filled text goes back out through `readPrDescription`, so it crosses `redactSecrets` and
 // `host-markdown.ts` on the way to the PR exactly as a free-form briefing does. Nothing here
 // widens that boundary: a template is repo-committed text on the way IN, and what the agent
-// writes is model-authored text on the way OUT either way.
+// writes is model-authored text on the way OUT either way. What it DOES change on the way out is
+// the title heuristic: the headings are now the repo's, so the caller reads the sentinel with
+// `titleFromHeading: false` (see `ReadPrDescriptionOptions`).
 // ---------------------------------------------------------------------------
 
-/** The VCS providers a repo can live on (mirrors `RepoSpec.provider`). */
-type ProviderName = 'github' | 'gitlab'
+/** The VCS providers a repo can live on. Bound to `RepoSpec` so the two cannot drift. */
+type ProviderName = NonNullable<RepoSpec['provider']>
 
 /**
  * How much template text is inlined into the agent's prompt.
@@ -95,6 +99,12 @@ interface TemplateLocation {
 export interface PrTemplate {
   /** Repo-root-relative path, forward-slashed (it is prose an agent reads). */
   path: string
+  /**
+   * The template's size. ALWAYS the real one, including when {@link text} is absent: an over-budget
+   * template reporting `chars: 0` would read in the log exactly like an empty file, which is the
+   * one thing discovery treats as "no template at all".
+   */
+  chars: number
   /** The template text. Absent ⇒ over budget, so the agent is told to read {@link path} itself. */
   text?: string
 }
@@ -108,9 +118,26 @@ export interface PrTemplateTarget {
   repoLabel?: string
 }
 
+/** What {@link resolvePrTemplateNote} tells the run about the templates it found. */
+export interface PrTemplateResolution {
+  /** The prompt note, or absent when no target ships a template (which is most repos). */
+  note?: string
+  /**
+   * The `repoDir`s whose briefing is a FILLED TEMPLATE. The push phase reads those sentinels with
+   * `titleFromHeading: false`, because the headings in them are the repo's — see
+   * `ReadPrDescriptionOptions.titleFromHeading`. A SET keyed by directory rather than a boolean
+   * because a multi-repo run's legs need not all ship a template.
+   */
+  templated: ReadonlySet<string>
+}
+
+/** Why a discovered template was named rather than inlined — the two are not the same fix. */
+type NotInlinedReason = 'over-file-budget' | 'over-shared-budget'
+
 /**
  * THE entry point: find each target's pull-request template and build the prompt note that asks
- * the agent to fill it, or `undefined` when no target ships one (which is most repos).
+ * the agent to fill it, plus the set of checkouts whose sentinel will therefore hold a filled
+ * template rather than a free-form briefing (see {@link PrTemplateResolution}).
  *
  * Pass NO targets for a dispatch that opens no pull request — an in-place fixer amending someone
  * else's PR, a read-only explore run. Asking such a run to fill a template would be asking for a
@@ -122,25 +149,42 @@ export interface PrTemplateTarget {
 export async function resolvePrTemplateNote(args: {
   targets: PrTemplateTarget[]
   logger: Logger
-}): Promise<string | undefined> {
+}): Promise<PrTemplateResolution> {
   const { targets, logger } = args
   const notes: string[] = []
+  const templated = new Set<string>()
   let inlineBudget = MAX_TOTAL_INLINE_PR_TEMPLATE_CHARS
   for (const target of targets) {
     const found = await discoverPrTemplate(target.repoDir, target.provider)
     if (!found) continue
-    // Spend the shared budget in leg order; a template that no longer fits is named, not cut.
-    const inline = found.text !== undefined && found.text.length <= inlineBudget
-    if (inline) inlineBudget -= found.text!.length
+    // Spend the shared budget in leg order; a template that no longer fits is named, not cut. The
+    // per-file budget was already spent inside discovery, so an absent `text` means THAT ceiling —
+    // distinguished in the log because the two want different fixes (a smaller template vs a
+    // workspace carrying more template text than one prompt should hold).
+    const text = found.text
+    const inline = text !== undefined && text.length <= inlineBudget
+    if (inline) inlineBudget -= text.length
+    const reason: NotInlinedReason | undefined = inline
+      ? undefined
+      : text === undefined
+        ? 'over-file-budget'
+        : 'over-shared-budget'
     logger.info('pr template: found', {
       path: found.path,
-      chars: found.text?.length ?? 0,
+      chars: found.chars,
       inlined: inline,
+      ...(reason ? { reason } : {}),
       ...(target.repoLabel ? { repo: target.repoLabel } : {}),
     })
-    notes.push(buildPrTemplateNote(inline ? found : { path: found.path }, target.repoLabel))
+    templated.add(target.repoDir)
+    notes.push(
+      buildPrTemplateNote(
+        inline ? found : { path: found.path, chars: found.chars },
+        target.repoLabel,
+      ),
+    )
   }
-  return notes.length > 0 ? notes.join('\n\n') : undefined
+  return { ...(notes.length > 0 ? { note: notes.join('\n\n') } : {}), templated }
 }
 
 /**
@@ -162,10 +206,12 @@ export async function discoverPrTemplate(
     const name = location.pick ? chooseFromDirectory(entries) : chooseSingleFile(entries, location)
     if (!name) continue
     const path = location.dir ? `${location.dir}/${name}` : name
-    const text = await readTemplate(join(repoDir, location.dir, name))
+    const text = await readTemplate(join(repoDir, location.dir, name), repoDir)
     // An empty (or unreadable) file imposes no structure, so keep probing: a repo can carry a
     // placeholder at one location and its real template at another.
-    if (text) return text.length <= MAX_INLINE_PR_TEMPLATE_CHARS ? { path, text } : { path }
+    if (!text) continue
+    const chars = text.length
+    return chars <= MAX_INLINE_PR_TEMPLATE_CHARS ? { path, chars, text } : { path, chars }
   }
   return undefined
 }
@@ -233,10 +279,27 @@ function splitName(name: string): { stem: string; extension: string } {
   return { stem: lower.slice(0, dot), extension: lower.slice(dot) }
 }
 
-/** The template's text, or undefined when it is unreadable or carries nothing. */
-async function readTemplate(path: string): Promise<string | undefined> {
+/**
+ * The template's text, or undefined when it is unreadable or carries nothing.
+ *
+ * A checkout is REPO-AUTHORED, symlinks included, and this is the one read the harness performs on
+ * a repo-chosen path without the agent asking for it — so the resolved target must stay inside
+ * `repoDir`. A link out of the tree would inline an arbitrary container file (the run's own env,
+ * a sibling checkout) into the prompt, and from there into a body only `redactSecrets` stands in
+ * front of. Containment rather than a blanket symlink refusal, because a monorepo pointing
+ * `.github/PULL_REQUEST_TEMPLATE.md` at a doc it keeps elsewhere in the repo is a real and
+ * legitimate layout.
+ */
+async function readTemplate(path: string, repoDir: string): Promise<string | undefined> {
   try {
-    return (await readFile(path, 'utf8')).trim() || undefined
+    // Both sides resolved, so the comparison is between two canonical paths — `repoDir` itself is
+    // routinely reached through a symlinked temp dir (macOS `/tmp`), which a raw prefix test on the
+    // unresolved root would read as an escape.
+    const [target, root] = await Promise.all([realpath(path), realpath(repoDir)])
+    if (target !== root && !target.startsWith(root.endsWith(sep) ? root : root + sep)) {
+      return undefined
+    }
+    return (await readFile(target, 'utf8')).trim() || undefined
   } catch {
     return undefined
   }
@@ -250,9 +313,13 @@ async function readTemplate(path: string): Promise<string | undefined> {
  * why the template is not already applied — an agent that believes the host will merge the
  * template with its text has no reason to reproduce the structure itself.
  *
- * The template is delimited with plain text rules rather than a code fence: templates routinely
- * contain fenced blocks of their own, which would close the wrapper early and spill the rest of
- * the template — and the instructions after it — into the prompt as prose.
+ * The template is delimited with `fencedOutput`, the same helper every other captured-text-into-a-
+ * prompt path uses. Templates routinely carry fenced blocks of their own, and a fixed three-tick
+ * wrapper closes on the first of them — spilling the rest of the template, and the instructions
+ * after it, into the prompt as prose. `fencedOutput` sizes the fence one tick longer than the
+ * longest run in the body, which is what CommonMark specifies for exactly this, so no template can
+ * break out of its own block. A plain `--- BEGIN/END ---` rule would read more nicely and is
+ * trivially forgeable by the template's own content, which is the whole thing being defended.
  */
 export function buildPrTemplateNote(template: PrTemplate, repoLabel?: string): string {
   const subject = repoLabel ? `The \`${repoLabel}\` repository` : 'This repository'
@@ -271,11 +338,20 @@ export function buildPrTemplateNote(template: PrTemplate, repoLabel?: string): s
     'reviewer looking for it needs to see it was considered. Where the template asks for ' +
     'something the general description guidance does not, the TEMPLATE wins; where it leaves room ' +
     'for prose, brief it as that guidance describes. The platform rules still hold either way: no ' +
-    'secrets, and no issue/PR numbers, @-mentions, or issue-closing wording.'
+    'secrets, and no issue/PR numbers, @-mentions, or issue-closing wording. Do NOT put a title ' +
+    "line above the template — the platform titles this pull request itself, so the template's " +
+    'own first heading stays the first line of the file. Keep the finished file under ' +
+    `${MAX_PR_BODY_CHARS.toLocaleString('en-US')} characters: the platform truncates a longer ` +
+    "body, which would cut the template's last sections."
   if (template.text === undefined) {
-    return `${lead} ${instructions} The template is too large to reproduce here — read it from the checkout.`
+    // Reached both when the file alone exceeds the inline budget and when a multi-repo run's
+    // earlier legs spent the shared one, so the wording states the size and stays true of both.
+    return (
+      `${lead} ${instructions} The template (${template.chars} characters) is not reproduced ` +
+      'here — read it from the checkout.'
+    )
   }
-  return `${lead} ${instructions}\n\nThe template follows, between markers that are NOT part of it:\n--- BEGIN PULL REQUEST TEMPLATE ---\n${template.text}\n--- END PULL REQUEST TEMPLATE ---`
+  return `${lead} ${instructions}\n\nThe template follows, in a fenced block that is NOT part of it:\n${fencedOutput(template.text)}`
 }
 
 /**

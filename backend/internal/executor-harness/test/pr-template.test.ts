@@ -9,7 +9,11 @@ import {
   MAX_TOTAL_INLINE_PR_TEMPLATE_CHARS,
   resolvePrTemplateNote,
   withPrTemplateNote,
+  type PrTemplate,
 } from '../src/pr-template.js'
+import { PR_DESCRIPTION_FILE, readPrDescription } from '../src/pr-description.js'
+import { buildSingleRepoCodingSpec } from '../src/agent.js'
+import { parseAgentJob } from '../src/job.js'
 import type { Logger } from '../src/logger.js'
 
 // The repo's own pull-request template. Neither host applies a template to an API-created pull
@@ -23,6 +27,19 @@ const silentLogger: Logger = {
   warn: () => {},
   error: () => {},
   child: () => silentLogger,
+}
+
+/**
+ * Create a symlink, or report that this machine cannot. An unprivileged Windows account cannot,
+ * and skipping beats either failing everywhere or dropping the assertion for everyone.
+ */
+function trySymlink(target: string, path: string): boolean {
+  try {
+    symlinkSync(target, path)
+    return true
+  } catch {
+    return false
+  }
 }
 
 describe('discoverPrTemplate', () => {
@@ -49,6 +66,7 @@ describe('discoverPrTemplate', () => {
     write('.github/PULL_REQUEST_TEMPLATE.md', '## Summary')
     expect(await discoverPrTemplate(dir, 'github')).toEqual({
       path: '.github/PULL_REQUEST_TEMPLATE.md',
+      chars: '## Summary'.length,
       text: '## Summary',
     })
   })
@@ -80,6 +98,7 @@ describe('discoverPrTemplate', () => {
     write('.gitlab/merge_request_templates/Default.md', '## Change')
     expect(await discoverPrTemplate(dir, 'gitlab')).toEqual({
       path: '.gitlab/merge_request_templates/Default.md',
+      chars: '## Change'.length,
       text: '## Change',
     })
   })
@@ -137,11 +156,16 @@ describe('discoverPrTemplate', () => {
     expect((await discoverPrTemplate(dir))?.text).toBe('the real one')
   })
 
-  it('names but does not inline an over-budget template', async () => {
+  it('names but does not inline an over-budget template, reporting its real size', async () => {
     // Truncating would have the agent fill a structure whose tail it never saw; the file is on
-    // disk, so pointing at it keeps the feature working at any size.
+    // disk, so pointing at it keeps the feature working at any size. `chars` still carries the
+    // real length — reporting 0 for the LARGEST templates would read exactly like an empty file,
+    // which is the one case discovery treats as no template at all.
     write('.github/PULL_REQUEST_TEMPLATE.md', 'x'.repeat(MAX_INLINE_PR_TEMPLATE_CHARS + 1))
-    expect(await discoverPrTemplate(dir)).toEqual({ path: '.github/PULL_REQUEST_TEMPLATE.md' })
+    expect(await discoverPrTemplate(dir)).toEqual({
+      path: '.github/PULL_REQUEST_TEMPLATE.md',
+      chars: MAX_INLINE_PR_TEMPLATE_CHARS + 1,
+    })
   })
 
   it('trims but keeps a template exactly at the budget', async () => {
@@ -152,12 +176,43 @@ describe('discoverPrTemplate', () => {
   it('never throws for an unreadable template', async () => {
     // A broken symlink is the reachable case: the entry exists, the read fails.
     mkdirSync(join(dir, '.github'), { recursive: true })
-    try {
-      symlinkSync(join(dir, 'nowhere.md'), join(dir, '.github/PULL_REQUEST_TEMPLATE.md'))
-    } catch {
-      return // unprivileged Windows cannot create symlinks; the swallow is covered by the ENOENT paths
-    }
+    if (!trySymlink(join(dir, 'nowhere.md'), join(dir, '.github/PULL_REQUEST_TEMPLATE.md'))) return
     expect(await discoverPrTemplate(dir)).toBeUndefined()
+  })
+
+  it('follows a symlink that stays inside the repo', async () => {
+    // A monorepo pointing `.github/` at a doc it keeps elsewhere in the tree is a real layout, so
+    // containment is the rule rather than a blanket refusal of symlinked templates.
+    write('docs/shared-pr-template.md', '## Shared')
+    mkdirSync(join(dir, '.github'), { recursive: true })
+    if (
+      !trySymlink(
+        join(dir, 'docs/shared-pr-template.md'),
+        join(dir, '.github/PULL_REQUEST_TEMPLATE.md'),
+      )
+    ) {
+      return
+    }
+    expect((await discoverPrTemplate(dir))?.text).toBe('## Shared')
+  })
+
+  it('refuses a template symlinked OUT of the checkout', async () => {
+    // This is the one read the harness performs on a repo-chosen path unprompted, so a repo could
+    // otherwise inline an arbitrary container file — the run's own env, a sibling checkout — into
+    // the prompt, and from there into a body only `redactSecrets` stands in front of.
+    const outside = mkdtempSync(join(tmpdir(), 'pr-tmpl-outside-'))
+    try {
+      writeFileSync(join(outside, 'secrets.env'), 'GH_TOKEN=ghp_realtoken', 'utf8')
+      mkdirSync(join(dir, '.github'), { recursive: true })
+      if (
+        !trySymlink(join(outside, 'secrets.env'), join(dir, '.github/PULL_REQUEST_TEMPLATE.md'))
+      ) {
+        return
+      }
+      expect(await discoverPrTemplate(dir)).toBeUndefined()
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 
   it('never throws for a missing checkout', async () => {
@@ -183,33 +238,40 @@ describe('resolvePrTemplateNote', () => {
     return repoDir
   }
 
-  it('returns undefined when the dispatch opens no pull request', async () => {
+  it('yields no note when the dispatch opens no pull request', async () => {
     repo('api', '## Summary')
     // The caller passes no targets — an in-place fixer amending someone else's PR must not be
     // asked to fill a template for a pull request nothing opens.
-    expect(await resolvePrTemplateNote({ targets: [], logger: silentLogger })).toBeUndefined()
+    const resolved = await resolvePrTemplateNote({ targets: [], logger: silentLogger })
+    expect(resolved.note).toBeUndefined()
+    expect(resolved.templated.size).toBe(0)
   })
 
-  it('returns undefined when no target ships a template', async () => {
+  it('yields no note when no target ships a template', async () => {
     const repoDir = repo('api')
-    expect(
-      await resolvePrTemplateNote({ targets: [{ repoDir }], logger: silentLogger }),
-    ).toBeUndefined()
+    const resolved = await resolvePrTemplateNote({ targets: [{ repoDir }], logger: silentLogger })
+    expect(resolved.note).toBeUndefined()
+    // Nothing to fill ⇒ the sentinel is a free-form briefing, so the title heuristic stays on.
+    expect(resolved.templated.has(repoDir)).toBe(false)
   })
 
-  it('builds a note carrying the template text', async () => {
+  it('builds a note carrying the template text and marks the checkout templated', async () => {
     const repoDir = repo('api', '## Summary\n## Risk')
-    const note = await resolvePrTemplateNote({ targets: [{ repoDir }], logger: silentLogger })
+    const { note, templated } = await resolvePrTemplateNote({
+      targets: [{ repoDir }],
+      logger: silentLogger,
+    })
     expect(note).toContain('.github/PULL_REQUEST_TEMPLATE.md')
     expect(note).toContain('## Summary\n## Risk')
     expect(note).toContain('This repository')
+    expect(templated.has(repoDir)).toBe(true)
   })
 
   it('names each repo in a multi-repo run and skips the ones with no template', async () => {
     const api = repo('api', '## API change')
     const web = repo('web')
     const jobs = repo('jobs', '## Jobs change')
-    const note = await resolvePrTemplateNote({
+    const { note, templated } = await resolvePrTemplateNote({
       targets: [
         { repoDir: api, repoLabel: 'acme__api' },
         { repoDir: web, repoLabel: 'acme__web' },
@@ -222,6 +284,8 @@ describe('resolvePrTemplateNote', () => {
     expect(note).not.toContain('acme__web')
     expect(note).toContain('## API change')
     expect(note).toContain('## Jobs change')
+    // Per-leg, not per-run: the leg with no template keeps the free-form title heuristic.
+    expect([...templated].sort()).toEqual([api, jobs].sort())
   })
 
   it('spends a shared inline budget across legs, naming the ones that no longer fit', async () => {
@@ -229,7 +293,7 @@ describe('resolvePrTemplateNote', () => {
     const big = 'z'.repeat(MAX_INLINE_PR_TEMPLATE_CHARS)
     const first = repo('first', big)
     const second = repo('second', `${big}\nSECOND MARKER`)
-    const note = await resolvePrTemplateNote({
+    const { note, templated } = await resolvePrTemplateNote({
       targets: [
         { repoDir: first, repoLabel: 'first' },
         { repoDir: second, repoLabel: 'second' },
@@ -240,43 +304,99 @@ describe('resolvePrTemplateNote', () => {
     expect(note).not.toContain('SECOND MARKER')
     expect(note).toContain('read it from the checkout')
     expect(note!.length).toBeLessThan(MAX_TOTAL_INLINE_PR_TEMPLATE_CHARS + 4_000)
+    // Named rather than inlined is still templated: the agent fills it either way.
+    expect(templated.has(second)).toBe(true)
+  })
+
+  it('reports the real size of a template it declined to inline', async () => {
+    // `chars: 0` for the LARGEST templates would read in the log exactly like an empty file.
+    const oversized = MAX_INLINE_PR_TEMPLATE_CHARS + 500
+    const repoDir = repo('api', 'q'.repeat(oversized))
+    const lines: { msg: string; fields?: Record<string, unknown> }[] = []
+    const recording: Logger = {
+      ...silentLogger,
+      info: (msg, fields) => lines.push({ msg, ...(fields ? { fields } : {}) }),
+    }
+    const { note } = await resolvePrTemplateNote({ targets: [{ repoDir }], logger: recording })
+    expect(lines[0]?.fields).toMatchObject({
+      chars: oversized,
+      inlined: false,
+      reason: 'over-file-budget',
+    })
+    expect(note).toContain(`${oversized} characters`)
+  })
+
+  it('distinguishes the shared budget from the per-file one', async () => {
+    // The two want different fixes — a smaller template, vs a workspace carrying more template
+    // text than one prompt should hold — so they must not log as the same condition.
+    const big = 'z'.repeat(MAX_INLINE_PR_TEMPLATE_CHARS)
+    const first = repo('first', big)
+    const second = repo('second', big)
+    const reasons: unknown[] = []
+    const recording: Logger = {
+      ...silentLogger,
+      info: (_msg, fields) => reasons.push(fields?.reason),
+    }
+    await resolvePrTemplateNote({
+      targets: [{ repoDir: first }, { repoDir: second }],
+      logger: recording,
+    })
+    expect(reasons).toEqual([undefined, 'over-shared-budget'])
   })
 })
 
 describe('buildPrTemplateNote', () => {
+  /** An inlined template at an arbitrary path — the path is not what these assertions are about. */
+  const inlined = (text: string): PrTemplate => ({
+    path: '.github/PULL_REQUEST_TEMPLATE.md',
+    chars: text.length,
+    text,
+  })
+
   it('states that the host does not apply the template for us', async () => {
     // An agent that believes the host will merge the template with its text has no reason to
     // reproduce the structure itself.
-    const note = buildPrTemplateNote({ path: '.github/PULL_REQUEST_TEMPLATE.md', text: '## Why' })
+    const note = buildPrTemplateNote(inlined('## Why'))
     expect(note).toMatch(/neither GitHub nor GitLab applies a template/i)
   })
 
   it('says the template wins where it conflicts with the free-form guidance', () => {
-    const note = buildPrTemplateNote({ path: 'PULL_REQUEST_TEMPLATE.md', text: '## Test plan' })
-    expect(note).toMatch(/TEMPLATE wins/)
+    expect(buildPrTemplateNote(inlined('## Test plan'))).toMatch(/TEMPLATE wins/)
   })
 
   it('names the sentinel file the filled template must be written to', () => {
-    const note = buildPrTemplateNote({ path: 'PULL_REQUEST_TEMPLATE.md', text: '## Why' })
-    expect(note).toContain('.cat-pr-description.md')
+    expect(buildPrTemplateNote(inlined('## Why'))).toContain('.cat-pr-description.md')
   })
 
-  it('delimits the template with text rules, not a code fence', () => {
-    // Templates routinely contain fenced blocks, which would close a wrapping fence early and
-    // spill the rest of the template — and the instructions after it — into the prompt as prose.
-    const note = buildPrTemplateNote({
-      path: 'PULL_REQUEST_TEMPLATE.md',
-      text: '## Repro\n```sh\nnpm t\n```',
-    })
-    expect(note).toContain('--- BEGIN PULL REQUEST TEMPLATE ---')
-    expect(note).toContain('--- END PULL REQUEST TEMPLATE ---')
-    expect(note.indexOf('```')).toBeGreaterThan(note.indexOf('--- BEGIN'))
+  it('forbids a title line above the template', () => {
+    // The platform titles the PR itself, and a `# <title>` line the agent adds on top would either
+    // become the title (stealing it from `<block> (<pipeline>)`) or make the template's own first
+    // heading no longer first. Reinforces the `titleFromHeading: false` read on the way out.
+    expect(buildPrTemplateNote(inlined('# Pull Request\n\n## Why'))).toMatch(
+      /Do NOT put a title line above the template/,
+    )
   })
 
-  it('tells the agent to read an un-inlined template itself', () => {
-    const note = buildPrTemplateNote({ path: '.github/PULL_REQUEST_TEMPLATE.md' })
+  it('states the body budget so a long template is not answered past it', () => {
+    // The platform truncates an over-budget body, which would cut the template's last sections —
+    // the same failure the INLINE budget avoids on the way in.
+    expect(buildPrTemplateNote(inlined('## Why'))).toContain('15,000 characters')
+  })
+
+  it('fences the template so its own fenced blocks cannot break out', () => {
+    // Templates routinely contain fenced blocks. A fixed three-tick wrapper closes on the first of
+    // them and spills the rest of the template — and the instructions after it — into the prompt as
+    // prose; a plain `--- END ---` rule is forgeable by the template's own content. `fencedOutput`
+    // sizes the fence past the longest run inside, so neither is possible.
+    const note = buildPrTemplateNote(inlined('## Repro\n```sh\nnpm t\n```'))
+    expect(note).toContain('````\n## Repro\n```sh\nnpm t\n```\n````')
+  })
+
+  it('tells the agent to read an un-inlined template itself, with its size', () => {
+    const note = buildPrTemplateNote({ path: '.github/PULL_REQUEST_TEMPLATE.md', chars: 12_345 })
     expect(note).toContain('read it from the checkout')
-    expect(note).not.toContain('--- BEGIN PULL REQUEST TEMPLATE ---')
+    expect(note).toContain('(12345 characters)')
+    expect(note).not.toContain('```')
   })
 })
 
@@ -287,5 +407,70 @@ describe('withPrTemplateNote', () => {
 
   it('appends the note', () => {
     expect(withPrTemplateNote('do the work', 'NOTE')).toBe('do the work\n\nNOTE')
+  })
+})
+
+describe('a filled template survives the read-back intact', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'pr-tmpl-read-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  // The shape that breaks: ONE level-1 heading on the first line above a set of `##` sections. The
+  // free-form title heuristic (`splitTitle`) fires on exactly that, so a template written to the
+  // sentinel unguarded loses its top heading to the PR title — a pull request titled "Pull Request"
+  // instead of `<block> (<pipeline>)`, and a body missing the heading the repo asked for.
+  const FILLED = '# Pull Request\n\n## What changed\n\nAdded login.\n\n## Test plan\n\nUnit tests.'
+
+  it('keeps the template top heading in the body and does not retitle the PR', async () => {
+    writeFileSync(join(dir, PR_DESCRIPTION_FILE), FILLED, 'utf8')
+    const parsed = await readPrDescription(dir, { titleFromHeading: false })
+    expect(parsed?.title).toBeUndefined()
+    expect(parsed?.body).toBe(FILLED)
+  })
+
+  it('still lifts the title off a FREE-FORM briefing, which is what asked for one', async () => {
+    // The guard is scoped to the templated read; the default behaviour must be untouched.
+    writeFileSync(join(dir, PR_DESCRIPTION_FILE), FILLED, 'utf8')
+    expect((await readPrDescription(dir))?.title).toBe('Pull Request')
+  })
+})
+
+describe('opensPr is derived from the job carrying a PR to open', () => {
+  // The single line the in-place-fixer exclusion rests on, and the one the coverage guard cannot
+  // reach: the fixers run through `runCodingAgent` exactly as the implementer does, so what tells
+  // them apart is `job.pr` — never an agent-kind switch, and never a second job-body flag that
+  // could disagree with the `if (job.pr)` guard that decides whether a PR opens at all.
+  const codingJob = (extra: Record<string, unknown>) =>
+    parseAgentJob({
+      jobId: 'job_1',
+      mode: 'coding',
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      model: 'qwen3-max',
+      proxyBaseUrl: 'https://w/v1',
+      sessionToken: 'sess',
+      ghToken: 'ght',
+      repo: {
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+        cloneUrl: 'https://github.com/acme/widgets.git',
+      },
+      branch: 'main',
+      ...extra,
+    })
+
+  it('is set for a dispatch that opens a pull request', () => {
+    const job = codingJob({ newBranch: 'cat-factory/b1', pr: { title: 'T', body: 'B' } })
+    expect(buildSingleRepoCodingSpec(job, 'cat-factory/b1').opensPr).toBe(true)
+  })
+
+  it('is absent for an in-place fixer, which amends a PR it does not own', () => {
+    const job = codingJob({ pushBranch: 'cat-factory/b1' })
+    expect(buildSingleRepoCodingSpec(job, 'cat-factory/b1').opensPr).toBeUndefined()
   })
 })
