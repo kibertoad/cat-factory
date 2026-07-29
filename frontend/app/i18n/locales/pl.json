@@ -5306,9 +5306,11 @@
       "title": "Ten plan czeka na Ciebie",
       "body": "Planer przygotował poniższe fazy i elementy. Zatwierdź je, aby zapisać plan i rozpocząć pracę, albo odeślij plan z informacją, co zmienić.",
       "approve": "Zatwierdź plan",
-      "requestChanges": "Poproś o zmiany",
       "feedbackPlaceholder": "Co planer ma zmienić? Zakres, kolejność faz, brakująca praca, element, który pasuje gdzie indziej…",
-      "sendBack": "Odeślij do planera"
+      "sendBack": "Odeślij do planera",
+      "noDocument": "Ten plan powstał, zanim platforma zaczęła generować plany do przeglądu, więc nie ma dokumentu do przeglądania — plan stanowią sekcje poniżej.",
+      "needsFeedback": "Dodaj najpierw komentarz lub uwagi — planista na ich podstawie planuje ponownie.",
+      "commentHint": "Kliknij dowolny fragment planu, aby go skomentować."
     },
     "planning": {
       "title": "Zaplanuj inicjatywe",

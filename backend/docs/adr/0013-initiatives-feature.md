@@ -78,9 +78,11 @@ Key shape decisions:
   proposal, and a "request changes" re-run handed the planner that sentence back as its previous
   proposal rather than the plan it had just written. The plan therefore joins the spec doc and the
   blueprint tree on the `reviewableArtifactOutput` seam: the gate parks on a deterministic markdown
-  RENDERING of the ingested plan, whose headings are load-bearing because the reader's outline
-  parser splits the document at each one — which is what makes navigation and per-block commenting
-  possible over it at all.
+  RENDERING of the ingested plan. Its headings are load-bearing rather than cosmetic — the reader's
+  outline parser splits the document at each one — which is what makes the rail's outline and its
+  per-block commenting possible at all. Those two tools are the SAME ones the step reader gives the
+  architect's prose: `useStepProse` for the outline, `useProseComments` for the anchoring, and one
+  global `.reader-prose` sheet for the presentation, so the two review surfaces cannot drift.
 - **A rendered proposal is NOT editable, and the engine says so.** "Approve with corrections"
   rewrites `step.output`, which is right when the output is the agent's own prose and silently
   useless when it is a rendering of state already ingested — the committed artifact would stay

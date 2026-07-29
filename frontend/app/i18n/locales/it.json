@@ -4294,9 +4294,11 @@
       "title": "Questo piano ti sta aspettando",
       "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
       "approve": "Approva il piano",
-      "requestChanges": "Richiedi modifiche",
       "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
-      "sendBack": "Rimanda al planner"
+      "sendBack": "Rimanda al planner",
+      "noDocument": "Questo piano è stato redatto prima che la piattaforma generasse piani da revisionare, quindi non c'è un documento da percorrere: le sezioni qui sotto sono il piano.",
+      "needsFeedback": "Aggiungi prima un commento o un riscontro: il pianificatore ripianifica a partire da questo.",
+      "commentHint": "Fai clic su una parte del piano per commentarla."
     },
     "planning": {
       "title": "Pianifica l'iniziativa",
