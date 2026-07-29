@@ -112,3 +112,59 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['k3s', '--app-url', 'ftp://example.com'])).toThrow(ArgError)
   })
 })
+
+describe('parseArgs — supervise', () => {
+  it('parses the supervise flags and the passthrough command', () => {
+    const o = parseArgs([
+      'supervise',
+      '--port',
+      '8788',
+      '--health-path=/ready',
+      '--compose-service',
+      'postgres',
+      '--compose-dir',
+      './deploy/local',
+      '--k3s-cluster',
+      'cat-factory',
+      '--poll',
+      '5',
+      '--boot-grace=30',
+      '--failures',
+      '2',
+      '--',
+      'pnpm',
+      'dev',
+    ])
+    expect(o.command).toBe('supervise')
+    expect(o.port).toBe(8788)
+    expect(o.healthPath).toBe('/ready')
+    expect(o.composeService).toBe('postgres')
+    expect(o.composeDir).toBe('./deploy/local')
+    expect(o.k3sCluster).toBe('cat-factory')
+    expect(o.pollSeconds).toBe(5)
+    expect(o.bootGraceSeconds).toBe(30)
+    expect(o.failures).toBe(2)
+    expect(o.superviseCommand).toEqual(['pnpm', 'dev'])
+  })
+
+  it('hands the child its OWN flags untouched, instead of trying to parse them', () => {
+    // The whole point of `--`: `--watch` and `-y` belong to the child, and an unknown-argument
+    // error here would make the supervisor unable to wrap the very commands it exists to wrap.
+    const o = parseArgs(['supervise', '--', 'node', '--watch', 'src/main.ts', '-y'])
+    expect(o.superviseCommand).toEqual(['node', '--watch', 'src/main.ts', '-y'])
+  })
+
+  it('leaves superviseCommand unset when no `--` was given', () => {
+    expect(parseArgs(['supervise']).superviseCommand).toBeUndefined()
+  })
+
+  it('rejects a health path that is not rooted', () => {
+    expect(() => parseArgs(['supervise', '--health-path', 'health'])).toThrow(ArgError)
+  })
+
+  it('rejects non-positive timings and a zero failure threshold', () => {
+    expect(() => parseArgs(['supervise', '--poll', '0'])).toThrow(ArgError)
+    expect(() => parseArgs(['supervise', '--boot-grace', '-1'])).toThrow(ArgError)
+    expect(() => parseArgs(['supervise', '--failures', '0'])).toThrow(ArgError)
+  })
+})

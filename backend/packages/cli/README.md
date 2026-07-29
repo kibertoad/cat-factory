@@ -45,6 +45,53 @@ It does the fiddly setup for you:
   is **not** needed to boot — add providers/keys through the UI after sign-in (the `.env` leaves
   them as commented hints) — so the generated file runs local mode with no manual edits.
 - **`cat-factory k3s`** — guided local Kubernetes setup for ephemeral environments (see `--help`).
+- **`cat-factory supervise`** — run a dev command under a self-healing watchdog (see
+  [Supervising local dev](#supervising-local-dev)).
+
+## Supervising local dev
+
+`node --watch` **parks on crash**: it restarts the entry only on a _file change_, never on a
+process exit. So when a laptop sleeps and the resume takes the Postgres connection with it, the
+server dies, the watcher settles at "Waiting for file changes before restarting", and nothing is
+left bound to the port. The wrapper PID is still alive and the ready banner scrolled past long ago,
+so the stack **looks** healthy while the SPA reports only a generic "can't reach backend" — and it
+stays that way until somebody notices.
+
+`cat-factory supervise` wraps that command and repairs it:
+
+```sh
+cat-factory supervise --compose-service postgres -- pnpm dev:raw
+```
+
+- **Probes the real signal** every 10s — the port is listening _and_ `/health` answers 200. The two
+  failure modes differ: a parked watcher leaves nothing bound, while a server that booted but lost
+  its DB pool still holds the socket and only fails the HTTP check.
+- **Notices a resume.** Timers don't fire while the host is suspended, so a tick arriving three
+  intervals late means time jumped. That triggers an immediate repair rather than waiting out the
+  normal failure threshold — a resume is exactly when the stack is most likely already dead.
+- **Restores dependencies before restarting.** `--compose-service postgres` brings the database
+  back (the example compose files set no restart policy, so anything that stops the container
+  engine leaves it down) and waits for it to report healthy, because relaunching against a
+  still-initialising database just crashes again in `migrate`.
+- **Revives a stopped local cluster.** `--k3s-cluster <name>` starts a k3d/kind cluster that is
+  merely stopped and waits for its apiserver, so a slept laptop doesn't leave the Local k3s
+  environment handler pointing at a dead control plane.
+- **Reaps the port.** Killing the child tree usually suffices, but a package-manager wrapper killed
+  without its subtree leaves the real `node` orphaned and holding the socket — the relaunch then
+  dies with `EADDRINUSE`, turning one outage into a restart loop.
+
+One failure it deliberately does **not** retry: a cluster whose restart is blocked by a stale
+cgroup (`runc create failed: … cgroup.procs: device or resource busy`, a state a suspend can leave
+behind). Clearing that needs the container **engine** restarted, which would kill every other
+container — including the database the supervisor depends on. So it is reported once, with the fix,
+instead of looped on forever. Retrying it would reproduce the exact pathology this command exists
+to end: a restart loop that reads as progress.
+
+Prefer the unsupervised script when you are **debugging a crash** — the supervisor's job is to
+restart the process, which destroys the parked state you would be trying to read.
+
+Run `cat-factory supervise --help` for the full flag list (`--port`, `--health-path`, `--poll`,
+`--boot-grace`, `--failures`, `--runtime`).
 
 ## Usage
 

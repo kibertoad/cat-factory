@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "secrets": "node scripts/generate-secrets.mjs",
-    "predev": "pnpm --filter @cat-factory/local-server run build",
-    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "predev": "pnpm --filter @cat-factory/local-server run build && pnpm --filter @cat-factory/cli run build",
+    "dev": "cat-factory supervise --compose-service postgres -- pnpm dev:raw",
+    "dev:raw": "node --watch --env-file-if-exists=.env src/main.ts",
     "prestart": "pnpm --filter @cat-factory/local-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
     "up": "docker compose --profile web-search up -d",
@@ -20,6 +21,7 @@
     "@cat-factory/local-server": "workspace:*"
   },
   "devDependencies": {
+    "@cat-factory/cli": "workspace:*",
     "@types/node": "^26.1.1",
     "typescript": "7.0.2"
   }
