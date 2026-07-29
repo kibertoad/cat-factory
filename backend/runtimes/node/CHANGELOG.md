@@ -1,5 +1,71 @@
 # @cat-factory/node-server
 
+## 0.136.0
+
+### Minor Changes
+
+- 57e1195: Install a service's dependencies into the checkout before the agent's first turn.
+
+  Agents opened a fresh shallow clone and saw manifests, not dependencies — they could read that a
+  library was depended upon but not what it exposed, so they guessed at APIs, re-derived type shapes
+  sitting on disk, or declined work they could have done. A service frame can now declare one
+  install command (autodetected alongside its validation checks) that the harness runs against the
+  checkout before the agent starts.
+
+  It shares the `validation_configs` row with the pre-PR checks so resolution costs no extra
+  round trip, but the two are threaded onto the job body under deliberately different rules: the
+  checks ride only a PR-opening coding dispatch, the install rides every dispatch that gets a
+  checkout — reviewers and architects most of all. Either may be declared without the other.
+
+  Every harness mode with a checkout runs it (coding, in-place fixing, multi-repo coding, both
+  explore paths, conflict resolution), through one shared seam that also keeps whatever the install
+  materialises out of the agent's commits — a repo whose `.gitignore` misses its dependency
+  directory would otherwise open a pull request containing the whole tree.
+
+  The install is never a gate: a failure becomes a note in the agent's prompt and the run continues.
+  The note rides every agent pass, so a validation or reproduction repair round does not spend
+  itself reinstalling a tree that is already there.
+
+  Bumps the runner image (harness `src/**`) and adds a nullable `dependency_install` column to
+  `validation_configs` on both runtimes.
+
+### Patch Changes
+
+- 5b19dab: Rebase the `dependency_install` migration snapshot onto the current leaf.
+
+  `db:check` was failing on `main` with "Non-commutative migrations detected": #1505's
+  `20260729062615_dependency_install` and #1501's `20260729054610_stiff_jazinda` both carry
+  `prevIds` pointing at the same pre-merge tip, so drizzle-kit could not order them. Two branches
+  adding a migration concurrently produce no textual conflict, which is exactly why this lands
+  after the merge rather than during it.
+
+  Fixed the documented way — `scripts/rebase-migration-snapshot.mjs`, which rewrites the later
+  snapshot's `ddl` from the merged `schema.ts` and re-points `prevIds` at the other leaf. Only
+  `snapshot.json` changes; `migration.sql` still encodes its own delta (the `dependency_install`
+  column on `validation_configs`), and the rebased ddl carries both branches' columns. D1 needs no
+  counterpart — it has no snapshot DAG.
+
+- Updated dependencies [57e1195]
+- Updated dependencies [5b19dab]
+  - @cat-factory/contracts@0.192.0
+  - @cat-factory/kernel@0.187.0
+  - @cat-factory/integrations@0.110.0
+  - @cat-factory/orchestration@0.165.0
+  - @cat-factory/server@0.174.0
+  - @cat-factory/agents@0.84.1
+  - @cat-factory/consensus@0.12.17
+  - @cat-factory/eks@0.1.169
+  - @cat-factory/gates@0.8.16
+  - @cat-factory/gitlab@0.13.36
+  - @cat-factory/observability-otel@0.4.13
+  - @cat-factory/prompt-fragments@0.15.15
+  - @cat-factory/spend@0.12.117
+  - @cat-factory/caching@0.11.16
+  - @cat-factory/observability-langfuse@0.9.13
+  - @cat-factory/provider-bedrock@0.7.321
+  - @cat-factory/provider-cloudflare@0.7.322
+  - @cat-factory/provider-s3@0.2.241
+
 ## 0.135.0
 
 ### Minor Changes
