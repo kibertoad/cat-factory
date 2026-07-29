@@ -3647,10 +3647,12 @@
     "taskDocs": {
       "heading": "Bağlam belgeleri",
       "hint": "Bu göreve bağlam olarak eklenen belgeler. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
+      "hintInitiative": "Bu girişime bağlam olarak eklenen belgeler. İçerikleri planı hazırlayan planlama ajanlarına iletilir.",
       "attach": "Ekle",
       "connectSource": "Bir kaynak bağla",
       "connectSourceNamed": "{source} bağla",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
+      "emptyInitiative": "Planlama ajanlarının bu girişimin planını hazırlarken okuyabilmesi için bir gereksinim, RFC veya PRD ekle.",
       "attached": "Belge eklendi"
     },
     "templates": {
@@ -3693,11 +3695,13 @@
     "contextIssues": {
       "title": "Bağlam sorunları",
       "hint": "Bu göreve bağlam olarak eklenen tracker sorunları. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
+      "hintInitiative": "Bu girişime bağlam olarak eklenen tracker sorunları. İçerikleri planı hazırlayan planlama ajanlarına iletilir.",
       "attach": "Ekle",
       "connectSource": "Bir kaynak bağla",
       "connectSourceNamed": "{source} bağla",
       "attached": "Sorun eklendi",
-      "emptyHint": "Agentların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir Jira sorunu ekle."
+      "emptyHint": "Agentların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir Jira sorunu ekle.",
+      "emptyHintInitiative": "Planlama ajanlarının bu girişimin planını hazırlarken açıklamasını ve yorumlarını görebilmesi için bir Jira sorunu ekle."
     },
     "import": {
       "titleCreate": "Sorundan görev oluştur",

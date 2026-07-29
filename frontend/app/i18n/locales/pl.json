@@ -3635,10 +3635,12 @@
     "taskDocs": {
       "heading": "Dokumenty kontekstowe",
       "hint": "Dokumenty dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
+      "hintInitiative": "Dokumenty dołączone do tej inicjatywy jako kontekst. Ich treść trafia do agentów planowania tworzących plan.",
       "attach": "Dołącz",
       "connectSource": "Połącz źródło",
       "connectSourceNamed": "Połącz {source}",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
+      "emptyInitiative": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci planowania przeczytali je podczas tworzenia planu tej inicjatywy.",
       "attached": "Dokument dołączony"
     },
     "templates": {
@@ -3681,11 +3683,13 @@
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",
       "hint": "Zgłoszenia z trackera dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
+      "hintInitiative": "Zgłoszenia z trackera dołączone do tej inicjatywy jako kontekst. Ich treść trafia do agentów planowania tworzących plan.",
       "attach": "Dołącz",
       "connectSource": "Połącz źródło",
       "connectSourceNamed": "Połącz {source}",
       "attached": "Dołączono zgłoszenie",
-      "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania."
+      "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
+      "emptyHintInitiative": "Dołącz zgłoszenie Jira, aby agenci planowania widzieli jego opis i komentarze podczas tworzenia planu tej inicjatywy."
     },
     "import": {
       "titleCreate": "Utwórz zadanie ze zgłoszenia",

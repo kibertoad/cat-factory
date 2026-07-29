@@ -3323,10 +3323,12 @@
     "taskDocs": {
       "heading": "Documenti di contesto",
       "hint": "Documenti allegati a questa attività come contesto. Il loro contenuto viene fornito agli agenti che lavorano sull'attività.",
+      "hintInitiative": "Documenti allegati a questa iniziativa come contesto. Il loro contenuto viene fornito agli agenti di pianificazione che redigono il piano.",
       "attach": "Allega",
       "connectSource": "Collega una fonte",
       "connectSourceNamed": "Collega {source}",
       "empty": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono durante l'implementazione di questa attività.",
+      "emptyInitiative": "Allega un requisito, un RFC o un PRD così gli agenti di pianificazione lo leggono mentre redigono questa iniziativa.",
       "attached": "Documento allegato"
     },
     "templates": {
@@ -3369,11 +3371,13 @@
     "contextIssues": {
       "title": "Issue di contesto",
       "hint": "Issue del tracker allegate a questa attività come contesto. Il loro contenuto viene fornito agli agenti che lavorano sull'attività.",
+      "hintInitiative": "Issue del tracker allegate a questa iniziativa come contesto. Il loro contenuto viene fornito agli agenti di pianificazione che redigono il piano.",
       "attach": "Allega",
       "connectSource": "Collega una fonte",
       "connectSourceNamed": "Collega {source}",
       "attached": "Issue allegata",
-      "emptyHint": "Allega una issue Jira così gli agenti vedono la sua descrizione e i commenti durante l'implementazione di questa attività."
+      "emptyHint": "Allega una issue Jira così gli agenti vedono la sua descrizione e i commenti durante l'implementazione di questa attività.",
+      "emptyHintInitiative": "Allega una issue Jira così gli agenti di pianificazione vedono la sua descrizione e i commenti mentre redigono questa iniziativa."
     },
     "import": {
       "titleCreate": "Crea attività da una issue",

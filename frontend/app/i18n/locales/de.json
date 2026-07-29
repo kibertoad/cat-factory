@@ -3323,10 +3323,12 @@
     "taskDocs": {
       "heading": "Kontextdokumente",
       "hint": "Dokumente, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
+      "hintInitiative": "Dokumente, die dieser Initiative als Kontext angehängt sind. Ihr Inhalt wird den Planungsagenten gegeben, die den Plan entwerfen.",
       "attach": "Anhängen",
       "connectSource": "Quelle verbinden",
       "connectSourceNamed": "{source} verbinden",
       "empty": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agents es beim Umsetzen dieser Aufgabe sehen.",
+      "emptyInitiative": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Entwerfen dieser Initiative lesen.",
       "attached": "Dokument angehängt"
     },
     "templates": {
@@ -3369,11 +3371,13 @@
     "contextIssues": {
       "title": "Kontext-Issues",
       "hint": "Tracker-Issues, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
+      "hintInitiative": "Tracker-Issues, die dieser Initiative als Kontext angehängt sind. Ihr Inhalt wird den Planungsagenten gegeben, die den Plan entwerfen.",
       "attach": "Anhängen",
       "connectSource": "Quelle verbinden",
       "connectSourceNamed": "{source} verbinden",
       "attached": "Issue angehängt",
-      "emptyHint": "Hängen Sie ein Jira-Issue an, damit Agents seine Beschreibung und Kommentare beim Umsetzen dieser Aufgabe sehen."
+      "emptyHint": "Hängen Sie ein Jira-Issue an, damit Agents seine Beschreibung und Kommentare beim Umsetzen dieser Aufgabe sehen.",
+      "emptyHintInitiative": "Hängen Sie ein Jira-Issue an, damit die Planungsagenten seine Beschreibung und Kommentare beim Entwerfen dieser Initiative sehen."
     },
     "import": {
       "titleCreate": "Aufgabe aus Issue erstellen",
