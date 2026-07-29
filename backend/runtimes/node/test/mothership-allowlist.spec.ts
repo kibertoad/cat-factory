@@ -332,6 +332,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // get/upsert/compareAndSwap/replaceFor* for clarity + brainstorm (getByBlock/getByBlockStage
   // were already exposed).
   consensusSessionRepository: {},
+  // The consensus-GROUP library is fully remote: the settings editor's CRUD plus the engine's
+  // per-dispatch `listByIds`, which resolves a tiered step's candidate panels on the RUN path.
+  consensusGroupRepository: {},
   clarityReviewRepository: {},
   brainstormSessionRepository: {},
   // The workspace-scoped CRUD + rev-CAS surface is allow-listed; only the cross-workspace

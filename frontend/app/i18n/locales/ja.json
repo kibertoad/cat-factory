@@ -3179,6 +3179,47 @@
       "saved": "既定のテスト環境を保存しました。",
       "savedState": "保存済み。",
       "saveFailed": "既定のテスト環境を保存できませんでした。"
+    },
+    "consensusGroups": {
+      "title": "コンセンサスグループ",
+      "intro": "パイプラインのステップが引き上げられる再利用可能なレビューパネルです。各グループはタスクが超えるべき見積もりしきい値を持つため、重い作業には別のパイプラインを作らずに大きなパネルを割り当てられます。",
+      "new": "新しいグループ",
+      "list": {
+        "empty": "コンセンサスグループはまだありません。",
+        "always": "常時",
+        "bar": "{bar} 以上",
+        "editTitle": "グループを編集",
+        "deleteTitle": "グループを削除",
+        "participantCount": "参加者なし | 参加者 1 名 | 参加者 {count} 名"
+      },
+      "editor": {
+        "nameLabel": "名前",
+        "namePlaceholder": "詳細レビューパネル",
+        "strategyLabel": "戦略",
+        "descriptionLabel": "説明",
+        "descriptionPlaceholder": "このパネルの用途",
+        "participantsLabel": "参加者",
+        "participantsHint": "2 名以上。役割とモデルの多様性こそが、単一モデルよりパネルを優れたものにします。",
+        "addParticipant": "参加者を追加",
+        "framingPlaceholder": "この参加者が主張する視点",
+        "stepModel": "ステップのモデル",
+        "synthesizerLabel": "統合モデル",
+        "gatedLabel": "しきい値を超えるタスクのみ",
+        "gatedHint": "このパネルを割り当てるためにタスクが達すべき見積もりです。オフのままにすると、このグループは常に適用されます。",
+        "complexityThreshold": "複雑さ",
+        "gatingIncomplete": "しきい値を 1 つ以上設定するか、条件をオフにしてください。",
+        "unnamedRole": "レビュアー",
+        "cancel": "キャンセル",
+        "save": "グループを保存"
+      },
+      "confirmDelete": {
+        "title": "コンセンサスグループを削除しますか？",
+        "body": "「{name}」を指定しているステップは、残りのグループにフォールバックします。"
+      },
+      "toast": {
+        "saveFailed": "コンセンサスグループを保存できませんでした",
+        "deleteFailed": "コンセンサスグループを削除できませんでした"
+      }
     }
   },
   "providers": {
@@ -3946,7 +3987,11 @@
       "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
       "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。",
       "promptEditTooltip": "このエージェントのシステムプロンプトを編集",
-      "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています"
+      "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています",
+      "consensusGroups": "コンセンサスグループ",
+      "consensusGroupsHint": "このステップが引き上げられる再利用可能なパネルを選びます。各パネルは独自の見積もりしきい値を持ち、タスクが超えたうち最も厳しいものが実行されます。",
+      "consensusGroupsActive": "このステップは選択したグループを実行します。ここで参加者を設定するには、すべてのグループの選択を解除してください。",
+      "consensusGroupAlways": "常時"
     },
     "progress": {
       "status": {
@@ -4060,6 +4105,17 @@
       "loadFailed": "プロンプトを読み込めませんでした",
       "conflict": "このプロンプトは別のユーザーが変更しました。再読み込みしました。編集をやり直してください。"
     }
+  },
+  "agentTier": {
+    "label": "エージェント階層",
+    "basic": "基本",
+    "intermediate": "中級",
+    "advanced": "上級",
+    "basicHint": "パイプラインの基本となる日常的なエージェントのみ。",
+    "intermediateHint": "日常的によく使うエージェントを追加します。",
+    "advancedHint": "専門的なものを含め、すべてのエージェントを表示します。",
+    "tooltip": "エージェントカタログの表示範囲を選択します",
+    "hidden": "この階層では {count} 件のエージェントが非表示です。"
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
@@ -4404,7 +4460,8 @@
       "synthesizing": "統合中",
       "done": "完了",
       "failed": "失敗"
-    }
+    },
+    "groupTitle": "この実行が引き上げられたコンセンサスグループ"
   },
   "brainstorm": {
     "title": {

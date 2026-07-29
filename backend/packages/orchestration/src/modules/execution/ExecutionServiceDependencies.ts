@@ -8,6 +8,7 @@ import type {
   BrainstormStage,
   BranchUpdater,
   ClarityReviewRepository,
+  ConsensusGroupRepository,
   Clock,
   DocInterviewRepository,
   DocumentRepository,
@@ -144,6 +145,12 @@ export interface ExecutionServiceDependencies {
    * every kind runs its shipped prompt (the feature is simply off).
    */
   agentPromptRepository?: AgentPromptRepository
+  /**
+   * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
+   * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a
+   * consensus step runs the inline participants authored on it.
+   */
+  consensusGroupRepository?: ConsensusGroupRepository
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService

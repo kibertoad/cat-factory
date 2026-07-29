@@ -357,6 +357,13 @@ function makeRegistry(): {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
       upsert: async () => undefined,
     },
+    consensusGroupRepository: {
+      list: async (ws: string) => [{ ws }],
+      listByIds: async (ws: string, ids: string[]) => [{ ws, ids }],
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      remove: async () => undefined,
+    },
     // The post-release-health settings surface: reads/deletes echo their workspaceId (arg0);
     // the record-based `upsert` binds on the record's `workspaceId` FIELD.
     observabilityConnectionRepository: {
@@ -1555,6 +1562,28 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       echoed: { ws: 'ws_in', blockId: 'blk_1' },
     },
     { repo: 'consensusSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+    // The consensus-GROUP library: the editor's CRUD plus `listByIds`, which the engine calls on
+    // every dispatch of a tiered consensus step.
+    {
+      repo: 'consensusGroupRepository',
+      method: 'list',
+      args: [],
+      echoed: { ws: 'ws_in' },
+    },
+    {
+      repo: 'consensusGroupRepository',
+      method: 'listByIds',
+      args: [['cng_1', 'cng_2']],
+      echoed: { ws: 'ws_in', ids: ['cng_1', 'cng_2'] },
+    },
+    {
+      repo: 'consensusGroupRepository',
+      method: 'get',
+      args: ['cng_1'],
+      echoed: { ws: 'ws_in', id: 'cng_1' },
+    },
+    { repo: 'consensusGroupRepository', method: 'upsert', args: [{ id: 'cng_1' }] },
+    { repo: 'consensusGroupRepository', method: 'remove', args: ['cng_1'] },
   ]
 
   for (const { repo, method, args, echoed } of METHODS) {

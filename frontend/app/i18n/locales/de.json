@@ -971,6 +971,47 @@
       "saved": "Standard-Testumgebung gespeichert.",
       "savedState": "Gespeichert.",
       "saveFailed": "Die Standard-Testumgebung konnte nicht gespeichert werden."
+    },
+    "consensusGroups": {
+      "title": "Konsensgruppen",
+      "intro": "Wiederverwendbare Review-Panels, auf die ein Pipeline-Schritt hochstufen kann. Jede Gruppe trägt die Schätzungsschwelle, die eine Aufgabe erreichen muss — so bekommt schwerere Arbeit ein größeres Panel, ohne eigene Pipeline.",
+      "new": "Neue Gruppe",
+      "list": {
+        "empty": "Noch keine Konsensgruppen.",
+        "always": "Immer",
+        "bar": "Ab {bar}",
+        "editTitle": "Gruppe bearbeiten",
+        "deleteTitle": "Gruppe löschen",
+        "participantCount": "keine Teilnehmer | ein Teilnehmer | {count} Teilnehmer"
+      },
+      "editor": {
+        "nameLabel": "Name",
+        "namePlaceholder": "Tiefes Review-Panel",
+        "strategyLabel": "Strategie",
+        "descriptionLabel": "Beschreibung",
+        "descriptionPlaceholder": "Wofür dieses Panel gedacht ist",
+        "participantsLabel": "Teilnehmer",
+        "participantsHint": "Mindestens zwei. Vielfalt bei Rolle und Modell macht ein Panel besser als ein einzelnes Modell.",
+        "addParticipant": "Teilnehmer hinzufügen",
+        "framingPlaceholder": "Perspektive, aus der dieser Teilnehmer argumentiert",
+        "stepModel": "Modell des Schritts",
+        "synthesizerLabel": "Synthese-Modell",
+        "gatedLabel": "Nur für Aufgaben über einer Schwelle",
+        "gatedHint": "Die Schätzung, die eine Aufgabe erreichen muss, um dieses Panel zu bekommen. Aus lassen, damit diese Gruppe immer gilt.",
+        "complexityThreshold": "Komplexität",
+        "gatingIncomplete": "Setze mindestens eine Schwelle oder schalte die Bedingung aus.",
+        "unnamedRole": "Reviewer",
+        "cancel": "Abbrechen",
+        "save": "Gruppe speichern"
+      },
+      "confirmDelete": {
+        "title": "Konsensgruppe löschen?",
+        "body": "Schritte, die „{name}“ nennen, fallen auf ihre verbleibenden Gruppen zurück."
+      },
+      "toast": {
+        "saveFailed": "Konsensgruppe konnte nicht gespeichert werden",
+        "deleteFailed": "Konsensgruppe konnte nicht gelöscht werden"
+      }
     }
   },
   "inspector": {
@@ -3618,7 +3659,11 @@
       "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
       "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung.",
       "promptEditTooltip": "Systemprompt dieses Agenten bearbeiten",
-      "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet"
+      "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet",
+      "consensusGroups": "Konsensgruppen",
+      "consensusGroupsHint": "Wähle die wiederverwendbaren Panels, auf die dieser Schritt hochstufen darf. Jedes hat seine eigene Schätzungsschwelle; es läuft das anspruchsvollste, das die Aufgabe erreicht.",
+      "consensusGroupsActive": "Dieser Schritt führt die ausgewählte Gruppe aus. Hebe die Auswahl aller Gruppen auf, um die Teilnehmer hier zu konfigurieren.",
+      "consensusGroupAlways": "immer"
     },
     "progress": {
       "status": {
@@ -3732,6 +3777,17 @@
       "loadFailed": "Prompt konnte nicht geladen werden",
       "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an."
     }
+  },
+  "agentTier": {
+    "label": "Agentenstufe",
+    "basic": "Basis",
+    "intermediate": "Fortgeschritten",
+    "advanced": "Experte",
+    "basicHint": "Nur die alltäglichen Agenten, aus denen eine Pipeline normalerweise besteht.",
+    "intermediateHint": "Ergänzt die Agenten, die du regelmäßig einsetzt.",
+    "advancedHint": "Zeigt alle Agenten, auch die spezialisierten.",
+    "tooltip": "Wähle, wie viel des Agentenkatalogs angezeigt wird",
+    "hidden": "{count} Agent ist auf dieser Stufe ausgeblendet. | {count} Agenten sind auf dieser Stufe ausgeblendet."
   },
   "requirements": {
     "title": "Anforderungsprüfung",
@@ -4870,7 +4926,8 @@
       "synthesizing": "Wird synthetisiert",
       "done": "Fertig",
       "failed": "Fehlgeschlagen"
-    }
+    },
+    "groupTitle": "Die Konsensgruppe, auf die dieser Lauf hochgestuft hat"
   },
   "spec": {
     "title": "Anforderungen",

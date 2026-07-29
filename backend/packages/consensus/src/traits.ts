@@ -1,7 +1,7 @@
 import type { AgentKind, ConsensusStrategy } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { traitsFor } from '@cat-factory/agents'
-import { TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
+import { PR_REVIEWER_KIND, TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
 
 // The group of consensus CAPABILITY traits an agent kind can carry. Each marks the
 // kind eligible for one consensus strategy: when a step's kind carries the trait, the
@@ -29,21 +29,45 @@ export const CONSENSUS_TRAITS = [
 
 /**
  * The default-eligible kinds, each carrying all three consensus traits. A deployment
- * can extend this by assigning them to more kinds. NOTE: `architect` and `analysis` run
- * in a container against a real checkout in their standard mode; in CONSENSUS mode they
- * reason inline over the provided context (spec + requirements + prior outputs) rather
- * than exploring the checkout — a deliberate trade made worthwhile by the gating, which
- * only triggers consensus for high-complexity/risk/impact tasks.
+ * can extend this by assigning them to more kinds. NOTE: several of these run in a
+ * container against a real checkout in their standard mode; in CONSENSUS mode they reason
+ * inline over the provided context rather than exploring the checkout — a deliberate trade
+ * made worthwhile by the gating, which only triggers consensus for high-complexity/risk/impact
+ * tasks.
  *
- *  - architect      → a well-reasoned architecture document
- *  - analysis       → a deep investigation / aggregate of observations
- *  - reviewer       → a rigorous, high-confidence code review (the companion verdict)
- *  - task-estimator → an accurate complexity/risk/impact estimate (ranked-scoring)
+ * REVIEW kinds are the highest-value users of the mechanism — a review is a JUDGEMENT, which
+ * is exactly what a panel of independent models is better at than one model — but what a panel
+ * can see differs by kind, and that is what decides whether a kind belongs here:
+ *
+ *  - `pr-reviewer` reads its whole input from backend-prepared context files (the computed
+ *    diff, the PR's existing review threads, the standards). Those bodies are folded into an
+ *    inline prompt by `userPromptFor`, so a panel reviews the SAME material the container
+ *    reviewer would.
+ *  - `reviewer` / `doc-reviewer` explore a read-only checkout in their standard mode. A panel
+ *    reasons over the producer's reported output and the prior steps instead — strictly less
+ *    than the container sees, so consensus here trades ground-truth depth for judgement
+ *    diversity. That is why it is opt-in per step and gated on the estimate.
+ *  - `architect-companion` / `spec-companion` are INLINE companions already: the artifact they
+ *    grade IS the producer's reported text, so a panel loses nothing at all.
+ *
+ * Full list:
+ *  - architect           → a well-reasoned architecture document
+ *  - analysis            → a deep investigation / aggregate of observations
+ *  - reviewer            → a rigorous, high-confidence code review (the companion verdict)
+ *  - pr-reviewer         → a deep review of an existing pull request
+ *  - doc-reviewer        → the document companion's verdict on a drafted document
+ *  - architect-companion → the design companion's verdict on an architecture proposal
+ *  - spec-companion      → the spec companion's verdict on a specification increment
+ *  - task-estimator      → an accurate complexity/risk/impact estimate (ranked-scoring)
  */
 export const DEFAULT_CONSENSUS_ELIGIBLE_KINDS: AgentKind[] = [
   'architect',
   'analysis',
   'reviewer',
+  PR_REVIEWER_KIND,
+  'doc-reviewer',
+  'architect-companion',
+  'spec-companion',
   TASK_ESTIMATOR_AGENT_KIND,
 ]
 

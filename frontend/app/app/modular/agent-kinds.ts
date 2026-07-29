@@ -27,6 +27,10 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     color: p.color,
     description: p.description,
     ...(p.category ? { category: p.category } : {}),
+    // A kind that declares no tier is left WITHOUT one rather than stamped with the default
+    // here, so the single fallback stays in `agentTierVisibleAt` — filling it in at the
+    // projection would fork the rule the moment the default changes.
+    ...(p.tier ? { tier: p.tier } : {}),
     ...(p.resultView ? { resultView: p.resultView } : {}),
   }
 }

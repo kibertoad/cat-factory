@@ -64,6 +64,7 @@ export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineSharedStackSuite } from './shared-stack-suite.js'
+export { defineConsensusGroupSuite } from './consensus-group-suite.js'
 export { defineAgentPromptSuite } from './agent-prompt-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'

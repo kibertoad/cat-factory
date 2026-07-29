@@ -15,6 +15,7 @@ import { notificationSchema } from './notifications.js'
 import { riskPolicySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
+import { consensusGroupSchema } from './consensus.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
@@ -150,6 +151,13 @@ export const workspaceSnapshotSchema = v.object({
    * optional on the wire.
    */
   modelPresets: v.optional(v.array(modelPresetSchema)),
+  /**
+   * The workspace's consensus-GROUP library — the reusable, estimate-gated panels a pipeline
+   * step escalates to. Carried in the snapshot so the pipeline builder's per-step tier picker
+   * and the settings editor have their options on load, exactly like the model presets above.
+   * Attached by the facade, so optional on the wire.
+   */
+  consensusGroups: v.optional(v.array(consensusGroupSchema)),
   /**
    * The deployment's env-routing defaults as `provider:model` refs: the model an
    * agent kind runs on when neither the task nor the workspace pins one. `default`

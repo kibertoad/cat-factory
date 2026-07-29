@@ -3167,6 +3167,47 @@
       "saved": "Environnement de test par défaut enregistré.",
       "savedState": "Enregistré.",
       "saveFailed": "Impossible d'enregistrer l'environnement de test par défaut."
+    },
+    "consensusGroups": {
+      "title": "Groupes de consensus",
+      "intro": "Panels de revue réutilisables auxquels une étape de pipeline peut monter. Chaque groupe porte le seuil d'estimation qu'une tâche doit franchir : le travail le plus lourd obtient un panel plus large sans pipeline dédié.",
+      "new": "Nouveau groupe",
+      "list": {
+        "empty": "Aucun groupe de consensus pour le moment.",
+        "always": "Toujours",
+        "bar": "À partir de {bar}",
+        "editTitle": "Modifier le groupe",
+        "deleteTitle": "Supprimer le groupe",
+        "participantCount": "aucun participant | un participant | {count} participants"
+      },
+      "editor": {
+        "nameLabel": "Nom",
+        "namePlaceholder": "Panel de revue approfondie",
+        "strategyLabel": "Stratégie",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "À quoi sert ce panel",
+        "participantsLabel": "Participants",
+        "participantsHint": "Au moins deux. C'est la diversité des rôles et des modèles qui rend un panel meilleur qu'un modèle seul.",
+        "addParticipant": "Ajouter un participant",
+        "framingPlaceholder": "Perspective défendue par ce participant",
+        "stepModel": "Modèle de l'étape",
+        "synthesizerLabel": "Modèle de synthèse",
+        "gatedLabel": "Seulement pour les tâches au-dessus d'un seuil",
+        "gatedHint": "L'estimation qu'une tâche doit atteindre pour mériter ce panel. Laisse désactivé pour que ce groupe s'applique toujours.",
+        "complexityThreshold": "Complexité",
+        "gatingIncomplete": "Définis au moins un seuil, ou désactive la condition.",
+        "unnamedRole": "Relecteur",
+        "cancel": "Annuler",
+        "save": "Enregistrer le groupe"
+      },
+      "confirmDelete": {
+        "title": "Supprimer le groupe de consensus ?",
+        "body": "Les étapes qui nomment « {name} » se rabattront sur leurs groupes restants."
+      },
+      "toast": {
+        "saveFailed": "Impossible d'enregistrer le groupe de consensus",
+        "deleteFailed": "Impossible de supprimer le groupe de consensus"
+      }
     }
   },
   "providers": {
@@ -3934,7 +3975,11 @@
       "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
       "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement.",
       "promptEditTooltip": "Modifier l'invite système de cet agent",
-      "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail"
+      "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail",
+      "consensusGroups": "Groupes de consensus",
+      "consensusGroupsHint": "Choisis les panels réutilisables auxquels cette étape peut monter. Chacun porte son propre seuil d'estimation ; c'est le plus exigeant que la tâche franchit qui s'exécute.",
+      "consensusGroupsActive": "Cette étape exécute le groupe sélectionné. Désélectionne tous les groupes pour configurer les participants ici.",
+      "consensusGroupAlways": "toujours"
     },
     "progress": {
       "status": {
@@ -4048,6 +4093,17 @@
       "loadFailed": "Impossible de charger l'invite",
       "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification."
     }
+  },
+  "agentTier": {
+    "label": "Niveau d'agents",
+    "basic": "Basique",
+    "intermediate": "Intermédiaire",
+    "advanced": "Avancé",
+    "basicHint": "Uniquement les agents du quotidien avec lesquels on construit un pipeline.",
+    "intermediateHint": "Ajoute les agents que vous utilisez régulièrement.",
+    "advancedHint": "Affiche tous les agents, y compris les plus spécialisés.",
+    "tooltip": "Choisissez quelle part du catalogue d'agents afficher",
+    "hidden": "{count} agent masqué à ce niveau. | {count} agents masqués à ce niveau."
   },
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
@@ -4392,7 +4448,8 @@
       "synthesizing": "Synthèse en cours",
       "done": "Terminé",
       "failed": "Échoué"
-    }
+    },
+    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée"
   },
   "brainstorm": {
     "title": {

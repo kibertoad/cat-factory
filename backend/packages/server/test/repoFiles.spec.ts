@@ -280,6 +280,7 @@ describe('runRepoOps', () => {
     } as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    deliversCheckout: true,
     logger: noopLogger,
   })
 

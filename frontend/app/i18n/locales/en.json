@@ -3261,6 +3261,47 @@
       "saved": "Default test environment saved.",
       "savedState": "Saved.",
       "saveFailed": "Could not save the default test environment."
+    },
+    "consensusGroups": {
+      "title": "Consensus groups",
+      "intro": "Reusable review panels a pipeline step can escalate to. Each group carries the estimate bar a task must clear to earn it, so heavier work gets a bigger panel without a separate pipeline.",
+      "new": "New group",
+      "list": {
+        "empty": "No consensus groups yet.",
+        "always": "Always",
+        "bar": "From {bar}",
+        "editTitle": "Edit group",
+        "deleteTitle": "Delete group",
+        "participantCount": "no participants | one participant | {count} participants"
+      },
+      "editor": {
+        "nameLabel": "Name",
+        "namePlaceholder": "Deep review panel",
+        "strategyLabel": "Strategy",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "What this panel is for",
+        "participantsLabel": "Participants",
+        "participantsHint": "At least two. Diversity of role and model is what makes a panel better than one model.",
+        "addParticipant": "Add participant",
+        "framingPlaceholder": "Perspective this participant argues from",
+        "stepModel": "Step's model",
+        "synthesizerLabel": "Synthesizer model",
+        "gatedLabel": "Only for tasks above a threshold",
+        "gatedHint": "The estimate a task must reach to earn this panel. Leave off to make this the group that always applies.",
+        "complexityThreshold": "Complexity",
+        "gatingIncomplete": "Set at least one threshold, or turn the gate off.",
+        "unnamedRole": "Reviewer",
+        "cancel": "Cancel",
+        "save": "Save group"
+      },
+      "confirmDelete": {
+        "title": "Delete consensus group?",
+        "body": "Steps that name \"{name}\" fall back to their remaining groups."
+      },
+      "toast": {
+        "saveFailed": "Could not save the consensus group",
+        "deleteFailed": "Could not delete the consensus group"
+      }
     }
   },
   "providers": {
@@ -4049,7 +4090,11 @@
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
       "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
       "promptEditTooltip": "Edit this agent's system prompt",
-      "promptEditedTooltip": "This agent's system prompt is edited for this workspace"
+      "promptEditedTooltip": "This agent's system prompt is edited for this workspace",
+      "consensusGroups": "Consensus groups",
+      "consensusGroupsHint": "Pick the reusable panels this step may escalate to. Each carries its own estimate bar; the most demanding one the task clears is the one that runs.",
+      "consensusGroupsActive": "This step runs the selected group. Deselect every group to configure participants here instead.",
+      "consensusGroupAlways": "always"
     },
     "progress": {
       "status": {
@@ -4172,6 +4217,23 @@
       "loadFailed": "Couldn't load the prompt",
       "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
     }
+  },
+  "agentTier": {
+    "label": "Agent tier",
+    "@label": {
+      "description": "Label of the control that chooses how much of the agent catalog is shown. \"Tier\" here means level of depth/specialisation, never a pricing plan."
+    },
+    "basic": "Basic",
+    "intermediate": "Intermediate",
+    "advanced": "Advanced",
+    "@advanced": {
+      "description": "The widest of the three levels: selecting it shows every agent, not only the advanced ones."
+    },
+    "basicHint": "Only the everyday agents a pipeline is normally built from.",
+    "intermediateHint": "Adds the agents you reach for regularly.",
+    "advancedHint": "Shows every agent, including the specialist ones.",
+    "tooltip": "Choose how much of the agent catalog to show",
+    "hidden": "{count} agent hidden at this tier. | {count} agents hidden at this tier."
   },
   "riskPolicy": {
     "health": {
@@ -4588,7 +4650,8 @@
       "synthesizing": "Synthesizing",
       "done": "Done",
       "failed": "Failed"
-    }
+    },
+    "groupTitle": "The consensus group this run escalated to"
   },
   "brainstorm": {
     "title": {
