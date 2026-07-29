@@ -99,6 +99,8 @@ function makeRegistry(): {
         throw new ConflictError('already terminal', 'invalid_state' as never)
       },
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // Run admission control's capacity read (workspace-scoped SQL COUNT → a number).
+      countActiveByWorkspace: async (_ws: string) => 2,
     },
     // Entity-id-keyed (findById/findByIds) + cross-service (listByServices) board-composition reads.
     blockRepository: {
@@ -811,6 +813,17 @@ describe('board-load read surface (workspace-scoped)', () => {
     await expect(remoteRegistry().blockRepository!.countActiveInternal!('ws_in')).resolves.toBe(3)
     await expect(
       remoteRegistry().blockRepository!.countActiveInternal!('ws_out'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // Run admission control's capacity read, the same COUNT-returns-a-number shape. It sits on the
+  // run-START path, so an unrouted method would take every mothership-mode run start down.
+  it('forwards executionRepository.countActiveByWorkspace for an in-scope workspace, and 404s otherwise', async () => {
+    await expect(
+      remoteRegistry().executionRepository!.countActiveByWorkspace!('ws_in'),
+    ).resolves.toBe(2)
+    await expect(
+      remoteRegistry().executionRepository!.countActiveByWorkspace!('ws_out'),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 })

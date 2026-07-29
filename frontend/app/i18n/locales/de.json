@@ -658,6 +658,32 @@
         "removeFailed": "Der gemeinsame Stack konnte nicht gelöscht werden"
       }
     },
+    "composeEnvSetup": {
+      "title": "Geführte Docker-Compose-Einrichtung für einen Service",
+      "lead": "Führt einen Service Schritt für Schritt durch das Erstellen des Docker-Compose-Rezepts, aus dem seine Testumgebungen aufgebaut werden, statt Compose-Pfad und Setup-Schritte von Hand zu schreiben.",
+      "how": {
+        "title": "So funktioniert es",
+        "scan": "Durchsucht das verknüpfte Repository des Service nach Compose-Dateien, Profilen, Env-Dateien und Seed-Dumps.",
+        "analyse": "Führt optional den Umgebungsanalysten aus, der Setup-Schritte und ein Health-Gate aus den Skripten des Repositorys entwirft.",
+        "preflight": "Führt die Preflight-Prüfungen des Rezepts auf der Maschine aus, die es bereitstellen wird.",
+        "save": "Speichert das Rezept am Service und registriert den Docker-Compose-Handler des Workspace.",
+        "outcome": "Danach stellt der Deployer genau diesen Stack bereit, sobald eine Pipeline eine laufende Umgebung braucht, und der Tester testet dagegen. Bis zum Speichern wird nichts übernommen."
+      },
+      "needed": {
+        "title": "Sie brauchen das, wenn",
+        "running": "Die Tests des Service die laufende Anwendung benötigen: API- oder UI-Tests, Migrationen, Seed-Daten.",
+        "compose": "Der Service über Docker Compose bereitgestellt wird und noch kein Rezept gespeichert hat.",
+        "setup": "Das Hochfahren des Stacks mehr als einen Befehl erfordert: Profile, Env-Dateien, Seed-Daten oder eine Bereitschaftsprüfung."
+      },
+      "notNeeded": {
+        "title": "Sie können es überspringen, wenn",
+        "inContainer": "Die Pipeline nur lintet, baut oder Unit-Tests ausführt. Das läuft als Pre-PR-Validierung im Agenten-Container, ohne dass eine Umgebung bereitgestellt wird.",
+        "otherBackend": "Der Service anders bereitgestellt wird (Kubernetes, eine Cloud-Vorschau oder gar keine Infrastruktur). Konfigurieren Sie das stattdessen oben.",
+        "noRepo": "Der Service kein verknüpftes Repository hat, es also nichts zu durchsuchen gibt."
+      },
+      "start": "Geführte Einrichtung starten",
+      "rerunHint": "Jederzeit erneut ausführbar, um ein gespeichertes Rezept zu ändern."
+    },
     "localMode": {
       "title": "Lokaler Modus",
       "intro": "Feinabstimmung für den lokalen Container-Runner, gespeichert im Deployment dieser Maschine (er hat die Umgebungsvariablen {poolVars} / {harnessVars} ersetzt). Das Speichern passt den Warm-Pool live an, kein Neustart nötig; laufende Ausführungen behalten den Container, den sie bereits halten.",
@@ -948,12 +974,12 @@
   "inspector": {
     "detectRepoUnresolved": "Das Repository dieses Blocks gehört nicht zu den verbundenen GitHub-Repos und kann daher nicht gelesen werden. Verbinde oder synchronisiere GitHub dafür und versuche es erneut.",
     "container": {
-      "title": "Inhalte",
-      "hint": "Die Module und Aufgaben innerhalb dieses Blocks. Klicke auf einen Eintrag, um ihn auf dem Board auszuwählen.",
-      "modules": "Module ({count})",
+      "modulesTitle": "Module",
+      "modulesHint": "Die Module innerhalb dieses Service. Klicke auf ein Modul, um es auf dem Board auszuwählen.",
       "taskCount": "{count} Aufgabe | {count} Aufgaben",
-      "allTasks": "Alle Aufgaben ({count})",
-      "tasks": "Aufgaben ({count})",
+      "tasksTitle": "Aufgaben",
+      "allTasksTitle": "Alle Aufgaben",
+      "tasksHint": "Die Aufgaben innerhalb dieses Blocks. Klicke auf eine Aufgabe, um sie auf dem Board auszuwählen.",
       "addTask": "Aufgabe hinzufügen",
       "noTasks": "Noch keine Aufgaben. Füge eine hinzu, um mit der Arbeit zu beginnen.",
       "servicesHint": "Services sind langlebig und werden nicht abgeschlossen. Die Arbeit findet in ihren Aufgaben und Modulen statt."
@@ -1685,8 +1711,6 @@
       "lastIncorporatedRequirements": "Zuletzt eingearbeitete Anforderungen",
       "priorDocHint": "Aus der vorherigen Prüfung. Verwende es als Basis: bearbeite die Beschreibung oben und reiche erneut ein.",
       "bootstrapping": "Wird initialisiert…",
-      "importIssue": "Issue importieren",
-      "connectTracker": "Einen Tracker verbinden",
       "spawnFromDocument": "Aus Dokument erzeugen",
       "viewRequirements": "Anforderungen anzeigen",
       "reRun": "Erneut ausführen",
@@ -1697,8 +1721,7 @@
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
       },
-      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}",
-      "huntBugs": "Fehler jagen"
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
     }
   },
   "layout": {
@@ -2005,7 +2028,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Zurück zu Meine Einrichtung",
-      "backToIntegrations": "Zurück zu Integrationen"
+      "backToIntegrations": "Zurück zu Integrationen",
+      "backToModelProviders": "Zurück zu Modellanbieter"
     },
     "commandBar": {
       "searchPlaceholder": "Suchen oder einen Befehl ausführen…",
@@ -2073,23 +2097,21 @@
     },
     "integrationsHub": {
       "title": "Integrationen",
-      "intro": "Verbinden und verwalten Sie die externen Systeme, die dieser Workspace einbinden kann.",
+      "intro": "Verbinden und verwalten Sie die optionalen externen Systeme, die dieser Workspace einbinden kann. Die Modelle, auf denen Ihre Agenten laufen, finden Sie unter Modellanbieter.",
       "searchPlaceholder": "Integrationen durchsuchen…",
       "noMatches": "Keine Integrationen passen zu \"{query}\".",
       "getStarted": {
         "title": "Erste Schritte",
-        "body": "Verbinden Sie eine Code-Quelle und einen Modellanbieter, um Ihre erste Pipeline auszuführen."
+        "body": "Verbinden Sie eine Code-Quelle, damit Ihre Pipelines etwas zu bearbeiten haben."
       },
       "status": {
         "connected": "Verbunden",
-        "keyConnected": "Schlüssel verbunden",
         "notConnected": "Nicht verbunden",
         "needsAttention": "Benötigt Aufmerksamkeit",
         "disabled": "Deaktiviert",
         "recommended": "Empfohlen"
       },
       "groups": {
-        "models": "Modelle und Anbieter",
         "sourceControl": "Versionsverwaltung",
         "communication": "Kommunikation",
         "documents": "Dokumente",
@@ -2099,16 +2121,6 @@
         "personal": "Persönlich (nur Sie)"
       },
       "items": {
-        "openrouter": {
-          "description": "Ein Gateway zu über 300 Modellen. Fügen Sie Ihren Schlüssel hinzu und aktivieren Sie Modelle an einem Ort."
-        },
-        "vendors": {
-          "label": "Anbieter und Schlüssel",
-          "description": "Workspace-LLM-Abonnements und Anbieter-API-Schlüssel."
-        },
-        "personalSubs": {
-          "label": "Persönliche Abonnements (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Verbinden Sie die GitHub-App des Workspace, durchsuchen Sie Repos, PRs und Issues."
         },
@@ -2148,16 +2160,51 @@
           "label": "Mein GitHub-Token",
           "description": "Ein Personal Access Token, der für von Ihnen gestartete Läufe verwendet wird (Pushes, PRs, CI, Merge)."
         },
-        "localRunners": {
-          "label": "Meine lokalen Runner",
-          "description": "Modell-Runner auf Ihrer eigenen Maschine (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Vorlagen & Beispiele"
         },
         "bugHunt": {
           "label": "Fehlerjagd",
           "description": "Offene, nicht zugewiesene Fehler eines Boards bewerten und einen zum Beheben auswählen"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Modellanbieter",
+      "intro": "Die Engines, auf denen Ihre Agenten laufen. Mindestens ein Anbieter muss verbunden sein, bevor ein Pipeline-Schritt ausgeführt werden kann.",
+      "searchPlaceholder": "Anbieter suchen…",
+      "noMatches": "Keine Anbieter entsprechen \"{query}\".",
+      "getStarted": {
+        "title": "Noch kein Anbieter verbunden",
+        "body": "Agentenschritte können erst laufen, wenn ein Modell erreichbar ist. Ein OpenRouter-Schlüssel ist der schnellste Weg zu einem großen Katalog, aber Anbieterschlüssel, ein persönliches Abonnement oder Ihr eigener lokaler Runner funktionieren genauso gut."
+      },
+      "status": {
+        "connected": "Verbunden",
+        "keyConnected": "Schlüssel verbunden",
+        "notConnected": "Nicht verbunden",
+        "recommended": "Empfohlen",
+        "connectedCount": "keine verbunden | {count} verbunden | {count} verbunden"
+      },
+      "groups": {
+        "workspace": "Workspace-Anbieter",
+        "personal": "Persönlich (nur Sie)",
+        "personalNote": "Diese gehören zu Ihrem Konto und nicht zum Workspace und werden nur für Läufe verwendet, die Sie starten. Sie sind auch unter Meine Einrichtung aufgeführt."
+      },
+      "items": {
+        "openrouter": {
+          "description": "Ein Gateway zu über 300 Modellen. Fügen Sie Ihren Schlüssel hinzu und aktivieren Sie Modelle an einem Ort."
+        },
+        "vendors": {
+          "label": "Anbieter und Schlüssel",
+          "description": "Workspace-LLM-Abonnements und Anbieter-API-Schlüssel."
+        },
+        "personalSubs": {
+          "label": "Meine Abonnements",
+          "description": "Pläne zur individuellen Nutzung, die Sie mit einem persönlichen Passwort freischalten (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "Meine lokalen Runner",
+          "description": "Modell-Runner auf Ihrer eigenen Maschine (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -2473,6 +2520,7 @@
       "dragToResize": "Zum Ändern der Größe ziehen",
       "addFirstTask": "Die erste Aufgabe hinzufügen",
       "createInitiativeTitle": "Initiative erstellen",
+      "huntBugsTitle": "Fehler jagen",
       "accessDenied": {
         "title": "Zugriff verweigert",
         "hint": "Sie haben keinen Zugriff auf das Repository, das diesem Service zugrunde liegt."
@@ -4385,6 +4433,8 @@
     "repositories": "Repositories",
     "addFromRepo": "Aus vorhandenem Repo hinzufügen",
     "bootstrapRepo": "Repo bootstrappen",
+    "models": "Modelle",
+    "modelProviders": "Modellanbieter",
     "integrations": "Integrationen",
     "infrastructure": "Infrastruktur",
     "sandbox": "Sandbox",
@@ -4396,8 +4446,7 @@
     "modelConfiguration": "Modellkonfiguration",
     "accountSettings": "Kontoeinstellungen",
     "operatorDashboard": "Plattform-Observability",
-    "reports": "Berichte",
-    "environmentSetup": "Umgebungseinrichtung"
+    "reports": "Berichte"
   },
   "errors": {
     "action": {
@@ -5292,8 +5341,8 @@
   },
   "environmentWizard": {
     "progress": "Schritt {index} von {total}",
-    "title": "Eine Testumgebung einrichten",
-    "subtitle": "Erkenne, prüfe und speichere ein Docker-Compose-Rezept, damit der Deployer es bereitstellt.",
+    "title": "Docker-Compose-Umgebungseinrichtung",
+    "subtitle": "Erstellen Sie das Docker-Compose-Rezept, aus dem die Testumgebungen eines Service aufgebaut werden: Repository durchsuchen, prüfen, Preflight, speichern.",
     "recommended": "empfohlen",
     "steps": {
       "pick": "Service auswählen",
@@ -5303,6 +5352,7 @@
     },
     "pick": {
       "intro": "Wähle den Service, für den eine Docker-Compose-Umgebung eingerichtet werden soll.",
+      "scope": "Nur der ausgewählte Service wird geändert. Führen Sie dies später erneut aus, um sein Rezept zu bearbeiten.",
       "empty": "Noch keine Services. Füge zuerst einen Service hinzu."
     },
     "review": {

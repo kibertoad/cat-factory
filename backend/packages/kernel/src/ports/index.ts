@@ -10,6 +10,7 @@ export type {
   WorkspaceRepository,
   WorkspaceVisibility,
 } from './repositories.js'
+export { LIVE_EXECUTION_STATUSES } from './repositories.js'
 export type {
   AccountRecord,
   AccountRepository,

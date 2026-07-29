@@ -511,7 +511,11 @@ repo but nothing is configured. All copy through i18n with locale parity from da
 > (`ui.environmentWizardOpen`), reached from a SideBar entry (`nav.environmentSetup`) and a
 > docker-compose service-inspector nudge (`ServiceTestConfig.vue`). The `environmentWizard` i18n
 > namespace + `common.back/next/done` + `nav.environmentSetup` + `inspector.testConfig.envWizard`
-> land across all 8 locales (parity-checked). Also fixed a latent store bug: `analystRun` filtered
+> land across all 8 locales (parity-checked). **Superseded since:** the standalone SideBar entry
+> and its `nav.environmentSetup` key are gone. The flow is now reached from the Infrastructure
+> window's Test-environments tab (`ComposeEnvironmentSetupSection.vue`, which also carries the
+> "how it works / when you need this" explanation) and from the same inspector nudge; the wizard
+> itself is unchanged. Also fixed a latent store bug: `analystRun` filtered
 > the collapsing `execution.getByBlock` (single-instance) as if it were an array; it now filters
 > `execution.instances` directly. Every affordance carries an `env-setup-*` `data-testid`.
 > **Deferred (the one remaining slice-7 item): the `data-testid`-only e2e spec.** The wizard's

@@ -15,22 +15,16 @@ import { describeError } from '@cat-factory/kernel'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the validation-config service or send a 503, returning null when unconfigured. */
 function requireValidationConfig<E extends AppEnv>(c: Context<E>): ValidationConfigService | null {
   return c.get('container').validationConfig ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The validation-check store is not configured',
-      },
-    },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('The validation-check store is not configured')
+}
 
 /**
  * Per-service PRE-PR VALIDATION CHECKS: the shell commands the executor-harness runs against
@@ -45,19 +39,19 @@ export function validationConfigController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listServiceValidationConfigsContract, async (c) => {
     const svc = requireValidationConfig(c)
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     return c.json(await svc.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, getServiceValidationConfigContract, async (c) => {
     const svc = requireValidationConfig(c)
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     return c.json(await svc.getView(param(c, 'workspaceId'), c.req.valid('param').blockId), 200)
   })
 
   buildHonoRoute(app, setServiceValidationConfigContract, async (c) => {
     const svc = requireValidationConfig(c)
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     const view = await svc.set(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -108,7 +102,7 @@ export function validationConfigController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteServiceValidationConfigContract, async (c) => {
     const svc = requireValidationConfig(c)
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     await svc.deleteFor(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.body(null, 204)
   })

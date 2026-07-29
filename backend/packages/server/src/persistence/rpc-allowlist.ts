@@ -98,6 +98,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     // Lean live-run projection backing the dispatch guard + resumePaused (workspace-scoped read).
     listLive: { scope: { kind: 'workspace', arg: 0 } },
+    // Run admission control's capacity read: a workspace-scoped SQL COUNT returning a NUMBER, so
+    // no row content crosses the wire (the same shape as `blockRepository.countActiveInternal`).
+    // It sits on the run-START path, which is precisely why it must be remote from the first
+    // slice: an unrouted method here would not fail at build or review, it would throw the moment
+    // a mothership-mode node — which has no `db` — tried to start a run.
+    countActiveByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },

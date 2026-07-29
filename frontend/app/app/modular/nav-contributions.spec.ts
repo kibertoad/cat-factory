@@ -99,12 +99,15 @@ describe('navSlotFilter', () => {
     expect(kept).toContain('integrations-hub')
     expect(kept).toContain('workspace-settings')
     expect(kept).toContain('model-config')
+    // Model providers are NOT an integration: the split is what makes the engines findable.
+    expect(kept).toContain('model-providers')
     // ...and so does everything the everyday delivery loop runs on, however deep it feels:
     // authoring a flow, the standards library, and the PREnv/runner plumbing.
     expect(kept).toContain('build-pipeline')
     expect(kept).toContain('fragments')
+    // Also the only route to the guided per-service Compose environment setup, which folded
+    // into this window rather than staying a sibling nav entry.
     expect(kept).toContain('infrastructure')
-    expect(kept).toContain('environment-setup')
     // What drops is either a shortcut basic mode reaches another way, or a capability
     // deliberately kept out of the tier (experimentation, one-off repo setup, the
     // deployment-wide operator rollups).
@@ -134,7 +137,7 @@ describe('navSlotFilter', () => {
       },
       'local-models': {
         kind: 'reached-another-way',
-        why: 'integrations-hub -> Local runners',
+        why: 'model-providers -> My local runners',
       },
       sandbox: {
         kind: 'out-of-tier',
@@ -250,6 +253,7 @@ describe('NAV_CONTRIBUTIONS catalog integrity', () => {
     for (const group of [
       'create',
       'repositories',
+      'models',
       'integrations',
       'infrastructure',
       'workspaceContext',
@@ -275,15 +279,19 @@ describe('nav grouping helpers', () => {
     expect(groups.map((g) => g.group)).toEqual([
       'create',
       'repositories',
+      'models',
       'integrations',
       'infrastructure',
       'workspaceContext',
       'configuration',
     ])
+    // The engines are their own section, ahead of the optional integrations; `model-config`
+    // sits beside the providers it picks models from rather than under `configuration`.
+    const models = groups.find((g) => g.group === 'models')
+    expect(models?.items.map((i) => i.id)).toEqual(['model-providers', 'model-config'])
     const configuration = groups.find((g) => g.group === 'configuration')
     expect(configuration?.items.map((i) => i.id)).toEqual([
       'workspace-settings',
-      'model-config',
       'account-settings',
       'operator-dashboard',
       'reports',

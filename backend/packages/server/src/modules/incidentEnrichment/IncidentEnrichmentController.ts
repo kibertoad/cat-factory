@@ -10,6 +10,7 @@ import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the incident-enrichment module or send a 503, returning null when unconfigured. */
 function requireIncidentEnrichment<E extends AppEnv>(
@@ -18,16 +19,9 @@ function requireIncidentEnrichment<E extends AppEnv>(
   return c.get('container').incidentEnrichmentSettings ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    {
-      error: {
-        code: 'unavailable',
-        message: 'The incident-enrichment integration is not configured',
-      },
-    },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('The incident-enrichment integration is not configured')
+}
 
 /**
  * Per-workspace incident-enrichment settings (PagerDuty + incident.io). The credentials
@@ -40,19 +34,19 @@ export function incidentEnrichmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    if (!ie) return unavailable()
     return c.json(await ie.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, setIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    if (!ie) return unavailable()
     return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable(c)
+    if (!ie) return unavailable()
     await ie.service.deleteConnection(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

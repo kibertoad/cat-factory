@@ -102,6 +102,7 @@ export {
   wrapResolverWithLimiter,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
+export { createStoreAgentContextGate } from './agents/storeAgentContextGate.js'
 export {
   resolveWorkspaceCapabilities,
   type CapabilityServices,

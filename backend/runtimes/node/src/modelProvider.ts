@@ -1,8 +1,13 @@
-import { type ProviderRegistry, resolveOpenAiCompatibleBaseUrl } from '@cat-factory/agents'
+import {
+  type ProviderRegistry,
+  type WorkspaceBodiesGate,
+  resolveOpenAiCompatibleBaseUrl,
+} from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import {
   type LlmTraceSink,
   type ModelProviderResolver,
+  type WorkspaceSettingsRepository,
   composeTraceSinks,
 } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
@@ -10,7 +15,7 @@ import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { parseOtlpHeaders } from '@cat-factory/observability-otel'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
-import { createScopedModelProviderResolver } from '@cat-factory/server'
+import { createScopedModelProviderResolver, createStoreAgentContextGate } from '@cat-factory/server'
 
 // The Node deployment's ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
@@ -23,6 +28,12 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 export interface InlineInstrument {
   traceSink: LlmTraceSink
   recordPrompts: boolean
+  /**
+   * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies before
+   * they leave for the sink — the same gate the proxied path runs. Required, so a wiring
+   * site cannot instrument inline calls while honouring only `LLM_RECORD_PROMPTS`.
+   */
+  workspaceBodiesEnabled: WorkspaceBodiesGate
 }
 
 /**
@@ -31,8 +42,14 @@ export interface InlineInstrument {
  * the caller does not supply a pre-built instrument (direct callers / tests). In the real
  * container build the sink is built ONCE (memoised, and its shutdown wired) and passed in,
  * so the SDK exporter's batch processors/timers aren't duplicated across wiring sites.
+ *
+ * `workspaceBodiesEnabled` is threaded in rather than built here because this function sees
+ * only `env` — it has no persistence to read the per-workspace opt-out from.
  */
-function buildInstrumentFromEnv(env: NodeJS.ProcessEnv): InlineInstrument | undefined {
+function buildInstrumentFromEnv(
+  env: NodeJS.ProcessEnv,
+  workspaceBodiesEnabled: WorkspaceBodiesGate,
+): InlineInstrument | undefined {
   const langfuseSink =
     env.LANGFUSE_ENABLED?.trim() === 'true' &&
     env.LANGFUSE_PUBLIC_KEY?.trim() &&
@@ -53,7 +70,11 @@ function buildInstrumentFromEnv(env: NodeJS.ProcessEnv): InlineInstrument | unde
       : undefined
   const traceSink = composeTraceSinks([langfuseSink, otelSink])
   return traceSink
-    ? { traceSink, recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' }
+    ? {
+        traceSink,
+        recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
+        workspaceBodiesEnabled,
+      }
     : undefined
 }
 
@@ -75,6 +96,13 @@ export function createNodeModelProviderResolver(
   // the core, so the SDK exporter isn't built twice). Omitted by direct callers/tests, which
   // fall back to building it from `env`.
   instrument?: InlineInstrument,
+  /**
+   * The workspace-settings store the per-workspace `storeAgentContext` body gate reads.
+   * Only consulted when `instrument` is omitted (the env-fallback path builds its own
+   * instrument); a supplied instrument already carries its gate. Absent ⇒ no settings
+   * source, so the deployment's `LLM_RECORD_PROMPTS` switch alone governs bodies.
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository,
 ): ModelProviderResolver {
   const extraRegistries: ProviderRegistry[] = []
 
@@ -109,7 +137,12 @@ export function createNodeModelProviderResolver(
   // path uses — Langfuse (fetch) and/or OpenTelemetry (official SDK). The container build
   // passes a pre-built, shared instrument (so the SDK exporter is created once); a direct
   // caller / test that omits it falls back to building one from `env`.
-  const resolvedInstrument = instrument ?? buildInstrumentFromEnv(env)
+  const resolvedInstrument =
+    instrument ??
+    buildInstrumentFromEnv(
+      env,
+      createStoreAgentContextGate({ repository: workspaceSettingsRepository }),
+    )
 
   return createScopedModelProviderResolver({
     apiKeys,

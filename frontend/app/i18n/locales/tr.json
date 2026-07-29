@@ -111,6 +111,8 @@
     "repositories": "Depolar",
     "addFromRepo": "Mevcut depodan ekle",
     "bootstrapRepo": "Depo başlat",
+    "models": "Modeller",
+    "modelProviders": "Model sağlayıcıları",
     "integrations": "Entegrasyonlar",
     "infrastructure": "Altyapı",
     "sandbox": "Deneme alanı",
@@ -122,8 +124,7 @@
     "modelConfiguration": "Model yapılandırması",
     "accountSettings": "Hesap ayarları",
     "operatorDashboard": "Platform gözlemlenebilirliği",
-    "reports": "Raporlar",
-    "environmentSetup": "Ortam kurulumu"
+    "reports": "Raporlar"
   },
   "board": {
     "toast": {
@@ -394,6 +395,7 @@
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
       "addFirstTask": "İlk görevi ekle",
       "createInitiativeTitle": "Girisim olustur",
+      "huntBugsTitle": "Hata avla",
       "accessDenied": {
         "title": "İzin reddedildi",
         "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
@@ -631,12 +633,12 @@
   "inspector": {
     "detectRepoUnresolved": "Bu bloğun deposu bağlı GitHub depoları arasında değil, bu yüzden okunamıyor. Bunun için GitHub'ı bağlayın veya eşitleyin, ardından yeniden deneyin.",
     "container": {
-      "title": "İçerik",
-      "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",
-      "modules": "Modüller ({count})",
+      "modulesTitle": "Modüller",
+      "modulesHint": "Bu servisin içindeki modüller. Panoda seçmek için birine tıklayın.",
       "taskCount": "{count} görev | {count} görev",
-      "allTasks": "Tüm görevler ({count})",
-      "tasks": "Görevler ({count})",
+      "tasksTitle": "Görevler",
+      "allTasksTitle": "Tüm görevler",
+      "tasksHint": "Bu bloğun içindeki görevler. Panoda seçmek için birine tıklayın.",
       "addTask": "Görev ekle",
       "noTasks": "Henüz görev yok. Çalışmaya başlamak için bir tane ekleyin.",
       "servicesHint": "Servisler uzun ömürlüdür ve tamamlanmaz. Çalışma, görevlerinde ve modüllerinde gerçekleşir."
@@ -1345,8 +1347,6 @@
       "lastIncorporatedRequirements": "Son dahil edilen gereksinimler",
       "priorDocHint": "Önceki incelemeden. Bir temel olarak kullanın: yukarıdaki açıklamayı düzenleyip yeniden gönderin.",
       "bootstrapping": "Önyükleniyor…",
-      "importIssue": "Sorunu içe aktar",
-      "connectTracker": "Bir izleyici bağla",
       "spawnFromDocument": "Belgeden oluştur",
       "viewRequirements": "Gereksinimleri Görüntüle",
       "reRun": "Yeniden çalıştır",
@@ -1380,8 +1380,7 @@
         "title": "Bu hizmet arşivlensin mi?",
         "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
       },
-      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}",
-      "huntBugs": "Hata avla"
+      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}"
     }
   },
   "observability": {
@@ -1963,7 +1962,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Kurulumuma geri dön",
-      "backToIntegrations": "Entegrasyonlara geri dön"
+      "backToIntegrations": "Entegrasyonlara geri dön",
+      "backToModelProviders": "Model sağlayıcılarına geri dön"
     },
     "commandBar": {
       "searchPlaceholder": "Ara veya bir komut çalıştır…",
@@ -2024,23 +2024,21 @@
     },
     "integrationsHub": {
       "title": "Entegrasyonlar",
-      "intro": "Bu çalışma alanının bağlayabileceği harici sistemleri bağlayın ve yönetin.",
+      "intro": "Bu çalışma alanının bağlayabileceği isteğe bağlı harici sistemleri bağlayın ve yönetin. Ajanlarınızı çalıştıran modeller Model sağlayıcıları altındadır.",
       "searchPlaceholder": "Entegrasyonlarda ara…",
       "noMatches": "\"{query}\" ile eşleşen entegrasyon yok.",
       "getStarted": {
         "title": "Başlayın",
-        "body": "İlk boru hattınızı çalıştırmak için bir kod kaynağı ve bir model sağlayıcısı bağlayın."
+        "body": "Boru hatlarınızın üzerinde çalışacağı bir şey olması için bir kod kaynağı bağlayın."
       },
       "status": {
         "connected": "Bağlandı",
-        "keyConnected": "Anahtar bağlandı",
         "notConnected": "Bağlı değil",
         "needsAttention": "Dikkat gerekiyor",
         "disabled": "Devre dışı",
         "recommended": "Önerilen"
       },
       "groups": {
-        "models": "Modeller ve sağlayıcılar",
         "sourceControl": "Kaynak kontrolü",
         "communication": "İletişim",
         "documents": "Belgeler",
@@ -2050,16 +2048,6 @@
         "personal": "Kişisel (yalnızca siz)"
       },
       "items": {
-        "openrouter": {
-          "description": "300+ modele tek bir ağ geçidi. Anahtarınızı ekleyin ve modelleri tek yerde etkinleştirin."
-        },
-        "vendors": {
-          "label": "Sağlayıcılar ve anahtarlar",
-          "description": "Çalışma alanı LLM abonelikleri ve sağlayıcı API anahtarları."
-        },
-        "personalSubs": {
-          "label": "Kişisel abonelikler (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Çalışma alanının GitHub App'ini bağlayın, depoları, PR'ları ve sorunları gözatın."
         },
@@ -2099,16 +2087,51 @@
           "label": "GitHub token'ım",
           "description": "Başlattığınız çalıştırmalar için kullanılan kişisel erişim token'ı (push'lar, PR'lar, CI, birleştirme)."
         },
-        "localRunners": {
-          "label": "Yerel runner'larım",
-          "description": "Kendi makinenizdeki model runner'ları (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Şablonlar ve örnekler"
         },
         "bugHunt": {
           "label": "Hata avı",
           "description": "Bir panodaki açık ve atanmamış hataları değerlendirin ve düzeltmek için birini seçin"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Model sağlayıcıları",
+      "intro": "Ajanlarınızı çalıştıran motorlar. Herhangi bir boru hattı adımı çalışabilmeden önce en az bir sağlayıcının bağlı olması gerekir.",
+      "searchPlaceholder": "Sağlayıcı ara…",
+      "noMatches": "\"{query}\" ile eşleşen sağlayıcı yok.",
+      "getStarted": {
+        "title": "Henüz bağlı sağlayıcı yok",
+        "body": "Bir modele erişilemeden ajan adımları çalışamaz. Geniş bir katalogu açmanın en hızlı yolu bir OpenRouter anahtarıdır; ancak sağlayıcı anahtarları, kişisel bir plan veya kendi yerel çalıştırıcınız da aynı işi görür."
+      },
+      "status": {
+        "connected": "Bağlandı",
+        "keyConnected": "Anahtar bağlandı",
+        "notConnected": "Bağlı değil",
+        "recommended": "Önerilen",
+        "connectedCount": "bağlı yok | {count} bağlı | {count} bağlı"
+      },
+      "groups": {
+        "workspace": "Çalışma alanı sağlayıcıları",
+        "personal": "Kişisel (yalnızca siz)",
+        "personalNote": "Bunlar çalışma alanına değil hesabınıza aittir ve yalnızca sizin başlattığınız çalışmalarda kullanılır. Kurulumum bölümünde de listelenir."
+      },
+      "items": {
+        "openrouter": {
+          "description": "300+ modele tek bir ağ geçidi. Anahtarınızı ekleyin ve modelleri tek yerde etkinleştirin."
+        },
+        "vendors": {
+          "label": "Sağlayıcılar ve anahtarlar",
+          "description": "Çalışma alanı LLM abonelikleri ve sağlayıcı API anahtarları."
+        },
+        "personalSubs": {
+          "label": "Aboneliklerim",
+          "description": "Kişisel bir parolayla açtığınız bireysel kullanım planları (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "Yerel çalıştırıcılarım",
+          "description": "Kendi makinenizdeki model çalıştırıcılarınız (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -2820,6 +2843,32 @@
         "stopFailed": "Paylaşılan yığın durdurulamadı",
         "removeFailed": "Paylaşılan yığın silinemedi"
       }
+    },
+    "composeEnvSetup": {
+      "title": "Bir servis için rehberli Docker Compose kurulumu",
+      "lead": "Compose yolunu ve kurulum adımlarını elle yazmak yerine, bir servisin test ortamlarının ayağa kaldırıldığı Docker Compose tarifini adım adım oluşturur.",
+      "how": {
+        "title": "Nasıl çalışır",
+        "scan": "Servisin bağlı deposunu compose dosyaları, profiller, env dosyaları ve tohum verisi dökümleri için tarar.",
+        "analyse": "İsteğe bağlı olarak ortam analisti ajanını çalıştırarak deponun kendi betiklerinden kurulum adımları ve bir sağlık kontrolü taslağı çıkarır.",
+        "preflight": "Tarifin ön kontrollerini, onu ayağa kaldıracak makinede çalıştırır.",
+        "save": "Tarifi servise kaydeder ve çalışma alanının Docker Compose işleyicisini kaydeder.",
+        "outcome": "Bundan sonra bir boru hattı canlı bir ortama ihtiyaç duyduğunda Deployer tam olarak o yığını ayağa kaldırır ve Tester ona karşı çalışır. Siz kaydedene kadar hiçbir şey uygulanmaz."
+      },
+      "needed": {
+        "title": "Şu durumlarda gerekir",
+        "running": "Servisin testleri uygulamanın gerçekten çalışmasını gerektiriyorsa: API veya arayüz testleri, göçler, tohum verisi.",
+        "compose": "Servis Docker Compose ile ayağa kaldırılıyorsa ve henüz kayıtlı bir tarifi yoksa.",
+        "setup": "Yığını ayağa kaldırmak tek komuttan fazlasını gerektiriyorsa: profiller, env dosyaları, tohum verisi veya hazır olma kontrolü."
+      },
+      "notNeeded": {
+        "title": "Şu durumlarda atlayabilirsiniz",
+        "inContainer": "Boru hattı yalnızca lint, derleme veya birim testi çalıştırıyorsa. Bunlar PR öncesi doğrulama kontrolleri olarak ajan konteynerinde çalışır, hiçbir ortam ayağa kaldırılmaz.",
+        "otherBackend": "Servis başka bir şekilde ayağa kaldırılıyorsa (Kubernetes, bulut önizlemesi veya hiç altyapı yok). Bunun yerine yukarıdan yapılandırın.",
+        "noRepo": "Servisin bağlı bir deposu yoksa, taranacak bir şey de yoktur."
+      },
+      "start": "Rehberli kurulumu başlat",
+      "rerunHint": "Kayıtlı bir tarifi değiştirmek için istediğiniz zaman yeniden çalıştırın."
     },
     "localMode": {
       "title": "Yerel mod",
@@ -5296,8 +5345,8 @@
   },
   "environmentWizard": {
     "progress": "Adım {index} / {total}",
-    "title": "Bir test ortamı kur",
-    "subtitle": "Deployer sağlasın diye bir Docker Compose tarifini algıla, gözden geçir ve kaydet.",
+    "title": "Docker Compose ortam kurulumu",
+    "subtitle": "Bir servisin test ortamlarının ayağa kaldırıldığı Docker Compose tarifini oluşturun: depoyu tarayın, gözden geçirin, ön kontrol yapın, kaydedin.",
     "recommended": "önerilen",
     "steps": {
       "pick": "Servis seç",
@@ -5307,6 +5356,7 @@
     },
     "pick": {
       "intro": "Docker Compose ortamı kuracağın servisi seç.",
+      "scope": "Yalnızca seçtiğiniz servis değişir. Tarifini düzenlemek için bunu daha sonra yeniden çalıştırın.",
       "empty": "Henüz servis yok. Önce bir servis ekle."
     },
     "review": {

@@ -10,10 +10,23 @@ import type {
 } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
+  describeError,
   noopLogger,
   readInlineObservabilityContext,
   runBestEffort,
 } from '@cat-factory/kernel'
+
+/**
+ * Whether prompt/response BODIES may leave this workspace for a trace sink — the
+ * per-workspace `storeAgentContext` opt-out, resolved by the caller layer (which owns the
+ * settings repository and its cache slice) and passed in as a narrow predicate so this
+ * package needs no persistence dependency.
+ *
+ * `null` is an inline call carrying no workspace tag: there is no workspace whose opt-out
+ * could apply, so the deployment switch alone governs it. That is a reason to TAG the call,
+ * not to guess — every first-party inline site passes its `workspaceId`.
+ */
+export type WorkspaceBodiesGate = (workspaceId: string | null) => Promise<boolean>
 
 // Re-exported so existing `@cat-factory/agents` consumers keep importing the inline
 // observability tag from here; the canonical, dependency-free definition lives in the
@@ -117,6 +130,7 @@ export class InstrumentedModelProvider implements ModelProvider {
   private readonly inner: ModelProvider
   private readonly traceSink: LlmTraceSink
   private readonly recordPrompts: boolean
+  private readonly workspaceBodiesEnabled: WorkspaceBodiesGate
   private readonly now: () => number
   private readonly log: Logger
 
@@ -125,6 +139,16 @@ export class InstrumentedModelProvider implements ModelProvider {
     traceSink: LlmTraceSink
     /** Honour the same `LLM_RECORD_PROMPTS` switch as the local store; default true. */
     recordPrompts?: boolean
+    /**
+     * The per-workspace `storeAgentContext` opt-out, the SECOND half of the double gate the
+     * proxy path applies (`LlmObservabilityService.bodiesEnabled`). REQUIRED, not optional:
+     * this path shipped for months honouring only the deployment switch, so an opted-out
+     * workspace's inline prompts and responses still reached Langfuse/OTel — a privacy bug,
+     * not a coverage gap (observability-logging-gaps.md, C2). An absent optional gate is
+     * open by definition, which is exactly the failure mode; requiring it makes forgetting
+     * one a typecheck failure instead of a silent leak.
+     */
+    workspaceBodiesEnabled: WorkspaceBodiesGate
     /** Injectable clock (tests); defaults to `Date.now`. */
     now?: () => number
     /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
@@ -133,6 +157,7 @@ export class InstrumentedModelProvider implements ModelProvider {
     this.inner = deps.inner
     this.traceSink = deps.traceSink
     this.recordPrompts = deps.recordPrompts ?? true
+    this.workspaceBodiesEnabled = deps.workspaceBodiesEnabled
     this.now = deps.now ?? (() => Date.now())
     this.log = (deps.logger ?? noopLogger).child({ scope: 'inlineLlmTrace' })
   }
@@ -178,8 +203,11 @@ export class InstrumentedModelProvider implements ModelProvider {
     const endedAt = this.now()
     const context = readInlineObservabilityContext(params)
     const usage = readUsage((result as { usage?: unknown })?.usage)
-    const event: LlmGenerationEvent = {
-      workspaceId: context.workspaceId ?? null,
+    const workspaceId = context.workspaceId ?? null
+    // Numeric telemetry + timing are recorded unconditionally, exactly as on the proxy
+    // path; only the BODIES answer to the privacy gate below.
+    const event: Omit<LlmGenerationEvent, 'input' | 'output'> = {
+      workspaceId,
       executionId: context.executionId ?? null,
       agentKind: context.agentKind,
       provider: ref.provider,
@@ -194,8 +222,6 @@ export class InstrumentedModelProvider implements ModelProvider {
       finishReason: ok ? readFinishReason(result) : null,
       ok,
       errorMessage: errMessage,
-      input: this.recordPrompts ? safeJson((params as { prompt?: unknown })?.prompt) : '',
-      output: this.recordPrompts && ok ? readOutputText(result) : '',
     }
     // Best-effort and fully isolated — instrumentation must never break the LLM call.
     // `runBestEffort` covers the synchronous build/dispatch throw as well as the rejection,
@@ -203,9 +229,42 @@ export class InstrumentedModelProvider implements ModelProvider {
     void runBestEffort(
       this.log,
       'traceSink.recordGeneration',
-      () => this.traceSink.recordGeneration(event),
-      { workspaceId: event.workspaceId, executionId: event.executionId, source: 'inline' },
+      async () => {
+        // Resolved per call, not once when the provider was built, so a workspace that
+        // turns `storeAgentContext` off stops shipping bodies on its very next inline
+        // call rather than when its scoped provider is next rebuilt.
+        const recordBodies = await this.bodiesAllowed(workspaceId)
+        await this.traceSink.recordGeneration({
+          ...event,
+          input: recordBodies ? safeJson((params as { prompt?: unknown })?.prompt) : '',
+          output: recordBodies && ok ? readOutputText(result) : '',
+        })
+      },
+      { workspaceId, executionId: event.executionId, source: 'inline' },
     )
+  }
+
+  /**
+   * The double gate on prompt/response bodies: the deployment-wide `LLM_RECORD_PROMPTS`
+   * switch AND the workspace's own `storeAgentContext` opt-out.
+   *
+   * FAILS CLOSED. An unreadable settings row is not consent, so a store hiccup withholds
+   * the bodies rather than defaulting to "allowed" — but it must not cost the whole export,
+   * so the numeric telemetry still ships. Reported rather than swallowed: a gate that is
+   * permanently unreadable would otherwise present as a deployment that quietly stopped
+   * tracing bodies at all.
+   */
+  private async bodiesAllowed(workspaceId: string | null): Promise<boolean> {
+    if (!this.recordPrompts) return false
+    try {
+      return await this.workspaceBodiesEnabled(workspaceId)
+    } catch (error) {
+      this.log.warn('workspace body-recording gate unreadable; withholding bodies', {
+        ...describeError(error),
+        workspaceId,
+      })
+      return false
+    }
   }
 }
 

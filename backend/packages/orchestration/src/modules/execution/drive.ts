@@ -1,4 +1,10 @@
-import { describeError, noopLogger, type AgentFailureKind, type Logger } from '@cat-factory/kernel'
+import {
+  describeError,
+  getErrorReason,
+  noopLogger,
+  type AgentFailureKind,
+  type Logger,
+} from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { ExecutionService } from './ExecutionService.js'
 
@@ -134,7 +140,17 @@ export async function driveExecution(
     try {
       result = await exec.advanceInstance(workspaceId, executionId, { rethrowAgentErrors: true })
     } catch (error) {
-      await fail(error instanceof Error ? error.message : String(error))
+      // A thrown `DomainError` carries a machine-readable `details.reason` (e.g. a
+      // `providers_unconfigured` conflict) — precisely the failure class the SPA has a
+      // remedy for. Lift it onto the run instead of leaving only prose behind; the
+      // step-result path below has always forwarded `reason`, so the throw path dropping
+      // it was the asymmetry (observability-logging-gaps.md, B3).
+      await fail(
+        error instanceof Error ? error.message : String(error),
+        'agent',
+        null,
+        getErrorReason(error) ?? null,
+      )
       return {}
     }
 

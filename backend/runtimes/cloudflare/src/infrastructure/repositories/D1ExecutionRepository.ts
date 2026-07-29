@@ -1,9 +1,10 @@
-import type {
-  AgentFailure,
-  Clock,
-  ExecutionRepository,
-  LiveRunSummary,
-  RunRef,
+import {
+  type AgentFailure,
+  type Clock,
+  type ExecutionRepository,
+  LIVE_EXECUTION_STATUSES,
+  type LiveRunSummary,
+  type RunRef,
 } from '@cat-factory/kernel'
 import type { ExecutionInstance, ExecutionStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
@@ -12,6 +13,12 @@ import { chunkForIn } from './chunk'
 import { adoptCreatedAt, type ExecutionRow, executionToDetail, rowToExecution } from './mappers'
 
 const runContext = (row: ExecutionRow) => ({ table: 'agent_runs', id: row.id })
+
+// The live statuses as a SQL list literal, derived from the shared constant so the live-run
+// projection and the admission-control capacity COUNT read the same set here and on Node.
+// `insertLive` deliberately keeps its literals: those mirror the frozen index predicate
+// (see LIVE_EXECUTION_STATUSES).
+const LIVE_STATUS_LIST_SQL = LIVE_EXECUTION_STATUSES.map((s) => `'${s}'`).join(', ')
 
 /**
  * Execution runs, stored as `kind='execution'` rows of the unified `agent_runs`
@@ -48,13 +55,27 @@ export class D1ExecutionRepository implements ExecutionRepository {
       .prepare(
         `SELECT id, block_id, status FROM agent_runs
          WHERE workspace_id = ? AND kind = 'execution'
-           AND status IN ('running', 'blocked', 'paused')`,
+           AND status IN (${LIVE_STATUS_LIST_SQL})`,
       )
       .bind(workspaceId)
       .all<{ id: string; block_id: string | null; status: LiveRunSummary['status'] }>()
     // `block_id` is nullable on the table; coalesce to '' so the projection matches the Drizzle
     // repo's `string` shape exactly (live execution runs always carry one in practice).
     return results.map((r) => ({ id: r.id, blockId: r.block_id ?? '', status: r.status }))
+  }
+
+  async countActiveByWorkspace(workspaceId: string): Promise<number> {
+    // Admission-control capacity read: the COUNT is pushed into SQL (never rows reduced in JS),
+    // over the same live predicate and index as `listLive` above. Mirrors the Drizzle repo.
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM agent_runs
+         WHERE workspace_id = ? AND kind = 'execution'
+           AND status IN (${LIVE_STATUS_LIST_SQL})`,
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {

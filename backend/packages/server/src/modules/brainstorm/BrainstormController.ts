@@ -14,14 +14,16 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the brainstorm module or send a 503, returning null when unconfigured. */
 function requireBrainstorm<E extends AppEnv>(c: Context<E>): BrainstormModule | null {
   return c.get('container').brainstorm ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Brainstorm is not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Brainstorm is not configured')
+}
 
 /**
  * Workspace-scoped brainstorm (structured-dialogue) endpoints, STAGE-scoped: a block may have
@@ -39,7 +41,7 @@ export function brainstormController(): Hono<AppEnv> {
   // The current session for a block + stage (null when none has been run yet).
   buildHonoRoute(app, getBrainstormContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await brainstorm.services[stage].getForBlock(param(c, 'workspaceId'), blockId)
     return c.json(session, 200)
@@ -50,7 +52,7 @@ export function brainstormController(): Hono<AppEnv> {
   // in any upstream refined requirements, exactly like the gate.
   buildHonoRoute(app, reviewBrainstormContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -61,7 +63,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Respond to a single option (pick / steer). Session-id scoped (stage-agnostic store).
   buildHonoRoute(app, replyBrainstormItemContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { sessionId, itemId } = c.req.valid('param')
     const session = await brainstorm.services.requirements.replyToItem(
       param(c, 'workspaceId'),
@@ -75,7 +77,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Set an option's status (resolve / dismiss / reopen). Session-id scoped.
   buildHonoRoute(app, updateBrainstormItemStatusContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { sessionId, itemId } = c.req.valid('param')
     const session = await brainstorm.services.requirements.setItemStatus(
       param(c, 'workspaceId'),
@@ -89,7 +91,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Incorporate the picks ASYNCHRONOUSLY (the durable driver folds + re-runs).
   buildHonoRoute(app, incorporateBrainstormContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -105,7 +107,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Re-run the brainstorm against the converged direction (one more pass).
   buildHonoRoute(app, reReviewBrainstormContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -116,7 +118,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Proceed: settle the brainstorm (last converged direction wins downstream) and advance.
   buildHonoRoute(app, proceedBrainstormContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -127,7 +129,7 @@ export function brainstormController(): Hono<AppEnv> {
   // Resolve a session that hit its iteration cap: one more round / proceed / stop-reset.
   buildHonoRoute(app, resolveBrainstormExceededContract, async (c) => {
     const brainstorm = requireBrainstorm(c)
-    if (!brainstorm) return unavailable(c)
+    if (!brainstorm) return unavailable()
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')

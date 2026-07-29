@@ -26,7 +26,7 @@ import {
   type PublicTask,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { CredentialRequiredError, runBestEffort } from '@cat-factory/kernel'
+import { CredentialRequiredError, runBestEffort, UnavailableError } from '@cat-factory/kernel'
 import { scopeSatisfies } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -1071,10 +1071,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     }
     const notifications = c.get('container').notifications
     if (!notifications) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
-        503,
-      )
+      throw new UnavailableError('Notifications are not configured')
     }
     const open = await notifications.service.listOpen(gate.auth.workspaceId)
     return c.json({ notifications: open }, 200)
@@ -1100,10 +1097,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     const container = c.get('container')
     const notifications = container.notifications
     if (!notifications) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
-        503,
-      )
+      throw new UnavailableError('Notifications are not configured')
     }
     const { id } = c.req.valid('param')
     const existing = await notifications.service.get(auth.workspaceId, id)
@@ -1181,10 +1175,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     }
     const notifications = c.get('container').notifications
     if (!notifications) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
-        503,
-      )
+      throw new UnavailableError('Notifications are not configured')
     }
     const resolved = await notifications.service.resolve(
       gate.auth.workspaceId,

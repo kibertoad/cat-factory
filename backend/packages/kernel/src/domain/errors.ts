@@ -8,6 +8,9 @@ export type DomainErrorCode =
   | 'conflict'
   | 'credential_required'
   | 'forbidden'
+  | 'unavailable'
+  | 'unauthorized'
+  | 'rate_limited'
 
 export class DomainError extends Error {
   constructor(
@@ -108,6 +111,71 @@ export class CredentialRequiredError extends DomainError {
 export class ForbiddenError extends DomainError {
   constructor(message = 'Forbidden', details?: Record<string, unknown>) {
     super('forbidden', message, details)
+  }
+}
+
+/**
+ * A capability this deployment has not wired is required for the action (→ 503 Service
+ * Unavailable). BY FAR the most common hand-rolled envelope before it had a class — an
+ * opt-in integration (task sources, the skills library, artifact storage, an OAuth
+ * provider) that a facade only builds when configured, so its controller answers 503
+ * rather than 404.
+ *
+ * `reason` matters more here than anywhere else: "not configured" is the one error class
+ * whose remedy is always a specific setup screen, and a client cannot route to it by
+ * string-matching prose. Carry the machine-readable code and let the SPA translate.
+ */
+export class UnavailableError extends DomainError {
+  constructor(
+    message: string,
+    /** Machine-readable code for the client (under `details.reason`), e.g. which integration. */
+    reason?: string,
+    /** Extra machine-readable context merged alongside `reason`. */
+    details?: Record<string, unknown>,
+  ) {
+    super('unavailable', message, reason ? { reason, ...details } : details)
+  }
+}
+
+/**
+ * The caller is NOT authenticated (or its credential/signature did not verify) → 401.
+ * Distinct from {@link ForbiddenError}, which is an authenticated caller lacking a
+ * capability: 401 says "sign in", 403 says "you can't do this".
+ *
+ * Webhook receivers use this for a failed HMAC check. Keep those messages coarse — a
+ * signature verifier that distinguishes "no header" from "bad digest" is an oracle — and
+ * put the operator-facing distinction in a log line, not the envelope.
+ */
+export class UnauthorizedError extends DomainError {
+  constructor(
+    message = 'Unauthorized',
+    /** Machine-readable code for the client (under `details.reason`). */
+    reason?: string,
+    details?: Record<string, unknown>,
+  ) {
+    super('unauthorized', message, reason ? { reason, ...details } : details)
+  }
+}
+
+/**
+ * The caller (or the deployment, against an upstream) exceeded a rate limit → 429.
+ *
+ * `retryAfterSeconds` rides `details` rather than a header because the envelope is what
+ * survives every hop this platform has — a queue consumer and the durable driver read the
+ * same `details` an HTTP client does, and neither sees response headers.
+ */
+export class RateLimitedError extends DomainError {
+  constructor(
+    message: string,
+    /** Machine-readable code for the client (under `details.reason`). */
+    reason?: string,
+    /** How long to wait before retrying, when the limiter told us. */
+    retryAfterSeconds?: number,
+  ) {
+    super('rate_limited', message, {
+      ...(reason ? { reason } : {}),
+      ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+    })
   }
 }
 

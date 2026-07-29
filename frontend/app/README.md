@@ -86,7 +86,7 @@ hoc where it can be avoided:
   it**, and marking an item does one of two distinguishable things:
   - **Reached another way** — a shortcut whose surface a basic destination also opens, so
     nothing is lost (the Merge / Service-best-practices palette entries into Workspace
-    settings, the local-models knob the Integrations hub already offers).
+    settings, the local-models knob the Model providers hub already offers).
   - **Out of the tier** — the sole route, hidden on purpose, so the capability is _absent_
     from basic mode and the tier switch is the way to it (Sandbox, Kaizen, repo bootstrap,
     and the deployment-wide operator + reports rollups).
@@ -153,8 +153,35 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
   (acceptance), and `fragments` (the prompt-fragment library).
+- **Model providers** — `ModelProvidersHub.vue`, the sibling hub for the ENGINES
+  (OpenRouter, vendor keys, personal subscriptions, own-machine runners). Kept out
+  of the Integrations hub on purpose: an integration is optional context in or
+  output out, while a provider is what executes the work, so a deployment with none
+  connected runs nothing at all. **A new provider-shaped connection belongs here,
+  never in `IntegrationsHub.vue`.** Both hubs, plus the user-scoped `PersonalSetupModal`,
+  share the `IntegrationBackTitle` Back control, which returns to whichever hub set
+  its came-from marker (`ui.cameFrom{Integrations,ModelProviders,Personal}`) — a panel
+  reachable from more than one hub must not hard-code its return.
 - **Auth** (`components/auth`) — `AuthGate` / `LoginScreen` / `UserMenu`; the app
   is gated when the backend requires sign-in.
+
+## Where a surface lives
+
+Two placements are load-bearing enough to state, because putting a new one in the
+wrong place is invisible until a user cannot find it:
+
+- **The sidebar section is a claim about what the destination IS.** `models` is the
+  engines, `integrations` the optional systems, `infrastructure` where agent
+  containers and test environments run, `configuration` workspace/account settings.
+  `nav-contributions.spec.ts` pins the section order and each section's membership.
+- **A flow that edits ONE entity's config is a section of the window that owns that
+  config, not a sibling nav entry.** The guided Docker Compose environment setup
+  (`ComposeEnvironmentSetupSection.vue` → `EnvironmentSetupWizard.vue`) lives inside
+  Infrastructure → Test environments for exactly this reason: it writes a service's
+  Compose recipe plus the workspace's Compose handler, both configured in that tab.
+  It also carries a full "how it works / when you need this / when you can skip it"
+  explanation there rather than a one-line hint, since the decision to run it has to
+  be made before opening a five-minute wizard.
 
 ## Develop & test
 

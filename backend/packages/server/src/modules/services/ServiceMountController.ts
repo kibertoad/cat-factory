@@ -11,14 +11,16 @@ import type { Context } from 'hono'
 import type { ServicesModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the in-org services module or send a 503, returning null when unconfigured. */
 function requireServices<E extends AppEnv>(c: Context<E>): ServicesModule | null {
   return c.get('container').services ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Shared services are not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Shared services are not configured')
+}
 
 /**
  * In-org service sharing: list/mount/unmount the account's services on a workspace board
@@ -33,14 +35,14 @@ export function serviceMountController(): Hono<AppEnv> {
   // Services currently mounted onto this board.
   buildHonoRoute(app, listServiceMountsContract, async (c) => {
     const services = requireServices(c)
-    if (!services) return unavailable(c)
+    if (!services) return unavailable()
     return c.json(await services.service.listMounts(param(c, 'workspaceId')), 200)
   })
 
   // The org catalog: services owned by this workspace's account (mountable here).
   buildHonoRoute(app, listServiceCatalogContract, async (c) => {
     const services = requireServices(c)
-    if (!services) return unavailable(c)
+    if (!services) return unavailable()
     // `accountOf` is `undefined` for an unknown board, `null` for the legacy/unscoped
     // org, or the account id. The org catalog includes the null-account org.
     const accountId = await c.get('container').workspaceService.accountOf(param(c, 'workspaceId'))
@@ -51,7 +53,7 @@ export function serviceMountController(): Hono<AppEnv> {
   // Mount an existing org service onto this board.
   buildHonoRoute(app, mountServiceContract, async (c) => {
     const services = requireServices(c)
-    if (!services) return unavailable(c)
+    if (!services) return unavailable()
     const mount = await services.service.mount(
       param(c, 'workspaceId'),
       c.req.valid('param').serviceId,
@@ -63,7 +65,7 @@ export function serviceMountController(): Hono<AppEnv> {
   // Update a mount's per-workspace layout override (frame position/size).
   buildHonoRoute(app, updateServiceMountLayoutContract, async (c) => {
     const services = requireServices(c)
-    if (!services) return unavailable(c)
+    if (!services) return unavailable()
     const mount = await services.service.updateLayout(
       param(c, 'workspaceId'),
       c.req.valid('param').serviceId,
@@ -75,7 +77,7 @@ export function serviceMountController(): Hono<AppEnv> {
   // Remove a service from this board (does NOT delete the shared service).
   buildHonoRoute(app, unmountServiceContract, async (c) => {
     const services = requireServices(c)
-    if (!services) return unavailable(c)
+    if (!services) return unavailable()
     await services.service.unmount(param(c, 'workspaceId'), c.req.valid('param').serviceId)
     return c.body(null, 204)
   })

@@ -1,8 +1,8 @@
 import { getLocalSettingsContract, updateLocalSettingsContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /**
  * Local-mode operational settings (warm-container-pool sizing + per-repo checkout reuse),
@@ -16,26 +16,19 @@ import type { AppEnv } from '../../http/env.js'
 export function localSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  const unavailable = <E extends AppEnv>(c: Context<E>) =>
-    c.json(
-      {
-        error: {
-          code: 'unavailable',
-          message: 'Local-mode settings are only available on the local-mode service',
-        },
-      },
-      503,
-    )
+  const unavailable = (): never => {
+    throw new UnavailableError('Local-mode settings are only available on the local-mode service')
+  }
 
   buildHonoRoute(app, getLocalSettingsContract, async (c) => {
     const container = c.get('container')
-    if (!container.localSettings) return unavailable(c)
+    if (!container.localSettings) return unavailable()
     return c.json(await container.localSettings.service.read(), 200)
   })
 
   buildHonoRoute(app, updateLocalSettingsContract, async (c) => {
     const container = c.get('container')
-    if (!container.localSettings) return unavailable(c)
+    if (!container.localSettings) return unavailable()
     return c.json(await container.localSettings.service.write(c.req.valid('json')), 200)
   })
 
