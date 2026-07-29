@@ -27,6 +27,7 @@ import type { SandboxService } from '../modules/sandbox/SandboxService.js'
 import type { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import type { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import type { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
+import type { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import type { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
 import type { UserSettingsService } from '../modules/settings/UserSettingsService.js'
 import type { WorkspaceSettingsService } from '../modules/settings/WorkspaceSettingsService.js'
@@ -148,6 +149,11 @@ export interface UserSettingsModule {
 /** The model-preset feature's service, present only when its repository is wired. */
 export interface ModelPresetsModule {
   service: ModelPresetService
+}
+
+/** The consensus-group library's service, present only when its repository is wired. */
+export interface ConsensusGroupsModule {
+  service: ConsensusGroupService
 }
 
 /** The agent-prompt-override feature's service, present only when its repository is wired. */

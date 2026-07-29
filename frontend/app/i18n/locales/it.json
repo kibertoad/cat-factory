@@ -971,6 +971,47 @@
       "saved": "Ambiente di test predefinito salvato.",
       "savedState": "Salvato.",
       "saveFailed": "Impossibile salvare l'ambiente di test predefinito."
+    },
+    "consensusGroups": {
+      "title": "Gruppi di consenso",
+      "intro": "Panel di revisione riutilizzabili a cui un passo della pipeline può salire. Ogni gruppo porta la soglia di stima che un task deve superare, così il lavoro più pesante ottiene un panel più ampio senza una pipeline dedicata.",
+      "new": "Nuovo gruppo",
+      "list": {
+        "empty": "Nessun gruppo di consenso finora.",
+        "always": "Sempre",
+        "bar": "Da {bar}",
+        "editTitle": "Modifica gruppo",
+        "deleteTitle": "Elimina gruppo",
+        "participantCount": "nessun partecipante | un partecipante | {count} partecipanti"
+      },
+      "editor": {
+        "nameLabel": "Nome",
+        "namePlaceholder": "Panel di revisione approfondita",
+        "strategyLabel": "Strategia",
+        "descriptionLabel": "Descrizione",
+        "descriptionPlaceholder": "A cosa serve questo panel",
+        "participantsLabel": "Partecipanti",
+        "participantsHint": "Almeno due. È la diversità di ruolo e di modello a rendere un panel migliore di un singolo modello.",
+        "addParticipant": "Aggiungi partecipante",
+        "framingPlaceholder": "Prospettiva da cui argomenta questo partecipante",
+        "stepModel": "Modello del passo",
+        "synthesizerLabel": "Modello di sintesi",
+        "gatedLabel": "Solo per task sopra una soglia",
+        "gatedHint": "La stima che un task deve raggiungere per meritare questo panel. Lascia disattivato perché il gruppo si applichi sempre.",
+        "complexityThreshold": "Complessità",
+        "gatingIncomplete": "Imposta almeno una soglia oppure disattiva la condizione.",
+        "unnamedRole": "Revisore",
+        "cancel": "Annulla",
+        "save": "Salva gruppo"
+      },
+      "confirmDelete": {
+        "title": "Eliminare il gruppo di consenso?",
+        "body": "I passi che nominano «{name}» ricadranno sui gruppi rimanenti."
+      },
+      "toast": {
+        "saveFailed": "Impossibile salvare il gruppo di consenso",
+        "deleteFailed": "Impossibile eliminare il gruppo di consenso"
+      }
     }
   },
   "inspector": {
@@ -3618,7 +3659,11 @@
       "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
       "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo.",
       "promptEditTooltip": "Modifica il prompt di sistema di questo agente",
-      "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro"
+      "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro",
+      "consensusGroups": "Gruppi di consenso",
+      "consensusGroupsHint": "Scegli i panel riutilizzabili a cui questo passo può salire. Ognuno porta la propria soglia di stima; viene eseguito il più esigente che il task supera.",
+      "consensusGroupsActive": "Questo passo esegue il gruppo selezionato. Deseleziona tutti i gruppi per configurare qui i partecipanti.",
+      "consensusGroupAlways": "sempre"
     },
     "progress": {
       "status": {
@@ -4864,7 +4909,8 @@
       "synthesizing": "Sintesi in corso",
       "done": "Fatto",
       "failed": "Non riuscito"
-    }
+    },
+    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione"
   },
   "spec": {
     "title": "Requisiti",

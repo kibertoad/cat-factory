@@ -190,6 +190,10 @@ export {
   resolvePresetModelForKind,
 } from './modules/modelPresets/ModelPresetService.js'
 export {
+  ConsensusGroupService,
+  type ConsensusGroupServiceDependencies,
+} from './modules/consensusGroups/ConsensusGroupService.js'
+export {
   AgentPromptService,
   type AgentPromptServiceDependencies,
 } from './modules/agentPrompts/AgentPromptService.js'
@@ -352,6 +356,7 @@ export {
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,
+  type ConsensusGroupsModule,
   type AgentPromptsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,

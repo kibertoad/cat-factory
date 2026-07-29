@@ -7,6 +7,8 @@ import type {
   BrainstormSessionRepository,
   ClarityReviewRepository,
   CloudProvider,
+  ConsensusGroupRepository,
+  ConsensusStepConfig,
   DocInterviewRepository,
   DocKind,
   DocumentRepository,
@@ -26,9 +28,11 @@ import type {
 } from '@cat-factory/kernel'
 import {
   applicableFragmentIds,
+  applyConsensusGroup,
   buildExcerpt,
   CONTEXT_BUDGET,
   resolveServiceFrameBlock,
+  selectConsensusGroup,
 } from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
@@ -196,6 +200,13 @@ export interface AgentContextBuilderDeps {
    * no revision for the kind) ⇒ the shipped prompt, unchanged.
    */
   agentPrompts?: AgentPromptRepository
+  /**
+   * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
+   * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
+   * group the task's estimate earns is materialised onto the context. Absent (or the step names
+   * no groups) ⇒ the inline participants authored on the step, unchanged.
+   */
+  consensusGroups?: ConsensusGroupRepository
   documents?: DocumentRepository
   /**
    * Optional: canonicalise a URL named in a block's description to the (source,
@@ -360,6 +371,10 @@ export class AgentContextBuilder {
       // than in each executor, so the container / inline / consensus paths cannot disagree
       // about which prompt a step ran under.
       systemPromptOverride,
+      // The consensus config this dispatch actually runs under: the step's own config when it
+      // authored inline participants, the workspace group its estimate earned when it named a
+      // tier set, or nothing at all when no tier cleared (⇒ the standard single-actor agent).
+      consensus,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -381,6 +396,10 @@ export class AgentContextBuilder {
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       this.resolveSystemPromptOverride(workspaceId, agentKind, step),
+      // A consensus step's TIER SET: resolve the named groups and materialise the one this
+      // task's estimate earns. In the same read wave as the rest of the context, so a tiered
+      // step costs one extra batched query and nothing else.
+      this.resolveConsensusConfig(workspaceId, step, block),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -439,10 +458,11 @@ export class AgentContextBuilder {
             return validation ? { ralphValidation: validation } : {}
           })()
         : {}),
-      // Consensus config for this step (copied onto the step at run start). Read only
-      // by the optional consensus executor, which decides — possibly gated on the
-      // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
-      ...(step.consensus ? { consensus: step.consensus } : {}),
+      // Consensus config for this dispatch, already tier-resolved (see
+      // {@link resolveConsensusConfig}). Read only by the optional consensus executor, which
+      // decides — possibly gated on the block estimate below — whether to run the multi-model
+      // process. Absent ⇒ standard single-actor agent.
+      ...consensus,
       // The resolved skills for this dispatch — instructions + resource bodies, rendered
       // harness-aware by the container executor. Catalog versions are pinned onto the step
       // (skillVersions) inside the resolver. Absent when the run applies no skills.
@@ -1107,6 +1127,48 @@ export class AgentContextBuilder {
     // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
     // so the context literal stays a flat spread instead of gaining another conditional.
     return head?.text ? { systemPromptOverride: head.text } : {}
+  }
+
+  /**
+   * Resolve the consensus config this dispatch runs under, applying the step's TIER SET when
+   * it names one.
+   *
+   * A step either authors its panel inline (unchanged: the config is passed through for the
+   * executor to gate) or names a set of workspace consensus GROUPS, each with its own estimate
+   * bar. In the second case the groups are read in ONE batched query and
+   * {@link selectConsensusGroup} picks the most demanding tier the task's estimate clears; its
+   * panel is materialised onto the config and the tier is stamped for the transcript.
+   *
+   * Resolving here rather than in the consensus executor is what keeps the library out of the
+   * optional package: the executor stays a pure ConsensusStepConfig consumer that need not know
+   * a group store exists, and the container/inline paths see one already-decided config.
+   *
+   * Three ways this yields NO consensus, all meaning "run the standard single-actor agent":
+   * the step isn't consensus-enabled, no tier cleared the estimate, or the library isn't wired
+   * on this deployment while the step names only groups (which would otherwise dispatch a panel
+   * with zero participants). Returns the spread-ready slice, like the sibling resolvers.
+   */
+  private async resolveConsensusConfig(
+    workspaceId: string,
+    step: PipelineStep,
+    block: Block,
+  ): Promise<{ consensus?: ConsensusStepConfig }> {
+    const config = step.consensus
+    // A step with consensus switched OFF carries no consensus at all, rather than passing the
+    // disabled config through for the executor to reject. The executor's own `enabled` check
+    // makes the two equivalent for dispatch, and dropping it is what lets everything downstream
+    // read `context.consensus` as "this dispatch runs a panel" — which the repo-op layer now
+    // does to decide whether the agent it prepares context for will have a checkout.
+    if (!config?.enabled) return {}
+    const groupIds = config.groupIds ?? []
+    if (!groupIds.length) return { consensus: config }
+    // A step that names ONLY groups has no usable inline panel, so an unwired library must not
+    // silently degrade to the two-participant backstop — it degrades to the standard agent.
+    if (!this.deps.consensusGroups) return {}
+    const groups = await this.deps.consensusGroups.listByIds(workspaceId, groupIds)
+    const selected = selectConsensusGroup(groups, block.estimate)
+    if (!selected) return {}
+    return { consensus: applyConsensusGroup(config, selected) }
   }
 
   /**

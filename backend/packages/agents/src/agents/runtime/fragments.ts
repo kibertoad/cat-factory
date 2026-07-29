@@ -133,10 +133,19 @@ export const STANDARDS_CONTEXT_FILE_PREFIX = 'standard-'
  * prompt composition never has to know a specific kind's constants.
  */
 export function standardsDeliveredAsFiles(injectedContextFiles?: { path: string }[]): boolean {
-  return !!injectedContextFiles?.some(
-    (f) =>
-      f.path === STANDARDS_CONTEXT_INDEX_FILE || f.path.startsWith(STANDARDS_CONTEXT_FILE_PREFIX),
-  )
+  return !!injectedContextFiles?.some((f) => isStandardsContextFile(f.path))
+}
+
+/**
+ * Whether an injected context file is one of the STANDARDS files (the index, or a per-standard
+ * body), by the shared filename convention. The per-file half of
+ * {@link standardsDeliveredAsFiles}, stated once so the two cannot disagree about which files
+ * carry standards — an inline caller folds the standards through the system prompt (which honours
+ * the kind's {@link StandardsVerbosity}) and must therefore leave exactly these files out of its
+ * own prompt fold, or every standard lands twice and at the wrong verbosity.
+ */
+export function isStandardsContextFile(path: string): boolean {
+  return path === STANDARDS_CONTEXT_INDEX_FILE || path.startsWith(STANDARDS_CONTEXT_FILE_PREFIX)
 }
 
 /**

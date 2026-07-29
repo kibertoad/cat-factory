@@ -89,6 +89,7 @@ import {
   ModelPresetService,
   resolvePresetModelForKind,
 } from '../modules/modelPresets/ModelPresetService.js'
+import { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
@@ -114,6 +115,7 @@ import type {
   KaizenModule,
   MergeTrackRecordModule,
   ModelPresetsModule,
+  ConsensusGroupsModule,
   NotificationsModule,
   PackageRegistriesModule,
   PreflightsModule,
@@ -1323,6 +1325,25 @@ export function createModelPresetsModule(deps: CoreDependencies): ModelPresetsMo
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.defaultModelPresetId ? { defaultPresetId: deps.defaultModelPresetId } : {}),
+  })
+  return { service }
+}
+
+/**
+ * Assemble the consensus-group library when its repository is present. Absent ⇒ the controller
+ * 503s and a consensus step runs the inline participants authored on it, exactly as before the
+ * library existed.
+ */
+export function createConsensusGroupsModule(
+  deps: CoreDependencies,
+): ConsensusGroupsModule | undefined {
+  const { consensusGroupRepository } = deps
+  if (!consensusGroupRepository) return undefined
+  const service = new ConsensusGroupService({
+    consensusGroupRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
   })
   return { service }
 }

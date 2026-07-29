@@ -13,6 +13,7 @@ import {
   createIncidentEnrichmentModule,
   createAgentPromptsModule,
   createModelPresetsModule,
+  createConsensusGroupsModule,
   createServiceFragmentDefaultsModule,
 } from './container/modules.js'
 import { resolveCoreRuntime } from './container/runtime.js'
@@ -213,6 +214,7 @@ import type {
   KaizenModule,
   MergeTrackRecordModule,
   ModelPresetsModule,
+  ConsensusGroupsModule,
   NotificationsModule,
   PackageRegistriesModule,
   PreflightsModule,
@@ -240,6 +242,7 @@ export type {
   KaizenModule,
   MergeTrackRecordModule,
   ModelPresetsModule,
+  ConsensusGroupsModule,
   NotificationsModule,
   PackageRegistriesModule,
   PreflightsModule,
@@ -436,6 +439,8 @@ export interface OptionalCoreModules {
   userSettings?: UserSettingsModule
   /** Present only when the model-preset repository is wired (see CoreDependencies). */
   modelPresets?: ModelPresetsModule
+  /** Present only when the consensus-group repository is wired (see CoreDependencies). */
+  consensusGroups?: ConsensusGroupsModule
   /** Present only when the agent-prompt-override repository is wired (see CoreDependencies). */
   agentPrompts?: AgentPromptsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
@@ -484,6 +489,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('preview', () => createPreviewModule(dependencies))
   modules.build('incidentEnrichmentSettings', () => createIncidentEnrichmentModule(dependencies))
   modules.build('modelPresets', () => createModelPresetsModule(dependencies))
+  modules.build('consensusGroups', () => createConsensusGroupsModule(dependencies))
   modules.build('agentPrompts', () => createAgentPromptsModule(dependencies))
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }

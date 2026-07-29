@@ -124,6 +124,17 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
     @close="close"
   >
     <template v-if="session" #header-extras>
+      <!-- Which workspace consensus GROUP the run escalated to. Only a tiered step has one, and
+           the name is the session's own copy — so it still reads correctly after the library
+           entry was renamed or deleted. Without it, a reader asking "why did five models run on
+           this task" has the transcript but not the reason. -->
+      <span
+        v-if="session.groupName"
+        class="rounded-full bg-emerald-900/50 px-2.5 py-1 text-xs font-medium text-emerald-200"
+        :title="t('consensus.groupTitle')"
+      >
+        {{ session.groupName }}
+      </span>
       <span
         class="rounded-full px-2.5 py-1 text-xs font-medium"
         :class="STATUS_CLASS[session.status] ?? 'bg-slate-700 text-slate-300'"

@@ -55,12 +55,14 @@ function reviewThread(over: Partial<GitHubReviewThread> = {}): GitHubReviewThrea
 function ctxWith(
   listChangedFiles: RepoFiles['listChangedFiles'],
   taskTypeFields: { prNumber?: number; prUrl?: string } | undefined,
+  opts: { deliversCheckout?: boolean } = {},
 ): RepoOpContext {
   return {
     repo: { listChangedFiles } as unknown as RepoFiles,
     context: { block: { taskTypeFields } } as unknown as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    deliversCheckout: opts.deliversCheckout ?? true,
     logger: noopLogger,
   }
 }
@@ -75,6 +77,7 @@ function ctxWithThreads(
     context: { block: { taskTypeFields } } as unknown as AgentRunContext,
     branch: 'main',
     opensPr: false,
+    deliversCheckout: true,
     logger: noopLogger,
   }
 }
@@ -154,11 +157,65 @@ describe('planSlices', () => {
 })
 
 describe('renderPrDiffContext', () => {
+  // The checkout-less shape. A consensus panel reviews this file as inline text with no
+  // filesystem and no tools, so anything the container shape would have told it to fetch is
+  // simply unreachable — the failure mode being pinned here is a panel that reviews a large PR
+  // from its changed-file list while sounding as confident as one that read the diff.
+  describe('without a checkout (a consensus panel)', () => {
+    const bigDiff = () => {
+      const big = '+x\n'.repeat(3400) // ~10 KiB each; 40 files is far over the container budget
+      return Array.from({ length: 40 }, (_, i) => changedFile({ path: `src/f${i}.ts`, patch: big }))
+    }
+
+    it('never tells a reviewer with no git to read the diff from git', () => {
+      const out = renderPrDiffContext(2, bigDiff(), { deliversCheckout: false })
+      expect(out).not.toContain('git diff')
+      expect(out).not.toContain('git show')
+      expect(out).not.toContain('Patches — NOT inlined')
+      // ... nor claim a checkout it does not have.
+      expect(out).not.toContain('full base checkout')
+      expect(out).toContain('no checkout')
+    })
+
+    it('inlines the patches a container render would have withheld', () => {
+      const files = [changedFile({ path: 'src/a.ts', patch: '@@ +1 @@\n+alpha' }), ...bigDiff()]
+      const out = renderPrDiffContext(2, files, { deliversCheckout: false })
+      // Over the container all-or-nothing budget, so the container shape would inline nothing.
+      expect(renderPrDiffContext(2, files, { deliversCheckout: true })).not.toContain('+alpha')
+      expect(out).toContain('+alpha')
+    })
+
+    it('NAMES what did not fit instead of passing it off as reviewed', () => {
+      // Far past even the inline-only budget, so some files cannot be included at all.
+      const big = '+x\n'.repeat(10_000) // ~30 KiB each, under the per-file cap
+      const files = Array.from({ length: 40 }, (_, i) =>
+        changedFile({ path: `src/f${i}.ts`, patch: big }),
+      )
+      const out = renderPrDiffContext(2, files, { deliversCheckout: false })
+      expect(out).toContain('Files whose diff is NOT available to you')
+      expect(out).toContain('Do NOT infer')
+      // Every file still appears in the changed-file list, so the panel knows the change is wider
+      // than what it read rather than believing it saw all of it.
+      for (let i = 0; i < 40; i++) expect(out).toContain(`src/f${i}.ts`)
+    })
+
+    it('is unchanged for a small PR, which fits either way', () => {
+      const files = [changedFile({ path: 'src/a.ts', patch: '@@ +1 @@\n+kept' })]
+      const out = renderPrDiffContext(7, files, { deliversCheckout: false })
+      expect(out).toContain('+kept')
+      expect(out).not.toContain('NOT available to you')
+    })
+  })
+
   it('lists every changed file, the change shape and a suggested slicing', () => {
-    const out = renderPrDiffContext(9, [
-      changedFile({ path: 'src/a.ts' }),
-      changedFile({ path: 'src/b.ts', status: 'added', patch: '@@ +1 @@\n+hi' }),
-    ])
+    const out = renderPrDiffContext(
+      9,
+      [
+        changedFile({ path: 'src/a.ts' }),
+        changedFile({ path: 'src/b.ts', status: 'added', patch: '@@ +1 @@\n+hi' }),
+      ],
+      { deliversCheckout: true },
+    )
     expect(out).toContain('# Pull request #9')
     expect(out).toContain('## Changed files (2)')
     expect(out).toContain('- modified src/a.ts (+3/-1)')
@@ -168,19 +225,25 @@ describe('renderPrDiffContext', () => {
   })
 
   it('inlines every patch when the whole diff is small enough for one pass', () => {
-    const out = renderPrDiffContext(9, [
-      changedFile({ path: 'src/a.ts' }),
-      changedFile({ path: 'src/b.ts', status: 'added', patch: '@@ +1 @@\n+hi' }),
-    ])
+    const out = renderPrDiffContext(
+      9,
+      [
+        changedFile({ path: 'src/a.ts' }),
+        changedFile({ path: 'src/b.ts', status: 'added', patch: '@@ +1 @@\n+hi' }),
+      ],
+      { deliversCheckout: true },
+    )
     expect(out).toContain('## Patches')
     expect(out).toContain('+new')
     expect(out).toContain('+hi')
   })
 
   it('notes a rename and a null (binary/oversized) patch instead of a diff block', () => {
-    const out = renderPrDiffContext(1, [
-      changedFile({ path: 'new.ts', previousPath: 'old.ts', status: 'renamed', patch: null }),
-    ])
+    const out = renderPrDiffContext(
+      1,
+      [changedFile({ path: 'new.ts', previousPath: 'old.ts', status: 'renamed', patch: null })],
+      { deliversCheckout: true },
+    )
     expect(out).toContain('(renamed from old.ts)')
     expect(out).toContain('(no patch — binary or too large; read the file from the checkout)')
   })
@@ -193,7 +256,7 @@ describe('renderPrDiffContext', () => {
     const files = Array.from({ length: 40 }, (_, i) =>
       changedFile({ path: `src/f${i}.ts`, patch: big }),
     )
-    const out = renderPrDiffContext(2, files)
+    const out = renderPrDiffContext(2, files, { deliversCheckout: true })
     // Every file is still listed (the cheap slicing signal is never dropped) ...
     expect(out).toContain('## Changed files (40)')
     for (let i = 0; i < 40; i++) expect(out).toContain(`src/f${i}.ts`)
@@ -209,10 +272,14 @@ describe('renderPrDiffContext', () => {
     // A ~40 KiB generated-file patch is over the 32 KiB per-file cap: it is stubbed and left OUT
     // of the inline decision, so the small patch beside it is still inlined.
     const huge = '+x\n'.repeat(20000) // ~40 KiB
-    const out = renderPrDiffContext(3, [
-      changedFile({ path: 'pnpm-lock.yaml', patch: huge }),
-      changedFile({ path: 'src/small.ts', patch: '@@ +1 @@\n+kept' }),
-    ])
+    const out = renderPrDiffContext(
+      3,
+      [
+        changedFile({ path: 'pnpm-lock.yaml', patch: huge }),
+        changedFile({ path: 'src/small.ts', patch: '@@ +1 @@\n+kept' }),
+      ],
+      { deliversCheckout: true },
+    )
     expect(out).toContain('over the per-file inline budget')
     expect(out).not.toContain(huge)
     expect(out).toContain('+kept')
@@ -409,6 +476,7 @@ describe('standards as context files', () => {
       } as unknown as AgentRunContext,
       branch: 'main',
       opensPr: false,
+      deliversCheckout: true,
       logger: noopLogger,
     })
     expect(result?.contextFiles?.map((f) => f.path)).toEqual([
@@ -425,6 +493,7 @@ describe('standards as context files', () => {
         context: { block: {} } as unknown as AgentRunContext,
         branch: 'main',
         opensPr: false,
+        deliversCheckout: true,
         logger: noopLogger,
       }),
     ).toBeUndefined()

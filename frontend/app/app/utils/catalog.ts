@@ -366,13 +366,19 @@ export function __resetCustomAgentKindMetaForTest(): void {
  * Agent kinds eligible for the optional consensus mechanism (the pipeline builder shows an
  * "Enable Consensus" toggle for these). Mirrors the backend default-eligible set assigned by
  * `registerConsensusTraits()` in `@cat-factory/consensus` — hand-synced, like the other
- * frontend mirrors. In CONSENSUS mode `architect`/`analysis` reason over the provided context
- * rather than exploring a checkout (a deliberate trade, gated by the task estimate).
+ * frontend mirrors. In CONSENSUS mode a container-backed kind (`architect`/`analysis`, and the
+ * checkout-exploring reviewers) reasons over the provided context rather than exploring a
+ * checkout (a deliberate trade, gated by the task estimate); the review kinds carry the bulk of
+ * the value, since a review is a judgement and a panel judges better than one model.
  */
 export const CONSENSUS_ELIGIBLE_KINDS: ReadonlySet<string> = new Set([
   'architect',
   'analysis',
   'reviewer',
+  'pr-reviewer',
+  'doc-reviewer',
+  'architect-companion',
+  'spec-companion',
   'task-estimator',
 ])
 

@@ -2,6 +2,10 @@ import {
   createRiskPolicyContract,
   listMergeClassRollupsContract,
   tagMergeReviewEffortContract,
+  createConsensusGroupContract,
+  deleteConsensusGroupContract,
+  listConsensusGroupsContract,
+  updateConsensusGroupContract,
   createModelPresetContract,
   deleteRiskPolicyContract,
   deleteModelPresetContract,
@@ -14,6 +18,7 @@ import {
 } from '@cat-factory/contracts'
 import type { ReviewEffort, UpdateRiskPolicyInput } from '~/types/merge'
 import type { CreateModelPresetInput, UpdateModelPresetInput } from '~/types/model-presets'
+import type { CreateConsensusGroupInput, UpdateConsensusGroupInput } from '~/types/consensus'
 import type { SendParams } from './client'
 import type { ApiContext } from './context'
 
@@ -86,5 +91,22 @@ export function presetsApi({ send, ws }: ApiContext) {
     // a drifted one, or materialise a new built-in that appeared). Custom presets reject this.
     reseedModelPreset: (workspaceId: string, presetId: string) =>
       send(reseedModelPresetContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+
+    // ---- consensus groups (the estimate-gated review panels a step escalates to) ----
+    listConsensusGroups: (workspaceId: string) =>
+      send(listConsensusGroupsContract, { pathPrefix: ws(workspaceId) }),
+
+    createConsensusGroup: (workspaceId: string, body: CreateConsensusGroupInput) =>
+      send(createConsensusGroupContract, { pathPrefix: ws(workspaceId), body }),
+
+    updateConsensusGroup: (workspaceId: string, groupId: string, body: UpdateConsensusGroupInput) =>
+      send(updateConsensusGroupContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { groupId },
+        body,
+      }),
+
+    deleteConsensusGroup: (workspaceId: string, groupId: string) =>
+      send(deleteConsensusGroupContract, { pathPrefix: ws(workspaceId), pathParams: { groupId } }),
   }
 }

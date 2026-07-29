@@ -16,6 +16,7 @@ import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
+import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -405,6 +406,11 @@ function fail(title: string, e: unknown) {
                   {{ t('settings.modelConfiguration.list.empty') }}
                 </p>
               </div>
+
+              <!-- The consensus-GROUP library: which model PANELS review the workspace's heavier
+                   tasks, and at what estimate bar. Beside the presets because both answer "which
+                   models do the work"; its own component so this screen keeps its size budget. -->
+              <ConsensusGroupsSection />
             </template>
 
             <!-- ===== editor view ===== -->

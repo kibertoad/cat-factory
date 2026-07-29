@@ -12,6 +12,7 @@ import { useFragmentsStore } from '~/stores/fragments'
 import { useGitHubStore } from '~/stores/github'
 import { useInitiativesStore } from '~/stores/initiative'
 import { useModelPresetsStore } from '~/stores/modelPresets'
+import { useConsensusGroupsStore } from '~/stores/consensusGroups'
 import { useNotificationsStore } from '~/stores/notifications'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
@@ -72,6 +73,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useWorkspaceSettingsStore().hydrate(snapshot.settings)
   useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
   useModelPresetsStore().hydrate(snapshot.modelPresets ?? [], snapshot.modelPresetCatalogVersions)
+  useConsensusGroupsStore().hydrate(snapshot.consensusGroups ?? [])
   useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
   useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
   useInitiativesStore().hydrate(snapshot.initiatives)

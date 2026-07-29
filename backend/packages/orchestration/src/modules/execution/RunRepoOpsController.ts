@@ -1,4 +1,5 @@
 import type {
+  AgentKind,
   AgentRunContext,
   AgentRunResult,
   AgentStepSpec,
@@ -15,7 +16,13 @@ import type {
 } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { type PullRequestRef, resolveAprioriWorkingBranch } from '@cat-factory/contracts'
-import { blueprintPostOp, runRepoOps, specPostOp, specPromotionPostOp } from '@cat-factory/agents'
+import {
+  blueprintPostOp,
+  dispatchDeliversCheckout,
+  runRepoOps,
+  specPostOp,
+  specPromotionPostOp,
+} from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   BLUEPRINTS_AGENT_KIND,
@@ -163,6 +170,22 @@ export class RunRepoOpsController {
   }
 
   /**
+   * Whether the agent this dispatch feeds will have a real checkout, for the ops preparing its
+   * context ({@link RepoOpContext.deliversCheckout}).
+   *
+   * Reads the consensus config off the context the builder has ALREADY resolved for this
+   * dispatch — including the tier a workspace consensus group won — so the answer reflects the
+   * panel that will actually run rather than what the step declared. The predicate itself lives
+   * in the agent catalog and is the one the composite executor routes on, so the preparation and
+   * the routing cannot drift apart.
+   */
+  private deliversCheckout(agentKind: AgentKind, context: AgentRunContext): boolean {
+    return dispatchDeliversCheckout(agentKind, this.agentKindRegistry, {
+      consensusEnabled: context.consensus?.enabled === true,
+    })
+  }
+
+  /**
    * Run a registered kind's PRE-op hooks before its agent step dispatches: deterministic
    * backend work (read a baseline artifact into the prompt, etc.) over a checkout-free
    * {@link RepoFiles}. No-op for built-in / unregistered kinds, when the kind declares no
@@ -190,6 +213,11 @@ export class RunRepoOpsController {
       context,
       branch,
       opensPr: runOpensPr(instance),
+      // Whether the agent this preparation feeds will have a checkout to read from. Resolved
+      // from the SAME predicate the composite executor routes on, off the consensus config the
+      // context builder has already settled for this dispatch — so a preOp preparing context
+      // for an inline panel cannot be told to assume a filesystem the panel does not have.
+      deliversCheckout: this.deliversCheckout(step.agentKind, context),
       logger: this.opLogger(workspaceId, instance, step, 'pre'),
     })
     // Surface any files a preOp prepared onto the SAME context object the executor dispatches
@@ -241,6 +269,7 @@ export class RunRepoOpsController {
       block,
     )
     const opensPr = runOpensPr(instance)
+    const deliversCheckout = this.deliversCheckout(step.agentKind, context)
     // Registered (custom) kinds resolve their branch from their declared clone target.
     if (registered.length > 0) {
       const branch = await this.resolveRepoOpBranch(
@@ -253,6 +282,7 @@ export class RunRepoOpsController {
         context,
         branch,
         opensPr,
+        deliversCheckout,
         result,
         logger: this.opLogger(workspaceId, instance, step, 'post'),
       })
@@ -273,6 +303,7 @@ export class RunRepoOpsController {
         context,
         branch,
         opensPr,
+        deliversCheckout,
         result,
         logger: this.opLogger(workspaceId, instance, step, 'post'),
       })

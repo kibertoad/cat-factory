@@ -134,6 +134,7 @@ export { KAIZEN_SYSTEM_PROMPT } from './agents/prompts/kaizen.js'
 export {
   composeSystemPrompt,
   composeBlockSystemPrompt,
+  isStandardsContextFile,
   standardsDeliveredAsFiles,
   STANDARDS_CONTEXT_INDEX_FILE,
   STANDARDS_CONTEXT_FILE_PREFIX,
@@ -167,6 +168,14 @@ export {
   companionTargets,
   isContainerBackedCompanion,
 } from './agents/kinds/companions.js'
+// The ONE definition of "does this dispatch hand the agent a real checkout?", shared by the
+// composite executor's ROUTING and the engine's preOp context preparation so the two can never
+// disagree about whether an agent can read files or run git.
+export {
+  CONTAINER_AGENT_KINDS,
+  dispatchDeliversCheckout,
+  runsInContainer,
+} from './agents/kinds/container-surface.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are
@@ -367,6 +376,7 @@ export {
   FINAL_ANSWER_IN_REPLY,
   FOLLOW_UP_GUIDANCE,
   FRAGMENT_ADHERENCE_GUIDANCE,
+  INLINE_PANEL_SURFACE,
   PR_DESCRIPTION_FILE,
   PR_DESCRIPTION_GUIDANCE,
   STANDARDS_FOOTER,
