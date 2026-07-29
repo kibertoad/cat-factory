@@ -22,11 +22,8 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import {
-  type AppConfig,
-  createStoreAgentContextGate,
-  wrapResolverWithLimiter,
-} from '@cat-factory/server'
+import { createStoreAgentContextGate } from '@cat-factory/kernel'
+import { type AppConfig, wrapResolverWithLimiter } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
 import type { DrizzleDb } from './db/client.js'

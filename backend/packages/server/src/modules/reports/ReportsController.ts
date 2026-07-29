@@ -3,16 +3,13 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { UnavailableError } from '@cat-factory/kernel'
+import { requireUser } from '../../http/guards.js'
 
-/** The signed-in user, or null. Generic over the (contract-typed) env, like AccountController. */
+/** The signed-in user, or a 401. Generic over the (contract-typed) env, like AccountController. */
 function accountUser<E extends AppEnv>(c: Context<E>) {
-  const user = c.get('user')
-  return user ? { id: user.id, login: user.login, name: user.name } : null
-}
-
-const signInRequired = (): never => {
-  throw new UnauthorizedError('Sign in to view reports')
+  const user = requireUser(c, 'Sign in to view reports')
+  return { id: user.id, login: user.login, name: user.name }
 }
 
 /**
@@ -36,7 +33,6 @@ export function reportsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getReportsContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.reports) {
       throw new UnavailableError('Reports are not available on this deployment')

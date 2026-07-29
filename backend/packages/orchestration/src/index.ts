@@ -71,6 +71,12 @@ export {
   type DriveOutcome,
 } from './modules/execution/drive.js'
 export {
+  failureFromAdvanceError,
+  failureFromDriver,
+  failureFromResult,
+  type RunFailure,
+} from './modules/execution/runFailure.js'
+export {
   aggregateCi,
   isCiGreen,
   describeFailingChecks,

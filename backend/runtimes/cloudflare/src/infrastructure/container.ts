@@ -23,6 +23,7 @@ import {
   type WebSearchAvailability,
   type WorkRunner,
   type ProviderRegistry,
+  createStoreAgentContextGate,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -111,7 +112,6 @@ import {
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
   createScopedModelProviderResolver,
-  createStoreAgentContextGate,
   wrapResolverWithLimiter,
   ENV_HELP,
   configProblem,

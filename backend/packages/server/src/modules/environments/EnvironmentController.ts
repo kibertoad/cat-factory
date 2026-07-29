@@ -36,19 +36,22 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the environment module or send a 503, returning null when unconfigured. */
-function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModule | null {
-  return c.get('container').environments ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Environment integration is not configured')
+/** Resolve the environment module, or refuse with a 503 naming what isn't wired. */
+function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModule {
+  return requireCapability(
+    c.get('container').environments,
+    'Environment integration is not configured',
+  )
 }
 
 /** The self-test service, present only when its run store + a git provider are wired. */
-function requireEnvironmentTest<E extends AppEnv>(c: Context<E>): EnvironmentTestService | null {
-  return c.get('container').environments?.environmentTest ?? null
+function requireEnvironmentTest<E extends AppEnv>(c: Context<E>): EnvironmentTestService {
+  return requireCapability(
+    c.get('container').environments?.environmentTest,
+    'Environment integration is not configured',
+  )
 }
 
 const testUnavailable = (): never => {
@@ -74,14 +77,12 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getEnvironmentConnectionContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const connection = await env.connectionService.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
 
   buildHonoRoute(app, registerEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const { config, secrets } = c.req.valid('json')
     const connection = await env.connectionService.register(param(c, 'workspaceId'), {
       config,
@@ -92,7 +93,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateEnvironmentSecretsContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const connection = await env.connectionService.updateSecrets(
       param(c, 'workspaceId'),
       c.req.valid('json').secrets,
@@ -102,7 +102,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, unregisterEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     await env.connectionService.unregister(param(c, 'workspaceId'))
     return c.body(null, 204)
   })
@@ -111,7 +110,6 @@ export function environmentController(): Hono<AppEnv> {
   // so the UI can render a connect form generically.
   buildHonoRoute(app, describeEnvironmentProviderContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.describeProvider(param(c, 'workspaceId'), c.req.query('kind')),
       200,
@@ -121,7 +119,6 @@ export function environmentController(): Hono<AppEnv> {
   // Probe a candidate connection before saving (nothing persisted).
   buildHonoRoute(app, testEnvironmentConnectionContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.testConnection(param(c, 'workspaceId'), c.req.valid('json')),
       200,
@@ -132,7 +129,6 @@ export function environmentController(): Hono<AppEnv> {
   // provider's `.deploy.yml` is present + well-formed). Nothing persisted.
   buildHonoRoute(app, validateEnvironmentRepoContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.validateRepo(param(c, 'workspaceId'), c.req.valid('json')),
       200,
@@ -143,7 +139,6 @@ export function environmentController(): Hono<AppEnv> {
   // in a target repo from UI-collected variables.
   buildHonoRoute(app, bootstrapEnvironmentRepoContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.bootstrapRepo(param(c, 'workspaceId'), c.req.valid('json')),
       200,
@@ -154,7 +149,6 @@ export function environmentController(): Hono<AppEnv> {
   // checkout-free over RepoFiles). Nothing persisted — the SPA prefills the confirm form.
   buildHonoRoute(app, detectServiceProvisioningContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.detectServiceProvisioning(
         param(c, 'workspaceId'),
@@ -168,7 +162,6 @@ export function environmentController(): Hono<AppEnv> {
   // over RepoFiles). Nothing persisted — the SPA prefills a preview the user applies.
   buildHonoRoute(app, detectFrontendConfigContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.detectFrontendConfig(
         param(c, 'workspaceId'),
@@ -182,7 +175,6 @@ export function environmentController(): Hono<AppEnv> {
   // durable env-config-repair run tracked exactly like the provider-config repair fallback.
   buildHonoRoute(app, repairCustomManifestContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.repairCustomManifest(
         param(c, 'workspaceId'),
@@ -198,7 +190,6 @@ export function environmentController(): Hono<AppEnv> {
   // custom-manifest-type catalog (registered code types merged with workspace rows).
   buildHonoRoute(app, listEnvironmentHandlersContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const ws = param(c, 'workspaceId')
     const [handlers, customTypes] = await Promise.all([
       env.connectionService.listHandlers(ws),
@@ -209,7 +200,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, registerEnvironmentHandlerContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const body = c.req.valid('json')
     const view = await env.connectionService.registerHandler(param(c, 'workspaceId'), body)
     return c.json(view, 201)
@@ -219,7 +209,6 @@ export function environmentController(): Hono<AppEnv> {
   // the Kubernetes engine form's "Test connection" reaches the apiserver with the supplied token.
   buildHonoRoute(app, testEnvironmentHandlerContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(
       await env.connectionService.testHandler(param(c, 'workspaceId'), c.req.valid('json')),
       200,
@@ -228,7 +217,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateEnvironmentHandlerSecretsContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const provisionType = v.parse(provisionTypeSchema, c.req.valid('param').provisionType)
     const manifestId = c.req.valid('query').manifestId ?? null
     const view = await env.connectionService.updateHandlerSecrets(
@@ -242,7 +230,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, unregisterEnvironmentHandlerContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const provisionType = v.parse(provisionTypeSchema, c.req.valid('param').provisionType)
     const manifestId = c.req.valid('query').manifestId ?? null
     await env.connectionService.unregisterHandler(
@@ -257,7 +244,6 @@ export function environmentController(): Hono<AppEnv> {
   // `custom` provision-type catalog; the registered code providers are the other half).
   buildHonoRoute(app, upsertCustomManifestTypeContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const type = await env.connectionService.upsertCustomType(
       param(c, 'workspaceId'),
       c.req.valid('param').manifestId,
@@ -268,7 +254,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeCustomManifestTypeContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     await env.connectionService.removeCustomType(
       param(c, 'workspaceId'),
       c.req.valid('param').manifestId,
@@ -280,13 +265,11 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listEnvironmentsContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     return c.json(await env.provisioningService.listHandles(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, getEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const handle = await env.provisioningService.getHandle(
       param(c, 'workspaceId'),
       c.req.valid('param').environmentId,
@@ -297,7 +280,6 @@ export function environmentController(): Hono<AppEnv> {
   // The only endpoint that returns decrypted access credentials (over TLS).
   buildHonoRoute(app, getEnvironmentAccessContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const handle = await env.provisioningService.getHandleWithAccess(
       param(c, 'workspaceId'),
       c.req.valid('param').environmentId,
@@ -307,7 +289,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, provisionEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const { blockId, inputs } = c.req.valid('json')
     const handle = await env.provisioningService.provision({
       workspaceId: param(c, 'workspaceId'),
@@ -319,7 +300,6 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, teardownEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
-    if (!env) return unavailable()
     const handle = await env.teardownService.teardown(
       param(c, 'workspaceId'),
       c.req.valid('param').environmentId,

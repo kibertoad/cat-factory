@@ -19,12 +19,13 @@ import {
   updateAccountContract,
   updateAccountSettingsContract,
 } from '@cat-factory/contracts'
-import { ConflictError, UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { ConflictError, UnavailableError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { apiKeyToWire } from '../providers/ApiKeyController.js'
+import { requireUser } from '../../http/guards.js'
 
 /**
  * The signed-in user, narrowed to what the tenancy layer needs. Generic over the
@@ -32,12 +33,8 @@ import { apiKeyToWire } from '../providers/ApiKeyController.js'
  * which Hono treats as a distinct, non-assignable env from the bare `AppEnv`.
  */
 function accountUser<E extends AppEnv>(c: Context<E>) {
-  const user = c.get('user')
-  return user ? { id: user.id, login: user.login, name: user.name } : null
-}
-
-const signInRequired = (): never => {
-  throw new UnauthorizedError('Sign in to manage accounts')
+  const user = requireUser(c, 'Sign in to manage accounts')
+  return { id: user.id, login: user.login, name: user.name }
 }
 
 /**
@@ -61,14 +58,12 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, createAccountContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const account = await c.get('container').accountService.createOrg(user, c.req.valid('json'))
     return c.json(account, 201)
   })
 
   buildHonoRoute(app, updateAccountContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const account = await c
       .get('container')
       .accountService.updateSettings(c.req.valid('param').accountId, user.id, c.req.valid('json'))
@@ -77,7 +72,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listAccountMembersContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const accounts = c.get('container').accountService
     const { accountId } = c.req.valid('param')
     // Membership in the account is required to see its roster (404 otherwise).
@@ -87,7 +81,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, addAccountMemberContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const body = c.req.valid('json')
     const member = await c
       .get('container')
@@ -98,7 +91,6 @@ export function accountController(): Hono<AppEnv> {
   // Set a member's role set (admin-only). The acting admin can't drop their own admin.
   buildHonoRoute(app, setMemberRolesContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const { accountId, userId } = c.req.valid('param')
     const member = await c
       .get('container')
@@ -111,7 +103,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listInvitationsContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.invitations) return c.json([], 200)
     const { accountId } = c.req.valid('param')
@@ -122,7 +113,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, createInvitationContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.invitations) {
       throw new UnavailableError('Invitations are not configured')
@@ -141,7 +131,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, revokeInvitationContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.invitations) return c.body(null, 204)
     const { accountId, invitationId } = c.req.valid('param')
@@ -161,7 +150,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listAccountApiKeysContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable()
     const { accountId } = c.req.valid('param')
@@ -172,7 +160,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, addAccountApiKeyContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable()
     const { accountId } = c.req.valid('param')
@@ -183,7 +170,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateAccountApiKeyContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable()
     const { accountId, id } = c.req.valid('param')
@@ -194,7 +180,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeAccountApiKeyContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.apiKeys) return apiKeysUnavailable()
     const { accountId, id } = c.req.valid('param')
@@ -208,7 +193,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getEmailConnectionContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.email) return c.json({ connection: null, configured: false }, 200)
     const { accountId } = c.req.valid('param')
@@ -219,7 +203,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, connectEmailContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.email) {
       throw new UnavailableError('Email is not configured')
@@ -232,7 +215,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, disconnectEmailContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.email) return c.body(null, 204)
     const { accountId } = c.req.valid('param')
@@ -243,7 +225,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, testEmailContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.email) {
       throw new UnavailableError('Email is not configured')
@@ -267,7 +248,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getAccountSettingsContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.accountSettings) return settingsUnavailable()
     const { accountId } = c.req.valid('param')
@@ -277,7 +257,6 @@ export function accountController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateAccountSettingsContract, async (c) => {
     const user = accountUser(c)
-    if (!user) return signInRequired()
     const container = c.get('container')
     if (!container.accountSettings) return settingsUnavailable()
     const { accountId } = c.req.valid('param')

@@ -9,37 +9,31 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { requireCapability, requireUser } from '../../http/guards.js'
 
 // Per-USER locally-run model endpoints (Ollama / LM Studio / llama.cpp / vLLM / custom
 // OpenAI-compatible runners). A runner lives on the user's own machine, so endpoints are
 // scoped to the signed-in user — mounted at the root (not under a workspace) and require
 // a signed-in user, like personal subscriptions. The optional bearer key is write-only.
 
-const signInRequired = (): never => {
-  throw new UnauthorizedError('Sign in to manage local model runners')
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Local model runner storage is not configured')
-}
-
 export function localModelEndpointController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listLocalModelEndpointsContract, async (c) => {
-    const local = c.get('container').localModelEndpoints
-    if (!local) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const local = requireCapability(
+      c.get('container').localModelEndpoints,
+      'Local model runner storage is not configured',
+    )
+    const user = requireUser(c, 'Sign in to manage local model runners')
     return c.json({ endpoints: await local.list(user.id) }, 200)
   })
 
   buildHonoRoute(app, upsertLocalModelEndpointContract, async (c) => {
-    const local = c.get('container').localModelEndpoints
-    if (!local) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const local = requireCapability(
+      c.get('container').localModelEndpoints,
+      'Local model runner storage is not configured',
+    )
+    const user = requireUser(c, 'Sign in to manage local model runners')
     const provider = v.parse(localRunnerSchema, c.req.valid('param').provider)
     const body = c.req.valid('json')
     const endpoint = await local.upsert(user.id, { ...body, provider })
@@ -47,10 +41,11 @@ export function localModelEndpointController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, removeLocalModelEndpointContract, async (c) => {
-    const local = c.get('container').localModelEndpoints
-    if (!local) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const local = requireCapability(
+      c.get('container').localModelEndpoints,
+      'Local model runner storage is not configured',
+    )
+    const user = requireUser(c, 'Sign in to manage local model runners')
     const provider = v.parse(localRunnerSchema, c.req.valid('param').provider)
     await local.remove(user.id, provider)
     return c.body(null, 204)
@@ -58,10 +53,11 @@ export function localModelEndpointController(): Hono<AppEnv> {
 
   // Probe a runner's `/models` server-side so the UI can validate the URL + list models.
   buildHonoRoute(app, testLocalModelEndpointContract, async (c) => {
-    const local = c.get('container').localModelEndpoints
-    if (!local) return unavailable()
-    const user = c.get('user')
-    if (!user) return signInRequired()
+    const local = requireCapability(
+      c.get('container').localModelEndpoints,
+      'Local model runner storage is not configured',
+    )
+    requireUser(c, 'Sign in to manage local model runners')
     return c.json(await local.testConnection(c.req.valid('json')), 200)
   })
 

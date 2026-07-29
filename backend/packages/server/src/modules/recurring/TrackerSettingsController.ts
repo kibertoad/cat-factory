@@ -6,15 +6,11 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the tracker-settings module or send a 503, returning null when unconfigured. */
-function requireTracker<E extends AppEnv>(c: Context<E>): TrackerModule | null {
-  return c.get('container').tracker ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Issue tracker is not configured')
+/** Resolve the tracker-settings module, or refuse with a 503 naming what isn't wired. */
+function requireTracker<E extends AppEnv>(c: Context<E>): TrackerModule {
+  return requireCapability(c.get('container').tracker, 'Issue tracker is not configured')
 }
 
 /**
@@ -27,13 +23,11 @@ export function trackerSettingsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getTrackerSettingsContract, async (c) => {
     const tracker = requireTracker(c)
-    if (!tracker) return unavailable()
     return c.json(await tracker.service.get(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, putTrackerSettingsContract, async (c) => {
     const tracker = requireTracker(c)
-    if (!tracker) return unavailable()
     return c.json(await tracker.service.put(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 

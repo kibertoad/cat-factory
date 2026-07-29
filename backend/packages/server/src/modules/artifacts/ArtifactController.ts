@@ -11,7 +11,7 @@ import {
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
 /**
  * Resolve the binary-artifact store for the request's workspace (its account's configured
@@ -21,10 +21,6 @@ import { UnavailableError } from '@cat-factory/kernel'
 async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArtifactStore | null> {
   const resolve = c.get('container').resolveBinaryArtifactStore
   return resolve ? resolve(param(c, 'workspaceId')) : null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Binary-artifact storage is not configured')
 }
 
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
@@ -51,8 +47,10 @@ export function artifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const store = await requireStore(c)
-      if (!store) return unavailable()
+      const store = requireCapability(
+        await requireStore(c),
+        'Binary-artifact storage is not configured',
+      )
       // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
       // into memory; the exact per-file ceiling is still enforced after parsing below.
       if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
@@ -117,8 +115,10 @@ export function artifactController(): Hono<AppEnv> {
 
   // Stream a stored blob's bytes (the metadata names its content type).
   app.get('/artifacts/:id/blob', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable()
+    const store = requireCapability(
+      await requireStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const workspaceId = param(c, 'workspaceId')
     const id = param(c, 'id')
     // Read metadata + bytes in a SINGLE metadata lookup (the serve path needs both the
@@ -139,8 +139,10 @@ export function artifactController(): Hono<AppEnv> {
 
   // List a run's artifacts (metadata only; the gate pairs screenshots vs references by view).
   app.get('/executions/:executionId/artifacts', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable()
+    const store = requireCapability(
+      await requireStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const artifacts = await store.listByExecution(param(c, 'workspaceId'), param(c, 'executionId'))
     return c.json({ artifacts }, 200)
   })
@@ -148,8 +150,10 @@ export function artifactController(): Hono<AppEnv> {
   // List a block's artifacts (e.g. its uploaded reference design images, which carry no
   // executionId because they're attached before any run).
   app.get('/blocks/:blockId/artifacts', async (c) => {
-    const store = await requireStore(c)
-    if (!store) return unavailable()
+    const store = requireCapability(
+      await requireStore(c),
+      'Binary-artifact storage is not configured',
+    )
     const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json({ artifacts }, 200)
   })

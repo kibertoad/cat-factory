@@ -13,14 +13,14 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
 /** Resolve the skill-library module or send a 503 when unconfigured. */
-function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule | null {
-  return c.get('container').skillLibrary ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('The Claude Skills library is not configured')
+function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule {
+  return requireCapability(
+    c.get('container').skillLibrary,
+    'The Claude Skills library is not configured',
+  )
 }
 
 const sourcesUnavailable = (): never => {
@@ -47,7 +47,6 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listAccountSkillsContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     return c.json(await lib.catalogService.list(accountId(c)), 200)
   })
 
@@ -55,14 +54,12 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listSkillSourcesContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     if (!lib.sourceService) return sourcesUnavailable()
     return c.json(await lib.sourceService.list(accountId(c)), 200)
   })
 
   buildHonoRoute(app, linkSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     if (!lib.sourceService) return sourcesUnavailable()
     const source = await lib.sourceService.link(accountId(c), c.req.valid('json'))
     return c.json(source, 201)
@@ -70,7 +67,6 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, unlinkSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     if (!lib.sourceService) return sourcesUnavailable()
     await lib.sourceService.unlink(accountId(c), c.req.valid('param').id)
     return c.body(null, 204)
@@ -78,14 +74,12 @@ export function skillLibraryController(): Hono<AppEnv> {
 
   buildHonoRoute(app, skillSourceStatusContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     if (!lib.sourceService) return sourcesUnavailable()
     return c.json(await lib.sourceService.status(accountId(c), c.req.valid('param').id), 200)
   })
 
   buildHonoRoute(app, syncSkillSourceContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!lib) return unavailable()
     if (!lib.sourceService) return sourcesUnavailable()
     return c.json(await lib.sourceService.sync(accountId(c), c.req.valid('param').id), 200)
   })

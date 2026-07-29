@@ -235,6 +235,45 @@ is named: it adapts pino onto the port. Full patterns:
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`; a child writes into the
   same `lines` array, so correlation fields are assertable too.
 
+## A controller REFUSES by throwing a `DomainError`, never by building an envelope
+
+`handleError` (`@cat-factory/server`'s `http/errorHandler.ts`) is mounted as `app.onError` on every
+facade and is the ONE producer of the `{ error: { code, message, details } }` wire envelope. A
+hand-built `c.json({ error: { code: 'unavailable' } }, 503)` is BANNED: an envelope literal
+structurally cannot carry `details.reason` — the machine-readable code the SPA maps to translated
+copy and to its remedy actions — which is how ~120 of them accumulated with the reason smuggled
+into the `code` slot instead.
+
+- **The vocabulary is kernel's `domain/errors.ts`**, and every member takes `details`:
+  `NotFoundError` 404, `UnauthorizedError` 401, `ForbiddenError` 403, `ConflictError` 409,
+  `ValidationError` 422, `CredentialRequiredError` 428, `RateLimitedError` 429,
+  `UnavailableError` 503. Adding a status means adding a class plus its row in `STATUS_BY_CODE`
+  and in the persistence-RPC `ERROR_STATUS` map — both are `Record<Code, …>`, so both fail to
+  compile until mapped.
+- **`code` is the STATUS CLASS; the machine-readable cause is `details.reason`.** Never invent a
+  new `code` value to express a reason.
+- **Guard with the total accessors**, not a nullable read plus an `if` at every route:
+  `requireCapability(c.get('container').x, 'X is not configured')` and
+  `requireUser(c, 'Sign in to …')` (`http/guards.ts`), the siblings of `param()`. A per-controller
+  `requireX(c): X` that throws is the shape; a `requireX(c): X | null` paired with a local
+  `unavailable()` thrower is the shape it replaced — that `| null` is what forced every route to
+  restate the guard, and 51 controllers had each declared their own copy of the thrower. The
+  exception is a boolean FLAG (`cfg.passwordEnabled`): there is no value to narrow, so it throws
+  directly.
+- **Rethrow, don't re-map.** Catching a `ConflictError` to re-emit it as `c.json({code:'conflict'})`
+  drops its `reason`; let it propagate. The one deliberate exception is a handler that flattens
+  distinct causes ON PURPOSE because the distinction is an ORACLE (password reset: "no such token"
+  vs "expired" vs "used").
+- **Three surfaces keep hand-built envelopes, each documented at the site**: the LLM/web-search
+  proxy pair (each failure must be RECORDED on the call metric before responding, and they answer
+  402/413/502 — statuses no domain class covers; they always carry a `code` and never echo an
+  upstream exception's text, which can hold the request URL or an auth header),
+  `publicApiAuth`/`PublicDecisionController` (failures are DATA, so the contract handlers stay
+  typed against their declared response schemas), and the `/internal` relay controllers (a
+  different `{ ok: false }` wire shape their machine clients parse).
+- **A test that drives a controller through a bare `new Hono()` must mount
+  `app.onError(handleError)`**, or every refusal reads as a 500.
+
 ## Caching goes through the app cache seam, never a homebrew Map
 
 A per-service `Map` with a manual TTL, a module-global memo, or an ad-hoc `{ value, expiresAt }`
@@ -1323,7 +1362,14 @@ error handling — and the phased plan to close them — are tracked in
 
 - **Gating**: the snapshot and the search queries require BOTH `LLM_RECORD_PROMPTS` AND the
   per-workspace `storeAgentContext` (the operator opt-out wins). Each service wires only when its
-  repository is present.
+  repository is present. **That double gate governs every path that captures a model BODY, not
+  just the ones that persist it** — the EXTERNAL trace fan-out answers to it too, on the proxied
+  path AND the inline one. It is ONE shared helper, kernel's `createStoreAgentContextGate`,
+  precisely because the two paths diverged: the inline feeder consulted only the deployment
+  switch, so an opted-out workspace still shipped its judge/consensus/requirements-writer prompts
+  and replies to Langfuse/OTel. A new body-capturing path builds its gate from that factory rather
+  than re-deriving the rule; a read that THROWS fails closed at the caller, because an unreadable
+  settings row is not consent.
 - **Surfacing**: `GET /workspaces/:ws/executions/:executionId/{agent-context,search-queries}` →
   `stores/observability.ts` → `ObservabilityPanel.vue`. A run-scoped endpoint returns an EMPTY list
   rather than erroring when its sink isn't wired.

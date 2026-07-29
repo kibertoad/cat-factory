@@ -10,17 +10,13 @@ import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the incident-enrichment module or send a 503, returning null when unconfigured. */
+/** Resolve the incident-enrichment module, or refuse with a 503 naming what isn't wired. */
 function requireIncidentEnrichment<E extends AppEnv>(
   c: Context<E>,
 ): IncidentEnrichmentModule | null {
   return c.get('container').incidentEnrichmentSettings ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('The incident-enrichment integration is not configured')
 }
 
 /**
@@ -33,20 +29,26 @@ export function incidentEnrichmentController(): Hono<AppEnv> {
   app.use('*', requireWorkspacePermission('settings.manage'))
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable()
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     return c.json(await ie.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, setIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable()
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteIncidentEnrichmentContract, async (c) => {
-    const ie = requireIncidentEnrichment(c)
-    if (!ie) return unavailable()
+    const ie = requireCapability(
+      requireIncidentEnrichment(c),
+      'The incident-enrichment integration is not configured',
+    )
     await ie.service.deleteConnection(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

@@ -61,6 +61,17 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})` — keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `domain/errors.ts` — the **`DomainError` hierarchy**, the whole vocabulary a service may raise
+  toward the wire: `NotFoundError` (404), `ValidationError` (422), `ConflictError` (409),
+  `CredentialRequiredError` (428), `ForbiddenError` (403), `UnauthorizedError` (401),
+  `UnavailableError` (503), `RateLimitedError` (429). Every one can carry `details.reason`, the
+  machine-readable code the SPA maps to translated copy (`getErrorReason` is the read side). A
+  hand-built `c.json({ error: { code } }, status)` structurally cannot, which is why controllers
+  raise these instead — see `@cat-factory/server`'s `http/guards.ts`.
+- `shared/agent-context-gate.ts` — `createStoreAgentContextGate`, the per-workspace
+  `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
+  the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
+  because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,
