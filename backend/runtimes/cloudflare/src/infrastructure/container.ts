@@ -182,6 +182,7 @@ import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingReposit
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
+import { D1ConsensusGroupRepository } from './repositories/D1ConsensusGroupRepository'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
@@ -722,6 +723,10 @@ export function selectMergeLifecycleDeps(
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     userSettingsRepository: new D1UserSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
+    // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to.
+    // Always wired (no secret material) — the panels only run when the optional consensus
+    // executor is enabled, but the library is editable and snapshot-visible regardless.
+    consensusGroupRepository: new D1ConsensusGroupRepository({ db }),
     agentPromptRepository: new D1AgentPromptRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),

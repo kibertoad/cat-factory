@@ -232,6 +232,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       agentKind: context.agentKind,
       strategy: cfg.strategy,
       status: 'running',
+      // Which workspace consensus GROUP the engine selected for this dispatch, when the step
+      // named a tier set. Copied onto the transcript (rather than looked up later) so the
+      // session still says which panel fired after the library row is edited or deleted.
+      groupId: cfg.selectedGroup?.id ?? null,
+      groupName: cfg.selectedGroup?.name ?? null,
       participants: cfg.participants,
       rounds: [],
       synthesis: null,

@@ -1,15 +1,18 @@
 import { computed } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
-import type { ConsensusStepConfig } from '~/types/consensus'
-import type { StepOptions } from '@cat-factory/contracts'
 import { companionForProducer } from '~/utils/catalog'
-import { defaultConsensusConfig, type PipelinesContext } from './context'
+import type { PipelinesContext } from './context'
+import { createPipelineStepConfigActions } from './draftStepConfig'
 
 /**
- * The pipeline-builder draft manipulation: inserting/removing/reordering steps and toggling each
- * step's per-step config, plus `clearDraft` / `loadForEdit`. Extracted from the store setup into a
- * factory closing over the shared {@link PipelinesContext} so behaviour is byte-identical to the
- * former in-closure functions — the split is purely to keep the setup within the size budget.
+ * The pipeline-builder draft's STRUCTURE: inserting/removing/reordering steps, the companion
+ * folding that turns the flat arrays into renderable units, and `clearDraft` / `loadForEdit`.
+ * Extracted from the store setup into a factory closing over the shared {@link PipelinesContext}.
+ *
+ * The per-step CONFIG toggles (consensus + its group tiers, gates, companions, step options) are
+ * the sibling factory in `./draftStepConfig` — a different concern on the same context, and the
+ * seam this file was split along when it outgrew the per-function budget. Both are spread into
+ * the store, so callers see one flat API exactly as before.
  */
 export function createPipelineDraftActions(ctx: PipelinesContext) {
   const {
@@ -97,13 +100,6 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     else insertAt(index + 1, companion)
   }
 
-  /** Toggle estimate gating on/off for the (companion) step at `index`. */
-  function toggleDraftGating(index: number) {
-    draftGating.value[index] = draftGating.value[index]?.enabled
-      ? null
-      : { enabled: true, minRisk: 0.5, minImpact: 0.5, onMissingEstimate: 'run' }
-  }
-
   /**
    * The draft as a list of "units" for rendering: each step is one unit, EXCEPT a companion
    * that sits immediately after its producer — that companion is folded into the producer's
@@ -157,93 +153,6 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     draftStepOptions.value = reorder(draftStepOptions.value)
   }
 
-  /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
-  function toggleDraftConsensus(index: number) {
-    draftConsensus.value[index] = draftConsensus.value[index] ? null : defaultConsensusConfig()
-  }
-
-  /** Replace the consensus config of the draft step at `index` (builder editor edits). */
-  function setDraftConsensus(index: number, config: ConsensusStepConfig | null) {
-    draftConsensus.value[index] = config
-  }
-
-  /** Toggle the approval gate on the draft step at `index`. */
-  function toggleDraftGate(index: number) {
-    draftGates.value[index] = !draftGates.value[index]
-  }
-
-  /** Toggle the Follow-up companion on the draft (coder) step at `index` (default on → off). */
-  function toggleDraftFollowUps(index: number) {
-    // Default (null/true) is enabled, so the first toggle disables it (false); toggle back to null.
-    draftFollowUps.value[index] = draftFollowUps.value[index] === false ? null : false
-  }
-
-  /**
-   * Toggle the test quality-control companion on the draft (Tester) step at `index`. The
-   * companion is enabled by default (a `null` entry), so the first toggle disables it
-   * (`{ enabled: false }`, dropping any gating) and the next restores the default.
-   */
-  function toggleDraftTesterQuality(index: number) {
-    draftTesterQuality.value[index] =
-      draftTesterQuality.value[index]?.enabled === false ? null : { enabled: false }
-  }
-
-  /**
-   * Toggle estimate gating on/off for the QC companion on the draft (Tester) step at `index`.
-   * A no-op while the companion is disabled (nothing to gate). Enabling gating pins the config
-   * to `{ enabled: true, gating }` so the thresholds are editable; disabling drops back to the
-   * default `null` (enabled, ungated).
-   */
-  function toggleDraftTesterQualityGating(index: number) {
-    const cur = draftTesterQuality.value[index]
-    if (cur?.enabled === false) return
-    draftTesterQuality.value[index] = cur?.gating?.enabled
-      ? null
-      : {
-          enabled: true,
-          gating: { enabled: true, minRisk: 0.5, minImpact: 0.5, onMissingEstimate: 'run' },
-        }
-  }
-
-  /** Enable/disable the draft step at `index` without removing it. */
-  function toggleDraftEnabled(index: number) {
-    draftEnabled.value[index] = draftEnabled.value[index] === false
-  }
-
-  /** Whether auto-recommendation is on for the draft (requirements-review) step at `index`. */
-  function draftAutoRecommendEnabled(index: number): boolean {
-    return draftStepOptions.value[index]?.autoRecommend !== false
-  }
-
-  /**
-   * Toggle the requirements-review auto-recommendation on the draft step at `index`. It is on by
-   * default, so we store ONLY the opt-out (`{ autoRecommend: false }`); toggling back drops the
-   * flag. Merges with any other future StepOptions fields rather than clobbering the whole bag.
-   */
-  function toggleDraftAutoRecommend(index: number) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (draftAutoRecommendEnabled(index)) next.autoRecommend = false
-    else delete next.autoRecommend
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
-  }
-
-  /** The skill picked for the draft `skill` step at `index` (its `stepOptions.skillId`). */
-  function draftSkillId(index: number): string | undefined {
-    return draftStepOptions.value[index]?.skillId
-  }
-
-  /**
-   * Set (or clear) the picked skill on the draft `skill` step at `index`. Merges into the
-   * step's `StepOptions` bag rather than clobbering it; clearing drops the field and, if the
-   * bag empties, the whole entry (so it normalizes away like the other options).
-   */
-  function setDraftSkillId(index: number, skillId: string | undefined) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (skillId) next.skillId = skillId
-    else delete next.skillId
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
-  }
-
   function clearDraft() {
     draft.value = []
     draftGates.value = []
@@ -282,25 +191,14 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
   }
 
   return {
+    ...createPipelineStepConfigActions(ctx),
     addToDraft,
     removeFromDraft,
     moveInDraft,
     hasCompanion,
     toggleCompanion,
-    toggleDraftGating,
     units,
     moveUnit,
-    toggleDraftConsensus,
-    setDraftConsensus,
-    toggleDraftGate,
-    toggleDraftFollowUps,
-    toggleDraftTesterQuality,
-    toggleDraftTesterQualityGating,
-    toggleDraftEnabled,
-    draftAutoRecommendEnabled,
-    toggleDraftAutoRecommend,
-    draftSkillId,
-    setDraftSkillId,
     clearDraft,
     loadForEdit,
   }

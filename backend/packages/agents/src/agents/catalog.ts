@@ -254,7 +254,43 @@ export function userPromptFor(
   registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
-  return withRevision(buildBaseUserPrompt(context, registry, opts), context)
+  return withInjectedContext(
+    withRevision(buildBaseUserPrompt(context, registry, opts), context),
+    context,
+    opts,
+  )
+}
+
+/**
+ * Fold the backend-prepared context files a preOp produced into the prompt when the caller
+ * has NO filesystem to materialise them onto (every inline caller: the inline executor, the
+ * consensus panel). The container path passes `materialized`, where the same bodies are
+ * written to `.cat-context/` and the agent reads them with tools — folding them here as well
+ * would double the tokens on exactly the kinds whose files are largest.
+ *
+ * Applied at the wrapper level, beside {@link withRevision}, deliberately: `buildBaseUserPrompt`
+ * returns early for a standard phase AND for a kind that supplies its own user prompt, and it
+ * is precisely those self-authoring kinds (`pr-reviewer`, whose preOps inject the diff, the
+ * existing review threads and the standards) whose whole input arrives this way. A fold inside
+ * the generic branch would reach none of them.
+ */
+function withInjectedContext(
+  prompt: string,
+  context: AgentRunContext,
+  opts: { materialized?: boolean },
+): string {
+  const files = context.injectedContextFiles
+  if (opts.materialized || !files?.length) return prompt
+  const lines = [
+    prompt,
+    '',
+    'Context files prepared for this run (their full contents follow — there is no',
+    'checkout to read them from):',
+  ]
+  for (const file of files) {
+    lines.push('', `--- ${file.path} ---`, file.content)
+  }
+  return lines.join('\n')
 }
 
 function buildBaseUserPrompt(

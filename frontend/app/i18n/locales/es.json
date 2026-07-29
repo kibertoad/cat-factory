@@ -3167,6 +3167,47 @@
       "saved": "Entorno de pruebas predeterminado guardado.",
       "savedState": "Guardado.",
       "saveFailed": "No se ha podido guardar el entorno de pruebas predeterminado."
+    },
+    "consensusGroups": {
+      "title": "Grupos de consenso",
+      "intro": "Paneles de revisión reutilizables a los que puede escalar un paso de la canalización. Cada grupo lleva el umbral de estimación que una tarea debe superar, así el trabajo más pesado recibe un panel mayor sin necesidad de otra canalización.",
+      "new": "Nuevo grupo",
+      "list": {
+        "empty": "Todavía no hay grupos de consenso.",
+        "always": "Siempre",
+        "bar": "Desde {bar}",
+        "editTitle": "Editar grupo",
+        "deleteTitle": "Eliminar grupo",
+        "participantCount": "sin participantes | un participante | {count} participantes"
+      },
+      "editor": {
+        "nameLabel": "Nombre",
+        "namePlaceholder": "Panel de revisión profunda",
+        "strategyLabel": "Estrategia",
+        "descriptionLabel": "Descripción",
+        "descriptionPlaceholder": "Para qué sirve este panel",
+        "participantsLabel": "Participantes",
+        "participantsHint": "Al menos dos. La diversidad de rol y de modelo es lo que hace que un panel supere a un solo modelo.",
+        "addParticipant": "Añadir participante",
+        "framingPlaceholder": "Perspectiva desde la que argumenta este participante",
+        "stepModel": "Modelo del paso",
+        "synthesizerLabel": "Modelo sintetizador",
+        "gatedLabel": "Solo para tareas por encima de un umbral",
+        "gatedHint": "La estimación que una tarea debe alcanzar para merecer este panel. Déjalo desactivado para que este grupo se aplique siempre.",
+        "complexityThreshold": "Complejidad",
+        "gatingIncomplete": "Fija al menos un umbral o desactiva la condición.",
+        "unnamedRole": "Revisor",
+        "cancel": "Cancelar",
+        "save": "Guardar grupo"
+      },
+      "confirmDelete": {
+        "title": "¿Eliminar el grupo de consenso?",
+        "body": "Los pasos que nombran «{name}» recurrirán a sus grupos restantes."
+      },
+      "toast": {
+        "saveFailed": "No se pudo guardar el grupo de consenso",
+        "deleteFailed": "No se pudo eliminar el grupo de consenso"
+      }
     }
   },
   "providers": {
@@ -3934,7 +3975,11 @@
       "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar.",
       "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo.",
       "promptEditTooltip": "Editar el prompt del sistema de este agente",
-      "promptEditedTooltip": "El prompt del sistema de este agente está editado para este espacio de trabajo"
+      "promptEditedTooltip": "El prompt del sistema de este agente está editado para este espacio de trabajo",
+      "consensusGroups": "Grupos de consenso",
+      "consensusGroupsHint": "Elige los paneles reutilizables a los que este paso puede escalar. Cada uno lleva su propio umbral de estimación; se ejecuta el más exigente que la tarea supere.",
+      "consensusGroupsActive": "Este paso ejecuta el grupo seleccionado. Deselecciona todos los grupos para configurar aquí los participantes.",
+      "consensusGroupAlways": "siempre"
     },
     "progress": {
       "status": {
@@ -4386,7 +4431,8 @@
       "synthesizing": "Sintetizando",
       "done": "Completado",
       "failed": "Fallido"
-    }
+    },
+    "groupTitle": "El grupo de consenso al que escaló esta ejecución"
   },
   "brainstorm": {
     "title": {
