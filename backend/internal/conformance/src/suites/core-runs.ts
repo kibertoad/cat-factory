@@ -455,6 +455,25 @@ export function defineCoreRunsConformance(harness: ConformanceHarness): void {
       // A workspace with no live runs projects to an empty list.
       const emptyWs = await app.createWorkspace()
       expect(await execs.listLive(emptyWs.workspace.id)).toEqual([])
+
+      // `countActiveByWorkspace` is run admission control's capacity read: the SQL-COUNT form of
+      // the SAME live set `listLive` projects (docs/initiatives/run-admission-control.md). Both
+      // queries read the shared `LIVE_EXECUTION_STATUSES`, so the status list itself cannot
+      // drift; what this pins is the REST of each predicate agreeing on both stores — the `kind`
+      // scope, the workspace scope, and (on D1) the interpolated IN list. They are asserted
+      // against EACH OTHER because a cap checked against a count that disagrees with the runs
+      // the board shows as live is worse than no cap at all: it would queue runs the workspace
+      // has capacity for, or admit runs past it, with no visible cause. So terminal rows
+      // (done/failed) and the live BOOTSTRAP job seeded above must both be outside it.
+      //
+      // NOTE for slice 2: this equality is expected to BREAK when `queued` lands, and the fix is
+      // not to make the count include queued runs (nothing would ever be promoted) — it is to
+      // split the two sets and assert each. See the initiative's gotchas.
+      expect(await execs.countActiveByWorkspace(workspace.id)).toBe(3)
+      expect(await execs.countActiveByWorkspace(workspace.id)).toBe(liveRows.length)
+      // A workspace with nothing live counts zero, never null/undefined — the admission check
+      // compares it numerically against a cap.
+      expect(await execs.countActiveByWorkspace(emptyWs.workspace.id)).toBe(0)
     })
   })
 }

@@ -1,6 +1,6 @@
 # Initiative: run admission control (concurrency caps, queueing, prioritization)
 
-**Status:** planned (tracker only — no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slice 1 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -50,18 +50,52 @@ Interactive (human-started) runs outrank background (recurring/initiative/Kaizen
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                         | Status  | PR  |
-| --- | ------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | `countActiveByWorkspace` (+ list-queued-ordered) port methods, D1 ⇄ Drizzle + conformance                     | ⬜ todo |     |
-| 2   | `queued` run state + admission check in `start`/`retry` (re-count backstop) — cap unset ⇒ no behaviour change | ⬜ todo |     |
-| 3   | Terminal-hook promotion + sweeper backstop (both runtimes)                                                    | ⬜ todo |     |
-| 4   | Priority derivation (interactive vs background) + ordered promotion                                           | ⬜ todo |     |
-| 5   | Workspace-settings cap + env ceiling clamp + contracts                                                        | ⬜ todo |     |
-| 6   | SPA queued state (board card, inspector, cancel) + i18n (all locales)                                         | ⬜ todo |     |
-| 7   | Conformance: fill-cap → queue → terminal → auto-promote, asserted on both runtimes                            | ⬜ todo |     |
-| 8   | Public API: `start` over cap returns `queued` (not an error); document in the public-api tracker's surface    | ⬜ todo |     |
+| #   | Slice                                                                                                         | Status  | PR                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| 1   | `countActiveByWorkspace` port method, D1 ⇄ Drizzle + conformance + machine-RPC route                          | ✅ done | [#1466](https://github.com/kibertoad/cat-factory/pull/1466) |
+| 2   | `queued` run state + admission check in `start`/`retry` (re-count backstop) — cap unset ⇒ no behaviour change | ⬜ todo |                                                             |
+| 3   | Terminal-hook promotion + sweeper backstop (both runtimes)                                                    | ⬜ todo |                                                             |
+| 4   | Priority derivation (interactive vs background) + ordered promotion                                           | ⬜ todo |                                                             |
+| 5   | Workspace-settings cap + env ceiling clamp + contracts                                                        | ⬜ todo |                                                             |
+| 6   | SPA queued state (board card, inspector, cancel) + i18n (all locales)                                         | ⬜ todo |                                                             |
+| 7   | Conformance: fill-cap → queue → terminal → auto-promote, asserted on both runtimes                            | ⬜ todo |                                                             |
+| 8   | Public API: `start` over cap returns `queued` (not an error); document in the public-api tracker's surface    | ⬜ todo |                                                             |
 
 ## Conventions & gotchas
+
+- **The queued-run listing moved OUT of slice 1 and into slice 2/3, on purpose.** Slice 1 was
+  scoped as "`countActiveByWorkspace` **+ list-queued-ordered**", but the ordered listing selects
+  on a `queued` status that does not exist until slice 2 introduces it. Landing it early would
+  mean either a repository method whose predicate can never match (dead code with a conformance
+  test that only ever asserts an empty list), or introducing the `queued` `ExecutionStatus` with
+  no producer — which ripples straight into the SPA's status rendering and every locale, i.e.
+  slice 6, and would ship a status a user can be shown but the engine can never reach. The
+  listing belongs with the promotion path that consumes it.
+- **`countActive*` must stay the SQL-COUNT form of exactly what `listLive` projects.** Both read
+  `running`/`blocked`/`paused` scoped to `kind = 'execution'`. A parked run holds no container,
+  but it holds its block and resumes WITHOUT re-passing admission, so it occupies a slot: exclude
+  it and a workspace exceeds its cap just by parking. Slice 1 made this MECHANICAL rather than a
+  convention: both queries on both runtimes read kernel's `LIVE_EXECUTION_STATUSES`, and a kernel
+  unit test asserts that set partitions `ExecutionStatus` with `done`/`failed`, so a new status
+  cannot be added without classifying it.
+- **`queued` is what splits the one live set into two, and slice 2 owns that split.** "Not
+  settled" and "occupies a slot" coincide today, which is why one constant serves both reads. A
+  `queued` run is pre-admission: it MUST NOT be counted by `countActiveByWorkspace` (counting it
+  means the cap is already full and nothing is ever promoted), while it probably SHOULD appear to
+  `listLive`'s consumers, since it is non-terminal and the board must render it. So slice 2 splits
+  `LIVE_EXECUTION_STATUSES` into a capacity set and a non-terminal set, and the conformance
+  equality `countActiveByWorkspace(ws) === listLive(ws).length` is EXPECTED to go red. Do not
+  repair it by widening the count — assert each set separately.
+- **There is a THIRD live predicate, and it is deliberately not shared: the partial unique index
+  `uniq_live_execution_per_block`** (D1 migration `0033`, Drizzle `20260702123641` +
+  `schema.ts`), mirrored by `insertLive`'s cleanup `NOT IN` and its `ON CONFLICT` target
+  predicate. Same three statuses today, different invariant: it is frozen in shipped migrations,
+  so it can only change by migrating both stores, and an `ON CONFLICT` whose `where` stops
+  matching a real index fails at runtime on Postgres. That is why those call sites keep their
+  literals instead of reading the shared constant. Whether a `queued` row enters that index is its
+  own slice-2 decision WITH a migration attached (in it ⇒ a block cannot hold a queued run beside
+  a live one; out of it ⇒ two queued runs can stack on one block), separate from the capacity
+  question above.
 
 - **Do not build a scheduler service.** The durable layer stays Workflows/pg-boss; admission
   is a persisted state + a promotion hook, the same shape as the spend pause. No new
