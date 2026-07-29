@@ -12,11 +12,11 @@ import { lodAtLeast } from '~/composables/useSemanticZoom'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 
-// Spatial drill-down inside a task card: at the `steps` zoom band the task's
-// build-pipeline steps appear, and one band deeper (`subtasks`) each step's live
-// todo breakdown expands — done / in-progress / pending — exactly the way a
-// zoomed-in bootstrap card reads. Renders nothing until the task has a run and
-// the user has zoomed in far enough, so it's safe to mount on every task card.
+// Drill-down inside a task card: the task's build-pipeline steps appear on hover (at any
+// zoom level) or once the `steps` zoom band is reached, and one band deeper (`subtasks`)
+// each step's live todo breakdown expands — done / in-progress / pending — exactly the way
+// a zoomed-in bootstrap card reads. Renders nothing until the task has a run and the card
+// is expanded, so it's safe to mount on every task card.
 const props = defineProps<{ taskId: string }>()
 
 const execution = useExecutionStore()
@@ -40,13 +40,10 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 // (spinning "Running") rather than a frozen subtask list.
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
-// Expand the pipeline list only when zoomed in far enough AND the board driver
-// permits this card — on-screen, and the centre-most of any cards that would
-// otherwise overlap (see useTaskExpansion) — so deep-zoom expansions don't pile up.
-const showSteps = computed(
-  () =>
-    lodAtLeast(lod.value, 'steps') && steps.value.length > 0 && expansion.canExpand(props.taskId),
-)
+// Expand the pipeline list when the board driver says so: this card is hovered (at any
+// zoom level), or the deep zoom bands granted it — on-screen, and the centre-most of any
+// cards that would otherwise overlap. See stores/taskExpansion.ts.
+const showSteps = computed(() => steps.value.length > 0 && expansion.isExpanded(props.taskId))
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 
 // Clicking a step opens the full agent step-detail overlay — execution metadata

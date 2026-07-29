@@ -1,6 +1,7 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** Phases 1, 1b + 2 landed; Phases 3–6 open (plus 1.2d) · **Owner:** core · **Started:** 2026-07-28
+**Status:** Phases 1, 1b + 2 landed; Phase 3 landed except 3.3; Phases 4–6 open (plus 1.2d)
+· **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current — search by symbol, not line.
 
@@ -67,6 +68,7 @@ token or a rejected body leaves no trace anywhere". Raw `console.*` is _not_ the
 zero in non-test source); silence is.
 
 **A2 — No request logging, no request/correlation id; every 4xx is invisible. (P1)**
+_(FIXED in Phase 3.1.)_
 No `app.use` in either facade is a logging middleware; no `requestId`/`x-request-id` exists
 anywhere outside the LLM-span packages. `errorHandler.ts` logs **only unexpected 500s** (with
 `{ method, path }` — no id, no duration, no status); `SchemaValidationError` (400) and every
@@ -74,6 +76,8 @@ anywhere outside the LLM-span packages. `errorHandler.ts` logs **only unexpected
 to tie a user report to a request, or a 4xx spike to a cause.
 
 **A3 — No correlation across the durable execution path. (P1)**
+_(FIXED in Phase 1.4b + 3.2: the harness now receives `workspaceId`/`executionId` on the job body
+and binds them beside `jobId`, and `ContainerAgentExecutor` logs the seam's transitions.)_
 `ExecutionWorkflow` logs `executionId`; the harness binds `jobId` (`runner.ts:382`) and never
 receives `executionId` (zero hits in `executor-harness/src`); the id spaces are stitched only by
 the `${executionId}-${agentKind}` naming convention (`ContainerAgentExecutor.ts:176-179`).
@@ -593,13 +597,82 @@ behaviour changes.
   checked) was considered and NOT taken: it turns a forgotten tag into silently missing trace
   bodies. Revisit it only together with a way to catch an untagged call at review time.
 
-### Phase 3 — Correlation & request visibility
+### Phase 3 — Correlation & request visibility — **3.1 + 3.2 LANDED**
 
-| #   | Step                                                                                                                                                                                                                                                                                                          | Fixes | Sev |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --- |
-| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable. | A2    | P1  |
-| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers.                        | A3    | P1  |
-| 3.3 | Propagate W3C `traceparent` into the job body so harness tool spans nest under the run's trace; add real parent ids to the OTel/Langfuse mappings (change in `src/mapping.ts`, conformity-pinned). HTTP server spans can follow as a separate slice.                                                          | C1    | P2  |
+| #   | Step                                                                                                                                                                                                                                                                                                          | Fixes | Sev | Status |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --- | ------ |
+| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable. | A2    | P1  | ✅     |
+| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers.                        | A3    | P1  | ✅     |
+| 3.3 | Propagate W3C `traceparent` into the job body so harness tool spans nest under the run's trace; add real parent ids to the OTel/Langfuse mappings (change in `src/mapping.ts`, conformity-pinned). HTTP server spans can follow as a separate slice.                                                          | C1    | P2  |        |
+
+#### What Phase 3 (3.1 + 3.2) actually shipped
+
+- **`http/requestLogging.ts`** — `mountRequestLogging`, mounted by both facades as the FIRST
+  middleware (ahead of CORS and the per-request container build, so a CORS denial and the
+  Worker's misconfiguration fallback are logged like anything else). It adopts a bounded, safe
+  `X-Request-Id` or mints one, binds `{ requestId, method, path }` on a request-scoped child
+  logger, echoes the id on the response, and emits one line per request: `info` on success,
+  `warn` on a 4xx, `error` on a 5xx.
+- **Every error envelope carries `requestId`**, which is the whole point of the id: a user quotes
+  what they were shown and an operator greps one line. `handleError` also stashes the code it
+  mapped on the context so the request line names it, and now reports an unexpected fault through
+  the REQUEST logger — the 500's own line and the envelope the caller received share an id.
+- **The misconfiguration fallback is covered on every facade.** The Worker inherits the middleware
+  (it serves the fallback from INSIDE `createApp`'s container-build middleware), but Node/local
+  `serve()` the standalone `createMisconfiguredApp` instead — so that app mounts it and the
+  expose-header itself. Without that, the one deployment shape an operator is actively debugging
+  would be the only one with no ids and no request lines.
+- **`X-Request-Id` joined both CORS lists** — `CORS_ALLOWED_HEADERS` so a caller that already has
+  an id can propagate it instead of the backend minting a second one for the same request, and a
+  new `CORS_EXPOSED_HEADERS` so a browser can actually READ it off the response (without
+  `Access-Control-Expose-Headers` it is on the wire and invisible to the SPA).
+- **The container seam correlates end to end.** `buildCommonBody` puts `workspaceId` +
+  `executionId` on every agent job body; the harness parses them (optional) and binds them onto
+  its per-job child logger beside `jobId`. Riding the job body means all three transports
+  (Cloudflare container, local container, runner pool) carry them with no transport-specific
+  wiring — the same reason `validationChecks` rides it.
+- **`containerAgentLogging.ts`** — the seam's log vocabulary as a small collaborator
+  (`ContainerAgentExecutor.ts` had 29 lines of headroom against its budget, so the messages and
+  their rationale were extracted rather than the budget raised). `ContainerAgentExecutor` now logs
+  dispatched / dispatch-failed / poll-failed / running (`debug`) / settled, with the ids bound once.
+  A second extraction, **`agentContextRecord.ts`** (the observability snapshot's allow-list
+  projection), ratcheted the file's budget 1520 → 1450 rather than growing it.
+- **A dispatch or poll that THROWS is logged and re-thrown.** Those failure classes had no account
+  anywhere: a failed dispatch never gets a handle, so no poll can report it, and a failed poll's
+  transport fault was recorded against no job, backend or run.
+- **Every `agent`-kind dispatcher carries the ids, not just the execution path.**
+  `ContainerRepoBootstrapper` and `ContainerEnvConfigRepairer` hand-build their job bodies instead
+  of going through `buildCommonBody`; a bootstrap is a first-class agent run (one `agent_runs`
+  table, one retry surface), so leaving it out would have left exactly one agent flow whose
+  container logs join to nothing. Neither has a separate execution row, so the job id doubles as
+  the run id — matching the session token each already mints.
+- **Two bare `catch {}` swallows in the executor became `runBestEffort`** (the agent-context
+  snapshot write and the tool-span forward) now that the class has a bound logger to report
+  through — 1.2d sites, drained here because they are in the file this slice gave a logger.
+
+#### Notes for the next implementer
+
+- **Do NOT set a response header on a 101.** Hono implements a post-`next()` `c.header()` by
+  REBUILDING the response (`new Response(body, res)`), which silently drops the Cloudflare
+  `webSocket` property — i.e. stamping the request id on the SPA's WebSocket upgrade would break
+  the live event stream on the deployed runtime while every plain-HTTP test stayed green. The
+  middleware skips 101 and the unit test pins response IDENTITY, not just the header.
+- **A client-supplied correlation id is untrusted text that lands in a log stream.** It is adopted
+  only when short and `[\w\-=]+`; anything else is replaced. Same reason the middleware logs
+  `new URL(url).pathname` and never the raw URL — the WS `?ticket=` and OAuth `?code=` live in
+  query strings.
+- **`errorCode` on the request line is a bonus, not a promise.** It is set by `handleError`, so a
+  controller that RETURNS a 4xx envelope instead of throwing a `DomainError` leaves it unset.
+  That is one more reason to throw rather than hand-roll (see the `http/errorHandler.ts` note in
+  `packages/server/AGENTS.md`).
+- **3.2 is scoped to the AGENT job body, not the inline one.** A local inline container job
+  (`LocalContainerRunnerTransport.runInline`) is minted with a synthetic `inline-<rand>` run id
+  and its request shape carries no workspace/execution — correlating it is a change to
+  `InlineContainerRequest` and its call sites, not to the harness.
+- **3.3 is deliberately still open, and it is not "pass one more id".** A real distributed trace
+  needs a span-id model the platform does not have yet (tool spans carry no parent span id today,
+  and the trace id is an FNV hash of `executionId`), plus a harness change — so it batches
+  naturally with 5.5 rather than paying a second image bump for the id alone.
 
 ### Phase 4 — Operational metrics, health, alerting
 

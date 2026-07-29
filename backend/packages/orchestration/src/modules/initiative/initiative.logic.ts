@@ -13,7 +13,12 @@ import type {
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
-import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  ValidationError,
+  hasInitiativeKinds,
+} from '@cat-factory/kernel'
 import type {
   InitiativePresetDescriptor,
   InitiativePresetInputs,
@@ -60,6 +65,27 @@ export function assertInitiativeShapeAllowed(block: Block, agentKinds: readonly 
       'An initiative block only accepts the Initiative Planning pipeline (pl_initiative)',
     )
   }
+}
+
+/**
+ * Whether a stakeholder INTERVIEW step still lies ahead of the running step in this run's chain.
+ *
+ * The planning pipeline is what decides this, not the preset: `pl_initiative` leads with the
+ * analyst and interviews after it, while `pl_initiative_docs` (and any other `interview: 'skip'`
+ * preset) has no interviewer at all — and a deployment may bind its own planning chain. Reading it
+ * off the chain therefore stays correct for a pipeline this repo has never seen, which neither a
+ * preset lookup nor a hard-coded pipeline id would.
+ *
+ * Strictly AHEAD of `currentStep`: an interviewer already behind us has settled what it was going
+ * to settle, so its questions are in the digest rather than still to be asked.
+ */
+export function interviewFollowsStep(
+  steps: readonly { agentKind: string }[],
+  currentStep: number,
+): boolean {
+  return steps
+    .slice(currentStep + 1)
+    .some((step) => step.agentKind === INITIATIVE_INTERVIEWER_AGENT_KIND)
 }
 
 /**

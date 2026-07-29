@@ -231,6 +231,14 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // every other built-in coding agent takes, with NO bespoke `/bootstrap` harness handler.
     const body = {
       jobId: request.jobId,
+      // The run's correlation ids, so the container's own lines join to this bootstrap in the
+      // backend's logs — the same fields `buildCommonBody` puts on an execution job. A bootstrap
+      // is a first-class agent run (one `agent_runs` table, one retry surface), so it must not be
+      // the one agent-kind dispatch whose container logs cannot be joined to anything. Its run id
+      // IS its job id: a bootstrap has no separate execution row, which is exactly what
+      // `sessionService.mint` above is told.
+      workspaceId: request.workspaceId,
+      executionId: request.jobId,
       mode: 'coding',
       systemPrompt: reference ? ADAPT_SYSTEM_PROMPT : SCAFFOLD_SYSTEM_PROMPT,
       userPrompt:

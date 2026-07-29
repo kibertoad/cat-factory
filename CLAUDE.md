@@ -228,7 +228,12 @@ is named: it adapts pino onto the port. Full patterns:
   text goes through `redactSecrets` at the emit site. Never log an auth header or a decrypted
   credential — not even at `debug`, which is a level operators turn on in production.
 - **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the
-  top of the scope so a deeply nested emit still carries them.
+  top of the scope so a deeply nested emit still carries them. Three seams do it for you:
+  `mountRequestLogging` (mounted FIRST by both facades — mints/adopts `X-Request-Id`, binds a
+  request-scoped child reachable as `requestLogger(c)`, logs one line per request and puts the id
+  in every error envelope), `containerJobLog` (the workflow↔container seam; the same ids also ride
+  the job body so the harness binds them beside `jobId`), and the durable drivers. A request line
+  logs the PATHNAME only — a query string carries the WS `?ticket=` and OAuth `?code=`.
 - **`LOG_LEVEL`** (`process.env` on Node/local, a wrangler var on the Worker) is applied FIRST in
   each boot path; an unrecognised value falls back to `info`. The threshold is checked in the
   adapter, not on the pino instance — pino children snapshot their parent's level at creation.
@@ -1907,6 +1912,16 @@ auth-enabled or it passes vacuously.
   **Anything EVERY window must show goes in `ResultWindowShell.vue`, never in the windows.** The
   shell owns the chrome and the shared trailing section (today `step.effortReport`), resolving the
   step itself rather than via a per-window prop, so a window can't opt out or forget it.
+  **A STEP-BACKED window's run details are the `StepRunMeta` sidebar, resolved through
+  `useResultViewRunMeta(viewId, …)`** — never hand-derived, and never wired straight off
+  `useResultView`'s `stepIndex`. It stays per-window rather than moving into the shell because it
+  is a layout column and several windows are block-keyed with no run at all (`service-spec`), but
+  the RESOLUTION is shared: a window opened OFF-PATH (`ui.openInitiativeTracker`, a board card, an
+  inspector button) carries a block id and NO step index, so reading `stepIndex` alone blanks the
+  model, the run id and the token telemetry on exactly the entry point people use. The composable
+  falls back to the block's live run and picks the step whose kind declares that view id — the
+  last one that actually ran a model, since a window's kind set can also span model-less
+  bookkeeping steps (`initiative-committer`).
 - **Inspector panel seam (frontend)**: the inspector body is a subject-keyed panel group, not a
   `v-if` monolith. Each sub-panel is a `PanelEntry<Block>` (`{ id, component, when(block), order }`)
   contributed to the `inspectorPanels` slot and rendered by `<PanelsOutlet>`. A consumer contributes

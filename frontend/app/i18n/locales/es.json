@@ -3572,6 +3572,8 @@
     "converged": "No hay preguntas pendientes. El entrevistador tiene lo que necesita y el documento se está redactando.",
     "working": "El entrevistador está procesando tus respuestas",
     "workingHint": "Esto tarda un momento. Las preguntas de seguimiento aparecerán aquí cuando termine, o empezará la redacción si ya tiene suficiente.",
+    "preparing": "Investigando el documento antes de la entrevista",
+    "preparingHint": "La ejecución primero reúne el contexto y esboza un esquema. Las preguntas aparecerán aquí cuando termine.",
     "failed": "La ejecución del documento se detuvo",
     "failedHint": "Terminó antes de que el entrevistador pudiera responder. Tus respuestas están guardadas; vuelve a ejecutar la tarea del documento.",
     "answerPlaceholder": "Tu respuesta",
@@ -3650,10 +3652,12 @@
     "taskDocs": {
       "heading": "Documentos de contexto",
       "hint": "Documentos adjuntos a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
+      "hintInitiative": "Documentos adjuntos a esta iniciativa como contexto. Su contenido se entrega a los agentes de planificación que redactan el plan.",
       "attach": "Adjuntar",
       "connectSource": "Conectar una fuente",
       "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
+      "emptyInitiative": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al redactar esta iniciativa.",
       "attached": "Documento adjuntado"
     },
     "templates": {
@@ -3696,11 +3700,13 @@
     "contextIssues": {
       "title": "Incidencias de contexto",
       "hint": "Incidencias del tracker adjuntas a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
+      "hintInitiative": "Incidencias del tracker adjuntas a esta iniciativa como contexto. Su contenido se entrega a los agentes de planificación que redactan el plan.",
       "attach": "Adjuntar",
       "connectSource": "Conectar una fuente",
       "connectSourceNamed": "Conectar {source}",
       "attached": "Incidencia adjuntada",
-      "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea."
+      "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea.",
+      "emptyHintInitiative": "Adjunta una incidencia de Jira para que los agentes de planificación vean su descripción y comentarios al redactar esta iniciativa."
     },
     "import": {
       "titleCreate": "Crear tarea desde incidencia",
@@ -5324,11 +5330,21 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "reviewPlan": "Revisar plan",
+      "resolveDecision": "Resolver",
       "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancel": "Cancelar iniciativa",
       "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planReview": {
+      "title": "Este plan te está esperando",
+      "body": "El planificador redactó las fases y los elementos de abajo. Apruébalos para confirmar el plan y empezar el trabajo, o devuelve el plan indicando qué cambiar.",
+      "approve": "Aprobar plan",
+      "requestChanges": "Solicitar cambios",
+      "feedbackPlaceholder": "¿Qué debería cambiar el planificador? Alcance, orden de las fases, trabajo que falta, un elemento que va en otro sitio…",
+      "sendBack": "Devolver al planificador"
     },
     "planning": {
       "title": "Planificar la iniciativa",
@@ -5336,9 +5352,11 @@
       "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, y luego envialas. Tambien puedes pedirle que planifique ahora con lo que ya tiene.",
       "empty": "No se encontro ninguna iniciativa para este bloque.",
       "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
-      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa para iniciar la entrevista.",
+      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa: primero analiza el codigo y despues te entrevista.",
       "working": "El planificador esta procesando tus respuestas",
       "workingHint": "Esto tarda un momento. Las preguntas de seguimiento apareceran aqui cuando termine, o empezara a redactar el plan si ya tiene suficiente.",
+      "preparing": "Explorando el codigo antes de la entrevista",
+      "preparingHint": "La planificacion lee primero el repositorio para no preguntarte lo que el codigo ya responde. Las preguntas apareceran aqui cuando termine.",
       "failed": "La ejecucion de planificacion se detuvo",
       "failedHint": "Termino antes de que el planificador pudiera responder. Tus respuestas estan guardadas; vuelve a ejecutar la planificacion desde la iniciativa.",
       "answerPlaceholder": "Tu respuesta",

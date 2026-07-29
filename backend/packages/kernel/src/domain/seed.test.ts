@@ -95,6 +95,20 @@ describe('seedPipelines — named-gate lowering', () => {
     ])
   })
 
+  it('explores the repo BEFORE interviewing the human in pl_initiative', () => {
+    // The interviewer is an INLINE kind with no checkout, so an interviewer that ran first could
+    // only ask the stakeholder to describe their own codebase. Ordering the read-only analyst ahead
+    // of it is what leaves the interview the half a repository cannot answer. Asserted as an ORDER,
+    // not a set: a reorder back is the whole regression.
+    const steps = byId().get('pl_initiative')!.agentKinds
+    expect(steps).toEqual([
+      'initiative-analyst',
+      'initiative-interviewer',
+      'initiative-planner',
+      'initiative-committer',
+    ])
+  })
+
   it('lowers the single-gate pipelines onto the right step', () => {
     const gateKindOf = (id: string) => {
       const p = byId().get(id)!

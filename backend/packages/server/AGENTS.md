@@ -32,12 +32,20 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `docs/initiatives/tracker-webhook-intake.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
+  Two collaborators split out of the executor to keep it inside its (ratcheting-down) size
+  budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
+  `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection — the one place
+  that decides what of a dispatch may be persisted, so a new body field is opt-in, never
+  inherited). Every dispatcher of the `agent` kind — the executor, the bootstrapper and
+  `ContainerEnvConfigRepairer` — puts `workspaceId`/`executionId` on its job body so the
+  container's own log lines join to the backend's.
   `agents/promptOverrides.ts` is the container half of the per-workspace **agent prompt
   override**: `dispatchSystemPromptFor` is what every container prompt assembly rides (the
   inline + consensus executors pass the override to `systemPromptFor` directly), and
   `BESPOKE_CONTAINER_SYSTEM_PROMPTS` names the two kinds — `merger` / `on-call` — whose dispatch
-  bypasses `systemPromptFor` and sends a constant from `agents/prompts.ts`, so the editor's
-  "built-in" baseline is the text those kinds actually run.
+  bypasses `systemPromptFor`. Each entry splits that kind's constant into the EDITABLE role half
+  and the non-editable `directives` tail, so an override replaces the role while the tail is
+  re-appended — the bespoke path's equivalent of `applySurfaceDirectives`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
@@ -54,6 +62,17 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   reading `return unavailable()` — `never` is assignable to any declared response type.
   The one deliberate exception is a handler that flattens distinct causes ON PURPOSE because
   the distinction is an ORACLE (password reset: "no such token" vs "expired" vs "used").
+  Every envelope also carries the request's `requestId` (see below).
+- `http/requestLogging.ts` — `mountRequestLogging`, mounted **first** by both facades (before
+  CORS and the per-request container). Mints/adopts `X-Request-Id`, binds a request-scoped child
+  logger, echoes the id on the response + in every error envelope, and logs one line per request
+  (`info`, 4xx `warn`, 5xx `error`). Reach the bound logger from a controller with
+  `requestLogger(c)`. ⚠️ It deliberately does NOT set the header on a 101: Hono implements a
+  post-`next()` `c.header()` by rebuilding the response, which drops Cloudflare's `webSocket`
+  property and would break the SPA's live stream on the deployed runtime only.
+  `createMisconfiguredApp` mounts it too — the Worker inherits it by serving the fallback from
+  inside `createApp`, but Node/local swap in that whole app, so without its own mount the one
+  deployment shape someone is actively debugging would be the only one with no ids.
 - `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
   `requireWorkspacePermission` — the admin-tier controller middleware) and `optionalJsonBody`

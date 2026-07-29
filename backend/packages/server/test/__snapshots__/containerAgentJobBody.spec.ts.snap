@@ -9,6 +9,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > blueprints
   },
   "spec": {
     "branch": "main",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -58,6 +59,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -71,6 +73,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -114,6 +117,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -127,6 +131,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-r
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
@@ -173,6 +178,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -186,6 +192,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > default (c
   },
   "spec": {
     "branch": "main",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -268,6 +275,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -281,6 +289,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > fixer 1`] 
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -339,6 +348,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -352,6 +362,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > merger 1`]
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
@@ -388,6 +399,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -401,6 +413,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > on-call 1`
   },
   "spec": {
     "branch": "main",
+    "executionId": "ex_1",
     "full": true,
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
@@ -441,6 +454,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -454,6 +468,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > read-only 
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -509,6 +524,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -522,6 +538,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -570,6 +587,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;
@@ -583,6 +601,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (do
   },
   "spec": {
     "branch": "cat-factory/blk_1",
+    "executionId": "ex_1",
     "ghToken": "GH-TOKEN",
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
@@ -682,6 +701,7 @@ You have \`web_search\` (titled result snippets for a query) and \`web_fetch\` (
 cite the source URL when a decision rests on what you find. Do not search for anything
 already in the checkout or the context you were given, and don't let searching replace
 reading the code.",
+    "workspaceId": "ws_1",
   },
 }
 `;

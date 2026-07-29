@@ -3336,10 +3336,12 @@
     "taskDocs": {
       "heading": "Kontextdokumente",
       "hint": "Dokumente, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
+      "hintInitiative": "Dokumente, die dieser Initiative als Kontext angehängt sind. Ihr Inhalt wird den Planungsagenten gegeben, die den Plan entwerfen.",
       "attach": "Anhängen",
       "connectSource": "Quelle verbinden",
       "connectSourceNamed": "{source} verbinden",
       "empty": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agents es beim Umsetzen dieser Aufgabe sehen.",
+      "emptyInitiative": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Entwerfen dieser Initiative lesen.",
       "attached": "Dokument angehängt"
     },
     "templates": {
@@ -3382,11 +3384,13 @@
     "contextIssues": {
       "title": "Kontext-Issues",
       "hint": "Tracker-Issues, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
+      "hintInitiative": "Tracker-Issues, die dieser Initiative als Kontext angehängt sind. Ihr Inhalt wird den Planungsagenten gegeben, die den Plan entwerfen.",
       "attach": "Anhängen",
       "connectSource": "Quelle verbinden",
       "connectSourceNamed": "{source} verbinden",
       "attached": "Issue angehängt",
-      "emptyHint": "Hängen Sie ein Jira-Issue an, damit Agents seine Beschreibung und Kommentare beim Umsetzen dieser Aufgabe sehen."
+      "emptyHint": "Hängen Sie ein Jira-Issue an, damit Agents seine Beschreibung und Kommentare beim Umsetzen dieser Aufgabe sehen.",
+      "emptyHintInitiative": "Hängen Sie ein Jira-Issue an, damit die Planungsagenten seine Beschreibung und Kommentare beim Entwerfen dieser Initiative sehen."
     },
     "import": {
       "titleCreate": "Aufgabe aus Issue erstellen",
@@ -4312,11 +4316,21 @@
     "inspector": {
       "runPlanning": "Planung ausführen",
       "answerPlanning": "Planungsfragen beantworten",
+      "reviewPlan": "Plan prüfen",
+      "resolveDecision": "Auflösen",
       "planningInProgress": "Planung läuft",
       "pause": "Pausieren",
       "resume": "Fortsetzen",
       "cancel": "Initiative abbrechen",
       "hint": "Die Planning-Pipeline erkundet die Codebasis, entwirft den mehrphasigen Plan zur Freigabe und committet dann das Tracker-Dokument ins Repository."
+    },
+    "planReview": {
+      "title": "Dieser Plan wartet auf dich",
+      "body": "Der Planner hat die Phasen und Aufgaben unten entworfen. Gib sie frei, um den Plan zu committen und die Arbeit zu starten, oder schicke den Plan mit deinen Änderungswünschen zurück.",
+      "approve": "Plan freigeben",
+      "requestChanges": "Änderungen anfordern",
+      "feedbackPlaceholder": "Was soll der Planner ändern? Umfang, Reihenfolge der Phasen, fehlende Arbeit, eine Aufgabe, die woanders hingehört …",
+      "sendBack": "An den Planner zurückschicken"
     },
     "planning": {
       "title": "Die Initiative planen",
@@ -4324,9 +4338,11 @@
       "intro": "Der Planer grenzt diese Initiative ein. Beantworten Sie seine Fragen, um Ziel und Einschränkungen zu formen, und senden Sie sie dann ab. Sie können ihn auch mit dem, was er bereits hat, jetzt planen lassen.",
       "empty": "Keine Initiative für diesen Block gefunden.",
       "converged": "Keine Fragen ausstehend. Der Planer hat, was er braucht, und entwirft den Plan.",
-      "idle": "Die Planung wurde noch nicht gestartet. Führen Sie die Planung von der Initiative aus, um das Interview zu beginnen.",
+      "idle": "Die Planung wurde noch nicht gestartet. Führen Sie die Planung von der Initiative aus: Zuerst wird die Codebasis analysiert, danach werden Sie befragt.",
       "working": "Der Planer verarbeitet Ihre Antworten",
       "workingHint": "Das dauert einen Moment. Rückfragen erscheinen hier, sobald er fertig ist, oder er beginnt mit dem Entwurf des Plans, wenn ihm die Angaben genügen.",
+      "preparing": "Die Codebasis wird vor dem Interview analysiert",
+      "preparingHint": "Die Planung liest zuerst das Repository, damit Sie nicht nach dem gefragt werden, was der Code beantworten kann. Fragen erscheinen hier, sobald das erledigt ist.",
       "failed": "Der Planungslauf wurde abgebrochen",
       "failedHint": "Er endete, bevor der Planer antworten konnte. Ihre Antworten sind gespeichert; führen Sie die Planung von der Initiative aus erneut aus.",
       "answerPlaceholder": "Ihre Antwort",
@@ -4679,6 +4695,8 @@
     "converged": "Es stehen keine Fragen aus. Der Interviewer hat, was er braucht, und das Dokument wird entworfen.",
     "working": "Der Interviewer verarbeitet deine Antworten",
     "workingHint": "Das dauert einen Moment. Nachfragen erscheinen hier, sobald er fertig ist, oder der Entwurf beginnt, wenn ihm die Angaben genügen.",
+    "preparing": "Das Dokument wird vor dem Interview recherchiert",
+    "preparingHint": "Der Lauf sammelt zuerst Hintergrundwissen und entwirft eine Gliederung. Fragen erscheinen hier, sobald das erledigt ist.",
     "failed": "Der Dokumentenlauf wurde abgebrochen",
     "failedHint": "Er endete, bevor der Interviewer antworten konnte. Deine Antworten sind gespeichert; führe die Dokumentaufgabe erneut aus.",
     "answerPlaceholder": "Deine Antwort",

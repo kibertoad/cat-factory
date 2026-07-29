@@ -1,14 +1,20 @@
 <script setup lang="ts">
-// The initiative tracker window — the dedicated read-only view of an initiative's
-// plan/tracker entity: goal + constraints, the phases with their per-item status +
-// PR links, the execution policy, and the decisions / deviations / follow-ups /
-// caveats logs. Renders the DB entity (the source of truth) — never the in-repo
-// mirror, which may not exist (GitHub-unwired workspaces). Opened via the universal
-// result-view host: from the board card / inspector (`ui.openInitiativeTracker`) or
-// as the planner step's result view. Live `initiative` stream events patch the
-// store, so an open window follows the plan as it is ingested and later executed.
-import { computed, reactive, ref } from 'vue'
+// The initiative tracker window — the dedicated view of an initiative's plan/tracker
+// entity: goal + constraints, the phases with their per-item status + PR links, the
+// execution policy, and the decisions / deviations / follow-ups / caveats logs.
+// Renders the DB entity (the source of truth) — never the in-repo mirror, which may
+// not exist (GitHub-unwired workspaces). Opened via the universal result-view host:
+// from the board card / inspector (`ui.openInitiativeTracker`) or as the planner
+// step's result view. Live `initiative` stream events patch the store, so an open
+// window follows the plan as it is ingested and later executed.
+//
+// It also OWNS the planner's plan-approval gate: this window is where the planner
+// step's park routes (its archetype declares this result view), so the approve /
+// request-changes rail has to live here or the gate has no resolving surface at all —
+// which is exactly how an approved-only-over-REST plan gate shipped.
+import { computed, reactive, ref, watch } from 'vue'
 import type { InitiativeFollowUp, InitiativeItem } from '~/types/domain'
+import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
   INITIATIVE_FOLLOWUP_STATUS_CHIPS,
   INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS,
@@ -19,18 +25,41 @@ import {
   pendingCheckpointPhase,
 } from '~/utils/initiative'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
+const execution = useExecutionStore()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 const toast = useToast()
 
-const { open, blockId, close } = useResultView('initiative-tracker', {
+const { open, blockId, instanceId, stepIndex, close } = useResultView('initiative-tracker', {
   onOpen: ({ blockId }) => void initiatives.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const initiative = computed(() => (blockId.value ? initiatives.forBlock(blockId.value) : null))
+
+/**
+ * The planning run's step this window speaks for, plus its run details, resolved through the
+ * shared seam so the tracker reports the same "which run is this / how did the model do" facts as
+ * every other agent window. The window is registered for the analyst, the planner AND the
+ * (model-less) committer, and is reached from the board card / inspector as often as from the run
+ * timeline — `useResultViewRunMeta` owns picking the right step for both cases.
+ */
+const {
+  step: metaStep,
+  instanceId: runId,
+  position,
+  totalSteps,
+  runFailed,
+  failureAt,
+} = useResultViewRunMeta('initiative-tracker', {
+  blockId: () => blockId.value,
+  instanceId: () => instanceId.value,
+  stepIndex: () => stepIndex.value,
+})
 
 const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
@@ -68,6 +97,58 @@ async function checkpointControl(action: 'resume' | 'cancel') {
     await initiatives.control(blockId.value, action)
   } catch (error) {
     reportError(error)
+  }
+}
+
+// ---- Plan review: the planner step's human gate, resolved right here -----------------------
+// Derived from the BLOCK (via the shared planning composable), not from this window's own
+// `stepIndex`: the card / inspector open the tracker with no step, and that is the entry point a
+// human parked on the gate actually uses. So the rail appears on every route into the window.
+const { planApproval } = useInitiativePlanning(() => blockId.value ?? '')
+
+/** Draft feedback for "request changes" (the planner re-runs with it), and the rail's in-flight
+ *  state. Reset when a different initiative opens so a draft can't follow the window. */
+const planFeedback = ref('')
+const requestingChanges = ref(false)
+const resolvingPlan = ref(false)
+watch(blockId, () => {
+  planFeedback.value = ''
+  requestingChanges.value = false
+})
+
+const canRequestChanges = computed(() => planFeedback.value.trim().length > 0)
+
+/**
+ * Accept the drafted plan: the run advances to the committer, which persists the initiative and
+ * arms the execution loop. The window deliberately stays OPEN — the rail disappears with the
+ * approval (live), and the tracker is where the plan then starts executing.
+ */
+async function approvePlan() {
+  const parked = planApproval.value
+  if (!parked || resolvingPlan.value) return
+  resolvingPlan.value = true
+  try {
+    await execution.approveStep(parked.instanceId, parked.approval.id)
+  } finally {
+    resolvingPlan.value = false
+  }
+}
+
+/** Send the plan back to the planner with what to change; it re-plans and parks again. */
+async function submitPlanChanges() {
+  const parked = planApproval.value
+  if (!parked || resolvingPlan.value || !canRequestChanges.value) return
+  resolvingPlan.value = true
+  try {
+    const ok = await execution.requestStepChanges(parked.instanceId, parked.approval.id, {
+      feedback: planFeedback.value.trim(),
+    })
+    if (ok) {
+      planFeedback.value = ''
+      requestingChanges.value = false
+    }
+  } finally {
+    resolvingPlan.value = false
   }
 }
 
@@ -180,7 +261,7 @@ async function savePolicy() {
     icon-class="bg-indigo-500/15 text-indigo-300"
     :title="initiative?.title ?? block?.title ?? t('initiative.tracker.title')"
     :subtitle="t('initiative.tracker.subtitle')"
-    width="4xl"
+    width="5xl"
     testid="initiative-tracker-window"
     @close="close"
   >
@@ -201,396 +282,497 @@ async function savePolicy() {
       </UBadge>
     </template>
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <!-- No entity yet (module unwired / still creating) -->
-      <div
-        v-if="!initiative"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
-      >
-        <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
-      </div>
-
-      <template v-else>
-        <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
-                 review before the next phase spawns. Read the phase's artifacts/PRs below,
-                 then resume (continue) or cancel (stop) the initiative right here. -->
-        <section
-          v-if="pausedAtCheckpoint"
-          class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
-          data-testid="initiative-checkpoint-pause"
-        >
-          <div class="flex items-start gap-2.5">
-            <UIcon name="i-lucide-pause-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-            <div class="min-w-0 flex-1">
-              <h3 class="text-[13px] font-semibold text-amber-200">
-                {{ t('initiative.checkpoint.pausedTitle') }}
-              </h3>
-              <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
-                {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
-              </p>
-              <div class="mt-2.5 flex flex-wrap gap-2">
-                <button
-                  class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                  :disabled="initiatives.controlling"
-                  data-testid="initiative-checkpoint-resume"
-                  @click="checkpointControl('resume')"
-                >
-                  {{ t('initiative.inspector.resume') }}
-                </button>
-                <button
-                  class="rounded border border-rose-500/50 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
-                  :disabled="initiatives.controlling"
-                  data-testid="initiative-checkpoint-cancel"
-                  @click="checkpointControl('cancel')"
-                >
-                  {{ t('initiative.inspector.cancel') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Goal & constraints -->
-        <section v-if="initiative.goal" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.goal') }}
-          </h3>
-          <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
-            {{ initiative.goal }}
-          </p>
-        </section>
-        <section v-if="initiative.constraints?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.constraints') }}
-          </h3>
-          <ul class="list-inside list-disc text-[13px] text-slate-300">
-            <li v-for="(c, i) in initiative.constraints" :key="i">{{ c }}</li>
-          </ul>
-        </section>
-        <section v-if="initiative.nonGoals?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.nonGoals') }}
-          </h3>
-          <ul class="list-inside list-disc text-[13px] text-slate-300">
-            <li v-for="(g, i) in initiative.nonGoals" :key="i">{{ g }}</li>
-          </ul>
-        </section>
-        <section v-if="initiative.analysisSummary" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.analysis') }}
-          </h3>
-          <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
-            {{ initiative.analysisSummary }}
-          </p>
-        </section>
-
-        <!-- Awaiting planning -->
+    <div class="flex min-h-0 flex-1">
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <!-- No entity yet (module unwired / still creating) -->
         <div
-          v-if="phases.length === 0"
-          class="mb-4 rounded-lg border border-dashed border-slate-700 p-4 text-center text-[12px] text-slate-400"
+          v-if="!initiative"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
         >
-          {{ t('initiative.tracker.noPlan') }}
+          <UIcon name="i-lucide-milestone" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('initiative.tracker.empty') }}</p>
         </div>
 
-        <!-- Phases + items -->
-        <section v-for="phase in phases" :key="phase.id" class="mb-5">
-          <h3 class="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
-            <span>{{ t('initiative.tracker.phase', { title: phase.title }) }}</span>
-            <!-- Checkpoint annotation (D2): this phase pauses the initiative for human review
-                     once its items settle. Cleared → already reviewed; the pending one → awaiting
-                     review; otherwise an upcoming gate. -->
-            <UBadge
-              v-if="phase.checkpoint"
-              :color="
-                phase.checkpointClearedAt
-                  ? 'neutral'
-                  : awaitingReviewPhaseId === phase.id
-                    ? 'warning'
-                    : 'info'
-              "
-              variant="subtle"
-              size="sm"
-              :data-testid="`initiative-phase-checkpoint-${phase.id}`"
-            >
-              <UIcon name="i-lucide-flag" class="mr-1 h-3 w-3" />
-              {{
-                phase.checkpointClearedAt
-                  ? t('initiative.checkpoint.cleared')
-                  : awaitingReviewPhaseId === phase.id
-                    ? t('initiative.checkpoint.awaiting')
-                    : t('initiative.checkpoint.badge')
-              }}
-            </UBadge>
-          </h3>
-          <p v-if="phase.goal" class="mb-2 text-[12px] text-slate-400">{{ phase.goal }}</p>
-          <div class="overflow-x-auto rounded-lg border border-slate-800">
-            <table class="w-full text-[12px]">
-              <thead>
-                <tr class="border-b border-slate-800 text-left text-slate-500">
-                  <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colItem') }}</th>
-                  <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colStatus') }}</th>
-                  <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colPr') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in itemsOf(phase.id)"
-                  :key="item.id"
-                  class="border-b border-slate-800/60 last:border-0"
-                >
-                  <td class="px-3 py-2 align-top">
-                    <div class="font-medium text-slate-200">{{ item.title }}</div>
-                    <div v-if="item.dependsOn?.length" class="mt-0.5 text-[10px] text-slate-500">
-                      {{
-                        t('initiative.tracker.dependsOn', {
-                          items: item.dependsOn.join(', '),
-                        })
-                      }}
-                    </div>
-                    <div v-if="item.note" class="mt-0.5 text-[10px] text-amber-300/80">
-                      {{ item.note }}
-                    </div>
-                    <div
-                      v-if="editable && (item.status === 'blocked' || item.status === 'pending')"
-                      class="mt-1 flex gap-1.5"
-                    >
-                      <button
-                        v-if="item.status === 'blocked'"
-                        class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                        :disabled="initiatives.curating"
-                        :data-testid="`initiative-item-retry-${item.id}`"
-                        @click="itemAction(item, 'retry')"
-                      >
-                        {{ t('initiative.curation.retry') }}
-                      </button>
-                      <button
-                        class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                        :disabled="initiatives.curating"
-                        :data-testid="`initiative-item-skip-${item.id}`"
-                        @click="itemAction(item, 'skip')"
-                      >
-                        {{ t('initiative.curation.skip') }}
-                      </button>
-                    </div>
-                  </td>
-                  <td class="px-3 py-2 align-top">
-                    <UBadge
-                      :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status]"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[item.status]) }}
-                    </UBadge>
-                  </td>
-                  <td class="px-3 py-2 align-top">
-                    <a
-                      v-if="item.pr"
-                      :href="item.pr.url"
-                      target="_blank"
-                      rel="noopener"
-                      class="text-sky-400 hover:underline"
-                    >
-                      {{ item.pr.number ? `#${item.pr.number}` : t('initiative.tracker.prLink') }}
-                    </a>
-                    <span v-else class="text-slate-600">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Execution policy -->
-        <section v-if="initiative.policy" class="mb-4">
-          <div class="mb-1 flex items-center gap-2">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              {{ t('initiative.tracker.policy') }}
-            </h3>
-            <button
-              v-if="editable && !editingPolicy"
-              class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-              data-testid="initiative-policy-edit"
-              @click="startEditPolicy"
-            >
-              {{ t('initiative.curation.edit') }}
-            </button>
-          </div>
-          <ul v-if="!editingPolicy" class="text-[12px] text-slate-300">
-            <li>
-              {{
-                t('initiative.tracker.maxConcurrent', {
-                  count: initiative.policy.maxConcurrent,
-                })
-              }}
-            </li>
-            <li v-for="(rule, i) in policyRules" :key="i">
-              <code class="text-sky-300">{{ rule.pipelineId }}</code>
-              · {{ ruleAxes(rule) }}
-            </li>
-            <li>
-              {{ t('initiative.tracker.defaultPipeline') }}
-              <code class="text-sky-300">{{ initiative.policy.defaultPipelineId }}</code>
-            </li>
-          </ul>
-          <!-- Edit form: the two scalar knobs; planner-authored rules are preserved. -->
-          <div v-else class="flex flex-col gap-2 rounded-lg border border-slate-800 p-3">
-            <label class="flex items-center gap-2 text-[12px] text-slate-300">
-              <span class="w-40">{{ t('initiative.curation.maxConcurrentField') }}</span>
-              <input
-                v-model.number="policyForm.maxConcurrent"
-                type="number"
-                min="1"
-                max="20"
-                class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
-                data-testid="initiative-policy-max-concurrent"
+        <template v-else>
+          <!-- The planner's human gate: the plan below is drafted but NOT yet committed. This
+               is the only surface that can resolve it (the generic approval panel is never
+               reached — the planner's archetype routes its park to this window), so approve /
+               request changes live here, beside the plan they judge. -->
+          <section
+            v-if="planApproval"
+            class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+            data-testid="initiative-plan-review"
+          >
+            <div class="flex items-start gap-2.5">
+              <UIcon
+                name="i-lucide-clipboard-check"
+                class="mt-0.5 h-4 w-4 shrink-0 text-amber-300"
               />
-            </label>
-            <label class="flex items-center gap-2 text-[12px] text-slate-300">
-              <span class="w-40">{{ t('initiative.curation.defaultPipelineField') }}</span>
-              <input
-                v-model="policyForm.defaultPipelineId"
-                type="text"
-                class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200"
-                data-testid="initiative-policy-default-pipeline"
-              />
-            </label>
-            <div class="flex gap-2">
-              <button
-                class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
-                :disabled="initiatives.curating"
-                data-testid="initiative-policy-save"
-                @click="savePolicy"
-              >
-                {{ t('initiative.curation.save') }}
-              </button>
-              <button
-                class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
-                @click="editingPolicy = false"
-              >
-                {{ t('initiative.curation.cancel') }}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Logs -->
-        <section v-if="initiative.decisions?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.decisions') }}
-          </h3>
-          <ul class="list-inside list-disc text-[13px] text-slate-300">
-            <li v-for="d in initiative.decisions" :key="d.id">
-              <span class="font-medium">{{ d.title }}</span>
-              <span v-if="d.detail" class="text-slate-400"> — {{ d.detail }}</span>
-            </li>
-          </ul>
-        </section>
-        <section v-if="initiative.deviations?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.deviations') }}
-          </h3>
-          <ul class="list-inside list-disc text-[13px] text-slate-300">
-            <li v-for="d in initiative.deviations" :key="d.id">
-              <code v-if="d.itemId" class="text-slate-400">{{ d.itemId }}</code>
-              {{ d.description }}
-              <span v-if="d.resolution" class="text-slate-400"> → {{ d.resolution }}</span>
-            </li>
-          </ul>
-        </section>
-        <section v-if="initiative.followUps?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.followUps') }}
-          </h3>
-          <ul class="flex flex-col gap-2 text-[13px] text-slate-300">
-            <li
-              v-for="f in initiative.followUps"
-              :key="f.id"
-              class="rounded-lg border border-slate-800 p-2.5"
-              :data-testid="`initiative-followup-${f.id}`"
-            >
-              <div class="flex items-start gap-2">
-                <div class="min-w-0 flex-1">
-                  <span class="font-medium">{{ f.title }}</span>
-                  <span v-if="f.detail" class="text-slate-400"> — {{ f.detail }}</span>
+              <div class="min-w-0 flex-1">
+                <h3 class="text-[13px] font-semibold text-amber-200">
+                  {{ t('initiative.planReview.title') }}
+                </h3>
+                <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+                  {{ t('initiative.planReview.body') }}
+                </p>
+                <div v-if="!requestingChanges" class="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    :disabled="resolvingPlan || !access.canExecuteRuns.value"
+                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                    data-testid="initiative-plan-approve"
+                    @click="approvePlan"
+                  >
+                    {{ t('initiative.planReview.approve') }}
+                  </button>
+                  <button
+                    class="rounded border border-amber-400/50 px-2.5 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                    :disabled="resolvingPlan || !access.canExecuteRuns.value"
+                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                    data-testid="initiative-plan-request-changes"
+                    @click="requestingChanges = true"
+                  >
+                    {{ t('initiative.planReview.requestChanges') }}
+                  </button>
                 </div>
-                <UBadge
-                  :color="INITIATIVE_FOLLOWUP_STATUS_CHIPS[f.status]"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ t(INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS[f.status]) }}
-                </UBadge>
-              </div>
-              <!-- Triage actions for an open follow-up (only while executing) -->
-              <div v-if="editable && f.status === 'open'" class="mt-2">
-                <div v-if="promotingId === f.id" class="flex flex-col gap-2">
-                  <label class="flex items-center gap-2 text-[12px]">
-                    <span class="text-slate-400">{{ t('initiative.curation.phaseField') }}</span>
-                    <select
-                      v-model="promoteForm.phaseId"
-                      class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
-                      data-testid="initiative-promote-phase"
-                    >
-                      <option v-for="p in phases" :key="p.id" :value="p.id">
-                        {{ p.title }}
-                      </option>
-                    </select>
-                  </label>
-                  <input
-                    v-model="promoteForm.title"
-                    type="text"
-                    class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200"
-                    :placeholder="t('initiative.curation.itemTitlePlaceholder')"
-                    data-testid="initiative-promote-title"
+                <!-- Request-changes composer: the feedback is what the planner re-plans FROM,
+                     so it is required — an empty send would re-run the planner with nothing
+                     to act on and park again on the same plan. -->
+                <div v-else class="mt-2.5">
+                  <UTextarea
+                    v-model="planFeedback"
+                    :rows="3"
+                    autoresize
+                    size="sm"
+                    class="w-full"
+                    data-testid="initiative-plan-feedback"
+                    :placeholder="t('initiative.planReview.feedbackPlaceholder')"
                   />
-                  <div class="flex gap-2">
+                  <div class="mt-2 flex flex-wrap gap-2">
                     <button
-                      class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
-                      :disabled="initiatives.curating || !promoteForm.phaseId"
-                      data-testid="initiative-promote-submit"
-                      @click="submitPromote(f)"
+                      class="rounded bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                      :disabled="
+                        resolvingPlan || !canRequestChanges || !access.canExecuteRuns.value
+                      "
+                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                      data-testid="initiative-plan-send-back"
+                      @click="submitPlanChanges"
                     >
-                      {{ t('initiative.curation.promoteConfirm') }}
+                      {{ t('initiative.planReview.sendBack') }}
                     </button>
                     <button
-                      class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
-                      @click="promotingId = null"
+                      class="rounded border border-slate-600 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      :disabled="resolvingPlan"
+                      data-testid="initiative-plan-cancel-changes"
+                      @click="requestingChanges = false"
                     >
-                      {{ t('initiative.curation.cancel') }}
+                      {{ t('common.cancel') }}
                     </button>
                   </div>
                 </div>
-                <div v-else class="flex gap-1.5">
+              </div>
+            </div>
+          </section>
+
+          <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
+                   review before the next phase spawns. Read the phase's artifacts/PRs below,
+                   then resume (continue) or cancel (stop) the initiative right here. -->
+          <section
+            v-if="pausedAtCheckpoint"
+            class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+            data-testid="initiative-checkpoint-pause"
+          >
+            <div class="flex items-start gap-2.5">
+              <UIcon name="i-lucide-pause-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <div class="min-w-0 flex-1">
+                <h3 class="text-[13px] font-semibold text-amber-200">
+                  {{ t('initiative.checkpoint.pausedTitle') }}
+                </h3>
+                <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+                  {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
+                </p>
+                <div class="mt-2.5 flex flex-wrap gap-2">
                   <button
-                    class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                    data-testid="initiative-followup-promote"
-                    @click="startPromote(f)"
+                    class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    :disabled="initiatives.controlling"
+                    data-testid="initiative-checkpoint-resume"
+                    @click="checkpointControl('resume')"
                   >
-                    {{ t('initiative.curation.promote') }}
+                    {{ t('initiative.inspector.resume') }}
                   </button>
                   <button
-                    class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                    :disabled="initiatives.curating"
-                    data-testid="initiative-followup-dismiss"
-                    @click="dismissFollowUp(f)"
+                    class="rounded border border-rose-500/50 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                    :disabled="initiatives.controlling"
+                    data-testid="initiative-checkpoint-cancel"
+                    @click="checkpointControl('cancel')"
                   >
-                    {{ t('initiative.curation.dismiss') }}
+                    {{ t('initiative.inspector.cancel') }}
                   </button>
                 </div>
               </div>
-            </li>
-          </ul>
-        </section>
-        <section v-if="initiative.caveats?.length" class="mb-4">
-          <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {{ t('initiative.tracker.caveats') }}
-          </h3>
-          <ul class="list-inside list-disc text-[13px] text-slate-300">
-            <li v-for="(c, i) in initiative.caveats" :key="i">{{ c }}</li>
-          </ul>
-        </section>
-      </template>
+            </div>
+          </section>
+
+          <!-- Goal & constraints -->
+          <section v-if="initiative.goal" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.goal') }}
+            </h3>
+            <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+              {{ initiative.goal }}
+            </p>
+          </section>
+          <section v-if="initiative.constraints?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.constraints') }}
+            </h3>
+            <ul class="list-inside list-disc text-[13px] text-slate-300">
+              <li v-for="(c, i) in initiative.constraints" :key="i">{{ c }}</li>
+            </ul>
+          </section>
+          <section v-if="initiative.nonGoals?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.nonGoals') }}
+            </h3>
+            <ul class="list-inside list-disc text-[13px] text-slate-300">
+              <li v-for="(g, i) in initiative.nonGoals" :key="i">{{ g }}</li>
+            </ul>
+          </section>
+          <section v-if="initiative.analysisSummary" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.analysis') }}
+            </h3>
+            <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
+              {{ initiative.analysisSummary }}
+            </p>
+          </section>
+
+          <!-- Awaiting planning -->
+          <div
+            v-if="phases.length === 0"
+            class="mb-4 rounded-lg border border-dashed border-slate-700 p-4 text-center text-[12px] text-slate-400"
+          >
+            {{ t('initiative.tracker.noPlan') }}
+          </div>
+
+          <!-- Phases + items -->
+          <section v-for="phase in phases" :key="phase.id" class="mb-5">
+            <h3 class="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <span>{{ t('initiative.tracker.phase', { title: phase.title }) }}</span>
+              <!-- Checkpoint annotation (D2): this phase pauses the initiative for human review
+                       once its items settle. Cleared → already reviewed; the pending one → awaiting
+                       review; otherwise an upcoming gate. -->
+              <UBadge
+                v-if="phase.checkpoint"
+                :color="
+                  phase.checkpointClearedAt
+                    ? 'neutral'
+                    : awaitingReviewPhaseId === phase.id
+                      ? 'warning'
+                      : 'info'
+                "
+                variant="subtle"
+                size="sm"
+                :data-testid="`initiative-phase-checkpoint-${phase.id}`"
+              >
+                <UIcon name="i-lucide-flag" class="mr-1 h-3 w-3" />
+                {{
+                  phase.checkpointClearedAt
+                    ? t('initiative.checkpoint.cleared')
+                    : awaitingReviewPhaseId === phase.id
+                      ? t('initiative.checkpoint.awaiting')
+                      : t('initiative.checkpoint.badge')
+                }}
+              </UBadge>
+            </h3>
+            <p v-if="phase.goal" class="mb-2 text-[12px] text-slate-400">{{ phase.goal }}</p>
+            <div class="overflow-x-auto rounded-lg border border-slate-800">
+              <table class="w-full text-[12px]">
+                <thead>
+                  <tr class="border-b border-slate-800 text-left text-slate-500">
+                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colItem') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colStatus') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colPr') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in itemsOf(phase.id)"
+                    :key="item.id"
+                    class="border-b border-slate-800/60 last:border-0"
+                  >
+                    <td class="px-3 py-2 align-top">
+                      <div class="font-medium text-slate-200">{{ item.title }}</div>
+                      <div v-if="item.dependsOn?.length" class="mt-0.5 text-[10px] text-slate-500">
+                        {{
+                          t('initiative.tracker.dependsOn', {
+                            items: item.dependsOn.join(', '),
+                          })
+                        }}
+                      </div>
+                      <div v-if="item.note" class="mt-0.5 text-[10px] text-amber-300/80">
+                        {{ item.note }}
+                      </div>
+                      <div
+                        v-if="editable && (item.status === 'blocked' || item.status === 'pending')"
+                        class="mt-1 flex gap-1.5"
+                      >
+                        <button
+                          v-if="item.status === 'blocked'"
+                          class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          :disabled="initiatives.curating"
+                          :data-testid="`initiative-item-retry-${item.id}`"
+                          @click="itemAction(item, 'retry')"
+                        >
+                          {{ t('initiative.curation.retry') }}
+                        </button>
+                        <button
+                          class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          :disabled="initiatives.curating"
+                          :data-testid="`initiative-item-skip-${item.id}`"
+                          @click="itemAction(item, 'skip')"
+                        >
+                          {{ t('initiative.curation.skip') }}
+                        </button>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 align-top">
+                      <UBadge
+                        :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status]"
+                        variant="subtle"
+                        size="sm"
+                      >
+                        {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[item.status]) }}
+                      </UBadge>
+                    </td>
+                    <td class="px-3 py-2 align-top">
+                      <a
+                        v-if="item.pr"
+                        :href="item.pr.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="text-sky-400 hover:underline"
+                      >
+                        {{ item.pr.number ? `#${item.pr.number}` : t('initiative.tracker.prLink') }}
+                      </a>
+                      <span v-else class="text-slate-600">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Execution policy -->
+          <section v-if="initiative.policy" class="mb-4">
+            <div class="mb-1 flex items-center gap-2">
+              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {{ t('initiative.tracker.policy') }}
+              </h3>
+              <button
+                v-if="editable && !editingPolicy"
+                class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                data-testid="initiative-policy-edit"
+                @click="startEditPolicy"
+              >
+                {{ t('initiative.curation.edit') }}
+              </button>
+            </div>
+            <ul v-if="!editingPolicy" class="text-[12px] text-slate-300">
+              <li>
+                {{
+                  t('initiative.tracker.maxConcurrent', {
+                    count: initiative.policy.maxConcurrent,
+                  })
+                }}
+              </li>
+              <li v-for="(rule, i) in policyRules" :key="i">
+                <code class="text-sky-300">{{ rule.pipelineId }}</code>
+                · {{ ruleAxes(rule) }}
+              </li>
+              <li>
+                {{ t('initiative.tracker.defaultPipeline') }}
+                <code class="text-sky-300">{{ initiative.policy.defaultPipelineId }}</code>
+              </li>
+            </ul>
+            <!-- Edit form: the two scalar knobs; planner-authored rules are preserved. -->
+            <div v-else class="flex flex-col gap-2 rounded-lg border border-slate-800 p-3">
+              <label class="flex items-center gap-2 text-[12px] text-slate-300">
+                <span class="w-40">{{ t('initiative.curation.maxConcurrentField') }}</span>
+                <input
+                  v-model.number="policyForm.maxConcurrent"
+                  type="number"
+                  min="1"
+                  max="20"
+                  class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                  data-testid="initiative-policy-max-concurrent"
+                />
+              </label>
+              <label class="flex items-center gap-2 text-[12px] text-slate-300">
+                <span class="w-40">{{ t('initiative.curation.defaultPipelineField') }}</span>
+                <input
+                  v-model="policyForm.defaultPipelineId"
+                  type="text"
+                  class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200"
+                  data-testid="initiative-policy-default-pipeline"
+                />
+              </label>
+              <div class="flex gap-2">
+                <button
+                  class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
+                  :disabled="initiatives.curating"
+                  data-testid="initiative-policy-save"
+                  @click="savePolicy"
+                >
+                  {{ t('initiative.curation.save') }}
+                </button>
+                <button
+                  class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
+                  @click="editingPolicy = false"
+                >
+                  {{ t('initiative.curation.cancel') }}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Logs -->
+          <section v-if="initiative.decisions?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.decisions') }}
+            </h3>
+            <ul class="list-inside list-disc text-[13px] text-slate-300">
+              <li v-for="d in initiative.decisions" :key="d.id">
+                <span class="font-medium">{{ d.title }}</span>
+                <span v-if="d.detail" class="text-slate-400"> — {{ d.detail }}</span>
+              </li>
+            </ul>
+          </section>
+          <section v-if="initiative.deviations?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.deviations') }}
+            </h3>
+            <ul class="list-inside list-disc text-[13px] text-slate-300">
+              <li v-for="d in initiative.deviations" :key="d.id">
+                <code v-if="d.itemId" class="text-slate-400">{{ d.itemId }}</code>
+                {{ d.description }}
+                <span v-if="d.resolution" class="text-slate-400"> → {{ d.resolution }}</span>
+              </li>
+            </ul>
+          </section>
+          <section v-if="initiative.followUps?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.followUps') }}
+            </h3>
+            <ul class="flex flex-col gap-2 text-[13px] text-slate-300">
+              <li
+                v-for="f in initiative.followUps"
+                :key="f.id"
+                class="rounded-lg border border-slate-800 p-2.5"
+                :data-testid="`initiative-followup-${f.id}`"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <span class="font-medium">{{ f.title }}</span>
+                    <span v-if="f.detail" class="text-slate-400"> — {{ f.detail }}</span>
+                  </div>
+                  <UBadge
+                    :color="INITIATIVE_FOLLOWUP_STATUS_CHIPS[f.status]"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {{ t(INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS[f.status]) }}
+                  </UBadge>
+                </div>
+                <!-- Triage actions for an open follow-up (only while executing) -->
+                <div v-if="editable && f.status === 'open'" class="mt-2">
+                  <div v-if="promotingId === f.id" class="flex flex-col gap-2">
+                    <label class="flex items-center gap-2 text-[12px]">
+                      <span class="text-slate-400">{{ t('initiative.curation.phaseField') }}</span>
+                      <select
+                        v-model="promoteForm.phaseId"
+                        class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                        data-testid="initiative-promote-phase"
+                      >
+                        <option v-for="p in phases" :key="p.id" :value="p.id">
+                          {{ p.title }}
+                        </option>
+                      </select>
+                    </label>
+                    <input
+                      v-model="promoteForm.title"
+                      type="text"
+                      class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200"
+                      :placeholder="t('initiative.curation.itemTitlePlaceholder')"
+                      data-testid="initiative-promote-title"
+                    />
+                    <div class="flex gap-2">
+                      <button
+                        class="rounded bg-indigo-600 px-2 py-1 text-[11px] text-white hover:bg-indigo-500 disabled:opacity-50"
+                        :disabled="initiatives.curating || !promoteForm.phaseId"
+                        data-testid="initiative-promote-submit"
+                        @click="submitPromote(f)"
+                      >
+                        {{ t('initiative.curation.promoteConfirm') }}
+                      </button>
+                      <button
+                        class="rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
+                        @click="promotingId = null"
+                      >
+                        {{ t('initiative.curation.cancel') }}
+                      </button>
+                    </div>
+                  </div>
+                  <div v-else class="flex gap-1.5">
+                    <button
+                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                      data-testid="initiative-followup-promote"
+                      @click="startPromote(f)"
+                    >
+                      {{ t('initiative.curation.promote') }}
+                    </button>
+                    <button
+                      class="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      :disabled="initiatives.curating"
+                      data-testid="initiative-followup-dismiss"
+                      @click="dismissFollowUp(f)"
+                    >
+                      {{ t('initiative.curation.dismiss') }}
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </section>
+          <section v-if="initiative.caveats?.length" class="mb-4">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('initiative.tracker.caveats') }}
+            </h3>
+            <ul class="list-inside list-disc text-[13px] text-slate-300">
+              <li v-for="(c, i) in initiative.caveats" :key="i">{{ c }}</li>
+            </ul>
+          </section>
+        </template>
+      </div>
+
+      <!-- Run details: the shared run-metadata + LLM model-activity block every agent window
+           carries (step position, live duration, model, run id, calls + token usage). Resolved
+           through `useResultViewRunMeta`, so it is present on the card / inspector entry point
+           too — where this window carries no step index of its own. -->
+      <aside
+        v-if="metaStep"
+        data-testid="initiative-tracker-run-meta"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <StepRunMeta
+          :step="metaStep"
+          :instance-id="runId"
+          :step-number="position"
+          :total-steps="totalSteps"
+          :run-failed="runFailed"
+          :failure-at="failureAt"
+        />
+      </aside>
     </div>
   </ResultWindowShell>
 </template>

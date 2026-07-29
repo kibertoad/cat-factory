@@ -247,6 +247,7 @@ export {
 export {
   INITIATIVE_BREAKDOWN_KIND,
   INITIATIVE_AGENT_KINDS,
+  codebaseAnalysisLines,
   initiativeAnalystUserPrompt,
   initiativePlannerUserPrompt,
   registerInitiativeAgents,

@@ -131,7 +131,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 
 - **Board canvas** (`components/board`) — `BoardCanvas` + `nodes/` (`BlockNode`,
   `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
-  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`.
+  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. A running task card expands
+  its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
+  on-screen card past the `steps` zoom band — the two grants are combined in the
+  `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`) — board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
@@ -148,7 +151,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 - **Context attachments** (`components/context`) — `ContextAttachmentFields`, the
   shared staged-attachment form used by both the add-task and create-initiative
   modals. Picks are held locally and import-and-linked once the block exists (see
-  `composables/useContextLinking`), because linking needs a block id.
+  `composables/useContextLinking`), because linking needs a block id. Both hosts
+  attach to the SAME per-block linkage, so the inspector's `TaskContextDocs` /
+  `TaskContextIssues` sections render for a task AND an initiative — an initiative's
+  attachments would otherwise be invisible the moment the create modal closed.
 - **Integrations** — modals/panels for `github` (the source-control panel, shared
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
@@ -171,9 +177,13 @@ Two placements are load-bearing enough to state, because putting a new one in th
 wrong place is invisible until a user cannot find it:
 
 - **The sidebar section is a claim about what the destination IS.** `models` is the
-  engines, `integrations` the optional systems, `infrastructure` where agent
-  containers and test environments run, `configuration` workspace/account settings.
-  `nav-contributions.spec.ts` pins the section order and each section's membership.
+  model layer — the engines, the per-agent model choice, and the surfaces that
+  evaluate a prompt+agent+model combination (Sandbox, Kaizen); `integrations` the
+  optional EXTERNAL systems; `infrastructure` where agent containers and test
+  environments run; `configuration` workspace/account settings. A surface that
+  connects to nothing does not belong in `integrations` however configuration-shaped
+  it feels. `nav-contributions.spec.ts` pins the section order and each section's
+  membership.
 - **A flow that edits ONE entity's config is a section of the window that owns that
   config, not a sibling nav entry.** The guided Docker Compose environment setup
   (`ComposeEnvironmentSetupSection.vue` → `EnvironmentSetupWizard.vue`) lives inside
