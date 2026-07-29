@@ -162,6 +162,13 @@ function addRecurring() {
   ui.openAddRecurring(props.id)
 }
 
+// Hunt this service's tracker board for a bug worth picking up. Scoped to THIS frame, so
+// an adopted candidate lands here rather than wherever the board's first frame happens to be.
+function huntBugs() {
+  ui.expandFrame(props.id)
+  ui.openBugHunt(null, props.id)
+}
+
 function createInitiative() {
   ui.expandFrame(props.id)
   ui.openCreateInitiative(props.id)
@@ -521,6 +528,17 @@ const ITEM_ICON: Record<string, string> = {
                   icon="i-lucide-milestone"
                   :title="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
+                />
+                <UButton
+                  v-if="tasks.anyOffered"
+                  class="nodrag"
+                  data-testid="frame-hunt-bugs"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-radar"
+                  :title="t('board.frame.huntBugsTitle')"
+                  @click.stop="huntBugs"
                 />
               </template>
               <UButton

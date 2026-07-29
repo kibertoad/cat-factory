@@ -10,17 +10,16 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the webhook service or send a 503, returning null when unconfigured. */
 function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookService | null {
   return c.get('container').notificationWebhooks ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Notification webhooks are not configured' } },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Notification webhooks are not configured')
+}
 
 /**
  * Workspace-scoped management of the OUTBOUND notification webhook: the one HTTPS endpoint a
@@ -39,20 +38,20 @@ export function notificationWebhookController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
+    if (!webhooks) return unavailable()
     return c.json(await webhooks.get(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, putNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
+    if (!webhooks) return unavailable()
     const saved = await webhooks.put(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(saved, 200)
   })
 
   buildHonoRoute(app, deleteNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)
-    if (!webhooks) return unavailable(c)
+    if (!webhooks) return unavailable()
     await webhooks.remove(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

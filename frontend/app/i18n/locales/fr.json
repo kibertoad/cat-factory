@@ -111,6 +111,8 @@
     "repositories": "Dépôts",
     "addFromRepo": "Ajouter depuis un dépôt existant",
     "bootstrapRepo": "Initialiser un dépôt",
+    "models": "Modèles",
+    "modelProviders": "Fournisseurs de modèles",
     "integrations": "Intégrations",
     "sandbox": "Bac à sable",
     "kaizen": "Kaizen",
@@ -122,8 +124,7 @@
     "accountSettings": "Paramètres du compte",
     "operatorDashboard": "Observabilité de la plateforme",
     "reports": "Rapports",
-    "infrastructure": "Infrastructure",
-    "environmentSetup": "Configuration d'environnement"
+    "infrastructure": "Infrastructure"
   },
   "board": {
     "toast": {
@@ -394,6 +395,7 @@
       "dragToResize": "Glisser pour redimensionner",
       "addFirstTask": "Ajouter la première tâche",
       "createInitiativeTitle": "Creer une initiative",
+      "huntBugsTitle": "Chasser les bugs",
       "accessDenied": {
         "title": "Autorisation refusée",
         "hint": "Vous n'avez pas accès au dépôt sur lequel repose ce service."
@@ -631,12 +633,12 @@
   "inspector": {
     "detectRepoUnresolved": "Le dépôt de ce bloc ne figure pas parmi les dépôts GitHub connectés et ne peut donc pas être lu. Connectez ou synchronisez GitHub pour ce dépôt, puis réessayez.",
     "container": {
-      "title": "Contenu",
-      "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",
-      "modules": "Modules ({count})",
+      "modulesTitle": "Modules",
+      "modulesHint": "Les modules de ce service. Cliquez sur l'un d'eux pour le sélectionner sur le tableau.",
       "taskCount": "{count} tâche | {count} tâches",
-      "allTasks": "Toutes les tâches ({count})",
-      "tasks": "Tâches ({count})",
+      "tasksTitle": "Tâches",
+      "allTasksTitle": "Toutes les tâches",
+      "tasksHint": "Les tâches contenues dans ce bloc. Cliquez sur l'une d'elles pour la sélectionner sur le tableau.",
       "addTask": "Ajouter une tâche",
       "noTasks": "Aucune tâche pour le moment. Ajoutez-en une pour commencer.",
       "servicesHint": "Les services sont permanents et ne se terminent pas. Le travail se fait dans leurs tâches et modules."
@@ -1318,8 +1320,6 @@
       "lastIncorporatedRequirements": "Dernières exigences intégrées",
       "priorDocHint": "Issu de la revue précédente. Utilisez-le comme base : modifiez la description ci-dessus et resoumettez.",
       "bootstrapping": "Initialisation…",
-      "importIssue": "Importer une issue",
-      "connectTracker": "Connecter un tracker",
       "viewRequirements": "Voir les exigences",
       "reRun": "Relancer",
       "run": "Exécuter",
@@ -1352,8 +1352,7 @@
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       },
-      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}",
-      "huntBugs": "Chasser les bugs"
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
     }
   },
   "observability": {
@@ -1935,7 +1934,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Retour à Ma configuration",
-      "backToIntegrations": "Retour aux Intégrations"
+      "backToIntegrations": "Retour aux Intégrations",
+      "backToModelProviders": "Retour aux Fournisseurs de modèles"
     },
     "commandBar": {
       "searchPlaceholder": "Rechercher ou exécuter une commande…",
@@ -1996,23 +1996,21 @@
     },
     "integrationsHub": {
       "title": "Intégrations",
-      "intro": "Connectez et gérez les systèmes externes que cet espace de travail peut relier.",
+      "intro": "Connectez et gérez les systèmes externes optionnels que cet espace de travail peut relier. Les modèles qui font tourner vos agents se trouvent dans Fournisseurs de modèles.",
       "searchPlaceholder": "Rechercher des intégrations…",
       "noMatches": "Aucune intégration ne correspond à \"{query}\".",
       "getStarted": {
         "title": "Pour commencer",
-        "body": "Connectez une source de code et un fournisseur de modèles pour exécuter votre premier pipeline."
+        "body": "Connectez une source de code pour que vos pipelines aient de quoi travailler."
       },
       "status": {
         "connected": "Connecté",
-        "keyConnected": "Clé connectée",
         "notConnected": "Non connecté",
         "needsAttention": "Nécessite une intervention",
         "disabled": "Désactivé",
         "recommended": "Recommandé"
       },
       "groups": {
-        "models": "Modèles et fournisseurs",
         "sourceControl": "Gestion de code source",
         "communication": "Communication",
         "documents": "Documents",
@@ -2022,16 +2020,6 @@
         "personal": "Personnel (vous uniquement)"
       },
       "items": {
-        "openrouter": {
-          "description": "Une seule passerelle vers plus de 300 modèles. Ajoutez votre clé et activez des modèles au même endroit."
-        },
-        "vendors": {
-          "label": "Fournisseurs et clés",
-          "description": "Abonnements LLM de l'espace de travail et clés API des fournisseurs."
-        },
-        "personalSubs": {
-          "label": "Abonnements personnels (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Connectez la GitHub App de l'espace de travail, parcourez dépôts, PR et tickets."
         },
@@ -2071,16 +2059,51 @@
           "label": "Mon jeton GitHub",
           "description": "Un jeton d'accès personnel utilisé pour les exécutions que vous lancez (pushes, PR, CI, fusion)."
         },
-        "localRunners": {
-          "label": "Mes exécuteurs locaux",
-          "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Modèles et exemples"
         },
         "bugHunt": {
           "label": "Chasse aux bugs",
           "description": "Évaluer les bugs ouverts et non assignés d'un tableau et en choisir un à corriger"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Fournisseurs de modèles",
+      "intro": "Les moteurs qui font tourner vos agents. Au moins un fournisseur doit être connecté avant qu'une étape de pipeline puisse s'exécuter.",
+      "searchPlaceholder": "Rechercher un fournisseur…",
+      "noMatches": "Aucun fournisseur ne correspond à \"{query}\".",
+      "getStarted": {
+        "title": "Aucun fournisseur connecté pour l'instant",
+        "body": "Les étapes d'agent ne peuvent pas s'exécuter tant qu'aucun modèle n'est accessible. Une clé OpenRouter est le moyen le plus rapide d'ouvrir un large catalogue, mais des clés de fournisseur, un abonnement personnel ou votre propre exécuteur local conviennent tout autant."
+      },
+      "status": {
+        "connected": "Connecté",
+        "keyConnected": "Clé connectée",
+        "notConnected": "Non connecté",
+        "recommended": "Recommandé",
+        "connectedCount": "aucun connecté | {count} connecté | {count} connectés"
+      },
+      "groups": {
+        "workspace": "Fournisseurs de l'espace de travail",
+        "personal": "Personnel (vous uniquement)",
+        "personalNote": "Ils appartiennent à votre compte et non à l'espace de travail, et ne servent qu'aux exécutions que vous lancez. Ils figurent aussi dans Ma configuration."
+      },
+      "items": {
+        "openrouter": {
+          "description": "Une seule passerelle vers plus de 300 modèles. Ajoutez votre clé et activez des modèles au même endroit."
+        },
+        "vendors": {
+          "label": "Fournisseurs et clés",
+          "description": "Abonnements LLM de l'espace de travail et clés API des fournisseurs."
+        },
+        "personalSubs": {
+          "label": "Mes abonnements",
+          "description": "Plans à usage individuel que vous déverrouillez avec un mot de passe personnel (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "Mes exécuteurs locaux",
+          "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -2651,6 +2674,32 @@
         "stopFailed": "Impossible d'arrêter le stack partagé",
         "removeFailed": "Impossible de supprimer le stack partagé"
       }
+    },
+    "composeEnvSetup": {
+      "title": "Configuration guidée Docker Compose pour un service",
+      "lead": "Accompagne un service dans la création de la recette Docker Compose à partir de laquelle ses environnements de test sont montés, au lieu d'écrire à la main le chemin du compose et les étapes de préparation.",
+      "how": {
+        "title": "Comment ça marche",
+        "scan": "Analyse le dépôt lié au service à la recherche de fichiers compose, de profils, de fichiers d'environnement et de jeux de données initiales.",
+        "analyse": "Exécute éventuellement l'agent analyste d'environnement pour rédiger des étapes de préparation et un contrôle de santé à partir des scripts du dépôt.",
+        "preflight": "Exécute les vérifications préalables de la recette sur la machine qui la provisionnera.",
+        "save": "Enregistre la recette sur le service et déclare le gestionnaire Docker Compose de l'espace de travail.",
+        "outcome": "Ensuite, le Deployer monte exactement cette pile dès qu'un pipeline a besoin d'un environnement réel, et le Tester s'exécute dessus. Rien n'est appliqué tant que vous n'avez pas enregistré."
+      },
+      "needed": {
+        "title": "Vous en avez besoin quand",
+        "running": "Les tests du service exigent que l'application tourne vraiment : tests d'API ou d'interface, migrations, données initiales.",
+        "compose": "Le service est provisionné via Docker Compose et n'a pas encore de recette enregistrée.",
+        "setup": "Monter la pile demande plus d'une commande : profils, fichiers d'environnement, données initiales ou contrôle de disponibilité."
+      },
+      "notNeeded": {
+        "title": "Vous pouvez l'ignorer quand",
+        "inContainer": "Le pipeline se contente de linter, compiler ou lancer des tests unitaires. Cela se fait dans le conteneur de l'agent comme vérifications avant PR, sans provisionner d'environnement.",
+        "otherBackend": "Le service est provisionné autrement (Kubernetes, un aperçu cloud, ou aucune infrastructure). Configurez cela plus haut.",
+        "noRepo": "Le service n'a pas de dépôt lié, il n'y a donc rien à analyser."
+      },
+      "start": "Lancer la configuration guidée",
+      "rerunHint": "Relancez-la à tout moment pour modifier une recette enregistrée."
     },
     "localMode": {
       "title": "Mode local",
@@ -5254,8 +5303,8 @@
   },
   "environmentWizard": {
     "progress": "Étape {index} sur {total}",
-    "title": "Configurer un environnement de test",
-    "subtitle": "Détectez, vérifiez et enregistrez une recette Docker Compose pour que le Deployer la provisionne.",
+    "title": "Configuration d'environnement Docker Compose",
+    "subtitle": "Créez la recette Docker Compose à partir de laquelle les environnements de test d'un service sont montés : analyse du dépôt, revue, vérifications préalables, enregistrement.",
     "recommended": "recommandé",
     "steps": {
       "pick": "Choisir le service",
@@ -5265,6 +5314,7 @@
     },
     "pick": {
       "intro": "Choisissez le service pour lequel configurer un environnement Docker Compose.",
+      "scope": "Seul le service choisi est modifié. Relancez ceci plus tard pour modifier sa recette.",
       "empty": "Aucun service pour l'instant. Ajoutez-en un d'abord."
     },
     "review": {

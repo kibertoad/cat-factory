@@ -1,21 +1,24 @@
 <script setup lang="ts">
 // Title content for an integration sub-panel's modal header. Renders the panel
 // title with a leading "back" control that returns to the hub the panel was reached
-// from — the workspace Integrations hub (`ui.cameFromIntegrations`) or the user-scoped
-// "My setup" hub (`ui.cameFromPersonal`) — shown only when there is one. Panels opened
-// from the command bar, sidebar, a banner or an inspector link don't grow a dead Back.
+// from — the workspace Integrations hub (`ui.cameFromIntegrations`), the Model providers
+// hub (`ui.cameFromModelProviders`) or the user-scoped "My setup" hub
+// (`ui.cameFromPersonal`) — shown only when there is one. Panels opened from the command
+// bar, sidebar, a banner or an inspector link don't grow a dead Back.
 // Dropped into a UModal's #title slot, so it inherits the modal's title styling; it
 // emits `back` and the host panel closes itself + reopens the right hub.
 defineProps<{ title?: string }>()
 const emit = defineEmits<{ back: [] }>()
 const { t } = useI18n()
 const ui = useUiStore()
-const cameFromHub = computed(() => ui.cameFromIntegrations || ui.cameFromPersonal)
-const backLabel = computed(() =>
-  ui.cameFromPersonal
-    ? t('layout.integrationBack.backToMySetup')
-    : t('layout.integrationBack.backToIntegrations'),
+const cameFromHub = computed(
+  () => ui.cameFromIntegrations || ui.cameFromModelProviders || ui.cameFromPersonal,
 )
+const backLabel = computed(() => {
+  if (ui.cameFromPersonal) return t('layout.integrationBack.backToMySetup')
+  if (ui.cameFromModelProviders) return t('layout.integrationBack.backToModelProviders')
+  return t('layout.integrationBack.backToIntegrations')
+})
 </script>
 
 <template>

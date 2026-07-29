@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultVcsRegistry, VcsProviderRegistry } from '@cat-factory/kernel'
 import type { VcsConnectionRef, VcsWebhookEvent } from '@cat-factory/kernel'
 import { vcsWebhookController } from './VcsWebhookController.js'
+import { handleError } from '../../http/errorHandler.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 
 // Exercises the neutral ingest route's behaviour (resolve provider → verify → map → sink)
@@ -11,6 +12,10 @@ import type { AppEnv, ServerContainer } from '../../http/env.js'
 
 function appWith(container: Partial<ServerContainer>) {
   const app = new Hono<AppEnv>()
+  // The controller signals refusals by THROWING a `DomainError` (an unverifiable signature
+  // → 401, an unwired provider → 503), so the test app must mount the same `onError` the
+  // real facades do — without it every such refusal reads as an unhandled 500.
+  app.onError(handleError)
   app.use('*', async (c, next) => {
     c.set('container', { vcsRegistry, ...container } as ServerContainer)
     await next()

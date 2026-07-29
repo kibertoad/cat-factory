@@ -420,6 +420,7 @@ export {
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,
+  type WorkspaceBodiesGate,
   VendorConcurrencyLimiter,
   limitModelProvider,
   vendorConcurrencyLimiterFromEnv,

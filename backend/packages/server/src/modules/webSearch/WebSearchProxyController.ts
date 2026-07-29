@@ -41,7 +41,10 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const secret = config.auth.sessionSecret
     if (!secret) {
       logger.error('web-search proxy: session secret not configured', { scope: 'webSearchProxy' })
-      return c.json({ error: { message: 'Web search proxy is not configured' } }, 503)
+      return c.json(
+        { error: { code: 'unavailable', message: 'Web search proxy is not configured' } },
+        503,
+      )
     }
 
     // Same model-locked container token the LLM proxy verifies: only our own per-run
@@ -50,7 +53,10 @@ export function webSearchProxyController(): Hono<AppEnv> {
     const session = await sessions.verify(bearer(c.req.header('authorization')))
     if (!session) {
       logger.warn('web-search proxy: invalid or expired session token', { scope: 'webSearchProxy' })
-      return c.json({ error: { message: 'Invalid or expired session token' } }, 401)
+      return c.json(
+        { error: { code: 'unauthorized', message: 'Invalid or expired session token' } },
+        401,
+      )
     }
 
     // Resolve the search upstream from the run's account settings (web-search keys live in
@@ -83,7 +89,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
         scope: 'webSearchProxy',
         workspaceId: session.workspaceId,
       })
-      return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
+      return c.json({ error: { code: 'spend_exhausted', message: 'Spend budget exhausted' } }, 402)
     }
 
     const query = (c.req.query('q') ?? '').trim()

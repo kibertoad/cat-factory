@@ -17,7 +17,15 @@
     prompt section (available servers + the ones this run could NOT wire). See ADR 0029.
 - `providers/` — the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
-  (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy).
+  (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy), and
+  `instrumented.ts` (`InstrumentedModelProvider` — the INLINE feeder onto the trace sink).
+  Bodies leaving for a sink pass the SAME double gate the proxied path applies: the deployment's
+  `LLM_RECORD_PROMPTS` **and** the workspace's `storeAgentContext` opt-out, the latter injected
+  as the required narrow `WorkspaceBodiesGate` predicate (built by the server layer's
+  `createStoreAgentContextGate`, so both facades wire it from one place). It is required, not
+  optional, because an absent gate is an OPEN gate — which is how an opted-out workspace's
+  inline prompts reached Langfuse/OTel for months. Any new inline call site must tag its
+  `workspaceId` via `catFactoryObservability`, or no opt-out can apply to it.
 - `fragmentLibrary/` — the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`) — the ONE

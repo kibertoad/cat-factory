@@ -10,6 +10,7 @@ export {
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,
+  type WorkspaceBodiesGate,
 } from './instrumented.js'
 export {
   VendorConcurrencyLimiter,
