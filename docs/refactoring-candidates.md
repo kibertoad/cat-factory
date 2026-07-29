@@ -206,18 +206,20 @@ rewrites both facade boot paths at once and must be conformance-verified on both
 ## Documentation follow-ups
 
 Not code refactors, but recorded here so they aren't lost. The package-map completeness +
-drift guard, the per-package `AGENTS.md` orientation layer, and `docs/glossary.md` have
-landed; the remaining optional item:
+drift guard, the per-package `AGENTS.md` orientation layer, `docs/glossary.md`, and the
+`CLAUDE.md` slim-down have landed; the remaining optional item:
 
-- **Slim `CLAUDE.md` + move the flow narratives to co-located `docs/flows/*`.** `CLAUDE.md`
-  is ~1,400 lines loaded every session, mixing durable working rules with long runtime-flow
-  narratives (execution, bootstrap, blueprints, requirements review, merge/gate lifecycle,
-  post-release health). Those narratives are the deepest well of otherwise-undocumented
-  knowledge but live nowhere near the code they describe. A future pass could keep the rules +
-  a concept index in `CLAUDE.md` and move each flow into a `docs/flows/<flow>.md` linked from
-  both `CLAUDE.md` and the owning package's `AGENTS.md` — cutting per-session tokens and
-  drift. Deferred because it is high-blast-radius (every inbound "CLAUDE.md → section" link
-  moves) and pure documentation; do it as its own change, not folded into unrelated work.
+- **Move the surviving flow entries to co-located `docs/flows/*`.** `CLAUDE.md` has been cut
+  roughly in half: the flow narratives are now a short INDEX (what the flow is + the trap a
+  change would hit + a link to its ADR/initiative doc), the rules those flows established are
+  hoisted into state-once sections (concurrency/idempotency, untrusted text, degrade loudly,
+  harness rules), the package-by-package layout defers to the root README's CI-guarded table,
+  and three descriptive sections whose content lives in `backend/docs/` were dropped outright.
+  What remains for a future pass is relocation rather than deletion: each index entry could
+  become a `docs/flows/<flow>.md` linked from both `CLAUDE.md` and the owning package's
+  `AGENTS.md`, for the flows that have no ADR/initiative doc of their own (built-in catalog
+  lifecycle, repo bootstrap, blueprints, merge lifecycle, consensus panels). Still deferred
+  because it is pure relocation with inbound-link blast radius; do it as its own change.
 
 ---
 
