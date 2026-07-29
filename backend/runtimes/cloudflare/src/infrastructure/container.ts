@@ -92,6 +92,7 @@ import {
   resolvePackageRegistriesForDispatch,
   LlmObservabilityService,
   makeHarnessCallRecorder,
+  makeInlineCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
@@ -305,18 +306,39 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     buildLangfuseSink(loadLangfuseConfig(env)),
     buildOtelSink(loadOtelConfig(env)),
   ])
-  const instrument = traceSink
-    ? {
-        traceSink,
-        recordPrompts: loadObservabilityConfig(env).recordPrompts,
-        // The second half of the body gate: the workspace's own `storeAgentContext`
-        // opt-out, the same one the proxied path honours. No cache handle is passed
-        // because `workspaceSettings` is a pass-through in the isolate-safe profile.
-        workspaceBodiesEnabled: createStoreAgentContextGate({
-          repository: new D1WorkspaceSettingsRepository({ db }),
-        }),
-      }
-    : undefined
+  const recordPrompts = loadObservabilityConfig(env).recordPrompts
+  const workspaceSettingsRepository = new D1WorkspaceSettingsRepository({ db })
+  // Persist inline calls to the SAME `llm_call_metrics` store the proxy writes for Pi and
+  // the executor writes for a subscription harness, so an inline agent kind (`doc-researcher`,
+  // the judges, consensus, the requirements writer) is visible to `ObservabilityPanel`, the
+  // per-step rollups and `/api/v1/debug/*` rather than only to an external trace backend. A
+  // standalone service over the required telemetry DB, exactly like `recordHarnessCalls` — both
+  // are stateless writers against the same table. The composed sink is handed to THIS service,
+  // never to the provider alongside the recorder: the service owns the fan-out for a call it
+  // records, so passing both would double every inline generation on Langfuse/OTel.
+  const recordCall = makeInlineCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock: new SystemClock(),
+      recordPrompts,
+      ...(traceSink ? { traceSink } : {}),
+      workspaceSettingsRepository,
+    }),
+  )
+  const instrument = {
+    recordCall,
+    // The sink exit remains for the calls the recorder structurally cannot take — an inline
+    // call tagged with no workspace has no row to be filed under.
+    ...(traceSink ? { traceSink } : {}),
+    recordPrompts,
+    // The second half of the body gate: the workspace's own `storeAgentContext`
+    // opt-out, the same one the proxied path honours. No cache handle is passed
+    // because `workspaceSettings` is a pass-through in the isolate-safe profile.
+    workspaceBodiesEnabled: createStoreAgentContextGate({
+      repository: workspaceSettingsRepository,
+    }),
+  }
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const scoped = createScopedModelProviderResolver({
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),

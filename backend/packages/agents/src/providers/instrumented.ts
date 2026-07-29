@@ -1,6 +1,7 @@
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
 import type { LanguageModel } from 'ai'
 import type {
+  InlineLlmCallRecorder,
   InlineObservabilityContext,
   LlmGenerationEvent,
   LlmTraceSink,
@@ -39,14 +40,27 @@ export type WorkspaceBodiesGate = StoreAgentContextGate
 export { catFactoryObservability }
 export type { InlineObservabilityContext }
 
-// Instruments the INLINE (non-proxied) LLM calls so they reach the SAME trace sink as
-// the container-agent calls. Container calls go through the LLM proxy, which the
-// orchestration `LlmObservabilityService` fans out to the sink; inline calls
-// (requirements review/rework, the document planner, the fragment selector, the inline
-// agent executor) call the AI SDK directly. This decorator wraps every resolved model
-// with an AI SDK middleware that, after each generate, builds the SAME
-// {@link LlmGenerationEvent} and calls the SAME `sink.recordGeneration` — so adding the
-// inline feeder never means a second sink.
+// Instruments the INLINE (non-proxied) LLM calls so they reach the SAME sinks as the
+// container-agent calls. Container calls go through the LLM proxy (or, on a subscription
+// harness, the harness's own stream), and both feed the orchestration
+// `LlmObservabilityService`, which persists the call to `llm_call_metrics` and fans it out
+// to the external trace sink. Inline calls (requirements review/rework, the document
+// researcher/outliner/interviewer, the judges, consensus, the fragment selector, the inline
+// agent executor) call the AI SDK directly. This decorator wraps every resolved model with an
+// AI SDK middleware that, after each generate, feeds the same telemetry through one of two
+// exits — so adding the inline feeder never means a second sink OR a second store:
+//
+//   - `recordCall` (preferred) — the {@link InlineLlmCallRecorder} the facade builds off
+//     `LlmObservabilityService`. It persists the row AND owns the trace-sink fan-out, so an
+//     inline call recorded this way is visible to `ObservabilityPanel`, the per-step token
+//     rollups and `/api/v1/debug/*` exactly like a proxied one. Requires a workspace to file
+//     the row under.
+//   - `traceSink` — the direct emit, for a deployment that wires a sink but no metric store,
+//     and for the un-tagged call `recordCall` structurally cannot take (see below).
+//
+// EXACTLY ONE of the two runs per call. `recordCall`'s service already fans out to the sink
+// it was built with, so calling both would double every inline generation on Langfuse/OTel;
+// the facade therefore hands the SAME sink instance to both.
 //
 // The middleware is transparent: callers keep calling `generateText({ model })`
 // unchanged. To group a call under its run's trace and label it, a caller passes
@@ -121,19 +135,50 @@ function readOutputText(result: unknown): string {
   return ''
 }
 
+/** Extract the model's reasoning/thinking trace from a generate result, when it came separately. */
+function readReasoningText(result: unknown): string {
+  const content = (result as { content?: unknown })?.content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((part) => (part as { type?: string })?.type === 'reasoning')
+    .map((part) => String((part as { text?: unknown }).text ?? ''))
+    .join('')
+}
+
+/** How many chat messages the request carried (the store's chain uses this as the turn size). */
+function readMessageCount(params: unknown): number {
+  const prompt = (params as { prompt?: unknown })?.prompt
+  return Array.isArray(prompt) ? prompt.length : 0
+}
+
+/** How many tools the request offered, across the SDK's array and record `tools` shapes. */
+function readToolCount(params: unknown): number {
+  const tools = (params as { tools?: unknown })?.tools
+  if (Array.isArray(tools)) return tools.length
+  if (tools && typeof tools === 'object') return Object.keys(tools).length
+  return 0
+}
+
+/** The output ceiling the request asked for, or null when it named none. */
+function readRequestMaxTokens(params: unknown): number | null {
+  const max = (params as { maxOutputTokens?: unknown })?.maxOutputTokens
+  return typeof max === 'number' ? max : null
+}
+
 function readFinishReason(result: unknown): string | null {
   const reason = (result as { finishReason?: unknown })?.finishReason
   return typeof reason === 'string' ? reason : null
 }
 
 /**
- * A {@link ModelProvider} that wraps every resolved model so inline LLM calls surface
- * on the trace sink. Build it only when a sink is wired AND the deployment opts in; an
- * unwrapped provider behaves exactly as before.
+ * A {@link ModelProvider} that wraps every resolved model so inline LLM calls surface on the
+ * telemetry store and/or the external trace sink. Build it only when at least one of those
+ * exits is wired AND the deployment opts in; an unwrapped provider behaves exactly as before.
  */
 export class InstrumentedModelProvider implements ModelProvider {
   private readonly inner: ModelProvider
-  private readonly traceSink: LlmTraceSink
+  private readonly traceSink?: LlmTraceSink
+  private readonly recordCall?: InlineLlmCallRecorder
   private readonly recordPrompts: boolean
   private readonly workspaceBodiesEnabled: WorkspaceBodiesGate
   private readonly now: () => number
@@ -141,7 +186,20 @@ export class InstrumentedModelProvider implements ModelProvider {
 
   constructor(deps: {
     inner: ModelProvider
-    traceSink: LlmTraceSink
+    /**
+     * The external trace sink (Langfuse / OTel). Used for a call {@link recordCall} cannot
+     * take, and as the sole exit on a deployment with a sink but no metric store. When both
+     * are wired this MUST be the same instance the recorder's service fans out to, or the
+     * two exits describe the same generation to the sink differently.
+     */
+    traceSink?: LlmTraceSink
+    /**
+     * Persist each workspace-scoped inline call to `llm_call_metrics` (and, through the
+     * service behind it, to the trace sink). Wired wherever the facade has a metric store —
+     * without it the inline half of the platform's model activity is invisible to every
+     * in-app observability surface, which is the gap this exists to close.
+     */
+    recordCall?: InlineLlmCallRecorder
     /** Honour the same `LLM_RECORD_PROMPTS` switch as the local store; default true. */
     recordPrompts?: boolean
     /**
@@ -152,6 +210,10 @@ export class InstrumentedModelProvider implements ModelProvider {
      * not a coverage gap (observability-logging-gaps.md, C2). An absent optional gate is
      * open by definition, which is exactly the failure mode; requiring it makes forgetting
      * one a typecheck failure instead of a silent leak.
+     *
+     * Applies to the {@link traceSink} exit only: a call taken by {@link recordCall} is
+     * gated INSIDE the service, by the very same rule from the very same kernel factory, so
+     * re-applying it here would only create a second place for the rule to drift.
      */
     workspaceBodiesEnabled: WorkspaceBodiesGate
     /** Injectable clock (tests); defaults to `Date.now`. */
@@ -159,8 +221,17 @@ export class InstrumentedModelProvider implements ModelProvider {
     /** Where a dropped inline export reports itself. Absent ⇒ `noopLogger`. */
     logger?: Logger
   }) {
+    if (!deps.traceSink && !deps.recordCall) {
+      // A provider that instruments nothing is a wiring mistake wearing the instrumented
+      // wrapper's clothes: every call would pay the middleware and reach no sink, and the
+      // facade's `instanceof InstrumentedModelProvider` wiring assertions would still pass.
+      throw new Error(
+        'InstrumentedModelProvider needs at least one exit: a traceSink, a recordCall, or both.',
+      )
+    }
     this.inner = deps.inner
     this.traceSink = deps.traceSink
+    this.recordCall = deps.recordCall
     this.recordPrompts = deps.recordPrompts ?? true
     this.workspaceBodiesEnabled = deps.workspaceBodiesEnabled
     this.now = deps.now ?? (() => Date.now())
@@ -209,11 +280,35 @@ export class InstrumentedModelProvider implements ModelProvider {
     const context = readInlineObservabilityContext(params)
     const usage = readUsage((result as { usage?: unknown })?.usage)
     const workspaceId = context.workspaceId ?? null
+    const executionId = context.executionId ?? null
+    const finishReason = ok ? readFinishReason(result) : null
+    // The recorder is the richer exit AND owns the sink fan-out, so a workspace-scoped call
+    // takes it and stops. An un-tagged call (`workspaceId: null`) has no workspace to file a
+    // row under, so it falls through to the sink — which is also the whole story on a
+    // deployment that wires a sink but retains no metrics.
+    if (this.recordCall && workspaceId) {
+      this.record(this.recordCall, {
+        workspaceId,
+        executionId,
+        agentKind: context.agentKind,
+        ref,
+        params,
+        result,
+        usage,
+        durationMs: Math.max(0, endedAt - startedAt),
+        finishReason,
+        ok,
+        errMessage,
+      })
+      return
+    }
+    if (!this.traceSink) return
+    const traceSink = this.traceSink
     // Numeric telemetry + timing are recorded unconditionally, exactly as on the proxy
     // path; only the BODIES answer to the privacy gate below.
     const event: Omit<LlmGenerationEvent, 'input' | 'output'> = {
       workspaceId,
-      executionId: context.executionId ?? null,
+      executionId,
       agentKind: context.agentKind,
       provider: ref.provider,
       model: ref.model,
@@ -224,7 +319,7 @@ export class InstrumentedModelProvider implements ModelProvider {
       cacheWriteTokens: usage.cacheWrite,
       completionTokens: usage.completion,
       totalTokens: usage.total,
-      finishReason: ok ? readFinishReason(result) : null,
+      finishReason,
       ok,
       errorMessage: errMessage,
     }
@@ -239,13 +334,69 @@ export class InstrumentedModelProvider implements ModelProvider {
         // turns `storeAgentContext` off stops shipping bodies on its very next inline
         // call rather than when its scoped provider is next rebuilt.
         const recordBodies = await this.bodiesAllowed(workspaceId)
-        await this.traceSink.recordGeneration({
+        await traceSink.recordGeneration({
           ...event,
           input: recordBodies ? safeJson((params as { prompt?: unknown })?.prompt) : '',
           output: recordBodies && ok ? readOutputText(result) : '',
         })
       },
       { workspaceId, executionId: event.executionId, source: 'inline' },
+    )
+  }
+
+  /**
+   * Hand a workspace-scoped call to the metric recorder. Bodies are passed through
+   * UNGATED on purpose: the service behind the recorder scrubs them and applies the same
+   * `LLM_RECORD_PROMPTS` + `storeAgentContext` double gate this class applies to the sink
+   * exit — gating here as well would drop a body the service is entitled to store and put
+   * the rule in two places, which is how the sink half drifted open in the first place.
+   *
+   * Best-effort and off the response path, exactly like the sink exit.
+   */
+  private record(
+    recordCall: InlineLlmCallRecorder,
+    call: {
+      workspaceId: string
+      executionId: string | null
+      agentKind: string
+      ref: ModelRef
+      params: unknown
+      result: unknown
+      usage: ReturnType<typeof readUsage>
+      durationMs: number
+      finishReason: string | null
+      ok: boolean
+      errMessage: string | null
+    },
+  ): void {
+    const { workspaceId, executionId, ref, params, result, usage, ok } = call
+    void runBestEffort(
+      this.log,
+      'llmObservability.recordInlineCall',
+      () =>
+        recordCall({
+          workspaceId,
+          executionId,
+          agentKind: call.agentKind,
+          provider: ref.provider,
+          model: ref.model,
+          messageCount: readMessageCount(params),
+          toolCount: readToolCount(params),
+          requestMaxTokens: readRequestMaxTokens(params),
+          promptTokens: usage.prompt,
+          cacheReadTokens: usage.cacheRead,
+          cacheWriteTokens: usage.cacheWrite,
+          completionTokens: usage.completion,
+          totalTokens: usage.total,
+          finishReason: call.finishReason,
+          durationMs: call.durationMs,
+          ok,
+          errorMessage: call.errMessage,
+          promptText: safeJson((params as { prompt?: unknown })?.prompt),
+          responseText: ok ? readOutputText(result) : '',
+          reasoningText: ok ? readReasoningText(result) : '',
+        }),
+      { workspaceId, executionId, source: 'inline' },
     )
   }
 

@@ -1445,6 +1445,26 @@ error handling — and the phased plan to close them — are tracked in
   service via `makeHarnessCallRecorder`. Claude Code's `stream-json` carries full bodies; Codex's is
   thinner; neither exposes per-HTTP timing.
 
+  **THREE producers converge on this one service, and a new one must too.** Besides the proxy and
+  the harness recorder, an INLINE (non-proxied) call — every `catFactoryObservability(` site: the
+  inline agent kinds (`doc-researcher` / `doc-outliner` / the document interviewer), the judges,
+  consensus, the requirements writer, the fragment selector — is recorded by
+  `InstrumentedModelProvider` through the kernel `InlineLlmCallRecorder` port
+  (`makeInlineCallRecorder`). Before that, an inline step reported ZERO model activity on every
+  in-app surface no matter what it spent. Two rules govern that path:
+  - **The provider takes EXACTLY ONE exit per call.** `LlmObservabilityService.record` already
+    fans out to the external trace sink, so a recorded call must NOT also be emitted to the
+    provider's `traceSink` — that would double every inline generation on Langfuse/OTel. A facade
+    hands the composed sink to the RECORDER's service; the provider's own sink is the fallback for
+    an inline call carrying no `workspaceId`, which the workspace-scoped store cannot file.
+    Bodies reach the recorder UNGATED: the service applies the same `LLM_RECORD_PROMPTS` +
+    `storeAgentContext` gate, plus `redactSecrets` and the delta chain.
+  - **State what an inline call does NOT know; never fill a proxy-shaped field with a guess.**
+    `turnIndex` null (no job-scoped counter), `httpStatus` null (the SDK owns the transport, so a
+    failure is an exception whose message is the cause), `phase` `''` (phases are boundaries the
+    container harness owns), `streaming` false, and `upstreamMs === totalMs` so the derived
+    overhead is a real 0 rather than a fabricated transport split.
+
   **These STREAM.** The harness hands over whatever accumulated since the previous poll
   (`RunnerJobView.callMetrics`, drain-on-read), and the complete list still rides the terminal
   result. Both carry the same objects stamped with a job-scoped `seq`, so both mint the same

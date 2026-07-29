@@ -11,10 +11,11 @@ import type {
   LlmPromptChainTip,
   LlmTraceSink,
 } from '@cat-factory/kernel'
-import type { HarnessCallMetric } from '@cat-factory/kernel'
+import type { HarnessCallMetric, InlineLlmCall } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
   makeHarnessCallRecorder,
+  makeInlineCallRecorder,
   MAX_BODY_CHARS,
   type RecordLlmCallInput,
 } from './LlmObservabilityService.js'
@@ -549,5 +550,114 @@ describe('makeHarnessCallRecorder', () => {
     // Ids are derived from the job id + call index, so a durable-driver replay of the
     // same job produces the SAME ids (a duplicate insert the store then rejects).
     expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+  })
+})
+
+describe('makeInlineCallRecorder', () => {
+  function call(overrides: Partial<InlineLlmCall> = {}): InlineLlmCall {
+    return {
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'doc-researcher',
+      provider: 'anthropic',
+      model: 'claude-opus-4-8',
+      messageCount: 2,
+      toolCount: 0,
+      requestMaxTokens: 4096,
+      promptTokens: 300,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 10,
+      completionTokens: 60,
+      totalTokens: 410,
+      finishReason: 'stop',
+      durationMs: 1200,
+      ok: true,
+      errorMessage: null,
+      promptText: '[{"role":"system","content":"s"}]',
+      responseText: 'brief',
+      reasoningText: '',
+      ...overrides,
+    }
+  }
+
+  it('maps an inline call onto a row, stating what it does NOT know rather than guessing', async () => {
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(call())
+
+    const row = repo.recorded[0]!
+    expect(row.agentKind).toBe('doc-researcher')
+    expect(row.provider).toBe('anthropic')
+    expect(row.promptTokens).toBe(300)
+    expect(row.cacheReadTokens).toBe(40)
+    expect(row.cacheWriteTokens).toBe(10)
+    expect(row.completionTokens).toBe(60)
+    expect(row.requestMaxTokens).toBe(4096)
+    expect(row.responseText).toBe('brief')
+    // Every inline site calls `generateText`, never `streamText`.
+    expect(row.streaming).toBe(false)
+    // The duration IS the upstream time — there is no proxy hop to split out — so the
+    // derived overhead is a real 0 rather than a fabricated transport slice.
+    expect(row.totalMs).toBe(1200)
+    expect(row.upstreamMs).toBe(1200)
+    expect(row.overheadMs).toBe(0)
+    // Phases are boundaries the container harness owns; an inline call sits outside all of
+    // them, so it files under the unattributed slice instead of borrowing one.
+    expect(row.phase).toBe('')
+    // No job-scoped counter (like the proxy) and no HTTP status (the SDK owns the transport).
+    expect(row.turnIndex).toBeNull()
+    expect(row.httpStatus).toBeNull()
+  })
+
+  it('chains consecutive calls of one inline conversation as a prompt delta', async () => {
+    // An inline agent kind's steps re-send a growing history exactly as a container agent's
+    // turns do, so they must earn the same delta compression rather than storing it whole.
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(call({ promptText: '[{"role":"system","content":"s"}]', messageCount: 1 }))
+    await record(
+      call({
+        promptText: '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+        messageCount: 2,
+        responseText: 'second',
+      }),
+    )
+
+    expect(repo.recorded[1]!.promptPrefixCount).toBe(1)
+  })
+
+  it('records a failed call with its scrubbed cause', async () => {
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record(
+      call({
+        ok: false,
+        finishReason: null,
+        responseText: '',
+        errorMessage: 'upstream refused (Authorization: Bearer sk-ant-supersecretvalue1234)',
+      }),
+    )
+
+    const row = repo.recorded[0]!
+    expect(row.ok).toBe(false)
+    expect(row.errorMessage).not.toContain('sk-ant-supersecretvalue1234')
   })
 })

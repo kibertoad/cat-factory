@@ -5,6 +5,7 @@ import {
 } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import {
+  type InlineLlmCallRecorder,
   type LlmTraceSink,
   type ModelProviderResolver,
   type WorkspaceSettingsRepository,
@@ -25,14 +26,26 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 // Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour.
 // Inline calls are wrapped for Langfuse exactly like the proxied path when configured.
 
-/** The instrumentation the scoped resolver wraps inline calls with (one shared trace sink). */
+/**
+ * The instrumentation the scoped resolver wraps inline calls with. At least one exit must be
+ * present: the metric recorder (so inline calls reach `llm_call_metrics` and every in-app
+ * observability surface) and/or one shared external trace sink.
+ */
 export interface InlineInstrument {
-  traceSink: LlmTraceSink
+  /**
+   * The composed external sink. When {@link recordCall} is also set this MUST be the same
+   * instance the recorder's `LlmObservabilityService` carries — that service performs the
+   * fan-out for a recorded call, so wiring a different sink here would split the trace.
+   */
+  traceSink?: LlmTraceSink
+  /** Persist each workspace-scoped inline call to `llm_call_metrics` (`makeInlineCallRecorder`). */
+  recordCall?: InlineLlmCallRecorder
   recordPrompts: boolean
   /**
    * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies before
    * they leave for the sink — the same gate the proxied path runs. Required, so a wiring
-   * site cannot instrument inline calls while honouring only `LLM_RECORD_PROMPTS`.
+   * site cannot instrument inline calls while honouring only `LLM_RECORD_PROMPTS`. A call
+   * the recorder takes is gated by the same rule inside the service instead.
    */
   workspaceBodiesEnabled: WorkspaceBodiesGate
 }

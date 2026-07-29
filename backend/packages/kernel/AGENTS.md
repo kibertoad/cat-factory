@@ -93,6 +93,11 @@ else imports its **ports** and domain types from here.
   `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
   the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
   because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
+- `ports/llm-metrics.ts` — besides the store's own `LlmCallMetric` / `LlmCallMetricRepository`,
+  `InlineLlmCallRecorder` is the seam the inline feeder writes through, so all three producers
+  (proxy, subscription harness, inline) land in one table. Its `InlineLlmCall` is deliberately
+  NARROWER than the row: it states only what a direct AI-SDK call can honestly report, and the
+  adapter fills the proxy-shaped rest with not-applicable values rather than plausible ones.
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,

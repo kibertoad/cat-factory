@@ -1310,6 +1310,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     cloudflareModelsEnabled: options.cloudflareModelsEnabled,
     caches: options.caches,
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    llmCallMetricRepository: repos.llmCallMetricRepository,
   })
 
   // Persistence the container-execution path needs (built from the same db). The

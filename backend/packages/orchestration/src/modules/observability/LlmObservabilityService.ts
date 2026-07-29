@@ -10,6 +10,7 @@ import {
 } from '@cat-factory/kernel'
 import type {
   GroupCacheHandle,
+  InlineLlmCall,
   Logger,
   HarnessCallMetric,
   LlmCallMetric,
@@ -410,4 +411,66 @@ export function makeHarnessCallRecorder(
       })
     }
   }
+}
+
+/**
+ * Build the instrumented model provider's `recordCall` dependency: map an INLINE (non-proxied)
+ * LLM call onto the SAME {@link LlmObservabilityService} the proxy and the subscription
+ * harnesses feed, so a judge, a consensus round, the requirements writer or an inline agent
+ * kind (`doc-researcher`, `doc-outliner`, the document interviewer) lands in `llm_call_metrics`
+ * exactly like a container call. Before this, every one of those was invisible to
+ * `ObservabilityPanel`, to a step's token rollup and to `/api/v1/debug/*` — a run made entirely
+ * of inline steps reported zero model activity no matter how many tokens it spent
+ * (`docs/initiatives/observability-logging-gaps.md`, C2 coverage half).
+ *
+ * The sibling of {@link makeHarnessCallRecorder}, and it fills the store's proxy-shaped fields
+ * the same deliberate way — with what an inline call actually knows rather than a plausible
+ * guess:
+ *
+ * - `id` is left to the service to mint. The proxy mints its own so the live activity event and
+ *   the row share one, and the harness derives one from `(jobId, seq)` so a durable replay is
+ *   idempotent. An inline call has neither: it is a single awaited SDK call inside one service
+ *   method, so there is no second channel to reconcile with and nothing to re-record.
+ * - `streaming` is false — every inline site calls `generateText`, never `streamText`.
+ * - `phase` is left absent ⇒ the unattributed `''` slice. Phases are boundaries the HARNESS
+ *   owns inside a container run; an inline call sits outside all of them, and stamping one
+ *   would file it under a loop it never ran in.
+ * - `turnIndex` is null, like the proxy's. There is no job-scoped counter here either, so these
+ *   rows order by `createdAt`.
+ * - `httpStatus` is null: the AI SDK owns the transport, so a failure arrives as an exception
+ *   whose message is already on `errorMessage` (scrubbed by the service) rather than a status.
+ * - `upstreamMs` is the whole `durationMs`, which makes the derived overhead 0 — honestly so.
+ *   Splitting transport from execution is the PROXY's observation; an inline call has no hop
+ *   between the caller and the model, so any non-zero overhead here would be fabricated.
+ */
+export function makeInlineCallRecorder(
+  service: LlmObservabilityService,
+): (call: InlineLlmCall) => Promise<void> {
+  return (call) =>
+    service.record({
+      workspaceId: call.workspaceId,
+      executionId: call.executionId,
+      agentKind: call.agentKind,
+      provider: call.provider,
+      model: call.model,
+      streaming: false,
+      turnIndex: null,
+      messageCount: call.messageCount,
+      toolCount: call.toolCount,
+      requestMaxTokens: call.requestMaxTokens,
+      promptTokens: call.promptTokens,
+      cacheReadTokens: call.cacheReadTokens,
+      cacheWriteTokens: call.cacheWriteTokens,
+      completionTokens: call.completionTokens,
+      totalTokens: call.totalTokens,
+      finishReason: call.finishReason,
+      totalMs: call.durationMs,
+      upstreamMs: call.durationMs,
+      ok: call.ok,
+      httpStatus: null,
+      errorMessage: call.errorMessage,
+      promptText: call.promptText,
+      responseText: call.responseText,
+      reasoningText: call.reasoningText,
+    })
 }
