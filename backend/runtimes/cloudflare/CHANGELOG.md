@@ -1,5 +1,48 @@
 # @cat-factory/worker
 
+## 0.126.0
+
+### Minor Changes
+
+- be7fe66: Let a deployment declare its infra dependencies in code: `startNode`/`startLocal` take
+  `seedSharedStacks`, and a compose layer can now be an inline document or a file in another repo.
+
+  A `StackRecipe`'s and a `SharedStack`'s `composeFiles` entries are now `ComposeFileRef`s — a bare
+  in-repo path (unchanged, still the common case) or an explicit `ComposeSource`: `inline` (the
+  compose document itself) or `repo` (a path in another `owner/name`, read without cloning it). A
+  stack whose layers are all inline / foreign owns no repository, so `SharedStack.cloneUrl` is
+  nullable.
+
+  An `inline` layer may name where it is materialized, and that path is host-escape guarded on every
+  path that accepts one: a layer that would land outside the checkout is refused when the shared
+  stack is SAVED (`details.reason: 'compose_layer_escapes_checkout'`) and again before any layer is
+  read or written, alongside the recipe path's existing pre-daemon check.
+
+  Breaking (pre-1.0): `SharedStack.cloneUrl` is `string | null` rather than `string`, and
+  `composeFiles` entries widen from `string` to `string | ComposeSource`. D1 migration `0070`
+  rebuilds `shared_stacks` to relax the `clone_url` NOT NULL; the Drizzle mirror does the same. No
+  data changes — every existing row keeps its clone URL and its plain-path layers.
+
+### Patch Changes
+
+- Updated dependencies [be7fe66]
+  - @cat-factory/contracts@0.197.0
+  - @cat-factory/kernel@0.193.0
+  - @cat-factory/integrations@0.111.0
+  - @cat-factory/orchestration@0.171.0
+  - @cat-factory/agents@0.87.2
+  - @cat-factory/consensus@0.13.2
+  - @cat-factory/eks@0.1.175
+  - @cat-factory/gates@0.8.22
+  - @cat-factory/gitlab@0.14.5
+  - @cat-factory/observability-otel@0.4.19
+  - @cat-factory/prompt-fragments@0.15.20
+  - @cat-factory/server@0.178.2
+  - @cat-factory/spend@0.12.123
+  - @cat-factory/caching@0.11.22
+  - @cat-factory/observability-langfuse@0.9.19
+  - @cat-factory/provider-cloudflare@0.7.328
+
 ## 0.125.1
 
 ### Patch Changes
