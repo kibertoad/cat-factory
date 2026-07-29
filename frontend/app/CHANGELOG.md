@@ -1,5 +1,13 @@
 # @cat-factory/app
 
+## 0.177.0
+
+### Minor Changes
+
+- 2a061ea: Split model providers out of the Integrations hub into their own "Model providers" nav
+  section, and fold the guided Docker Compose environment setup into the Infrastructure window
+  with a full explanation of what it does and when it is needed.
+
 ## 0.176.0
 
 ### Minor Changes
