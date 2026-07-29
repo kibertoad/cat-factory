@@ -5292,11 +5292,21 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "reviewPlan": "Examiner le plan",
+      "resolveDecision": "Résoudre",
       "planningInProgress": "Planification en cours",
       "pause": "Mettre en pause",
       "resume": "Reprendre",
       "cancel": "Annuler l'initiative",
       "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
+    },
+    "planReview": {
+      "title": "Ce plan vous attend",
+      "body": "Le planificateur a rédigé les phases et les éléments ci-dessous. Approuvez-les pour valider le plan et lancer le travail, ou renvoyez le plan en indiquant ce qu'il faut changer.",
+      "approve": "Approuver le plan",
+      "requestChanges": "Demander des modifications",
+      "feedbackPlaceholder": "Que doit changer le planificateur ? Périmètre, ordre des phases, travail manquant, un élément qui a sa place ailleurs…",
+      "sendBack": "Renvoyer au planificateur"
     },
     "planning": {
       "title": "Planifier l'initiative",

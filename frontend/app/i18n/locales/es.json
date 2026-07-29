@@ -5292,11 +5292,21 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "reviewPlan": "Revisar plan",
+      "resolveDecision": "Resolver",
       "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancel": "Cancelar iniciativa",
       "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planReview": {
+      "title": "Este plan te está esperando",
+      "body": "El planificador redactó las fases y los elementos de abajo. Apruébalos para confirmar el plan y empezar el trabajo, o devuelve el plan indicando qué cambiar.",
+      "approve": "Aprobar plan",
+      "requestChanges": "Solicitar cambios",
+      "feedbackPlaceholder": "¿Qué debería cambiar el planificador? Alcance, orden de las fases, trabajo que falta, un elemento que va en otro sitio…",
+      "sendBack": "Devolver al planificador"
     },
     "planning": {
       "title": "Planificar la iniciativa",

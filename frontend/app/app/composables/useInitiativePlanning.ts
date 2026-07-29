@@ -4,7 +4,20 @@ import { useExecutionStore } from '~/stores/execution'
 import { useInitiativesStore } from '~/stores/initiative'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
+import { agentKindMeta } from '~/utils/catalog'
+import { selectPlanApproval, type InitiativeAttentionKind } from '~/utils/initiative'
 import { interviewGatePhase } from '~/utils/interviewGate'
+
+/**
+ * What an initiative's planning run needs from a human right now: which kind of park it is (the
+ * card + inspector resolve its icon/label from the shared `INITIATIVE_ATTENTION_*` maps, so the
+ * two surfaces word one park identically), and the action that opens the surface which can
+ * RESOLVE it — the step's own dedicated window, via `dispatchStepView`.
+ */
+export interface InitiativeAttention {
+  kind: InitiativeAttentionKind
+  open: () => void
+}
 
 /**
  * Shared planning affordances for an `initiative`-level block, used by BOTH the board card
@@ -66,6 +79,60 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   const interviewing = computed(() => interviewPhase.value === 'working')
 
   /**
+   * The planner's parked plan-approval gate, or undefined. `pl_initiative` gates the planner step
+   * (`{ kind: 'initiative-planner', gate: true }`), so a finished planning pass PARKS the run on a
+   * pending `step.approval` until a human accepts the plan — the state this composable's other
+   * flags deliberately do NOT cover (the interview has converged, and the run is `blocked`, so
+   * `awaitingAnswers` and `interviewing` are both false and the card would otherwise sit on a
+   * disabled, spinning "Run planning").
+   *
+   * The interviewer's own park is excluded by the window its step routes to (see
+   * {@link selectPlanApproval}), not by the interview phase, so the two affordances can never both
+   * claim one park.
+   */
+  const planApproval = computed(() =>
+    selectPlanApproval(
+      execution.approvalsByBlock.get(toValue(blockId)) ?? [],
+      (kind) => agentKindMeta(kind).resultView,
+    ),
+  )
+
+  /** An agent-raised decision on the planning run (the analyst is an ordinary agent step). */
+  const pendingDecision = computed(() => execution.decisionsByBlock.get(toValue(blockId))?.[0])
+
+  /**
+   * The single thing a human has to act on, or null — the initiative dual of a task card's
+   * `attention`. A decision outranks an approval (a step never holds both; this is just a stable
+   * order). Opening always goes through the step-view dispatch, so the park lands in the window
+   * that can RESOLVE it (the plan gate → the tracker window's plan-review rail) rather than a
+   * generic panel that would refuse it.
+   */
+  const attention = computed<InitiativeAttention | null>(() => {
+    const id = toValue(blockId)
+    const decision = pendingDecision.value
+    if (decision) {
+      return {
+        kind: 'decision',
+        open: () => {
+          ui.select(id)
+          ui.openDecision(decision.instanceId, decision.decision.id)
+        },
+      }
+    }
+    const approval = planApproval.value
+    if (approval) {
+      return {
+        kind: 'approval',
+        open: () => {
+          ui.select(id)
+          ui.openApprovalDetail(approval.instanceId, approval.approval.id)
+        },
+      }
+    }
+    return null
+  })
+
+  /**
    * Optimistic start flag: flip true the instant "Run planning" is clicked, before the stream
    * pushes the block's `executionId` back. Cleared the moment `running` takes over (success) or the
    * start is refused/cancelled — never left dangling, which would otherwise strand the button
@@ -105,6 +172,9 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
     interviewPhase,
     awaitingAnswers,
     interviewing,
+    planApproval,
+    pendingDecision,
+    attention,
     starting,
     runPlanning,
     openPlanning,
