@@ -3727,6 +3727,17 @@
       "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica."
     }
   },
+  "agentTier": {
+    "label": "Livello agenti",
+    "basic": "Base",
+    "intermediate": "Intermedio",
+    "advanced": "Avanzato",
+    "basicHint": "Solo gli agenti di uso quotidiano con cui si costruisce una pipeline.",
+    "intermediateHint": "Aggiunge gli agenti che usi regolarmente.",
+    "advancedHint": "Mostra tutti gli agenti, compresi quelli specialistici.",
+    "tooltip": "Scegli quanta parte del catalogo agenti mostrare",
+    "hidden": "{count} agente nascosto a questo livello. | {count} agenti nascosti a questo livello."
+  },
   "requirements": {
     "title": "Revisione dei requisiti",
     "iteration": "Iterazione {current} / {max}",

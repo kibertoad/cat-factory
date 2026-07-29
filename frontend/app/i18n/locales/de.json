@@ -3727,6 +3727,17 @@
       "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an."
     }
   },
+  "agentTier": {
+    "label": "Agentenstufe",
+    "basic": "Basis",
+    "intermediate": "Fortgeschritten",
+    "advanced": "Experte",
+    "basicHint": "Nur die alltäglichen Agenten, aus denen eine Pipeline normalerweise besteht.",
+    "intermediateHint": "Ergänzt die Agenten, die du regelmäßig einsetzt.",
+    "advancedHint": "Zeigt alle Agenten, auch die spezialisierten.",
+    "tooltip": "Wähle, wie viel des Agentenkatalogs angezeigt wird",
+    "hidden": "{count} Agent ist auf dieser Stufe ausgeblendet. | {count} Agenten sind auf dieser Stufe ausgeblendet."
+  },
   "requirements": {
     "title": "Anforderungsprüfung",
     "iteration": "Iteration {current} / {max}",

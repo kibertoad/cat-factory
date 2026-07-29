@@ -104,6 +104,9 @@ export const acmeSecurityModule = defineModule({
           color: '#ef4444',
           description: 'Read-only security audit of the change, with a compliance report.',
           category: 'review',
+          // A specialist kind: offered only at the palette's widest agent tier. Omitting
+          // `tier` would default it to `intermediate`.
+          tier: 'advanced',
           resultView: ACME_SECURITY_REPORT_VIEW,
         },
       },

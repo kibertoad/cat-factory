@@ -4043,6 +4043,17 @@
       "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification."
     }
   },
+  "agentTier": {
+    "label": "Niveau d'agents",
+    "basic": "Basique",
+    "intermediate": "Intermédiaire",
+    "advanced": "Avancé",
+    "basicHint": "Uniquement les agents du quotidien avec lesquels on construit un pipeline.",
+    "intermediateHint": "Ajoute les agents que vous utilisez régulièrement.",
+    "advancedHint": "Affiche tous les agents, y compris les plus spécialisés.",
+    "tooltip": "Choisissez quelle part du catalogue d'agents afficher",
+    "hidden": "{count} agent masqué à ce niveau. | {count} agents masqués à ce niveau."
+  },
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
     "customAgents": "Agents personnalisés"

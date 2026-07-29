@@ -93,6 +93,7 @@ export const SKILL_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Runs a repo-sourced Claude Skill (a procedural playbook your team authored) against a task, committing whatever changes the skill prescribes.',
       category: 'build',
+      tier: 'advanced',
     },
   },
 ]

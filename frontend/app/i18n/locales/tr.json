@@ -4055,6 +4055,17 @@
       "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
     }
   },
+  "agentTier": {
+    "label": "Ajan düzeyi",
+    "basic": "Temel",
+    "intermediate": "Orta",
+    "advanced": "İleri",
+    "basicHint": "Yalnızca bir hattın normalde kurulduğu günlük ajanlar.",
+    "intermediateHint": "Düzenli olarak başvurduğunuz ajanları ekler.",
+    "advancedHint": "Uzmanlaşmış olanlar dahil tüm ajanları gösterir.",
+    "tooltip": "Ajan kataloğunun ne kadarının gösterileceğini seçin",
+    "hidden": "Bu düzeyde {count} ajan gizli."
+  },
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
     "customAgents": "Özel agent'lar"

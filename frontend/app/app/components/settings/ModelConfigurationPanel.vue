@@ -14,6 +14,8 @@ import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
+import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
+import { filterByAgentTierKeeping } from '~/utils/agentTier'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 
@@ -22,6 +24,7 @@ const ui = useUiStore()
 const models = useModelsStore()
 const presets = useModelPresetsStore()
 const agents = useAgentsStore()
+const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const toast = useToast()
@@ -49,13 +52,35 @@ const filter = ref('')
 // (spec-writer, merger, the fixers/resolver). The pure gates run no model, so they
 // stay out — exactly the set the per-agent override list should cover.
 const configurableKinds = computed(() => [...agents.archetypes, ...MODEL_CONFIGURABLE_SYSTEM_KINDS])
+
+// Narrowed to the selected agent tier, EXCEPT that a kind the preset being edited already
+// pins a model for is always kept: that override may have been written by a teammate, by the
+// API, or by this user at a wider tier, and a row hidden here is one they can neither read
+// nor clear. Same rule the interface mode's `showOverrideField` states for a single field.
+const tieredKinds = computed(() =>
+  filterByAgentTierKeeping(
+    configurableKinds.value,
+    agentTier.tier,
+    (a) => editor.value?.overrides[a.kind] !== undefined,
+  ),
+)
+
 const filteredKinds = computed(() => {
   const q = filter.value.trim().toLowerCase()
-  if (!q) return configurableKinds.value
+  if (!q) return tieredKinds.value
+  // A typed query searches the WHOLE catalog, not the tiered slice: naming an agent is a
+  // stronger statement of intent than the tier default, and "No agents match" for a kind the
+  // user can spell would read as "this deployment doesn't have it".
   return configurableKinds.value.filter(
     (a) => a.label.toLowerCase().includes(q) || String(a.kind).toLowerCase().includes(q),
   )
 })
+
+// Nothing is being held back while a search is running (it spans every kind), so the hint
+// reports 0 rather than a count the visible list contradicts.
+const hiddenByTier = computed(() =>
+  filter.value.trim() ? 0 : configurableKinds.value.length - tieredKinds.value.length,
+)
 
 watch(
   open,
@@ -453,10 +478,11 @@ function fail(title: string, e: unknown) {
               </div>
 
               <div>
-                <div class="mb-1 flex items-center justify-between">
+                <div class="mb-1 flex items-start justify-between gap-3">
                   <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </span>
+                  <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
                 </div>
                 <UInput
                   v-model="filter"

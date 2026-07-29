@@ -4043,6 +4043,17 @@
       "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
     }
   },
+  "agentTier": {
+    "label": "Poziom agentów",
+    "basic": "Podstawowy",
+    "intermediate": "Średni",
+    "advanced": "Zaawansowany",
+    "basicHint": "Tylko codzienni agenci, z których zwykle buduje się potok.",
+    "intermediateHint": "Dodaje agentów, po których sięgasz regularnie.",
+    "advancedHint": "Pokazuje wszystkich agentów, także tych specjalistycznych.",
+    "tooltip": "Wybierz, jak dużą część katalogu agentów pokazać",
+    "hidden": "{count} agent ukryty na tym poziomie. | {count} agenci ukryci na tym poziomie. | {count} agentów ukrytych na tym poziomie."
+  },
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
     "customAgents": "Agenci niestandardowi"
