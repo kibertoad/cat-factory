@@ -4,12 +4,13 @@
 // The rail this replaces could approve or send back, but it judged nothing: the plan was a wall
 // of structured sections above it, with no way to navigate a long one and no way to say WHICH
 // part needed changing. So it renders the plan as the document it is — the engine puts a markdown
-// rendering of the ingested plan on the gate's proposal (`renderInitiativePlanForReview`, via the
-// `reviewableArtifactOutput` seam) — and gives it the same three tools the step reader gives the
-// architect's prose: an outline to navigate by, click-to-comment on any block, and overall
-// feedback. Everything here is shared with that reader rather than re-implemented:
-// `useStepProse` for the outline/collapse/scroll-spy, `useProseComments` for the anchoring, and
-// the global `.reader-prose` sheet for the presentation, so the two surfaces cannot drift.
+// rendering of the INGESTED plan on the gate's proposal (`renderInitiativePlanForReview`, authored
+// by the planner's step resolver, which is the only thing that knows what ingest committed) — and
+// gives it the same three tools the step reader gives the architect's prose: an outline to
+// navigate by, click-to-comment on any block, and overall feedback. Everything here is shared with
+// that reader rather than re-implemented: `useStepProse` for the outline/collapse/scroll-spy,
+// `useProseComments` for the anchoring, and the global `.reader-prose` sheet for the presentation,
+// so the surfaces cannot drift.
 //
 // Deliberately NOT offered here: "approve with corrections". The plan was ingested into the
 // `initiatives` entity before this gate was raised, so the document is a VIEW of committed state
@@ -28,31 +29,52 @@ const props = defineProps<{
   instanceId: string
   /** Whether the viewer may resolve runs at all (RBAC); false renders the actions disabled. */
   canExecute: boolean
+  /**
+   * Whether the proposal IS the plan rendering (the step's `outputIsRendered`). Read rather
+   * than inferred from the proposal being non-empty: a run planned before the engine rendered
+   * plans parks on the planner's transcript summary, which is a perfectly non-empty string —
+   * so an emptiness check would show that one sentence under a table of contents as if it were
+   * the plan, which is the failure this whole surface exists to end.
+   */
+  outputIsRendered: boolean
 }>()
 
 const execution = useExecutionStore()
 const { t } = useI18n()
 
 /**
- * The plan document under review. Not named `document` — that shadows the global in a template
- * expression. Empty on a run planned before the engine rendered the plan onto the gate, which the
- * `noDocument` notice below states rather than passing the transcript summary off as the plan.
+ * The plan document under review — the gate's proposal, but ONLY once the step says that
+ * proposal is the plan rendering. Not named `document`: that shadows the global in a template
+ * expression. Anything else (a run planned before the engine rendered plans, which parks on the
+ * planner's transcript summary) reads as no document, and the `noDocument` notice says so rather
+ * than dressing a stray sentence up as the plan.
  */
-const planDocument = computed(() => props.approval.proposal ?? '')
+const planDocument = computed(() => (props.outputIsRendered ? (props.approval.proposal ?? '') : ''))
 
-// The outline + collapse + scroll-spy, exactly as the step reader resolves them.
-const scrollEl = ref<HTMLElement | null>(null)
-const prose = useStepProse(() => planDocument.value)
-const { outline, tocSections, hasOutput, collapsed, activeId, sectionEls, toggle, goTo, onScroll } =
-  prose
+// The outline + collapse + scroll-spy, exactly as the step reader resolves them — minus its
+// lead anchor: the reader renders a details card ahead of the prose and this rail renders the
+// document alone, and the spy stops at the first anchor it cannot measure.
+const prose = useStepProse(() => planDocument.value, { leadAnchorId: null })
+const {
+  outline,
+  tocSections,
+  hasOutput,
+  collapsed,
+  activeId,
+  // The reader's own scroll container, bound straight through so the shared scroll-spy and the
+  // comment-highlight sync read the same element the template scrolls.
+  scrollEl,
+  sectionEls,
+  toggle,
+  goTo,
+  onScroll,
+} = prose
 
-// Wire the reader's own scroll container into the shared scroll-spy (the step reader binds the
-// overlay's; here the document scrolls inside this component).
-watch(scrollEl, (el) => {
-  prose.scrollEl.value = el
-})
-
-/** Per-block comment drafts over the plan, anchored to its source lines. */
+/**
+ * Per-block comment drafts over the plan, anchored to its source lines. Commenting follows the
+ * same RBAC gate as the actions: a viewer who cannot resolve the run cannot send the comments
+ * anywhere, so offering the composer would only invite work the Send-back button then refuses.
+ */
 const {
   comments: planComments,
   wireComments,
@@ -66,7 +88,7 @@ const {
 } = useProseComments({
   output: () => planDocument.value,
   root: () => scrollEl.value,
-  enabled: () => true,
+  enabled: () => props.canExecute,
 })
 
 const feedback = ref('')
@@ -138,9 +160,10 @@ const disabledTitle = computed(() => (props.canExecute ? undefined : t('access.n
       </div>
     </header>
 
-    <!-- The plan document. A run planned before the engine rendered it onto the gate carries only
-         the planner's transcript summary, so say so rather than showing a stray sentence as if it
-         were the plan — the structured sections below are still the plan in that case. -->
+    <!-- The plan document, shown only when the gate's proposal actually IS the plan rendering
+         (`outputIsRendered`). A run planned before the engine rendered plans parks on the
+         planner's transcript summary instead, so it takes the notice below — the structured
+         sections further down are still the plan in that case. -->
     <div v-if="hasOutput" class="mt-3 flex min-h-0 gap-3 px-3.5">
       <!-- Outline: the navigation the rail had none of. Inline rather than a full sidebar — the
            tracker window already spends its end-side column on run metadata. -->
@@ -195,11 +218,14 @@ const disabledTitle = computed(() => (props.canExecute ? undefined : t('access.n
               v-html="s.titleHtml"
             />
           </button>
+          <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
+               gate the composer does — a viewer gets the document, not hover targets that lead
+               nowhere. -->
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
             v-show="!collapsed[s.id]"
-            class="reader-prose review-mode mt-0.5 text-[12px] leading-relaxed text-slate-300"
-            :class="s.depth > 0 ? 'ps-5' : ''"
+            class="reader-prose mt-0.5 text-[12px] leading-relaxed text-slate-300"
+            :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
             @click="onProseClick"
             v-html="s.bodyHtml"
           />
@@ -314,7 +340,9 @@ const disabledTitle = computed(() => (props.canExecute ? undefined : t('access.n
         >
           {{ t('initiative.planReview.sendBack') }}
         </UButton>
-        <p v-if="hasOutput" class="text-[10px] text-amber-100/60">
+        <!-- Only worth saying where clicking a block does something (a document + the RBAC to
+             act on it). -->
+        <p v-if="hasOutput && canExecute" class="text-[10px] text-amber-100/60">
           {{ t('initiative.planReview.commentHint') }}
         </p>
       </div>

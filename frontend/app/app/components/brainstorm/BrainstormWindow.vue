@@ -610,41 +610,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 .pl-5\.5 {
   padding-left: 1.375rem;
 }
-/* Minimal CommonMark styling for the converged-direction reader (mirrors the prose
-   review window's reader-prose). */
-.reader-prose :deep(p) {
-  margin: 0.4rem 0;
-}
-.reader-prose :deep(ul),
-.reader-prose :deep(ol) {
-  margin: 0.4rem 0;
-  padding-left: 1.25rem;
-  list-style: revert;
-}
-.reader-prose :deep(li) {
-  margin: 0.2rem 0;
-}
-.reader-prose :deep(strong) {
-  color: rgb(226 232 240);
-  font-weight: 600;
-}
-.reader-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.85em;
-}
-.reader-prose :deep(pre) {
-  margin: 0.5rem 0;
-  overflow-x: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.75rem;
-}
-.reader-prose :deep(blockquote) {
-  margin: 0.5rem 0;
-  border-left: 2px solid rgb(51 65 85);
-  padding-left: 0.75rem;
-  color: rgb(148 163 184);
-}
+/* The rendered-markdown presentation is the SHARED global `.reader-prose` sheet
+   (`assets/css/prose.css`), not a local copy: this reader shows the same agent-authored
+   markdown the step reader does, and a per-window duplicate is how the review surfaces
+   drift apart one property at a time. */
 </style>

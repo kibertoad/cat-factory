@@ -5305,6 +5305,7 @@
     "inspector": {
       "runPlanning": "計画を実行",
       "answerPlanning": "計画の質問に回答",
+      "reviewPlan": "計画をレビュー",
       "resolveDecision": "解決",
       "planningInProgress": "計画を実行中",
       "pause": "一時停止",

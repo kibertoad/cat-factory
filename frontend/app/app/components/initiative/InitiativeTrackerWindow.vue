@@ -257,6 +257,7 @@ async function savePolicy() {
             :approval="planApproval.approval"
             :instance-id="planApproval.instanceId"
             :can-execute="access.canExecuteRuns.value"
+            :output-is-rendered="planApproval.outputIsRendered"
           />
 
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting

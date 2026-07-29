@@ -37,6 +37,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
+import { renderInitiativePlanForReview } from '@cat-factory/contracts'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { renderReproDigest } from './reproTest.logic.js'
@@ -615,6 +616,17 @@ export function buildStepResolverRegistry(
     // planner's human gate; the committer step later mirrors the APPROVED plan into
     // the repo. A malformed draft fails the step loudly — completing the run without
     // an ingested plan would strand the initiative in `planning` with a green run.
+    //
+    // It also authors the step's reviewable OUTPUT, which is what the human gate parks on.
+    // That cannot ride the generic `reviewableArtifactOutput` seam (see the comment there):
+    // the plan is the one artifact the ENGINE reshapes on the way to storage — a preset's
+    // phase template reorders phases and forces checkpoints, its `seedPlan` hook adds and
+    // drops items, and a re-plan carries over items a previous plan already materialised —
+    // so only the INGESTED entity is the plan the reviewer's approval actually governs.
+    // Rendering the raw draft instead would show a document that quietly differs from what
+    // executes. `outputIsRendered` marks it non-editable for the same reason the flag exists
+    // everywhere else: the artifact is already committed, so a correction typed over its
+    // rendering would reach nothing.
     {
       kind: INITIATIVE_PLANNER_AGENT_KIND,
       phase: 'post-completion',
@@ -633,6 +645,7 @@ export function buildStepResolverRegistry(
         if (!ingested) {
           throw new Error('No initiative entity found for this block — cannot ingest the plan')
         }
+        return { output: renderInitiativePlanForReview(ingested), outputIsRendered: true }
       },
     },
     // A spec-writer step produced the service's unified specification (`spec.json`) and

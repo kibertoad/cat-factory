@@ -5305,6 +5305,7 @@
     "inspector": {
       "runPlanning": "Planlamayi calistir",
       "answerPlanning": "Planlama sorularini yanitla",
+      "reviewPlan": "Planı incele",
       "resolveDecision": "Çöz",
       "planningInProgress": "Planlama suruyor",
       "pause": "Duraklat",

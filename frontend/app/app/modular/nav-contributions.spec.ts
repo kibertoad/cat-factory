@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import enCatalog from '../../i18n/locales/en.json'
+import { hasI18nKey } from '../../test/i18nKeys'
 import {
   groupCommands,
   groupSidebar,
@@ -10,18 +10,8 @@ import {
 } from './nav-contributions'
 import type { AppSlots, NavGates } from './nav-contributions'
 
-/** The layer's base i18n catalog, used to prove every referenced key resolves. */
-const en = enCatalog as Record<string, unknown>
-
-/** Walk a dotted vue-i18n key path; true when it resolves to a leaf string. */
-function hasKey(path: string): boolean {
-  let node: unknown = en
-  for (const part of path.split('.')) {
-    if (typeof node !== 'object' || node === null || !(part in node)) return false
-    node = (node as Record<string, unknown>)[part]
-  }
-  return typeof node === 'string'
-}
+/** Prove every referenced key resolves in the layer's base catalog (see `test/i18nKeys`). */
+const hasKey = hasI18nKey
 
 const NO_GATES: NavGates = {
   canWriteBoard: false,

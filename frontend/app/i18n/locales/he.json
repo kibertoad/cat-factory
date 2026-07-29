@@ -5304,6 +5304,7 @@
     "inspector": {
       "runPlanning": "הרצת תכנון",
       "answerPlanning": "מענה על שאלות התכנון",
+      "reviewPlan": "בדיקת התוכנית",
       "resolveDecision": "פתור",
       "planningInProgress": "התכנון מתבצע",
       "pause": "השהה",

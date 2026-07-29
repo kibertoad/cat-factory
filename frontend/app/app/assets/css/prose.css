@@ -1,9 +1,11 @@
 /*
- * The rendered-markdown reader's presentation, shared by every surface that reviews an agent's
- * prose: the step-detail overlay (`AgentStepDetail`) and the initiative tracker's plan-approval
- * rail. Global rather than scoped because the markup is injected with `v-html`, so a scoped
- * sheet would need `:deep()` in each consumer and the two could drift — and "consistent in look
- * and feel across review surfaces" is the whole point of sharing it.
+ * The rendered-markdown reader's presentation, shared by EVERY surface that reviews an agent's
+ * prose: the step-detail overlay (`AgentStepDetail`), the initiative tracker's plan-approval
+ * rail, and the clarity / requirements / brainstorm review windows. Global rather than scoped
+ * because the markup is injected with `v-html`, so a scoped sheet would need `:deep()` in each
+ * consumer — which is exactly what those windows each used to carry, five near-identical copies
+ * diverging a property at a time. "Consistent in look and feel across review surfaces" is the
+ * whole point, so the copy lives here once and a new reader adds `.reader-prose` and nothing else.
  *
  * `.reader-prose` styles the document; `.review-mode` turns each source-mapped block into a
  * comment target (hover highlight + a "+" gutter affordance, GitHub-review style); `.cf-commented`

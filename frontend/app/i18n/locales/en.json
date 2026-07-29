@@ -5458,6 +5458,7 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "reviewPlan": "Review plan",
       "resolveDecision": "Resolve",
       "planningInProgress": "Planning in progress",
       "pause": "Pause",

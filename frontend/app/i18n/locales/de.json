@@ -4281,6 +4281,7 @@
     "inspector": {
       "runPlanning": "Planung ausführen",
       "answerPlanning": "Planungsfragen beantworten",
+      "reviewPlan": "Plan prüfen",
       "resolveDecision": "Auflösen",
       "planningInProgress": "Planung läuft",
       "pause": "Pausieren",

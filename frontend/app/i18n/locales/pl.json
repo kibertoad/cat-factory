@@ -5293,6 +5293,7 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
+      "reviewPlan": "Przejrzyj plan",
       "resolveDecision": "Rozwiąż",
       "planningInProgress": "Planowanie w toku",
       "pause": "Wstrzymaj",

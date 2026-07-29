@@ -39,6 +39,20 @@ export interface StepResolution {
   /** Replacement step output (e.g. a human-readable merge summary). */
   output?: string
   /**
+   * Declares that {@link output} is a deterministic RENDERING of an artifact this resolver
+   * already committed, rather than the agent's own work product — the engine records it as
+   * `step.outputIsRendered`, which makes the approval gate refuse an edited proposal (an edit
+   * typed over a rendering reaches nothing; see the flag's contract in `@cat-factory/contracts`).
+   *
+   * A resolver sets this when the COMMITTED artifact is something it derived, so the generic
+   * `reviewableArtifactOutput` seam — which renders straight off the agent's raw result — would
+   * render a document the reviewer's approval does not govern. The initiative planner is the
+   * reference case: its plan is reshaped at ingest (a preset's phase template reorders phases and
+   * its `seedPlan` hook adds/drops items), so only the ingest knows what was actually committed.
+   * Ignored when `output` is absent.
+   */
+  outputIsRendered?: boolean
+  /**
    * Set when the resolver has already decided the block's TERMINAL status itself (the
    * merger flips the block to `done` on a real merge or `pr_ready` on a review). The
    * engine's `finalizeBlock` then only backstops a block the resolver left untouched.
