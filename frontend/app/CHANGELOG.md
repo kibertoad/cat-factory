@@ -1,5 +1,16 @@
 # @cat-factory/app
 
+## 0.178.1
+
+### Patch Changes
+
+- d0937e6: Remove the "Spawn from document" button from the service inspector. Spawning is now
+  board-level only: the planner is target-blind, so the frame-scoped path could only
+  flatten the planned frames into the target and discard the titles and types the
+  preview showed. The `frameId` capability remains on the endpoint.
+- Updated dependencies [ac832b9]
+  - @cat-factory/contracts@0.188.0
+
 ## 0.178.0
 
 ### Minor Changes
