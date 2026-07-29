@@ -1433,6 +1433,8 @@
     "validationChecks": {
       "title": "Validazione prima della PR",
       "sectionHint": "Comandi eseguiti sulla copia di lavoro quando lo sviluppatore ha finito e prima di aprire una richiesta di modifica. Un errore torna all'agente perché lo corregga; solo una copia senza errori apre una PR.",
+      "dependencyInstall": "Installazione delle dipendenze",
+      "dependencyInstallHint": "Viene eseguita prima dell'avvio dell'agente",
       "hint": "Ogni comando viene eseguito con `sh -c` nella copia di lavoro di questo servizio, in ordine. Va corretto il codice, non il controllo: all'agente viene chiesto di non indebolirli.",
       "clear": "Svuota",
       "configNoun": "controlli di validazione",
@@ -1452,6 +1454,7 @@
         "action": "Rileva",
         "hint": "Suggerisci controlli a partire dal repository di questo servizio",
         "added": "Aggiunto {count} controllo | Aggiunti {count} controlli",
+        "installOnly": "Installazione delle dipendenze compilata",
         "found": "Riconosciuto: {ecosystems}.",
         "capped": "Alcuni suggerimenti sono stati esclusi: un servizio accetta al massimo {max} controlli.",
         "nothingNew": "Niente da aggiungere",

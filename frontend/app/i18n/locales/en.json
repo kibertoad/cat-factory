@@ -1155,6 +1155,9 @@
     "validationChecks": {
       "title": "Pre-PR validation",
       "sectionHint": "Commands run against the checkout after the coder finishes and before a pull request is opened. A failure is handed back to the agent to fix; only a passing checkout opens a PR.",
+      "dependencyInstall": "Dependency install",
+      "@dependencyInstall": "Field label for a shell command. \"install\" is a NOUN here (the installation step), not the imperative verb — it labels the input holding a command such as `pnpm install`, it does not ask the user to install anything.",
+      "dependencyInstallHint": "Runs before the agent starts",
       "hint": "Each command runs with `sh -c` in this service's checkout, in order. Fix the code, not the check — the agent is told not to weaken them.",
       "clear": "Clear",
       "configNoun": "validation checks",
@@ -1174,6 +1177,7 @@
         "action": "Detect",
         "hint": "Suggest checks from this service's repository",
         "added": "Added {count} check | Added {count} checks",
+        "installOnly": "Filled in the dependency install",
         "found": "Recognised {ecosystems}.",
         "capped": "Some suggestions were left out — a service takes at most {max} checks.",
         "nothingNew": "Nothing to add",

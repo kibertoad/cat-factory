@@ -76,6 +76,9 @@ export const validationConfigs = pgTable(
     block_id: text('block_id').notNull(),
     checks: text('checks').notNull().default('[]'),
     max_attempts: integer('max_attempts').notNull().default(3),
+    // DEPENDENCY PREPOPULATION: the install run BEFORE the agent's first turn (mirror of D1
+    // migration 0068). Nullable — a service may declare checks, this, both or neither.
+    dependency_install: text('dependency_install'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

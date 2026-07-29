@@ -35,6 +35,17 @@ export const validationCheckSchema = v.object({
 export type ValidationCheck = v.InferOutput<typeof validationCheckSchema>
 
 /**
+ * The service's DEPENDENCY PREPOPULATION command: the install the harness runs against the
+ * checkout BEFORE the coding agent's first turn, so the agent reads a tree that has its
+ * dependencies present (`node_modules`, a populated `.venv`, a warm module cache) rather than
+ * inferring capabilities from a manifest. Same shape and trust boundary as a check's command —
+ * it runs as `sh -c` in the run's own container — but a different PHASE and a different
+ * disposition: prepopulation is setup, never a gate, so a failure is reported to the agent and
+ * the run continues. See `docs/initiatives/agent-dependency-prepopulation.md`.
+ */
+const dependencyInstallSchema = validationCommandSchema
+
+/**
  * How many times the harness may re-run the agent against failing checks before giving up.
  * Bounded so a wedged service can't burn a container indefinitely. `1` = run the checks once
  * and fail on the first red (no repair round).
@@ -62,6 +73,12 @@ export const upsertServiceValidationConfigSchema = v.pipe(
     checks: v.array(validationCheckSchema),
     /** Repair-round budget; omitted ⇒ {@link VALIDATION_DEFAULT_MAX_ATTEMPTS}. */
     maxAttempts: v.optional(validationMaxAttemptsSchema),
+    /**
+     * The pre-agent dependency install. Independent of `checks`: a service may declare ONLY
+     * this (prepopulate the checkout, verify nothing) or only checks. An empty/omitted value
+     * clears it.
+     */
+    dependencyInstall: v.optional(dependencyInstallSchema),
   }),
   v.check(
     (o) => new Set(o.checks.map((c) => c.label)).size === o.checks.length,
@@ -82,6 +99,8 @@ export const serviceValidationConfigSchema = v.object({
   blockId: v.string(),
   checks: v.array(validationCheckSchema),
   maxAttempts: v.number(),
+  /** The pre-agent dependency install, when the service declared one. */
+  dependencyInstall: v.optional(v.string()),
 })
 export type ServiceValidationConfig = v.InferOutput<typeof serviceValidationConfigSchema>
 
@@ -93,6 +112,13 @@ export type ServiceValidationConfig = v.InferOutput<typeof serviceValidationConf
 export const resolvedValidationChecksSchema = v.object({
   checks: v.array(validationCheckSchema),
   maxAttempts: v.number(),
+  /**
+   * The pre-agent dependency install resolved for this dispatch. Carried on the SAME resolved
+   * object as the checks because it comes from the same frame-chain read — so prepopulation
+   * costs the dispatch no extra round trip — but it is threaded onto the job body SEPARATELY
+   * (every checkout-having dispatch, not only a PR-opening one).
+   */
+  dependencyInstall: v.optional(v.string()),
 })
 export type ResolvedValidationChecks = v.InferOutput<typeof resolvedValidationChecksSchema>
 
@@ -147,6 +173,13 @@ export const detectedValidationChecksSchema = v.object({
   checks: v.array(validationCheckSchema),
   /** Whether {@link VALIDATION_MAX_CHECKS} dropped suggestions the detectors produced. */
   truncated: v.boolean(),
+  /**
+   * The suggested DEPENDENCY PREPOPULATION command — every detected ecosystem's install,
+   * chained with `&&`. Suggested independently of {@link checks}: an ecosystem that declares an
+   * install but nothing to verify contributes no check (an install alone verifies nothing) yet
+   * is exactly the case prepopulation exists for. Absent when nothing detected needs one.
+   */
+  dependencyInstall: v.optional(v.string()),
 })
 export type DetectedValidationChecks = v.InferOutput<typeof detectedValidationChecksSchema>
 

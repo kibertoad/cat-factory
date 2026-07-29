@@ -1092,6 +1092,8 @@
     "validationChecks": {
       "title": "PR öncesi doğrulama",
       "sectionHint": "Kodlayıcı işini bitirdikten sonra ve bir çekme isteği açılmadan önce çalışma kopyası üzerinde çalıştırılan komutlar. Bir hata düzeltilmesi için aracıya geri verilir; yalnızca sorunsuz bir çalışma kopyası çekme isteği açar.",
+      "dependencyInstall": "Bağımlılık kurulumu",
+      "dependencyInstallHint": "Aracı başlamadan önce çalışır",
       "hint": "Her komut bu hizmetin çalışma kopyasında sırayla `sh -c` ile çalıştırılır. Denetimi değil kodu düzeltin — aracıya denetimleri zayıflatmaması söylenir.",
       "clear": "Temizle",
       "configNoun": "doğrulama denetimleri",
@@ -1111,6 +1113,7 @@
         "action": "Algıla",
         "hint": "Bu hizmetin deposundan denetimler öner",
         "added": "{count} denetim eklendi | {count} denetim eklendi",
+        "installOnly": "Bağımlılık kurulumu dolduruldu",
         "found": "{ecosystems} algılandı.",
         "capped": "Bazı öneriler dışarıda bırakıldı — bir hizmet en fazla {max} denetim alır.",
         "nothingNew": "Eklenecek bir şey yok",

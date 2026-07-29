@@ -36,7 +36,11 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
       app: ReturnType<ConformanceHarness['makeApp']>,
       wsId: string,
       blockId: string,
-      body: { checks: { label: string; command: string }[]; maxAttempts?: number },
+      body: {
+        checks: { label: string; command: string }[]
+        maxAttempts?: number
+        dependencyInstall?: string
+      },
     ) =>
       app.call<ServiceValidationConfig>(
         'PUT',
@@ -106,6 +110,101 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
         `/workspaces/${wsId}/validation-checks`,
       )
       expect(list.body.map((c) => c.blockId)).not.toContain('blk_auth')
+    })
+
+    describe('dependency prepopulation', () => {
+      // The install shares the per-frame row with the checks but is INDEPENDENT of them, so both
+      // runtimes have to agree on three things a single-runtime test would not catch: the column
+      // round-trips, an install-only config SURVIVES a save with no checks, and it reaches the
+      // dispatched context. See docs/initiatives/agent-dependency-prepopulation.md.
+      it('round-trips the install alongside the checks', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const saved = await saveChecks(app, wsId, 'blk_auth', {
+          checks: [{ label: 'lint', command: 'pnpm lint' }],
+          dependencyInstall: 'pnpm install --frozen-lockfile',
+        })
+        expect(saved.body.dependencyInstall).toBe('pnpm install --frozen-lockfile')
+
+        const list = await app.call<ServiceValidationConfig[]>(
+          'GET',
+          `/workspaces/${wsId}/validation-checks`,
+        )
+        expect(list.body.find((c) => c.blockId === 'blk_auth')?.dependencyInstall).toBe(
+          'pnpm install --frozen-lockfile',
+        )
+      })
+
+      it('keeps an install-only config, and clears the row only when BOTH are empty', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // No checks at all — prepopulate the checkout, verify nothing. A delete rule keyed on
+        // `checks` alone would drop this the moment it was saved, on precisely the repo shape
+        // the feature exists for.
+        const saved = await saveChecks(app, wsId, 'blk_auth', {
+          checks: [],
+          dependencyInstall: 'pnpm install',
+        })
+        expect(saved.body.checks).toEqual([])
+        expect(saved.body.dependencyInstall).toBe('pnpm install')
+        const kept = await app.call<ServiceValidationConfig[]>(
+          'GET',
+          `/workspaces/${wsId}/validation-checks`,
+        )
+        expect(kept.body.map((c) => c.blockId)).toContain('blk_auth')
+
+        const cleared = await saveChecks(app, wsId, 'blk_auth', { checks: [] })
+        expect(cleared.body.dependencyInstall).toBeUndefined()
+        const list = await app.call<ServiceValidationConfig[]>(
+          'GET',
+          `/workspaces/${wsId}/validation-checks`,
+        )
+        expect(list.body.map((c) => c.blockId)).not.toContain('blk_auth')
+      })
+
+      it('threads an install-only frame config onto a task’s dispatched context', async () => {
+        const contexts: AgentRunContext[] = []
+        const app = harness.makeApp({ onContext: (c) => contexts.push(c) })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await saveChecks(app, wsId, 'blk_auth', {
+          checks: [],
+          dependencyInstall: 'pnpm install --frozen-lockfile',
+        })
+
+        const pipeline = await coderPipeline(app, wsId)
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.id,
+        })
+        await app.drive(wsId)
+
+        const coderContext = contexts.find((c) => c.agentKind === 'coder')
+        expect(coderContext?.dependencyInstall).toBe('pnpm install --frozen-lockfile')
+        // Independent of the checks: the frame declared none, so nothing gates the PR.
+        expect(coderContext?.validationChecks?.checks ?? []).toEqual([])
+      })
+
+      it('carries no install when the service declared none', async () => {
+        const contexts: AgentRunContext[] = []
+        const app = harness.makeApp({ onContext: (c) => contexts.push(c) })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await coderPipeline(app, wsId)
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.id,
+        })
+        await app.drive(wsId)
+
+        const coderContext = contexts.find((c) => c.agentKind === 'coder')
+        expect(coderContext).toBeDefined()
+        expect(coderContext?.dependencyInstall).toBeUndefined()
+      })
     })
 
     it('refuses checks on a non-frame block (they would never be resolved)', async () => {
@@ -261,6 +360,9 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
           { label: 'build', command: 'pnpm run build' },
           { label: 'test', command: 'pnpm run test' },
         ])
+        // The same read also suggests the dependency-prepopulation install, so pressing Detect
+        // once fills both halves of the panel.
+        expect(res.body.dependencyInstall).toBe('pnpm install --frozen-lockfile')
 
         // Detection is a SUGGESTION: it must not have written the service's config, or the
         // operator's next board load would claim checks no run was ever told to run.

@@ -1092,6 +1092,8 @@
     "validationChecks": {
       "title": "Validation avant la PR",
       "sectionHint": "Commandes exécutées sur la copie de travail une fois le développeur terminé et avant l'ouverture d'une demande de tirage. Un échec est renvoyé à l'agent pour correction ; seule une copie sans erreur ouvre une PR.",
+      "dependencyInstall": "Installation des dépendances",
+      "dependencyInstallHint": "S'exécute avant le démarrage de l'agent",
       "hint": "Chaque commande s'exécute avec `sh -c` dans la copie de travail de ce service, dans l'ordre. Il faut corriger le code, pas la vérification : il est demandé à l'agent de ne pas les affaiblir.",
       "clear": "Vider",
       "configNoun": "vérifications de validation",
@@ -1111,6 +1113,7 @@
         "action": "Détecter",
         "hint": "Proposer des vérifications à partir du dépôt de ce service",
         "added": "{count} vérification ajoutée | {count} vérifications ajoutées",
+        "installOnly": "L'installation des dépendances a été renseignée",
         "found": "Reconnu : {ecosystems}.",
         "capped": "Certaines suggestions ont été écartées : un service accepte au plus {max} vérifications.",
         "nothingNew": "Rien à ajouter",

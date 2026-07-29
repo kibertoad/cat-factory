@@ -1433,6 +1433,8 @@
     "validationChecks": {
       "title": "Prüfungen vor dem PR",
       "sectionHint": "Befehle, die nach dem Coder und vor dem Öffnen eines Pull Requests im Checkout laufen. Ein Fehlschlag geht zur Behebung an den Agenten zurück; nur ein fehlerfreier Checkout öffnet einen PR.",
+      "dependencyInstall": "Abhängigkeiten installieren",
+      "dependencyInstallHint": "Läuft, bevor der Agent startet",
       "hint": "Jeder Befehl läuft der Reihe nach mit `sh -c` im Checkout dieses Dienstes. Der Agent soll den Code reparieren, nicht die Prüfung abschwächen.",
       "clear": "Leeren",
       "configNoun": "Prüfungen",
@@ -1452,6 +1454,7 @@
         "action": "Erkennen",
         "hint": "Prüfungen aus dem Repository dieses Dienstes vorschlagen",
         "added": "{count} Prüfung hinzugefügt | {count} Prüfungen hinzugefügt",
+        "installOnly": "Abhängigkeitsinstallation eingetragen",
         "found": "Erkannt: {ecosystems}.",
         "capped": "Einige Vorschläge wurden ausgelassen — ein Dienst nimmt höchstens {max} Prüfungen auf.",
         "nothingNew": "Nichts hinzuzufügen",

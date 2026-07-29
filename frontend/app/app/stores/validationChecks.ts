@@ -86,21 +86,25 @@ export const useValidationChecksStore = defineStore('validationChecks', () => {
   }
 
   /**
-   * Save a service frame's checks. An EMPTY list clears the config on the backend (the service
-   * deletes the row), which restores the exact pre-feature behaviour — so the local list drops
-   * the entry rather than keeping an empty one that reads as "configured".
+   * Save a service frame's checks and its dependency-prepopulation install. The backend deletes
+   * the row only when BOTH are empty (restoring the exact pre-feature behaviour), so the local
+   * list mirrors that rule — dropping the entry on an empty save of both, and keeping it for a
+   * service that declares only an install. Testing `checks` alone here would evict a live
+   * install-only config from the store and report the service as unconfigured until a reload.
    */
   async function save(
     blockId: string,
     checks: ValidationCheck[],
     maxAttempts: number,
+    dependencyInstall?: string,
   ): Promise<void> {
     const ws = useWorkspaceStore()
     const saved = await api.setServiceValidationConfig(ws.requireId(), blockId, {
       checks,
       maxAttempts,
+      ...(dependencyInstall ? { dependencyInstall } : {}),
     })
-    if (saved.checks.length === 0) dropLocal(blockId)
+    if (saved.checks.length === 0 && !saved.dependencyInstall) dropLocal(blockId)
     else upsertLocal(saved)
   }
 

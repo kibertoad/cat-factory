@@ -1092,6 +1092,8 @@
     "validationChecks": {
       "title": "Validación previa al PR",
       "sectionHint": "Comandos que se ejecutan sobre la copia de trabajo cuando el programador termina y antes de abrir una solicitud de incorporación. Un fallo vuelve al agente para que lo corrija; solo una copia sin errores abre un PR.",
+      "dependencyInstall": "Instalación de dependencias",
+      "dependencyInstallHint": "Se ejecuta antes de que empiece el agente",
       "hint": "Cada comando se ejecuta con `sh -c` en la copia de trabajo de este servicio, en orden. Hay que arreglar el código, no la comprobación: al agente se le indica que no las debilite.",
       "clear": "Vaciar",
       "configNoun": "comprobaciones de validación",
@@ -1111,6 +1113,7 @@
         "action": "Detectar",
         "hint": "Sugerir comprobaciones a partir del repositorio de este servicio",
         "added": "Se añadió {count} comprobación | Se añadieron {count} comprobaciones",
+        "installOnly": "Se rellenó la instalación de dependencias",
         "found": "Se reconoció {ecosystems}.",
         "capped": "Se omitieron algunas sugerencias: un servicio admite como máximo {max} comprobaciones.",
         "nothingNew": "No hay nada que añadir",
