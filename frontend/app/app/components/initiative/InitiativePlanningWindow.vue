@@ -4,8 +4,9 @@
 // (pending `qa` entries with an empty answer) are shown here; the human answers them, then either
 // SUBMITS them (the `continue` action: the interviewer re-runs and may ask follow-ups) or plans
 // now (the `proceed` action: skip the remaining questions — the interviewer converges and the run
-// advances to the analyst/planner). The labels say submit/plan-now rather than continue/proceed
-// because the latter pair both read as "go forward" and were indistinguishable in use.
+// advances to the planner; the analyst already ran, ahead of this gate). The labels say
+// submit/plan-now rather than continue/proceed because the latter pair both read as "go forward"
+// and were indistinguishable in use.
 // Opened via the universal result-view host: from the inspector / card
 // (`ui.openInitiativePlanning`) or as the interviewer step's result view. Live `initiative`
 // stream events patch the store, so an open window follows the interview as it progresses.
@@ -29,7 +30,11 @@ import {
   isPendingQuestion,
   orderInterviewQuestions,
 } from '~/utils/initiative'
-import { interviewGatePhase } from '~/utils/interviewGate'
+import {
+  INITIATIVE_INTERVIEWER_KIND,
+  interviewGatePhase,
+  interviewStepReached,
+} from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
@@ -117,7 +122,11 @@ const resuming = computed(() => initiatives.resuming)
 const phase = computed(() =>
   resuming.value
     ? 'working'
-    : interviewGatePhase(initiative.value?.interview?.status, run.value?.status),
+    : interviewGatePhase(
+        initiative.value?.interview?.status,
+        run.value?.status,
+        interviewStepReached(run.value, INITIATIVE_INTERVIEWER_KIND),
+      ),
 )
 
 /**
@@ -229,10 +238,21 @@ async function onDiscard() {
             {{ t('initiative.planning.intro') }}
           </p>
 
+          <!-- The run is still ahead of the interview — the codebase analysis that grounds it. It
+               wears the working chrome but says something different on purpose: nothing has been
+               asked yet, so "working on your answers" would describe answers that do not exist. -->
+          <InterviewGateNotice
+            v-if="phase === 'preparing'"
+            variant="working"
+            :title="t('initiative.planning.preparing')"
+            :hint="t('initiative.planning.preparingHint')"
+            testid="initiative-planning-preparing"
+          />
+
           <!-- A pass is running: the human is waiting on the planner. Without this the window is
                byte-identical to the parked state and the submit reads as a no-op. -->
           <InterviewGateNotice
-            v-if="phase === 'working'"
+            v-else-if="phase === 'working'"
             variant="working"
             :title="t('initiative.planning.working')"
             :hint="t('initiative.planning.workingHint')"
@@ -316,8 +336,8 @@ async function onDiscard() {
     <!-- Action rail. The submit/plan-now pair shows only while the run is actually parked on the
          human: mid-pass they would re-submit a question set already in flight, and the resume is a
          no-op once it isn't. Discard is the opposite — it is offered for as long as a run owns the
-         block, because the phases where those two are hidden (working, failed) are exactly the ones
-         a wedged run sits in. -->
+         block, because the phases where those two are hidden (preparing, working, failed) are
+         exactly the ones a wedged run sits in. -->
     <footer
       v-if="initiative && (canDiscard || (phase === 'awaiting' && questions.length > 0))"
       class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"

@@ -131,7 +131,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 
 - **Board canvas** (`components/board`) — `BoardCanvas` + `nodes/` (`BlockNode`,
   `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
-  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`.
+  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. A running task card expands
+  its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
+  on-screen card past the `steps` zoom band — the two grants are combined in the
+  `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`) — board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
@@ -174,9 +177,13 @@ Two placements are load-bearing enough to state, because putting a new one in th
 wrong place is invisible until a user cannot find it:
 
 - **The sidebar section is a claim about what the destination IS.** `models` is the
-  engines, `integrations` the optional systems, `infrastructure` where agent
-  containers and test environments run, `configuration` workspace/account settings.
-  `nav-contributions.spec.ts` pins the section order and each section's membership.
+  model layer — the engines, the per-agent model choice, and the surfaces that
+  evaluate a prompt+agent+model combination (Sandbox, Kaizen); `integrations` the
+  optional EXTERNAL systems; `infrastructure` where agent containers and test
+  environments run; `configuration` workspace/account settings. A surface that
+  connects to nothing does not belong in `integrations` however configuration-shaped
+  it feels. `nav-contributions.spec.ts` pins the section order and each section's
+  membership.
 - **A flow that edits ONE entity's config is a section of the window that owns that
   config, not a sibling nav entry.** The guided Docker Compose environment setup
   (`ComposeEnvironmentSetupSection.vue` → `EnvironmentSetupWizard.vue`) lives inside
@@ -185,6 +192,15 @@ wrong place is invisible until a user cannot find it:
   It also carries a full "how it works / when you need this / when you can skip it"
   explanation there rather than a one-line hint, since the decision to run it has to
   be made before opening a five-minute wizard.
+- **"It talks to an external service" is not what puts a surface in `integrations`.**
+  Private package registries connect to npmjs.com and GitHub Packages and still belong
+  in Infrastructure, because the question they answer is _what may a container install
+  from_ — a property of where agents RUN, which is what the Infrastructure window is
+  for. `integrations` is for a system the WORKSPACE links in and would still be a
+  coherent product without. Ask which question the destination answers, not whether a
+  credential leaves the building. A surface moved between sections must also move its
+  entry point: leaving a hub row behind as a shortcut splits the answer across two
+  places, so the row goes and the window's tab becomes the single route in.
 
 ## Develop & test
 

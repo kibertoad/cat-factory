@@ -58,6 +58,11 @@ import {
   type ReproductionReport,
   type ReproductionSpec,
 } from './reproduction-proof.js'
+import {
+  prepopulateDependencies,
+  withDependencyNote,
+  type DependencyInstallSpec,
+} from './dependency-install.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -130,6 +135,13 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * `docs/initiatives/pre-pr-validation.md`.
    */
   validationChecks?: ValidationChecksSpec
+  /**
+   * DEPENDENCY PREPOPULATION: the service's install command, run against the checkout BEFORE the
+   * agent's first turn so it works against a tree whose dependencies are present. Best-effort —
+   * a failure becomes a note in the agent's prompt, never a failed run. Absent ⇒ no install
+   * phase. See `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: DependencyInstallSpec
   /**
    * BUGFIX REPRODUCTION PROOF: the run's declared reproduction command + test files. When set, the
    * harness runs that command against the pre-fix tree AND the tree the PR will open from, feeding
@@ -337,9 +349,29 @@ export async function runCodingAgent(
         followUpTick.unref?.()
       }
 
+      // DEPENDENCY PREPOPULATION: install the service's dependencies into the checkout BEFORE the
+      // agent's first turn, so it reads real packages instead of inferring capabilities from a
+      // manifest. Runs in `workDir` (a monorepo service installs from its own subtree, exactly
+      // where its manifest and lockfile live), and its outcome is STATED to the agent either way —
+      // a silent absence of dependencies reads to an agent as "this environment is offline".
+      // Best-effort by construction: a failed install never fails the run. Keyed purely off the
+      // job body (no agent-kind switch); absent ⇒ this is a no-op.
+      const dependencyNote = await prepopulateDependencies({
+        spec: spec.dependencyInstall,
+        installDir: workDir,
+        repoDir: dir,
+        agentDir: workDir,
+        logger,
+        opts,
+      })
+
       // One agent pass over this checkout, parameterised only by the prompt — so the pre-PR
       // validation loop below can re-run the agent with a repair instruction without
       // re-deriving (or drifting from) the dispatch's own settings.
+      //
+      // The dependency note rides EVERY pass, not just the first: a repair round starts a fresh
+      // agent, and one that is not told the tree is already installed spends the round it was
+      // given to fix something reinstalling it instead.
       const runAgentPass = (
         userPrompt: string,
       ): Promise<Awaited<ReturnType<typeof runAgentInWorkspace>>> =>
@@ -347,7 +379,7 @@ export async function runCodingAgent(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
-            userPrompt,
+            userPrompt: withDependencyNote(userPrompt, dependencyNote),
             model: spec.model,
             harness: spec.harness,
             subscriptionToken: spec.subscriptionToken,
@@ -1038,6 +1070,29 @@ export async function runMultiRepoCoding(
     // reference branches. Mutates each leg's `dir`/`resumed`/`baseSha` in place.
     await prepareMultiRepoCheckouts(root, legs, job, logger, opts)
 
+    // DEPENDENCY PREPOPULATION for the PRIMARY leg, exactly as the read-only multi-repo fan-out
+    // does it. The install is declared on ONE service frame (the primary repo's), so it runs in
+    // that leg's checkout and is never fanned out across peers, whose own frames declare configs
+    // this dispatch never resolved — running a `pnpm install` inside a Go checkout is not a
+    // degraded outcome, it is a wrong one. A cross-repo implementer needs its dependencies for
+    // the same reason a cross-repo investigator does; the note names the sibling directory
+    // because the agent itself stands at the workspace root.
+    //
+    // At the leg's checkout ROOT, not a `serviceDirectory` subtree: this layout applies no
+    // service-directory scoping anywhere (the agent runs at the root and the prompt explains the
+    // sibling checkouts), and a root install is the one that resolves a monorepo workspace whole.
+    const primaryLeg = legs.find((leg) => leg.primary)
+    const dependencyNote = primaryLeg
+      ? await prepopulateDependencies({
+          spec: job.dependencyInstall,
+          installDir: primaryLeg.dir,
+          repoDir: primaryLeg.dir,
+          agentDir: root,
+          logger,
+          opts,
+        })
+      : undefined
+
     // Run the agent ONCE with its cwd at the workspace root, so it sees every sibling checkout
     // and can change them coherently. No monorepo/service-directory scoping — the multi-repo
     // note + the backend system-prompt section explain the layout.
@@ -1048,7 +1103,7 @@ export async function runMultiRepoCoding(
         {
           dir: root,
           systemPrompt: job.systemPrompt,
-          userPrompt: job.userPrompt,
+          userPrompt: withDependencyNote(job.userPrompt, dependencyNote),
           model: job.model,
           harness: job.harness,
           subscriptionToken: job.subscriptionToken,

@@ -24,6 +24,7 @@ import {
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
+import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
@@ -300,16 +301,12 @@ interface CliExit {
 /**
  * One message shape for a CLI that ended badly, with or without a report to add.
  *
- * A `null` exit code means a SIGNAL killed the process, so name the signal rather than render
- * "exited with code null": an externally-killed container job (an OOM kill, a `docker stop`
- * racing teardown) then reads differently from the CLI's own failure exit, which is the first
- * fork in the road when diagnosing one.
+ * How it ended is rendered through {@link describeProcessExit}, the shared vocabulary every
+ * process-reporting transport uses, so an externally-killed container job (an OOM kill, a
+ * `docker stop` racing teardown) reads differently from the CLI's own failure exit.
  */
 function cliExitMessage(exit: CliExit, report: string): string {
-  const how =
-    exit.exitCode === null
-      ? `killed by ${exit.signal ?? 'signal'}`
-      : `exited with code ${exit.exitCode}`
+  const how = describeProcessExit(exit.exitCode, exit.signal)
   const suffix = report ? ` Agent's last report: ${report}` : ''
   return `${exit.command} ${how}: ${exit.stderrTail || '(no stderr output)'}${suffix}`
 }
@@ -330,8 +327,25 @@ function cliExitMessage(exit: CliExit, report: string): string {
  */
 function withAgentReport(err: unknown, report: string, secrets: string[]): unknown {
   if (!(err instanceof CliExitFailure)) return err
-  const tail = redact(report, secrets).trim().slice(-700)
-  return tail ? new CliExitFailure(err.parts, tail) : err
+  const folded = capReport(redact(report, secrets).trim())
+  return folded ? new CliExitFailure(err.parts, folded) : err
+}
+
+/** How much of the agent's terminal report the failure message carries. */
+const MAX_AGENT_REPORT_CHARS = 700
+
+/**
+ * Bound the agent's terminal report, keeping its HEAD — the opposite bias from the stderr tail
+ * beside it, and deliberately so. A stderr tail is a log: the cause is whatever it ended on. A
+ * report is a written statement, and its opening is where the answer lives — the failure
+ * `subtype` {@link claudeResultReport} prepends, or the first line of Codex's last agent message.
+ * Tail-slicing it drops exactly the classification the fold exists to surface.
+ *
+ * A cut is marked, because a report that merely stops reads like an agent that trailed off.
+ */
+function capReport(report: string): string {
+  if (report.length <= MAX_AGENT_REPORT_CHARS) return report
+  return `${report.slice(0, MAX_AGENT_REPORT_CHARS)}… (report truncated)`
 }
 
 /**
@@ -700,12 +714,24 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     telemetry.flush()
     publisher.flush()
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
-    // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
-    // it attached, since that is usually the only evidence of what the CLI was doing when it was
-    // killed. Byte-for-byte the shape `runPi` fails with.
+    // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail it
+    // attached, since that is usually the only evidence of what the CLI was doing when it was
+    // killed. The leading clauses are byte-for-byte the shape `runPi` fails with; a terminal
+    // report is appended after them when the CLI managed to emit one before it was killed, which
+    // is uncommon but is the same evidence a bad exit now carries — a guard trip is no reason to
+    // discard it.
     if (guardReason) {
       const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
-      throw new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason)
+      const report = capReport(redact(terminalReport, secrets).trim())
+      throw new Error(
+        [
+          guardReason,
+          tail ? `Agent stderr: ${tail}` : '',
+          report ? `Agent's last report: ${report}` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      )
     }
     throw withAgentReport(err, terminalReport, secrets)
   } finally {

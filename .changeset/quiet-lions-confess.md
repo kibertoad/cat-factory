@@ -1,6 +1,7 @@
 ---
 '@cat-factory/executor-harness': patch
 '@cat-factory/local-server': patch
+'@cat-factory/kernel': minor
 ---
 
 Make a silently-failing agent run say what happened.
@@ -27,9 +28,13 @@ between "the CLI gave up" and "something killed the container".
 
 **The failure detail says how quiet the run had gone.** Exit status cannot distinguish a crash
 from a stall: both are non-zero with an empty stderr. Phase timing plus silence can. The
-breadcrumb now adds `silent for 564s`, or `no agent output at all in 564s` when the run never
+breadcrumb now adds `silent for 564s`, or `no activity at all in 564s` when the run never
 produced a byte — suppressed under 30s, and on an inactivity kill whose own message already states
-the window it waited out, so it appears only where it changes the diagnosis.
+the window it waited out, so it appears only where it changes the diagnosis. It is worded as
+ACTIVITY rather than agent output because that is what the channel carries: the activity-silent
+phases (dependency install, pre-PR validation, the reproduction proof, the frontend stand-up) feed
+it synthetic keep-alive beats to hold the inactivity watchdog off, so a run that beat every 30s
+through its install and then died has been heard from even though the agent never spoke.
 
 **The cold-start diagnostic reaches the run.** ADR 0026 D4 asks for it to be surfaced on the step;
 it was recorded on the job view and logged in the container, where a developer reading a failed run
@@ -40,9 +45,25 @@ still-RUNNING view (the early warning) stays open as observability-logging-gaps 
 The local runtime's native inline runner had the same defect in miniature: it runs
 `claude -p --output-format json`, whose error JSON also lands on stdout, and its non-zero-exit
 branch kept only stderr — so the in-band `is_error` check its caller performs was unreachable
-exactly when the CLI exited non-zero. It now reports whichever stream spoke.
+exactly when the CLI exited non-zero. It now reports whichever stream spoke, scrubbed through
+`redactSecrets` at the emit site: that message carries raw command output, and on this path stdout
+holds the model's own text, which is strictly more exposed than the stderr the sibling in the
+container harness was already redacting.
+
+**`describeProcessExit` is a new kernel export**, the shared sentence for how a subprocess ended.
+The `null`-code-means-signal distinction is operational knowledge rather than formatting, and it
+was about to exist in two hand-written copies; a third and fourth transport (pooled runner, K8s
+pod, native host process) report process exits too and should inherit it rather than rediscover
+it. The executor-harness keeps a pinned copy because the container image can depend on no
+workspace package — the same arrangement `host-markdown` has, held equal by a conformity test.
 
 Behaviour change to be aware of: the non-zero-exit message shape is different (`(no stderr
 output)`, a `killed by SIGKILL` variant, an appended report). Nothing classifies on it — the
 backend reads the structured `failureCause`, and the string-fallback classifiers were deleted in
 error-message-coverage I5 — but a human-facing string that appeared in past runs has changed.
+
+Deliberately NOT changed: the failure still classifies as the generic `agent` cause. `llm-upstream`
+exists and is documented as exactly this case, but the only signal available for it is the CLI's
+`result` prose plus a `subtype` whose vocabulary is not contractual — classifying on that would
+reintroduce the string matching I5 deleted, and a wrong structured cause is worse than a generic
+one because the backend acts on it. Surfacing the report is what makes the follow-up decidable.

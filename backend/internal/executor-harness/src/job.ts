@@ -12,6 +12,7 @@ import {
   type ReproductionReport,
   type ReproductionSpec,
 } from './reproduction-proof.js'
+import { parseDependencyInstallSpec, type DependencyInstallSpec } from './dependency-install.js'
 import {
   parseMcpServerSpecs,
   parseSkillSpecs,
@@ -420,7 +421,7 @@ export interface PackageRegistrySpec {
   ecosystem: 'npm'
   /** Registry host, e.g. `registry.npmjs.org` — allowlisted, never a full URL. */
   host: string
-  /** npm scopes (`@org`) routed to this registry. */
+  /** npm scopes (`@org`) routed to this registry; EMPTY ⇒ authenticate the host only. */
   scopes: string[]
   token: string
 }
@@ -468,8 +469,12 @@ export function parsePackageRegistries(
         `Invalid job: 'packageRegistries[${i}].host' '${host}' is not an allowed npm registry host`,
       )
     }
-    if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
-      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be a non-empty array`)
+    // An EMPTY scope list is valid and deliberate: the entry then only authenticates its
+    // host, leaving every package to resolve from the default registry unless a dependency
+    // pins this one itself. Mapping a scope is all-or-nothing, so a workspace mixing private
+    // and public packages under one scope must be able to skip it.
+    if (!Array.isArray(entry.scopes)) {
+      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be an array`)
     }
     const scopes = entry.scopes.map((scope, j) => {
       const s = str(scope, `packageRegistries[${i}].scopes[${j}]`).trim()
@@ -885,6 +890,18 @@ export interface AgentJob extends HarnessAuthFields {
    * `docs/initiatives/bugfix-reproduction-proof.md`.
    */
   reproduction?: ReproductionSpec
+  /**
+   * DEPENDENCY PREPOPULATION: the service's install command, run against the checkout BEFORE the
+   * agent's first turn so it reads a tree whose dependencies are present rather than inferring
+   * them from a manifest. Applies to EVERY mode that gets a checkout (explore as well as coding)
+   * — unlike {@link validationChecks}, which is a pre-PR gate — because an agent reading or
+   * reviewing a tree needs its dependencies as much as one changing it.
+   *
+   * Best-effort: a failure becomes a note in the agent's prompt, never a failed job. Absent ⇒ the
+   * run behaves exactly as before. Deliberately keyed off job DATA, not the agent kind. See
+   * `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: DependencyInstallSpec
 }
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
@@ -1309,6 +1326,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     validation: parseValidationSpec(o.validation),
     validationChecks: parseValidationChecksSpec(o.validationChecks),
     reproduction: parseReproductionSpec(o.reproduction),
+    dependencyInstall: parseDependencyInstallSpec(o.dependencyInstall),
     reviewPrNumber: posInt(o.reviewPrNumber),
   })
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
@@ -1349,6 +1367,7 @@ interface ParsedAgentJobParts {
   validation: ReturnType<typeof parseValidationSpec>
   validationChecks: ReturnType<typeof parseValidationChecksSpec>
   reproduction: ReturnType<typeof parseReproductionSpec>
+  dependencyInstall: ReturnType<typeof parseDependencyInstallSpec>
   reviewPrNumber: number | undefined
 }
 
@@ -1404,6 +1423,7 @@ function assembleAgentJob(
     validation,
     validationChecks,
     reproduction,
+    dependencyInstall,
     reviewPrNumber,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
@@ -1435,6 +1455,7 @@ function assembleAgentJob(
     ...(validation ? { validation } : {}),
     ...(validationChecks ? { validationChecks } : {}),
     ...(reproduction ? { reproduction } : {}),
+    ...(dependencyInstall ? { dependencyInstall } : {}),
   }
 }
 

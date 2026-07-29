@@ -29,6 +29,7 @@ import {
   initiativeProgress,
   initiativeSlug,
   interviewAtCap,
+  interviewFollowsStep,
   isPendingQuestion,
   itemDependenciesMet,
   normalizeDraftAgainstPhaseTemplate,
@@ -128,6 +129,48 @@ describe('assertInitiativeShapeAllowed', () => {
       ]),
     ).not.toThrow()
     expect(() => assertInitiativeShapeAllowed(block('task'), ['coder', 'merger'])).not.toThrow()
+  })
+})
+
+// What the analyst is told about WHY it must read exhaustively depends on whether a human is asked
+// anything after it — and the shared analyst kind serves both `pl_initiative` (interview) and
+// `pl_initiative_docs` (none), so getting this wrong states a falsehood to a model on one of them.
+describe('interviewFollowsStep', () => {
+  const steps = (...kinds: string[]) => kinds.map((agentKind) => ({ agentKind }))
+  const PLANNING = steps(
+    'initiative-analyst',
+    'initiative-interviewer',
+    'initiative-planner',
+    'initiative-committer',
+  )
+
+  it('is true for the analyst on the generic planning chain', () => {
+    expect(interviewFollowsStep(PLANNING, 0)).toBe(true)
+  })
+
+  it('is false for a chain with no interviewer at all (pl_initiative_docs)', () => {
+    const docs = steps('initiative-analyst', 'initiative-planner', 'initiative-committer')
+    expect(interviewFollowsStep(docs, 0)).toBe(false)
+  })
+
+  it('is false once the interview is BEHIND the running step', () => {
+    // The interviewer itself, and everything after it, has already had its questions asked — they
+    // are in the digest, not still to come.
+    expect(interviewFollowsStep(PLANNING, 1)).toBe(false)
+    expect(interviewFollowsStep(PLANNING, 2)).toBe(false)
+  })
+
+  it('reads the CHAIN, so a deployment-authored order is honoured either way', () => {
+    // No hard-coded pipeline id and no preset lookup: a chain this repo has never seen still gets
+    // a truthful answer.
+    expect(interviewFollowsStep(steps('coder', 'initiative-interviewer'), 0)).toBe(true)
+    expect(interviewFollowsStep(steps('initiative-interviewer', 'initiative-analyst'), 1)).toBe(
+      false,
+    )
+  })
+
+  it('is false for an empty chain', () => {
+    expect(interviewFollowsStep([], 0)).toBe(false)
   })
 })
 

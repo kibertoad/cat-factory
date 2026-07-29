@@ -84,6 +84,18 @@ export interface AgentRunContext {
    */
   followUpCompanion?: boolean
   /**
+   * The workspace's own system prompt for the kind being dispatched, when it has edited one
+   * from the pipeline builder. Replaces the SHIPPED track prompt; the engine-enforced surface
+   * directives and trait guidance are still layered on top by `systemPromptFor`, so an
+   * override cannot delete the read-only guardrail or the answer-in-the-reply rule.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`) rather than by each
+   * executor, so the container, inline and consensus paths cannot disagree about which prompt
+   * a step ran under — and so a step's telemetry records the prompt that was actually sent.
+   * Absent ⇒ the kind's shipped prompt.
+   */
+  systemPromptOverride?: string
+  /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
    * Read ONLY by the optional consensus executor (`@cat-factory/consensus`), which
@@ -137,6 +149,22 @@ export interface AgentRunContext {
     checks: { label: string; command: string }[]
     maxAttempts: number
   }
+  /**
+   * DEPENDENCY PREPOPULATION: the install command the harness runs against the checkout BEFORE
+   * the agent's first turn, so a repo-aware agent reads a tree whose dependencies are actually
+   * present instead of inferring what a library can do from a manifest entry.
+   *
+   * Resolved from the SAME frame-chain read as {@link validationChecks} (so it costs a dispatch
+   * no extra round trip) but forwarded on the job body under a DIFFERENT rule: every dispatch
+   * that gets a checkout — explore kinds and in-place fixers included — not only a PR-opening
+   * one. A reviewer or an architect reading the tree needs the dependencies as much as a coder
+   * does, and neither opens a PR.
+   *
+   * Best-effort in the harness by construction: a failed install is reported to the agent (which
+   * may install what it needs itself) and the run continues. Absent ⇒ the harness's existing
+   * path, unchanged. See `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: string
   /**
    * The BUGFIX REPRODUCTION the harness must PROVE for this run: the command that runs the
    * declared reproduction test(s), those test paths, and an optional setup command that makes a
@@ -492,6 +520,23 @@ export interface AgentRunContext {
     nonGoals?: string[]
     qa?: { question: string; answer: string }[]
     analysisSummary?: string
+    /**
+     * Whether a stakeholder INTERVIEW step still lies ahead of the running step in THIS run's
+     * pipeline. Resolved from the pipeline's own shape, not from the preset: `pl_initiative` leads
+     * with the analyst and interviews after it (`true` for the analyst), while `pl_initiative_docs`
+     * and any other `interview: 'skip'` planning pipeline has no interviewer at all (`false`).
+     *
+     * It exists because the analyst is SHARED across those pipelines while the reason it must read
+     * rather than defer differs: with an interview ahead, every fact it establishes is one a human
+     * is not asked about their own codebase; with none, this analysis is the only reading of the
+     * repository the plan will ever get. Both motivate the same behaviour, and each is FALSE for
+     * the other pipeline — so the framing is selected here rather than asserted unconditionally.
+     *
+     * Present only on an initiative-LEVEL (planning) run; a spawned run carries preset steering
+     * alone. Reports the step's presence, not whether its interviewer is wired — an unwired
+     * interviewer passes through, which makes reading MORE important, never less.
+     */
+    interviewFollows?: boolean
     /**
      * The initiative PRESET's planning steering for THIS step, resolved by the engine from the
      * entity's `presetId` against the registry. `label` names the preset; `promptAddition` is its

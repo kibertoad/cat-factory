@@ -10,6 +10,7 @@ import type {
   SandboxExperimentStatus,
   SandboxFixtureKind,
   SandboxGrade,
+  SandboxPromptOrigin,
   SandboxPromptVersion,
   SandboxRun,
 } from '~/types/sandbox'
@@ -35,6 +36,47 @@ const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
   'repo-feature': t('sandbox.fixtureKind.repo-feature'),
   'repo-bug': t('sandbox.fixtureKind.repo-bug'),
 }))
+/**
+ * Badge colour per prompt origin. An exhaustive Record over the closed union rather than a
+ * ternary, so adding an origin fails the typecheck here instead of silently rendering as
+ * "candidate" — the drift guard the i18n conventions ask for on enum-keyed lookups.
+ */
+const PROMPT_ORIGIN_COLOR: Record<SandboxPromptOrigin, 'neutral' | 'primary' | 'warning'> = {
+  baseline: 'neutral',
+  candidate: 'primary',
+  workspace: 'warning',
+}
+
+/** Which version is mid-promotion, so only its button spins. */
+const promoting = ref<string | null>(null)
+
+/**
+ * Promotion is offered on anything that is not already what the workspace runs: a graded
+ * candidate (the point of the tool) and an older workspace revision (rolling back). Not on the
+ * live row, where it is a no-op the backend would swallow anyway — and not on a shipped baseline,
+ * since "run what the product ships" is the revert in the prompt editor, not a promotion that
+ * would pin today's wording as a stored override.
+ */
+function canPromote(version: SandboxPromptVersion): boolean {
+  return version.origin !== 'baseline' && version.live !== true
+}
+
+async function promote(version: SandboxPromptVersion) {
+  promoting.value = version.id
+  try {
+    await store.promotePrompt(version)
+    toast.add({
+      title: t('sandbox.prompts.promoted', { agent: version.agentKind }),
+      color: 'success',
+      icon: 'i-lucide-rocket',
+    })
+  } catch {
+    toast.add({ title: t('sandbox.prompts.promoteFailed'), color: 'error' })
+  } finally {
+    promoting.value = null
+  }
+}
+
 const FIXTURE_ORIGIN_LABEL = computed<Record<'builtin' | 'custom', string>>(() => ({
   builtin: t('sandbox.fixtureOrigin.builtin'),
   custom: t('sandbox.fixtureOrigin.custom'),
@@ -508,15 +550,18 @@ async function archive(prompt: SandboxPromptVersion) {
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="truncate text-slate-200">{{ p.name }}</span>
-                  <UBadge
-                    :color="p.origin === 'baseline' ? 'neutral' : 'primary'"
-                    variant="soft"
-                    size="xs"
-                  >
+                  <UBadge :color="PROMPT_ORIGIN_COLOR[p.origin]" variant="soft" size="xs">
                     {{
                       p.origin === 'baseline'
                         ? t('sandbox.baseline')
                         : t('sandbox.versionLabel', { version: p.version })
+                    }}
+                  </UBadge>
+                  <UBadge v-if="p.origin === 'workspace'" color="warning" variant="soft" size="xs">
+                    {{
+                      p.live
+                        ? t('sandbox.prompts.liveInWorkspace')
+                        : t('sandbox.prompts.fromWorkspace')
                     }}
                   </UBadge>
                 </div>
@@ -534,6 +579,19 @@ async function archive(prompt: SandboxPromptVersion) {
                       : t('sandbox.prompts.editTitle')
                   "
                   @click="edit(p)"
+                />
+                <!-- Deploy: make this version the workspace's live prompt for its agent kind.
+                     Offered on a graded candidate and on an older workspace revision (rolling
+                     back), but not on the one already live, where it would be a no-op. -->
+                <UButton
+                  v-if="canPromote(p)"
+                  icon="i-lucide-rocket"
+                  color="primary"
+                  variant="ghost"
+                  size="xs"
+                  :loading="promoting === p.id"
+                  :title="t('sandbox.prompts.promoteTitle')"
+                  @click="promote(p)"
                 />
                 <UButton
                   v-if="p.origin === 'candidate'"

@@ -266,4 +266,50 @@ describe('spawnCliExec', () => {
       else process.env.DATABASE_URL = original
     }
   })
+
+  // `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as JSON on
+  // STDOUT and leaves stderr EMPTY, so a stderr-only failure message carried the exit code and
+  // nothing else — the same defect the container harness's `streamCli` had.
+  const runFailing = (body: string): Promise<string> =>
+    spawnCliExec(process.execPath, ['-e', body], '', { timeoutMs: 30_000 })
+
+  it('carries the stdout report when the CLI failed with an empty stderr', async () => {
+    await expect(
+      runFailing(
+        'process.stdout.write(JSON.stringify({is_error:true,result:"usage limit reached"}));process.exit(1)',
+      ),
+    ).rejects.toThrow(/exited with code 1: .*usage limit reached/)
+  })
+
+  it('prefers stderr when that is where the CLI spoke', async () => {
+    await expect(
+      runFailing(
+        'process.stderr.write("not usable here");process.stdout.write("{}");process.exit(2)',
+      ),
+    ).rejects.toThrow(/exited with code 2: not usable here/)
+  })
+
+  it('names an empty failure as empty rather than trailing off after a colon', async () => {
+    await expect(runFailing('process.exit(3)')).rejects.toThrow(/exited with code 3: \(no output\)/)
+  })
+
+  it('names the signal instead of rendering "code null" when something killed the CLI', async () => {
+    await expect(runFailing('process.kill(process.pid, "SIGKILL")')).rejects.toThrow(
+      /killed by SIGKILL/,
+    )
+  })
+
+  // Both streams are command output on a path whose stdout holds the model's own text, so the
+  // failure message is scrubbed at this emit site — the sibling in the container harness redacts
+  // its stderr tail for the same reason.
+  it('scrubs a credential out of the output it carries onto the failure', async () => {
+    const message = await runFailing(
+      'process.stdout.write("auth failed for ghp_0123456789abcdefghijklmnopqrstuvwxyz");process.exit(1)',
+    ).then(
+      () => '(resolved)',
+      (err: Error) => err.message,
+    )
+    expect(message).not.toMatch(/ghp_0123456789/)
+    expect(message).toMatch(/auth failed for/)
+  })
 })

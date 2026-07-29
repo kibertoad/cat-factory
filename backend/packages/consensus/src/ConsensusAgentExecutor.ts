@@ -193,7 +193,12 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const base = await this.baseRef(context)
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
     const baseSystem = composeBlockSystemPrompt(
-      config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry),
+      // Same precedence the single-actor inline executor applies: the workspace's own prompt
+      // for this kind wins over the deployment-wide `AGENT_ROUTING` system prompt, and
+      // `systemPromptFor` re-applies the engine-enforced directives on top of it.
+      context.systemPromptOverride
+        ? systemPromptFor(context.agentKind, this.agentKindRegistry, context.systemPromptOverride)
+        : (config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)),
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
       standardsDeliveredAsFiles(context.injectedContextFiles),

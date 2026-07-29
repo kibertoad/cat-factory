@@ -25,6 +25,7 @@ import type { RequirementReviewService } from '../modules/requirements/Requireme
 import type { SandboxRunService } from '../modules/sandbox/SandboxRunService.js'
 import type { SandboxService } from '../modules/sandbox/SandboxService.js'
 import type { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
+import type { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import type { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import type { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
 import type { UserSettingsService } from '../modules/settings/UserSettingsService.js'
@@ -147,6 +148,11 @@ export interface UserSettingsModule {
 /** The model-preset feature's service, present only when its repository is wired. */
 export interface ModelPresetsModule {
   service: ModelPresetService
+}
+
+/** The agent-prompt-override feature's service, present only when its repository is wired. */
+export interface AgentPromptsModule {
+  service: AgentPromptService
 }
 
 /** The default service-fragment feature's service, present only when its repository is wired. */

@@ -1,5 +1,184 @@
 # @cat-factory/app
 
+## 0.184.0
+
+### Minor Changes
+
+- e087b40: Let a workspace rewrite any agent's system prompt from the pipeline builder, and switch back
+  through every version it has run.
+
+  The store is an append-only revision log per `(workspace, agent kind)` — the highest revision is
+  live — so restoring an older prompt appends a copy of it rather than overwriting, and "back to the
+  built-in" is itself a recorded revision (a null text) that keeps the workspace tracking the shipped
+  prompt as it improves instead of pinning a stale copy. The composite key doubles as the concurrency
+  control: a second editor's save collides and is refused as `prompt_revision_conflict` rather than
+  silently winning last-write.
+
+  An override replaces the shipped TRACK prompt only. `systemPromptFor` gained an optional `override`
+  argument and still layers the engine-enforced surface directives and trait guidance on top, so a
+  workspace cannot edit away the read-only guardrail or the answer-in-your-reply rule. Holding that
+  takes two mechanisms, because an invariant reaches a shipped prompt by two routes and only one of
+  them survives having the track prompt replaced: `restoreShippedInvariants` puts back a rule a
+  built-in track prompt carried INLINE (without it, editing any kind whose deliverable is its reply —
+  spec-writer, the testers, the reviewers — silently drops the answer-in-your-reply rule and the run
+  fails on an empty visible reply), and `BESPOKE_CONTAINER_SYSTEM_PROMPTS` declares `merger` /
+  `on-call` as a `{ role, directives }` pair since those two bypass `systemPromptFor` entirely. The
+  editor SHOWS the resulting appended text (`AgentPromptDetail.appendedText`, measured from the real
+  composition) rather than describing it, so the promise is checkable rather than taken on trust.
+
+  The engine resolves the live revision once per dispatch onto
+  `AgentRunContext.systemPromptOverride` and pins it to `PipelineStep.promptRevision`, which Kaizen
+  folds into its `(prompt, agent, model)` combo key — an edited prompt is its own combo rather than
+  inheriting a verification the shipped one earned.
+
+  New: the `agent_prompt_revisions` table (D1 migration 0068 ⇄ Drizzle), the `AgentPromptRepository`
+  kernel port (remote-bucket for mothership mode), `GET|PUT /workspaces/:ws/agent-prompts[/:agentKind]`
+  gated on `settings.manage`, and the `prompt_revision_conflict` conflict reason.
+
+  The Sandbox is the other half of this feature and is now wired to it in both directions. A
+  workspace's own prompts are projected into the prompt browser as read-only `workspace` versions
+  (synthesized per request from the revision log, with the live one marked), so an experiment can
+  measure a candidate against the prompt that is actually running rather than only against what the
+  product ships — previously the only control on offer, and silently the wrong one on any workspace
+  that had edited a kind. And a version can be PROMOTED to the live prompt:
+  `POST /agent-prompts/:kind/promote`, deliberately on the prompt controller so it answers to
+  `settings.manage` rather than the sandbox's `integrations.manage`.
+
+  Behaviour change worth knowing: a stored sandbox `systemText` is now the BASE (track) prompt, and
+  `SandboxRunService` composes the platform's directives on top at run time through the same
+  `systemPromptFor` override path production uses. Previously it sent the stored text raw, so it
+  graded a prompt that is never what gets sent — tolerable while the sandbox was a closed loop, and
+  not tolerable once a graded candidate can become the live prompt. Existing candidates keep their
+  text; their grades shift, because they are now measured on the composed prompt.
+
+### Patch Changes
+
+- Updated dependencies [e087b40]
+  - @cat-factory/contracts@0.191.0
+
+## 0.183.0
+
+### Minor Changes
+
+- 0eacaa2: Move private package registries into the Infrastructure window, and stop requiring package scopes.
+
+  The registries a checkout installs from are part of where agent containers RUN, not an optional
+  external system a workspace links in, so they are now a tab of the Infrastructure window
+  (alongside Agent containers / Test environments / Shared stacks) rather than an Integrations-hub
+  row with a modal of its own. The tab still gates on the module's own probe, so an unconfigured
+  backend shows no dead tab. `ui.infrastructureTab` is typed against the window's full tab
+  vocabulary rather than the two provider-connection kinds, so the non-connection tabs (shared
+  stacks, package registries) are reachable by deep link instead of only by opening the window and
+  clicking across.
+
+  Package scopes are now OPTIONAL on an entry, and leaving them empty is often the right answer: an
+  npmrc scope mapping is all-or-nothing, so routing `@org` to a private registry makes every
+  `@org/*` package resolve from it — which breaks an organisation that publishes part of that scope
+  publicly. A scope-less entry still emits the registry host's `_authToken` line, which is all a
+  checkout needs whenever the ROUTING is already settled elsewhere: the repository commits its own
+  `.npmrc` (project config wins over the user config the harness writes), single dependencies carry
+  a named-registry prefix (`"@acme/private": "gh:^1.0.0"` — pnpm >= 11.1.0, pnpm/pnpm#11324), or the
+  vendor simply IS the default registry, where a scope mapping back to `registry.npmjs.org` was
+  always a no-op and only the credential was missing. The form explains this next to the field and
+  previews the scopes it parsed, so an empty save reads as deliberate rather than as a field that
+  silently swallowed what was typed.
+
+  Compatibility: a scope-less entry needs harness image `1.73.0` or newer. Note the blast radius —
+  an older image does not skip the entry, it fails `parseJob`, so EVERY container dispatch in that
+  workspace dies (`packageRegistries[i].scopes must be a non-empty array`), not just dependency
+  installs. The backend has no signal for what image a pool pins, so this cannot be gated
+  server-side: a self-hosted runner pool must be updated before a workspace configures a scope-less
+  entry. Deployments on the managed image are carried by the pin bump in this release.
+
+  Also: a package-registries read that fails for any reason OTHER than the module being
+  unconfigured now propagates instead of being swallowed, so the panel reports it. Previously a
+  `503` (no module) and an unreachable backend both rendered as an empty, silent surface — and with
+  the panel behind an availability-gated tab, the second case had no surface at all.
+
+### Patch Changes
+
+- Updated dependencies [0eacaa2]
+  - @cat-factory/contracts@0.190.0
+
+## 0.182.1
+
+### Patch Changes
+
+- 4dd799d: Move the Sandbox and Kaizen sidebar destinations out of the Integrations section and into
+  Models, beside the model providers and per-agent model configuration they exercise. Neither
+  connects to an external system: Sandbox runs prompt versions and models against graded
+  fixtures, and Kaizen grades the prompt+agent+model combinations that shipped.
+- f511799: Surface an initiative's parked plan review on the board, and make the tracker window resolve it.
+
+  A `pl_initiative` run parks on the planner's human gate once the plan is drafted, but the board card
+  kept showing a disabled, spinning "Run planning" and the tracker window (where the planner's park
+  routes) was read-only — so the gate could only be cleared over REST. The card and the inspector now
+  carry the same `attention` affordance a task card does (a parked decision, or the plan review),
+  the interviewer's own park still belonging to "Answer planning questions"; the tracker window gained
+  the approve / request-changes rail beside the plan it judges; and a frame's decision/approval badge
+  now counts its initiative children, not only its tasks.
+
+## 0.182.0
+
+### Minor Changes
+
+- 1fa8ef7: Initiative planning now explores the repository BEFORE it interviews you.
+
+  `pl_initiative` ran `initiative-interviewer → initiative-analyst → …`, but the interviewer is an
+  inline kind with no checkout — so the only source it could reach for was the human, and it spent
+  its bounded rounds asking stakeholders to describe their own codebase (what frameworks are in use,
+  how a module is laid out, what test coverage exists) while the agent that could have read all of it
+  waited behind the park. The steps are reordered to `initiative-analyst → initiative-interviewer →
+initiative-planner (gate) → initiative-committer`, and the analysis is folded into the interviewer's
+  prompt with an explicit ban on re-asking anything it settles.
+
+  Behaviour changes worth knowing about:
+
+  - The analyst container starts before the human is asked anything, so an initiative abandoned mid
+    interview has already paid for one read-only exploration.
+  - The analyst now closes its report with an `## Open questions` section naming only what the code
+    cannot settle; that section is the interview's agenda.
+  - The interview is restricted to what no amount of code reading recovers: intent, priorities, risk
+    and downtime tolerance, deadlines, external commitments, and choices the code permits equally.
+    The "recommend an answer" action is grounded in the analysis too.
+  - That restriction is a rule about where an ANSWER comes from, so it now lifts when there is no
+    analysis to lean on (an unreachable repo, an analyst that produced nothing, the gate driven
+    outside `pl_initiative`): the interviewer is told the repository was NOT read and may ask about
+    it again, with the human-only facts still first. The ban and the analysis fold share one
+    predicate, so the role prompt can never promise a reading the task prompt does not carry.
+  - `pl_initiative` is reseeded (version 5) with a new description. `pl_initiative_docs` keeps its
+    steps — it never had an interviewer and already led with the analyst — but the shared analyst
+    kind now learns from the running chain whether an interview actually follows it
+    (`AgentRunContext.initiative.interviewFollows`) and states the matching reason to read
+    exhaustively. Asserting "a stakeholder is interviewed after you" unconditionally would be false
+    on every interview-less planning pipeline, including a deployment's own.
+  - The technological-migration preset's interviewer steering no longer asks for the operational
+    surface (scheduled jobs, ops tooling, monitoring, CI); its analyst already inventories that.
+  - Both interview windows (initiative planning, document authoring) gained a `preparing` state.
+    Neither gate leads its pipeline, so a running run used to read as "the interviewer is working on
+    your answers" for the whole of a lead-in the human had not answered anything into — now the
+    window says what is actually happening and the "Planning in progress" route into it stays
+    available throughout.
+
+### Patch Changes
+
+- 44bb4a2: Hovering a task card on the board now expands its build pipeline underneath the card at any zoom
+  level, instead of only past the deep `steps` zoom band.
+
+  A pointer resting on a task is asking what that task is doing right now, and the answer — the
+  step list with its live subtask counts — was previously reachable only by first zooming the board
+  in past 1.8x, so the question could not be answered from the scale people actually plan at. The
+  board driver already resolved the card under the pointer to win overlap ties at deep zoom, so this
+  promotes that hit to a grant in its own right: the hover grant applies at every band, and the
+  zoom grant (every on-screen card, minus the ones that would collide with a card nearer the screen
+  centre) is unchanged.
+
+  The two grants are now combined in the `taskExpansion` store rather than at each call site, so the
+  component that renders the pipeline and the wrapper that stacks the card above its neighbours read
+  one predicate and cannot disagree about which cards are expanded. The hover grant is also filtered
+  to tasks that have a run with steps, so a frame, a module, or an idle task is never marked expanded
+  and never lifts an empty card over its neighbours.
+
 ## 0.181.0
 
 ### Minor Changes

@@ -1,7 +1,12 @@
 import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import { describe, it, expect } from 'vitest'
 import type { InitiativeItem, InitiativePhase, InitiativeQa } from '~/types/domain'
-import { isPendingQuestion, orderInterviewQuestions, pendingCheckpointPhase } from './initiative'
+import {
+  isPendingQuestion,
+  orderInterviewQuestions,
+  pendingCheckpointPhase,
+  selectPlanApproval,
+} from './initiative'
 
 // `pendingCheckpointPhase` mirrors the backend `pendingCheckpoint` (orchestration
 // `initiative.logic.ts`); these pin the same ordering/edge cases the loop pauses on, so the
@@ -148,5 +153,50 @@ describe('orderInterviewQuestions', () => {
 
   it('handles an empty interview', () => {
     expect(orderInterviewQuestions([])).toEqual([])
+  })
+})
+
+// The plan-review park: which of a block's pending approvals the board card / inspector offer as
+// "Review plan", and which one they must leave alone. Both gates on the planning pipeline park on
+// a `step.approval`, so the interviewer's park (owned by the planning window's "Answer planning
+// questions") is the case this selector exists to keep out — offering it here would give one park
+// two differently-worded buttons, and the tracker window it opened could not resolve it.
+
+/** A pending approval as `execution.approvalsByBlock` carries it (only the fields read here). */
+const parked = (agentKind: string, id: string) => ({ agentKind, approval: { id } })
+
+/** The catalog's result-view resolver, as the composable passes it in. */
+const resultViewOf = (kind: string): string | undefined =>
+  kind === 'initiative-interviewer'
+    ? 'initiative-planning'
+    : kind.startsWith('initiative-')
+      ? 'initiative-tracker'
+      : undefined
+
+describe('selectPlanApproval', () => {
+  it('is undefined when nothing is parked', () => {
+    expect(selectPlanApproval([], resultViewOf)).toBeUndefined()
+  })
+
+  it('picks the planner gate — the plan awaiting approval', () => {
+    const approvals = [parked('initiative-planner', 'ap_1')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_1')
+  })
+
+  it('leaves the interviewer park to the planning window', () => {
+    const approvals = [parked('initiative-interviewer', 'ap_interview')]
+    expect(selectPlanApproval(approvals, resultViewOf)).toBeUndefined()
+  })
+
+  it('finds the plan gate past an interview park (a re-run interviewing again)', () => {
+    const approvals = [parked('initiative-interviewer', 'ap_interview'), parked('x', 'ap_plan')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_plan')
+  })
+
+  it('offers a gated step of a custom planning pipeline, whatever window it routes to', () => {
+    // A kind with no dedicated window at all still parks a human; the affordance opens whatever
+    // `dispatchStepView` routes it to (the generic panel), which is exactly what resolves it.
+    const approvals = [parked('some-custom-kind', 'ap_custom')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_custom')
   })
 })

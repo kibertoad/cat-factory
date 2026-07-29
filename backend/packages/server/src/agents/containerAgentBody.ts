@@ -124,6 +124,17 @@ export function buildCommonBody(
     ghToken,
     ...(packageRegistries.length ? { packageRegistries } : {}),
     repo: repoSpec,
+    // DEPENDENCY PREPOPULATION: the install the harness runs against the checkout before the
+    // agent's first turn. On the BASE body deliberately — unlike `validationChecks`, which is a
+    // pre-PR gate and rides only a PR-opening coding dispatch, this applies to every dispatch
+    // that gets a checkout (explore kinds and in-place fixers included): an agent asked to read
+    // or review a tree needs its dependencies present as much as one asked to change it.
+    // Wrapped in an envelope rather than sent as a bare string: the harness parses it as
+    // `{ command }` alongside the other phase specs, and a phase that later needs a second knob
+    // (a working directory, a budget) must not require a wire-shape change on a published image.
+    ...(context.dependencyInstall
+      ? { dependencyInstall: { command: context.dependencyInstall } }
+      : {}),
     ...(deps.githubApiBase ? { githubApiBase: deps.githubApiBase } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     // The resolved skills always travel as this dedicated top-level field (never context

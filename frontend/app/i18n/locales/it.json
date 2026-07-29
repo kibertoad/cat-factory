@@ -537,20 +537,22 @@
       "incidentNoun": "il provider degli incidenti"
     },
     "packageRegistries": {
-      "title": "Registry di package privati",
+      "tab": "Registry di package",
       "intro": "Connetti i registry privati da cui i tuoi repository installano. Gli agenti li ricevono quando effettuano il checkout di un repository, cosicche le dipendenze private si risolvano durante le installazioni. I token sono in sola scrittura: per modificarne uno, rimuovi la voce e aggiungila di nuovo.",
       "entryNoun": "voce del registry",
       "list": {
         "heading": "Registry connessi",
         "tokenTail": "token …{tail}",
-        "remove": "Rimuovi voce"
+        "remove": "Rimuovi voce",
+        "noScopes": "Nessuno scope (il token autentica solo questo registry)"
       },
       "add": {
         "heading": "Aggiungi un registry",
         "vendor": "Registry",
         "host": "Il token viene inviato solo a {host}.",
         "scopes": "Scope dei package",
-        "scopesHelp": "Scope npm separati da virgola",
+        "scopesHelp": "Facoltativo. Scope npm separati da virgola.",
+        "scopesNote": "Facoltativo. Uno scope indicato qui indirizza a questo registry ogni package che contiene, quindi uno scope che include anche package pubblicati pubblicamente smette di essere risolto. Lascialo vuoto quando il repository include un proprio .npmrc oppure quando le singole dipendenze vengono fissate con un prefisso di registry denominato come gh: (pnpm 11.1 o successivo): il token autentica il registry in ogni caso.",
         "token": "Token di accesso",
         "save": "Aggiungi registry"
       },
@@ -1431,6 +1433,8 @@
     "validationChecks": {
       "title": "Validazione prima della PR",
       "sectionHint": "Comandi eseguiti sulla copia di lavoro quando lo sviluppatore ha finito e prima di aprire una richiesta di modifica. Un errore torna all'agente perché lo corregga; solo una copia senza errori apre una PR.",
+      "dependencyInstall": "Installazione delle dipendenze",
+      "dependencyInstallHint": "Viene eseguita prima dell'avvio dell'agente",
       "hint": "Ogni comando viene eseguito con `sh -c` nella copia di lavoro di questo servizio, in ordine. Va corretto il codice, non il controllo: all'agente viene chiesto di non indebolirli.",
       "clear": "Svuota",
       "configNoun": "controlli di validazione",
@@ -1450,6 +1454,7 @@
         "action": "Rileva",
         "hint": "Suggerisci controlli a partire dal repository di questo servizio",
         "added": "Aggiunto {count} controllo | Aggiunti {count} controlli",
+        "installOnly": "Installazione delle dipendenze compilata",
         "found": "Riconosciuto: {ecosystems}.",
         "capped": "Alcuni suggerimenti sono stati esclusi: un servizio accetta al massimo {max} controlli.",
         "nothingNew": "Niente da aggiungere",
@@ -2146,10 +2151,6 @@
         "observability": {
           "label": "Salute post-rilascio",
           "description": "Monitora i monitor e gli SLO dopo il rilascio di una release (Datadog)."
-        },
-        "packageRegistries": {
-          "label": "Registry di pacchetti privati",
-          "description": "Token npm e GitHub Packages che gli agenti usano per installare dipendenze private."
         },
         "apiTokens": {
           "label": "Token di accesso API",
@@ -3606,7 +3607,9 @@
       "skillNoneAvailable": "Nessuna competenza disponibile. Collega una fonte di competenze nelle impostazioni dell'account.",
       "skillMissing": "Questa competenza non è più nel catalogo; scegline un'altra.",
       "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
-      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo."
+      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo.",
+      "promptEditTooltip": "Modifica il prompt di sistema di questo agente",
+      "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro"
     },
     "progress": {
       "status": {
@@ -3678,6 +3681,41 @@
         "reseedFailed": "Impossibile ripristinare la pipeline",
         "deleteFailed": "Impossibile eliminare la pipeline"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Prompt di sistema: {agent}",
+    "description": "Sostituisce ciò che viene chiesto a questo agente, per tutte le esecuzioni di questo spazio di lavoro.",
+    "customized": "Modificato",
+    "usingBuiltin": "Predefinito",
+    "managedNotice": "La piattaforma aggiunge le proprie regole, non modificabili, a tutto ciò che salvi qui.",
+    "showAppended": "Mostra il testo aggiunto",
+    "hideAppended": "Nascondi il testo aggiunto",
+    "appendedHeading": "Aggiunto dalla piattaforma (non modificabile)",
+    "placeholder": "Descrivi che cosa deve fare questo agente.",
+    "save": "Salva come nuova versione",
+    "revert": "Torna al predefinito",
+    "loadBuiltin": "Carica il testo predefinito",
+    "showBuiltin": "Confronta con il predefinito",
+    "hideBuiltin": "Nascondi il predefinito",
+    "restoringFrom": "Caricata dalla versione {n}. Salva per renderla di nuovo attiva.",
+    "builtinHeading": "Prompt predefinito",
+    "historyHeading": "Cronologia delle versioni",
+    "historyEmpty": "Questo agente non è mai stato modificato in questo spazio di lavoro.",
+    "live": "Attiva",
+    "restore": "Carica",
+    "restoreTooltip": "Carica questa versione nell'editor",
+    "revision": {
+      "edit": "Versione {n} (modificata)",
+      "restored": "Versione {n} (ripristinata dalla versione {from})",
+      "builtin": "Versione {n} (ritorno al predefinito)"
+    },
+    "toast": {
+      "saved": "Prompt salvato",
+      "reverted": "Tornato al prompt predefinito",
+      "saveFailed": "Impossibile salvare il prompt",
+      "loadFailed": "Impossibile caricare il prompt",
+      "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica."
     }
   },
   "requirements": {
@@ -4282,11 +4320,21 @@
     "inspector": {
       "runPlanning": "Esegui pianificazione",
       "answerPlanning": "Rispondi alle domande di pianificazione",
+      "reviewPlan": "Rivedi il piano",
+      "resolveDecision": "Risolvi",
       "planningInProgress": "Pianificazione in corso",
       "pause": "Pausa",
       "resume": "Riprendi",
       "cancel": "Annulla iniziativa",
       "hint": "La pipeline di pianificazione esplora il codebase, redige il piano multi-fase per l'approvazione, poi effettua il commit del documento del tracker nel repository."
+    },
+    "planReview": {
+      "title": "Questo piano ti sta aspettando",
+      "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
+      "approve": "Approva il piano",
+      "requestChanges": "Richiedi modifiche",
+      "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
+      "sendBack": "Rimanda al planner"
     },
     "planning": {
       "title": "Pianifica l'iniziativa",
@@ -4294,9 +4342,11 @@
       "intro": "Il pianificatore sta definendo l'ambito di questa iniziativa. Rispondi alle sue domande per dare forma all'obiettivo e ai vincoli, poi invia le risposte. Puoi anche chiedergli di pianificare subito con quello che ha gia.",
       "empty": "Nessuna iniziativa trovata per questo blocco.",
       "converged": "Nessuna domanda in sospeso. Il pianificatore ha cio che gli serve e sta redigendo il piano.",
-      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa per avviare l'intervista.",
+      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa: prima analizza il codice, poi ti intervista.",
       "working": "Il pianificatore sta elaborando le tue risposte",
       "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure iniziera a redigere il piano se ha abbastanza informazioni.",
+      "preparing": "Esplorazione del codice prima dell'intervista",
+      "preparingHint": "La pianificazione legge prima il repository, cosi non ti viene chiesto cio che il codice puo rispondere. Le domande compariranno qui al termine.",
       "failed": "L'esecuzione della pianificazione si e interrotta",
       "failedHint": "Si e conclusa prima che il pianificatore potesse rispondere. Le tue risposte sono salvate; riesegui la pianificazione dall'iniziativa.",
       "answerPlaceholder": "La tua risposta",
@@ -4510,7 +4560,8 @@
         "env_test_infraless": "Niente da testare",
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
         "env_test_no_vcs": "Provider Git non connesso",
-        "env_test_connection_failed": "Connessione all'ambiente non riuscita"
+        "env_test_connection_failed": "Connessione all'ambiente non riuscita",
+        "prompt_revision_conflict": "Prompt modificato da qualcun altro"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4534,7 +4585,8 @@
         "env_test_not_provisionable_type_mismatch": "Più di un handler dell'ambiente potrebbe corrispondere al tipo di provisioning di questo servizio. Fissa un manifest id per questo servizio in modo che se ne risolva esattamente uno, oppure rimuovi l'handler sovrapposto in Infrastruttura → Ambienti di test.",
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
         "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
-        "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione."
+        "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
+        "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -4647,6 +4699,8 @@
     "converged": "Nessuna domanda in sospeso. L'intervistatore ha ciò che gli serve e il documento è in fase di redazione.",
     "working": "L'intervistatore sta elaborando le tue risposte",
     "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure inizierà la stesura se ha abbastanza informazioni.",
+    "preparing": "Ricerca sul documento prima dell'intervista",
+    "preparingHint": "L'esecuzione raccoglie prima il contesto e abbozza una scaletta. Le domande compariranno qui al termine.",
     "failed": "L'esecuzione del documento si è interrotta",
     "failedHint": "Si è conclusa prima che l'intervistatore potesse rispondere. Le tue risposte sono salvate; riesegui l'attività del documento.",
     "answerPlaceholder": "La tua risposta",
@@ -5271,7 +5325,12 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "Nuova versione di · {name}",
       "saveVersion": "Salva nuova versione",
-      "hint": "Scegli un prompt per derivare una baseline già distribuita o versionare un candidato. Ogni salvataggio aggiunge una versione immutabile che puoi mettere sotto test."
+      "hint": "Scegli un prompt per derivare una baseline già distribuita o versionare un candidato. Ogni salvataggio aggiunge una versione immutabile che puoi mettere sotto test.",
+      "liveInWorkspace": "Attivo",
+      "fromWorkspace": "Il tuo spazio di lavoro",
+      "promoteTitle": "Rendi questo il prompt attivo per questo agente",
+      "promoted": "Ora è il prompt attivo per {agent}",
+      "promoteFailed": "Impossibile attivare questo prompt"
     },
     "fixtureKind": {
       "requirements": "requisiti",

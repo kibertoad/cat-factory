@@ -30,11 +30,15 @@ export type NavSurface = 'sidebar' | 'command' | 'toolbar'
  *
  * `models` and `integrations` are deliberately SEPARATE sections even though a model
  * provider is technically also an external system we connect to. They answer different
- * questions: `models` is the ENGINE the harnesses run on (no provider ⇒ nothing runs at
- * all), `integrations` is the optional systems that feed a run context or receive its
- * output (source control, trackers, documents, chat, observability) — each of which a
- * deployment can live without. Folding the providers in among them buried the one
- * connection every deployment must make in a list of ones most never touch.
+ * questions: `models` is the MODEL LAYER — which engine the harnesses run on (no provider
+ * ⇒ nothing runs at all), which model each agent kind uses, and how well a given
+ * prompt+agent+model actually performs (`sandbox`, `kaizen`); `integrations` is the
+ * optional EXTERNAL SYSTEMS that feed a run context or receive its output (source control,
+ * trackers, documents, chat, observability) — each of which a deployment can live without.
+ * Folding the providers in among them buried the one connection every deployment must make
+ * in a list of ones most never touch; parking the two model-quality surfaces there was the
+ * same mistake from the other end — neither Sandbox nor Kaizen connects to anything, they
+ * evaluate what the `models` section configures.
  */
 export type NavSidebarGroup =
   | 'create'
@@ -269,33 +273,6 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'integrations', order: 10 },
   },
   {
-    id: 'sandbox',
-    labelKey: 'nav.sandbox',
-    icon: 'i-lucide-flask-conical',
-    surfaces: S('sidebar', 'command'),
-    advanced: true,
-    gate: (g) => g.canManageIntegrations,
-    action: 'sandbox',
-    testId: 'nav-sandbox',
-    sidebar: { group: 'integrations', order: 20 },
-    command: {
-      group: 'workspace',
-      order: 70,
-      labelKey: 'layout.commandBar.cmd.sandbox',
-      keywordsKey: 'layout.commandBar.keywords.sandbox',
-    },
-  },
-  {
-    id: 'kaizen',
-    labelKey: 'nav.kaizen',
-    icon: 'i-lucide-sparkles',
-    surfaces: S('sidebar'),
-    advanced: true,
-    action: 'kaizen',
-    testId: 'nav-kaizen',
-    sidebar: { group: 'integrations', order: 30 },
-  },
-  {
     id: 'infrastructure',
     labelKey: 'nav.infrastructure',
     icon: 'i-lucide-server-cog',
@@ -369,6 +346,39 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       labelKey: 'layout.commandBar.cmd.modelConfiguration',
       keywordsKey: 'layout.commandBar.keywords.modelConfiguration',
     },
+  },
+  {
+    // Trying prompt versions and models against graded fixtures — a model-layer surface,
+    // not an integration: it connects to no external system, it exercises the providers
+    // and per-agent models the two entries above configure.
+    id: 'sandbox',
+    labelKey: 'nav.sandbox',
+    icon: 'i-lucide-flask-conical',
+    surfaces: S('sidebar', 'command'),
+    advanced: true,
+    gate: (g) => g.canManageIntegrations,
+    action: 'sandbox',
+    testId: 'nav-sandbox',
+    sidebar: { group: 'models', order: 30 },
+    command: {
+      group: 'workspace',
+      order: 70,
+      labelKey: 'layout.commandBar.cmd.sandbox',
+      keywordsKey: 'layout.commandBar.keywords.sandbox',
+    },
+  },
+  {
+    // The same axis after the fact: grading history and verified prompt+agent+model combos.
+    // Sandbox asks "which combination should we use", Kaizen answers "how is the one we
+    // shipped doing" — both read the model layer, so they sit with it.
+    id: 'kaizen',
+    labelKey: 'nav.kaizen',
+    icon: 'i-lucide-sparkles',
+    surfaces: S('sidebar'),
+    advanced: true,
+    action: 'kaizen',
+    testId: 'nav-kaizen',
+    sidebar: { group: 'models', order: 40 },
   },
   {
     id: 'service-fragment-defaults',

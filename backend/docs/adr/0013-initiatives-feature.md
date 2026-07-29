@@ -13,12 +13,35 @@ conversion.
 ## Decision
 
 Add **Initiatives**: a new `initiative`-level board block (a frame child, like a module) whose
-**Initiative Planning pipeline** (`pl_initiative`) interviews the user on goals/constraints,
-analyses the codebase, drafts a multi-phase plan requiring human approval, commits a structured
+**Initiative Planning pipeline** (`pl_initiative`) analyses the codebase, interviews the user on
+goals/constraints, drafts a multi-phase plan requiring human approval, commits a structured
 tracker into the repo, and then **executes the plan as a loop of ordinary tasks** — sequenced or
 parallel per an agreed concurrency policy — until every tracker item is resolved.
 
 Key shape decisions:
+
+- **The codebase analysis runs BEFORE the interview.** The interviewer is an inline kind with no
+  checkout, so an interviewer placed first can only ask the stakeholder to describe their own
+  repository — which is what it did, spending its bounded rounds on facts the platform could read
+  for itself. The read-only analyst leads instead, its prose is folded onto the entity
+  (`analysisSummary`), and the interviewer is handed it with an explicit ban on re-asking anything
+  it settles. The interview then covers only what no amount of code reading recovers: intent,
+  priorities, risk tolerance, deadlines, and choices the code permits equally. The analyst closes
+  its report with the open questions it could not settle, which is the interview's agenda.
+
+  Two consequences follow from the ordering being a PIPELINE fact rather than a global one, and
+  both are load-bearing. The analyst kind is shared with `pl_initiative_docs` (and any other
+  `interview: 'skip'` preset), which has no interviewer at all, so its role prompt states only the
+  duties that hold everywhere — read what is discoverable, close with the open questions — and the
+  reason they matter is selected per run in the USER prompt from
+  `AgentRunContext.initiative.interviewFollows`, read off the running chain. Either framing
+  asserted unconditionally would be a plain falsehood on the other pipeline. Symmetrically, the
+  interviewer's ban on codebase questions is a rule about where an ANSWER COMES FROM, so it holds
+  only while an analysis is actually in hand: with none (an unreachable repo, an analyst that
+  produced nothing, the gate driven outside `pl_initiative`) the prompt says the repository was not
+  read and allows the questions back, keeping the human-only facts as the priority. The ban and the
+  analysis fold share ONE predicate, so the role prompt can never claim a reading the task prompt
+  does not carry.
 
 - **Just-in-time task spawning**: the tracker is the source of truth; task blocks are created only
   when about to start, not up front.
@@ -41,7 +64,14 @@ Key shape decisions:
   the inspector's execution panel (step list, live phases, step-detail drill-down, Stop / Discard
   run) and the Focus view. Only the way a run is STARTED differs — an initiative block accepts
   exactly one pipeline, so it keeps a single "Run planning" control instead of the pipeline picker,
-  on all three surfaces (board card, inspector, Focus).
+  on all three surfaces (board card, inspector, Focus). **That parity governs the run's PARKS too.**
+  The planner step is `gate: true`, so a drafted plan parks the run exactly like any other gate:
+  the card and the inspector carry the same `attention` affordance a task card does (resolved from
+  `useInitiativePlanning`, with the interviewer's own park left to its "Answer planning questions"
+  sibling), and the window that park ROUTES to — the tracker, per the planner's `resultView` —
+  owns the approve / request-changes rail. Both halves are load-bearing: the gate first shipped
+  with neither, so a finished plan sat behind a spinning "Run planning" and could be cleared only
+  by a REST call. A park whose offer or whose resolving surface is missing is not "surfaced as one".
 - **A re-run re-interviews: the interviewer gate implements the spine's `resetForFreshRun`.** The
   entity outlives any one run, so on a fresh entry it drops the previous run's round bookkeeping and
   still-pending questions, keeping the answered + dismissed digest (which is also where a preset
@@ -51,6 +81,13 @@ Key shape decisions:
 
 ## Rationale
 
+- Exploring before interviewing costs nothing the pipeline was not already going to spend (the
+  analyst always ran) and converts the interview from a codebase quiz into the one thing a human is
+  actually the authority on. The alternative — telling the interviewer to be more careful while
+  leaving it first — cannot work: it has no checkout, so there is no source but the human to reach
+  for. The trade-off accepted is that a run now spins up the analyst container before the human is
+  first asked anything, so an initiative abandoned during the interview has already paid for one
+  exploration.
 - JIT spawning avoids maintaining a stale up-front task tree as the plan and codebase evolve.
 - Letting spawned tasks carry their own pipeline gates/merge presets (rather than adding a second,
   initiative-level gate) avoids duplicating governance the engine already has.

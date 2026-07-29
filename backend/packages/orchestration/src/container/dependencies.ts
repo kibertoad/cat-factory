@@ -31,6 +31,7 @@ import type {
   AccountSkillRepository,
   AgentContextSnapshotRepository,
   AgentExecutor,
+  AgentPromptRepository,
   AgentSearchQueryRepository,
   AppCaches,
   BlockRepository,
@@ -1002,6 +1003,13 @@ export interface CoreDependencies {
    * task's selected/default preset (the built-in default points everything at Kimi K2.7).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Stores a workspace's agent system-prompt overrides — an append-only revision log per agent
+   * kind, edited from the pipeline builder, whose live entry REPLACES the kind's shipped
+   * system prompt for every run in that workspace. Optional and default-off: absent → the
+   * `agentPrompts` module isn't assembled and every kind runs the prompt it ships with.
+   */
+  agentPromptRepository?: AgentPromptRepository
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
    * DEFAULT: Cloudflare/Node deploy `mdp_kimi` (Cloudflare-runnable on the bare baseline),

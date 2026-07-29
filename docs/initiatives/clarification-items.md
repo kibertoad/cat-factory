@@ -94,6 +94,18 @@ board-surfacing of requirements-review + clarity-review without merging the serv
   local in-flight flag — that survives a reload and cannot wedge, because a pass that dies takes
   the run to `failed` instead of spinning forever. `converged` outranks `failed` deliberately: a
   failure after the interview settled belongs to the step that failed, not to the interview.
+- **A running run is not automatically a running INTERVIEW.** Neither gate leads its pipeline —
+  initiative planning explores the codebase first, document authoring researches and outlines
+  first — so `running` covers minutes of container work before the human is asked anything.
+  Reported as `working` the window claims a pass is chewing on answers that were never given, on
+  exactly the long lead-ins worth explaining. `interviewGatePhase` therefore splits it with
+  `interviewStepReached(run, kind)`: `preparing` (something earlier is running) vs `working` (the
+  interviewer itself). The argument is REQUIRED, not optional — a caller that omitted it would
+  silently get the misleading half. It degrades to `working` for an uncached run or a chain with no
+  such step, because over-reporting "still preparing" would leave a genuinely parked interview
+  looking dormant, which is the worse failure. The card/inspector affordance spans BOTH phases: it
+  is the only route into the window while a run owns the block, so narrowing it to `working` would
+  strand the human on a "Run planning" button for a run already running.
 - **The two states the entity cannot express get a SHARED panel.** `components/common/
 InterviewGateNotice.vue` renders the wait and the stopped-run notice for both windows (copy per
   feature, treatment shared) — the same rule as `ClarificationItem`: reuse, don't clone.

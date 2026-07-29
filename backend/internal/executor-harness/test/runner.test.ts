@@ -408,7 +408,7 @@ describe('JobRegistry silent-failure evidence', () => {
     await tick()
 
     const detail = registry.get('exec-1')?.detail
-    expect(detail).toMatch(/no agent output at all in 564s/)
+    expect(detail).toMatch(/no activity at all in 564s/)
     // ADR 0026 D4's diagnostic reaches the run here — `detail` is the only one of the three
     // failure fields the backend carries onto the step.
     expect(detail).toMatch(/Cold start: agent produced no output/)
@@ -442,7 +442,7 @@ describe('JobRegistry silent-failure evidence', () => {
     const view = registry.get('exec-1')
     expect(view?.failureCause).toBe('inactivity-timeout')
     expect(view?.error).toMatch(/no agent activity for 0s/)
-    expect(view?.detail).not.toMatch(/silent for|no agent output at all/)
+    expect(view?.detail).not.toMatch(/silent for|no activity at all/)
   })
 })
 

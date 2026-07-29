@@ -205,6 +205,7 @@ import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageR
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
+import { D1AgentPromptRepository } from './repositories/D1AgentPromptRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -720,6 +721,7 @@ export function selectMergeLifecycleDeps(
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     userSettingsRepository: new D1UserSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
+    agentPromptRepository: new D1AgentPromptRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }

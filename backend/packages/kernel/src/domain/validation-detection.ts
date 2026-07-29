@@ -89,6 +89,14 @@ export interface ValidationDetectionResult {
   checks: { label: string; command: string }[]
   /** Whether {@link VALIDATION_MAX_CHECKS} dropped suggestions the detectors produced. */
   truncated: boolean
+  /**
+   * The suggested DEPENDENCY PREPOPULATION command: every detected ecosystem's install role,
+   * chained with `&&` (so a failed install stops rather than letting the next one run against a
+   * broken tree). Derived from the RAW detections, deliberately — an ecosystem that declares an
+   * install but nothing to verify contributes no check at all, and that repo is precisely the
+   * one whose agent most needs its dependencies present. Absent when nothing detected an install.
+   */
+  dependencyInstall?: string
 }
 
 /**
@@ -176,18 +184,28 @@ export class RepoView {
 export type EcosystemDetector = (view: RepoView) => EcosystemDetection | null
 
 /**
- * Compose one ecosystem's result, dropping an ecosystem that produced ONLY setup commands.
- * An `install` on its own verifies nothing — it would open a PR on a checkout no command
- * ever inspected, while costing every run the install — so the whole ecosystem is dropped
- * instead, which is also what lets the task-runner fallback below take over.
+ * Compose one ecosystem's result, dropping an ecosystem whose preconditions produced nothing
+ * at all.
+ *
+ * An ecosystem that produced ONLY setup commands is KEPT here and filtered later, in
+ * {@link detectValidationChecks}. That split matters: an `install` on its own verifies nothing,
+ * so it must not become a suggested CHECK (it would open a PR on a checkout no command ever
+ * inspected, while costing every run the install) — but it is exactly the command DEPENDENCY
+ * PREPOPULATION wants, and nulling the detection here would discard it before anything could
+ * read it. One place now decides what a verification-less ecosystem means for each output.
  */
 export function ecosystem(
   id: ValidationEcosystem,
   checks: (DetectedCheck | null)[],
 ): EcosystemDetection | null {
   const kept = checks.filter((c): c is DetectedCheck => c !== null)
-  if (!kept.some((c) => c.role !== 'install')) return null
+  if (kept.length === 0) return null
   return { ecosystem: id, checks: kept }
+}
+
+/** Whether an ecosystem proposed anything that actually VERIFIES the checkout. */
+function verifies(detection: EcosystemDetection): boolean {
+  return detection.checks.some((c) => c.role !== 'install')
 }
 
 /** Build a check, or nothing when its precondition didn't hold (keeps detectors declarative). */
@@ -220,27 +238,44 @@ export function detectValidationChecks(
     list.map((d) => d(view)).filter((d): d is EcosystemDetection => d !== null)
 
   const language = run(detectors.language)
-  const hits = language.length > 0 ? language : run(detectors.taskRunner)
+  // The task-runner fallback keys off whether a language ecosystem produced a VERIFYING check,
+  // not merely a detection: a repo whose only language hit is an install (a `package.json` with
+  // no scripts) still has nothing checking it, so `make test` is as much the right fallback as
+  // it was before install-only detections survived `ecosystem()`.
+  const hits = language.some(verifies) ? language : [...language, ...run(detectors.taskRunner)]
 
   // Grouped by ecosystem (so an install stays with the commands that need it), role-ordered
-  // within each group, and in the detectors' own canonical order across groups.
-  const ordered = hits.flatMap((hit) =>
-    [...hit.checks]
-      .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role))
-      .map((c) => ({ ...c, ecosystem: hit.ecosystem })),
-  )
+  // within each group, and in the detectors' own canonical order across groups. A group with
+  // nothing to verify contributes NO check and, importantly, consumes none of the cap below —
+  // its install still reaches `dependencyInstall`.
+  const ordered = hits
+    .filter(verifies)
+    .flatMap((hit) =>
+      [...hit.checks]
+        .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role))
+        .map((c) => ({ ...c, ecosystem: hit.ecosystem })),
+    )
   // The cap can slice an ecosystem mid-group and leave only its `install` behind — a command
   // that verifies nothing, costs every run its install time, and reads as "this ecosystem is
-  // covered". Drop any group the cut reduced to setup, the same rule `ecosystem()` applies
-  // before truncation.
+  // covered". Drop any group the cut reduced to setup.
   const capped = ordered.slice(0, VALIDATION_MAX_CHECKS)
   const verified = new Set(capped.filter((c) => c.role !== 'install').map((c) => c.ecosystem))
   const kept = capped.filter((c) => verified.has(c.ecosystem))
+  // Every detected ecosystem's install, INCLUDING one whose group never reached `checks` —
+  // deduplicated, because two detectors can legitimately land on the same command.
+  const installs = [
+    ...new Set(
+      hits.flatMap((h) => h.checks.filter((c) => c.role === 'install').map((c) => c.command)),
+    ),
+  ]
 
   return {
     ecosystems: hits.map((h) => h.ecosystem).filter((id) => verified.has(id)),
     checks: uniquifyLabels(kept),
-    truncated: ordered.length > kept.length,
+    // Only the CAP truncates. A group dropped for verifying nothing was never a suggestion to
+    // begin with, so counting it here would report a truncation that discarded no check.
+    truncated: ordered.length > capped.length,
+    ...(installs.length ? { dependencyInstall: installs.join(' && ') } : {}),
   }
 }
 

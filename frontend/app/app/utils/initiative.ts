@@ -59,6 +59,50 @@ export const INITIATIVE_ITEM_STATUS_CHIPS: Record<InitiativeItemStatus, BadgeCol
   skipped: 'neutral',
 }
 
+/**
+ * The two ways an initiative's planning run parks for a human: an agent-raised `decision`, or a
+ * pending step `approval` (the plan-approval gate the `initiative-planner` step carries). Resolved
+ * per block by `useInitiativePlanning().attention`.
+ */
+export type InitiativeAttentionKind = 'decision' | 'approval'
+
+/** Park kind → i18n label key for the card/inspector button that opens the resolving window. */
+export const INITIATIVE_ATTENTION_LABEL_KEYS: Record<InitiativeAttentionKind, string> = {
+  decision: 'initiative.inspector.resolveDecision',
+  approval: 'initiative.inspector.reviewPlan',
+}
+
+/** Park kind → button icon, so the board card and the inspector can't diverge on one park. */
+export const INITIATIVE_ATTENTION_ICONS: Record<InitiativeAttentionKind, string> = {
+  decision: 'i-lucide-circle-help',
+  approval: 'i-lucide-clipboard-check',
+}
+
+/**
+ * The result view the INTERVIEW gate owns. Its park rides the same `step.approval` mechanism as
+ * every other gate, so anything offering "there is a plan to review here" has to exclude it: the
+ * interview park is already owned by the planning window, behind the differently-worded "Answer
+ * planning questions".
+ */
+export const INTERVIEW_GATE_RESULT_VIEW = 'initiative-planning'
+
+/**
+ * The block's parked approval that is a PLAN REVIEW — the planner's human gate (`pl_initiative`
+ * declares `{ kind: 'initiative-planner', gate: true }`), or any other gated step of a custom
+ * planning pipeline — as opposed to the interviewer's park.
+ *
+ * Discriminated by the step's own result view, the seam `dispatchStepView` routes on, rather than
+ * by an agent-kind list or by the interview phase: the affordance's ACTION is that dispatch, so
+ * keying the offer on the same fact guarantees the button opens a window that can resolve what it
+ * offered — and that the interview and plan affordances can never both claim one park.
+ */
+export function selectPlanApproval<A extends { agentKind: string }>(
+  approvals: readonly A[],
+  resultViewOf: (agentKind: string) => string | undefined,
+): A | undefined {
+  return approvals.find((a) => resultViewOf(a.agentKind) !== INTERVIEW_GATE_RESULT_VIEW)
+}
+
 /** Follow-up triage status → i18n label key. Exhaustive so a new status fails the build. */
 export const INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS: Record<InitiativeFollowUp['status'], string> = {
   open: 'initiative.followUpStatus.open',

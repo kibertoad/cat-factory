@@ -15,22 +15,24 @@ function sameSet(a: Set<string>, b: Set<string>) {
 }
 
 /**
- * Board-level driver deciding which task cards may expand their full pipeline list
- * once zoomed in (the deep `steps`/`subtasks` bands). Two gates, recomputed every
- * frame against live DOM rects so they follow pan / zoom / drag / resize:
+ * Board-level driver deciding which task cards expand their full pipeline list.
+ * Recomputed every frame against live DOM rects so it follows pan / zoom / drag / resize,
+ * and writes two independent grants into the `taskExpansion` store (which combines them —
+ * see the store for how they resolve):
  *
- *  - visibility: a task expands only while its card overlaps the board viewport.
- *  - overlap: walking the visible candidates nearest-header-to-screen-centre first, a
- *    task expands only if its footprint doesn't collide with one already granted, so the
- *    card you're looking at wins an overlap and the rest stay compact.
- *  - hover: the task directly under the pointer is granted first, so hovering any card
- *    expands its pipeline regardless of its position on screen. "Under the pointer" is
- *    the TOPMOST card at the cursor (document.elementFromPoint), so hovering a region
+ *  - hover: the task directly under the pointer, at ANY zoom level. "Under the pointer"
+ *    is the TOPMOST card at the cursor (document.elementFromPoint), so hovering a region
  *    already covered by another open pipeline keeps that pipeline, not the card beneath.
+ *  - zoom: at the deep `steps`/`subtasks` bands, every on-screen card, minus overlaps —
+ *    two sub-gates:
+ *      - visibility: a task expands only while its card overlaps the board viewport.
+ *      - overlap: walking the visible candidates nearest-header-to-screen-centre first, a
+ *        task expands only if its footprint doesn't collide with one already granted, so
+ *        the card you're looking at wins an overlap and the rest stay compact. The hovered
+ *        card is granted first, so it wins every overlap it's part of.
  *
- * Writes the permitted id set into the `taskExpansion` store; `TaskPipelineMini` reads it.
- * Only tasks with a running pipeline (steps to show) are candidates — a task that
- * wouldn't expand never blocks a neighbour.
+ * Only tasks with a running pipeline (steps to show) are candidates for either grant — a
+ * task that wouldn't expand never blocks a neighbour and never lifts an empty card.
  */
 export function useTaskExpansion(container: Ref<HTMLElement | null>) {
   const board = useBoardStore()
@@ -65,14 +67,27 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
   // The task whose card is topmost at the pointer, or null. Using elementFromPoint (not a
   // rect test) means an open pipeline stacked above a neighbour wins the hit, so hovering
   // a region obscured by another pipeline doesn't switch to the card hidden beneath it.
+  //
+  // Blocks with no pipeline to show are filtered out here rather than left to the card:
+  // a frame, a module, or a task with no run expands to nothing, and granting it would
+  // still lift an empty card over its neighbours (see DraggableTask's z-index).
   function hoveredTaskId(): string | null {
     if (!pointer) return null
     const hit = document.elementFromPoint(pointer.x, pointer.y)
-    return hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
+    const id = hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
+    if (!id || !execution.getByBlock(id)?.steps.length) return null
+    return id
   }
 
   function recompute() {
-    // Task cards only expand at the deep zoom bands; clear everything otherwise.
+    // Hover expands a card at ANY zoom band, so the pointer hit is resolved BEFORE the
+    // zoom gate below — resolving it after would collapse the hovered card the moment the
+    // user zoomed back out past the `steps` band.
+    const hovered = hoveredTaskId()
+    if (store.hoveredId !== hovered) store.setHovered(hovered)
+
+    // The zoom-driven expansion (every on-screen card, overlap-resolved) is deep-band
+    // only; clear its grants otherwise. The hover grant above stands on its own.
     if (!lodAtLeast(ui.lod, 'steps')) {
       if (store.allowed.size) store.setAllowed(new Set())
       return
@@ -117,7 +132,6 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
     // clears every footprint already granted, so the centre-most card wins any overlap.
     // The hovered card is granted FIRST, so hovering a card expands it regardless of its
     // distance from the centre (and a centre-most neighbour it overlaps yields to it).
-    const hovered = hoveredTaskId()
     const claimed: Rect[] = []
     const next = new Set<string>()
     const hoveredCard = hovered ? candidates.find((c) => c.id === hovered) : undefined

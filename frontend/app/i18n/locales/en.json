@@ -556,7 +556,8 @@
         "env_test_infraless": "Nothing to test",
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected",
-        "env_test_connection_failed": "Environment connection failed"
+        "env_test_connection_failed": "Environment connection failed",
+        "prompt_revision_conflict": "Prompt changed by someone else"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -583,7 +584,8 @@
         "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
         "@env_test_connection_failed_detail": {
           "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
-        }
+        },
+        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1153,6 +1155,9 @@
     "validationChecks": {
       "title": "Pre-PR validation",
       "sectionHint": "Commands run against the checkout after the coder finishes and before a pull request is opened. A failure is handed back to the agent to fix; only a passing checkout opens a PR.",
+      "dependencyInstall": "Dependency install",
+      "@dependencyInstall": "Field label for a shell command. \"install\" is a NOUN here (the installation step), not the imperative verb — it labels the input holding a command such as `pnpm install`, it does not ask the user to install anything.",
+      "dependencyInstallHint": "Runs before the agent starts",
       "hint": "Each command runs with `sh -c` in this service's checkout, in order. Fix the code, not the check — the agent is told not to weaken them.",
       "clear": "Clear",
       "configNoun": "validation checks",
@@ -1172,6 +1177,7 @@
         "action": "Detect",
         "hint": "Suggest checks from this service's repository",
         "added": "Added {count} check | Added {count} checks",
+        "installOnly": "Filled in the dependency install",
         "found": "Recognised {ecosystems}.",
         "capped": "Some suggestions were left out — a service takes at most {max} checks.",
         "nothingNew": "Nothing to add",
@@ -2163,10 +2169,6 @@
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Private package registries",
-          "description": "npm and GitHub Packages tokens agents use to install private dependencies."
-        },
         "apiTokens": {
           "label": "API access tokens",
           "description": "Tokens external systems present to call the cat-factory API."
@@ -2813,20 +2815,22 @@
       "incidentNoun": "the incident provider"
     },
     "packageRegistries": {
-      "title": "Private package registries",
+      "tab": "Package registries",
       "intro": "Connect the private registries your repositories install from. Agents receive them when they check out a repository, so private dependencies resolve during installs. Tokens are write-only: to change one, remove the entry and add it again.",
       "entryNoun": "registry entry",
       "list": {
         "heading": "Connected registries",
         "tokenTail": "token …{tail}",
-        "remove": "Remove entry"
+        "remove": "Remove entry",
+        "noScopes": "No scopes (the token authenticates this registry only)"
       },
       "add": {
         "heading": "Add a registry",
         "vendor": "Registry",
         "host": "The token is sent only to {host}.",
         "scopes": "Package scopes",
-        "scopesHelp": "Comma-separated npm scopes",
+        "scopesHelp": "Optional. Comma-separated npm scopes.",
+        "scopesNote": "Optional. A scope listed here routes every package under it to this registry, so a scope that also holds publicly published packages stops resolving. Leave it empty when the repository commits its own .npmrc, or when single dependencies are pinned with a named-registry prefix such as gh: (pnpm 11.1 or newer) - the token authenticates the registry either way.",
         "token": "Access token",
         "save": "Add registry"
       },
@@ -3678,6 +3682,8 @@
     "converged": "No questions are pending. The interviewer has what it needs and the document is being drafted.",
     "working": "The interviewer is working on your answers",
     "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or drafting starts if it has enough.",
+    "preparing": "Researching the document before the interview",
+    "preparingHint": "The run gathers background and drafts an outline first. Questions appear here once that is done.",
     "failed": "The document run stopped",
     "failedHint": "It ended before the interviewer could answer. Your answers are saved; re-run the document task to try again.",
     "answerPlaceholder": "Your answer",
@@ -4032,7 +4038,9 @@
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
-      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build."
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
+      "promptEditTooltip": "Edit this agent's system prompt",
+      "promptEditedTooltip": "This agent's system prompt is edited for this workspace"
     },
     "progress": {
       "status": {
@@ -4104,6 +4112,50 @@
         "reseedFailed": "Could not reseed pipeline",
         "deleteFailed": "Could not delete pipeline"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "System prompt: {agent}",
+    "description": "Replace what this agent is told to do, for every run in this workspace.",
+    "customized": "Edited",
+    "usingBuiltin": "Built-in",
+    "@usingBuiltin": {
+      "description": "Badge meaning this agent runs the prompt the product ships. \"Built-in\" refers to that shipped prompt specifically, not to a user-set default."
+    },
+    "managedNotice": "The platform appends its own non-editable rules to whatever you save here.",
+    "showAppended": "Show what gets appended",
+    "hideAppended": "Hide what gets appended",
+    "appendedHeading": "Appended by the platform (not editable)",
+    "placeholder": "Describe what this agent should do.",
+    "save": "Save as new version",
+    "revert": "Back to built-in",
+    "loadBuiltin": "Load built-in text",
+    "showBuiltin": "Compare with built-in",
+    "hideBuiltin": "Hide built-in",
+    "restoringFrom": "Loaded from version {n}. Save to make it live again.",
+    "builtinHeading": "Built-in prompt",
+    "historyHeading": "Version history",
+    "historyEmpty": "This agent has never been edited in this workspace.",
+    "live": "Live",
+    "@live": {
+      "description": "Adjective, not a verb: labels the revision that is currently in effect."
+    },
+    "restore": "Load",
+    "@restore": {
+      "description": "Verb, imperative: loads the chosen revision into the editor. It does NOT save it - the user still presses Save."
+    },
+    "restoreTooltip": "Load this version into the editor",
+    "revision": {
+      "edit": "Version {n} (edited)",
+      "restored": "Version {n} (restored from version {from})",
+      "builtin": "Version {n} (back to built-in)"
+    },
+    "toast": {
+      "saved": "Prompt saved",
+      "reverted": "Back to the built-in prompt",
+      "saveFailed": "Couldn't save the prompt",
+      "loadFailed": "Couldn't load the prompt",
+      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
     }
   },
   "riskPolicy": {
@@ -5239,7 +5291,18 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "New version of · {name}",
       "saveVersion": "Save new version",
-      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test."
+      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test.",
+      "liveInWorkspace": "Live",
+      "@liveInWorkspace": {
+        "description": "Adjective, not a verb: badges the prompt version this workspace is currently running."
+      },
+      "fromWorkspace": "Your workspace",
+      "@fromWorkspace": {
+        "description": "Badge on a prompt version that came from this workspace's own edits, as opposed to one the product ships."
+      },
+      "promoteTitle": "Make this the live prompt for this agent",
+      "promoted": "Now the live prompt for {agent}",
+      "promoteFailed": "Couldn't promote this prompt"
     },
     "fixtureKind": {
       "requirements": "requirements",
@@ -5457,11 +5520,21 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "reviewPlan": "Review plan",
+      "resolveDecision": "Resolve",
       "planningInProgress": "Planning in progress",
       "pause": "Pause",
       "resume": "Resume",
       "cancel": "Cancel initiative",
       "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
+    },
+    "planReview": {
+      "title": "This plan is waiting for you",
+      "body": "The planner drafted the phases and items below. Approve them to commit the plan and start the work, or send the plan back with what to change.",
+      "approve": "Approve plan",
+      "requestChanges": "Request changes",
+      "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
+      "sendBack": "Send back to the planner"
     },
     "planning": {
       "title": "Plan the initiative",
@@ -5469,9 +5542,11 @@
       "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then submit them. You can also have it plan now with what it already has.",
       "empty": "No initiative found for this block.",
       "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
-      "idle": "Planning has not started yet. Run planning from the initiative to begin the interview.",
+      "idle": "Planning has not started yet. Run planning from the initiative: it analyzes the codebase first, then interviews you.",
       "working": "The planner is working on your answers",
       "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or it starts drafting the plan if it has enough.",
+      "preparing": "Exploring the codebase before the interview",
+      "preparingHint": "Planning reads the repository first, so you are not asked what the code can answer. Questions appear here once that is done.",
       "failed": "The planning run stopped",
       "failedHint": "It ended before the planner could answer. Your answers are saved; re-run planning from the initiative to try again.",
       "answerPlaceholder": "Your answer",

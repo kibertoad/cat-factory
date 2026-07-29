@@ -106,6 +106,20 @@ const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
 }
 
 /**
+ * The versioned prompt id backing a kind's system prompt, or undefined when the kind's
+ * prompt carries no number. The direct (non-phase) map wins, else the kind's standard phase
+ * supplies it — the same two-step resolution {@link promptVersionForKind} does, hoisted out so
+ * a caller that wants the `id@vN` LABEL (the prompt editor, naming the shipped revision an
+ * override was forked from) doesn't have to re-derive the id from a bare version number.
+ */
+export function promptIdForKind(kind: string): PromptId | undefined {
+  const direct = NON_PHASE_PROMPT_IDS[kind]
+  if (direct) return direct
+  const phase = phaseForKind(kind as Parameters<typeof phaseForKind>[0])
+  return phase ? PHASE_PROMPT_IDS[phase] : undefined
+}
+
+/**
  * The prompt version for a step's agent kind, used as the "prompt" dimension of a
  * Kaizen `(prompt, agent, model)` combo. Bumping a kind's numbered prompt (in
  * {@link PROMPT_VERSIONS}) changes the combo key, so a previously-verified combo is
@@ -114,11 +128,8 @@ const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
  * stable because there is no numbered prompt to bump.
  */
 export function promptVersionForKind(kind: string): number {
-  const direct = NON_PHASE_PROMPT_IDS[kind]
-  if (direct) return PROMPT_VERSIONS[direct].version
-  const phase = phaseForKind(kind as Parameters<typeof phaseForKind>[0])
-  const phaseId = phase ? PHASE_PROMPT_IDS[phase] : undefined
-  return phaseId ? PROMPT_VERSIONS[phaseId].version : 1
+  const id = promptIdForKind(kind)
+  return id ? PROMPT_VERSIONS[id].version : 1
 }
 
 /** The current versioned prompt for an id. */
