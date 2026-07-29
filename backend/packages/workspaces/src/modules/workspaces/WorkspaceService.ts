@@ -3,6 +3,7 @@ import {
   applyMountLayout,
   registerServiceForFrame,
   requireWorkspace,
+  retiredPipelines,
   seedBlocks,
   seedRiskPolicies,
   seedModelPresets,
@@ -361,6 +362,11 @@ export class WorkspaceService {
     const pipelineCatalogVersions = Object.fromEntries(
       seedPipelines(this.pipelineRegistry).map((p) => [p.id, p.version ?? 0]),
     )
+    // The complement: built-ins WITHDRAWN from the catalog, so the SPA can offer to remove a stored
+    // copy this board was seeded with before the withdrawal. `seedPipelines` already excludes these,
+    // so a retired id reaches the SPA through this channel alone — which is what keeps the "new
+    // built-ins available" advisory from offering to re-add one (see WorkspaceSnapshot).
+    const retired = retiredPipelines(this.pipelineRegistry)
     // The current built-in merge-preset catalog versions, so the SPA can flag a workspace's
     // stale built-in copies AND surface a brand-new built-in it doesn't have yet (see
     // WorkspaceSnapshot.riskPolicyCatalogVersions). Built here so it stays symmetric across
@@ -381,6 +387,7 @@ export class WorkspaceService {
       pipelines,
       executions,
       pipelineCatalogVersions,
+      ...(retired.length ? { retiredPipelines: retired } : {}),
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,
       ...(archivedFrames.length ? { archivedServices: archivedFrames } : {}),

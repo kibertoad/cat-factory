@@ -4112,14 +4112,20 @@
       "add": "Add",
       "reseed": "Reseed",
       "delete": "Delete",
+      "remove": "Remove",
       "updatesHeading": "Updates available",
       "updatesDescription": "A newer version of these built-in pipelines has shipped. Reseed to adopt it (your labels and archive state are kept).",
+      "retiredHeading": "Retired pipelines",
+      "retiredDescription": "These built-in pipelines have been withdrawn from the catalog, so there is no newer version to adopt. Remove them from this board library.",
+      "retiredNote": "Retired from the catalog.",
+      "retiredReplacedBy": "Retired from the catalog. Use {name} instead.",
       "reseedAll": "Reseed all ({count})",
       "dismiss": "Dismiss",
       "done": "Done",
       "toast": {
         "reseedFailed": "Could not reseed pipeline",
-        "deleteFailed": "Could not delete pipeline"
+        "deleteFailed": "Could not delete pipeline",
+        "removeFailed": "Could not remove pipeline"
       }
     }
   },

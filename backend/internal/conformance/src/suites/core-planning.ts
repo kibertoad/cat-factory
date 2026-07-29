@@ -1,7 +1,9 @@
 import {
   type Block,
   type Pipeline,
+  type PipelineSchedule,
   type WorkspaceSnapshot,
+  PipelineRegistry,
   seedPipelines,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -746,6 +748,104 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       })
       const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
       expect(res.status).toBe(422)
+    })
+
+    it('retires a pipeline: advertised on the snapshot, deletable, no longer reseedable', async () => {
+      // The lifecycle a real deployment goes through, driven as two apps over ONE store: the board
+      // is seeded while the pipeline is still in the catalog, then the deployment ships a version
+      // that has withdrawn it. That sequencing is the whole feature — a board created after the
+      // withdrawal never holds the row, so the only workspace that needs cleaning is one seeded
+      // before it.
+      const live = new PipelineRegistry()
+      live.register({
+        id: 'pl_org_flow',
+        name: 'Org flow',
+        agentKinds: ['coder', 'reviewer'],
+        builtin: true,
+        version: 1,
+      })
+      const before = harness.makeApp(undefined, { pipelineRegistry: live })
+      const { workspace } = await before.createWorkspace()
+      const wsId = workspace.id
+      const seeded = await before.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(seeded.body.pipelines.map((p) => p.id)).toContain('pl_org_flow')
+      expect(seeded.body.pipelineCatalogVersions?.pl_org_flow).toBe(1)
+      expect(seeded.body.retiredPipelines ?? []).toEqual([])
+
+      // The upgraded deployment withdraws it in favour of a live built-in.
+      const withdrawn = new PipelineRegistry()
+      withdrawn.retire('pl_org_flow', { replacedBy: 'pl_simple' })
+      const after = harness.makeApp(undefined, { pipelineRegistry: withdrawn })
+
+      const snap = await after.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      // The row is still stored (nothing deletes it behind the user's back) but is now advertised
+      // as retired, and — the property the SPA's "new pipelines" advisory depends on — it is GONE
+      // from the catalog versions, so the two channels can never both claim it.
+      expect(snap.body.pipelines.map((p) => p.id)).toContain('pl_org_flow')
+      expect(snap.body.retiredPipelines).toEqual([{ id: 'pl_org_flow', replacedBy: 'pl_simple' }])
+      expect(snap.body.pipelineCatalogVersions).not.toHaveProperty('pl_org_flow')
+
+      // Reseed has nothing left to restore from; removal is the action that applies.
+      expect(
+        (await after.call('POST', `/workspaces/${wsId}/pipelines/pl_org_flow/reseed`)).status,
+      ).toBe(422)
+      const removed = await after.call('DELETE', `/workspaces/${wsId}/pipelines/pl_org_flow`)
+      expect(removed.status).toBe(204)
+
+      // Gone from the store on a fresh read (D1 ⇄ Postgres), and the advisory has nothing left to
+      // report — a retirement the board no longer holds a row for is not an outstanding issue.
+      const done = await after.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(done.body.pipelines.map((p) => p.id)).not.toContain('pl_org_flow')
+    })
+
+    it('refuses to delete a built-in the catalog still ships', async () => {
+      // Retirement is the deletion's authorization, so the read-only guarantee on the curated
+      // palette is untouched — otherwise this would be a way to empty it one built-in at a time.
+      const registry = new PipelineRegistry()
+      registry.retire('pl_org_flow')
+      const { call, createWorkspace } = harness.makeApp(undefined, { pipelineRegistry: registry })
+      const { workspace } = await createWorkspace()
+      const res = await call('DELETE', `/workspaces/${workspace.id}/pipelines/pl_full`)
+      expect(res.status).toBe(422)
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+      expect(snap.body.pipelines.map((p) => p.id)).toContain('pl_full')
+    })
+
+    it('refuses to delete a pipeline a recurring schedule still points at', async () => {
+      // A deleted pipeline breaks every future fire of its schedule, and a recurring failure is
+      // invisible: nobody gets an error, the work just stops happening. The refusal names the fix.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Nightly custom',
+        agentKinds: ['coder', 'reviewer'],
+      })
+      const schedule = await app.call<PipelineSchedule>(
+        'POST',
+        `/workspaces/${wsId}/recurring-pipelines`,
+        {
+          frameId: 'blk_auth',
+          pipelineId: pipeline.body.id,
+          name: 'Nightly',
+          recurrence: {
+            intervalHours: 24,
+            weekdays: [] as number[],
+            windowStartHour: null,
+            windowEndHour: null,
+            timezone: 'UTC',
+          },
+        },
+      )
+      expect(schedule.status).toBe(201)
+
+      const blocked = await app.call('DELETE', `/workspaces/${wsId}/pipelines/${pipeline.body.id}`)
+      expect(blocked.status).toBe(409)
+
+      // Detaching the schedule releases it.
+      await app.call('DELETE', `/workspaces/${wsId}/recurring-pipelines/${schedule.body.id}`)
+      const freed = await app.call('DELETE', `/workspaces/${wsId}/pipelines/${pipeline.body.id}`)
+      expect(freed.status).toBe(204)
     })
 
     it('round-trips the per-step companion toggles (followUps + testerQuality) + stepOptions on every store', async () => {

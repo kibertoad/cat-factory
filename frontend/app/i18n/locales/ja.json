@@ -4009,14 +4009,20 @@
       "add": "追加",
       "reseed": "再シード",
       "delete": "削除",
+      "remove": "削除",
       "updatesHeading": "更新あり",
       "updatesDescription": "これらのビルトインパイプラインの新しいバージョンが提供されました。再シードして取り込んでください(ラベルとアーカイブ状態は維持されます)。",
+      "retiredHeading": "廃止されたパイプライン",
+      "retiredDescription": "これらの組み込みパイプラインはカタログから撤回されたため、取り込める新しいバージョンはありません。このボードのライブラリから削除してください。",
+      "retiredNote": "カタログから廃止されました。",
+      "retiredReplacedBy": "カタログから廃止されました。代わりに{name}を使用してください。",
       "reseedAll": "すべて再シード ({count})",
       "dismiss": "閉じる",
       "done": "完了",
       "toast": {
         "reseedFailed": "パイプラインを再シードできませんでした",
-        "deleteFailed": "パイプラインを削除できませんでした"
+        "deleteFailed": "パイプラインを削除できませんでした",
+        "removeFailed": "パイプラインを削除できませんでした"
       }
     }
   },

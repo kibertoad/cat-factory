@@ -121,9 +121,11 @@ export {
   subscriptionQuotaCeiling,
   isSubscriptionVendor,
 } from './domain/subscription-quota.js'
+export type { RetiredPipeline } from './domain/seed.js'
 export {
   seedBlocks,
   seedPipelines,
+  retiredPipelines,
   BLUEPRINT_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,

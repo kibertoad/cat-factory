@@ -1,3 +1,4 @@
+import type { RetiredPipeline } from './seed.js'
 import type { Pipeline } from './types.js'
 
 // App-owned registry of extra predefined pipelines, mirroring the agent-kind / gate registries.
@@ -18,16 +19,45 @@ import type { Pipeline } from './types.js'
  */
 export class PipelineRegistry {
   private readonly extra: Pipeline[] = []
+  private readonly withdrawn: RetiredPipeline[] = []
 
   /**
    * Register an extra predefined pipeline. A registered pipeline whose id matches a built-in (or an
    * earlier registration) replaces it, so a deployment can both add new pipelines and customize the
    * built-in catalog.
+   *
+   * Registering an id this registry had {@link retire}d un-retires it: the two are opposite
+   * assertions about the same id, so the later call wins and the id can never be both live and
+   * withdrawn.
    */
   register(pipeline: Pipeline): void {
+    const retiredAt = this.withdrawn.findIndex((p) => p.id === pipeline.id)
+    if (retiredAt >= 0) this.withdrawn.splice(retiredAt, 1)
     const at = this.extra.findIndex((p) => p.id === pipeline.id)
     if (at >= 0) this.extra[at] = pipeline
     else this.extra.push(pipeline)
+  }
+
+  /**
+   * Withdraw a pipeline from the catalog: it stops being seeded into new workspaces, and a
+   * workspace that already stores it is offered a removal instead of a reseed (see
+   * `retiredPipelines` / `PipelineService.remove`). Use it for a deployment's OWN pipeline that is
+   * no longer relevant — retiring a BUILT-IN is done in kernel's `buildRetiredPipelines`.
+   *
+   * Retiring an id this registry had registered drops the registration (the inverse of
+   * {@link register}), so a deployment can withdraw a pipeline by editing one line rather than
+   * having to also delete its definition.
+   */
+  retire(id: string, options?: { replacedBy?: string }): void {
+    const at = this.extra.findIndex((p) => p.id === id)
+    if (at >= 0) this.extra.splice(at, 1)
+    const entry: RetiredPipeline = {
+      id,
+      ...(options?.replacedBy ? { replacedBy: options.replacedBy } : {}),
+    }
+    const retiredAt = this.withdrawn.findIndex((p) => p.id === id)
+    if (retiredAt >= 0) this.withdrawn[retiredAt] = entry
+    else this.withdrawn.push(entry)
   }
 
   /** Register several extra predefined pipelines at once. */
@@ -40,6 +70,11 @@ export class PipelineRegistry {
     return [...this.extra]
   }
 
+  /** The pipelines this registry withdrew from the catalog (retirement order). */
+  retired(): RetiredPipeline[] {
+    return [...this.withdrawn]
+  }
+
   /**
    * Merge the registered pipelines into a built-in list: a registered pipeline replaces a built-in
    * with the same id in place, new ones are appended (registration order).
@@ -47,6 +82,21 @@ export class PipelineRegistry {
   merge(builtins: readonly Pipeline[]): Pipeline[] {
     const merged = [...builtins]
     for (const pipeline of this.extra) {
+      const at = merged.findIndex((p) => p.id === pipeline.id)
+      if (at >= 0) merged[at] = pipeline
+      else merged.push(pipeline)
+    }
+    return merged
+  }
+
+  /**
+   * Merge this registry's retirements into the built-in tombstone list: a registry entry for an
+   * already-retired built-in replaces it in place (so a deployment can point `replacedBy` at its
+   * own pipeline), new ones are appended.
+   */
+  mergeRetired(builtins: readonly RetiredPipeline[]): RetiredPipeline[] {
+    const merged = [...builtins]
+    for (const pipeline of this.withdrawn) {
       const at = merged.findIndex((p) => p.id === pipeline.id)
       if (at >= 0) merged[at] = pipeline
       else merged.push(pipeline)

@@ -3997,14 +3997,20 @@
       "add": "Añadir",
       "reseed": "Regenerar",
       "delete": "Eliminar",
+      "remove": "Quitar",
       "updatesHeading": "Actualizaciones disponibles",
       "updatesDescription": "Se ha publicado una versión más reciente de estos pipelines integrados. Regenéralos para adoptarla (se conservan tus etiquetas y el estado de archivo).",
+      "retiredHeading": "Pipelines retirados",
+      "retiredDescription": "Estos pipelines integrados se han retirado del catálogo, así que no hay ninguna versión más reciente que adoptar. Quítalos de la biblioteca de este tablero.",
+      "retiredNote": "Retirado del catálogo.",
+      "retiredReplacedBy": "Retirado del catálogo. Usa {name} en su lugar.",
       "reseedAll": "Regenerar todos ({count})",
       "dismiss": "Descartar",
       "done": "Hecho",
       "toast": {
         "reseedFailed": "No se pudo regenerar el pipeline",
-        "deleteFailed": "No se pudo eliminar el pipeline"
+        "deleteFailed": "No se pudo eliminar el pipeline",
+        "removeFailed": "No se pudo quitar el pipeline"
       }
     }
   },

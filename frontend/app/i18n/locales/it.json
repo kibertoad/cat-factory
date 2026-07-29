@@ -3681,14 +3681,20 @@
       "add": "Aggiungi",
       "reseed": "Ripristina",
       "delete": "Elimina",
+      "remove": "Rimuovi",
       "updatesHeading": "Aggiornamenti disponibili",
       "updatesDescription": "E stata rilasciata una versione piu recente di queste pipeline integrate. Ripristinale per adottarla (le tue etichette e lo stato di archiviazione vengono mantenuti).",
+      "retiredHeading": "Pipeline ritirate",
+      "retiredDescription": "Queste pipeline integrate sono state ritirate dal catalogo, quindi non esiste una versione piu recente da adottare. Rimuovile dalla libreria di questa board.",
+      "retiredNote": "Ritirata dal catalogo.",
+      "retiredReplacedBy": "Ritirata dal catalogo. Usa {name} al suo posto.",
       "reseedAll": "Ripristina tutte ({count})",
       "dismiss": "Ignora",
       "done": "Fatto",
       "toast": {
         "reseedFailed": "Impossibile ripristinare la pipeline",
-        "deleteFailed": "Impossibile eliminare la pipeline"
+        "deleteFailed": "Impossibile eliminare la pipeline",
+        "removeFailed": "Impossibile rimuovere la pipeline"
       }
     }
   },

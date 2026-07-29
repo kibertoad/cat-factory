@@ -3681,14 +3681,20 @@
       "add": "Hinzufügen",
       "reseed": "Neu aufsetzen",
       "delete": "Löschen",
+      "remove": "Entfernen",
       "updatesHeading": "Updates verfügbar",
       "updatesDescription": "Eine neuere Version dieser integrierten Pipelines wurde ausgeliefert. Setzen Sie sie neu auf, um sie zu übernehmen (Ihre Labels und der Archivstatus bleiben erhalten).",
+      "retiredHeading": "Ausgemusterte Pipelines",
+      "retiredDescription": "Diese integrierten Pipelines wurden aus dem Katalog zurückgezogen, es gibt also keine neuere Version zum Übernehmen. Entfernen Sie sie aus der Bibliothek dieses Boards.",
+      "retiredNote": "Aus dem Katalog zurückgezogen.",
+      "retiredReplacedBy": "Aus dem Katalog zurückgezogen. Verwenden Sie stattdessen {name}.",
       "reseedAll": "Alle neu aufsetzen ({count})",
       "dismiss": "Verwerfen",
       "done": "Fertig",
       "toast": {
         "reseedFailed": "Pipeline konnte nicht neu aufgesetzt werden",
-        "deleteFailed": "Pipeline konnte nicht gelöscht werden"
+        "deleteFailed": "Pipeline konnte nicht gelöscht werden",
+        "removeFailed": "Pipeline konnte nicht entfernt werden"
       }
     }
   },

@@ -4009,14 +4009,20 @@
       "add": "Ekle",
       "reseed": "Yeniden tohumla",
       "delete": "Sil",
+      "remove": "Kaldır",
       "updatesHeading": "Güncellemeler mevcut",
       "updatesDescription": "Bu yerleşik pipeline'ların daha yeni bir sürümü yayınlandı. Benimsemek için yeniden tohumlayın (etiketleriniz ve arşiv durumunuz korunur).",
+      "retiredHeading": "Kullanımdan kaldırılan pipeline’lar",
+      "retiredDescription": "Bu yerleşik pipeline’lar katalogdan çekildi, dolayısıyla benimsenecek daha yeni bir sürüm yok. Bu panonun kütüphanesinden kaldırın.",
+      "retiredNote": "Katalogdan kaldırıldı.",
+      "retiredReplacedBy": "Katalogdan kaldırıldı. Bunun yerine {name} kullanın.",
       "reseedAll": "Tümünü yeniden tohumla ({count})",
       "dismiss": "Yoksay",
       "done": "Tamam",
       "toast": {
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
-        "deleteFailed": "Pipeline silinemedi"
+        "deleteFailed": "Pipeline silinemedi",
+        "removeFailed": "Pipeline kaldırılamadı"
       }
     }
   },

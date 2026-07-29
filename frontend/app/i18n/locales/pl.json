@@ -3997,14 +3997,20 @@
       "add": "Dodaj",
       "reseed": "Zregeneruj",
       "delete": "Usuń",
+      "remove": "Usuń",
       "updatesHeading": "Dostępne aktualizacje",
       "updatesDescription": "Pojawiła się nowsza wersja tych wbudowanych pipeline'ów. Zregeneruj je, aby ją przyjąć (Twoje etykiety i stan archiwum zostaną zachowane).",
+      "retiredHeading": "Wycofane pipeline’y",
+      "retiredDescription": "Te wbudowane pipeline’y zostały wycofane z katalogu, więc nie ma nowszej wersji do przyjęcia. Usuń je z biblioteki tej tablicy.",
+      "retiredNote": "Wycofany z katalogu.",
+      "retiredReplacedBy": "Wycofany z katalogu. Użyj zamiast niego {name}.",
       "reseedAll": "Zregeneruj wszystkie ({count})",
       "dismiss": "Odrzuć",
       "done": "Gotowe",
       "toast": {
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
-        "deleteFailed": "Nie udało się usunąć pipeline'u"
+        "deleteFailed": "Nie udało się usunąć pipeline'u",
+        "removeFailed": "Nie udało się usunąć pipeline’u"
       }
     }
   },
