@@ -2088,10 +2088,6 @@
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Registros privados de paquetes",
-          "description": "Tokens de npm y GitHub Packages que los agentes usan para instalar dependencias privadas."
-        },
         "apiTokens": {
           "label": "Tokens de acceso a la API",
           "description": "Tokens que los sistemas externos presentan para llamar a la API de cat-factory."
@@ -2595,20 +2591,22 @@
       "incidentNoun": "el proveedor de incidencias"
     },
     "packageRegistries": {
-      "title": "Registros privados de paquetes",
+      "tab": "Registros de paquetes",
       "intro": "Conecta los registros privados desde los que instalan tus repositorios. Los agentes los reciben al hacer checkout de un repositorio, de modo que las dependencias privadas se resuelven durante la instalación. Los tokens son de solo escritura: para cambiar uno, elimina la entrada y vuelve a agregarla.",
       "entryNoun": "entrada de registro",
       "list": {
         "heading": "Registros conectados",
         "tokenTail": "token …{tail}",
-        "remove": "Eliminar entrada"
+        "remove": "Eliminar entrada",
+        "noScopes": "Sin ámbitos (el token solo autentica este registro)"
       },
       "add": {
         "heading": "Agregar un registro",
         "vendor": "Registro",
         "host": "El token solo se envía a {host}.",
         "scopes": "Ámbitos de paquetes",
-        "scopesHelp": "Ámbitos de npm separados por comas",
+        "scopesHelp": "Opcional. Ámbitos de npm separados por comas.",
+        "scopesNote": "Opcional. Un ámbito indicado aquí dirige a este registro todos los paquetes que contiene, de modo que un ámbito que también incluye paquetes publicados publicamente deja de resolverse. Déjalo vacío cuando el repositorio incluya su propio .npmrc o cuando las dependencias individuales se fijen con un prefijo de registro con nombre como gh: (pnpm 11.1 o posterior); el token autentica el registro en cualquier caso.",
         "token": "Token de acceso",
         "save": "Agregar registro"
       },

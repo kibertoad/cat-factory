@@ -2088,10 +2088,6 @@
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Registres de paquets privés",
-          "description": "Jetons npm et GitHub Packages que les agents utilisent pour installer les dépendances privées."
-        },
         "apiTokens": {
           "label": "Jetons d'accès à l'API",
           "description": "Jetons que les systèmes externes présentent pour appeler l'API cat-factory."
@@ -2595,20 +2591,22 @@
       "incidentNoun": "le fournisseur d’incidents"
     },
     "packageRegistries": {
-      "title": "Registres de paquets privés",
+      "tab": "Registres de paquets",
       "intro": "Connectez les registres privés depuis lesquels vos dépôts installent leurs dépendances. Les agents les reçoivent lors du checkout d'un dépôt, afin que les dépendances privées se résolvent pendant l'installation. Les jetons sont en écriture seule : pour en changer un, supprimez l'entrée puis ajoutez-la de nouveau.",
       "entryNoun": "entrée de registre",
       "list": {
         "heading": "Registres connectés",
         "tokenTail": "jeton …{tail}",
-        "remove": "Supprimer l'entrée"
+        "remove": "Supprimer l'entrée",
+        "noScopes": "Aucune portée (le jeton authentifie uniquement ce registre)"
       },
       "add": {
         "heading": "Ajouter un registre",
         "vendor": "Registre",
         "host": "Le jeton n'est envoyé qu'à {host}.",
         "scopes": "Portées de paquets",
-        "scopesHelp": "Portées npm séparées par des virgules",
+        "scopesHelp": "Facultatif. Portées npm séparées par des virgules.",
+        "scopesNote": "Facultatif. Une portée indiquée ici dirige vers ce registre tous les paquets qu'elle contient, si bien qu'une portée contenant aussi des paquets publiés publiquement cesse d'être résolue. Laissez le champ vide si le dépôt fournit son propre .npmrc ou si les dépendances individuelles sont épinglées avec un préfixe de registre nommé tel que gh: (pnpm 11.1 ou version ultérieure) : le jeton authentifie le registre dans tous les cas.",
         "token": "Jeton d'accès",
         "save": "Ajouter le registre"
       },

@@ -90,8 +90,20 @@ describe('parsePackageRegistries', () => {
     expect(() => parsePackageRegistries([{ ...npmjsEntry, scopes: ['not-a-scope!'] }])).toThrow(
       /must look like @org/,
     )
-    expect(() => parsePackageRegistries([{ ...npmjsEntry, scopes: [] }])).toThrow(/non-empty array/)
+    expect(() => parsePackageRegistries([{ ...npmjsEntry, scopes: 'nope' }])).toThrow(
+      /must be an array/,
+    )
     expect(() => parsePackageRegistries([{ ...npmjsEntry, token: '' }])).toThrow(/token/)
+  })
+
+  it('accepts an entry with no scopes (host authentication only)', () => {
+    // A scope mapping is all-or-nothing, so a workspace whose `@org` spans the public
+    // registry too configures the token WITHOUT a scope and pins individual dependencies
+    // to the registry themselves. The entry must survive the parse and still render its
+    // credential line.
+    const entries = parsePackageRegistries([{ ...npmjsEntry, scopes: [] }])
+    expect(entries).toEqual([{ ...npmjsEntry, scopes: [] }])
+    expect(renderNpmrc(entries)).toBe(`//registry.npmjs.org/:_authToken=npm_token_abcdef\n`)
   })
 
   it('rejects a token with a newline / control char (npmrc line injection)', () => {

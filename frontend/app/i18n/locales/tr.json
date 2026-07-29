@@ -2088,10 +2088,6 @@
           "label": "Sürüm sonrası sağlık",
           "description": "Bir sürüm yayınlandıktan sonra monitörleri ve SLO'ları izleyin (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Özel paket kayıt defterleri",
-          "description": "Aracıların özel bağımlılıkları yüklemek için kullandığı npm ve GitHub Packages token'ları."
-        },
         "apiTokens": {
           "label": "API erişim belirteçleri",
           "description": "Harici sistemlerin cat-factory API'sini çağırmak için sunduğu belirteçler."
@@ -2736,20 +2732,22 @@
       "incidentNoun": "olay sağlayıcısı"
     },
     "packageRegistries": {
-      "title": "Özel paket kayıt defterleri",
+      "tab": "Paket kayıt defterleri",
       "intro": "Depolarınızın yükleme yaptığı özel kayıt defterlerini bağlayın. Aracılar bir depoyu çekerken bunları alır, böylece özel bağımlılıklar yükleme sırasında çözülür. Token'lar yalnızca yazılırdır: birini değiştirmek için girdiyi silin ve yeniden ekleyin.",
       "entryNoun": "kayıt defteri girdisi",
       "list": {
         "heading": "Bağlı kayıt defterleri",
         "tokenTail": "token …{tail}",
-        "remove": "Girdiyi kaldır"
+        "remove": "Girdiyi kaldır",
+        "noScopes": "Kapsam yok (token yalnızca bu kayıt defterinin kimliğini doğrular)"
       },
       "add": {
         "heading": "Kayıt defteri ekle",
         "vendor": "Kayıt defteri",
         "host": "Token yalnızca {host} adresine gönderilir.",
         "scopes": "Paket kapsamları",
-        "scopesHelp": "Virgülle ayrılmış npm kapsamları",
+        "scopesHelp": "İsteğe bağlı. Virgülle ayrılmış npm kapsamları.",
+        "scopesNote": "İsteğe bağlı. Burada belirtilen bir kapsam, altındaki her paketi bu kayıt defterine yönlendirir; bu nedenle herkese açık yayımlanmış paketler de barındıran bir kapsam artık çözümlenemez. Depo kendi .npmrc dosyasını içeriyorsa ya da tek tek bağımlılıklar gh: gibi adlandırılmış bir kayıt defteri önekiyle sabitleniyorsa (pnpm 11.1 veya üzeri) boş bırakın; token kayıt defterinin kimliğini her durumda doğrular.",
         "token": "Erişim token'ı",
         "save": "Kayıt defteri ekle"
       },
