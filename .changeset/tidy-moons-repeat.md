@@ -19,6 +19,11 @@ compose document itself) or `repo` (a path in another `owner/name`, read without
 stack whose layers are all inline / foreign owns no repository, so `SharedStack.cloneUrl` is
 nullable.
 
+An `inline` layer may name where it is materialized, and that path is host-escape guarded on every
+path that accepts one: a layer that would land outside the checkout is refused when the shared
+stack is SAVED (`details.reason: 'compose_layer_escapes_checkout'`) and again before any layer is
+read or written, alongside the recipe path's existing pre-daemon check.
+
 Breaking (pre-1.0): `SharedStack.cloneUrl` is `string | null` rather than `string`, and
 `composeFiles` entries widen from `string` to `string | ComposeSource`. D1 migration `0070`
 rebuilds `shared_stacks` to relax the `clone_url` NOT NULL; the Drizzle mirror does the same. No

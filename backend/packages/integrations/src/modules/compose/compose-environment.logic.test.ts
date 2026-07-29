@@ -24,6 +24,7 @@ import {
   composeExecArgs,
   matchesHttpExpectation,
   prepareRecipeComposeFiles,
+  composeSourceEscapeIssues,
   recipeCheckoutPathIssues,
   recipeProfilesEnv,
   recipeStepTimeoutMs,
@@ -857,6 +858,35 @@ describe('recipeCheckoutPathIssues', () => {
       teardownSteps: [{ kind: 'copy-file', name: 'td', from: '/etc/passwd', to: '.env' }],
     })
     expect(issues).toEqual([])
+  })
+})
+
+describe('composeSourceEscapeIssues', () => {
+  it('judges each layer on the path it will be MATERIALIZED at', () => {
+    // A generated path is escape-free by construction however hostile the source path is — it is
+    // reduced to a sanitized filename stem under the project dir — so only a layer that NAMES its
+    // own landing spot can escape.
+    expect(
+      composeSourceEscapeIssues([
+        'docker/dev.yml',
+        { kind: 'inline', content: 's' },
+        { kind: 'repo', repo: 'acme/infra', path: '../../../etc/passwd' },
+      ]),
+    ).toEqual([])
+
+    const escaping = composeSourceEscapeIssues([
+      { kind: 'inline', content: 's', path: '../../evil.yml' },
+    ])
+    expect(escaping).toHaveLength(1)
+    expect(escaping[0]).toContain('escapes the checkout')
+  })
+
+  it('is independent of layer ORDER — the verdict never depends on which layer wins the anchor', () => {
+    // Judged at the strictest anchor (project dir ''), so reordering a list can't turn an escaping
+    // layer into an allowed one by giving it a deeper directory to climb out of.
+    const inline = { kind: 'inline', content: 's', path: '../out.yml' } as const
+    expect(composeSourceEscapeIssues([inline, 'a/b/c/dev.yml'])).toHaveLength(1)
+    expect(composeSourceEscapeIssues(['a/b/c/dev.yml', inline])).toHaveLength(1)
   })
 })
 

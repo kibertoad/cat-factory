@@ -626,6 +626,17 @@ infra dependencies to live in code review rather than in a form:
 >   inheriting a foreign path's depth. A materialized layer's path is keyed by POSITION
 >   (`.cat-factory/compose/<i>-<stem>.yml`), so two layers with the same basename in different
 >   repos can't collide and a re-provision overwrites instead of accumulating.
+> - **A layer that NAMES where it lands is host-escape guarded, on both paths.** A generated path
+>   is escape-free by construction, but an `inline` layer may carry its own `path`, and that string
+>   becomes the `relPath` of a `writeCheckoutFile` whose runtime implementation is a bare
+>   `join(checkoutDir, relPath)` — so an unguarded `../` is an arbitrary host-file WRITE with
+>   caller-chosen content, a strictly worse primitive than the read-shaped escapes the recipe guard
+>   already refused. ONE rule (`composeSourceEscapeIssues`) is called from three places: the
+>   recipe's pre-daemon `recipeCheckoutPathIssues`, `planComposeLayers` (so the shared-stack
+>   bring-up, which has no preflight of its own, inherits it), and the shared-stack WRITE boundary
+>   (`details.reason: 'compose_layer_escapes_checkout'`). It judges at the STRICTEST anchor
+>   (`projectDir: ''`) rather than the list's real project directory, so a layer list's escape
+>   safety can never change because an unrelated layer was reordered.
 > - **Resolution is one seam** (`integrations/modules/compose/compose-sources.ts`
 >   `planComposeLayers`), consumed differently by design: the compose PROVIDER rewrites every layer
 >   for isolation, so it reads its `path` layers itself from the VCS before a checkout exists; a
@@ -637,6 +648,9 @@ infra dependencies to live in code review rather than in a form:
 >   forces a clone URL is reading a COMMITTED file — a `path` layer, an `envFiles` template, or a
 >   `copy-file` / `stdinFile` step (`composeBringUpNeedsRepo`) — and that is refused at the WRITE
 >   boundary (`details.reason: 'clone_url_required'`) on the MERGED entity, not only at bring-up.
+>   The bring-up's runtime-capability gate keys off that SAME predicate, so it demands `checkout`
+>   of the committed-file shape and `workingDir` of the repo-less one, rather than a fixed set that
+>   would refuse whichever shape it wasn't written for.
 > - **`seedSharedStacks`** on `startNode`/`startLocal` (and `NodeContainerOptions`) is the
 >   programmatic surface, a direct copy of `seedEnvironmentHandlers`: kernel `SharedStackSeeder`,
 >   `createSharedStackSeeder`, the `WorkspaceService.create` hook, and the boot backfill — which

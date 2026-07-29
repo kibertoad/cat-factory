@@ -9,9 +9,12 @@ import {
   composeProjectDir,
   composeSourcesNeedPrimaryRepo,
   describeComposeSource,
+  getErrorMessage,
   materializedComposePath,
   normalizeComposeFileRefs,
+  redactSecrets,
 } from '@cat-factory/kernel'
+import { composeSourceEscapeIssues } from './compose-environment.logic.js'
 
 // ---------------------------------------------------------------------------
 // Resolving an ordered list of `-f` compose layers whose text may come from the PRIMARY repo
@@ -70,10 +73,15 @@ export interface ComposeLayerPlanResult {
  * Plan an ordered layer list: normalize the bare-path shorthand, fetch every `inline` / `repo`
  * layer's text, and assign each layer the checkout-relative path it will be used at.
  *
- * Foreign repos are resolved ONCE per `owner/repo` and reused across every layer that names them
- * (a central infra repo commonly supplies several layers) — a resolve per layer would be the
- * banned N+1. Returns a blocking `error` string rather than throwing, because both callers turn a
- * failure here into a persisted `lastError` / a failed provision with the real cause attached.
+ * Foreign repos are resolved ONCE per provider+`owner/repo` and reused across every layer that
+ * names them (a central infra repo commonly supplies several layers) — a resolve per layer would be
+ * the banned N+1. Returns a blocking `error` string rather than throwing, because both callers turn
+ * a failure here into a persisted `lastError` / a failed provision with the real cause attached.
+ *
+ * The host-escape guard runs FIRST, before any repo is read: a layer that names where it lands is
+ * about to become the `relPath` of a `writeCheckoutFile`, so an escaping one is refused here rather
+ * than in either caller. The recipe path also checks it pre-daemon (`recipeCheckoutPathIssues`);
+ * the shared-stack bring-up has no preflight of its own and inherits the rule from here.
  */
 export async function planComposeLayers(
   refs: readonly ComposeFileRef[],
@@ -81,9 +89,11 @@ export async function planComposeLayers(
 ): Promise<ComposeLayerPlanResult | { error: string }> {
   const sources = normalizeComposeFileRefs(refs)
   if (sources.length === 0) return { error: 'No compose files are configured for this stack.' }
+  const escapes = composeSourceEscapeIssues(sources)
+  if (escapes.length > 0) return { error: escapes.join('; ') }
   const projectDir = composeProjectDir(sources)
   const layers: ComposeLayerPlan[] = []
-  // One resolved context per `owner/repo`, shared by every layer naming it.
+  // One resolved context per provider + `owner/repo`, shared by every layer naming it.
   const contexts = new Map<string, RunRepoContext | null>()
 
   for (const [index, source] of sources.entries()) {
@@ -107,26 +117,51 @@ export async function planComposeLayers(
           `VCS connection this deployment does not have. Connect the provider, or supply the layer inline.`,
       }
     }
-    const key = `${owner}/${repo}`
-    if (!contexts.has(key)) {
-      contexts.set(
-        key,
-        await deps.resolveForeignRepo({
-          owner,
-          repo,
-          ...(source.provider ? { provider: source.provider } : {}),
-        }),
-      )
-    }
-    const ctx = contexts.get(key) ?? null
-    if (!ctx) {
+    // Keyed by PROVIDER + slug, not the slug alone: `acme/infra` on GitHub and `acme/infra` on
+    // GitLab are different repos, and a slug-only key would silently serve the first one's context
+    // to the second one's layers.
+    const key = `${source.provider ?? ''}:${owner}/${repo}`
+    let file: { content: string } | null
+    try {
+      if (!contexts.has(key)) {
+        contexts.set(
+          key,
+          await deps.resolveForeignRepo({
+            owner,
+            repo,
+            ...(source.provider ? { provider: source.provider } : {}),
+          }),
+        )
+      }
+      const ctx = contexts.get(key) ?? null
+      if (!ctx) {
+        return {
+          error:
+            `No VCS connection could read '${owner}/${repo}' for compose layer ` +
+            `'${describeComposeSource(source)}'. Connect the matching provider and retry.`,
+        }
+      }
+      file = await ctx.repo.getFile(source.path, source.ref || ctx.baseBranch)
+    } catch (err) {
+      // Both the resolve and the read are live VCS calls, so either can REJECT (a 5xx, a rate
+      // limit, a revoked token) as readily as it can answer "absent". Both callers turn our
+      // return value into a persisted `lastError` / a failed provision, and neither wraps this
+      // call — an escaping throw would leave a shared stack stuck at `starting` with no recorded
+      // cause. Convert it, so this function's "returns a blocking error, never throws" contract
+      // holds for the failure modes that actually happen in production, not only for the absent
+      // ones.
+      //
+      // Scrubbed, because this string is PERSISTED (`lastError`) and rendered in the SPA: a fetch
+      // failure routinely echoes the request URL, and reading a PRIVATE repo puts an installation
+      // token or a PAT in it.
       return {
         error:
-          `No VCS connection could read '${key}' for compose layer ` +
-          `'${describeComposeSource(source)}'. Connect the matching provider and retry.`,
+          redactSecrets(
+            `Could not read compose layer '${describeComposeSource(source)}' from ` +
+              `'${owner}/${repo}': ${getErrorMessage(err)}`,
+          ) ?? '',
       }
     }
-    const file = await ctx.repo.getFile(source.path, source.ref || ctx.baseBranch)
     if (!file) {
       return { error: `No compose file found at '${describeComposeSource(source)}'.` }
     }

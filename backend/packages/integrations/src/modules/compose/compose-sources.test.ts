@@ -123,6 +123,83 @@ describe('planComposeLayers', () => {
     expect('error' in unwired && unwired.error).toContain('supply the layer inline')
   })
 
+  it('turns a THROWING resolver or read into a blocking error, not an escaping rejection', async () => {
+    // The absent cases above are the easy half. A live VCS call fails far more often by REJECTING
+    // (5xx, rate limit, revoked token) than by answering "not found", and both callers persist our
+    // return value as the run's cause of death — an escaping throw would leave a shared stack stuck
+    // at `starting` with nothing recorded.
+    const resolverThrew = await planComposeLayers(
+      [{ kind: 'repo', repo: 'acme/infra', path: 'a.yml' }],
+      {
+        resolveForeignRepo: () => Promise.reject(new Error('GitHub API 503')),
+      },
+    )
+    expect('error' in resolverThrew && resolverThrew.error).toContain('GitHub API 503')
+    expect('error' in resolverThrew && resolverThrew.error).toContain('acme/infra')
+
+    // …and the converted message is SCRUBBED: it is persisted as `lastError` and rendered in the
+    // SPA, while a private-repo fetch failure routinely echoes a tokenized request URL.
+    const leaky = await planComposeLayers([{ kind: 'repo', repo: 'acme/infra', path: 'a.yml' }], {
+      resolveForeignRepo: () =>
+        Promise.reject(new Error('GET https://x-access-token:ghp_0123456789abcdefghij@host/a 401')),
+    })
+    expect('error' in leaky && leaky.error).not.toContain('ghp_0123456789abcdefghij')
+
+    const { ctx } = fakeRepoContext({})
+    vi.mocked(ctx.repo.getFile).mockRejectedValueOnce(new Error('rate limited'))
+    const readThrew = await planComposeLayers(
+      [{ kind: 'repo', repo: 'acme/infra', path: 'a.yml' }],
+      {
+        resolveForeignRepo: () => Promise.resolve(ctx),
+      },
+    )
+    expect('error' in readThrew && readThrew.error).toContain('rate limited')
+  })
+
+  it('keys the foreign-repo cache by PROVIDER as well as slug', async () => {
+    // `acme/infra` on GitHub and `acme/infra` on GitLab are different repos. A slug-only cache key
+    // would serve the first one's context to the second one's layers — and silently, since both
+    // reads succeed.
+    const gh = fakeRepoContext({ 'a.yml': 'from-github' })
+    const gl = fakeRepoContext({ 'a.yml': 'from-gitlab' })
+    const planned = await planComposeLayers(
+      [
+        { kind: 'repo', repo: 'acme/infra', path: 'a.yml', provider: 'github' },
+        { kind: 'repo', repo: 'acme/infra', path: 'a.yml', provider: 'gitlab' },
+      ],
+      {
+        resolveForeignRepo: (coords) =>
+          Promise.resolve(coords.provider === 'gitlab' ? gl.ctx : gh.ctx),
+      },
+    )
+
+    expect('error' in planned).toBe(false)
+    if ('error' in planned) return
+    expect(planned.layers.map((l) => l.content)).toEqual(['from-github', 'from-gitlab'])
+  })
+
+  it('refuses a layer that would be materialized OUTSIDE the checkout, before reading anything', async () => {
+    // An `inline` layer names where it lands, and that path becomes the `relPath` of a
+    // `writeCheckoutFile` whose runtime implementation is a bare join — so an unguarded `../` is an
+    // arbitrary host-file write with caller-chosen content. Refused here so BOTH consumers inherit
+    // the rule (the recipe path also checks it pre-daemon; the shared-stack bring-up has no
+    // preflight of its own).
+    const resolveForeignRepo = vi.fn()
+    const escaped = await planComposeLayers(
+      ['docker/dev.yml', { kind: 'inline', content: 'services: {}', path: '../../evil.yml' }],
+      { resolveForeignRepo },
+    )
+    expect('error' in escaped && escaped.error).toContain('escapes the checkout')
+    expect('error' in escaped && escaped.error).toContain('../../evil.yml')
+    // Refused BEFORE any repo work — an unsafe list is never partially resolved.
+    expect(resolveForeignRepo).not.toHaveBeenCalled()
+
+    for (const path of ['/etc/cron.d/x.yml', '~/x.yml', '${HOME}/x.yml', 'a/../../b.yml']) {
+      const issue = await planComposeLayers([{ kind: 'inline', content: 's', path }], {})
+      expect('error' in issue && issue.error).toContain('escapes the checkout')
+    }
+  })
+
   it('refuses an empty layer list', async () => {
     expect(await planComposeLayers([], {})).toEqual({
       error: 'No compose files are configured for this stack.',

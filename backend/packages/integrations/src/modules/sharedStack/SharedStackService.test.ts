@@ -545,6 +545,80 @@ describe('SharedStackService', () => {
       expect(up.status).toBe('failed')
       expect(up.lastError).toContain('acme/infra')
     })
+
+    it('refuses to STORE a layer that would be materialized outside the checkout', async () => {
+      // An inline layer's `path` becomes the `relPath` of a `writeCheckoutFile`, whose runtime
+      // implementation is a bare join — so an unguarded `../` writes caller-chosen content to an
+      // arbitrary host path. Refused at the write boundary: a definition that could never be
+      // safely brought up should not be storable, on either the create or the update path.
+      const svc = makeService(makeRepo())
+      await expect(
+        svc.create(WS, {
+          ...baseInput,
+          cloneUrl: undefined,
+          composeFiles: [{ kind: 'inline', content: 'services: {}', path: '../../evil.yml' }],
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'compose_layer_escapes_checkout' } })
+
+      const created = await svc.create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      await expect(
+        svc.update(WS, created.id, {
+          composeFiles: [{ kind: 'inline', content: 'services: {}', path: '/etc/cron.d/x.yml' }],
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'compose_layer_escapes_checkout' } })
+    })
+
+    it('fails the bring-up — writing nothing — for a stored layer that escapes the checkout', async () => {
+      // Defence in depth behind the write boundary above: a row that predates the guard (or one
+      // written straight to the store) must still never reach `writeCheckoutFile`.
+      const repo = makeRepo()
+      const stored = await makeService(repo).create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      await repo.upsert(WS, {
+        ...stored,
+        composeFiles: [{ kind: 'inline', content: 'pwned', path: '../../evil.yml' }],
+      })
+
+      const { runtime, writes } = makeLayerRuntime()
+      const up = await makeService(repo, runtime).ensureUp(WS, stored.id)
+      expect(up.status).toBe('failed')
+      expect(up.lastError).toContain('escapes the checkout')
+      expect(writes).toEqual([])
+    })
+
+    it('refuses a repo-less stack on a runtime that cannot stand an empty tree up', async () => {
+      // The capability gate is keyed off the SHAPE: a repo-less stack calls `workingDir`, never
+      // `checkout`, so it must be judged on the seam it will actually use.
+      const repo = makeRepo()
+      const created = await makeService(repo).create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      const { runtime } = makeLayerRuntime()
+      const { workingDir: _omitted, ...withoutWorkingDir } = runtime
+      const up = await makeService(repo, withoutWorkingDir).ensureUp(WS, created.id)
+      expect(up.status).toBe('failed')
+      expect(up.lastError).toContain('working tree')
+    })
+
+    it('still brings a plain in-repo stack up on a runtime that cannot write into the checkout', async () => {
+      // The mirror of the case above: a stack of bare paths materializes nothing, so it must not be
+      // gated on `writeCheckoutFile`. (A `path` layer is run where the clone already put it.)
+      const repo = makeRepo()
+      const created = await makeService(repo).create(WS, baseInput)
+      const { runtime } = makeRuntime()
+      expect(runtime.writeCheckoutFile).toBeUndefined()
+      const up = await makeService(repo, runtime).ensureUp(WS, created.id)
+      expect(up.status).toBe('running')
+    })
   })
 
   describe('detect', () => {
