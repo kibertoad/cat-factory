@@ -36,17 +36,39 @@ import { sanitizedChildEnv } from './childEnv.js'
 // model, exactly as `nativeVendorForRef` / `isAmbientNativeVendor` gate the container path — so
 // the guard's `inlineHarnessRef` predicate and this provider agree on what can run inline.
 
+/** How the caller wants a CLI run supervised, and how it wants the output delivered. */
+export interface CliExecOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+  /**
+   * Consume stdout LINE BY LINE as it arrives, INSTEAD of buffering the body — the two are
+   * mutually exclusive, and supplying this is what keeps a streaming vendor's output out of the
+   * orchestrator's memory (see {@link spawnCliExec}). The promise then resolves with `''`: the
+   * observer is the only account of the stream, so a caller that supplies one must not also
+   * expect a body.
+   *
+   * Lines arrive without their terminator, in order, and the final line is flushed on close even
+   * when the CLI was killed mid-write — so an observer must tolerate a truncated last line.
+   *
+   * MUST NOT THROW. It runs inside the stream's `data` handler, where a rejection would escape
+   * the promise entirely and leave the run unsettled; the one implementation
+   * ({@link ClaudeStreamFold.line}) is total by construction.
+   */
+  onLine?: (line: string) => void
+}
+
 /**
- * Runs a CLI once: feed the prompt over stdin, collect stdout, reject on non-zero exit, abort,
- * or timeout. The injectable seam ({@link CliExec}) so the vendor runners below are unit-testable
- * with a fake process (mirroring the injectable exec every other local subprocess transport
- * takes) — the default is the real {@link spawnCliExec}.
+ * Runs a CLI once: feed the prompt over stdin, deliver stdout (buffered, or streamed line-by-line
+ * via {@link CliExecOptions.onLine}), reject on non-zero exit, abort, or timeout. The injectable
+ * seam ({@link CliExec}) so the vendor runners below are unit-testable with a fake process
+ * (mirroring the injectable exec every other local subprocess transport takes) — the default is
+ * the real {@link spawnCliExec}.
  */
 export type CliExec = (
   command: string,
   args: string[],
   stdin: string,
-  opts?: { signal?: AbortSignal; timeoutMs?: number },
+  opts?: CliExecOptions,
 ) => Promise<string>
 
 // A hung ambient CLI (network stall, an approval prompt not covered by the bypass flags, a
@@ -57,6 +79,16 @@ const DEFAULT_CLI_TIMEOUT_MS = 300_000
 const KILL_GRACE_MS = 2_000
 /** How much of the CLI's output a failure message carries. Tail-biased: the error is at the end. */
 const EXIT_OUTPUT_TAIL_CHARS = 700
+/**
+ * How much of EACH stream is retained for that message. The bound applies to stdout as well as
+ * stderr, and on the streaming path it is the ONLY stdout the spawn holds: `stream-json` output is
+ * unbounded in a way the one-shot `json` object never was (every assistant envelope, every
+ * `tool_use` input and every tool_result, for as long as the watchdog allows), and this runner
+ * bypasses permissions, so a stalled tool-using run would otherwise park hundreds of MB in the
+ * orchestrator process — precisely on the runs worth diagnosing. The container harness's
+ * `streamCli` retains no body for the same reason.
+ */
+const OUTPUT_TAIL_RETAIN_CHARS = 8_000
 
 /**
  * The message a badly-ended inline CLI fails with.
@@ -115,32 +147,46 @@ export function silenceClause(
   return lastOutputAt === undefined ? `no output at all in ${secs}s` : `silent for ${secs}s`
 }
 
+/** Why a CLI run ended badly. Structured because the message is prose a caller extends. */
+export type CliExecFailureReason = 'timeout' | 'aborted' | 'exit'
+
 /**
- * A CLI run that ended badly, carrying the evidence only the SPAWN SITE holds: everything the child
- * had written before it died, and (already folded into `message`) how quiet it had gone.
+ * A CLI run that ended badly, carrying what only the SPAWN SITE knows: how it died, and (already
+ * folded into `message`) how quiet it had gone.
  *
- * The partial stdout rides along because the spawn site cannot interpret it — only the vendor runner
- * knows its own output format. {@link makeClaudeRunner} catches this to append what Claude Code's
- * event stream says the run had already consumed; the previous `reject(new Error(...))` discarded
- * that buffer outright, which is why a killed run could burn millions of tokens and report nothing.
+ * It deliberately carries NO output. The spawn site could not interpret a partial stream anyway —
+ * only the vendor knows its own format — so the evidence accumulates in the vendor's own observer
+ * ({@link ClaudeStreamFold}, fed through {@link CliExecOptions.onLine}) and is still there to be
+ * read after the rejection. That split is what lets a killed run report what it spent without the
+ * spawn holding the stream: before it, the watchdog and abort paths rejected with the bare fact
+ * that the budget had elapsed, so a run that burned millions of tokens read exactly like one that
+ * never reached the model.
+ *
+ * A caller that ENRICHES the message re-throws a `CliExecFailure` rather than a plain `Error`
+ * ({@link withBurnClause}), so `reason` survives the enrichment on the error itself and not only
+ * down the `cause` chain.
  */
 export class CliExecFailure extends Error {
   constructor(
     message: string,
-    readonly reason: 'timeout' | 'aborted' | 'exit',
-    /** Everything the CLI wrote to stdout before it died — its partial event stream. */
-    readonly stdout: string,
+    readonly reason: CliExecFailureReason,
+    options?: ErrorOptions,
   ) {
-    super(message)
+    super(message, options)
     this.name = 'CliExecFailure'
   }
+}
+
+/** Keep only the trailing {@link OUTPUT_TAIL_RETAIN_CHARS} of a stream. */
+function retainTail(buffer: string): string {
+  return buffer.length > OUTPUT_TAIL_RETAIN_CHARS ? buffer.slice(-OUTPUT_TAIL_RETAIN_CHARS) : buffer
 }
 
 /** The default {@link CliExec}: a real `node:child_process` spawn with a timeout watchdog.
  * Exported for its own tests (the sanitized-env contract); callers use the runner builders. */
 export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
   new Promise((resolve, reject) => {
-    const { signal, timeoutMs = DEFAULT_CLI_TIMEOUT_MS } = opts
+    const { signal, timeoutMs = DEFAULT_CLI_TIMEOUT_MS, onLine } = opts
     if (signal?.aborted) {
       // Deliberately a plain Error, not a {@link CliExecFailure}: nothing ran, so there is no
       // stream to account for and no silence to measure. The message already says as much, and the
@@ -158,8 +204,19 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     })
     child.stdin.on('error', () => {})
     child.stdin.end(stdin)
-    let stdout = ''
+    // Decode on the STREAM, not per chunk: a multi-byte character split across a chunk boundary
+    // decodes to replacement characters when each `Buffer` is stringified alone, and `onLine`
+    // hands these lines to `JSON.parse` — one unlucky boundary would silently drop an event (and
+    // its usage) from the fold. `setEncoding` holds the partial sequence back instead.
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    /** The full stdout — retained ONLY when no `onLine` consumer took the stream instead. */
+    let body = ''
+    /** Bounded tail of stdout, always retained: the failure message needs it either way. */
+    let stdoutTail = ''
     let stderr = ''
+    /** Carry for a chunk boundary that fell mid-line (streaming path only). */
+    let lineBuffer = ''
     // When the child last spoke on EITHER stream, so a failure can say how long it had been quiet.
     // `undefined` until the first byte — the honest distinction between a run that went quiet and
     // one that never produced anything at all.
@@ -183,14 +240,25 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       clearTimeout(watchdog)
       if (killTimer) clearTimeout(killTimer)
     }
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout.on('data', (chunk: string) => {
       lastOutputAt = Date.now()
-      stdout += chunk.toString()
+      stdoutTail = retainTail(stdoutTail + chunk)
+      if (!onLine) {
+        body += chunk
+        return
+      }
+      lineBuffer += chunk
+      let nl = lineBuffer.indexOf('\n')
+      while (nl !== -1) {
+        const line = lineBuffer.slice(0, nl)
+        lineBuffer = lineBuffer.slice(nl + 1)
+        nl = lineBuffer.indexOf('\n')
+        onLine(line)
+      }
     })
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr.on('data', (chunk: string) => {
       lastOutputAt = Date.now()
-      stderr += chunk.toString()
-      if (stderr.length > 8_000) stderr = stderr.slice(-8_000)
+      stderr = retainTail(stderr + chunk)
     })
     child.on('error', (err) => {
       cleanup()
@@ -201,14 +269,22 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     // line in this handler that reaches for it.
     child.on('close', (code, killSignal) => {
       cleanup()
-      // Every bad end goes out as a {@link CliExecFailure} carrying the partial stdout and the
-      // silence clause. The watchdog and abort paths used to reject with the bare fact that the
-      // budget elapsed — no output, no timing, nothing about what the run had already done — which
-      // made a run that burned through a poll budget indistinguishable from one that never reached
-      // the model. The vendor runner adds what the stream says it consumed.
-      const failed = (reason: 'timeout' | 'aborted' | 'exit', base: string): void => {
+      // Flush the trailing line BEFORE settling, so the observer sees the whole stream. It has no
+      // terminator in two cases that matter: a clean run whose terminal `result` event is the last
+      // thing written, and a killed one cut mid-JSON. The observer drops what it can't parse.
+      if (onLine && lineBuffer) {
+        const last = lineBuffer
+        lineBuffer = ''
+        onLine(last)
+      }
+      // Every bad end goes out as a {@link CliExecFailure} naming HOW it died and (below) how quiet
+      // it had gone. The watchdog and abort paths used to reject with the bare fact that the budget
+      // elapsed — no timing, nothing about what the run had already done — which made a run that
+      // burned through a poll budget indistinguishable from one that never reached the model. What
+      // it consumed is added by the vendor runner, off the observer it fed.
+      const failed = (reason: CliExecFailureReason, base: string): void => {
         const silence = silenceClause(startedAt, lastOutputAt, Date.now())
-        reject(new CliExecFailure(silence ? `${base}; ${silence}` : base, reason, stdout))
+        reject(new CliExecFailure(silence ? `${base}; ${silence}` : base, reason))
       }
       if (killedReason === 'timeout') {
         failed('timeout', `${command} timed out after ${timeoutMs}ms`)
@@ -220,11 +296,12 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       }
       if (code !== 0) {
         // BOTH streams, not just stderr — see {@link cliExitMessage} for why, and for what is
-        // scrubbed out of them on the way.
-        failed('exit', cliExitMessage(command, code, killSignal, stderr, stdout))
+        // scrubbed out of them on the way. The stdout TAIL, since that is all either path holds.
+        failed('exit', cliExitMessage(command, code, killSignal, stderr, stdoutTail))
         return
       }
-      resolve(stdout)
+      // `''` on the streaming path, by contract: the observer already has the stream.
+      resolve(body)
     })
   })
 
@@ -262,8 +339,18 @@ function claudeUsage(raw: unknown): InlineCliResult['usage'] {
 const CLAUDE_ERROR_SUBTYPES = new Set(['error_max_turns', 'error_during_execution'])
 
 /**
- * Fold Claude Code's `stream-json` output into the run's terminal `result` event plus the
- * cumulative telemetry of the calls that got as far as reporting usage.
+ * How much non-event output the fold retains for the {@link ClaudeStreamFold.fallbackText}
+ * fallback. Only ever reached by a CLI that does not speak `stream-json` at all, whose whole
+ * output is one short answer.
+ */
+const FALLBACK_BODY_MAX_CHARS = 64 * 1024
+
+/**
+ * Folds Claude Code's `stream-json` output AS IT ARRIVES into the two things the runner needs: the
+ * run's terminal `result` event, and the cumulative telemetry of the calls that got as far as
+ * reporting usage. Fed line-by-line through {@link CliExecOptions.onLine}, so it holds a bounded
+ * summary instead of the stream — and it is readable after a REJECTION, which is what lets a
+ * killed run still say what it spent.
  *
  * Envelopes are keyed by `message.id` BEFORE summing, because the stream emits one envelope per
  * CONTENT BLOCK of a response, each repeating that ONE call's `usage` — a turn that answers with
@@ -272,58 +359,87 @@ const CLAUDE_ERROR_SUBTYPES = new Set(['error_max_turns', 'error_during_executio
  * and the naive sum inflated 1.47M tokens to 5.53M (3.8x). The container harness hit exactly this
  * trap and fixed it the same way — see `claude-call-aggregator.ts` and
  * docs/initiatives/token-burn-instrumentation.md.
+ *
+ * {@link line} is TOTAL: it parses defensively and returns rather than throwing, which is the
+ * contract {@link CliExecOptions.onLine} demands of an observer running inside a stream handler.
  */
-function claudeStreamTelemetry(stdout: string): {
-  calls: number
-  usage: InlineCliResult['usage']
-  result: Record<string, unknown> | undefined
-} {
-  const usageByCall = new Map<string, unknown>()
-  let result: Record<string, unknown> | undefined
-  for (const line of stdout.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
+class ClaudeStreamFold {
+  /** Usage per CALL, keyed by `message.id` — a response's repeated per-block usage counts once. */
+  private readonly usageByCall = new Map<string, NonNullable<InlineCliResult['usage']>>()
+  /** Envelopes with no id can't be folded, so each stands alone instead of colliding. */
+  private anonCalls = 0
+  private terminal: Record<string, unknown> | undefined
+  private nonEventText = ''
+  private sawEvent = false
+
+  line(raw: string): void {
+    if (!raw.trim()) return
     let event: unknown
     try {
-      event = JSON.parse(trimmed)
+      event = JSON.parse(raw)
     } catch {
-      continue // a wrapper/progress line that isn't an event
+      this.retainNonEvent(raw) // a wrapper/progress line, or a last line cut mid-JSON
+      return
     }
-    if (typeof event !== 'object' || event === null) continue
+    if (typeof event !== 'object' || event === null) {
+      this.retainNonEvent(raw)
+      return
+    }
+    // The CLI is speaking `stream-json`, so the event stream IS its body: stop retaining raw text
+    // for good. Retention exists only for a CLI that never emits an event at all.
+    this.sawEvent = true
+    this.nonEventText = ''
     const e = event as Record<string, unknown>
     // The terminal event, the same object `--output-format json` used to emit on its own. LAST one
     // wins: it is the run's authoritative account of itself.
     if (e.type === 'result') {
-      result = e
-      continue
+      this.terminal = e
+      return
     }
     const message = e.message
-    if (typeof message !== 'object' || message === null) continue
+    if (typeof message !== 'object' || message === null) return
     const m = message as Record<string, unknown>
-    if (m.usage === undefined) continue
-    // Keyed by call id, so a response's repeated per-block usage is counted ONCE. An envelope
-    // without an id can't be folded, so it stands alone rather than colliding with its siblings.
-    usageByCall.set(typeof m.id === 'string' ? m.id : `anon:${usageByCall.size}`, m.usage)
+    // Store the PARSED usage, so `calls` counts calls that actually reported a burn rather than
+    // envelopes that merely carried a `usage` key — otherwise a stream of empty ones reads as
+    // "burned 0 tokens across 3 model calls", contradicting the `no model call completed` branch.
+    const usage = claudeUsage(m.usage)
+    if (!usage) return
+    this.usageByCall.set(typeof m.id === 'string' ? m.id : `anon:${this.anonCalls++}`, usage)
   }
-  let inputTokens = 0
-  let cacheReadTokens = 0
-  let cacheWriteTokens = 0
-  let outputTokens = 0
-  for (const raw of usageByCall.values()) {
-    const one = claudeUsage(raw)
-    if (!one) continue
-    inputTokens += one.inputTokens ?? 0
-    cacheReadTokens += one.cacheReadTokens ?? 0
-    cacheWriteTokens += one.cacheWriteTokens ?? 0
-    outputTokens += one.outputTokens ?? 0
+
+  private retainNonEvent(raw: string): void {
+    if (this.sawEvent || this.nonEventText.length >= FALLBACK_BODY_MAX_CHARS) return
+    this.nonEventText = this.nonEventText ? `${this.nonEventText}\n${raw}` : raw
   }
-  return {
-    calls: usageByCall.size,
-    usage:
-      usageByCall.size === 0
-        ? undefined
-        : { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens },
-    result,
+
+  /** The run's terminal `result` event, or `undefined` if it never reached one. */
+  get result(): Record<string, unknown> | undefined {
+    return this.terminal
+  }
+
+  /** What a CLI that emitted no events at all wrote, for the raw-text fallback. */
+  get fallbackText(): string {
+    return this.nonEventText.trim()
+  }
+
+  /** Cumulative burn across the calls that got as far as reporting usage. */
+  telemetry(): { calls: number; usage: InlineCliResult['usage'] } {
+    let inputTokens = 0
+    let cacheReadTokens = 0
+    let cacheWriteTokens = 0
+    let outputTokens = 0
+    for (const one of this.usageByCall.values()) {
+      inputTokens += one.inputTokens ?? 0
+      cacheReadTokens += one.cacheReadTokens ?? 0
+      cacheWriteTokens += one.cacheWriteTokens ?? 0
+      outputTokens += one.outputTokens ?? 0
+    }
+    const calls = this.usageByCall.size
+    return {
+      calls,
+      usage:
+        calls === 0 ? undefined : { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens },
+    }
   }
 }
 
@@ -362,8 +478,14 @@ function claudeBurnClause(calls: number, usage: InlineCliResult['usage']): strin
  * lone result object exists ONLY if the CLI reaches the end, so a run the watchdog killed reported
  * nothing whatsoever about what it had already spent — and nothing else recorded it either, because
  * a failed step writes no `token_usage` row on either transport. The terminal event carries the same
- * fields the single object did, so the success path is unchanged; the difference is that a killed run
- * now still has a stream to account for itself with. Stream volume is bounded by the watchdog.
+ * fields the single object did (`-p --output-format json` prints exactly that event), so the success
+ * path is unchanged; the difference is that a killed run now still has a stream to account for
+ * itself with.
+ *
+ * The stream is consumed through {@link ClaudeStreamFold} rather than buffered — see
+ * {@link OUTPUT_TAIL_RETAIN_CHARS} for why holding it would be a memory fault on exactly the runs
+ * this exists to diagnose. The fold is declared OUTSIDE the try so it is still readable when the
+ * run is killed, which is the whole mechanism.
  */
 function makeClaudeRunner(exec: CliExec): InlineCliRunner {
   return async (req: InlineCliRequest): Promise<InlineCliResult> => {
@@ -378,18 +500,21 @@ function makeClaudeRunner(exec: CliExec): InlineCliRunner {
     ]
     if (req.system.trim()) args.push('--append-system-prompt', req.system)
     args.push('--model', req.model)
-    let stdout: string
+    const fold = new ClaudeStreamFold()
     try {
-      stdout = await exec('claude', args, req.prompt, req.signal ? { signal: req.signal } : {})
+      await exec('claude', args, req.prompt, {
+        onLine: (line) => fold.line(line),
+        ...(req.signal ? { signal: req.signal } : {}),
+      })
     } catch (error) {
-      if (error instanceof CliExecFailure) throw claudeFailureWithBurn(error)
+      if (error instanceof CliExecFailure) throw withBurnClause(error, fold)
       throw error
     }
-    const { result } = claudeStreamTelemetry(stdout)
+    const result = fold.result
     if (!result) {
       // No terminal event (an older CLI, or a wrapper that swallowed the stream) — fall back to the
       // raw text, as the single-object path did when its JSON wouldn't parse.
-      return { text: stdout.trim(), finishReason: 'stop' }
+      return { text: fold.fallbackText, finishReason: 'stop' }
     }
     const subtype = typeof result.subtype === 'string' ? result.subtype : undefined
     if (result.is_error === true || (subtype && CLAUDE_ERROR_SUBTYPES.has(subtype))) {
@@ -408,12 +533,18 @@ function makeClaudeRunner(exec: CliExec): InlineCliRunner {
 
 /**
  * Re-throw a badly-ended `claude` run with what its PARTIAL stream says it had already consumed.
- * The cause chain is kept so a caller that wants the reason (`timeout` / `aborted` / `exit`) still
- * has it.
+ *
+ * Stays a {@link CliExecFailure} so `reason` is readable on the error a caller actually catches,
+ * not only one link down the chain; the un-enriched original rides as `cause` so the raw kill
+ * message survives too.
  */
-function claudeFailureWithBurn(failure: CliExecFailure): Error {
-  const { calls, usage } = claudeStreamTelemetry(failure.stdout)
-  return new Error(`${failure.message}; ${claudeBurnClause(calls, usage)}`, { cause: failure })
+function withBurnClause(failure: CliExecFailure, fold: ClaudeStreamFold): CliExecFailure {
+  const { calls, usage } = fold.telemetry()
+  return new CliExecFailure(
+    `${failure.message}; ${claudeBurnClause(calls, usage)}`,
+    failure.reason,
+    { cause: failure },
+  )
 }
 
 /**
