@@ -88,3 +88,21 @@ export const CONFLICT_REASONS = [
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
+
+/**
+ * Machine-readable reasons a `review` task's target pull request is refused at creation
+ * (`error.details.reason` on the 422). Same contract as {@link CONFLICT_REASONS} — the code is
+ * the source of truth and the SPA keys an exhaustive `Record<ReviewTargetReason, …>` of message
+ * keys off it, so adding a reason without wording trips the frontend typecheck.
+ *
+ *  - `review_pr_not_found`      — the provider positively reports no such pull request on the
+ *                                 service's linked repository (its own 404, never an outage).
+ *  - `review_pr_repo_mismatch`  — the pasted link belongs to a DIFFERENT repository than the one
+ *                                 this service reviews. The reviewer fetches the PR by number
+ *                                 from the linked repo (ADR 0023), so accepting it would review
+ *                                 whatever PR happens to carry that number there. `details`
+ *                                 carries `expected` (`owner/repo`).
+ */
+export const REVIEW_TARGET_REASONS = ['review_pr_not_found', 'review_pr_repo_mismatch'] as const
+
+export type ReviewTargetReason = (typeof REVIEW_TARGET_REASONS)[number]

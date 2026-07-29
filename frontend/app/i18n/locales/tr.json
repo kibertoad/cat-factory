@@ -299,7 +299,9 @@
         "focus": "İnceleme odağı",
         "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan",
         "derivedTitle": "{ref} incele",
-        "derivedTitleFallback": "Pull request'i incele"
+        "derivedTitleFallback": "Pull request'i incele",
+        "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
+        "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
       }
     },
     "recurring": {
@@ -944,6 +946,12 @@
       "risk": "Risk",
       "impact": "Etki"
     },
+    "reviewTarget": {
+      "title": "İncelenen pull request",
+      "hint": "Bu görevin incelediği mevcut pull request.",
+      "prNumber": "PR #{number}",
+      "focus": "Odak: {focus}"
+    },
     "execution": {
       "title": "Yürütme",
       "hint": "Pipeline'ın canlı yürütmesi: her ajan adımı, ilerlemesi ve ortaya çıkan pull request.",
@@ -1284,6 +1292,7 @@
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",
       "approveWithCorrections": "Düzeltmelerle onayla",
+      "renderedOutputNote": "Bu çıktı, adımın ürettiği yapıtın bir gösterimidir; burada düzenlenemez. Gözden geçirilmesi için değişiklik isteyin.",
       "reviewAndApprove": "İncele ve onayla",
       "editHint": "Soldaki sonuçları düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir.",
       "reviewHint": "Yorum yapmak için çıktıdaki herhangi bir bloğa tıklayın ya da aşağıya genel geri bildirim bırakın.",
@@ -5365,9 +5374,11 @@
       "title": "Bu plan sizi bekliyor",
       "body": "Planlayıcı aşağıdaki aşamaları ve maddeleri hazırladı. Planı kaydedip işe başlamak için onaylayın ya da neyin değişmesi gerektiğini yazarak planı geri gönderin.",
       "approve": "Planı onayla",
-      "requestChanges": "Değişiklik iste",
       "feedbackPlaceholder": "Planlayıcı neyi değiştirmeli? Kapsam, aşama sırası, eksik iş, başka yere ait bir madde…",
-      "sendBack": "Planlayıcıya geri gönder"
+      "sendBack": "Planlayıcıya geri gönder",
+      "noDocument": "Bu plan, platform incelemeye yönelik planlar üretmeye başlamadan önce hazırlandı; gezinilecek bir belge yok — plan aşağıdaki bölümlerdir.",
+      "needsFeedback": "Önce bir yorum veya geri bildirim ekleyin — planlayıcı yeniden planlamak için bunu kullanır.",
+      "commentHint": "Yorum yapmak için planın herhangi bir bölümüne tıklayın."
     },
     "planning": {
       "title": "Girisimi planla",

@@ -37,6 +37,17 @@ export function reviewableArtifactOutput(result: AgentRunResult): string | undef
     const service = safeParseBlueprintService(result.blueprintService)
     return service ? renderBlueprintForReview(service) : undefined
   }
+  // NOT the initiative plan, even though its human gate has exactly the failure this seam
+  // fixes. This seam renders the agent's RAW result, which is sound only while the committed
+  // artifact IS that result — true for the two above (the harness committed those files to the
+  // repo; the engine merely validates them). The plan is the exception: what gets committed is
+  // derived by the ENGINE at ingest, where a preset's phase template reorders phases and forces
+  // checkpoints and its `seedPlan` hook adds/drops items — so rendering the raw draft would
+  // show the reviewer a document their approval does not govern. Its rendering is therefore
+  // authored by the `initiative-planner` step resolver, off the ingested entity, and published
+  // through `StepResolution.outputIsRendered`. Read that resolver before adding an artifact
+  // here: the test is whether the ENGINE reshapes it on the way to storage.
+  //
   // `testReport` / `mergeAssessment` carry their own dedicated structured surfaces
   // (the tester result view; the merger is the final step) and no prose companion
   // grades them today. If one ever gains a companion, render it here — the seam, not

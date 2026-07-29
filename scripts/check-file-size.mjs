@@ -96,7 +96,10 @@ const LEGACY_ALLOWANCES = new Map([
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.
-  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1500],
+  // Ratcheted 1500 → 1455 by extracting `github/reviewThreads.ts` (the GraphQL review-thread
+  // reads/writes, the sibling of `reviewPosting.ts`'s REST half) and folding the single-PR
+  // accessors onto one `readPullRequest` when `getPullRequest` joined them.
+  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1455],
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */

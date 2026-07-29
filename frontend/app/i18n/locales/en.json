@@ -326,7 +326,9 @@
         "focus": "Review focus",
         "focusPlaceholder": "e.g. focus on the auth changes and error handling",
         "derivedTitle": "Review {ref}",
-        "derivedTitleFallback": "Review pull request"
+        "derivedTitleFallback": "Review pull request",
+        "prNotFound": "Pull request #{number} was not found in this service's repository. Check the number, or link the service to the repository that pull request is on.",
+        "prRepoMismatch": "That pull request is on a different repository. This service reviews {repo}, so create the review task under the service linked to the pull request's repository."
       }
     },
     "recurring": {
@@ -1007,6 +1009,12 @@
       "risk": "Risk",
       "impact": "Impact"
     },
+    "reviewTarget": {
+      "title": "Under review",
+      "hint": "The existing pull request this task reviews.",
+      "prNumber": "PR #{number}",
+      "focus": "Focus: {focus}"
+    },
     "execution": {
       "title": "Execution",
       "hint": "The live pipeline run: each agent step, its progress, and the resulting pull request.",
@@ -1348,6 +1356,7 @@
       "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
       "noProseOutput": "This agent produced no prose output.",
       "approveWithCorrections": "Approve with corrections",
+      "renderedOutputNote": "This output is a rendering of what the step produced, so it cannot be edited here. Request changes to have it revised.",
       "reviewAndApprove": "Review & approve",
       "editHint": "Edit the conclusions on the left; your edits are saved when you approve.",
       "reviewHint": "Click any block in the output to comment on it, or leave overall feedback below.",
@@ -5535,9 +5544,11 @@
       "title": "This plan is waiting for you",
       "body": "The planner drafted the phases and items below. Approve them to commit the plan and start the work, or send the plan back with what to change.",
       "approve": "Approve plan",
-      "requestChanges": "Request changes",
       "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
-      "sendBack": "Send back to the planner"
+      "sendBack": "Send back to the planner",
+      "noDocument": "This plan was drafted before the platform rendered plans for review, so there is no document to navigate — the sections below are the plan.",
+      "needsFeedback": "Add a comment or some feedback first — the planner re-plans from it.",
+      "commentHint": "Click any part of the plan to comment on it."
     },
     "planning": {
       "title": "Plan the initiative",

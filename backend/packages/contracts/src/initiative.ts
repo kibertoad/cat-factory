@@ -631,9 +631,201 @@ export function decodeInitiativeRow(row: InitiativeRowLike): Initiative | null {
   )
 }
 
-/** Strictly parse a planner plan draft. Throws on shape violations. */
+/**
+ * Strictly parse a planner plan draft. Throws on shape violations.
+ *
+ * There is deliberately NO non-throwing variant: the only consumer is the ingest, whose
+ * whole job is to reject a malformed plan loudly. The review rendering does not parse the
+ * planner's raw output at all — it renders the INGESTED entity (see
+ * {@link renderInitiativePlanForReview}), so a second, more lenient reading of the same
+ * bytes can never disagree with what was committed.
+ */
 export function parseInitiativePlanDraft(value: unknown): InitiativePlanDraft {
   return v.parse(initiativePlanDraftSchema, value)
+}
+
+/**
+ * What {@link renderInitiativePlanForReview} reads — the plan-shaped intersection of the
+ * planner's {@link InitiativePlanDraft} and the ingested {@link Initiative}, so one renderer
+ * serves both without either type having to know about it.
+ *
+ * It exists because the two are NOT interchangeable in the one place that matters: the human
+ * gate reviews the plan that will EXECUTE, which is the entity — the draft has not yet been
+ * through the preset's phase-template reorder, its `seedPlan` decoration, or the carry-over of
+ * items a previous plan already materialised. The renderer is therefore written against the
+ * shape both satisfy, and its callers choose the truthful one (see the `initiative-planner`
+ * step resolver). Every field is read-only and optional-tolerant: the entity's `policy` is
+ * nullable and its items carry runtime `status`, neither of which a draft has.
+ */
+export interface InitiativePlanView {
+  goal?: string
+  constraints?: readonly string[]
+  nonGoals?: readonly string[]
+  analysisSummary?: string
+  phases?: readonly {
+    id?: string
+    title: string
+    goal?: string
+    maxConcurrent?: number
+    checkpoint?: boolean
+  }[]
+  items?: readonly {
+    id?: string
+    phaseId: string
+    title: string
+    description?: string
+    dependsOn?: readonly string[]
+    estimate?: InitiativeEstimate
+    pipelineId?: string
+    status?: InitiativeItemStatus
+  }[]
+  policy?: InitiativeExecutionPolicy | null
+  decisions?: readonly { title: string; detail?: string }[]
+  caveats?: readonly string[]
+}
+
+/** One estimate axis rendered as a percentage, so the three read comparably. */
+function estimatePct(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+/** The axes a pipeline rule matches on, as prose ('never' when it declares none). */
+function renderRuleAxes(rule: InitiativePipelineRule): string {
+  const axes = [
+    rule.minComplexity !== undefined ? `complexity ≥ ${estimatePct(rule.minComplexity)}` : null,
+    rule.minRisk !== undefined ? `risk ≥ ${estimatePct(rule.minRisk)}` : null,
+    rule.minImpact !== undefined ? `impact ≥ ${estimatePct(rule.minImpact)}` : null,
+  ].filter((axis): axis is string => axis !== null)
+  return axes.length ? axes.join(' or ') : 'never matches (no thresholds declared)'
+}
+
+/** One item's body, under a heading the outline turns into its own navigable section. */
+function renderPlanItem(item: NonNullable<InitiativePlanView['items']>[number]): string[] {
+  const lines: string[] = ['', `### ${item.title}${item.id ? ` (${item.id})` : ''}`]
+  if (item.description) lines.push('', item.description)
+  // Only a NON-pending status is worth a line: it means the item is already underway or
+  // settled, which is how a re-plan's carried-over items differ from the ones being proposed.
+  if (item.status && item.status !== 'pending') lines.push('', `Status: \`${item.status}\`.`)
+  const estimate = item.estimate
+  if (estimate) {
+    lines.push(
+      '',
+      `- Complexity: ${estimatePct(estimate.complexity)}`,
+      `- Risk: ${estimatePct(estimate.risk)}`,
+      `- Impact: ${estimatePct(estimate.impact)}`,
+    )
+    if (estimate.rationale) lines.push(`- Rationale: ${estimate.rationale}`)
+  }
+  if (item.dependsOn?.length) {
+    lines.push('', `Depends on: ${item.dependsOn.map((id) => `\`${id}\``).join(', ')}`)
+  }
+  if (item.pipelineId) lines.push('', `Pipeline: \`${item.pipelineId}\``)
+  return lines
+}
+
+/**
+ * Render an {@link InitiativePlanView} as readable markdown for HUMAN review — the
+ * planning counterpart of {@link renderSpecForReview} / {@link renderBlueprintForReview},
+ * and the document the `initiative-planner`'s human gate parks on.
+ *
+ * The planner is a container agent that emits the plan as JSON; its own `result.output` is
+ * the raw Pi transcript summary ("Initiative plan drafted."). Parking the gate on THAT gave
+ * the reviewer a one-line proposal: nothing to navigate, nothing to quote a comment against,
+ * and a "request changes" re-run that handed the planner back a sentence instead of the plan
+ * it had just written. Rendering the plan itself is what makes the generic review surface
+ * (ToC + per-block comments + approve / request changes / reject) work for it, exactly as it
+ * already does for the architect's prose.
+ *
+ * HEADINGS ARE LOAD-BEARING, not decoration: the reader's outline parser splits the document
+ * at each heading into the collapsible sections its table of contents navigates, so every
+ * part a reviewer might jump to (each phase, each item, the policy) gets its own heading
+ * rather than being folded into a table. Deterministic and dependency-free.
+ *
+ * NOTHING IS SILENTLY DROPPED. An item is placed by matching its `phaseId` against the
+ * phases, and a plan can legitimately reach here with items that match none: a phase's `id`
+ * is optional on the draft, and the reference validation only rejects a dangling `phaseId`
+ * once at least one phase declares an id. Those items are still ingested and still execute,
+ * so they get their own section rather than vanishing — approving a plan whose items you were
+ * never shown is exactly the failure this document exists to prevent.
+ */
+export function renderInitiativePlanForReview(plan: InitiativePlanView): string {
+  const lines: string[] = ['# Initiative plan']
+  if (plan.goal) lines.push('', '## Goal', '', plan.goal)
+  if (plan.constraints?.length) {
+    lines.push('', '## Constraints', '', ...plan.constraints.map((c) => `- ${c}`))
+  }
+  if (plan.nonGoals?.length) {
+    lines.push('', '## Non-goals', '', ...plan.nonGoals.map((g) => `- ${g}`))
+  }
+  if (plan.analysisSummary) lines.push('', '## Codebase analysis', '', plan.analysisSummary)
+
+  const items = plan.items ?? []
+  const phases = plan.phases ?? []
+  const placed = new Set<(typeof items)[number]>()
+  phases.forEach((phase, index) => {
+    lines.push('', `## Phase ${index + 1}: ${phase.title}`)
+    if (phase.goal) lines.push('', phase.goal)
+    if (phase.checkpoint) {
+      lines.push(
+        '',
+        '> Checkpoint — the initiative pauses for human review once this phase settles.',
+      )
+    }
+    if (phase.maxConcurrent !== undefined) {
+      lines.push('', `Concurrency for this phase: ${phase.maxConcurrent}.`)
+    }
+    // An id-less phase matches nothing (an item's `phaseId` is always a non-empty string),
+    // so its items surface under "Unplaced items" below rather than being lost.
+    const phaseItems = phase.id ? items.filter((item) => item.phaseId === phase.id) : []
+    if (phaseItems.length === 0) {
+      lines.push('', '_No items in this phase._')
+      return
+    }
+    for (const item of phaseItems) {
+      placed.add(item)
+      lines.push(...renderPlanItem(item))
+    }
+  })
+
+  const unplaced = items.filter((item) => !placed.has(item))
+  if (unplaced.length > 0) {
+    lines.push(
+      '',
+      '## Unplaced items',
+      '',
+      `${unplaced.length === 1 ? 'This item names' : 'These items name'} a phase the plan does not declare, so ${unplaced.length === 1 ? 'it is' : 'they are'} listed here rather than under a phase. The initiative still carries ${unplaced.length === 1 ? 'it' : 'them'}.`,
+    )
+    for (const item of unplaced) {
+      lines.push(...renderPlanItem(item), '', `Declared phase: \`${item.phaseId}\`.`)
+    }
+  }
+
+  const policy = plan.policy
+  lines.push('', '## Execution policy', '')
+  if (policy) {
+    lines.push(
+      `- Up to ${policy.maxConcurrent} item${policy.maxConcurrent === 1 ? '' : 's'} run at once.`,
+      `- Default pipeline: \`${policy.defaultPipelineId}\`.`,
+    )
+    for (const rule of policy.rules ?? []) {
+      lines.push(`- \`${rule.pipelineId}\` when ${renderRuleAxes(rule)}.`)
+    }
+  } else {
+    // Only reachable for an entity whose policy has not been planned yet; say so rather than
+    // omitting the section, which would read as "there is nothing to configure here".
+    lines.push('_No execution policy has been agreed yet._')
+  }
+
+  if (plan.decisions?.length) {
+    lines.push('', '## Decisions', '')
+    for (const decision of plan.decisions) {
+      lines.push(`- **${decision.title}**${decision.detail ? ` — ${decision.detail}` : ''}`)
+    }
+  }
+  if (plan.caveats?.length) {
+    lines.push('', '## Caveats', '', ...plan.caveats.map((c) => `- ${c}`))
+  }
+  return lines.join('\n')
 }
 
 /** Item statuses that count as settled (nothing left for the loop to drive). */

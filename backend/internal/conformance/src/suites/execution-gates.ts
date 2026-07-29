@@ -442,6 +442,107 @@ export function defineExecutionGatesConformance(harness: ConformanceHarness): vo
       expect(step.approval?.status).toBe('pending')
       expect(step.approval?.proposal).toBe(step.output)
       expect(exec.steps[1]!.state).toBe('pending')
+      // A prose producer's output IS its work product, so it stays editable — and the flag is
+      // left OFF the persisted step rather than stored as `false`, which every ordinary step
+      // would otherwise carry.
+      expect(step.outputIsRendered).toBeUndefined()
+    })
+
+    // A gate raised on a step whose output is a RENDERING of an artifact it already produced
+    // (the initiative plan, the spec doc, the blueprint tree — `reviewableArtifactOutput`).
+    // Two things must hold, and both used to fail silently: the gate must park on the ARTIFACT
+    // rather than the agent's raw transcript summary (a one-line proposal is nothing to review,
+    // and it is what a "request changes" re-run quotes back to the producer), and an edited
+    // proposal must be REFUSED rather than accepted-and-dropped — the ingested artifact is what
+    // gets committed, so a correction typed over the rendering reaches nothing. Driven through
+    // the spec-writer because it is the artifact producer both runtimes already exercise; the
+    // flag it asserts is the same one the `initiative-planner`'s human gate rides.
+    it('parks a rendered-artifact gate on the artifact and refuses an edited proposal', async () => {
+      // Ids are spelled out because the fake hands this object to the engine VERBATIM, where the
+      // real container path would have run it through the lenient `coerceSpecDoc` (which mints
+      // them). The rendering is taken at the STRICT parse, so an id-less fixture renders nothing
+      // and the gate silently falls back to the transcript summary — the very thing under test.
+      const app = harness.makeApp({
+        confidence: 1,
+        spec: {
+          service: 'Widgets',
+          summary: 'A widget service.',
+          modules: [
+            {
+              name: 'Auth',
+              summary: 'Authentication',
+              groups: [
+                {
+                  name: 'Login',
+                  summary: 'Signing in',
+                  requirements: [
+                    {
+                      id: 'req-password-login',
+                      title: 'Password login',
+                      statement: 'The system SHALL authenticate by password.',
+                      kind: 'functional',
+                      priority: 'must',
+                      acceptance: [
+                        {
+                          id: 'ac-1',
+                          given: 'a user',
+                          when: 'they sign in',
+                          outcome: 'a session opens',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Gated artifact producer',
+        agentKinds: ['spec-writer', 'coder'],
+        gates: [true, false],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: gated.body.id,
+      })
+
+      const blocked = await app.drive(wsId)
+      const exec = blocked.find((e) => e.blockId === 'task_login')!
+      const step = exec.steps[0]!
+      expect(step.approval?.status).toBe('pending')
+      expect(step.outputIsRendered).toBe(true)
+      // The proposal is the rendered document, not the fake's transcript-summary output.
+      expect(step.approval?.proposal).toContain('# Specification: Widgets')
+      expect(step.approval?.proposal).toContain('The system SHALL authenticate by password.')
+
+      const approvalId = step.approval!.id
+      const edited = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/approve`,
+        { proposal: '# Specification: Widgets\n\nEdited by hand.' },
+      )
+      expect(edited.status).toBe(422)
+
+      // The refusal is total, not partial: the gate is untouched and the run still parked, so
+      // the reviewer can still approve as-is or request changes. Read back from the runtime's
+      // real store so a store that persisted the edit before the throw would be caught.
+      const stillParked = (await app.executionRepository().get(wsId, exec.id))!
+      expect(stillParked.status).toBe('blocked')
+      expect(stillParked.steps[0]!.approval?.status).toBe('pending')
+      expect(stillParked.steps[0]!.output).toContain('# Specification: Widgets')
+      expect(stillParked.steps[0]!.output).not.toContain('Edited by hand.')
+
+      // An UNEDITED approve on the same gate still advances — the refusal is scoped to the edit.
+      const approved = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/approve`,
+        {},
+      )
+      expect(approved.status).toBe(200)
     })
 
     // The per-run gate-override seam (the initiative-preset gate-override, slice 2): a run

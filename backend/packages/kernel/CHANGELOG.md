@@ -1,5 +1,211 @@
 # @cat-factory/kernel
 
+## 0.188.0
+
+### Minor Changes
+
+- 85efc27: Review the initiative plan as a document, not a wall of sections.
+
+  #1498 gave the planner's parked gate a board affordance and an approve / request-changes rail in
+  the tracker window. This is the other half: what that rail actually reviews.
+
+  The planner emits its plan as JSON and returns a transcript summary ("Initiative plan drafted.")
+  as `step.output`, so the gate parked on a **one-line proposal**. Three consequences, none of them
+  visible from the rail itself: there was no document to read (the plan was only ever the tracker's
+  structured sections beneath the rail), no way to navigate a long plan, no way to say WHICH part
+  needed changing — and, worst, "request changes" handed the planner back that sentence as its
+  previous proposal, so the re-plan was near-blind.
+
+  The gate now parks on a markdown rendering of the plan (`renderInitiativePlanForReview`). Its
+  headings are load-bearing rather than decorative: the reader's outline parser splits the document
+  at each one, which is what makes the rest possible. The tracker's rail renders that document with
+  an outline to navigate by and GitHub-style click-to-comment on any block, and sends the anchored
+  comments with the feedback — so a re-plan is quoted the planner's own text back at it.
+
+  **What gets rendered is the INGESTED plan, and that is the part worth a reviewer's attention.**
+  The obvious home for this was the existing `reviewableArtifactOutput` seam, beside the spec doc
+  and the blueprint tree. It is the wrong one: that seam renders the agent's RAW result, which is
+  sound only while the committed artifact IS that result — true for those two (the harness commits
+  the files; the engine only validates them), false for the plan, which the engine derives at
+  ingest. A preset's phase template reorders phases and forces checkpoints, its `seedPlan` hook adds
+  and drops items (the tech-migration preset caps coverage items and seeds a confidence case), and a
+  re-plan carries over items a previous plan already materialised. Rendering the raw draft would
+  show the reviewer a document their approval does not govern — and nothing would fail; they would
+  simply approve work they were never shown. So the `initiative-planner`'s post-completion resolver
+  authors the rendering off the entity it just committed, and publishes it through the new
+  `StepResolution.outputIsRendered`. The renderer takes the shape the draft and the entity share,
+  and drops nothing it is handed: an item naming a phase the plan never declared gets its own
+  section rather than disappearing between the phases.
+
+  Both review tools are the SAME ones the step reader gives the architect's prose, shared rather
+  than re-implemented: `useStepProse` for the outline, the new `useProseComments` for the anchoring
+  (the per-block half of `useStepApproval`, which now builds on it), and one global `.reader-prose`
+  stylesheet. The stylesheet absorbs the near-identical scoped copies the clarity, requirements and
+  brainstorm windows each carried, so all five reader surfaces now share one presentation — those
+  three pick up small cosmetic changes (the step reader's spacing and its code/blockquote styling)
+  in exchange for no longer being able to drift.
+
+  `useStepProse` also gained an explicit `leadAnchorId`. Its scroll-spy walks anchors in document
+  order and stops at the first one it cannot measure, so a consumer that renders the document alone
+  — this rail — had its active-section highlight silently pinned to the step reader's details card.
+
+  **Behaviour change worth knowing about at review time:** "approve with corrections" is now REFUSED
+  for any step whose output is a rendering of an artifact it already produced — the new
+  `PipelineStep.outputIsRendered`, which today covers the initiative plan, the spec doc and the
+  blueprint tree. `approveStep` answers 422 with `details.reason: 'proposal_not_editable'` and the
+  SPA replaces the button with a note. This looks like a removal but is the opposite: those edits
+  were already being silently discarded, because the committed artifact is the ingested one and never
+  the text typed over its rendering. It only bites a deployment that gates a `spec-writer` or
+  `blueprints` step, where the affordance was accepting corrections and dropping them. Requesting
+  changes is the route for a correction. The `task-estimator`'s summary deliberately stays editable
+  and the resolver now says why: the flag marks an output an edit cannot REACH, and that summary is
+  itself what downstream steps read via `priorOutputs`.
+
+  An alternative considered and rejected: routing the planner step to the generic step reader (by
+  dropping its `resultView`), which would have delivered the same tools with no new UI at all. It was
+  withdrawn once #1498 landed — that PR deliberately makes the tracker the window the park routes to,
+  and two review surfaces for one gate is worse than a slightly larger frontend diff.
+
+  One guard is new and worth keeping in mind when touching enum→i18n lookup tables: a key held in a
+  `Record<SomeEnum, string>` is invisible to BOTH i18n drift guards (typed message keys and
+  `i18n:check` only see a literal `t('a.b.c')`, and the exhaustive `Record` only proves every enum
+  member has an entry, never that the entry still names a live key). `test/i18nKeys` resolves such
+  values against the base catalog, and the initiative label tables now assert against it.
+
+- 9794c19: Validate a review task's target pull request when the task is created, and surface that pull
+  request in the inspector.
+
+  A `review` task carries a reference to an EXISTING pull request, and until now nothing checked it.
+  A typo'd number was accepted silently and only surfaced much later as a run that dispatched a
+  container, cloned the repo and found nothing to review. Creation now probes the PR through the
+  same run-repo seam the review itself uses (`RepoFiles.getPullRequest`, new and optional on the
+  `GitHubClient` / `VcsClient` ports, implemented for GitHub and GitLab), so the reference is checked
+  against precisely the repository the reviewer will read.
+
+  Only a POSITIVE "no such pull request" refuses — the provider's own 404, which the new port method
+  reports as `null` while every other failure throws. An outage, a revoked token or a rate limit
+  answers "unknown", not "absent", so those are logged and the task is created: making task creation
+  depend on the provider being up would be a worse failure than the one this prevents. Same for
+  every unwired case (no VCS connection, a provider that can't read a PR, a reference with no
+  resolvable number) — all pass through unchanged.
+
+  One case that looks like validation but is really a correctness fix: a pasted link belonging to a
+  DIFFERENT repository is now refused (`review_pr_repo_mismatch`). The reviewer fetches the PR by
+  NUMBER from the service's linked repo (ADR 0023 — a cross-repo `prUrl` is not resolved to another
+  repo), so such a link previously reviewed whatever PR happened to carry that number on the linked
+  repo, with nothing anywhere saying so.
+
+  A confirmed reference is then rewritten to the provider's own URL for that PR, which is what makes
+  the second half possible: the block inspector leads a review task's body with an "Under review"
+  panel linking the reviewed pull request. That is the task's SUBJECT and it had no affordance at
+  all before — only the Execution panel's link to the PR a run PRODUCED, which a review task never
+  has. A task created while no VCS was connected keeps just the number, and the panel renders it as
+  text rather than pretending to be a link.
+
+### Patch Changes
+
+- Updated dependencies [85efc27]
+- Updated dependencies [9794c19]
+  - @cat-factory/contracts@0.193.0
+
+## 0.187.0
+
+### Minor Changes
+
+- 57e1195: Install a service's dependencies into the checkout before the agent's first turn.
+
+  Agents opened a fresh shallow clone and saw manifests, not dependencies — they could read that a
+  library was depended upon but not what it exposed, so they guessed at APIs, re-derived type shapes
+  sitting on disk, or declined work they could have done. A service frame can now declare one
+  install command (autodetected alongside its validation checks) that the harness runs against the
+  checkout before the agent starts.
+
+  It shares the `validation_configs` row with the pre-PR checks so resolution costs no extra
+  round trip, but the two are threaded onto the job body under deliberately different rules: the
+  checks ride only a PR-opening coding dispatch, the install rides every dispatch that gets a
+  checkout — reviewers and architects most of all. Either may be declared without the other.
+
+  Every harness mode with a checkout runs it (coding, in-place fixing, multi-repo coding, both
+  explore paths, conflict resolution), through one shared seam that also keeps whatever the install
+  materialises out of the agent's commits — a repo whose `.gitignore` misses its dependency
+  directory would otherwise open a pull request containing the whole tree.
+
+  The install is never a gate: a failure becomes a note in the agent's prompt and the run continues.
+  The note rides every agent pass, so a validation or reproduction repair round does not spend
+  itself reinstalling a tree that is already there.
+
+  Bumps the runner image (harness `src/**`) and adds a nullable `dependency_install` column to
+  `validation_configs` on both runtimes.
+
+- 5b19dab: Make a silently-failing agent run say what happened.
+
+  An agent step failed in local mode with `claude exited with code 1: ` — the exit code, a colon,
+  and nothing after it — plus `Phase timings: starting=0s, clone=1s, agent=564s. Failed in agent
+phase; no tool had completed yet`. Every piece of evidence that would have identified it was
+  either discarded or unreachable: no watchdog had fired (so it was not classified as a hang), the
+  cold-start diagnostic recorded at the 120s mark had no consumer outside the container log, the
+  CLI's session transcript died with its per-run config home, and the container was removed the
+  moment the job settled. The retry succeeded, which is the worst outcome for diagnosis — nothing
+  left to inspect and no reason to believe it won't recur.
+
+  Three things now carry the evidence the harness already had:
+
+  **A bad CLI exit carries the CLI's own report.** Both agent CLIs report a terminal failure on
+  STDOUT inside their event stream — Claude Code's `result` event, Codex's last agent message — and
+  leave stderr EMPTY. `streamCli` rejected with the stderr tail alone, so an upstream refusal (quota,
+  rate limit, a provider outage the CLI retried out on) was rendered as an exit code and a dangling
+  colon, while the explanation sat in a local variable only the success path read. The rejection now
+  folds that report in, says `(no stderr output)` rather than trailing off, and names the SIGNAL when
+  one killed the process instead of rendering "code null" — which is the first fork in the road
+  between "the CLI gave up" and "something killed the container".
+
+  **The failure detail says how quiet the run had gone.** Exit status cannot distinguish a crash
+  from a stall: both are non-zero with an empty stderr. Phase timing plus silence can. The
+  breadcrumb now adds `silent for 564s`, or `no activity at all in 564s` when the run never
+  produced a byte — suppressed under 30s, and on an inactivity kill whose own message already states
+  the window it waited out, so it appears only where it changes the diagnosis. It is worded as
+  ACTIVITY rather than agent output because that is what the channel carries: the activity-silent
+  phases (dependency install, pre-PR validation, the reproduction proof, the frontend stand-up) feed
+  it synthetic keep-alive beats to hold the inactivity watchdog off, so a run that beat every 30s
+  through its install and then died has been heard from even though the agent never spoke.
+
+  **The cold-start diagnostic reaches the run.** ADR 0026 D4 asks for it to be surfaced on the step;
+  it was recorded on the job view and logged in the container, where a developer reading a failed run
+  in the SPA never sees it. It is now folded into the failure `detail`, the one failure field the
+  backend already carries onto the step — no new field on every transport hop. Surfacing it on a
+  still-RUNNING view (the early warning) stays open as observability-logging-gaps slice 5.5.
+
+  The local runtime's native inline runner had the same defect in miniature: it runs
+  `claude -p --output-format json`, whose error JSON also lands on stdout, and its non-zero-exit
+  branch kept only stderr — so the in-band `is_error` check its caller performs was unreachable
+  exactly when the CLI exited non-zero. It now reports whichever stream spoke, scrubbed through
+  `redactSecrets` at the emit site: that message carries raw command output, and on this path stdout
+  holds the model's own text, which is strictly more exposed than the stderr the sibling in the
+  container harness was already redacting.
+
+  **`describeProcessExit` is a new kernel export**, the shared sentence for how a subprocess ended.
+  The `null`-code-means-signal distinction is operational knowledge rather than formatting, and it
+  was about to exist in two hand-written copies; a third and fourth transport (pooled runner, K8s
+  pod, native host process) report process exits too and should inherit it rather than rediscover
+  it. The executor-harness keeps a pinned copy because the container image can depend on no
+  workspace package — the same arrangement `host-markdown` has, held equal by a conformity test.
+
+  Behaviour change to be aware of: the non-zero-exit message shape is different (`(no stderr
+output)`, a `killed by SIGKILL` variant, an appended report). Nothing classifies on it — the
+  backend reads the structured `failureCause`, and the string-fallback classifiers were deleted in
+  error-message-coverage I5 — but a human-facing string that appeared in past runs has changed.
+
+  Deliberately NOT changed: the failure still classifies as the generic `agent` cause. `llm-upstream`
+  exists and is documented as exactly this case, but the only signal available for it is the CLI's
+  `result` prose plus a `subtype` whose vocabulary is not contractual — classifying on that would
+  reintroduce the string matching I5 deleted, and a wrong structured cause is worse than a generic
+  one because the backend acts on it. Surfacing the report is what makes the follow-up decidable.
+
+### Patch Changes
+
+- Updated dependencies [57e1195]
+  - @cat-factory/contracts@0.192.0
+
 ## 0.186.0
 
 ### Minor Changes

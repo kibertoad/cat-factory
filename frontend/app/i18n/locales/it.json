@@ -1285,6 +1285,12 @@
       "risk": "Rischio",
       "impact": "Impatto"
     },
+    "reviewTarget": {
+      "title": "Pull request in revisione",
+      "hint": "La pull request esistente che questa attività revisiona.",
+      "prNumber": "PR n. {number}",
+      "focus": "Focus: {focus}"
+    },
     "execution": {
       "title": "Esecuzione",
       "hint": "L'esecuzione dal vivo della pipeline: ogni passaggio dell'agente, il suo avanzamento e la pull request risultante.",
@@ -1625,6 +1631,7 @@
       "editConclusionsPlaceholder": "Modifica le conclusioni dell'agente; le tue modifiche vengono salvate quando approvi…",
       "noProseOutput": "Questo agente non ha prodotto alcun output testuale.",
       "approveWithCorrections": "Approva con correzioni",
+      "renderedOutputNote": "Questo output è una rappresentazione di ciò che il passaggio ha prodotto, quindi non può essere modificato qui. Richiedi modifiche per farlo rivedere.",
       "reviewAndApprove": "Revisiona e approva",
       "editHint": "Modifica le conclusioni a sinistra; le tue modifiche vengono salvate quando approvi.",
       "reviewHint": "Fai clic su un blocco qualsiasi nell'output per commentarlo, oppure lascia un feedback complessivo qui sotto.",
@@ -2424,7 +2431,9 @@
         "focus": "Focus della revisione",
         "focusPlaceholder": "es. concentrati sulle modifiche di autenticazione e sulla gestione degli errori",
         "derivedTitle": "Rivedi {ref}",
-        "derivedTitleFallback": "Rivedi la pull request"
+        "derivedTitleFallback": "Rivedi la pull request",
+        "prNotFound": "La pull request n. {number} non è stata trovata nel repository di questo servizio. Controlla il numero, oppure collega il servizio al repository in cui si trova la pull request.",
+        "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request."
       }
     },
     "recurring": {
@@ -4334,9 +4343,11 @@
       "title": "Questo piano ti sta aspettando",
       "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
       "approve": "Approva il piano",
-      "requestChanges": "Richiedi modifiche",
       "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
-      "sendBack": "Rimanda al planner"
+      "sendBack": "Rimanda al planner",
+      "noDocument": "Questo piano è stato redatto prima che la piattaforma generasse piani da revisionare, quindi non c'è un documento da percorrere: le sezioni qui sotto sono il piano.",
+      "needsFeedback": "Aggiungi prima un commento o un riscontro: il pianificatore ripianifica a partire da questo.",
+      "commentHint": "Fai clic su una parte del piano per commentarla."
     },
     "planning": {
       "title": "Pianifica l'iniziativa",

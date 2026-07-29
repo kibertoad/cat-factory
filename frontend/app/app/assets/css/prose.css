@@ -1,0 +1,135 @@
+/*
+ * The rendered-markdown reader's presentation, shared by EVERY surface that reviews an agent's
+ * prose: the step-detail overlay (`AgentStepDetail`), the initiative tracker's plan-approval
+ * rail, and the clarity / requirements / brainstorm review windows. Global rather than scoped
+ * because the markup is injected with `v-html`, so a scoped sheet would need `:deep()` in each
+ * consumer — which is exactly what those windows each used to carry, five near-identical copies
+ * diverging a property at a time. "Consistent in look and feel across review surfaces" is the
+ * whole point, so the copy lives here once and a new reader adds `.reader-prose` and nothing else.
+ *
+ * `.reader-prose` styles the document; `.review-mode` turns each source-mapped block into a
+ * comment target (hover highlight + a "+" gutter affordance, GitHub-review style); `.cf-commented`
+ * / `.cf-selected` are the persistent markers `useProseComments` toggles.
+ */
+
+/* Approval mode: each source-mapped block becomes a comment target — a hover
+   highlight + a "+" gutter affordance, GitHub-review style. */
+.reader-prose.review-mode [data-src-start] {
+  position: relative;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  transition: background 0.12s ease;
+}
+.reader-prose.review-mode [data-src-start]:hover {
+  background: rgb(99 102 241 / 0.08);
+  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.5);
+}
+.reader-prose.review-mode [data-src-start]::before {
+  content: '+';
+  position: absolute;
+  left: -1.4rem;
+  top: 0.1rem;
+  display: none;
+  height: 1.1rem;
+  width: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  background: rgb(99 102 241);
+  color: white;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.reader-prose.review-mode [data-src-start]:hover::before {
+  display: flex;
+}
+/* Persistent markers: amber for a block that already has a comment, indigo for
+   the block whose composer is currently open. */
+.reader-prose .cf-commented {
+  background: rgb(234 179 8 / 0.1);
+  box-shadow: inset 2px 0 0 rgb(234 179 8 / 0.6);
+}
+.reader-prose .cf-selected {
+  background: rgb(99 102 241 / 0.12);
+  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.8);
+}
+
+/* Styling for the markdown HTML injected via v-html (out of scoped reach without
+   :deep), kept close to the inspector's existing prose styling. */
+.reader-prose p {
+  margin: 0.5rem 0;
+}
+.reader-prose ul,
+.reader-prose ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+.reader-prose ul {
+  list-style: disc;
+}
+.reader-prose ol {
+  list-style: decimal;
+}
+.reader-prose li {
+  margin: 0.2rem 0;
+}
+.reader-prose strong {
+  font-weight: 600;
+  color: rgb(226 232 240);
+}
+.reader-prose em {
+  font-style: italic;
+}
+.reader-prose code {
+  border-radius: 0.25rem;
+  background: rgb(30 41 59 / 0.8);
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  color: rgb(199 210 254);
+}
+.reader-prose pre {
+  margin: 0.6rem 0;
+  overflow: auto;
+  border-radius: 0.5rem;
+  background: rgb(2 6 23 / 0.6);
+  padding: 0.75rem 0.9rem;
+}
+.reader-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: rgb(203 213 225);
+}
+.reader-prose blockquote {
+  margin: 0.6rem 0;
+  border-left: 3px solid rgb(99 102 241 / 0.5);
+  padding-left: 0.75rem;
+  color: rgb(148 163 184);
+}
+.reader-prose table {
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.reader-prose th,
+.reader-prose td {
+  border: 1px solid rgb(51 65 85);
+  padding: 0.3rem 0.6rem;
+}
+.reader-prose th {
+  background: rgb(30 41 59 / 0.6);
+  font-weight: 600;
+}
+.reader-prose hr {
+  margin: 1rem 0;
+  border: none;
+  border-top: 1px solid rgb(51 65 85);
+}
+.reader-prose h1,
+.reader-prose h2,
+.reader-prose h3,
+.reader-prose h4 {
+  margin: 0.6rem 0 0.3rem;
+  font-weight: 600;
+  color: rgb(226 232 240);
+}

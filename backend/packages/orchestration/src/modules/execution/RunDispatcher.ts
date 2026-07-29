@@ -1519,7 +1519,13 @@ export class RunDispatcher {
     // reviewable-output rendering and the follow-up/approval gates read `step.output`, so it
     // sits exactly where the old inline ingestion branches did. See
     // {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
-    await this.applyPostCompletionResolver(workspaceId, instance, step, result, isFinalStep)
+    const resolverRendered = await this.applyPostCompletionResolver(
+      workspaceId,
+      instance,
+      step,
+      result,
+      isFinalStep,
+    )
 
     // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
     // returns its raw Pi transcript summary as `result.output` — useless for review.
@@ -1531,6 +1537,17 @@ export class RunDispatcher {
     // future, which is why this is keyed off the artifact, not a specific agentKind.
     const reviewable = reviewableArtifactOutput(result)
     if (reviewable !== undefined) step.output = reviewable
+    // Record WHICH of the two the step's output now is, because the approval gate below reads
+    // `step.output` as an editable proposal and a rendering is not editable — the artifact it
+    // renders was already ingested, so a correction typed over the render reaches nothing.
+    // Either producer counts: the generic seam above, or a post-completion resolver that
+    // rendered the artifact IT committed (`StepResolution.outputIsRendered` — the initiative
+    // planner, whose committed plan the engine derives rather than takes verbatim).
+    // Assigned on BOTH branches (not only when a render happened): a re-run that produced no
+    // artifact this time must clear a flag the previous attempt set. The negative branch is
+    // `undefined` rather than `false` so `JSON.stringify` omits the key — every ordinary step
+    // takes it, and the run detail blob carries one per step.
+    step.outputIsRendered = reviewable !== undefined || resolverRendered ? true : undefined
 
     // Follow-up companion gate: the future-looking Coder surfaced forward-looking items.
     // Hold the pipeline until every item is decided (an undecided follow-up or an unanswered
@@ -1699,6 +1716,9 @@ export class RunDispatcher {
    * task-estimate persistence). It reshapes the agent's structured result into domain state and may
    * replace `step.output`. A no-op when no post-completion resolver applies. See
    * {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
+   *
+   * Returns whether the replacement output is a RENDERING of an artifact the resolver committed
+   * (`StepResolution.outputIsRendered`), which the caller folds into `step.outputIsRendered`.
    */
   private async applyPostCompletionResolver(
     workspaceId: string,
@@ -1706,13 +1726,13 @@ export class RunDispatcher {
     step: PipelineStep,
     result: AgentRunResult,
     isFinalStep: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const postCompletionResolver = this.stepResolverFor(step.agentKind)
     if (
       postCompletionResolver?.phase !== 'post-completion' ||
       !(postCompletionResolver.applies?.(result) ?? true)
     ) {
-      return
+      return false
     }
     const resolution = await postCompletionResolver.resolve({
       workspaceId,
@@ -1721,7 +1741,12 @@ export class RunDispatcher {
       result,
       isFinalStep,
     })
-    if (resolution?.output !== undefined) step.output = resolution.output
+    if (resolution?.output === undefined) return false
+    step.output = resolution.output
+    // Reported to the caller rather than written here, so `step.outputIsRendered` keeps a
+    // SINGLE assignment point — the flag has to be cleared on a re-run that rendered nothing,
+    // and two writers would make "who clears it" ambiguous.
+    return resolution.outputIsRendered === true
   }
 
   /**

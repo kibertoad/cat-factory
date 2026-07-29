@@ -188,6 +188,14 @@ export const useExecutionStore = defineStore('execution', () => {
       blockId: string
       approval: StepApproval
       agentKind: PipelineStep['agentKind']
+      /**
+       * Whether the gate's proposal is a RENDERING of an artifact the step already committed
+       * (`step.outputIsRendered`). Projected here because a surface that reviews the proposal
+       * WITHOUT the step in hand — the initiative tracker's plan-approval rail — otherwise has
+       * no way to tell a rendered document from the agent's raw transcript summary, and would
+       * present a one-line summary as though it were the artifact.
+       */
+      outputIsRendered: boolean
     }[] = []
     for (const e of instances.value) {
       for (const s of e.steps) {
@@ -197,6 +205,7 @@ export const useExecutionStore = defineStore('execution', () => {
             blockId: e.blockId,
             approval: s.approval,
             agentKind: s.agentKind,
+            outputIsRendered: s.outputIsRendered === true,
           })
         }
       }

@@ -126,9 +126,10 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   // planner's human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
-  // Approve the parked planner gate over REST (no SPA affordance exposes it for an initiative
-  // block). Poll for the parked approval — a green ingest of the 5-phase plan is a precondition for
-  // it existing, so reaching here already proves the template normalization accepted the plan.
+  // Approve the parked planner gate over REST — the gate has its own SPA review surface (see
+  // `initiative-plan-review.spec.ts`), but here it is only setup for the preset under test. Poll
+  // for the parked approval — a green ingest of the 5-phase plan is a precondition for it
+  // existing, so reaching here already proves the template normalization accepted the plan.
   let approval: Awaited<ReturnType<typeof findParkedApproval>> = null
   await expect
     .poll(
