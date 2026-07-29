@@ -26,6 +26,16 @@ function requireRequirements<E extends AppEnv>(c: Context<E>): RequirementsModul
 }
 
 /**
+ * The requirements module as a REFUSAL only. These routes drive their mutations through the
+ * execution service and read nothing off the module itself — but an unwired deployment must
+ * still 503 rather than answer. Discarding a `requireRequirements` result would read as a
+ * no-op statement, so the guard is named for what it does and returns `void`.
+ */
+function assertRequirementsWired<E extends AppEnv>(c: Context<E>): void {
+  requireRequirements(c)
+}
+
+/**
  * Workspace-scoped requirements-review endpoints. The initial review runs an LLM inline and
  * returns the entity. Incorporation, by contrast, is ASYNCHRONOUS: it records the human's
  * intent on the parked run, signals the durable driver to fold + re-review in the
@@ -50,7 +60,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Routed through the execution service so the off-path surface honours the task's
   // merge-preset knobs (iteration budget + tolerated severity) exactly like the gate.
   buildHonoRoute(app, reviewRequirementsContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.review(
@@ -93,7 +103,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // calls them back only if the re-review needs input. Blocks scoped (the review is resolved
   // from the block) to match the other run-driving endpoints.
   buildHonoRoute(app, incorporateRequirementsContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.incorporate(
@@ -108,7 +118,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // parked run advances; otherwise the response carries the next cycle's findings (or the
   // iteration-cap state). Returns the updated review.
   buildHonoRoute(app, reReviewRequirementsContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.reReview(
@@ -121,7 +131,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Proceed: settle the requirements (last incorporated doc wins downstream) and advance
   // the parked run. Used when every finding is dismissed.
   buildHonoRoute(app, proceedRequirementsContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.proceed(
@@ -178,7 +188,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Re-request a recommendation with a "do it differently" note. ASYNCHRONOUS like the batch:
   // resets the recommendation to `pending` and signals the driver to re-run the Writer.
   buildHonoRoute(app, reRequestRequirementRecommendationContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const { reviewId, recId } = c.req.valid('param')
     const review = await c
       .get('container')
@@ -194,7 +204,7 @@ export function requirementReviewController(): Hono<AppEnv> {
   // Resolve a review that hit its iteration cap: one more round / proceed anyway / stop
   // and reset the task to phase zero. Returns the updated review.
   buildHonoRoute(app, resolveRequirementsExceededContract, async (c) => {
-    requireRequirements(c)
+    assertRequirementsWired(c)
     const review = await c
       .get('container')
       .executionService.requirementsReview.resolveExceeded(

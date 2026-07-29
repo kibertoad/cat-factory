@@ -27,7 +27,7 @@ import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { loadWorkspaceAccess, requireWorkspacePermission } from '../../http/workspaceAccess.js'
-import { requireCapability } from '../../http/guards.js'
+import { assertCapability, requireCapability } from '../../http/guards.js'
 
 type Scope = 'account' | 'workspace'
 
@@ -39,14 +39,22 @@ function requireLibrary<E extends AppEnv>(c: Context<E>): FragmentLibraryModule 
   )
 }
 
-const sourcesUnavailable = (): never => {
-  throw new UnavailableError(
+/**
+ * The repo-source service, wired only when the GitHub integration is too — so it is a SECOND
+ * capability behind the same module, and gets its own accessor rather than a guard restated at
+ * each of the five source routes.
+ */
+function requireSources<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    requireLibrary(c).sourceService,
     'Repo-sourced fragments require the GitHub integration to be configured',
   )
 }
 
-const documentsUnavailable = (): never => {
-  throw new UnavailableError(
+/** The document-source integration, which these routes need WIRED but read nothing off. */
+function assertDocumentsWired<E extends AppEnv>(c: Context<E>): void {
+  assertCapability(
+    c.get('container').documents,
     'Document-backed fragments require the document-source integration to be configured',
   )
 }
@@ -152,7 +160,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // body's `viaWorkspaceId` at the account scope (credentials are per-workspace).
   buildHonoRoute(app, createDocumentFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!c.get('container').documents) return documentsUnavailable()
+    assertDocumentsWired(c)
     const input = c.req.valid('json')
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (input.viaWorkspaceId ?? '')
@@ -183,7 +191,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // Force an immediate live re-resolve of a document-backed fragment.
   buildHonoRoute(app, refreshPromptFragmentContract, async (c) => {
     const lib = requireLibrary(c)
-    if (!c.get('container').documents) return documentsUnavailable()
+    assertDocumentsWired(c)
     const viaWorkspaceId =
       scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
     if (!viaWorkspaceId) {
@@ -212,38 +220,30 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // ---- repo sources -------------------------------------------------------
 
   buildHonoRoute(app, listFragmentSourcesContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(await lib.sourceService.list(ownerKind, ownerId(c)), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.list(ownerKind, ownerId(c)), 200)
   })
 
   buildHonoRoute(app, linkFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib.sourceService) return sourcesUnavailable()
-    const source = await lib.sourceService.link(ownerKind, ownerId(c), c.req.valid('json'))
+    const sources = requireSources(c)
+    const source = await sources.link(ownerKind, ownerId(c), c.req.valid('json'))
     return c.json(source, 201)
   })
 
   buildHonoRoute(app, unlinkFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib.sourceService) return sourcesUnavailable()
-    await lib.sourceService.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
+    const sources = requireSources(c)
+    await sources.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, fragmentSourceStatusContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(
-      await lib.sourceService.status(ownerKind, ownerId(c), c.req.valid('param').id),
-      200,
-    )
+    const sources = requireSources(c)
+    return c.json(await sources.status(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
   buildHonoRoute(app, syncFragmentSourceContract, async (c) => {
-    const lib = requireLibrary(c)
-    if (!lib.sourceService) return sourcesUnavailable()
-    return c.json(await lib.sourceService.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
+    const sources = requireSources(c)
+    return c.json(await sources.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
   // ---- resolved (workspace only) — the merged catalog an agent sees -------

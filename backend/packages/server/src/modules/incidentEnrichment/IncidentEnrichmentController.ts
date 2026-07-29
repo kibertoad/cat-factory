@@ -13,10 +13,11 @@ import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
 /** Resolve the incident-enrichment module, or refuse with a 503 naming what isn't wired. */
-function requireIncidentEnrichment<E extends AppEnv>(
-  c: Context<E>,
-): IncidentEnrichmentModule | null {
-  return c.get('container').incidentEnrichmentSettings ?? null
+function requireIncidentEnrichment<E extends AppEnv>(c: Context<E>): IncidentEnrichmentModule {
+  return requireCapability(
+    c.get('container').incidentEnrichmentSettings,
+    'The incident-enrichment integration is not configured',
+  )
 }
 
 /**
@@ -29,26 +30,17 @@ export function incidentEnrichmentController(): Hono<AppEnv> {
   app.use('*', requireWorkspacePermission('settings.manage'))
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
-    const ie = requireCapability(
-      requireIncidentEnrichment(c),
-      'The incident-enrichment integration is not configured',
-    )
+    const ie = requireIncidentEnrichment(c)
     return c.json(await ie.service.getConnection(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, setIncidentEnrichmentContract, async (c) => {
-    const ie = requireCapability(
-      requireIncidentEnrichment(c),
-      'The incident-enrichment integration is not configured',
-    )
+    const ie = requireIncidentEnrichment(c)
     return c.json(await ie.service.setConnection(param(c, 'workspaceId'), c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteIncidentEnrichmentContract, async (c) => {
-    const ie = requireCapability(
-      requireIncidentEnrichment(c),
-      'The incident-enrichment integration is not configured',
-    )
+    const ie = requireIncidentEnrichment(c)
     await ie.service.deleteConnection(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

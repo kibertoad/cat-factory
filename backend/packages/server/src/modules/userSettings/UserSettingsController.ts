@@ -1,6 +1,7 @@
 import { getUserSettingsContract, updateUserSettingsContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability, requireUser } from '../../http/guards.js'
 
@@ -8,24 +9,31 @@ import { requireCapability, requireUser } from '../../http/guards.js'
 // (not a workspace), mounted at the root, like personal subscriptions + local model
 // runners. Absent user-settings persistence ⇒ 503 (unconfigured facade / tests).
 
+/** Resolve the per-user settings store, or refuse with a 503 naming what isn't wired. */
+function requireUserSettings<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').userSettings,
+    'User settings storage is not configured',
+  )
+}
+
+/** The signed-in caller, or a 401 wording the prompt for what this controller manages. */
+function requireSignedIn<E extends AppEnv>(c: Context<E>) {
+  return requireUser(c, 'Sign in to manage your settings')
+}
+
 export function userSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getUserSettingsContract, async (c) => {
-    const settings = requireCapability(
-      c.get('container').userSettings,
-      'User settings storage is not configured',
-    )
-    const user = requireUser(c, 'Sign in to manage your settings')
+    const settings = requireUserSettings(c)
+    const user = requireSignedIn(c)
     return c.json(await settings.service.get(user.id), 200)
   })
 
   buildHonoRoute(app, updateUserSettingsContract, async (c) => {
-    const settings = requireCapability(
-      c.get('container').userSettings,
-      'User settings storage is not configured',
-    )
-    const user = requireUser(c, 'Sign in to manage your settings')
+    const settings = requireUserSettings(c)
+    const user = requireSignedIn(c)
     return c.json(await settings.service.update(user.id, c.req.valid('json')), 200)
   })
 

@@ -22,6 +22,16 @@ function requireBrainstorm<E extends AppEnv>(c: Context<E>): BrainstormModule {
 }
 
 /**
+ * The brainstorm module as a REFUSAL only. These routes drive their mutations through the
+ * execution service and read nothing off the module itself — but an unwired deployment must
+ * still 503 rather than answer. Discarding a `requireBrainstorm` result would read as a
+ * no-op statement, so the guard is named for what it does and returns `void`.
+ */
+function assertBrainstormWired<E extends AppEnv>(c: Context<E>): void {
+  requireBrainstorm(c)
+}
+
+/**
  * Workspace-scoped brainstorm (structured-dialogue) endpoints, STAGE-scoped: a block may have
  * one live `requirements` session and one live `architecture` session at once. The brainstorm
  * mirror of the requirements / clarity review controllers: the initial pass runs an LLM inline
@@ -46,7 +56,7 @@ export function brainstormController(): Hono<AppEnv> {
   // execution service so the off-path surface honours the task's merge-preset knobs and threads
   // in any upstream refined requirements, exactly like the gate.
   buildHonoRoute(app, reviewBrainstormContract, async (c) => {
-    requireBrainstorm(c)
+    assertBrainstormWired(c)
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -82,7 +92,7 @@ export function brainstormController(): Hono<AppEnv> {
 
   // Incorporate the picks ASYNCHRONOUSLY (the durable driver folds + re-runs).
   buildHonoRoute(app, incorporateBrainstormContract, async (c) => {
-    requireBrainstorm(c)
+    assertBrainstormWired(c)
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -97,7 +107,7 @@ export function brainstormController(): Hono<AppEnv> {
 
   // Re-run the brainstorm against the converged direction (one more pass).
   buildHonoRoute(app, reReviewBrainstormContract, async (c) => {
-    requireBrainstorm(c)
+    assertBrainstormWired(c)
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -107,7 +117,7 @@ export function brainstormController(): Hono<AppEnv> {
 
   // Proceed: settle the brainstorm (last converged direction wins downstream) and advance.
   buildHonoRoute(app, proceedBrainstormContract, async (c) => {
-    requireBrainstorm(c)
+    assertBrainstormWired(c)
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')
@@ -117,7 +127,7 @@ export function brainstormController(): Hono<AppEnv> {
 
   // Resolve a session that hit its iteration cap: one more round / proceed / stop-reset.
   buildHonoRoute(app, resolveBrainstormExceededContract, async (c) => {
-    requireBrainstorm(c)
+    assertBrainstormWired(c)
     const { blockId, stage } = c.req.valid('param')
     const session = await c
       .get('container')

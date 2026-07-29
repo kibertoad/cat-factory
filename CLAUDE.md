@@ -259,7 +259,14 @@ into the `code` slot instead.
   `unavailable()` thrower is the shape it replaced — that `| null` is what forced every route to
   restate the guard, and 51 controllers had each declared their own copy of the thrower. The
   exception is a boolean FLAG (`cfg.passwordEnabled`): there is no value to narrow, so it throws
-  directly.
+  directly. **A capability behind a capability gets its OWN accessor** — a library module's
+  `sourceService` (wired only when GitHub is), the environment self-test — rather than a guard
+  restated at each route, and never a message borrowed from its parent, which would name a module
+  the operator has already wired.
+- **A guard whose value the route ignores uses the `assert*` twin**, never a discarded `require*`.
+  `assertCapability` / `assertUser` (and a per-controller `assertXWired`) return `void`, so the
+  line reads as the refusal it is; a bare `requireClarity(c)` statement reads as a no-op, and the
+  next mechanical cleanup deletes it with no test failing.
 - **Rethrow, don't re-map.** Catching a `ConflictError` to re-emit it as `c.json({code:'conflict'})`
   drops its `reason`; let it propagate. The one deliberate exception is a handler that flattens
   distinct causes ON PURPOSE because the distinction is an ORACLE (password reset: "no such token"

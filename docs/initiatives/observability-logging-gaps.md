@@ -535,8 +535,19 @@ behaviour changes.
   the siblings of `param()`. The per-controller `requireX(c): Module | null` is what forced every
   route to restate `if (!x) return unavailable()`, and **51 controllers had each declared their
   own copy of the thrower** to satisfy it. Making the accessor TOTAL deletes the guard line at
-  every route: ~300 call sites, one thrower left (`AuthController`, whose guards are boolean
-  FLAGS — there is no value to narrow, so it throws directly).
+  every route: ~300 call sites. Two throwers remain, both in `AuthController` and both correct:
+  what they guard is a boolean FLAG (`cfg.passwordEnabled` / `cfg.githubEnabled`) and a rate-limit
+  verdict, neither of which has a value to narrow.
+  Each guard has an **`assert*` twin** (`assertCapability` / `assertUser`, plus a per-controller
+  `assertXWired`) for the ~20 routes that need a capability WIRED but read nothing off it,
+  because they call through the execution service instead. Those were the one class the sweep
+  could not convert mechanically, and a discarded `require*` result is indistinguishable from a
+  no-op statement — the next reader, or a mechanical "drop the unused call" pass, deletes the
+  guard and no test fails. The `void` return type is what keeps the intent local to the line.
+  A capability behind a capability (a library module's `sourceService`, wired only when GitHub
+  is) gets its OWN accessor rather than a guard restated per route; so does one whose refusal
+  message differs from its parent's (the environment self-test), or the message names a module
+  the operator has in fact already wired.
 - **`createStoreAgentContextGate` moved to kernel** (`shared/agent-context-gate.ts`) and is now
   the single implementation, consumed by BOTH `LlmObservabilityService` and
   `InstrumentedModelProvider`. Phase 2 gave the inline path a gate, but wrote the rule a second

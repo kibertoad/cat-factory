@@ -22,6 +22,17 @@ function requireClarity<E extends AppEnv>(c: Context<E>): ClarityModule {
 }
 
 /**
+ * The clarity module as a REFUSAL only. These routes drive their mutations through the
+ * execution service (so the gate and the off-path surface honour the same knobs) and read
+ * nothing off the module itself — but an unwired deployment must still 503 rather than
+ * answer. Discarding a `requireClarity` result would read as a no-op statement, so the
+ * guard is named for what it does and returns `void`.
+ */
+function assertClarityWired<E extends AppEnv>(c: Context<E>): void {
+  requireClarity(c)
+}
+
+/**
  * Workspace-scoped clarity-review (bug-report triage) endpoints. The clarity mirror of the
  * requirements-review controller: the initial review runs an LLM inline and returns the
  * entity; incorporation is ASYNCHRONOUS (records the intent on the parked run, signals the
@@ -45,7 +56,7 @@ export function clarityReviewController(): Hono<AppEnv> {
   // execution service so the off-path surface honours the task's merge-preset knobs and
   // threads in any upstream investigator output, exactly like the gate.
   buildHonoRoute(app, reviewClarityContract, async (c) => {
-    requireClarity(c)
+    assertClarityWired(c)
     const review = await c
       .get('container')
       .executionService.clarityReview.review(param(c, 'workspaceId'), c.req.valid('param').blockId)
@@ -80,7 +91,7 @@ export function clarityReviewController(): Hono<AppEnv> {
 
   // Incorporate the answers ASYNCHRONOUSLY (the durable driver folds + re-reviews).
   buildHonoRoute(app, incorporateClarityContract, async (c) => {
-    requireClarity(c)
+    assertClarityWired(c)
     const review = await c
       .get('container')
       .executionService.clarityReview.incorporate(
@@ -93,7 +104,7 @@ export function clarityReviewController(): Hono<AppEnv> {
 
   // Re-review the clarified report (one more reviewer pass).
   buildHonoRoute(app, reReviewClarityContract, async (c) => {
-    requireClarity(c)
+    assertClarityWired(c)
     const review = await c
       .get('container')
       .executionService.clarityReview.reReview(
@@ -105,7 +116,7 @@ export function clarityReviewController(): Hono<AppEnv> {
 
   // Proceed: settle the clarity review (last clarified report wins downstream) and advance.
   buildHonoRoute(app, proceedClarityContract, async (c) => {
-    requireClarity(c)
+    assertClarityWired(c)
     const review = await c
       .get('container')
       .executionService.clarityReview.proceed(param(c, 'workspaceId'), c.req.valid('param').blockId)
@@ -114,7 +125,7 @@ export function clarityReviewController(): Hono<AppEnv> {
 
   // Resolve a review that hit its iteration cap: one more round / proceed / stop-reset.
   buildHonoRoute(app, resolveClarityExceededContract, async (c) => {
-    requireClarity(c)
+    assertClarityWired(c)
     const review = await c
       .get('container')
       .executionService.clarityReview.resolveExceeded(

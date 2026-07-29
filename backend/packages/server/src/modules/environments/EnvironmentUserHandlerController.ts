@@ -48,6 +48,19 @@ async function requireRunsExecute<E extends AppEnv>(
   }
 }
 
+/** The signed-in caller, or a 401 wording the prompt for what this controller manages. */
+function requireSignedIn<E extends AppEnv>(c: Context<E>) {
+  return requireUser(c, 'Sign in to manage environment handler overrides')
+}
+
+/** Resolve the per-user environment-handler service, or refuse with a 503. */
+function requireUserHandlers<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').environments?.userHandlerService,
+    'Per-user environment handlers are not configured',
+  )
+}
+
 export function environmentUserHandlerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -56,25 +69,19 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
   // wired, so an unwired facade never reveals a board's existence to a non-member.
 
   buildHonoRoute(app, listEnvironmentUserHandlersContract, async (c) => {
-    const user = requireUser(c, 'Sign in to manage environment handler overrides')
+    const user = requireSignedIn(c)
     const workspaceId = c.req.valid('param').workspaceId
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = requireCapability(
-      c.get('container').environments?.userHandlerService,
-      'Per-user environment handlers are not configured',
-    )
+    const svc = requireUserHandlers(c)
     const handlers = await svc.list(user.id, workspaceId)
     return c.json({ handlers }, 200)
   })
 
   buildHonoRoute(app, upsertEnvironmentUserHandlerContract, async (c) => {
-    const user = requireUser(c, 'Sign in to manage environment handler overrides')
+    const user = requireSignedIn(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = requireCapability(
-      c.get('container').environments?.userHandlerService,
-      'Per-user environment handlers are not configured',
-    )
+    const svc = requireUserHandlers(c)
     // The provision type comes from the path; the body's value is overridden by it.
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const view = await svc.upsert(user.id, workspaceId, {
@@ -85,13 +92,10 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, removeEnvironmentUserHandlerContract, async (c) => {
-    const user = requireUser(c, 'Sign in to manage environment handler overrides')
+    const user = requireSignedIn(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
-    const svc = requireCapability(
-      c.get('container').environments?.userHandlerService,
-      'Per-user environment handlers are not configured',
-    )
+    const svc = requireUserHandlers(c)
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const manifestId = c.req.valid('query').manifestId ?? null
     await svc.remove(user.id, workspaceId, provisionType, manifestId)

@@ -1,6 +1,7 @@
 import { retryAgentRunContract, stopAgentRunContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { personalGateForRun, readPersonalPassword } from '../providers/personalCredentialGate.js'
@@ -13,6 +14,19 @@ import { requireCapability } from '../../http/guards.js'
  * `/workspaces/:workspaceId`. This is the single retry path the board uses for a
  * failed run of either flow (replacing the bootstrap-only retry route).
  */
+/** Resolve the repo-bootstrap module, or refuse with a 503 naming what isn't wired. */
+function requireBootstrap<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(c.get('container').bootstrap, 'Repo bootstrap is not configured')
+}
+
+/** Resolve the env-config-repair module, or refuse with a 503 naming what isn't wired. */
+function requireEnvConfigRepair<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').envConfigRepair,
+    'Environment config repair is not configured',
+  )
+}
+
 export function agentRunController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -29,7 +43,7 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'bootstrap') {
-      const bootstrap = requireCapability(container.bootstrap, 'Repo bootstrap is not configured')
+      const bootstrap = requireBootstrap(c)
       // A capability that IS wired but can't act: a predicate, not an absent value, so it
       // throws directly rather than through the accessor.
       if (!bootstrap.service.canBootstrap) {
@@ -42,10 +56,7 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'env-config-repair') {
-      const repair = requireCapability(
-        container.envConfigRepair,
-        'Environment config repair is not configured',
-      )
+      const repair = requireEnvConfigRepair(c)
       // Wired but unable to act — a predicate, not an absent value.
       if (!repair.service.canRepair) {
         throw new UnavailableError('Environment config repair is not configured')
@@ -88,16 +99,13 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'bootstrap') {
-      const bootstrap = requireCapability(container.bootstrap, 'Repo bootstrap is not configured')
+      const bootstrap = requireBootstrap(c)
       const run = await bootstrap.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }
 
     if (ref.kind === 'env-config-repair') {
-      const repair = requireCapability(
-        container.envConfigRepair,
-        'Environment config repair is not configured',
-      )
+      const repair = requireEnvConfigRepair(c)
       const run = await repair.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }

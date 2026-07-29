@@ -39,6 +39,17 @@ function requireGitHub<E extends AppEnv>(c: Context<E>): GitHubModule {
 }
 
 /**
+ * The GitHub module as a REFUSAL only. The install URL is signed from config alone, so this
+ * route reads nothing off the module — but offering an install link on a deployment with no
+ * GitHub integration wired would send the user through an OAuth round trip that lands
+ * nowhere. Discarding a `requireGitHub` result would read as a no-op statement, so the
+ * guard is named for what it does and returns `void`.
+ */
+function assertGitHubWired<E extends AppEnv>(c: Context<E>): void {
+  requireGitHub(c)
+}
+
+/**
  * Workspace-scoped GitHub endpoints: connection management, projection reads
  * (served from the local DB — fast and rate-limit-free), resync triggers, and repo
  * writes. Mounted under `/workspaces/:workspaceId`. Runtime-neutral: the async resync
@@ -55,7 +66,7 @@ export function githubController(): Hono<AppEnv> {
   // The URL the frontend should redirect to so a workspace owner can install
   // the App; carries an HMAC-signed `state` binding the install to this workspace.
   buildHonoRoute(app, getGitHubInstallUrlContract, async (c) => {
-    requireGitHub(c)
+    assertGitHubWired(c)
     const config = c.get('container').config.github
     const signer = new StateSigner(config.webhookSecret)
     // Bind the install to this workspace AND the signed-in user, with a short

@@ -1,6 +1,7 @@
 import { getLocalSettingsContract, updateLocalSettingsContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -13,22 +14,24 @@ import { requireCapability } from '../../http/guards.js'
  * it wholesale. Not auth-gated beyond the facade's gate: local mode runs with the auth gate
  * open on the developer's own machine, and the settings store is wired only there.
  */
+/** Resolve the local-mode settings store, or refuse with a 503 naming what isn't wired. */
+function requireLocalSettings<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').localSettings,
+    'Local-mode settings are only available on the local-mode service',
+  )
+}
+
 export function localSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getLocalSettingsContract, async (c) => {
-    const localSettings = requireCapability(
-      c.get('container').localSettings,
-      'Local-mode settings are only available on the local-mode service',
-    )
+    const localSettings = requireLocalSettings(c)
     return c.json(await localSettings.service.read(), 200)
   })
 
   buildHonoRoute(app, updateLocalSettingsContract, async (c) => {
-    const localSettings = requireCapability(
-      c.get('container').localSettings,
-      'Local-mode settings are only available on the local-mode service',
-    )
+    const localSettings = requireLocalSettings(c)
     return c.json(await localSettings.service.write(c.req.valid('json')), 200)
   })
 

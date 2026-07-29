@@ -23,33 +23,33 @@ import { requireCapability } from '../../http/guards.js'
 export function docInterviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  const require = <E extends AppEnv>(c: Context<E>) =>
+  const requireDocInterview = <E extends AppEnv>(c: Context<E>) =>
     requireCapability(
       c.get('container').executionService.docInterview,
       'The document interviewer is not configured',
     )
 
   buildHonoRoute(app, getDocInterviewContract, async (c) => {
-    const interview = require(c)
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.getByBlock(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, answerDocInterviewContract, async (c) => {
-    const interview = require(c)
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     const { questionId, answer } = c.req.valid('json')
     return c.json(await interview.answer(param(c, 'workspaceId'), blockId, questionId, answer), 200)
   })
 
   buildHonoRoute(app, continueDocInterviewContract, async (c) => {
-    const interview = require(c)
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.continue(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, proceedDocInterviewContract, async (c) => {
-    const interview = require(c)
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.proceed(param(c, 'workspaceId'), blockId), 200)
   })

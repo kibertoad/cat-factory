@@ -7,7 +7,7 @@ import { UnavailableError } from '@cat-factory/kernel'
 import { requireUser } from '../../http/guards.js'
 
 /** The signed-in user, or a 401. Generic over the (contract-typed) env, like AccountController. */
-function accountUser<E extends AppEnv>(c: Context<E>) {
+function requireAccountUser<E extends AppEnv>(c: Context<E>) {
   const user = requireUser(c, 'Sign in to view reports')
   return { id: user.id, login: user.login, name: user.name }
 }
@@ -32,7 +32,7 @@ export function reportsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getReportsContract, async (c) => {
-    const user = accountUser(c)
+    const user = requireAccountUser(c)
     const container = c.get('container')
     if (!container.reports) {
       throw new UnavailableError('Reports are not available on this deployment')

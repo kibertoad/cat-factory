@@ -18,10 +18,12 @@ to drop `AgentFailure.reason` on every path while its runtime-neutral twin forwa
 omitted field is now a typecheck failure.
 
 Controllers guard through two shared total accessors, `requireCapability` and `requireUser`
-(`@cat-factory/server`'s `http/guards.ts`, the siblings of `param()`). The per-controller
-`requireX(c): Module | null` forced every route to restate `if (!x) return unavailable()`, and
-51 controllers had each declared their own copy of the thrower to satisfy it; making the
-accessor total deletes the guard line at ~300 call sites.
+(`@cat-factory/server`'s `http/guards.ts`, the siblings of `param()`, and exported from the
+package root alongside `param`). The per-controller `requireX(c): Module | null` forced every
+route to restate `if (!x) return unavailable()`, and 51 controllers had each declared their own
+copy of the thrower to satisfy it; making the accessor total deletes the guard line at ~300 call
+sites. Each has an `assert*` twin for a route that needs a capability wired but reads nothing off
+it, so the guard never reads as a discardable no-op statement.
 
 `createStoreAgentContextGate` moves to `@cat-factory/kernel` (`StoreAgentContextGate`) and is
 now the single implementation of the per-workspace body-capture rule, shared by the proxied

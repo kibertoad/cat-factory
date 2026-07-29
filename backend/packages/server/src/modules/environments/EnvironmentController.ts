@@ -35,7 +35,6 @@ import type { EnvironmentsModule, EnvironmentTestService } from '@cat-factory/or
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
 
 /** Resolve the environment module, or refuse with a 503 naming what isn't wired. */
@@ -46,16 +45,15 @@ function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModul
   )
 }
 
-/** The self-test service, present only when its run store + a git provider are wired. */
+/**
+ * The self-test service, present only when its run store + a git provider are wired. It keeps
+ * its OWN refusal message rather than borrowing `requireEnvironments`': a deployment can have
+ * the environment integration fully wired and still not host the self-test, so naming the
+ * module here would tell the operator to fix something that is already configured.
+ */
 function requireEnvironmentTest<E extends AppEnv>(c: Context<E>): EnvironmentTestService {
   return requireCapability(
     c.get('container').environments?.environmentTest,
-    'Environment integration is not configured',
-  )
-}
-
-const testUnavailable = (): never => {
-  throw new UnavailableError(
     'Ephemeral-environment self-testing is not configured for this deployment',
   )
 }
@@ -314,7 +312,6 @@ export function environmentController(): Hono<AppEnv> {
   // durable driver advances it and pushes live `envTest` stage events.
   buildHonoRoute(app, startEnvironmentTestContract, async (c) => {
     const service = requireEnvironmentTest(c)
-    if (!service) return testUnavailable()
     const run = await service.startTest(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -325,14 +322,12 @@ export function environmentController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getEnvironmentTestContract, async (c) => {
     const service = requireEnvironmentTest(c)
-    if (!service) return testUnavailable()
     const run = await service.getRun(param(c, 'workspaceId'), c.req.valid('param').id)
     return c.json(run, 200)
   })
 
   buildHonoRoute(app, stopEnvironmentTestContract, async (c) => {
     const service = requireEnvironmentTest(c)
-    if (!service) return testUnavailable()
     const run = await service.stop(param(c, 'workspaceId'), c.req.valid('param').id)
     return c.json(run, 200)
   })
