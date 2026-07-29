@@ -32,6 +32,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `docs/initiatives/tracker-webhook-intake.md`.
 - `agents/` — the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
+  `agents/promptOverrides.ts` is the container half of the per-workspace **agent prompt
+  override**: `dispatchSystemPromptFor` is what every container prompt assembly rides (the
+  inline + consensus executors pass the override to `systemPromptFor` directly), and
+  `BESPOKE_CONTAINER_SYSTEM_PROMPTS` names the two kinds — `merger` / `on-call` — whose dispatch
+  bypasses `systemPromptFor` and sends a constant from `agents/prompts.ts`, so the editor's
+  "built-in" baseline is the text those kinds actually run.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).

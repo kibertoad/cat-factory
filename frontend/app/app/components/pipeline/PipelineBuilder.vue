@@ -4,6 +4,8 @@ import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
+import { showOverrideField } from '~/utils/uiMode'
 import {
   agentKindMeta,
   companionForProducer,
@@ -54,6 +56,24 @@ function toggleGating(i: number) {
 }
 const agents = useAgentsStore()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
+const agentPrompts = useAgentPromptsStore()
+
+// The agent kind whose system prompt is open in the editor (null = closed). Per-KIND, not
+// per-step: an override applies to every run of that agent in the workspace, so two steps of
+// the same kind are two views of one prompt.
+const promptEditorKind = ref<AgentKind | null>(null)
+
+/**
+ * Whether the "edit this agent's prompt" affordance shows for a kind. Editing a prompt is an
+ * OVERRIDE of what the product ships, so it follows the override rule: hidden in basic mode
+ * while the kind is running the shipped prompt, and revealed as soon as the workspace actually
+ * carries an override — otherwise a basic-mode user would be running on an edited prompt they
+ * can neither see nor clear.
+ */
+function showPromptEditor(kind: AgentKind): boolean {
+  return showOverrideField(uiMode.isAdvanced, agentPrompts.isCustomized(kind) || null)
+}
 const releaseHealth = useReleaseHealthStore()
 const skills = useSkillsStore()
 
@@ -99,6 +119,10 @@ const open = computed({
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
 watch(open, (isOpen) => {
   if (isOpen) releaseHealth.load().catch(() => {})
+  // The prompt-override index badges the steps whose agent no longer runs the shipped prompt.
+  // Best-effort: the builder is fully usable without it, and a deployment that wires no
+  // override store answers 503 here.
+  if (isOpen) agentPrompts.loadIndex().catch(() => {})
 })
 
 function add(kind: AgentKind) {
@@ -578,6 +602,21 @@ async function clone(p: Pipeline) {
                     "
                     @click="pipelines.toggleDraftAutoRecommend(unit.index)"
                   />
+                  <!-- System prompt: replace what this agent kind ships with, for every run in
+                     this workspace, with the full revision history to switch back through. -->
+                  <UButton
+                    v-if="showPromptEditor(unit.kind)"
+                    icon="i-lucide-file-pen-line"
+                    :color="agentPrompts.isCustomized(unit.kind) ? 'warning' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      agentPrompts.isCustomized(unit.kind)
+                        ? t('pipeline.builder.promptEditedTooltip')
+                        : t('pipeline.builder.promptEditTooltip')
+                    "
+                    @click="promptEditorKind = unit.kind"
+                  />
                   <UButton
                     icon="i-lucide-chevron-up"
                     color="neutral"
@@ -642,6 +681,25 @@ async function clone(p: Pipeline) {
                   <span class="min-w-0 flex-1 truncate text-slate-200">
                     {{ agentKindMeta(pipelines.draft[unit.companionIndex]!).label }}
                   </span>
+                  <!-- A companion is an agent kind with a prompt of its own, and this row is its
+                     only route to it — so the affordance belongs here too, not only on producers. -->
+                  <UButton
+                    v-if="showPromptEditor(pipelines.draft[unit.companionIndex]!)"
+                    icon="i-lucide-file-pen-line"
+                    :color="
+                      agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
+                        ? 'warning'
+                        : 'neutral'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
+                        ? t('pipeline.builder.promptEditedTooltip')
+                        : t('pipeline.builder.promptEditTooltip')
+                    "
+                    @click="promptEditorKind = pipelines.draft[unit.companionIndex]!"
+                  />
                   <UButton
                     :icon="
                       pipelines.draftGating[unit.companionIndex]?.enabled
@@ -1147,4 +1205,8 @@ async function clone(p: Pipeline) {
       </div>
     </template>
   </UModal>
+
+  <!-- The per-workspace system-prompt editor for one agent kind. Mounted alongside the builder
+       (not inside its slideover body) so its own modal isn't nested inside the scrolling column. -->
+  <AgentPromptEditor :agent-kind="promptEditorKind" @close="promptEditorKind = null" />
 </template>

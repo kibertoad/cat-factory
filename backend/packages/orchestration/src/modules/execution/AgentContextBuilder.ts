@@ -1,5 +1,6 @@
 import type {
   AccountRepository,
+  AgentPromptRepository,
   AgentRunContext,
   Block,
   BlockRepository,
@@ -177,6 +178,13 @@ export interface AgentContextBuilderDeps {
   agentKindRegistry: AgentKindRegistry
   /** App-owned initiative-preset registry: resolves a spawned/planning run's preset steering. */
   initiativePresetRegistry: InitiativePresetRegistry
+  /**
+   * Optional: the workspace's agent system-prompt override log. When wired, each dispatch
+   * resolves the live revision for the kind being run and folds it onto the context, so the
+   * container / inline / consensus executors all send the workspace's own prompt. Absent (or
+   * no revision for the kind) ⇒ the shipped prompt, unchanged.
+   */
+  agentPrompts?: AgentPromptRepository
   documents?: DocumentRepository
   /**
    * Optional: canonicalise a URL named in a block's description to the (source,
@@ -334,6 +342,11 @@ export class AgentContextBuilder {
       // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
       // resolve — a step asked to apply a skill must never run against nothing.
       runSkills,
+      // The workspace's own system prompt for the kind being dispatched, when it edited one
+      // from the pipeline builder. Resolved HERE — once per dispatch, in the engine — rather
+      // than in each executor, so the container / inline / consensus paths cannot disagree
+      // about which prompt a step ran under.
+      systemPromptOverride,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -354,6 +367,7 @@ export class AgentContextBuilder {
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
+      this.resolveSystemPromptOverride(workspaceId, agentKind),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -383,6 +397,7 @@ export class AgentContextBuilder {
       // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
       ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
       isFinalStep,
+      ...systemPromptOverride,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.
       // Gated on the EFFECTIVE dispatched kind matching the step's own kind, so a HELPER
@@ -1026,6 +1041,25 @@ export class AgentContextBuilder {
       step.selectedFragmentIds = undefined
       return null
     }
+  }
+
+  /**
+   * The workspace's live system prompt for the kind being dispatched, or undefined to run the
+   * shipped one. One point read per dispatch, in the same wave as the rest of the context.
+   *
+   * The head revision's `text` is `null` when the workspace deliberately went BACK to the
+   * built-in — a real state, distinct from never having edited the kind, which is why it is
+   * recorded rather than deleted. Both resolve to "no override" here, so a revert keeps
+   * tracking the shipped prompt as the product bumps it instead of pinning a stale copy.
+   */
+  private async resolveSystemPromptOverride(
+    workspaceId: string,
+    agentKind: string,
+  ): Promise<{ systemPromptOverride?: string }> {
+    const head = await this.deps.agentPrompts?.head(workspaceId, agentKind)
+    // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
+    // so the context literal stays a flat spread instead of gaining another conditional.
+    return head?.text ? { systemPromptOverride: head.text } : {}
   }
 
   /**

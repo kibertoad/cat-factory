@@ -314,6 +314,11 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         { perm: 'settings.manage', method: 'PUT', path: w('/settings') },
         { perm: 'settings.manage', method: 'PUT', path: w('/tracker-settings') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/model-presets/none') },
+        // Agent prompt overrides: the pipeline builder itself is member-tier, but an edited
+        // system prompt changes how every run in the workspace behaves — the same blast radius
+        // as the model mapping above, so the same permission. (The controller has no DELETE:
+        // going back to the built-in is a PUT with a null text.)
+        { perm: 'settings.manage', method: 'PUT', path: w('/agent-prompts/coder') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },

@@ -36,8 +36,22 @@ import {
 // the tester/fixer track in ./prompts/testing, the companions in ./prompts/companion,
 // and the thin one-line roles + generic fallback in ./prompts/roles).
 
-export function systemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
-  const base = baseSystemPromptFor(kind, registry)
+/**
+ * The system prompt for a kind: its track prompt plus the surface directives and trait
+ * guidance the engine enforces.
+ *
+ * `override` replaces only the TRACK prompt — a workspace's edited prompt for this kind (see
+ * ./prompt-overrides). The directives and trait guidance are still appended on top, because
+ * they are invariants of how the platform runs the kind (a read-only kind must not edit; a
+ * reasoning kind's answer must land in its visible reply), not editorial content: an override
+ * that dropped them would break the run in exactly the ways they exist to prevent.
+ */
+export function systemPromptFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+  override?: string,
+): string {
+  const base = override ?? baseSystemPromptFor(kind, registry)
   // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
   // {@link applySurfaceDirectives}. This is the single place that decision lives, so a
   // registered kind gets the SAME treatment a built-in does from its declared `agent.surface`.
@@ -85,7 +99,15 @@ function applySurfaceDirectives(
   return result
 }
 
-function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
+/**
+ * The SHIPPED track prompt for a kind, before the surface directives and trait guidance
+ * `systemPromptFor` layers on. Exported because it is the unit a workspace prompt override
+ * replaces (see ./prompt-overrides): the directives are engine-enforced invariants — a
+ * read-only kind must not edit, a reasoning kind must answer in its reply — so they are
+ * re-applied on top of an override rather than being handed to an editor that could delete
+ * them. It is also therefore the text the prompt editor shows as the built-in baseline.
+ */
+export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
   // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
   // built-in track: they grade a prior step's output and return a JSON rating.
   const companion = companionSystemPrompt(kind)

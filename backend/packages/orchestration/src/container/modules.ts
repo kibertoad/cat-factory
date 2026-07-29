@@ -84,6 +84,7 @@ import { ReleaseHealthService } from '../modules/releaseHealth/ReleaseHealthServ
 import { PackageRegistryService } from '../modules/packageRegistries/PackageRegistryService.js'
 import { PreviewService } from '../modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from '../modules/incidentEnrichment/IncidentEnrichmentService.js'
+import { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import {
   ModelPresetService,
   resolvePresetModelForKind,
@@ -106,6 +107,7 @@ import type {
   TasksModule,
 } from '../container.js'
 import type {
+  AgentPromptsModule,
   BrainstormModule,
   ClarityModule,
   IncidentEnrichmentModule,
@@ -1316,6 +1318,21 @@ export function createModelPresetsModule(deps: CoreDependencies): ModelPresetsMo
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.defaultModelPresetId ? { defaultPresetId: deps.defaultModelPresetId } : {}),
+  })
+  return { service }
+}
+
+/**
+ * Assemble the agent-prompt-override module when its repository is present. Absent ⇒ the
+ * controller 503s and every agent kind runs the prompt it ships with.
+ */
+export function createAgentPromptsModule(deps: CoreDependencies): AgentPromptsModule | undefined {
+  const { agentPromptRepository } = deps
+  if (!agentPromptRepository) return undefined
+  const service = new AgentPromptService({
+    agentPromptRepository,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
   })
   return { service }
 }

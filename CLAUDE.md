@@ -1274,6 +1274,44 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
   in the harness. Converting them one at a time (parity-gated, image-bumped) is the remaining
   strangler work.
 
+## Per-workspace agent prompt overrides (edited from the pipeline builder)
+
+A workspace can replace any agent kind's system prompt from the pipeline builder — the surface
+where its step is chosen — and switch back through the full history of what it has run.
+
+- **The store is an APPEND-ONLY revision log** (`agent_prompt_revisions`, D1 ⇄ Drizzle, keyed
+  `(workspace, agent_kind, revision)`), and the HIGHEST revision is live. There is no update and
+  no delete: restoring an older prompt appends a copy of it (tagged `restoredFrom`), and going
+  back to what the product ships appends a revision whose `text` is **NULL**. That null is a real
+  state, distinct from a kind nobody ever edited — it keeps the workspace tracking the shipped
+  prompt as it is bumped instead of pinning a stale copy of today's wording, and it records that
+  someone reverted deliberately.
+- **The composite key is the concurrency control, not hygiene.** The next revision number comes
+  from a read, so a second editor's insert COLLIDES; `AgentPromptService` re-reads the head to tell
+  that apart from a store failure (the two runtimes report the violation differently) and raises
+  `prompt_revision_conflict`. **Never turn that insert into an upsert** — last-write-wins would
+  silently discard one of two people's prompts.
+- **An override replaces the SHIPPED TRACK PROMPT, never the whole system prompt.**
+  `systemPromptFor(kind, registry, override?)` re-applies the surface directives and trait guidance
+  on top, because those are invariants of how the platform runs a kind (a read-only kind must not
+  edit; a reasoning kind's answer must land in its visible reply) rather than editorial content. So
+  the editor shows — and an override supplies — `baseSystemPromptFor`, not `systemPromptFor`.
+- **The engine resolves it ONCE per dispatch** (`AgentContextBuilder`, in the same read wave as the
+  rest of the context) onto `AgentRunContext.systemPromptOverride`, so the container, inline and
+  consensus paths cannot disagree about which prompt a step ran under. **A new prompt-assembly site
+  must honour it** — the same hazard `standardsVerbosityFor` has. Container dispatch rides
+  `dispatchSystemPromptFor` (`@cat-factory/server`'s `agents/promptOverrides.ts`); the inline and
+  consensus executors pass the override to `systemPromptFor` directly, where it wins over the
+  deployment-wide `AGENT_ROUTING` system prompt (the workspace's edit is the more specific of the two).
+- **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` exists so the editor and the dispatch agree.** `merger` and
+  `on-call` dispatch a bespoke constant instead of their role prompt, so an editor built on
+  `systemPromptFor` would show a baseline those kinds never run — and "restore the built-in" would
+  restore something that was never running. Adding another such kind means adding it there too.
+- **Writes are `settings.manage`, reads pass through.** The builder is member-tier, but an edited
+  prompt changes every run in the workspace — the same blast radius as the model mapping.
+- **The SPA affordance is an OVERRIDE control**, so it is gated on `showOverrideField`: hidden in
+  basic mode while the kind runs the shipped prompt, revealed as soon as the workspace carries one.
+
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows (task `execution`, repo `bootstrap`) persist to one `agent_runs` table

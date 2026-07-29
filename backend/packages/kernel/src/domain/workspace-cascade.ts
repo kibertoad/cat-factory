@@ -44,6 +44,7 @@
  *   `live_containers` Durable-Object tracking table) are appended by that facade.
  */
 export const WORKSPACE_SCOPED_TABLES = [
+  'agent_prompt_revisions',
   'agent_runs',
   'blocks',
   'brainstorm_sessions',

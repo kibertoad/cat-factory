@@ -2,6 +2,7 @@ import type { FragmentOwnerKind } from '~/types/domain'
 import { createApiClient, createSend, createSendWith } from './api/client'
 import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
+import { agentPromptsApi } from './api/agentPrompts'
 import { platformObservabilityApi } from './api/platformObservability'
 import { reportsApi } from './api/reports'
 import { authApi } from './api/auth'
@@ -134,6 +135,7 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...agentPromptsApi(ctx),
     ...preflightsApi(ctx),
     ...publicApiKeysApi(ctx),
     ...sharedStacksApi(ctx),

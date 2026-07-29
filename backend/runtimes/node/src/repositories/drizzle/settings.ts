@@ -7,6 +7,8 @@
 import type {
   AccountSettingsRecord,
   AccountSettingsRepository,
+  AgentPromptRepository,
+  AgentPromptRevision,
   KeyFingerprintStore,
   LocalSettingsRecord,
   LocalSettingsRepository,
@@ -33,10 +35,11 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { parseNotificationWebhookTypes } from '@cat-factory/server'
-import { and, eq, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountSettings,
+  agentPromptRevisions,
   keyFingerprint,
   localSettings,
   modelPresets,
@@ -721,5 +724,117 @@ export class DrizzleTrackerCommentIngestRepository implements TrackerCommentInge
       error: row.error,
       updatedAt: row.updated_at,
     }
+  }
+}
+
+/** The row shape every read below projects, so the mapper is shared across the three queries. */
+interface AgentPromptRow {
+  agent_kind: string
+  revision: number
+  text: string | null
+  restored_from: number | null
+  created_at: number
+  created_by: string | null
+}
+
+function rowToAgentPromptRevision(row: AgentPromptRow): AgentPromptRevision {
+  return {
+    agentKind: row.agent_kind,
+    revision: row.revision,
+    text: row.text,
+    ...(row.restored_from != null ? { restoredFrom: row.restored_from } : {}),
+    createdAt: row.created_at,
+    ...(row.created_by != null ? { createdBy: row.created_by } : {}),
+  }
+}
+
+/**
+ * Per-workspace agent system-prompt overrides — the Drizzle mirror of
+ * `D1AgentPromptRepository`. Append-only; the highest `revision` for a kind is live, and a
+ * `text` of NULL is the "follow the shipped built-in" revision.
+ *
+ * `append` is a plain INSERT on purpose. The service allocates the next revision number from
+ * what it read, so the primary-key collision IS the concurrency control and must reach the
+ * caller (mapped to a 409) rather than being absorbed by an `onConflictDoUpdate`, which would
+ * let a second editor's save silently overwrite the first's.
+ */
+export class DrizzleAgentPromptRepository implements AgentPromptRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listRevisions(workspaceId: string, agentKind: string): Promise<AgentPromptRevision[]> {
+    const rows = await this.db
+      .select()
+      .from(agentPromptRevisions)
+      .where(
+        and(
+          eq(agentPromptRevisions.workspace_id, workspaceId),
+          eq(agentPromptRevisions.agent_kind, agentKind),
+        ),
+      )
+      .orderBy(desc(agentPromptRevisions.revision))
+    return rows.map(rowToAgentPromptRevision)
+  }
+
+  async listHeads(workspaceId: string): Promise<AgentPromptRevision[]> {
+    // The per-kind MAX is computed in SQL and joined back, rather than reading the whole
+    // workspace's log and reducing in JS: history only grows, and the pipeline builder asks
+    // for this index every time it opens.
+    const heads = this.db
+      .select({
+        agentKind: sql<string>`${agentPromptRevisions.agent_kind}`.as('head_agent_kind'),
+        revision: sql<number>`max(${agentPromptRevisions.revision})`.as('head_revision'),
+      })
+      .from(agentPromptRevisions)
+      .where(eq(agentPromptRevisions.workspace_id, workspaceId))
+      .groupBy(agentPromptRevisions.agent_kind)
+      .as('heads')
+
+    const rows = await this.db
+      .select({
+        agent_kind: agentPromptRevisions.agent_kind,
+        revision: agentPromptRevisions.revision,
+        text: agentPromptRevisions.text,
+        restored_from: agentPromptRevisions.restored_from,
+        created_at: agentPromptRevisions.created_at,
+        created_by: agentPromptRevisions.created_by,
+      })
+      .from(agentPromptRevisions)
+      .innerJoin(
+        heads,
+        and(
+          eq(agentPromptRevisions.agent_kind, heads.agentKind),
+          eq(agentPromptRevisions.revision, heads.revision),
+        ),
+      )
+      .where(eq(agentPromptRevisions.workspace_id, workspaceId))
+      .orderBy(agentPromptRevisions.agent_kind)
+    return rows.map(rowToAgentPromptRevision)
+  }
+
+  async head(workspaceId: string, agentKind: string): Promise<AgentPromptRevision | null> {
+    const [row] = await this.db
+      .select()
+      .from(agentPromptRevisions)
+      .where(
+        and(
+          eq(agentPromptRevisions.workspace_id, workspaceId),
+          eq(agentPromptRevisions.agent_kind, agentKind),
+        ),
+      )
+      .orderBy(desc(agentPromptRevisions.revision))
+      .limit(1)
+    return row ? rowToAgentPromptRevision(row) : null
+  }
+
+  async append(workspaceId: string, revision: AgentPromptRevision): Promise<void> {
+    await this.db.insert(agentPromptRevisions).values({
+      workspace_id: workspaceId,
+      agent_kind: revision.agentKind,
+      revision: revision.revision,
+      text: revision.text,
+      restored_from: revision.restoredFrom ?? null,
+      created_at: revision.createdAt,
+      created_by: revision.createdBy ?? null,
+    })
   }
 }

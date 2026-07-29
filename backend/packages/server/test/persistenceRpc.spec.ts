@@ -199,6 +199,14 @@ function makeRegistry(): {
       get: async (ws: string) => ({ ws }),
       remove: async () => undefined,
     },
+    // Per-workspace agent system-prompt overrides. `head` is on the RUN path (every dispatch
+    // resolves the live revision), the other three serve the pipeline builder's prompt editor.
+    agentPromptRepository: {
+      listRevisions: async (ws: string) => [{ ws }],
+      listHeads: async (ws: string) => [{ ws }],
+      head: async (ws: string) => ({ ws }),
+      append: async () => undefined,
+    },
     // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
     documentRepository: {
       listByBlock: async (ws: string) => [{ ws }],
@@ -760,6 +768,11 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'workspaceSettingsRepository', method: 'get', args: [] },
     { repo: 'riskPolicyRepository', method: 'list', args: [] },
     { repo: 'modelPresetRepository', method: 'list', args: [] },
+    { repo: 'agentPromptRepository', method: 'listHeads', args: [] },
+    { repo: 'agentPromptRepository', method: 'listRevisions', args: ['coder'] },
+    // The run-path read: an unrouted `head` would fail every agent dispatch in mothership mode
+    // with `unknown_method`, not merely leave the builder's badges blank.
+    { repo: 'agentPromptRepository', method: 'head', args: ['coder'] },
     { repo: 'serviceFragmentDefaultsRepository', method: 'get', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'list', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'getByBlock', args: ['blk_1'] },
@@ -1083,6 +1096,11 @@ describe('settings, preset & schedule management surface (workspace-scoped write
     { repo: 'riskPolicyRepository', method: 'remove', args: ['preset_1'] },
     { repo: 'modelPresetRepository', method: 'get', args: ['preset_1'], echoes: true },
     { repo: 'modelPresetRepository', method: 'remove', args: ['preset_1'] },
+    {
+      repo: 'agentPromptRepository',
+      method: 'append',
+      args: [{ agentKind: 'coder', revision: 1, text: 'be terse', createdAt: 1 }],
+    },
     { repo: 'pipelineScheduleRepository', method: 'get', args: ['sched_1'], echoes: true },
     { repo: 'pipelineScheduleRepository', method: 'upsert', args: [{ id: 'sched_1' }] },
     { repo: 'pipelineScheduleRepository', method: 'remove', args: ['sched_1'] },
