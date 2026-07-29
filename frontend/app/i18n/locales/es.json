@@ -3648,10 +3648,12 @@
     "taskDocs": {
       "heading": "Documentos de contexto",
       "hint": "Documentos adjuntos a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
+      "hintInitiative": "Documentos adjuntos a esta iniciativa como contexto. Su contenido se entrega a los agentes de planificación que redactan el plan.",
       "attach": "Adjuntar",
       "connectSource": "Conectar una fuente",
       "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
+      "emptyInitiative": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al redactar esta iniciativa.",
       "attached": "Documento adjuntado"
     },
     "templates": {
@@ -3694,11 +3696,13 @@
     "contextIssues": {
       "title": "Incidencias de contexto",
       "hint": "Incidencias del tracker adjuntas a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
+      "hintInitiative": "Incidencias del tracker adjuntas a esta iniciativa como contexto. Su contenido se entrega a los agentes de planificación que redactan el plan.",
       "attach": "Adjuntar",
       "connectSource": "Conectar una fuente",
       "connectSourceNamed": "Conectar {source}",
       "attached": "Incidencia adjuntada",
-      "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea."
+      "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea.",
+      "emptyHintInitiative": "Adjunta una incidencia de Jira para que los agentes de planificación vean su descripción y comentarios al redactar esta iniciativa."
     },
     "import": {
       "titleCreate": "Crear tarea desde incidencia",

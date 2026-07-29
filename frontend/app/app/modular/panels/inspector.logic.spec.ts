@@ -98,11 +98,18 @@ describe('inspector panel group', () => {
     expect(visibleIds(block('epic'))).toEqual(['epic-children'])
   })
 
-  // An initiative's planning pipeline is an ordinary run, so it shares the task body's execution
-  // panel — its own inspector leading, the run detail under it. Pinned because the panel is the
-  // only surface carrying the Stop / Discard-run controls that unwedge a stalled planning run.
-  it('an initiative shows its inspector, then the shared execution panel', () => {
-    expect(visibleIds(block('initiative'))).toEqual(['initiative-inspector', 'task-execution'])
+  // An initiative shares two of the task body's panels: the CONTEXT sections (the
+  // create-initiative modal attaches the same documents/issues, and the planning pipeline reads
+  // them, so the inspector must surface them) and the execution panel (planning is an ordinary
+  // run — and that panel carries the only Stop / Discard-run controls that unwedge a stalled
+  // one). Order is pinned too: identity + controls, the context it was given, then the run.
+  it('an initiative shows its inspector, then the shared context + execution panels', () => {
+    expect(visibleIds(block('initiative'))).toEqual([
+      'initiative-inspector',
+      'task-context-docs',
+      'task-context-issues',
+      'task-execution',
+    ])
   })
 
   it('no subject selected resolves to no panels', () => {

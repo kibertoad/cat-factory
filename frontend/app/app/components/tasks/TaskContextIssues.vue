@@ -1,6 +1,10 @@
 <script setup lang="ts">
-// Inspector section for a task block: the tracker issues (Jira, GitHub Issues, …)
-// attached to it as agent context. Attaching uses the SAME inline picker as task
+// Inspector section for a task OR initiative block: the tracker issues (Jira,
+// GitHub Issues, …) attached to it as agent context. An initiative takes the same
+// attachments (the create-initiative modal stages them exactly as the add-task one
+// does) and its whole planning pipeline reads them, so it gets the same section —
+// only the prose differs, which is why the hint/empty copy is level-keyed below.
+// Attaching uses the SAME inline picker as task
 // creation (source selector + in-repo search + paste-by-reference —
 // ContextIssuePicker), NOT the old dropdown that opened a second, page-level
 // "Import an issue…" modal on top of the inspector (stacked page-level modals
@@ -28,6 +32,20 @@ onMounted(() => {
 })
 
 const linked = computed(() => tasks.tasksForBlock(props.block.id))
+
+// Two STATIC literal keys per string, picked by level — the copy names what reads the issue
+// (the agents implementing a task vs the pipeline that plans an initiative), which is the
+// whole point of the hint. Assembling one key from `block.level` would defeat the typed
+// message-key check for a two-member choice that gains nothing from being dynamic.
+const isInitiative = computed(() => props.block.level === 'initiative')
+const hint = computed(() =>
+  isInitiative.value ? t('tasks.contextIssues.hintInitiative') : t('tasks.contextIssues.hint'),
+)
+const emptyHint = computed(() =>
+  isInitiative.value
+    ? t('tasks.contextIssues.emptyHintInitiative')
+    : t('tasks.contextIssues.emptyHint'),
+)
 // Already-linked issues, so the inline picker filters them out / never re-offers them.
 const chosenKeys = computed(() =>
   linked.value.map((issue) =>
@@ -71,7 +89,7 @@ async function attach(item: PendingContext) {
   <InspectorSection
     v-if="tasks.available"
     :title="t('tasks.contextIssues.title')"
-    :hint="t('tasks.contextIssues.hint')"
+    :hint="hint"
     :count="linked.length"
   >
     <template #actions>
@@ -133,7 +151,7 @@ async function attach(item: PendingContext) {
       </a>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      {{ t('tasks.contextIssues.emptyHint') }}
+      {{ emptyHint }}
     </p>
   </InspectorSection>
 </template>

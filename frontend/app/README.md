@@ -148,7 +148,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 - **Context attachments** (`components/context`) — `ContextAttachmentFields`, the
   shared staged-attachment form used by both the add-task and create-initiative
   modals. Picks are held locally and import-and-linked once the block exists (see
-  `composables/useContextLinking`), because linking needs a block id.
+  `composables/useContextLinking`), because linking needs a block id. Both hosts
+  attach to the SAME per-block linkage, so the inspector's `TaskContextDocs` /
+  `TaskContextIssues` sections render for a task AND an initiative — an initiative's
+  attachments would otherwise be invisible the moment the create modal closed.
 - **Integrations** — modals/panels for `github` (the source-control panel, shared
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
