@@ -3743,6 +3743,8 @@
     "intro": "Przeszukaj tablicę systemu zgłoszeń w poszukiwaniu otwartych, nieprzypisanych błędów i uszereguj je według wpływu w stosunku do przewidywanej trudności naprawy. Wybierz jeden, a stanie się zadaniem uruchamiającym potok naprawy błędów.",
     "connectFirst": "Najpierw połącz lub włącz źródło zadań.",
     "connectSource": "Połącz {label}",
+    "enableSource": "Włącz {label}",
+    "pickTracker": "Wybierz system zgłoszeń",
     "needFrameFirst": "Najpierw dodaj ramkę usługi do tablicy, aby wybrany błąd miał gdzie wylądować.",
     "tracker": "System zgłoszeń",
     "board": "Tablica",

@@ -10,6 +10,13 @@
 // unavailable or failed still shows its candidates (flagged as unassessed, since the scan is
 // useful on its own), and a scan that hit its cap says so — a silently shortened list reads
 // exactly like an exhaustive one.
+//
+// The tracker selector doubles as the "add a tracker" affordance (the same two-tier menu
+// `<ContextIssuePicker>` renders, off the shared `buildSourceChoices`): a hunt is a common
+// place to find out the tracker holding the bugs isn't connected here yet, and the answer
+// has to be a route to that tracker's own connect screen rather than "go find the
+// Integrations hub". The connect modal opens OVER the hunt, so nothing typed here is lost.
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type {
   BugHuntAnalysisStatus,
@@ -17,6 +24,7 @@ import type {
   BugHuntConfidence,
   TaskSourceKind,
 } from '~/types/domain'
+import { type SourceChoice, buildSourceChoices, reconcileSource } from '~/utils/taskSources'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, d, n } = useI18n()
@@ -54,8 +62,64 @@ const containerItems = computed(() =>
     })),
 )
 
-const sourceItems = computed(() =>
-  tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
+const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
+
+// Two-tier tracker menu: pick one the workspace already offers, or add one it doesn't.
+const sourceChoices = computed(() => buildSourceChoices(tasks.sources, source.value))
+const sourceMenu = computed<DropdownMenuItem[][]>(() =>
+  sourceChoices.value.map((group) =>
+    group.map((choice) =>
+      choice.action === 'select'
+        ? {
+            label: choice.label,
+            icon: choice.icon,
+            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
+            onSelect: () => {
+              source.value = choice.source
+            },
+          }
+        : {
+            label: addLabel(choice),
+            icon: 'i-lucide-plug',
+            onSelect: () => addSource(choice.source),
+          },
+    ),
+  ),
+)
+
+/** The trackers that can be added — the empty state's buttons, where none is offered yet. */
+const addableSources = computed(() =>
+  sourceChoices.value.flat().filter((c) => c.action !== 'select'),
+)
+
+/**
+ * Wording for an addable tracker: `enable` is connected but toggled off for this workspace,
+ * so the user is never told to "connect" something they already connected.
+ */
+function addLabel(choice: SourceChoice): string {
+  return choice.action === 'enable'
+    ? t('bugHunt.enableSource', { label: choice.label })
+    : t('bugHunt.connectSource', { label: choice.label })
+}
+
+/**
+ * The tracker the user left to add, so it becomes the selection the moment it turns up
+ * offered (the connect modal re-probes on success and this hunt stays open underneath it).
+ * Also the reconcile trigger for a source that STOPS being offered — disconnected, or
+ * toggled off in settings while the hunt sat open.
+ */
+const awaitingConnect = ref<TaskSourceKind | null>(null)
+function addSource(s: TaskSourceKind) {
+  awaitingConnect.value = s
+  ui.openTaskConnect(s)
+}
+watch(
+  () => tasks.offeredSources.map((s) => s.source),
+  (offered) => {
+    const next = reconcileSource(offered, source.value, awaitingConnect.value)
+    if (next && next === awaitingConnect.value) awaitingConnect.value = null
+    if (next !== source.value) source.value = next
+  },
 )
 
 const boardItems = computed(() =>
@@ -100,6 +164,7 @@ watch(open, (isOpen) => {
   boardId.value = ''
   issueType.value = ''
   labels.value = ''
+  awaitingConnect.value = null
   source.value = ui.bugHunt?.source ?? tasks.offeredSources[0]?.source ?? undefined
   containerId.value = ui.bugHunt?.containerId ?? containerItems.value[0]?.value
   if (source.value) hunt.loadBoards(source.value)
@@ -193,16 +258,16 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
         <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
         <p class="text-sm text-slate-400">{{ t('bugHunt.connectFirst') }}</p>
-        <div class="flex justify-center gap-2">
+        <div class="flex flex-wrap justify-center gap-2">
           <UButton
-            v-for="s in tasks.sources"
-            :key="s.source"
+            v-for="choice in addableSources"
+            :key="choice.source"
             color="primary"
             variant="soft"
-            :icon="s.icon"
-            @click="ui.openTaskConnect(s.source)"
+            :icon="choice.icon"
+            @click="addSource(choice.source)"
           >
-            {{ t('bugHunt.connectSource', { label: s.label }) }}
+            {{ addLabel(choice) }}
           </UButton>
         </div>
       </div>
@@ -217,7 +282,24 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
 
         <div class="grid gap-3 sm:grid-cols-2">
           <UFormField :label="t('bugHunt.tracker')">
-            <USelect v-model="source" :items="sourceItems" class="w-full" />
+            <!-- The selector is also the way to ADD a tracker: each entry in the second group
+                 opens that tracker's own connect screen over this modal, so the hunt (and
+                 anything typed into it) is still here when the user comes back. -->
+            <UDropdownMenu
+              :items="sourceMenu"
+              :content="{ side: 'bottom', align: 'start' }"
+              class="w-full"
+            >
+              <UButton
+                color="neutral"
+                variant="soft"
+                :icon="descriptor?.icon"
+                trailing-icon="i-lucide-chevron-down"
+                class="w-full justify-between"
+              >
+                <span class="truncate">{{ descriptor?.label ?? t('bugHunt.pickTracker') }}</span>
+              </UButton>
+            </UDropdownMenu>
           </UFormField>
 
           <UFormField :label="t('bugHunt.board')">

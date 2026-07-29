@@ -34,6 +34,24 @@ admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection,
 — create a task, start a run — is exactly what the member tier is for. Gating it on
 `integrations.manage` would mean only admins could pick up a bug.
 
+### The tracker picker is also how a tracker gets ADDED
+
+"Which board holds the bugs?" is a common place to discover the tracker holding them isn't
+connected to this workspace yet, so the hunt's tracker selector is the same two-tier menu
+`<ContextIssuePicker>` renders (both off the shared `buildSourceChoices` /`reconcileSource` in
+`frontend/app/app/utils/taskSources.ts`): the trackers the workspace offers, then the ones it
+could add. An add entry routes to **that tracker's own connect screen** (`ui.openTaskConnect`),
+never to the Integrations hub — the hub is a directory the user then has to search, and the
+tracker they just named is the one thing we already know.
+
+Two consequences the wording and the wiring have to honour. The connect modal opens **over** the
+hunt rather than replacing it, so the board scope, issue type and labels typed so far survive the
+detour; and the hunt reconciles the offered set as it changes underneath it, so the tracker the
+user left to add becomes the selection the moment it turns up offered rather than leaving them on
+the old one wondering whether the connect took. A tracker that is connected but toggled off for
+the workspace is offered as "enable", not "connect" — the same modal serves both, and a user is
+never told to connect something they already connected.
+
 ## 2. It persists nothing
 
 There is **no hunt table, no migration and no runtime-symmetry surface of its own**. A hunt is a
@@ -190,4 +208,5 @@ work away and leave them to redo the pick; they can press Run instead.
 | Inline rating model          | `orchestration/src/modules/bugHunt/BugHuntAssessorService.ts`             |
 | HTTP                         | `server/src/modules/bugHunt/BugHuntController.ts`                         |
 | SPA                          | `frontend/app/app/components/tasks/BugHuntModal.vue`, `stores/bugHunt.ts` |
+| Shared tracker selection     | `frontend/app/app/utils/taskSources.ts`                                   |
 | Cross-runtime assertions     | `internal/conformance/src/suites/bug-hunt.ts`                             |

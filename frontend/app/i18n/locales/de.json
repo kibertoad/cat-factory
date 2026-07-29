@@ -3431,6 +3431,8 @@
     "intro": "Durchsuche ein Tracker-Board nach offenen, nicht zugewiesenen Fehlern und bewerte sie nach Auswirkung im Verhältnis zum geschätzten Aufwand. Wähle einen aus, und er wird zu einer Aufgabe, die die Fehlerbehebungs-Pipeline durchläuft.",
     "connectFirst": "Verbinde oder aktiviere zuerst eine Aufgabenquelle.",
     "connectSource": "{label} verbinden",
+    "enableSource": "{label} aktivieren",
+    "pickTracker": "Tracker auswählen",
     "needFrameFirst": "Füge zuerst einen Service-Rahmen zum Board hinzu, damit ein übernommener Fehler irgendwo landen kann.",
     "tracker": "Tracker",
     "board": "Board",
