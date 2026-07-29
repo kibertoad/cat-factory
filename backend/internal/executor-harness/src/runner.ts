@@ -423,9 +423,11 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       controller.abort(new Error('max duration exceeded'))
     }, this.limits.maxDurationMs)
 
-    // When the run last produced ANY output. Unset until its first byte — which is both the
-    // cold-start watchdog's "has it spoken yet" test and, on a failure, the difference between
-    // a run that died mid-work and one that never started producing (see `silenceClause`).
+    // When the run was last heard from — the agent's own output, or a synthetic keep-alive beat
+    // from an activity-silent phase (see `silenceClause`, which is careful not to claim more than
+    // that). Unset until the first of either, which is both the cold-start watchdog's "has it
+    // spoken yet" test and, on a failure, the difference between a run that died mid-work and one
+    // that never got going at all.
     let lastActivityAt: number | undefined
 
     // ADR 0026 D4: a one-shot cold-start watchdog. If the job produces no activity within

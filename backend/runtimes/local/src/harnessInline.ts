@@ -147,10 +147,8 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
         return
       }
       if (code !== 0) {
-        // `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as
-        // JSON on STDOUT and leaves stderr EMPTY — so on a non-zero exit a stderr-only message
-        // carries nothing but the code, and the reason the caller's in-band `is_error` check
-        // would have surfaced is dropped on the floor. Carry whichever stream spoke.
+        // BOTH streams, not just stderr — see {@link cliExitMessage} for why, and for what is
+        // scrubbed out of them on the way.
         reject(new Error(cliExitMessage(command, code, killSignal, stderr, stdout)))
         return
       }
