@@ -2746,7 +2746,7 @@
         "host": "Token yalnızca {host} adresine gönderilir.",
         "scopes": "Paket kapsamları",
         "scopesHelp": "İsteğe bağlı. Virgülle ayrılmış npm kapsamları.",
-        "scopesNote": "İsteğe bağlıdır ve bir kapsam hem özel hem herkese açık paketler barındırıyorsa boş bırakmak daha iyidir: burada belirtilen bir kapsam, altındaki her paketi bu kayıt defterine yönlendirir, böylece herkese açık yayımlananlar artık çözümlenemez. Token her durumda kayıt defterinin kimliğini doğruladığından, tek tek bağımlılıkları sürümlerindeki kayıt defteri önekiyle yine de buraya sabitleyebilirsiniz (pnpm bunu destekler).",
+        "scopesNote": "İsteğe bağlı. Burada belirtilen bir kapsam, altındaki her paketi bu kayıt defterine yönlendirir; bu nedenle herkese açık yayımlanmış paketler de barındıran bir kapsam artık çözümlenemez. Depo kendi .npmrc dosyasını içeriyorsa ya da tek tek bağımlılıklar gh: gibi adlandırılmış bir kayıt defteri önekiyle sabitleniyorsa (pnpm 11.1 veya üzeri) boş bırakın; token kayıt defterinin kimliğini her durumda doğrular.",
         "token": "Erişim token'ı",
         "save": "Kayıt defteri ekle"
       },

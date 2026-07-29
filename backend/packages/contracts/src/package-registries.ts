@@ -75,10 +75,18 @@ export const packageRegistryTokenSchema = v.pipe(
  * scope mapping is all-or-nothing, so routing `@org` at a private registry makes EVERY
  * `@org/*` package resolve from it — which breaks an organisation publishing part of that
  * scope to the public registry. A scope-less entry still emits the host's `_authToken`
- * line, so individual dependencies can be pinned to the registry through their version
- * specifier (pnpm's per-dependency registry prefix) while the rest of the scope keeps
- * resolving publicly. NB an empty list needs harness image >= 1.73.0; older images reject
- * the job body.
+ * line, which is all a checkout needs when the ROUTING is already settled elsewhere:
+ *
+ *   - the repository commits its own `.npmrc` (project config wins over the user config the
+ *     harness writes, so the repo keeps owning where its packages come from);
+ *   - single dependencies carry a named-registry prefix — `"@acme/private": "gh:^1.0.0"`,
+ *     with `gh:` built in for GitHub Packages and further aliases declared under
+ *     `namedRegistries` in `pnpm-workspace.yaml` (pnpm >= 11.1.0, pnpm/pnpm#11324);
+ *   - the vendor IS the default registry (`npmjs`), where a scope mapping back to
+ *     `registry.npmjs.org` is a no-op and only the credential was ever missing.
+ *
+ * NB an empty list needs harness image >= 1.73.0. An older image does not ignore the entry,
+ * it rejects the whole job body — see the harness's `parsePackageRegistries`.
  */
 export const addPackageRegistrySchema = v.object({
   ecosystem: packageEcosystemSchema,

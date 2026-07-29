@@ -552,7 +552,7 @@
         "host": "Il token viene inviato solo a {host}.",
         "scopes": "Scope dei package",
         "scopesHelp": "Facoltativo. Scope npm separati da virgola.",
-        "scopesNote": "Facoltativo, ed è meglio lasciarlo vuoto quando uno scope mescola package privati e pubblici: uno scope indicato qui instrada verso questo registry ogni package che contiene, quindi quelli pubblicati pubblicamente non si risolvono più. Il token autentica comunque il registry, perciò le singole dipendenze possono ancora essere puntate a esso con un prefisso di registry nella loro versione (supportato da pnpm).",
+        "scopesNote": "Facoltativo. Uno scope indicato qui indirizza a questo registry ogni package che contiene, quindi uno scope che include anche package pubblicati pubblicamente smette di essere risolto. Lascialo vuoto quando il repository include un proprio .npmrc oppure quando le singole dipendenze vengono fissate con un prefisso di registry denominato come gh: (pnpm 11.1 o successivo): il token autentica il registry in ogni caso.",
         "token": "Token di accesso",
         "save": "Aggiungi registry"
       },

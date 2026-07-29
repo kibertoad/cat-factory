@@ -2605,7 +2605,7 @@
         "host": "Le jeton n'est envoyé qu'à {host}.",
         "scopes": "Portées de paquets",
         "scopesHelp": "Facultatif. Portées npm séparées par des virgules.",
-        "scopesNote": "Facultatif, et mieux vaut le laisser vide lorsqu'une portée mélange paquets privés et publics : une portée indiquée ici dirige vers ce registre tous les paquets qu'elle contient, si bien que ceux publiés publiquement ne se résolvent plus. Le jeton authentifie le registre dans tous les cas : vous pouvez donc toujours épingler des dépendances précises dessus grâce à un préfixe de registre dans leur version (pris en charge par pnpm).",
+        "scopesNote": "Facultatif. Une portée indiquée ici dirige vers ce registre tous les paquets qu'elle contient, si bien qu'une portée contenant aussi des paquets publiés publiquement cesse d'être résolue. Laissez le champ vide si le dépôt fournit son propre .npmrc ou si les dépendances individuelles sont épinglées avec un préfixe de registre nommé tel que gh: (pnpm 11.1 ou version ultérieure) : le jeton authentifie le registre dans tous les cas.",
         "token": "Jeton d'accès",
         "save": "Ajouter le registre"
       },

@@ -552,7 +552,7 @@
         "host": "Das Token wird nur an {host} gesendet.",
         "scopes": "Package-Scopes",
         "scopesHelp": "Optional. Kommagetrennte npm-Scopes.",
-        "scopesNote": "Optional und besser leer, wenn ein Scope private und öffentliche Pakete mischt: Ein hier eingetragener Scope leitet jedes Paket darunter an dieses Registry, sodass die öffentlich veröffentlichten nicht mehr aufgelöst werden. Das Token authentifiziert das Registry ohnehin, einzelne Abhängigkeiten lassen sich also weiterhin über ein Registry-Präfix in ihrer Version darauf festlegen (von pnpm unterstützt).",
+        "scopesNote": "Optional. Ein hier eingetragener Scope leitet jedes Paket darunter an dieses Registry, sodass ein Scope, der auch öffentlich veröffentlichte Pakete enthält, nicht mehr aufgelöst wird. Lass das Feld leer, wenn das Repository eine eigene .npmrc enthält oder wenn einzelne Abhängigkeiten über ein benanntes Registry-Präfix wie gh: festgelegt werden (pnpm 11.1 oder neuer) - das Token authentifiziert das Registry ohnehin.",
         "token": "Zugriffstoken",
         "save": "Registry hinzufügen"
       },

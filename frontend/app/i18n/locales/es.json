@@ -2605,7 +2605,7 @@
         "host": "El token solo se envía a {host}.",
         "scopes": "Ámbitos de paquetes",
         "scopesHelp": "Opcional. Ámbitos de npm separados por comas.",
-        "scopesNote": "Opcional, y es mejor dejarlo vacío cuando un ámbito mezcla paquetes privados y públicos: un ámbito indicado aquí dirige a este registro todos los paquetes que contiene, por lo que los publicados públicamente dejan de resolverse. El token autentica el registro en cualquier caso, así que aún puedes fijar dependencias concretas a él con un prefijo de registro en su versión (compatible con pnpm).",
+        "scopesNote": "Opcional. Un ámbito indicado aquí dirige a este registro todos los paquetes que contiene, de modo que un ámbito que también incluye paquetes publicados publicamente deja de resolverse. Déjalo vacío cuando el repositorio incluya su propio .npmrc o cuando las dependencias individuales se fijen con un prefijo de registro con nombre como gh: (pnpm 11.1 o posterior); el token autentica el registro en cualquier caso.",
         "token": "Token de acceso",
         "save": "Agregar registro"
       },

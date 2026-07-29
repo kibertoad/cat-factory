@@ -2605,7 +2605,7 @@
         "host": "Token jest wysyłany tylko do {host}.",
         "scopes": "Zakresy pakietów",
         "scopesHelp": "Opcjonalne. Zakresy npm oddzielone przecinkami.",
-        "scopesNote": "Opcjonalne, a najlepiej zostawić puste, gdy zakres łączy pakiety prywatne i publiczne: zakres podany tutaj kieruje do tego rejestru każdy pakiet w jego obrębie, więc te opublikowane publicznie przestają się rozwiązywać. Token uwierzytelnia rejestr niezależnie od tego, więc pojedyncze zależności nadal można do niego przypiąć prefiksem rejestru w ich wersji (obsługiwane przez pnpm).",
+        "scopesNote": "Opcjonalne. Zakres podany tutaj kieruje do tego rejestru każdy pakiet, który się w nim znajduje, więc zakres zawierający również pakiety opublikowane publicznie przestaje być rozwiązywany. Zostaw puste, gdy repozytorium ma własny plik .npmrc lub gdy pojedyncze zależności są przypinane przedrostkiem nazwanego rejestru, takim jak gh: (pnpm 11.1 lub nowszy) - token i tak uwierzytelnia rejestr.",
         "token": "Token dostępu",
         "save": "Dodaj rejestr"
       },

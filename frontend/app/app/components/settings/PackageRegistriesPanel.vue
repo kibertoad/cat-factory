@@ -53,9 +53,15 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
+// The tab this renders in only exists once the window's probe resolved `available === true`, so
+// `ensureLoaded()` here would early-return every time and this error branch would be dead code.
+// Read the list outright instead: the window owns the PROBE (a failure there means no tab), the
+// panel owns the DATA (a failure here means the reader is looking at a list we could not fetch,
+// and must be told). It also drops the staleness `ensureLoaded` carried — reopening the tab
+// after an entry was added elsewhere used to re-render the first load's snapshot.
 onMounted(async () => {
   try {
-    await store.ensureLoaded()
+    await store.load()
   } catch (e) {
     notifyError(t('settings.packageRegistries.toast.loadFailed'), e)
   }
@@ -181,6 +187,22 @@ async function removeEntry(entryId: string) {
           data-testid="package-registry-scopes"
         />
       </UFormField>
+      <!-- What will actually be SAVED. The parse splits on commas/whitespace and prefixes a
+           missing `@`, so the field's text and the stored scopes routinely differ — and now
+           that an empty list is a legitimate save, "I typed something that parsed to nothing"
+           and "I meant to leave this empty" would otherwise look identical at the button. -->
+      <div v-if="parsedScopes.length" class="flex flex-wrap gap-1">
+        <UBadge
+          v-for="scope in parsedScopes"
+          :key="scope"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          data-testid="package-registry-parsed-scope"
+        >
+          {{ scope }}
+        </UBadge>
+      </div>
       <!-- Why leaving this empty is often the RIGHT answer — a scope mapping is all-or-nothing,
            so an org publishing some of its `@org` packages publicly breaks under one. -->
       <p class="text-[11px] text-slate-500">

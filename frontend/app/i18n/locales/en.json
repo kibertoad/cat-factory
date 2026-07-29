@@ -2824,7 +2824,7 @@
         "host": "The token is sent only to {host}.",
         "scopes": "Package scopes",
         "scopesHelp": "Optional. Comma-separated npm scopes.",
-        "scopesNote": "Optional, and best left empty when a scope mixes private and public packages: a scope listed here routes every package under it to this registry, so the ones published publicly stop resolving. The token authenticates the registry either way, so single dependencies can still be pinned to it with a registry prefix in their version (supported by pnpm).",
+        "scopesNote": "Optional. A scope listed here routes every package under it to this registry, so a scope that also holds publicly published packages stops resolving. Leave it empty when the repository commits its own .npmrc, or when single dependencies are pinned with a named-registry prefix such as gh: (pnpm 11.1 or newer) - the token authenticates the registry either way.",
         "token": "Access token",
         "save": "Add registry"
       },
