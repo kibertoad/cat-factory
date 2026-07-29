@@ -96,6 +96,16 @@ behaviour by choosing a pipeline SHAPE over REST. Call it BEFORE starting the ru
 await setFakeProfile(request, workspaceId, { decisionOnSteps: [], dispatchThrowKinds: ['coder'] })
 ```
 
+A workspace's fake is built lazily on its FIRST call and cached (it owns per-workspace state — job
+maps, companion/tester counters, gate verdict sequences — that has to survive a whole run), so the
+profile behind it is read exactly once. A write therefore **re-arms** that workspace: the cached
+fakes are dropped so the next call rebuilds them from the profile just written. That is what lets a
+spec change behaviour PART-WAY through a workspace's life — `initiative-checkpoint.spec.ts` re-arms
+the decision gate so the next phase's run parks instead of settling to `done`, leaving a stable card
+to assert on. Without it the late write would be a silent no-op, visible only as a load-dependent
+flake. Re-arming resets that workspace's counters and job map too, so only write while the workspace
+is quiescent — never while one of its own async jobs is mid-poll.
+
 `FakeProfile` (see [`tests/helpers.ts`](./tests/helpers.ts)): `confidence`, `decisionOnSteps`,
 `asyncKinds`, `dispatchThrowKinds`, `asyncPolls`, `bootstrapProgress`, `bootstrapFailWith`,
 `customResult`, `initiativePlan` (the plan draft the fake `initiative-planner` returns, so an
@@ -152,11 +162,17 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
 
 Playwright's `webServer` boots both the backend (`src/testServer.ts`) and the SPA
 (`deploy/frontend`'s `nuxt dev`, pointed at the backend via `NUXT_PUBLIC_API_BASE`).
-Use `test:e2e:ui` for the interactive runner. The suite is **not** part of the unit
-`test:run` lane — it runs in its own CI job (`.github/workflows/ci.yml` → `Test e2e`).
-That job is **non-blocking**: it isn't wired into the aggregated `Test` gate, so a
+Use `test:e2e:ui` for the interactive runner. The browser suite is **not** part of the
+unit `test:run` lane — it runs in its own CI job (`.github/workflows/ci.yml` → `Test
+e2e`). That job is **non-blocking**: it isn't wired into the aggregated `Test` gate, so a
 browser/boot flake can't block an otherwise-green PR. Promote it into `test-gate.needs`
 once it has proven stable.
+
+`test:run` is a separate, browser-free vitest lane over the test-only backend SEAMS in
+`src/` (`vitest.config.ts` scopes it to `src/**/*.test.ts`, away from the Playwright specs
+in `tests/`). It rides the ordinary `Test units (no DB)` job, so a seam whose breakage
+would only ever show up as an e2e flake — `FakeProfileRegistry` re-arming a workspace's
+fakes is the motivating case — gets pinned deterministically instead.
 
 ### Test isolation
 
