@@ -1,5 +1,127 @@
 # @cat-factory/orchestration
 
+## 0.168.0
+
+### Minor Changes
+
+- 4ecb25c: Record inline (non-proxied) LLM calls into `llm_call_metrics`, so an inline agent step's model
+  activity is visible in-app instead of only in an external trace backend.
+
+  `InstrumentedModelProvider` was the one LLM feeder that wrote to no repository: it called
+  `traceSink.recordGeneration` and nothing else. So every inline call site — the judges, consensus,
+  the requirements writer, the fragment selector, the fork chat, and the inline agent kinds
+  (`doc-researcher`, `doc-outliner`, the document interviewer) — was invisible to
+  `ObservabilityPanel`, to a step's token rollup and to `/api/v1/debug/*`. A run made entirely of
+  inline steps reported zero model activity no matter what it spent, on the surfaces an operator
+  actually opens. This is the coverage half of C2 in `docs/initiatives/observability-logging-gaps.md`
+  (slice 5.6); its privacy half landed earlier.
+
+  The provider now has a second exit, the kernel `InlineLlmCallRecorder` port, implemented by
+  orchestration's `makeInlineCallRecorder` over the same `LlmObservabilityService` the proxy and the
+  subscription harnesses already feed — so all three producers converge on one store rather than a
+  third recording path being invented.
+
+  Two things a reviewer should look at closely. First, the provider takes **exactly one** exit per
+  call: the service behind the recorder performs the trace-sink fan-out itself, so a recorded call
+  must not also be emitted to the provider's own sink — doing both would double every inline
+  generation on Langfuse/OTel. Because that invariant binds two objects a facade could easily build
+  from different sinks (which typechecks, and merely splits the trace), neither facade assembles the
+  pair: `createInlineInstrumentation` composes both exits from one sink instance, and leaves the
+  provider's `traceSink` as the fallback for a call carrying no `workspaceId` (the metric store is
+  workspace-scoped, so such a call has no row to be filed under — the same deliberate fail-open the
+  body gate already takes for an untagged call). Second, bodies now reach the recorder ungated: the
+  service applies the identical `LLM_RECORD_PROMPTS` + `storeAgentContext` gate from the same kernel
+  factory, plus `redactSecrets` and the prompt delta chain. Re-gating in the provider was rejected
+  because it would withhold text the store is entitled to keep and restore the two-places-one-rule
+  shape that produced C2's privacy half in the first place; instead the bodies cross as thunks and
+  `record` resolves its gate before touching one, so a prompts-off deployment never serialises a
+  prompt that is about to be discarded.
+
+  **A second, pre-existing instance of C2's privacy half is fixed here too.** On both runtimes
+  `makeHarnessCallRecorder`'s `LlmObservabilityService` was built with no `workspaceSettingsRepository`,
+  and an absent repository makes `createStoreAgentContextGate` a constant `true` — so a subscription
+  harness's full `stream-json` prompt and response were retained for a workspace that had explicitly
+  opted out. It went unnoticed because that failure is silent by construction: nothing errors, the
+  rows simply keep their bodies. Both facades now thread the repository. Existing rows are not
+  rewritten; the fix applies from the next recorded call.
+
+  The row mapping deliberately reports what an inline call does not know rather than filling
+  proxy-shaped fields with plausible values: `turnIndex` null, `httpStatus` null, `phase` `''`,
+  `streaming` false, and `upstreamMs === totalMs` so the derived overhead is a real 0. Conformance
+  pins each of those on both runtimes' real stores, since each is one a store could quietly flatten.
+  Anything reading these rows should expect inline calls in the unattributed `phase=""` slice —
+  `backend/docs/debug-api.md` and the `investigate-telemetry` skill now say so.
+
+  **A live bug on the existing trace-sink path is fixed on the way through:** the inline feeder read
+  `finishReason` as a bare string, but the current AI-SDK spec reports it as `{ unified, raw }` — so
+  every inline call has been exporting `finishReason: null`, which reads in telemetry as "the
+  provider didn't say" rather than as a parse miss. It survived because the tests fed the reader a
+  hand-rolled result carrying the shape the reader wanted; they now drive the SDK's own
+  `MockLanguageModelV3` through a real `generateText`, which is what surfaced it. Both provider test
+  suites are consolidated into the one beside the class (they had drifted into two packages).
+
+  Behaviour note: an `InstrumentedModelProvider` built with neither exit wired now throws at
+  construction. Nothing in-tree does that, and it would previously have been a silent no-op wrapper
+  that still satisfied the facades' wiring assertions.
+
+### Patch Changes
+
+- Updated dependencies [4ecb25c]
+  - @cat-factory/kernel@0.190.0
+  - @cat-factory/agents@0.86.0
+  - @cat-factory/caching@0.11.19
+  - @cat-factory/integrations@0.110.3
+  - @cat-factory/sandbox@0.11.4
+  - @cat-factory/spend@0.12.120
+  - @cat-factory/workspaces@0.19.19
+
+## 0.167.0
+
+### Minor Changes
+
+- 7ed2bc0: Condense long best-practice standards for the agents that re-read them every turn.
+
+  Coding agents (`coder`, `fixer`, `ci-fixer`, `conflict-resolver`) re-send their whole system
+  prompt on every turn of a long loop, so each folded standard is billed again and again. The
+  two-tier `body` / `brief` split exists for exactly that, but only the code-authored built-in
+  catalog could supply a brief: a managed standard — hand-authored, repo-sourced, or a living
+  Confluence/Notion page, and including one that OVERRIDES a built-in id — always folded in full.
+  Those are the long ones.
+
+  A tenant can now link a short version (a field in the library editor, or a `brief:` frontmatter
+  key on a repo-sourced guideline file), and a standard over ~1,500 characters with none gets one
+  generated by a small model, persisted, and reused by every later dispatch. The stored brief is
+  keyed by a fingerprint of the body it condensed, so an edit, a repo resync, or a re-resolved
+  living document invalidates it and the next coding dispatch re-condenses — no change feed, and
+  the same mechanism covers all three. Reviewer and planner kinds are untouched: they read the full
+  standard, and never trigger a condensation.
+
+  A standard that cannot be usefully shortened is a normal outcome — the generator is told to keep
+  every rule even where that means returning the text near its original length — so that verdict is
+  recorded against the body too, and the full standard is folded without asking again until someone
+  edits it. A provider failure is deliberately not recorded, so a bad minute never disables
+  condensation for a fragment. Whether a condensation is usable is judged as a proportion of the
+  standard it condenses rather than a fixed length, so a very long standard condensed well is
+  accepted while a short one restated at almost full length is not.
+
+  Adds `prompt_fragments.brief` and a `fragment_briefs` table on both runtimes. No shipped built-in
+  reaches the threshold, so the built-in catalog is unchanged; a deployment with no model wired
+  folds full bodies exactly as before, as does every failure on the path — a brief changes how a
+  standard is stated, never what it requires.
+
+### Patch Changes
+
+- Updated dependencies [7ed2bc0]
+  - @cat-factory/contracts@0.194.0
+  - @cat-factory/kernel@0.189.0
+  - @cat-factory/agents@0.85.0
+  - @cat-factory/prompt-fragments@0.15.17
+  - @cat-factory/integrations@0.110.2
+  - @cat-factory/sandbox@0.11.3
+  - @cat-factory/spend@0.12.119
+  - @cat-factory/workspaces@0.19.18
+  - @cat-factory/caching@0.11.18
+
 ## 0.166.0
 
 ### Minor Changes

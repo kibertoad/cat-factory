@@ -314,6 +314,88 @@ export interface LlmCallPageQuery {
   contains?: string
 }
 
+/**
+ * One completed INLINE (non-proxied) LLM call, as the instrumented model provider observes it.
+ *
+ * A container agent reaches its model through the LLM proxy (or, on a subscription harness,
+ * through the harness's own stream), and both of those producers own a wire boundary that
+ * carries facts an inline call simply does not have — a job-scoped turn ordinal, a run phase,
+ * an HTTP status, a transport-vs-model latency split. So this is a deliberately NARROWER shape
+ * than {@link LlmCallMetric}: it states only what a direct AI-SDK call can honestly report, and
+ * the layer that adapts it onto the store fills the rest with the values that mean "not
+ * applicable" rather than inventing them.
+ *
+ * `workspaceId` is REQUIRED here even though the inline observability tag makes it optional:
+ * the metric store is workspace-scoped, so an untagged call has nowhere to land. That is a
+ * reason for a caller to tag its call, not for this port to widen — the provider keeps such a
+ * call on the trace-sink path instead of recording an unattributable row.
+ */
+export interface InlineLlmCall {
+  workspaceId: string
+  /** The run this call belongs to, or null for a one-shot call outside a run. */
+  executionId: string | null
+  /** The call site (`doc-researcher`, `requirements-writer`, `sandbox:judge`, …). */
+  agentKind: string
+  provider: string
+  model: string
+  /** Number of chat messages in the request. */
+  messageCount: number
+  /** Number of tools offered in the request (0 = the model can't call anything). */
+  toolCount: number
+  /** The output ceiling the request asked for, or null when it named none. */
+  requestMaxTokens: number | null
+  /** FRESH (uncached) input tokens — exclusive of both cache classes. */
+  promptTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  completionTokens: number
+  totalTokens: number
+  finishReason: string | null
+  /**
+   * Wall-clock the SDK call took (ms). ONE number, not the proxy path's `totalMs`/`upstreamMs`
+   * pair: an inline call has no proxy hop between the caller and the model, so there is no
+   * transport overhead to split out and a second field could only ever restate this one.
+   */
+  durationMs: number
+  ok: boolean
+  errorMessage: string | null
+  /**
+   * The request messages serialised as JSON (the FULL prompt — the store owns the delta).
+   *
+   * A THUNK, not a string, because every body here sits behind the recorder's
+   * `LLM_RECORD_PROMPTS` + `storeAgentContext` gate and the caller cannot see that gate — the
+   * whole point of {@link InlineLlmCallRecorder} owning it is that the rule lives in one
+   * place. Handing over the work instead of the result lets a deployment with recording off
+   * skip serialising an AI-SDK prompt array (on a judge or a reviewer: a rubric and a diff)
+   * that would be dropped on the next line, without the caller having to know why.
+   */
+  promptText: InlineLlmCallBody
+  responseText: InlineLlmCallBody
+  /** The model's reasoning trace when it arrived on a separate channel, else ''. */
+  reasoningText: InlineLlmCallBody
+}
+
+/**
+ * One prompt/response/reasoning body of an inline call, resolved by the recorder ONLY when the
+ * body gate says it will be kept. Never called more than once per body.
+ */
+export type InlineLlmCallBody = () => string
+
+/**
+ * Persist one inline LLM call into the same store the proxy and the subscription harnesses
+ * write to, so `ObservabilityPanel`, the per-step rollups and the `/api/v1/debug/*` surface
+ * see judge / consensus / inline-agent-kind calls alongside container ones.
+ *
+ * Implemented by the orchestration `LlmObservabilityService` (via `makeInlineCallRecorder`),
+ * which owns secret scrubbing, the `LLM_RECORD_PROMPTS` + per-workspace `storeAgentContext`
+ * body gate, the prompt delta chain AND the external trace-sink fan-out. That last one is why
+ * a provider wired with a recorder must NOT also emit to a trace sink for the same call: the
+ * recorder's own fan-out is the emit, and doing both would double every inline generation.
+ *
+ * MUST NOT throw into its caller — observability never breaks LLM work.
+ */
+export type InlineLlmCallRecorder = (call: InlineLlmCall) => Promise<void>
+
 export interface LlmCallMetricRepository {
   /**
    * Append one metered call, IGNORING a call whose {@link LlmCallMetric.id} is already stored.

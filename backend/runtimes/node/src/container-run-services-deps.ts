@@ -72,12 +72,18 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
   // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
   // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
   // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  // The settings repository is REQUIRED here, not optional hygiene: a harness's
+  // `stream-json` carries the FULL prompt and response, and an absent repository makes
+  // `createStoreAgentContextGate` an open gate — so without it an opted-out workspace's
+  // bodies are retained anyway, which is the privacy half of C2 wearing a different hat.
   const recordHarnessCalls = makeHarnessCallRecorder(
     new LlmObservabilityService({
       llmCallMetricRepository: repos.llmCallMetricRepository,
       idGenerator,
       clock,
       recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: repos.workspaceSettingsRepository,
+      ...(caches?.workspaceSettings ? { workspaceSettingsCache: caches.workspaceSettings } : {}),
     }),
   )
   // A deployment-wide trusted web-search upstream, built from this facade's own `WEB_SEARCH_*`

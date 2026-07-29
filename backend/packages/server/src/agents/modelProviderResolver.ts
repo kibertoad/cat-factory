@@ -12,6 +12,7 @@ import {
 } from '@cat-factory/agents'
 import { type ApiKeyService, fetchLocalRunner } from '@cat-factory/integrations'
 import type {
+  InlineLlmCallRecorder,
   LlmTraceSink,
   ModelProvider,
   ModelProviderResolver,
@@ -51,16 +52,34 @@ export interface ScopedModelProviderOptions {
   localEndpointsFor?: (
     userId: string,
   ) => Promise<{ provider: string; baseUrl: string; apiKey: string | null }[]>
-  /** Wrap the scoped provider so inline calls feed the trace sink (Langfuse). */
+  /**
+   * Wrap the scoped provider so inline calls are observed: persisted to `llm_call_metrics`
+   * via {@link recordCall}, and/or emitted to the external trace sink (Langfuse / OTel).
+   * At least one exit must be present — `InstrumentedModelProvider` refuses a wrap that
+   * would instrument nothing.
+   */
   instrument?: {
-    traceSink: LlmTraceSink
+    /**
+     * The external trace sink. Optional now that a facade may retain metrics without one;
+     * when {@link recordCall} is also wired this MUST be the very sink that recorder's
+     * `LlmObservabilityService` was built with, because the service — not this provider —
+     * performs the fan-out for a recorded call.
+     */
+    traceSink?: LlmTraceSink
+    /**
+     * Persist each workspace-scoped inline call to the metric store, built with
+     * `makeInlineCallRecorder`. Without it the inline half of the platform's model activity
+     * never reaches `ObservabilityPanel`, the per-step token rollups or `/api/v1/debug/*`.
+     */
+    recordCall?: InlineLlmCallRecorder
     recordPrompts?: boolean
     /**
      * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies
      * before they leave for the sink — build it with {@link createStoreAgentContextGate}.
      * Required so a facade cannot instrument inline calls while silently honouring only
      * the deployment switch, which is how an opted-out workspace's bodies reached
-     * Langfuse/OTel for months (observability-logging-gaps.md, C2).
+     * Langfuse/OTel for months (observability-logging-gaps.md, C2). A call taken by
+     * {@link recordCall} is gated by the same rule inside the service instead.
      */
     workspaceBodiesEnabled: WorkspaceBodiesGate
   }
@@ -112,7 +131,8 @@ export function createScopedModelProviderResolver(
       if (opts.instrument) {
         return new InstrumentedModelProvider({
           inner: composite,
-          traceSink: opts.instrument.traceSink,
+          ...(opts.instrument.traceSink ? { traceSink: opts.instrument.traceSink } : {}),
+          ...(opts.instrument.recordCall ? { recordCall: opts.instrument.recordCall } : {}),
           recordPrompts: opts.instrument.recordPrompts,
           workspaceBodiesEnabled: opts.instrument.workspaceBodiesEnabled,
           logger,

@@ -1,5 +1,14 @@
-import type { HarnessCallMetric, LlmCallMetric, LlmCallMetricRepository } from '@cat-factory/kernel'
-import { LlmObservabilityService, makeHarnessCallRecorder } from '@cat-factory/orchestration'
+import type {
+  HarnessCallMetric,
+  InlineLlmCall,
+  LlmCallMetric,
+  LlmCallMetricRepository,
+} from '@cat-factory/kernel'
+import {
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
+  makeInlineCallRecorder,
+} from '@cat-factory/orchestration'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the LLM observability sink. The proxy that records these
@@ -350,6 +359,105 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(first.upstreamMs).toBe(0)
       // The second call chained onto the first as a prompt delta on the real store.
       expect(byResp['done']!.promptPrefixCount).toBe(2)
+    })
+
+    it("records an inline (non-proxied) call's telemetry through the observability sink", async () => {
+      // The third producer into this store, after the proxy and the subscription harness: an
+      // INLINE agent kind / judge / consensus round calling the AI SDK directly. It reaches
+      // `llm_call_metrics` only through `makeInlineCallRecorder`, so this asserts the mapping
+      // lands on each runtime's real store — in particular the three "an inline call does not
+      // have this" answers, each of which a store could plausibly flatten: a null `turnIndex`
+      // (no job-scoped counter), a null `httpStatus` (the SDK owns the transport), and the
+      // unattributed `''` phase (phases are boundaries the container harness owns).
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      let n = 0
+      const record = makeInlineCallRecorder(
+        new LlmObservabilityService({
+          llmCallMetricRepository: repo,
+          idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+          clock: { now: () => 1 },
+        }),
+      )
+      const call = (overrides: Partial<InlineLlmCall>): InlineLlmCall => ({
+        workspaceId: ws,
+        executionId: e1,
+        agentKind: 'doc-researcher',
+        provider: 'anthropic',
+        model: 'claude-opus-4-8',
+        messageCount: 2,
+        toolCount: 0,
+        requestMaxTokens: 4096,
+        promptTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        finishReason: 'stop',
+        durationMs: 0,
+        ok: true,
+        errorMessage: null,
+        // Bodies are THUNKS: the recorder resolves one only once its gate says it will be
+        // stored, so a prompts-off deployment never serialises a prompt it then drops.
+        promptText: () => '[]',
+        responseText: () => '',
+        reasoningText: () => '',
+        ...overrides,
+      })
+      await record(
+        call({
+          promptText: () => '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+          responseText: () => 'brief',
+          promptTokens: 300,
+          cacheReadTokens: 40,
+          cacheWriteTokens: 10,
+          completionTokens: 60,
+          totalTokens: 410,
+          durationMs: 1200,
+        }),
+      )
+      await record(
+        call({
+          promptText: () =>
+            '[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"brief"}]',
+          messageCount: 3,
+          responseText: () => 'outline',
+          agentKind: 'doc-researcher',
+          promptTokens: 400,
+          completionTokens: 20,
+          totalTokens: 420,
+          durationMs: 900,
+        }),
+      )
+
+      const rows = await repo.listByExecution(ws, e1)
+      expect(rows).toHaveLength(2)
+      const byResp = Object.fromEntries(rows.map((c) => [c.responseText, c]))
+      const first = byResp['brief']!
+      expect(first.agentKind).toBe('doc-researcher')
+      expect(first.provider).toBe('anthropic')
+      expect(first.streaming).toBe(false)
+      expect(first.promptTokens).toBe(300)
+      expect(first.cacheReadTokens).toBe(40)
+      expect(first.cacheWriteTokens).toBe(10)
+      expect(first.completionTokens).toBe(60)
+      expect(first.requestMaxTokens).toBe(4096)
+      // One duration, reported as the whole of it, so the derived overhead is 0 rather than a
+      // fabricated transport split the inline path never measured.
+      expect(first.totalMs).toBe(1200)
+      expect(first.upstreamMs).toBe(1200)
+      expect(first.overheadMs).toBe(0)
+      // The three "not applicable" answers must survive the round trip un-flattened.
+      expect(first.turnIndex).toBeNull()
+      expect(first.httpStatus).toBeNull()
+      expect(first.phase).toBe('')
+      // Consecutive calls of one inline conversation chain as a prompt delta like any other.
+      expect(byResp['outline']!.promptPrefixCount).toBe(2)
+      // And the rollup sees them, which is what puts an inline step's spend on the board.
+      const summary = await repo.summarizeByExecution(ws, e1)
+      const cell = summary.find((s) => s.agentKind === 'doc-researcher' && s.phase === '')
+      expect(cell?.calls).toBe(2)
+      expect(cell?.completionTokens).toBe(80)
     })
 
     it('round-trips the phase and turn axes, including the unattributed slice', async () => {

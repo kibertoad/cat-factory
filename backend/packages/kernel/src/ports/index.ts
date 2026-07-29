@@ -91,6 +91,9 @@ export type {
   UsageBreakdownRow,
 } from './token-usage.js'
 export type {
+  InlineLlmCall,
+  InlineLlmCallBody,
+  InlineLlmCallRecorder,
   LlmCallBodySlice,
   LlmCallBodyWindow,
   LlmCallMetric,

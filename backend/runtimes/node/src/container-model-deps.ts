@@ -11,6 +11,7 @@ import type {
 } from '@cat-factory/integrations'
 import type {
   AppCaches,
+  LlmCallMetricRepository,
   LocalModelEndpointRepository,
   ModelProviderResolver,
   PersonalSubscriptionRepository,
@@ -22,8 +23,11 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import { createStoreAgentContextGate } from '@cat-factory/kernel'
-import { type AppConfig, wrapResolverWithLimiter } from '@cat-factory/server'
+import {
+  type AppConfig,
+  createInlineInstrumentation,
+  wrapResolverWithLimiter,
+} from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
 import type { DrizzleDb } from './db/client.js'
@@ -113,6 +117,13 @@ export interface NodeModelDepsInput {
    * rebuilt from `db`, so mothership mode's routed repository is the one consulted.
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * The LLM-call telemetry store the inline metric recorder writes to. Threaded from the
+   * composition root's repository set (not rebuilt from `db`) so mothership mode's routed
+   * local-first telemetry store is the one written. Absent ⇒ no inline metric recording,
+   * and inline calls fall back to the trace sink alone.
+   */
+  llmCallMetricRepository?: LlmCallMetricRepository
 }
 
 /**
@@ -143,6 +154,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     cloudflareModelsEnabled: cloudflareModelsEnabledOverride,
     caches,
     workspaceSettingsRepository,
+    llmCallMetricRepository,
   } = input
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
@@ -222,21 +234,31 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
   // does the per-workspace `storeAgentContext` gate beside it, which is the half the inline
   // path used to lack entirely (observability-logging-gaps.md, C2).
   const traceSink = buildTraceSink(config)
+  // Persist inline (non-proxied) calls to the SAME `llm_call_metrics` store the proxy writes
+  // for Pi and the executor writes for a subscription harness, so an inline agent kind
+  // (`doc-researcher`, the judges, consensus, the requirements writer) shows up in
+  // `ObservabilityPanel`, in a step's token rollup and in `/api/v1/debug/*` instead of only in
+  // an external trace backend. The metric repository is threaded from the composition root
+  // (not rebuilt off `db`), so in mothership mode this writes the routed local-first telemetry
+  // store. Composed through the shared factory so the recorder's service and the provider's
+  // fallback sink cannot be handed two DIFFERENT instances — the service fans out a recorded
+  // call itself, so a mismatch would split the trace and wiring both to the provider would
+  // double every inline generation.
+  const instrument = createInlineInstrumentation({
+    ...(llmCallMetricRepository ? { llmCallMetricRepository } : {}),
+    ...(traceSink ? { traceSink } : {}),
+    recordPrompts: config.observability.recordPrompts,
+    ...(workspaceSettingsRepository ? { workspaceSettingsRepository } : {}),
+    ...(caches?.workspaceSettings ? { workspaceSettingsCache: caches.workspaceSettings } : {}),
+    idGenerator,
+    clock,
+  })
   const baseModelProviderResolver = buildModelProviderResolver(
     env,
     db,
     apiKeys,
     localModelEndpoints,
-    traceSink
-      ? {
-          traceSink,
-          recordPrompts: config.observability.recordPrompts,
-          workspaceBodiesEnabled: createStoreAgentContextGate({
-            repository: workspaceSettingsRepository,
-            cache: caches?.workspaceSettings,
-          }),
-        }
-      : undefined,
+    instrument,
     workspaceSettingsRepository,
   )
   const wrappedModelProviderResolver = wrapModelProviderResolver

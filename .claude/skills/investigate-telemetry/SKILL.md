@@ -13,11 +13,20 @@ Cloudflare Workers Observability. Two tables carry everything you need:
   `status`, the structured `failure` JSON (kind/message/hint/lastSubtasks), and a
   `detail` JSON with every pipeline step (agentKind, state, model, approvals,
   per-step `metrics`). This is the lifecycle + the failure verdict.
-- **`llm_call_metrics`** — one row per proxied LLM call (migration 0026). Holds
+- **`llm_call_metrics`** — one row per LLM call (migration 0026). Holds
   `agent_kind`, `provider`, `model`, `ok`, `http_status`, `finish_reason`,
   token counts, `request_max_tokens`, the latency split (`upstream_ms`/`overhead_ms`),
   `error_message`, and the full `prompt_text` + `response_text`. Linked to a run by
   `execution_id`. This is what the model actually saw and produced.
+
+  Three producers write here and their rows read differently, so check which one you have
+  before drawing a conclusion from a null: a **proxied** container call (Pi) carries the full
+  latency split and an `http_status`; a **subscription harness** call (Claude Code / Codex)
+  carries a `turn_index` and a `phase` but zero timing (the CLIs expose none); an **inline**
+  call (a judge, consensus, the requirements writer, an inline agent kind such as
+  `doc-researcher` / `doc-outliner` / the document interviewer) has `streaming=0`,
+  `turn_index` NULL, `http_status` NULL, `phase=''`, and `upstream_ms = total_ms` — a genuine
+  0 overhead, because there is no proxy hop. None of those nulls means data was lost.
 
 Retention: `llm_call_metrics` is pruned aggressively (default 3 days,
 `LLM_CALL_METRICS_RETENTION_DAYS`) because the full bodies are heavy; `agent_runs`

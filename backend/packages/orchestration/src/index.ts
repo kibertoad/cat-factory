@@ -208,6 +208,7 @@ export {
   type RecordLlmCallInput,
   type HarnessCallsRecordInput,
   makeHarnessCallRecorder,
+  makeInlineCallRecorder,
 } from './modules/observability/LlmObservabilityService.js'
 export {
   AgentContextObservabilityService,
