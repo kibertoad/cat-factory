@@ -53,7 +53,7 @@ export const TECH_MIGRATION_PRESET_ID = 'preset_tech_migration'
 // Form field keys. The two consumed by `seedMigrationPlan` (T7) — `migrationDocsDir` + `humanReview`
 // — are defined ONCE there and imported here so the field key / default never drifts between the
 // form descriptor and the plan post-processor. The rest are steering-only: they freeze on
-// `presetInputs` and reach the interviewer/analyst/planner through the seeded qa digest.
+// `presetInputs` and reach the analyst/interviewer/planner through the seeded qa digest.
 const FIELD_MIGRATION_KIND = 'migrationKind'
 const FIELD_FROM_TECH = 'fromTech'
 const FIELD_TO_TECH = 'toTech'
@@ -186,7 +186,7 @@ const DESCRIPTOR: InitiativePresetRegistration['descriptor'] = {
       placeholder: 'e.g. the orders and billing services only',
     },
   ],
-  // A migration needs exactly interviewer → analyst → planner(gate) → committer, so it binds the
+  // A migration needs exactly analyst → interviewer → planner(gate) → committer, so it binds the
   // EXISTING `pl_initiative` planning pipeline — no new planning pipeline is registered; all
   // deviation is data (this descriptor + the phase template) and hooks (`seedMigrationPlan` +
   // `promptAdditions`).
