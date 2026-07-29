@@ -180,11 +180,11 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * within {@link RunnerLimits.coldStartMs} of starting, a likely onboarding/auth wedge.
    * This does NOT fail the job (the inactivity/max-duration watchdogs still own that).
    *
-   * Legibility today is via the per-job container log line emitted the moment it fires
-   * (the ~2-minute early signal the ADR wants); this field additionally carries the
-   * structured record on the GET /jobs/{id} view so an operator hitting the endpoint — or a
-   * future engine-side consumer — can read it without scraping logs. No engine code consumes
-   * it yet, so surfacing it up through the runner-transport layer is deliberately deferred.
+   * Legibility is via the per-job container log line emitted the moment it fires (the
+   * ~2-minute early signal the ADR wants), this field on the GET /jobs/{id} view for an
+   * operator hitting the endpoint, and — when the job goes on to fail — a sentence folded into
+   * {@link detail}, which is the path that reaches the run without a new field on every
+   * transport hop. Surfacing it on a still-RUNNING step (the early warning) remains deferred.
    * Absent on a job that produced output promptly (the overwhelming common case). Sticky once set.
    */
   coldStart?: { atMs: number; message: string }
@@ -423,15 +423,21 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       controller.abort(new Error('max duration exceeded'))
     }, this.limits.maxDurationMs)
 
+    // When the run was last heard from — the agent's own output, or a synthetic keep-alive beat
+    // from an activity-silent phase (see `silenceClause`, which is careful not to claim more than
+    // that). Unset until the first of either, which is both the cold-start watchdog's "has it
+    // spoken yet" test and, on a failure, the difference between a run that died mid-work and one
+    // that never got going at all.
+    let lastActivityAt: number | undefined
+
     // ADR 0026 D4: a one-shot cold-start watchdog. If the job produces no activity within
     // `coldStartMs`, record a structured diagnostic (a likely onboarding/auth wedge) so it
     // is legible early — it does NOT abort the run (the inactivity watchdog still owns
     // that). Cleared the moment the first activity arrives.
-    let sawActivity = false
     let coldStart: ReturnType<typeof setTimeout> | undefined
     if (this.limits.coldStartMs > 0) {
       coldStart = setTimeout(() => {
-        if (sawActivity) return
+        if (lastActivityAt !== undefined) return
         const secs = Math.round(this.limits.coldStartMs / 1000)
         const message = `agent produced no output ${secs}s after start; possible onboarding/auth wedge (phase: ${phase})`
         entry.coldStart = { atMs: Date.now(), message }
@@ -440,11 +446,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     }
 
     const heartbeat = (): void => {
-      if (!sawActivity) {
-        sawActivity = true
-        clearTimeout(coldStart)
-      }
-      entry.heartbeatAt = Date.now()
+      if (lastActivityAt === undefined) clearTimeout(coldStart)
+      lastActivityAt = Date.now()
+      entry.heartbeatAt = lastActivityAt
       resetInactivity()
     }
     resetInactivity()
@@ -506,13 +510,16 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       // breadcrumb names where it hung (markPhase below would otherwise overwrite it).
       const failedInPhase = phase
       markPhase('failed')
-      const { message, cause, detail } = this.describeFailure(
+      const { message, cause, detail } = this.describeFailure({
         killReason,
         error,
-        failedInPhase,
+        phase: failedInPhase,
         lastTool,
         phaseTimingsMs,
-      )
+        lastActivityAt,
+        startedAt: entry.startedAt,
+        coldStart: entry.coldStart,
+      })
       entry.state = 'failed'
       entry.error = message
       entry.failureCause = cause
@@ -540,48 +547,128 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
    * breadcrumb of where they hung, no longer a regex-stable phrase; a thrown error keeps its own
    * message and its structured cause when tagged (a git op → `git`, an upstream API call → `api`),
    * else `agent`. All strings are credential-scrubbed.
+   *
+   * `detail` is where the evidence the harness already holds but the one-line `error` has no room
+   * for lands: the phase breakdown, the {@link failureBreadcrumb} (last completed tool + how long
+   * the run had been silent), and the cold-start diagnostic when that watchdog recorded one. It is
+   * the only one of the three that reaches the run's failure record, so a diagnostic that isn't
+   * folded in here is effectively invisible outside the container log.
    */
-  private describeFailure(
-    killReason: 'inactivity' | 'max-duration' | undefined,
-    error: unknown,
-    phase: string,
-    lastTool: { name: string; at: number } | undefined,
-    phaseTimingsMs: Record<string, number>,
-  ): { message: string; cause: FailureCause; detail: string } {
-    // `lastTool` is the last tool that COMPLETED (a span is emitted on tool end), so when the
-    // hang is inside a still-running tool the breadcrumb points at the prior one — worded
-    // "last completed tool" so the reader knows the stuck call may be the next, unfinished one.
-    const breadcrumb = lastTool
-      ? `last completed tool ${lastTool.name} ${Math.round((Date.now() - lastTool.at) / 1000)}s ago`
-      : 'no tool had completed yet'
-    const phaseBreakdown = Object.entries(phaseTimingsMs)
+  private describeFailure(ctx: FailureContext): {
+    message: string
+    cause: FailureCause
+    detail: string
+  } {
+    const breadcrumb = failureBreadcrumb(ctx)
+    const phaseBreakdown = Object.entries(ctx.phaseTimingsMs)
       .map(([p, ms]) => `${p}=${Math.round(ms / 1000)}s`)
       .join(', ')
-    if (killReason === 'inactivity') {
+    const cold = ctx.coldStart ? ` Cold start: ${ctx.coldStart.message}.` : ''
+    if (ctx.killReason === 'inactivity') {
       return {
         message: redactSecrets(
-          `${inactivityAbortMessage(this.limits.inactivityMs)} (likely hung in ${phase} phase; ${breadcrumb})`,
+          `${inactivityAbortMessage(this.limits.inactivityMs)} (likely hung in ${ctx.phase} phase; ${breadcrumb})`,
         ),
         cause: 'inactivity-timeout',
-        detail: redactSecrets(`Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.`),
+        detail: redactSecrets(
+          `Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.${cold}`,
+        ),
       }
     }
-    if (killReason === 'max-duration') {
+    if (ctx.killReason === 'max-duration') {
       return {
         message: redactSecrets(maxDurationAbortMessage(this.limits.maxDurationMs)),
         cause: 'max-duration',
-        detail: redactSecrets(`Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.`),
+        detail: redactSecrets(
+          `Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.${cold}`,
+        ),
       }
     }
-    const raw = error instanceof Error ? error.message : String(error)
+    const raw = ctx.error instanceof Error ? ctx.error.message : String(ctx.error)
     // A thrown error tagged with a structured cause (a git op / an upstream API call) keeps
     // it; an untagged throw is a generic agent failure.
     return {
       message: redactSecrets(raw),
-      cause: failureCauseOf(error) ?? 'agent',
+      cause: failureCauseOf(ctx.error) ?? 'agent',
       detail: redactSecrets(
-        `${phaseBreakdown ? `Phase timings: ${phaseBreakdown}. ` : ''}Failed in ${phase} phase; ${breadcrumb}.`,
+        `${phaseBreakdown ? `Phase timings: ${phaseBreakdown}. ` : ''}Failed in ${ctx.phase} phase; ${breadcrumb}.${cold}`,
       ),
     }
   }
+}
+
+/**
+ * Everything known about a job the moment it failed. One value rather than a growing positional
+ * list, and every field REQUIRED (explicitly `undefined` where absent) so a new failure dimension
+ * has to be threaded at the call site instead of silently defaulting away.
+ */
+interface FailureContext {
+  /** Which watchdog killed it; unset when the run threw on its own. */
+  killReason: 'inactivity' | 'max-duration' | undefined
+  error: unknown
+  /** The phase the job was IN when it failed (captured before the `failed` transition). */
+  phase: string
+  /** The last tool that COMPLETED, when any had. */
+  lastTool: { name: string; at: number } | undefined
+  phaseTimingsMs: Record<string, number>
+  /** When the run last produced any output; `undefined` ⇒ it never produced a single byte. */
+  lastActivityAt: number | undefined
+  /** Job start — the silence window's origin when there was never any output. */
+  startedAt: number
+  /** The cold-start diagnostic, when that watchdog recorded one (see {@link JobView.coldStart}). */
+  coldStart: { atMs: number; message: string } | undefined
+}
+
+/**
+ * How long a run must have been quiet before the breadcrumb calls it out. Well above a slow
+ * model turn or a long tool call, so this fires on a genuine stall rather than on normal
+ * think time.
+ */
+const SILENCE_BREADCRUMB_MS = 30_000
+
+/**
+ * Where the job was, and how quiet it had gone, when it failed.
+ *
+ * The silence half matters because the exit status alone cannot distinguish a crash from a
+ * stall: an agent CLI that gives up on a failing upstream request exits NON-ZERO with nothing
+ * on stderr, which reads exactly like a crash — while its phase timing (minutes) and its
+ * silence (all of them) say "it never got an answer". Omitted when the run was producing
+ * output right up to the failure (the common case, where it is noise), and for an inactivity
+ * kill, whose own message already states the window it waited out.
+ */
+function failureBreadcrumb(ctx: FailureContext): string {
+  const now = Date.now()
+  // `lastTool` is the last tool that COMPLETED (a span is emitted on tool end), so when the
+  // hang is inside a still-running tool the breadcrumb points at the prior one — worded
+  // "last completed tool" so the reader knows the stuck call may be the next, unfinished one.
+  const tool = ctx.lastTool
+    ? `last completed tool ${ctx.lastTool.name} ${Math.round((now - ctx.lastTool.at) / 1000)}s ago`
+    : 'no tool had completed yet'
+  return [tool, silenceClause(ctx, now)].filter(Boolean).join(', ')
+}
+
+/**
+ * The silence half of {@link failureBreadcrumb}; empty when silence isn't part of the story —
+ * which includes the fast failures (a missing env var, a git auth rejection) where the run was
+ * never going to have spoken yet and saying so would be pure noise.
+ *
+ * What it measures is the ACTIVITY channel, which carries the agent's own output plus the
+ * synthetic keep-alive beats the activity-silent phases feed the inactivity watchdog (dependency
+ * install, pre-PR validation, the reproduction proof, the frontend stand-up). So the wording
+ * claims no more than the channel supports — "no activity", not "no agent output": a run whose
+ * install phase beat every 30s and then died has been heard from, even though the agent itself
+ * never spoke. The window's origin is the job start, so it spans the `starting`/`clone` phases
+ * too; the phase breakdown sits beside it in the same `detail` for the reader who needs the
+ * split.
+ *
+ * Making this say "the AGENT last spoke" specifically would mean separating real output from
+ * liveness beats at the {@link RunOptions} seam, which is a change to what the cold-start and
+ * inactivity watchdogs fire on — deliberately not folded into this diagnostic-only fix.
+ */
+function silenceClause(ctx: FailureContext, now: number): string {
+  if (ctx.killReason === 'inactivity') return ''
+  const silentMs = now - (ctx.lastActivityAt ?? ctx.startedAt)
+  if (silentMs < SILENCE_BREADCRUMB_MS) return ''
+  const secs = Math.round(silentMs / 1000)
+  return ctx.lastActivityAt === undefined ? `no activity at all in ${secs}s` : `silent for ${secs}s`
 }

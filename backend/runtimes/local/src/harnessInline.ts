@@ -8,6 +8,7 @@ import {
   type InlineCliRunner,
 } from '@cat-factory/agents'
 import {
+  describeProcessExit,
   type HarnessKind,
   isAmbientNativeVendor,
   isIndividualVendor,
@@ -16,6 +17,7 @@ import {
   type ModelRef,
   type ModelScope,
   nativeVendorForRef,
+  redactSecrets,
   SUBSCRIPTION_VENDORS,
   type SubscriptionVendor,
   subscriptionVendorForRef,
@@ -53,6 +55,34 @@ export type CliExec = (
 const DEFAULT_CLI_TIMEOUT_MS = 300_000
 // A CLI that ignores SIGTERM is escalated to SIGKILL after this grace period.
 const KILL_GRACE_MS = 2_000
+/** How much of the CLI's output a failure message carries. Tail-biased: the error is at the end. */
+const EXIT_OUTPUT_TAIL_CHARS = 700
+
+/**
+ * The message a badly-ended inline CLI fails with.
+ *
+ * `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as JSON on
+ * STDOUT and leaves stderr EMPTY, so a stderr-only message carries nothing but the exit code and
+ * the reason the caller's in-band `is_error` check would have surfaced is dropped on the floor.
+ * Carry whichever stream actually spoke, and say so when neither did rather than trailing off
+ * after a colon.
+ *
+ * Both streams are command output, so both are scrubbed at this emit site — the sibling in the
+ * container harness (`streamCli`) redacts its stderr tail for the same reason, and stdout here is
+ * strictly more exposed since it holds the model's own text. Scrub BEFORE the tail slice, so a
+ * partially-cut credential cannot survive by being unrecognisable to the pattern rules.
+ */
+function cliExitMessage(
+  command: string,
+  code: number | null,
+  killSignal: NodeJS.Signals | null,
+  stderr: string,
+  stdout: string,
+): string {
+  const spoke = stderr.trim() || stdout.trim()
+  const tail = (redactSecrets(spoke) ?? '').slice(-EXIT_OUTPUT_TAIL_CHARS) || '(no output)'
+  return `${command} ${describeProcessExit(code, killSignal)}: ${tail}`
+}
 
 /** The default {@link CliExec}: a real `node:child_process` spawn with a timeout watchdog.
  * Exported for its own tests (the sanitized-env contract); callers use the runner builders. */
@@ -103,7 +133,10 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       cleanup()
       reject(err)
     })
-    child.on('close', (code) => {
+    // `killSignal`, not `signal`: the outer `signal` in scope here is the caller's AbortSignal,
+    // and shadowing it with the exit signal would silently hand the wrong value to any later
+    // line in this handler that reaches for it.
+    child.on('close', (code, killSignal) => {
       cleanup()
       if (killedReason === 'timeout') {
         reject(new Error(`${command} timed out after ${timeoutMs}ms`))
@@ -114,7 +147,9 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
         return
       }
       if (code !== 0) {
-        reject(new Error(`${command} exited with code ${code}: ${stderr.slice(-700)}`))
+        // BOTH streams, not just stderr — see {@link cliExitMessage} for why, and for what is
+        // scrubbed out of them on the way.
+        reject(new Error(cliExitMessage(command, code, killSignal, stderr, stdout)))
         return
       }
       resolve(stdout)

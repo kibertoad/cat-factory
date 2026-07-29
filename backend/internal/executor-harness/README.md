@@ -213,6 +213,7 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic — a likely onboarding/auth wedge — WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |
 | `DEPENDENCY_INSTALL_TIMEOUT_MS` | a third of `JOB_MAX_DURATION_MS` (20m at its default) | Watchdog for the pre-agent dependency install; a timeout is reported as a failed install (exit 124), never a failed job. Derived from the job ceiling rather than fixed, and an explicit value is clamped by the same share — the agent is what waits on this, so setup can never consume the run it is preparing for. |
 | `DEPENDENCY_INSTALL_HEARTBEAT_MS` | `30000` (30s) | How often the dependency install feeds the job inactivity watchdog. A cold install is activity-silent and `JOB_INACTIVITY_MS` is tighter than its own watchdog, so without this a healthy install aborts the run as "likely hung". |
 | `VALIDATION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a pre-PR validation check; a timeout counts as a failure (exit 124) so one hung command can't wedge the loop. |

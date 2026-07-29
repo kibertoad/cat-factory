@@ -163,6 +163,14 @@ Independent changes; suggested order by value and blast radius:
    recorder. D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s) records a
    structured diagnostic — without killing the run — when a job produces no output early, plus a
    one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
+   **✅ D4.1 landed (the diagnostic reaches the run).** D4 recorded the cold-start diagnostic but
+   only the container log and the `GET /jobs/{id}` view could see it, so on the failure it was
+   meant to explain the operator got a bare exit code. `describeFailure` now folds it — plus a
+   measurement of how long the run had been silent — into the failure `detail`, which the backend
+   already carries onto the step, so no new transport field was needed; the still-RUNNING view
+   (the early warning proper) is tracked in
+   [`observability-logging-gaps.md`](../../../docs/initiatives/observability-logging-gaps.md)
+   slice 5.5.
    **✅ D3.1 landed (the observable heartbeat).** D3 restored the harness heartbeat + the watchdog,
    but it was still dropped at the transport boundary: `ContainerAgentExecutor.pollJob` forwarded
    phase/progress/follow-ups but never `view.heartbeatAt`, so a quiet-but-alive run still froze

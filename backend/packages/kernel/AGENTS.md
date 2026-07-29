@@ -65,6 +65,16 @@ else imports its **ports** and domain types from here.
   tracker-issue writebacks (integrations) render through it — a second copy is how one of them
   drifts into paging a stranger. Anything host-bound picks one of the three renderers; never a
   bare template hole.
+- `shared/process-exit.logic.ts` — **`describeProcessExit(code, signal)`**, the one sentence every
+  transport that reports a dead subprocess renders its failure with. It encodes an operational
+  distinction, not formatting: a `null` exit code means a SIGNAL killed the process, and telling
+  that apart from the process's own non-zero exit is the first fork in the road between "the CLI
+  gave up" and "something killed the container" — rendering the `null` verbatim produces "exited
+  with code null", which reads as neither. A new process-reporting transport (a pooled runner, a
+  K8s pod, a native host process) renders through this rather than re-deriving it. `signal` is a
+  plain `string` because kernel compiles without Node's ambient types. The executor-harness carries
+  a pinned COPY (`src/process-exit.ts`, it can depend on no workspace package), held equal by
+  `test/process-exit.conformity.test.ts` — the same arrangement as `host-markdown`.
 - `ports/logging.ts` — the **`Logger` port**: `debug`/`info`/`warn`/`error` (`(msg, fields?)`)
   plus `child(bound)`, with `noopLogger` and the test-facing `createRecordingLogger`. Injected
   like `Clock`/`IdGenerator`, which is what lets the whole domain engine log without depending on
