@@ -1,9 +1,15 @@
 import type {
+  ComposeFileRef,
   EnvironmentManifest,
   EnvironmentStatus,
   RecipeHealthGate,
   RecipeStep,
   StackRecipe,
+} from '@cat-factory/kernel'
+import {
+  describeComposeSource,
+  materializedComposePath,
+  normalizeComposeFileRefs,
 } from '@cat-factory/kernel'
 import { parse, stringify } from 'yaml'
 
@@ -67,6 +73,14 @@ export interface ComposeRuntime {
     project: string,
     target: { cloneUrl: string; ref: string; token?: string },
   ): Promise<{ dir: string }>
+  /**
+   * The project's working tree WITHOUT cloning anything — created empty if absent. The repo-less
+   * counterpart of {@link checkout}, for a stack whose compose layers are all supplied inline /
+   * read from other repos and so have no repo of their own to clone: the layers are materialized
+   * into this directory and it becomes `--project-directory`. Optional, paired with
+   * {@link writeCheckoutFile}; a runtime without it can only run stacks that clone.
+   */
+  workingDir?(project: string): Promise<{ dir: string }>
   /**
    * Build-from-source mode only: write the rewritten compose file INTO the checkout (beside the
    * original, so relative paths still resolve) at `relPath` under the project's checkout dir;
@@ -1020,9 +1034,18 @@ export const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
 /** The rewritten-compose filename prefix, written beside each original inside the checkout. */
 const RECIPE_REWRITE_PREFIX = 'cat-factory.'
 
-/** The ordered `-f` compose files a recipe layers: `recipe.composeFiles` when set, else `[composePath]`. */
-export function resolveRecipeComposeFiles(recipe: StackRecipe, composePath: string): string[] {
-  return recipe.composeFiles && recipe.composeFiles.length > 0 ? recipe.composeFiles : [composePath]
+/**
+ * The ordered `-f` compose layers a recipe stacks: `recipe.composeFiles` when set, else the single
+ * `composePath`. Entries stay in their {@link ComposeFileRef} form (a bare path, or an explicit
+ * `inline` / `repo` source) — `planComposeLayers` normalizes and resolves them.
+ */
+export function resolveRecipeComposeFiles(
+  recipe: StackRecipe,
+  composePath: string,
+): ComposeFileRef[] {
+  return recipe.composeFiles && recipe.composeFiles.length > 0
+    ? [...recipe.composeFiles]
+    : [composePath]
 }
 
 /** The filename portion of a repo-relative path (`docker/dev.yml` → `dev.yml`). */
@@ -1145,6 +1168,65 @@ export function prepareRecipeComposeFiles(
 }
 
 /**
+ * Whether a bring-up needs the stack's OWN repo checked out — true as soon as something reads a
+ * COMMITTED file: a `path` compose layer, an env-file template, a `copy-file` source, or a
+ * `compose-exec` seed dump piped from `stdinFile`.
+ *
+ * This is what makes a repo-LESS stack expressible: a stack whose layers are all `inline`
+ * documents / `repo` references needs no clone URL at all, and the bring-up materializes them into
+ * an empty working tree instead. Deliberately NOT triggered by a `host-command` workdir or a
+ * checkout-target `wait-file` — those write or watch, they don't read committed content, so a
+ * repo-less stack can legitimately use them against the materialized tree.
+ */
+export function composeBringUpNeedsRepo(input: {
+  composeFiles: readonly ComposeFileRef[]
+  envFiles?: readonly { template: string; target: string }[]
+  setupSteps?: readonly RecipeStep[]
+}): boolean {
+  if (normalizeComposeFileRefs(input.composeFiles).some((source) => source.kind === 'path')) {
+    return true
+  }
+  if ((input.envFiles ?? []).length > 0) return true
+  return (input.setupSteps ?? []).some(
+    (step) =>
+      step.kind === 'copy-file' || (step.kind === 'compose-exec' && step.stdinFile !== undefined),
+  )
+}
+
+/**
+ * Blocking host-escape issues for an ordered compose LAYER LIST, judged on the checkout-relative
+ * path each layer will be MATERIALIZED at. A generated path is escape-free by construction, but an
+ * `inline` layer may name its own — and that string reaches us from a request body / a deployment's
+ * seed, then becomes the `relPath` of a `writeCheckoutFile` call whose runtime implementation is a
+ * bare `join(checkoutDir, relPath)`. An unguarded `../` there is an arbitrary host-file WRITE with
+ * caller-chosen content, which is a strictly worse primitive than the read-shaped escapes the rest
+ * of {@link recipeCheckoutPathIssues} exists to refuse.
+ *
+ * Judged at `projectDir: ''` — the STRICTEST anchor — deliberately, and not at the list's real
+ * project directory: prefixing a (non-escaping) project dir can only push a path further below the
+ * checkout root, so the strict reading can never miss an escape, and it keeps the verdict
+ * independent of which layer happens to win the anchor. A layer list's escape safety must not
+ * change because an unrelated layer was reordered.
+ *
+ * This is the ONE escape judgement over layer placement: `recipeCheckoutPathIssues` calls it for
+ * the recipe path's pre-daemon preflight, and `planComposeLayers` calls it so the shared-stack
+ * bring-up — which has no preflight of its own — inherits exactly the same rule.
+ */
+export function composeSourceEscapeIssues(refs: readonly ComposeFileRef[]): string[] {
+  const issues: string[] = []
+  for (const [index, ref] of normalizeComposeFileRefs(refs).entries()) {
+    const path = materializedComposePath(ref, index, '')
+    if (escapesCheckout(path, 0)) {
+      issues.push(
+        `compose layer '${describeComposeSource(ref)}' would be written to '${path}', which escapes ` +
+          `the checkout — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  return issues
+}
+
+/**
  * Blocking host-escape issues for a recipe's checkout-relative paths, collected up front so a bad
  * recipe fails BEFORE the daemon is touched (the `prepareComposeProject` posture). Every path that
  * the engine reads/writes/execs INSIDE the checkout — the `composeFiles` layers (written back beside
@@ -1165,10 +1247,9 @@ export function recipeCheckoutPathIssues(recipe: StackRecipe): string[] {
     }
   }
   // The compose-file layers are written back into the checkout + one feeds `--project-directory`, so
-  // an escaping path is a host-filesystem write escape — guarded like every other recipe path.
-  for (const composeFile of recipe.composeFiles ?? []) {
-    check(composeFile, 'compose file')
-  }
+  // an escaping path is a host-filesystem write escape — guarded like every other recipe path,
+  // through the shared {@link composeSourceEscapeIssues} the shared-stack bring-up also runs.
+  issues.push(...composeSourceEscapeIssues(recipe.composeFiles ?? []))
   for (const env of recipe.envFiles ?? []) {
     check(env.template, 'env-file template')
     check(env.target, 'env-file target')

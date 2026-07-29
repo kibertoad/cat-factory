@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-monolith pilot)
 
-**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 9 landed = the pilot fixtures + golden detection + drift alarm + reference configs; slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred — see the checklist) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 9 landed = the pilot fixtures + golden detection + drift alarm + reference configs; slice 11 landed = the programmatic config surface (compose layers as inline documents / other-repo references, repo-less stacks, `seedSharedStacks`); slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred — see the checklist) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -594,10 +594,80 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + inspector nudge + i18n (all locales) + `data-testid`s — **incl. the analyst draft-merge (deterministic-wins + provenance) + "run deep analysis" trigger deferred from slice 8**. _Part 1 done_: the pure `mergeAnalystRecipeDraft` draft-merge core (`@cat-factory/contracts`) + unit tests. _Part 2 done_: `EnvironmentSetupWizard.vue` + store wiring + SideBar/inspector entry points + i18n (8 locales). Only the `data-testid`-only e2e spec deferred (needs a fake `ProvisioningRepoReader` e2e seam — GitHub is off in e2e). | in progress (e2e deferred) | (this) |
 | 8   | **Environment analyst**: agent kind (structured draft recipe on `result.custom`) + `AnalystRecipeDraft` contract + seeded `pl_environment_analysis` pipeline (draft-merge moved to slice 7)                                                                                                                                                                                                                                                                                                                                                                                                       | done                       | (this) |
 | 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, drift alarm, pilot docs. _Landed_: sanitized `__fixtures__/pilot/` snapshot of both repos (byte-for-byte reproduces the live detection), the two `*.detect.golden.json` goldens, `reference/{consumer-recipe,shared-stack}.json`, `pilot-golden.logic.test.ts`, and `scripts/pilot-detect-golden.mjs` (externalized-sanitizer drift alarm vs live clones). Live compose-up smoke is slice 10.                                                                                 | done                       | (this) |
+| 11  | **Programmatic config surface**: compose layers as `ComposeSource`s (inline document / another repo / in-repo path) on BOTH the recipe and the shared stack, a repo-less stack (nullable `clone_url`, D1 rebuild ⇄ Drizzle + conformance), and `seedSharedStacks` on `startNode`/`startLocal` (kernel `SharedStackSeeder` + boot backfill + the `WorkspaceService.create` hook)                                                                                                                                                                                                                   | done                       | (this) |
 | 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)                                                                                                                                                                                                                                                                                                                                                                                                                                                    | todo                       |        |
 | S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | todo                       |        |
 | S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | todo                       |        |
 | S3  | _Stretch_: Windows-host bridge for `host-command` steps (WSL invocation shim)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | todo                       |        |
+
+## Declaring stacks + compose layers PROGRAMMATICALLY (slice 11)
+
+Everything above assumes a human at the Infrastructure panel and a repo whose compose files the
+platform clones. Two shapes were unexpressible, and both matter for a deployment that wants its
+infra dependencies to live in code review rather than in a form:
+
+1. **A compose layer that is not a path in the repo being provisioned.** `ComposeEnvironmentConfig`
+   had `composeRepo`/`composeRef` for the SIMPLE single-file path only — a layered recipe read every
+   `-f` from one repo, and a shared stack read every `-f` from its own clone.
+2. **A stack with no repo at all** — the shape you get when the compose document IS the declaration.
+
+> **Landed (slice 11)** — a compose layer is now a {@link ComposeFileRef}: a bare in-repo path (the
+> shorthand the deterministic detector emits and the panel authors) or an explicit `ComposeSource`
+> — `{ kind: 'inline', content, path? }` or `{ kind: 'repo', repo, path, ref?, provider? }`. It
+> rides `stackRecipeSchema.composeFiles` AND `sharedStackSchema.composeFiles`, so the recipe path
+> and the shared-stack path gained the capability together.
+>
+> - **Placement is PURE and shared** (kernel `domain/compose-sources.ts`, shape helpers in
+>   contracts' `compose-sources.ts` because the SPA needs them too): the compose PROJECT DIRECTORY
+>   is the first **`path`** layer's dir — never the first layer of any kind, or prepending an
+>   inline layer would silently move the anchor every in-repo layer's relative build contexts /
+>   binds / `env_file`s resolve against. The host-escape `baseDepth` derives from that same
+>   directory, so a layer list with no in-repo layer gets the STRICTEST depth (0) rather than
+>   inheriting a foreign path's depth. A materialized layer's path is keyed by POSITION
+>   (`.cat-factory/compose/<i>-<stem>.yml`), so two layers with the same basename in different
+>   repos can't collide and a re-provision overwrites instead of accumulating.
+> - **A layer that NAMES where it lands is host-escape guarded, on both paths.** A generated path
+>   is escape-free by construction, but an `inline` layer may carry its own `path`, and that string
+>   becomes the `relPath` of a `writeCheckoutFile` whose runtime implementation is a bare
+>   `join(checkoutDir, relPath)` — so an unguarded `../` is an arbitrary host-file WRITE with
+>   caller-chosen content, a strictly worse primitive than the read-shaped escapes the recipe guard
+>   already refused. ONE rule (`composeSourceEscapeIssues`) is called from three places: the
+>   recipe's pre-daemon `recipeCheckoutPathIssues`, `planComposeLayers` (so the shared-stack
+>   bring-up, which has no preflight of its own, inherits it), and the shared-stack WRITE boundary
+>   (`details.reason: 'compose_layer_escapes_checkout'`). It judges at the STRICTEST anchor
+>   (`projectDir: ''`) rather than the list's real project directory, so a layer list's escape
+>   safety can never change because an unrelated layer was reordered.
+> - **Resolution is one seam** (`integrations/modules/compose/compose-sources.ts`
+>   `planComposeLayers`), consumed differently by design: the compose PROVIDER rewrites every layer
+>   for isolation, so it reads its `path` layers itself from the VCS before a checkout exists; a
+>   SHARED STACK runs its committed layers AS AUTHORED off the clone and only materializes the
+>   non-`path` ones. Each foreign repo is resolved ONCE however many layers name it.
+> - **`SharedStack.cloneUrl` is NULLABLE** (D1 `0070` table rebuild ⇄ a generated Drizzle
+>   migration, both asserted by `defineSharedStackSuite`). A repo-less bring-up materializes an
+>   EMPTY working tree through the new `ComposeRuntime.workingDir` seam instead of cloning. What
+>   forces a clone URL is reading a COMMITTED file — a `path` layer, an `envFiles` template, or a
+>   `copy-file` / `stdinFile` step (`composeBringUpNeedsRepo`) — and that is refused at the WRITE
+>   boundary (`details.reason: 'clone_url_required'`) on the MERGED entity, not only at bring-up.
+>   The bring-up's runtime-capability gate keys off that SAME predicate, so it demands `checkout`
+>   of the committed-file shape and `workingDir` of the repo-less one, rather than a fixed set that
+>   would refuse whichever shape it wasn't written for.
+> - **`seedSharedStacks`** on `startNode`/`startLocal` (and `NodeContainerOptions`) is the
+>   programmatic surface, a direct copy of `seedEnvironmentHandlers`: kernel `SharedStackSeeder`,
+>   `createSharedStackSeeder`, the `WorkspaceService.create` hook, and the boot backfill — which
+>   generalized from `backfillEnvironmentHandlerSeeds` to `backfillDeclaredSeeds` and now runs both
+>   seeders over ONE workspace enumeration. Seeds are idempotent by NAME, so a stack an operator has
+>   since edited is never overwritten from config: a seed says "this board should have a stack called
+>   X", not "X must look exactly like this".
+>
+> **Gotchas for later slices:** (1) the SPA panel authors bare paths only; a stack carrying richer
+> layers renders them read-only and its save OMITS `composeFiles` entirely, so editing the name can
+> never flatten a declaration the form has no editor for — a richer layer editor is the follow-up.
+> (2) A foreign/inline layer's own relative references still resolve against the PRIMARY checkout
+> (that is what `--project-directory` means), so those layers should pull images and wire networks;
+> a layer that builds from source belongs in the repo whose source it builds. (3) The Worker facade
+> does NOT wire `seedSharedStacks` — matching `seedEnvironmentHandlers`, which is node/local-only
+> because the option is a code-level declaration a deploy-app wrapper passes at boot; the
+> persistence and the seeder itself are runtime-neutral, so wiring it there is a pure addition.
 
 ## Interaction with the Deployer (`deployer-single-provisioner`)
 

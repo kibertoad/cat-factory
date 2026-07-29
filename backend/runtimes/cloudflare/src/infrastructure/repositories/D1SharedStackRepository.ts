@@ -13,7 +13,7 @@ interface SharedStackRow {
   workspace_id: string
   id: string
   name: string
-  clone_url: string
+  clone_url: string | null
   git_ref: string | null
   compose_files: string
   compose_profiles: string
@@ -55,7 +55,9 @@ function rowToStack(row: SharedStackRow): SharedStack {
     name: row.name,
     cloneUrl: row.clone_url,
     gitRef: row.git_ref,
-    composeFiles: parseJsonArray<string>(row.compose_files),
+    // A layer is a bare path (the shorthand) OR an explicit `{kind: 'path'|'inline'|'repo'}`
+    // source — both shapes round-trip through this one JSON column (migration 0070).
+    composeFiles: parseJsonArray<SharedStack['composeFiles'][number]>(row.compose_files),
     composeProfiles: parseJsonArray<string>(row.compose_profiles),
     envFiles: parseJsonArray<RecipeEnvFile>(row.env_files),
     managedNetworks: parseJsonArray<string>(row.managed_networks),

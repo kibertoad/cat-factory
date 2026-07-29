@@ -22,6 +22,7 @@ import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
   createEnvironmentHandlerSeeder,
+  createSharedStackSeeder,
 } from '@cat-factory/integrations'
 import { DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import {
@@ -38,7 +39,7 @@ import type { FragmentLibraryModule, SkillLibraryModule } from '../container-con
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { CoreDependencies } from '../container.js'
-import type { EnvironmentHandlerSeeder } from '@cat-factory/kernel'
+import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
 import type { resolveCoreRuntime } from './runtime.js'
 
 type CoreRuntime = ReturnType<typeof resolveCoreRuntime>
@@ -55,6 +56,7 @@ export interface PlatformModules {
   llmObservability: LlmObservabilityService | undefined
   environments: ReturnType<typeof createEnvironmentsModule> | undefined
   environmentHandlerSeeder: EnvironmentHandlerSeeder | undefined
+  sharedStackSeeder: SharedStackSeeder | undefined
   fragmentLibrary: FragmentLibraryModule | undefined
   skillLibrary: SkillLibraryModule | undefined
 }
@@ -172,6 +174,20 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
         })
       : undefined,
   )
+  // The deployment-declared SHARED-STACK seeder, the sibling of the handler seeder above and
+  // wired at the same two sites (workspace creation + a boot backfill). Built only when the
+  // shared-stacks module is wired; a no-op when `seedSharedStacks` is empty. Its persistence is
+  // runtime-symmetric, so seeding works on every facade even though only the local one can bring
+  // a stack UP.
+  const sharedStackSeeder = modules.build('sharedStackSeeder', () =>
+    sharedStacks
+      ? createSharedStackSeeder({
+          service: sharedStacks.service,
+          seeds: dependencies.seedSharedStacks ?? [],
+          logger: dependencies.logger,
+        })
+      : undefined,
+  )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = modules.build('documents', () =>
@@ -183,5 +199,12 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   const skillLibrary = modules.build('skillLibrary', () =>
     createSkillLibraryModule(dependencies, caches),
   )
-  return { llmObservability, environments, environmentHandlerSeeder, fragmentLibrary, skillLibrary }
+  return {
+    llmObservability,
+    environments,
+    environmentHandlerSeeder,
+    sharedStackSeeder,
+    fragmentLibrary,
+    skillLibrary,
+  }
 }

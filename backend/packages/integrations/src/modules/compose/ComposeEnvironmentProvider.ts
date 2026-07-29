@@ -32,6 +32,7 @@ import {
   tailOutput,
   templateVars,
 } from './compose-environment.logic.js'
+import { planComposeLayers } from './compose-sources.js'
 import { runHealthGate, runRecipeStep } from './recipe-runner.js'
 
 // Native Docker Compose ephemeral-environment provider. It brings the PR repo's OWN
@@ -479,7 +480,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     // bounds the host-escape guard). A blocking issue fails BEFORE the daemon is touched.
     const read = await this.readRecipeComposeFiles(req, config, recipe, vars)
     if ('error' in read) return this.failed(project, read.error)
-    const { composeFiles, baseDepth, inputsFiles } = read
+    const { baseDepth, inputsFiles } = read
 
     // Provider-before-consumer: bring the referenced SHARED STACKS up FIRST and collect the managed
     // Docker networks they own, so the per-PR project can attach to them as `external: true` (the
@@ -523,8 +524,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         `Could not clone the repo for the recipe: ${err instanceof Error ? err.message : String(err)}`,
       )
     }
-    const composeDir = composeFileDir(composeFiles[0]!)
-    const projectDir = composeDir ? `${checkoutDir}/${composeDir}` : checkoutDir
+    // `--project-directory` is the layer list's project dir (the first IN-REPO layer's directory),
+    // never the first layer's own — a materialized `inline`/`repo` layer must not move the anchor
+    // every in-repo layer's relative build contexts / binds / env_files resolve against.
+    const projectDir = read.projectDir ? `${checkoutDir}/${read.projectDir}` : checkoutDir
 
     // Materialize env-file templates (`.env.dev.local-dist` → `.env.dev.local`) BEFORE `up`, each a
     // logged step so a materialization failure is visible.
@@ -584,9 +587,15 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
   }
 
   /**
-   * Read + template the layered compose files at the resolved source ref. `-f` order is preserved;
-   * the first file's checkout depth bounds the host-escape guard. Returns the templated inputs +
-   * derived `baseDepth`, or a blocking `error` (missing file / unresolvable source) — no daemon work.
+   * Read + template the layered compose files. `-f` order is preserved; the compose PROJECT
+   * DIRECTORY (the first in-repo layer's dir) bounds the host-escape guard. A layer's text comes
+   * from wherever it declares: the run's own repo (a bare path), the layer itself (`inline`), or
+   * another `owner/repo` read checkout-free through the workspace's VCS connection. Returns the
+   * templated inputs + derived `baseDepth`, or a blocking `error` (missing file / unresolvable
+   * source) — no daemon work.
+   *
+   * The primary-repo source is resolved LAZILY: a recipe made entirely of `inline` / `repo` layers
+   * must not fail for want of a co-located compose file it never asked for.
    */
   private async readRecipeComposeFiles(
     req: ProvisionEnvironmentRequest,
@@ -594,24 +603,34 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     recipe: StackRecipe,
     vars: Record<string, string>,
   ): Promise<
-    | { composeFiles: string[]; baseDepth: number; inputsFiles: { path: string; text: string }[] }
+    | { projectDir: string; baseDepth: number; inputsFiles: { path: string; text: string }[] }
     | { error: string }
   > {
-    const composeFiles = resolveRecipeComposeFiles(recipe, config.composePath)
-    const baseDepth = checkoutDepthFor(composeFiles[0]!)
-    let source: { ctx: RunRepoContext; ref: string }
-    try {
-      source = await this.resolveComposeSource(req, config)
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) }
-    }
+    const planned = await planComposeLayers(
+      resolveRecipeComposeFiles(recipe, config.composePath),
+      req.resolveRepoFiles ? { resolveForeignRepo: (coords) => req.resolveRepoFiles!(coords) } : {},
+    )
+    if ('error' in planned) return planned
+
+    let primary: { ctx: RunRepoContext; ref: string } | null = null
     const inputsFiles: { path: string; text: string }[] = []
-    for (const path of composeFiles) {
-      const file = await source.ctx.repo.getFile(path, source.ref)
-      if (!file) return { error: `No docker-compose file found at '${path}'` }
-      inputsFiles.push({ path, text: renderTemplate(file.content, vars) })
+    for (const layer of planned.layers) {
+      let text = layer.content
+      if (text === undefined) {
+        if (!primary) {
+          try {
+            primary = await this.resolveComposeSource(req, config)
+          } catch (err) {
+            return { error: err instanceof Error ? err.message : String(err) }
+          }
+        }
+        const file = await primary.ctx.repo.getFile(layer.path, primary.ref)
+        if (!file) return { error: `No docker-compose file found at '${layer.path}'` }
+        text = file.content
+      }
+      inputsFiles.push({ path: layer.path, text: renderTemplate(text, vars) })
     }
-    return { composeFiles, baseDepth, inputsFiles }
+    return { projectDir: planned.projectDir, baseDepth: planned.baseDepth, inputsFiles }
   }
 
   /**

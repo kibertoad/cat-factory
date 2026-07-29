@@ -6,6 +6,7 @@
 // they succeed only on the local facade (elsewhere the backend returns a clear error surfaced as
 // a toast). Renders inline inside the Infrastructure window's "Shared stacks" tab.
 import { computed, reactive, ref } from 'vue'
+import { describeComposeSource, normalizeComposeFileRefs } from '@cat-factory/contracts'
 import type {
   SharedStack,
   SharedStackRecommendation,
@@ -76,8 +77,26 @@ function tokens(value: string): string[] {
     .filter(Boolean)
 }
 
+// A stack's compose layers may be bare in-repo paths (what this form authors and what the
+// autodetect scan returns) or explicit sources — an inline document, or a file in another repo —
+// which arrive through the API / a deployment's programmatic seeds. The form edits only the
+// former; a stack carrying any of the latter shows its layers read-only and its save omits
+// `composeFiles` entirely, so editing the name or the profiles can never silently flatten a
+// declaration this form has no editor for.
+const editingStack = computed(() => stacks.value.find((s) => s.id === editingId.value) ?? null)
+const advancedLayers = computed(() =>
+  (editingStack.value?.composeFiles ?? []).some((ref) => typeof ref !== 'string'),
+)
+const layerLabels = computed(() =>
+  normalizeComposeFileRefs(editingStack.value?.composeFiles ?? []).map(describeComposeSource),
+)
+
+// A repo-LESS stack (every layer inline / from another repo) needs no clone URL, so the form
+// requires one only while the layers it can author — in-repo paths — are what is being saved.
 const canSave = computed(
-  () => form.name.trim() && form.cloneUrl.trim() && tokens(form.composeFiles).length > 0,
+  () =>
+    form.name.trim() &&
+    (advancedLayers.value || (form.cloneUrl.trim() && tokens(form.composeFiles).length > 0)),
 )
 
 function resetForm() {
@@ -97,10 +116,12 @@ function resetForm() {
 function startEdit(stack: SharedStack) {
   editingId.value = stack.id
   form.name = stack.name
-  form.cloneUrl = stack.cloneUrl
+  form.cloneUrl = stack.cloneUrl ?? ''
   form.gitRef = stack.gitRef ?? ''
   form.directory = ''
-  form.composeFiles = stack.composeFiles.join(', ')
+  // Only bare in-repo paths are editable here; a stack with richer layers renders them read-only
+  // below and keeps them untouched through the save.
+  form.composeFiles = stack.composeFiles.filter((ref) => typeof ref === 'string').join(', ')
   form.composeProfiles = stack.composeProfiles.join(', ')
   form.managedNetworks = stack.managedNetworks.join(', ')
   form.allowHostCommands = stack.allowHostCommands
@@ -179,7 +200,17 @@ async function saveStack() {
   }
   try {
     if (editing) {
-      await store.update(editing, { ...payload, gitRef: form.gitRef.trim() || null })
+      // `composeFiles` is omitted when the stack carries layers this form can't author — the
+      // partial update preserves them, exactly as it already does for setup steps and the health
+      // gate. `cloneUrl` goes through as an explicit null when cleared, so a stack can be moved to
+      // the repo-less shape from here too.
+      const { composeFiles, ...rest } = payload
+      await store.update(editing, {
+        ...rest,
+        cloneUrl: form.cloneUrl.trim() || null,
+        gitRef: form.gitRef.trim() || null,
+        ...(advancedLayers.value ? {} : { composeFiles }),
+      })
     } else {
       await store.create(payload)
     }
@@ -402,6 +433,23 @@ async function remove(stack: SharedStack) {
       </p>
 
       <UFormField
+        v-if="advancedLayers"
+        :label="t('settings.sharedStacks.add.composeFiles')"
+        :help="t('settings.sharedStacks.add.composeLayersManagedHelp')"
+      >
+        <ul class="space-y-1" data-testid="shared-stack-compose-layers">
+          <li
+            v-for="(label, index) in layerLabels"
+            :key="index"
+            class="font-mono text-[11px] text-slate-500"
+          >
+            {{ label }}
+          </li>
+        </ul>
+      </UFormField>
+
+      <UFormField
+        v-else
         :label="t('settings.sharedStacks.add.composeFiles')"
         :help="t('settings.sharedStacks.add.composeFilesHelp')"
       >

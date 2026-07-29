@@ -65,8 +65,9 @@ const LEGACY_ALLOWANCES = new Map([
   // optional-module SHAPES then moved to `container/module-shapes.ts`, so it ratchets down again.
   // The Node root's container-agent-executor wiring now lives in `container-executor-deps.ts`, and
   // the Worker root's external LLM-trace destinations in `container-trace-sinks.ts` — both ratchet
-  // down accordingly.
-  ['backend/runtimes/node/src/container.ts', 1550],
+  // down accordingly. The Node root then shed its ~350-line `NodeContainerOptions` declaration
+  // block to `container-options.ts` (re-exported, so no call site changed — the same move
+  // `ExecutionService.ts` made) and now fits the DEFAULT budget, so its allowance is gone.
   // `CoreDependencies` (the ~815-line `createCore` contract) now lives in `container/dependencies.ts`,
   // re-exported — the same split the engine's own dependency block got — so, on top of the
   // module-shapes extraction above, the domain composition root drops back under the DEFAULT

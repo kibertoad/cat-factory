@@ -95,7 +95,13 @@ export function createSaveActions(ctx: WizardContext) {
       await board.updateBlock(id, {
         provisioning: {
           type: 'docker-compose',
-          ...(pruned.composeFiles?.[0] ? { composePath: pruned.composeFiles[0] } : {}),
+          // `composePath` is the single-file fallback the provider uses when a recipe declares no
+          // layers, so only a bare in-repo path can fill it. The wizard's layers always are ones
+          // (they come from the deterministic detector); an `inline` / other-repo layer, which the
+          // API can supply, simply leaves it unset — the recipe below already carries the layer.
+          ...(typeof pruned.composeFiles?.[0] === 'string'
+            ? { composePath: pruned.composeFiles[0] }
+            : {}),
           ...(build ? { composeBuild: true } : {}),
           recipe: pruned,
         },

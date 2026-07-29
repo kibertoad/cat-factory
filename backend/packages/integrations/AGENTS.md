@@ -16,6 +16,18 @@ prerequisites are configured.
   board scan), both over the `listBugCandidates` / `listBoards` provider capabilities.
 - `environments/` — ephemeral-environment provisioning (the heaviest module) + `kubernetes/`,
   `runners/` (the self-hosted runner-pool transports).
+- `compose/` — the Docker Compose environment backend + the STACK RECIPE machinery. `compose-sources.ts`
+  is the one seam that turns an ordered `-f` layer list into text + the path each layer lands at,
+  whether the layer is a path in the repo being provisioned, an INLINE compose document, or a file in
+  ANOTHER repo (read checkout-free through the workspace's VCS connection). Its pure placement rules —
+  which layer anchors `--project-directory`, and therefore what the host-escape guard measures against
+  — are kernel's `domain/compose-sources.ts`, shared with the shared-stack bring-up so the two paths
+  cannot drift.
+- `sharedStack/` — long-lived compose infra a per-PR environment attaches to over an external network.
+  `SharedStackService` owns CRUD (runtime-neutral) + the host-daemon bring-up (local facade only); a
+  stack whose layers are all inline / from other repos needs NO repo of its own and materializes an
+  empty working tree instead of cloning. `SharedStackSeeder.ts` is the deployment-declared side:
+  `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
 - `datadog/` + `observability/` — release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/` — incident enrichment.
 - `testSecrets/` — sealed per-service test credentials; `validation/` — per-service PRE-PR

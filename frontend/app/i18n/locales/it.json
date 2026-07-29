@@ -630,6 +630,7 @@
         "directoryHelp": "Usato solo dal rilevamento automatico: la sottodirectory del monorepo in cui si trova lo stack compose.",
         "composeFiles": "File compose",
         "composeFilesHelp": "Separati da virgola, relativi al repository, in ordine di override.",
+        "composeLayersManagedHelp": "Gestito tramite API: questo stack ha livelli forniti inline o letti da un altro repository, quindi qui sono mostrati in sola lettura e restano invariati al salvataggio.",
         "composeProfiles": "Profili compose (facoltativo)",
         "managedNetworks": "Reti gestite (facoltativo)",
         "managedNetworksHelp": "Reti che questo stack crea e possiede affinche i consumatori vi si colleghino.",

@@ -325,6 +325,10 @@ export {
   SharedStackService,
   type SharedStackServiceDependencies,
 } from './modules/sharedStack/SharedStackService.js'
+// The generic (deployment-neutral) seeder that idempotently creates a deployment's pre-declared
+// shared stacks in a workspace — the concrete implementation of the kernel `SharedStackSeeder`
+// port, and the shared-stack sibling of `createEnvironmentHandlerSeeder`.
+export { createSharedStackSeeder } from './modules/sharedStack/SharedStackSeeder.js'
 // Preflights: the runtime-neutral runner over an injected host-probe seam (local facade only).
 export {
   PreflightService,

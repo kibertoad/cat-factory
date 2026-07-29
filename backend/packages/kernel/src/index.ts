@@ -311,6 +311,20 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Where an ordered `-f` compose layer's text comes from (the primary repo, a directly-supplied
+// document, or another repo), and the pure placement rules both consumers share — the compose
+// environment provider and the shared-stack bring-up. See `domain/compose-sources.ts`.
+export {
+  normalizeComposeFileRef,
+  normalizeComposeFileRefs,
+  composePathDir,
+  composeProjectDir,
+  composeBaseDepth,
+  materializedComposePath,
+  composeSourcesNeedPrimaryRepo,
+  describeComposeSource,
+} from './domain/compose-sources.js'
+
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {
   clearsConsensusBar,

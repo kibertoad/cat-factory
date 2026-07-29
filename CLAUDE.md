@@ -1052,6 +1052,41 @@ capabilities from a manifest entry. Design:
   (`node_modules`, `.venv`, `target`); Maven/Gradle/Go/Cargo cache in `HOME`, which the "per-job
   state, NEVER HOME-global" rule governs. Don't assume a warm cache there without designing it.
 
+### Compose layers: where a `-f` layer's TEXT comes from
+
+Both a service's `StackRecipe` and a `SharedStack` name an ORDERED list of compose layers, and a
+layer is a `ComposeFileRef`: a bare in-repo path (the shorthand the deterministic detector emits
+and the SPA authors) or an explicit `ComposeSource` — `inline` (the document itself) or `repo` (a
+path in another `owner/name`, read checkout-free through the workspace's VCS connection). This is
+what lets a deployment declare infra dependencies IN CODE (`seedSharedStacks` on
+`startNode`/`startLocal`) rather than through a form. Design:
+[`docs/initiatives/stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
+
+- **The project directory anchors on the first `path` layer, NEVER the first layer.** Compose
+  resolves every layer's relative build contexts / binds / `env_file`s against
+  `--project-directory`, so prepending an `inline` layer to an in-repo stack must not move that
+  anchor to the checkout root and break every relative path below it. The host-escape `baseDepth`
+  derives from the SAME directory, so a layer list with no in-repo layer gets the strictest depth
+  (0) instead of inheriting a foreign path's depth — a foreign layer's own nesting may never widen
+  what the guard tolerates in the primary checkout.
+- **Placement is PURE and shared** (kernel `domain/compose-sources.ts`; the shape helpers sit in
+  contracts' `compose-sources.ts` because the SPA needs them and depends on contracts alone).
+  Resolution is ONE seam, integrations' `modules/compose/compose-sources.ts` `planComposeLayers`,
+  which resolves each foreign repo once however many layers name it. The two consumers use it
+  differently ON PURPOSE: the compose PROVIDER rewrites every layer for isolation, so it reads its
+  `path` layers itself from the VCS before a checkout exists; a SHARED STACK runs its committed
+  layers AS AUTHORED off the clone and materializes only the non-`path` ones.
+- **A materialized layer's path is keyed by POSITION**, so two layers with the same basename in
+  different repos can't collide, and a re-provision overwrites rather than accumulating stale `-f`
+  candidates in the working tree.
+- **`SharedStack.cloneUrl` is nullable, and what forces one is reading a COMMITTED file** — a
+  `path` layer, an `envFiles` template, or a `copy-file`/`stdinFile` step (`composeBringUpNeedsRepo`).
+  Refused at the WRITE boundary on the MERGED entity (`details.reason: 'clone_url_required'`), because
+  `composeFiles` and `cloneUrl` patch independently and only conflict once combined. A repo-less
+  bring-up materializes an EMPTY tree through `ComposeRuntime.workingDir` instead of cloning.
+- **Seeds are idempotent by NAME, never overwritten.** A seed says "this board should have a stack
+  called X", not "X must look exactly like this", so an operator's later edit survives every boot.
+
 ### Pre-PR validation (checks in the container BEFORE the PR opens)
 
 A service frame can declare install/lint/test/build commands the harness runs against the checkout

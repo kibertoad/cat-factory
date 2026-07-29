@@ -1497,7 +1497,9 @@ export const sharedStacks = pgTable(
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
     name: text('name').notNull(),
-    clone_url: text('clone_url').notNull(),
+    // NULL ⇒ a repo-less stack: every compose layer is an inline document or a reference into
+    // another repo, so there is nothing of its own to clone (migration 0070 ⇄ D1).
+    clone_url: text('clone_url'),
     git_ref: text('git_ref'),
     compose_files: text('compose_files').notNull().default('[]'),
     compose_profiles: text('compose_profiles').notNull().default('[]'),

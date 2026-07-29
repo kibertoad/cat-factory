@@ -2703,6 +2703,7 @@
         "directoryHelp": "Solo lo usa la detección automática: el subdirectorio del monorepo donde se encuentra el stack de compose.",
         "composeFiles": "Archivos de Compose",
         "composeFilesHelp": "Separados por comas, relativos al repositorio, en orden de anulación.",
+        "composeLayersManagedHelp": "Gestionado mediante la API: esta pila tiene capas suministradas en línea o leídas desde otro repositorio, por lo que aquí se muestran como solo lectura y no se modifican al guardar.",
         "composeProfiles": "Perfiles de Compose (opcional)",
         "managedNetworks": "Redes gestionadas (opcional)",
         "managedNetworksHelp": "Redes que este stack crea y posee para que los consumidores se conecten.",

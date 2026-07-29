@@ -45,6 +45,7 @@ import type {
   Clock,
   CommitProjectionRepository,
   ConsensusGroupRepository,
+  CreateSharedStackInput,
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
@@ -614,6 +615,19 @@ export interface CoreDependencies {
    * fault-tolerant. Absent / empty ⇒ no seeding.
    */
   seedEnvironmentHandlers?: RegisterHandlerInput[]
+  /**
+   * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+   * compose infra its services' preview environments attach to. The sibling of
+   * {@link seedEnvironmentHandlers} and wired the same way: `createCore` builds a
+   * `SharedStackSeeder` over them and exposes it on the container, the runtime boot-backfills
+   * every existing workspace, and `WorkspaceService.create` seeds each new one.
+   *
+   * This is what lets a deployment declare its infra dependencies IN CODE instead of through the
+   * SPA: a seed's ordered compose layers may be inline documents, paths in ANOTHER repo, or paths
+   * in the stack's own clone, so a stack that owns no repo at all is expressible. Seeding is
+   * idempotent (matched by name) + per-seed fault-tolerant. Absent / empty ⇒ no seeding.
+   */
+  seedSharedStacks?: CreateSharedStackInput[]
   /**
    * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
    * publishes a served app's port to a host port and keeps the container alive. Wired ONLY on a

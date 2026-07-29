@@ -307,6 +307,9 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // them (when the environments module is wired) and exposes it for the boot backfill + the
     // WorkspaceService on-create hook. Undefined ⇒ no seeding. The local facade rides this via `o`.
     seedEnvironmentHandlers: options.seedEnvironmentHandlers,
+    // …and the pre-declared shared stacks, under the same rules. `createCore` builds the seeder
+    // over them (when the shared-stacks module is wired) and exposes it for the same two sites.
+    seedSharedStacks: options.seedSharedStacks,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`

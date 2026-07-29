@@ -1,0 +1,1 @@
+ALTER TABLE "shared_stacks" ALTER COLUMN "clone_url" DROP NOT NULL;

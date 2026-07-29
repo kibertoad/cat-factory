@@ -121,6 +121,15 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
       await git(['-C', dir, 'checkout', '--quiet', '--detach', 'FETCH_HEAD'])
       return { dir }
     },
+    async workingDir(project) {
+      // The repo-less counterpart of `checkout`: a shared stack whose compose layers are all
+      // inline / read from other repos has nothing to clone, so it materializes them into this
+      // (created-if-absent) tree. Deliberately NOT wiped like `checkout` does — there is no clone
+      // to make authoritative, and the layer writes below overwrite deterministically anyway.
+      const dir = checkoutDir(project)
+      await mkdir(dir, { recursive: true })
+      return { dir }
+    },
     async writeCheckoutFile(project, relPath, content) {
       const path = join(checkoutDir(project), relPath)
       await mkdir(dirname(path), { recursive: true })

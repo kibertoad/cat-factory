@@ -38,7 +38,7 @@ import type {} from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 
-import type { EnvironmentHandlerSeeder } from '@cat-factory/kernel'
+import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -393,6 +393,12 @@ export interface OptionalCoreModules {
    * into `WorkspaceService` for the on-create hook). A no-op when no seeds were declared.
    */
   environmentHandlerSeeder?: EnvironmentHandlerSeeder
+  /**
+   * The deployment-declared shared-stack seeder, present only when the shared-stacks module is
+   * wired. Read by the runtime to boot-backfill every existing workspace, and late-bound into
+   * `WorkspaceService` for the on-create hook. A no-op when no seeds were declared.
+   */
+  sharedStackSeeder?: SharedStackSeeder
   /** Present only when the self-hosted runner-pool integration is configured. */
   runners?: RunnersModule
   /** Present only when the provisioning event-log store is wired (see CoreDependencies). */
@@ -528,6 +534,9 @@ export function createCore(injected: CoreDependencies): Core {
   // `getEnvironmentHandlerSeeder`; it is built AFTER the foundation (below, over the environments
   // module's connection service), so the workspace service resolves it at call time, not now.
   let environmentHandlerSeederRef: EnvironmentHandlerSeeder | undefined
+  // Late-bound for the same reason, and resolved at the same call site: the shared-stack seeder is
+  // built over the shared-stacks module, which lands after the foundation.
+  let sharedStackSeederRef: SharedStackSeeder | undefined
   // The foundation slice (notifications/settings, board/workspace/account/user + the account-
   // onboarding modules) is built up-front as a cohesive collaborator; see container/foundation.ts.
   const { notifications, settings, boardService, workspaceService, accountService, userService } =
@@ -540,6 +549,7 @@ export function createCore(injected: CoreDependencies): Core {
       pipelineRegistry,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
+      getSharedStackSeeder: () => sharedStackSeederRef,
     })
   const pipelineService = new PipelineService({ ...dependencies, pipelineRegistry })
   const spendService = new SpendService({
@@ -581,6 +591,7 @@ export function createCore(injected: CoreDependencies): Core {
     llmObservability,
     environments,
     environmentHandlerSeeder,
+    sharedStackSeeder,
     fragmentLibrary,
     skillLibrary,
   } = createPlatformModules({
@@ -591,6 +602,7 @@ export function createCore(injected: CoreDependencies): Core {
     boardService,
   })
   environmentHandlerSeederRef = environmentHandlerSeeder
+  sharedStackSeederRef = sharedStackSeeder
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired

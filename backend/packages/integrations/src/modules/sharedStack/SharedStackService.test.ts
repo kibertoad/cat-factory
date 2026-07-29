@@ -76,12 +76,45 @@ function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
   return { runtime, calls, networks, checkouts }
 }
 
+// A checkout-free RepoFiles reader over a flat path->content map, bound as the workspace's VCS
+// resolver. Shared by the detect tests and the other-repo compose-layer tests.
+function makeResolver(files: Record<string, string>, baseBranch = 'main') {
+  const calls: { owner: string; repo: string; provider?: string }[] = []
+  const repoFiles = {
+    async getFile(path: string) {
+      return path in files ? { content: files[path]!, sha: 'sha' } : null
+    },
+    async listDirectory(path: string) {
+      const prefix = path ? `${path}/` : ''
+      const children = new Map<string, 'file' | 'dir'>()
+      for (const full of Object.keys(files)) {
+        if (!full.startsWith(prefix)) continue
+        const rest = full.slice(prefix.length)
+        if (!rest) continue
+        const slash = rest.indexOf('/')
+        if (slash === -1) children.set(rest, 'file')
+        else children.set(rest.slice(0, slash), 'dir')
+      }
+      return [...children].map(([name, type]) => ({ name, type, path: prefix + name }))
+    },
+  }
+  const resolve = async (
+    _ws: string,
+    coords: { owner: string; repo: string; provider?: string },
+  ) => {
+    calls.push(coords)
+    return { repo: repoFiles, baseBranch } as never
+  }
+  return { resolve, calls }
+}
+
 function makeService(
   repo: SharedStackRepository,
   runtime?: ComposeRuntime,
   opts: {
     cloneToken?: string
     runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
+    resolveRepoFilesForWorkspace?: SharedStackServiceDependencies['resolveRepoFilesForWorkspace']
   } = {},
 ): SharedStackService {
   let n = 0
@@ -93,6 +126,9 @@ function makeService(
     ...(runtime ? { composeRuntime: runtime } : {}),
     ...(opts.cloneToken ? { cloneToken: opts.cloneToken } : {}),
     ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
+    ...(opts.resolveRepoFilesForWorkspace
+      ? { resolveRepoFilesForWorkspace: opts.resolveRepoFilesForWorkspace }
+      : {}),
   })
 }
 
@@ -401,38 +437,193 @@ describe('SharedStackService', () => {
     await expect(svc.remove(WS, created.id)).resolves.toBeUndefined()
   })
 
+  describe('compose layers supplied directly / from another repo', () => {
+    /** A runtime that also records `writeCheckoutFile` writes + `workingDir` calls. */
+    function makeLayerRuntime(overrides: Partial<ComposeRuntime> = {}) {
+      const base = makeRuntime(overrides)
+      const writes: { path: string; content: string }[] = []
+      let workingDirs = 0
+      const runtime: ComposeRuntime = {
+        ...base.runtime,
+        async writeCheckoutFile(_project, relPath, content) {
+          writes.push({ path: relPath, content })
+          return `/scratch/checkout/${relPath}`
+        },
+        async workingDir() {
+          workingDirs += 1
+          return { dir: '/scratch/checkout' }
+        },
+        ...overrides,
+      }
+      return { ...base, runtime, writes, workingDirs: () => workingDirs }
+    }
+
+    /** The `-f` arguments of the `up` invocation. */
+    function upFiles(calls: string[][]): string[] {
+      const up = calls.find((args) => args.includes('up'))!
+      return up.filter((arg, i) => up[i - 1] === '-f')
+    }
+
+    it('materializes inline + other-repo layers beside the in-repo ones, in declared order', async () => {
+      const { runtime, calls, writes, checkouts } = makeLayerRuntime()
+      const svc = makeService(makeRepo(), runtime, {
+        resolveRepoFilesForWorkspace: makeResolver({ 'compose/edge.yml': 'edge: yes\n' }).resolve,
+      })
+      const created = await svc.create(WS, {
+        ...baseInput,
+        composeFiles: [
+          'docker/dev.yml',
+          { kind: 'inline', content: 'services: {}\n' },
+          { kind: 'repo', repo: 'acme/infra', path: 'compose/edge.yml' },
+        ],
+      })
+
+      const up = await svc.ensureUp(WS, created.id)
+      expect(up.status).toBe('running')
+      // The in-repo layer still comes from the clone; only the other two are written.
+      expect(checkouts).toHaveLength(1)
+      expect(writes).toEqual([
+        { path: 'docker/.cat-factory/compose/1-inline.yml', content: 'services: {}\n' },
+        { path: 'docker/.cat-factory/compose/2-edge.yml', content: 'edge: yes\n' },
+      ])
+      expect(upFiles(calls)).toEqual([
+        '/scratch/checkout/docker/dev.yml',
+        '/scratch/checkout/docker/.cat-factory/compose/1-inline.yml',
+        '/scratch/checkout/docker/.cat-factory/compose/2-edge.yml',
+      ])
+      // `--project-directory` stays anchored on the IN-REPO layer's dir, so that layer's own
+      // relative build contexts / binds / env_files resolve exactly as authored.
+      const upCall = calls.find((args) => args.includes('up'))!
+      expect(upCall[upCall.indexOf('--project-directory') + 1]).toBe('/scratch/checkout/docker')
+    })
+
+    it('brings a REPO-LESS stack up with no clone at all', async () => {
+      const { runtime, calls, checkouts, writes, workingDirs } = makeLayerRuntime()
+      const svc = makeService(makeRepo(), runtime)
+      const created = await svc.create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services:\n  db:\n    image: postgres:17\n' }],
+      })
+      expect(created.cloneUrl).toBeNull()
+
+      const up = await svc.ensureUp(WS, created.id)
+      expect(up.status).toBe('running')
+      expect(checkouts).toEqual([]) // nothing was cloned…
+      expect(workingDirs()).toBe(1) // …an empty working tree was materialized instead
+      expect(writes.map((w) => w.path)).toEqual(['.cat-factory/compose/0-inline.yml'])
+      expect(upFiles(calls)).toEqual(['/scratch/checkout/.cat-factory/compose/0-inline.yml'])
+    })
+
+    it('refuses to CREATE a stack that reads committed files with no clone URL', async () => {
+      const svc = makeService(makeRepo())
+      await expect(
+        svc.create(WS, { ...baseInput, cloneUrl: undefined, composeFiles: ['docker-compose.yml'] }),
+      ).rejects.toMatchObject({ details: { reason: 'clone_url_required' } })
+      // …and the same check runs on the MERGED entity, so clearing the URL on an inline-only
+      // stack that also declares an env-file template is caught too.
+      const created = await svc.create(WS, {
+        ...baseInput,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+        envFiles: [{ template: '.env-dist', target: '.env' }],
+      })
+      await expect(svc.update(WS, created.id, { cloneUrl: null })).rejects.toMatchObject({
+        details: { reason: 'clone_url_required' },
+      })
+    })
+
+    it('fails the bring-up with the real cause when another repo cannot be read', async () => {
+      const { runtime } = makeLayerRuntime()
+      const svc = makeService(makeRepo(), runtime) // no VCS resolver wired
+      const created = await svc.create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'repo', repo: 'acme/infra', path: 'compose/edge.yml' }],
+      })
+
+      const up = await svc.ensureUp(WS, created.id)
+      expect(up.status).toBe('failed')
+      expect(up.lastError).toContain('acme/infra')
+    })
+
+    it('refuses to STORE a layer that would be materialized outside the checkout', async () => {
+      // An inline layer's `path` becomes the `relPath` of a `writeCheckoutFile`, whose runtime
+      // implementation is a bare join — so an unguarded `../` writes caller-chosen content to an
+      // arbitrary host path. Refused at the write boundary: a definition that could never be
+      // safely brought up should not be storable, on either the create or the update path.
+      const svc = makeService(makeRepo())
+      await expect(
+        svc.create(WS, {
+          ...baseInput,
+          cloneUrl: undefined,
+          composeFiles: [{ kind: 'inline', content: 'services: {}', path: '../../evil.yml' }],
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'compose_layer_escapes_checkout' } })
+
+      const created = await svc.create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      await expect(
+        svc.update(WS, created.id, {
+          composeFiles: [{ kind: 'inline', content: 'services: {}', path: '/etc/cron.d/x.yml' }],
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'compose_layer_escapes_checkout' } })
+    })
+
+    it('fails the bring-up — writing nothing — for a stored layer that escapes the checkout', async () => {
+      // Defence in depth behind the write boundary above: a row that predates the guard (or one
+      // written straight to the store) must still never reach `writeCheckoutFile`.
+      const repo = makeRepo()
+      const stored = await makeService(repo).create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      await repo.upsert(WS, {
+        ...stored,
+        composeFiles: [{ kind: 'inline', content: 'pwned', path: '../../evil.yml' }],
+      })
+
+      const { runtime, writes } = makeLayerRuntime()
+      const up = await makeService(repo, runtime).ensureUp(WS, stored.id)
+      expect(up.status).toBe('failed')
+      expect(up.lastError).toContain('escapes the checkout')
+      expect(writes).toEqual([])
+    })
+
+    it('refuses a repo-less stack on a runtime that cannot stand an empty tree up', async () => {
+      // The capability gate is keyed off the SHAPE: a repo-less stack calls `workingDir`, never
+      // `checkout`, so it must be judged on the seam it will actually use.
+      const repo = makeRepo()
+      const created = await makeService(repo).create(WS, {
+        ...baseInput,
+        cloneUrl: undefined,
+        composeFiles: [{ kind: 'inline', content: 'services: {}' }],
+      })
+      const { runtime } = makeLayerRuntime()
+      const { workingDir: _omitted, ...withoutWorkingDir } = runtime
+      const up = await makeService(repo, withoutWorkingDir).ensureUp(WS, created.id)
+      expect(up.status).toBe('failed')
+      expect(up.lastError).toContain('working tree')
+    })
+
+    it('still brings a plain in-repo stack up on a runtime that cannot write into the checkout', async () => {
+      // The mirror of the case above: a stack of bare paths materializes nothing, so it must not be
+      // gated on `writeCheckoutFile`. (A `path` layer is run where the clone already put it.)
+      const repo = makeRepo()
+      const created = await makeService(repo).create(WS, baseInput)
+      const { runtime } = makeRuntime()
+      expect(runtime.writeCheckoutFile).toBeUndefined()
+      const up = await makeService(repo, runtime).ensureUp(WS, created.id)
+      expect(up.status).toBe('running')
+    })
+  })
+
   describe('detect', () => {
     // A checkout-free RepoFiles reader over a flat path→content map (only the two methods the
     // detector calls) wrapped in a RunRepoContext, plus a resolver that hands it back.
-    function makeResolver(files: Record<string, string>, baseBranch = 'main') {
-      const calls: { owner: string; repo: string; provider?: string }[] = []
-      const repoFiles = {
-        async getFile(path: string) {
-          return path in files ? { content: files[path]!, sha: 'sha' } : null
-        },
-        async listDirectory(path: string) {
-          const prefix = path ? `${path}/` : ''
-          const children = new Map<string, 'file' | 'dir'>()
-          for (const full of Object.keys(files)) {
-            if (!full.startsWith(prefix)) continue
-            const rest = full.slice(prefix.length)
-            if (!rest) continue
-            const slash = rest.indexOf('/')
-            if (slash === -1) children.set(rest, 'file')
-            else children.set(rest.slice(0, slash), 'dir')
-          }
-          return [...children].map(([name, type]) => ({ name, type, path: prefix + name }))
-        },
-      }
-      const resolve = async (
-        _ws: string,
-        coords: { owner: string; repo: string; provider?: string },
-      ) => {
-        calls.push(coords)
-        return { repo: repoFiles, baseBranch } as never
-      }
-      return { resolve, calls }
-    }
 
     function detectService(
       repo: SharedStackRepository,

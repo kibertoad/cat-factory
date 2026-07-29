@@ -29,8 +29,18 @@ test.describe('mobile responsive shell', () => {
     // drawer is never RAILED: the collapsed rail is lg-only, so below lg the labels render.
     await expect(page.getByTestId('sidebar').getByText('Workspace settings')).toBeVisible()
 
-    // Tapping the backdrop closes the drawer (backdrop unmounts).
-    await page.getByTestId('sidebar-backdrop').click()
+    // Tapping the backdrop closes the drawer (backdrop unmounts). Tap the dimmed strip BESIDE the
+    // panel, which is the only part of the backdrop a user can actually reach — and the reason
+    // this needs a position at all: the backdrop is `fixed inset-0`, so Playwright's default click
+    // point is its centre (x≈195 on this 390px viewport), which sits INSIDE the 256px-wide drawer.
+    // The drawer then intercepts the click, and the retry loop can never win, so the test hangs to
+    // its full 60s. It passed at all only when the click happened to land while the 200ms open
+    // transition still had the panel part-way off-screen — a race against an animation, not a
+    // property of the affordance. Derived from the panel's measured width so a restyle can't
+    // silently put the tap point back underneath it.
+    const drawerWidth = (await page.getByTestId('sidebar').boundingBox())?.width ?? 0
+    expect(drawerWidth).toBeGreaterThan(0)
+    await page.getByTestId('sidebar-backdrop').click({ position: { x: drawerWidth + 40, y: 422 } })
     await expect(page.getByTestId('sidebar-backdrop')).toBeHidden()
   })
 

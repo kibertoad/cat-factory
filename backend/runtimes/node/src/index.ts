@@ -4,7 +4,7 @@
 // in dev, test and prod). `start()` boots an HTTP server; `createServer()` returns the
 // app (for embedding/tests); `buildNodeContainer()` is the composition root.
 export {
-  backfillEnvironmentHandlerSeeds,
+  backfillDeclaredSeeds,
   createApp,
   createServer,
   serveAppWithRealtime,
@@ -104,6 +104,10 @@ export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // wrapper can name a preset when passing `start({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import.
 export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
+// The shapes a deployment declares its INFRA DEPENDENCIES with, re-exported so a deploy-app
+// wrapper can type its `seedSharedStacks` (and hand-write an inline compose layer) without a
+// direct `@cat-factory/kernel` / `@cat-factory/contracts` import.
+export type { ComposeFileRef, ComposeSource, CreateSharedStackInput } from '@cat-factory/kernel'
 export { SystemClock, CryptoIdGenerator } from './runtime.js'
 // Re-exported so the local facade can build its own provisioning-log recorder for the
 // per-workspace transport chooser without taking a direct @cat-factory/integrations dep.

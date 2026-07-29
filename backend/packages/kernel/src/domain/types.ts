@@ -422,6 +422,11 @@ export type {
   RequirementConcernLevel,
   CreateRiskPolicyInput,
   UpdateRiskPolicyInput,
+  // Where one ordered `-f` compose layer's text comes from: a path in the primary repo, a
+  // directly-supplied document, or a path in another repo.
+  ComposeFileRef,
+  ComposeSource,
+  ComposeSourceKind,
   // Shared stacks (long-lived compose infra a consumer environment attaches to).
   SharedStack,
   SharedStackStatus,
