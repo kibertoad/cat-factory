@@ -30,6 +30,17 @@ export interface AgentPromptRepository {
   /** The live revision for one kind, or null when the kind was never touched. */
   head(workspaceId: string, agentKind: string): Promise<AgentPromptRevision | null>
   /**
+   * The full revision log for SEVERAL kinds at once, newest first within each kind.
+   *
+   * Exists so the sandbox can project the workspace's own prompts for every kind in its catalog
+   * without a point read per kind — the banned N+1 that a `listRevisions` in a loop would be. One
+   * chunked `IN` query; an empty `agentKinds` returns nothing rather than the whole workspace.
+   */
+  listRevisionsByKinds(
+    workspaceId: string,
+    agentKinds: readonly string[],
+  ): Promise<AgentPromptRevision[]>
+  /**
    * Append a revision. Throws when `revision` already exists for the kind — see the
    * concurrency note above; never silently overwrite.
    */

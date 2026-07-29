@@ -5324,7 +5324,12 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "Neue Version von · {name}",
       "saveVersion": "Neue Version speichern",
-      "hint": "Wähle einen Prompt, um eine ausgelieferte Baseline zu forken oder einen Kandidaten zu versionieren. Jedes Speichern hängt eine unveränderliche Version an, die du testen kannst."
+      "hint": "Wähle einen Prompt, um eine ausgelieferte Baseline zu forken oder einen Kandidaten zu versionieren. Jedes Speichern hängt eine unveränderliche Version an, die du testen kannst.",
+      "liveInWorkspace": "Aktiv",
+      "fromWorkspace": "Ihr Arbeitsbereich",
+      "promoteTitle": "Diesen Prompt für diesen Agenten aktiv schalten",
+      "promoted": "Jetzt der aktive Prompt für {agent}",
+      "promoteFailed": "Prompt konnte nicht aktiviert werden"
     },
     "fixtureKind": {
       "requirements": "Anforderungen",

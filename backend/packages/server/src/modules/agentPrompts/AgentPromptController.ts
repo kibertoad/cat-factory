@@ -2,9 +2,10 @@ import type { AgentPromptDetail, AgentPromptRevision } from '@cat-factory/contra
 import {
   getAgentPromptContract,
   listAgentPromptsContract,
+  promoteAgentPromptContract,
   saveAgentPromptContract,
 } from '@cat-factory/contracts'
-import type { AgentPromptsModule } from '@cat-factory/orchestration'
+import type { AgentPromptsModule, SandboxModule } from '@cat-factory/orchestration'
 import { promptIdForKind, promptVersionLabel } from '@cat-factory/agents'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -13,11 +14,21 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { builtInBaseSystemPrompt, builtInDirectivesFor } from '../../agents/promptOverrides.js'
 
 /** Resolve the agent-prompt module, or refuse with a 503 naming what isn't wired. */
 function requireAgentPrompts<E extends AppEnv>(c: Context<E>): AgentPromptsModule {
   return requireCapability(c.get('container').agentPrompts, 'Agent prompts are not configured')
+}
+
+/**
+ * Resolve the sandbox module for the promote route. Its OWN accessor rather than a message
+ * borrowed from the prompt module's: a deployment can wire prompt overrides without the sandbox,
+ * and an operator told "agent prompts are not configured" would go and check the wrong thing.
+ */
+function requireSandbox<E extends AppEnv>(c: Context<E>): SandboxModule {
+  return requireCapability(c.get('container').sandbox, 'The Sandbox is not configured')
 }
 
 /**
@@ -82,6 +93,36 @@ export function agentPromptController(): Hono<AppEnv> {
       param(c, 'workspaceId'),
       agentKind,
       c.req.valid('json'),
+      c.get('user')?.id,
+    )
+    return c.json(detailFor(c, agentKind, revisions), 200)
+  })
+
+  buildHonoRoute(app, promoteAgentPromptContract, async (c) => {
+    const prompts = requireAgentPrompts(c)
+    const sandbox = requireSandbox(c)
+    const { agentKind } = c.req.valid('param')
+    const workspaceId = param(c, 'workspaceId')
+    const { sandboxPromptVersionId } = c.req.valid('json')
+
+    const version = await sandbox.service.getPrompt(workspaceId, sandboxPromptVersionId)
+    if (!version) throw new NotFoundError('Sandbox prompt version', sandboxPromptVersionId)
+    // The version carries the kind it was written FOR. Promoting it onto a different kind would
+    // install e.g. a code-reviewer prompt as the requirements reviewer — a silently wrong run
+    // rather than an error — so the mismatch is refused instead of trusted from the path.
+    if (version.agentKind !== agentKind) {
+      throw new ValidationError('That prompt version belongs to a different agent.', {
+        reason: 'agent_kind_mismatch',
+        expected: agentKind,
+        actual: version.agentKind,
+      })
+    }
+    // An ordinary append: revertible, visible in the history, and a no-op when the promoted text
+    // is already live. The TEXT comes from the stored version, never from the request.
+    const revisions = await prompts.service.save(
+      workspaceId,
+      agentKind,
+      { text: version.systemText },
       c.get('user')?.id,
     )
     return c.json(detailFor(c, agentKind, revisions), 200)

@@ -472,6 +472,7 @@ export type {
   AgentPromptDetail,
   AgentPromptSummary,
   SaveAgentPromptInput,
+  PromoteAgentPromptInput,
   // Per-workspace default service-fragment selection (new services inherit it).
   ServiceFragmentDefaults,
   SetServiceFragmentDefaultsInput,

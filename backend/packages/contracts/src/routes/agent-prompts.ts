@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import {
   agentPromptDetailSchema,
   agentPromptSummarySchema,
+  promoteAgentPromptSchema,
   saveAgentPromptSchema,
 } from '../agent-prompts.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -50,5 +51,26 @@ export const saveAgentPromptContract = defineApiContract({
   requestPathParamsSchema: agentKindParams,
   pathResolver: ({ agentKind }) => `/agent-prompts/${agentKind}`,
   requestBodySchema: saveAgentPromptSchema,
+  responsesByStatusCode: { 200: agentPromptDetailSchema, ...errorResponses },
+})
+
+/**
+ * Promote a SANDBOX prompt version to this kind's live prompt — the deploy half of the
+ * sandbox workflow, where a graded candidate becomes what the workspace's runs actually use.
+ *
+ * Deliberately mounted HERE rather than under `/sandbox`, because the state it writes is the
+ * agent prompt: it inherits this controller's `settings.manage` gate instead of the sandbox
+ * controller's `integrations.manage` one, so promoting can never be a way around the permission
+ * that guards editing a prompt directly. (Both are admin-only today, but the role map is
+ * explicitly built to be split post-1.0.)
+ *
+ * It is an ordinary append, so a promotion is revertible and shows up in the history like any
+ * other revision, and promoting the text that is already live is a no-op rather than a duplicate.
+ */
+export const promoteAgentPromptContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: agentKindParams,
+  pathResolver: ({ agentKind }) => `/agent-prompts/${agentKind}/promote`,
+  requestBodySchema: promoteAgentPromptSchema,
   responsesByStatusCode: { 200: agentPromptDetailSchema, ...errorResponses },
 })

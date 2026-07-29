@@ -5324,7 +5324,12 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "Nuova versione di · {name}",
       "saveVersion": "Salva nuova versione",
-      "hint": "Scegli un prompt per derivare una baseline già distribuita o versionare un candidato. Ogni salvataggio aggiunge una versione immutabile che puoi mettere sotto test."
+      "hint": "Scegli un prompt per derivare una baseline già distribuita o versionare un candidato. Ogni salvataggio aggiunge una versione immutabile che puoi mettere sotto test.",
+      "liveInWorkspace": "Attivo",
+      "fromWorkspace": "Il tuo spazio di lavoro",
+      "promoteTitle": "Rendi questo il prompt attivo per questo agente",
+      "promoted": "Ora è il prompt attivo per {agent}",
+      "promoteFailed": "Impossibile attivare questo prompt"
     },
     "fixtureKind": {
       "requirements": "requisiti",

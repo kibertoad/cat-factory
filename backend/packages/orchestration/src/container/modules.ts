@@ -1203,6 +1203,10 @@ export function createSandboxModule(
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     agentKindRegistry,
+    // Optional: lets the prompt browser offer the workspace's OWN prompts (edited in the pipeline
+    // builder) beside the shipped baselines, so a candidate can be measured against what is
+    // actually running. Absent ⇒ baselines + stored candidates only.
+    ...(deps.agentPromptRepository ? { agentPromptRepository: deps.agentPromptRepository } : {}),
   }
   const defaultModelRef = deps.requirementReviewModel ?? deps.documentPlannerModel
   const service = new SandboxService({ ...repositories, defaultModelRef })

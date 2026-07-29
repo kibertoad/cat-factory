@@ -5073,7 +5073,12 @@
       "forkOf": "Çatal · {name}",
       "newVersionOf": "Yeni sürüm · {name}",
       "saveVersion": "Yeni sürüm kaydet",
-      "hint": "Sevk edilmiş bir temeli çatallamak veya bir adayı sürümlemek için bir prompt seçin. Her kaydetme, teste sokabileceğiniz değiştirilemez bir sürüm ekler."
+      "hint": "Sevk edilmiş bir temeli çatallamak veya bir adayı sürümlemek için bir prompt seçin. Her kaydetme, teste sokabileceğiniz değiştirilemez bir sürüm ekler.",
+      "liveInWorkspace": "Etkin",
+      "fromWorkspace": "Çalışma alanınız",
+      "promoteTitle": "Bu ajanın etkin istemi yap",
+      "promoted": "Artık {agent} için etkin istem",
+      "promoteFailed": "Bu istem etkinleştirilemedi"
     },
     "fixtureKind": {
       "requirements": "gereksinimler",

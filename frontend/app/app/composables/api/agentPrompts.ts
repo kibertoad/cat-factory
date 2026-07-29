@@ -1,6 +1,7 @@
 import {
   getAgentPromptContract,
   listAgentPromptsContract,
+  promoteAgentPromptContract,
   saveAgentPromptContract,
 } from '@cat-factory/contracts'
 import type { SaveAgentPromptInput } from '~/types/agent-prompts'
@@ -26,6 +27,15 @@ export function agentPromptsApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { agentKind },
         body,
+      }),
+
+    // Deploy the sandbox half of the workflow: a graded prompt version becomes the live prompt.
+    // The text is read server-side from the version, so what runs is what was graded.
+    promoteAgentPrompt: (workspaceId: string, agentKind: string, sandboxPromptVersionId: string) =>
+      send(promoteAgentPromptContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { agentKind },
+        body: { sandboxPromptVersionId },
       }),
   }
 }

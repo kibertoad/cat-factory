@@ -5061,7 +5061,12 @@
       "forkOf": "Bifurcación · {name}",
       "newVersionOf": "Nueva versión de · {name}",
       "saveVersion": "Guardar nueva versión",
-      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba."
+      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba.",
+      "liveInWorkspace": "Activo",
+      "fromWorkspace": "Tu espacio de trabajo",
+      "promoteTitle": "Convertir en el prompt activo de este agente",
+      "promoted": "Ahora es el prompt activo de {agent}",
+      "promoteFailed": "No se pudo activar este prompt"
     },
     "fixtureKind": {
       "requirements": "requisitos",

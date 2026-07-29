@@ -26,6 +26,12 @@ function fakeRepo(seed: AgentPromptRevision[] = []): AgentPromptRepository & {
       }
       return [...byKind.values()].sort((a, b) => a.agentKind.localeCompare(b.agentKind))
     },
+    async listRevisionsByKinds(_ws, agentKinds) {
+      const wanted = new Set(agentKinds)
+      return rows
+        .filter((r) => wanted.has(r.agentKind))
+        .sort((a, b) => a.agentKind.localeCompare(b.agentKind) || b.revision - a.revision)
+    },
     async head(_ws, agentKind) {
       return (await this.listRevisions(_ws, agentKind))[0] ?? null
     },

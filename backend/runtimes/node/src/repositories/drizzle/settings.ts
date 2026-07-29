@@ -811,6 +811,27 @@ export class DrizzleAgentPromptRepository implements AgentPromptRepository {
     return rows.map(rowToAgentPromptRevision)
   }
 
+  async listRevisionsByKinds(
+    workspaceId: string,
+    agentKinds: readonly string[],
+  ): Promise<AgentPromptRevision[]> {
+    // One IN query rather than a point read per kind (the sandbox asks about its whole catalog).
+    // An empty list would make `inArray` match nothing on Postgres but is short-circuited anyway,
+    // so the caller never pays for a round trip it cannot use.
+    if (agentKinds.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(agentPromptRevisions)
+      .where(
+        and(
+          eq(agentPromptRevisions.workspace_id, workspaceId),
+          inArray(agentPromptRevisions.agent_kind, [...agentKinds]),
+        ),
+      )
+      .orderBy(agentPromptRevisions.agent_kind, desc(agentPromptRevisions.revision))
+    return rows.map(rowToAgentPromptRevision)
+  }
+
   async head(workspaceId: string, agentKind: string): Promise<AgentPromptRevision | null> {
     const [row] = await this.db
       .select()

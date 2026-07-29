@@ -203,6 +203,7 @@ function makeRegistry(): {
     // resolves the live revision), the other three serve the pipeline builder's prompt editor.
     agentPromptRepository: {
       listRevisions: async (ws: string) => [{ ws }],
+      listRevisionsByKinds: async (ws: string) => [{ ws }],
       listHeads: async (ws: string) => [{ ws }],
       head: async (ws: string) => ({ ws }),
       append: async () => undefined,
@@ -770,6 +771,9 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'modelPresetRepository', method: 'list', args: [] },
     { repo: 'agentPromptRepository', method: 'listHeads', args: [] },
     { repo: 'agentPromptRepository', method: 'listRevisions', args: ['coder'] },
+    // The sandbox's batched projection read — it lists the workspace's own prompts for the whole
+    // sandbox catalog, so it is on the board-load surface rather than an admin one.
+    { repo: 'agentPromptRepository', method: 'listRevisionsByKinds', args: [['coder']] },
     // The run-path read: an unrouted `head` would fail every agent dispatch in mothership mode
     // with `unknown_method`, not merely leave the builder's badges blank.
     { repo: 'agentPromptRepository', method: 'head', args: ['coder'] },

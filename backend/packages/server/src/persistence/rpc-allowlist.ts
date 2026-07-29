@@ -327,6 +327,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // dimming a panel.
   agentPromptRepository: {
     listRevisions: { scope: { kind: 'workspace', arg: 0 } },
+    listRevisionsByKinds: { scope: { kind: 'workspace', arg: 0 } },
     listHeads: { scope: { kind: 'workspace', arg: 0 } },
     head: { scope: { kind: 'workspace', arg: 0 } },
     append: { scope: { kind: 'workspace', arg: 0 } },

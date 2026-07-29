@@ -118,6 +118,45 @@ export function defineAgentPromptSuite(name: string, makeRepo: () => AgentPrompt
       ])
     })
 
+    it('reads several kinds in one batched call, newest first within each kind', async () => {
+      const repo = makeRepo()
+      const ws = nextWs()
+      await repo.append(ws, revision({ agentKind: 'coder', revision: 1, text: 'c1' }))
+      await repo.append(ws, revision({ agentKind: 'coder', revision: 2, text: 'c2' }))
+      await repo.append(ws, revision({ agentKind: 'reviewer', revision: 1, text: 'r1' }))
+      await repo.append(ws, revision({ agentKind: 'architect', revision: 1, text: 'a1' }))
+
+      // The sandbox projects the workspace's own prompts for its whole catalog; a point read per
+      // kind would be the banned N+1, so this is the batched read it uses instead.
+      const rows = await repo.listRevisionsByKinds(ws, ['coder', 'reviewer'])
+      expect(rows.map((r) => [r.agentKind, r.revision])).toEqual([
+        ['coder', 2],
+        ['coder', 1],
+        ['reviewer', 1],
+      ])
+    })
+
+    it('returns nothing for an empty kind list, rather than the whole workspace', async () => {
+      // The difference matters: "no kinds asked about" must not degrade into "every prompt in the
+      // workspace", which would put prompts for un-runnable kinds into the sandbox browser.
+      const repo = makeRepo()
+      const ws = nextWs()
+      await repo.append(ws, revision())
+
+      expect(await repo.listRevisionsByKinds(ws, [])).toEqual([])
+    })
+
+    it('never leaks another workspace through the batched read', async () => {
+      const repo = makeRepo()
+      const ws = nextWs()
+      const other = nextWs()
+      await repo.append(ws, revision({ text: 'mine' }))
+      await repo.append(other, revision({ text: 'theirs' }))
+
+      const rows = await repo.listRevisionsByKinds(ws, ['coder'])
+      expect(rows.map((r) => r.text)).toEqual(['mine'])
+    })
+
     it('refuses a duplicate revision instead of overwriting it', async () => {
       const repo = makeRepo()
       const ws = nextWs()

@@ -1333,6 +1333,23 @@ where its step is chosen — and switch back through the full history of what it
   this map IS their equivalent of it. **Adding another such kind means adding it there, split** —
   one added with its directives inside `role` compiles and dispatches fine, and fails only later
   as a workspace that edited it losing its guardrail.
+- **The sandbox is the other half of this feature, and they share ONE unit of text.** A stored
+  sandbox `systemText` and a stored prompt override are both the BASE (track) prompt: the sandbox
+  composes the directives at RUN time through the same `systemPromptFor(kind, registry, text)`
+  override path production dispatch uses, so a candidate is graded on what would actually be sent
+  AND a promoted candidate behaves like the graded one. Storing the composed text on either side
+  would double the trait guidance the moment it crossed over.
+  - **The workspace's own prompts are PROJECTED into the sandbox** (`workspacePromptVersions`,
+    `origin: 'workspace'`, synthesized per request from the revision log — never synced, so
+    nothing can fall behind). Without them the sandbox's only control is what the PRODUCT ships,
+    so on a workspace that edited a kind every experiment measures its candidate against text
+    nobody there runs. Read with the batched `listRevisionsByKinds` — a point read per catalog
+    kind would be the banned N+1.
+  - **Promote is `POST /agent-prompts/:kind/promote`, NOT a sandbox route.** It writes the live
+    agent prompt, so it must answer to `settings.manage` rather than the sandbox controller's
+    `integrations.manage`, or the sandbox becomes a way around the gate on editing a prompt. It
+    is an ordinary append: revertible, visible in the history, a no-op when already live, and the
+    TEXT is read server-side from the version so what runs is what was graded.
 - **A step records the prompt revision it ran under** (`PipelineStep.promptRevision`, pinned at
   dispatch beside `skillVersions`, absent ⇒ the shipped prompt). The log is append-only, so
   re-reading it later answers about whatever landed since. Kaizen keys its `(prompt, agent, model)`

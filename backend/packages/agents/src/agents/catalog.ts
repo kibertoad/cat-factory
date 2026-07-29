@@ -79,6 +79,28 @@ function restoreShippedInvariants(
 }
 
 /**
+ * A string no real prompt contains, used to MEASURE what the platform appends without having to
+ * restate it. Composed in-process only; never stored, never sent.
+ */
+const DIRECTIVE_PROBE = ' cat-factory:override-probe '
+
+/**
+ * The text {@link systemPromptFor} appends to an override for this kind — the surface directives,
+ * the trait guidance, and anything {@link restoreShippedInvariants} puts back.
+ *
+ * MEASURED, never restated: compose the real prompt around a probe and return the tail. That is
+ * what makes it total — a hand-written summary would miss precisely the invisible case (a rule the
+ * shipped track prompt carried inline), and would go stale the first time a directive is added.
+ *
+ * Two consumers depend on it: the prompt editor SHOWS it, so a workspace can see the rules its
+ * override cannot delete; and the sandbox composes a candidate the same way production does, so a
+ * prompt is graded on the text that will actually be sent.
+ */
+export function appendedDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
+  return systemPromptFor(kind, registry, DIRECTIVE_PROBE).slice(DIRECTIVE_PROBE.length)
+}
+
+/**
  * The system prompt for a kind: its track prompt plus the surface directives and trait
  * guidance the engine enforces.
  *

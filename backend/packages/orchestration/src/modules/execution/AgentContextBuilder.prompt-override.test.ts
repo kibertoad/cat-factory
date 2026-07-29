@@ -44,6 +44,7 @@ function promptsRepo(
 ): AgentPromptRepository {
   return {
     listRevisions: async () => [],
+    listRevisionsByKinds: async () => [],
     listHeads: async () => [],
     head: async (_ws, agentKind) =>
       head && head.agentKind === agentKind

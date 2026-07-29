@@ -5289,7 +5289,18 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "New version of · {name}",
       "saveVersion": "Save new version",
-      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test."
+      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test.",
+      "liveInWorkspace": "Live",
+      "@liveInWorkspace": {
+        "description": "Adjective, not a verb: badges the prompt version this workspace is currently running."
+      },
+      "fromWorkspace": "Your workspace",
+      "@fromWorkspace": {
+        "description": "Badge on a prompt version that came from this workspace's own edits, as opposed to one the product ships."
+      },
+      "promoteTitle": "Make this the live prompt for this agent",
+      "promoted": "Now the live prompt for {agent}",
+      "promoteFailed": "Couldn't promote this prompt"
     },
     "fixtureKind": {
       "requirements": "requirements",

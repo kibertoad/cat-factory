@@ -1,6 +1,7 @@
 import type { AgentPromptRepository } from '@cat-factory/kernel'
 import type { AgentPromptRevision } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface AgentPromptRow {
   agent_kind: string
@@ -70,6 +71,29 @@ export class D1AgentPromptRepository implements AgentPromptRepository {
       .bind(workspaceId)
       .all<AgentPromptRow>()
     return results.map(rowToRevision)
+  }
+
+  async listRevisionsByKinds(
+    workspaceId: string,
+    agentKinds: readonly string[],
+  ): Promise<AgentPromptRevision[]> {
+    // Chunked IN rather than a point read per kind: the sandbox asks about its whole catalog at
+    // once. Ordering is applied across the merged chunks, since a chunk boundary would otherwise
+    // interleave kinds.
+    const out: AgentPromptRevision[] = []
+    for (const chunk of chunkForIn(agentKinds as string[])) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT agent_kind, revision, text, restored_from, created_at, created_by
+             FROM agent_prompt_revisions
+             WHERE workspace_id = ? AND agent_kind IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .all<AgentPromptRow>()
+      out.push(...results.map(rowToRevision))
+    }
+    return out.sort((a, b) => a.agentKind.localeCompare(b.agentKind) || b.revision - a.revision)
   }
 
   async head(workspaceId: string, agentKind: string): Promise<AgentPromptRevision | null> {

@@ -5,6 +5,7 @@
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/consensus': patch
+'@cat-factory/sandbox': minor
 '@cat-factory/conformance': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
@@ -41,3 +42,19 @@ inheriting a verification the shipped one earned.
 New: the `agent_prompt_revisions` table (D1 migration 0068 ⇄ Drizzle), the `AgentPromptRepository`
 kernel port (remote-bucket for mothership mode), `GET|PUT /workspaces/:ws/agent-prompts[/:agentKind]`
 gated on `settings.manage`, and the `prompt_revision_conflict` conflict reason.
+
+The Sandbox is the other half of this feature and is now wired to it in both directions. A
+workspace's own prompts are projected into the prompt browser as read-only `workspace` versions
+(synthesized per request from the revision log, with the live one marked), so an experiment can
+measure a candidate against the prompt that is actually running rather than only against what the
+product ships — previously the only control on offer, and silently the wrong one on any workspace
+that had edited a kind. And a version can be PROMOTED to the live prompt:
+`POST /agent-prompts/:kind/promote`, deliberately on the prompt controller so it answers to
+`settings.manage` rather than the sandbox's `integrations.manage`.
+
+Behaviour change worth knowing: a stored sandbox `systemText` is now the BASE (track) prompt, and
+`SandboxRunService` composes the platform's directives on top at run time through the same
+`systemPromptFor` override path production uses. Previously it sent the stored text raw, so it
+graded a prompt that is never what gets sent — tolerable while the sandbox was a closed loop, and
+not tolerable once a graded candidate can become the live prompt. Existing candidates keep their
+text; their grades shift, because they are now measured on the composed prompt.

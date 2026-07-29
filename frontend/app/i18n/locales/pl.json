@@ -5061,7 +5061,12 @@
       "forkOf": "Rozgałęzienie · {name}",
       "newVersionOf": "Nowa wersja · {name}",
       "saveVersion": "Zapisz nową wersję",
-      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom."
+      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom.",
+      "liveInWorkspace": "Aktywny",
+      "fromWorkspace": "Twój obszar roboczy",
+      "promoteTitle": "Ustaw jako aktywny prompt tego agenta",
+      "promoted": "To teraz aktywny prompt dla {agent}",
+      "promoteFailed": "Nie udało się aktywować tego promptu"
     },
     "fixtureKind": {
       "requirements": "wymagania",

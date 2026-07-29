@@ -319,6 +319,10 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         // as the model mapping above, so the same permission. (The controller has no DELETE:
         // going back to the built-in is a PUT with a null text.)
         { perm: 'settings.manage', method: 'PUT', path: w('/agent-prompts/coder') },
+        // Promoting a sandbox version writes the live agent prompt, so it answers to the prompt
+        // permission and NOT to the sandbox controller's `integrations.manage` — otherwise the
+        // sandbox would be a way around the gate that guards editing a prompt directly.
+        { perm: 'settings.manage', method: 'POST', path: w('/agent-prompts/coder/promote') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },

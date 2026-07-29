@@ -112,3 +112,13 @@ export const saveAgentPromptSchema = v.object({
   restoredFrom: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
 })
 export type SaveAgentPromptInput = v.InferOutput<typeof saveAgentPromptSchema>
+
+/**
+ * Promote a sandbox prompt version to this kind's live prompt. Carries only the source id — the
+ * TEXT is read server-side from the version, never sent by the client, so a promotion cannot
+ * silently differ from the version whose grades justified it.
+ */
+export const promoteAgentPromptSchema = v.object({
+  sandboxPromptVersionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type PromoteAgentPromptInput = v.InferOutput<typeof promoteAgentPromptSchema>
