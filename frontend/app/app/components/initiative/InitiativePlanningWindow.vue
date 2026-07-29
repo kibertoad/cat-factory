@@ -22,19 +22,38 @@ import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
 import { interviewGatePhase } from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
-const execution = useExecutionStore()
 const { t } = useI18n()
 
-const { open, blockId, close } = useResultView('initiative-planning', {
+const { open, blockId, instanceId, stepIndex, close } = useResultView('initiative-planning', {
   onOpen: ({ blockId }) => void initiatives.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const initiative = computed(() => (blockId.value ? initiatives.forBlock(blockId.value) : null))
-const run = computed(() => (blockId.value ? execution.getByBlock(blockId.value) : undefined))
+
+/**
+ * The planning run + the interviewer step's run details, resolved through the shared seam so this
+ * window reports the same "which run is this / how did the model do" facts as every other agent
+ * window — including on the card/inspector entry point, which carries no step (see
+ * `useResultViewRunMeta`). `run` is the same instance the phase below reads.
+ */
+const {
+  instance: run,
+  step: metaStep,
+  instanceId: runId,
+  position,
+  totalSteps,
+  runFailed,
+  failureAt,
+} = useResultViewRunMeta('initiative-planning', {
+  blockId: () => blockId.value,
+  instanceId: () => instanceId.value,
+  stepIndex: () => stepIndex.value,
+})
 
 /** Every interview exchange, with a stable key for the list + draft map. */
 const questions = computed(() =>
@@ -155,7 +174,7 @@ async function onDiscard() {
     icon-class="bg-indigo-500/15 text-indigo-300"
     :title="initiative?.title ?? block?.title ?? t('initiative.planning.title')"
     :subtitle="t('initiative.planning.subtitle')"
-    width="3xl"
+    width="4xl"
     testid="initiative-planning-window"
     @close="close"
   >
@@ -165,79 +184,100 @@ async function onDiscard() {
       </UBadge>
     </template>
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <!-- No entity yet -->
-      <div
-        v-if="!initiative"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
-      >
-        <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
+    <div class="flex min-h-0 flex-1">
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <!-- No entity yet -->
+        <div
+          v-if="!initiative"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+        >
+          <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
+        </div>
+
+        <template v-else>
+          <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
+            {{ t('initiative.planning.intro') }}
+          </p>
+
+          <!-- A pass is running: the human is waiting on the planner. Without this the window is
+               byte-identical to the parked state and the submit reads as a no-op. -->
+          <InterviewGateNotice
+            v-if="phase === 'working'"
+            variant="working"
+            :title="t('initiative.planning.working')"
+            :hint="t('initiative.planning.workingHint')"
+            testid="initiative-planning-working"
+          />
+
+          <!-- The planning run stopped before the interview settled — a dead end otherwise. -->
+          <InterviewGateNotice
+            v-else-if="phase === 'failed'"
+            variant="failed"
+            :title="t('initiative.planning.failed')"
+            :hint="t('initiative.planning.failedHint')"
+            testid="initiative-planning-failed"
+          />
+
+          <!-- Planning was never started, so there is nothing to answer YET (distinct from
+               converged, which means the planner already has what it needs). -->
+          <div
+            v-else-if="phase === 'idle' && questions.length === 0"
+            class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+            data-testid="initiative-planning-idle"
+          >
+            {{ t('initiative.planning.idle') }}
+          </div>
+
+          <!-- Converged / no pending questions -->
+          <div
+            v-else-if="phase === 'converged' || questions.length === 0"
+            class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+            data-testid="initiative-planning-converged"
+          >
+            {{ t('initiative.planning.converged') }}
+          </div>
+
+          <!-- Interview questions — the shared clarification surface (answer / not-relevant /
+                   recommend), reused with the requirements-review window. -->
+          <ul v-else class="space-y-4">
+            <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
+              <ClarificationItem
+                v-model:answer="drafts[q.key]"
+                :prompt="q.question"
+                :dismissed="q.status === 'dismissed'"
+                :recommendation="q.recommendation"
+                :recommending="!!q.id && initiatives.recommending.has(q.id)"
+                :answer-placeholder="t('initiative.planning.answerPlaceholder')"
+                @persist="persist(q)"
+                @dismiss="setStatus(q, 'dismissed')"
+                @reopen="setStatus(q, 'open')"
+                @recommend="recommend(q)"
+                @use-recommendation="useRecommendation(q)"
+              />
+            </li>
+          </ul>
+        </template>
       </div>
 
-      <template v-else>
-        <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
-          {{ t('initiative.planning.intro') }}
-        </p>
-
-        <!-- A pass is running: the human is waiting on the planner. Without this the window is
-             byte-identical to the parked state and the submit reads as a no-op. -->
-        <InterviewGateNotice
-          v-if="phase === 'working'"
-          variant="working"
-          :title="t('initiative.planning.working')"
-          :hint="t('initiative.planning.workingHint')"
-          testid="initiative-planning-working"
+      <!-- Run details: the shared run-metadata + LLM model-activity block every agent window
+           carries (step position, live duration, model, run id, calls + token usage). Resolved
+           through `useResultViewRunMeta`, so it is present on the card / inspector entry point
+           too — where this window carries no step index of its own. -->
+      <aside
+        v-if="metaStep"
+        data-testid="initiative-planning-run-meta"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <StepRunMeta
+          :step="metaStep"
+          :instance-id="runId"
+          :step-number="position"
+          :total-steps="totalSteps"
+          :run-failed="runFailed"
+          :failure-at="failureAt"
         />
-
-        <!-- The planning run stopped before the interview settled — a dead end otherwise. -->
-        <InterviewGateNotice
-          v-else-if="phase === 'failed'"
-          variant="failed"
-          :title="t('initiative.planning.failed')"
-          :hint="t('initiative.planning.failedHint')"
-          testid="initiative-planning-failed"
-        />
-
-        <!-- Planning was never started, so there is nothing to answer YET (distinct from
-             converged, which means the planner already has what it needs). -->
-        <div
-          v-else-if="phase === 'idle' && questions.length === 0"
-          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
-          data-testid="initiative-planning-idle"
-        >
-          {{ t('initiative.planning.idle') }}
-        </div>
-
-        <!-- Converged / no pending questions -->
-        <div
-          v-else-if="phase === 'converged' || questions.length === 0"
-          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
-          data-testid="initiative-planning-converged"
-        >
-          {{ t('initiative.planning.converged') }}
-        </div>
-
-        <!-- Interview questions — the shared clarification surface (answer / not-relevant /
-                 recommend), reused with the requirements-review window. -->
-        <ul v-else class="space-y-4">
-          <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
-            <ClarificationItem
-              v-model:answer="drafts[q.key]"
-              :prompt="q.question"
-              :dismissed="q.status === 'dismissed'"
-              :recommendation="q.recommendation"
-              :recommending="!!q.id && initiatives.recommending.has(q.id)"
-              :answer-placeholder="t('initiative.planning.answerPlaceholder')"
-              @persist="persist(q)"
-              @dismiss="setStatus(q, 'dismissed')"
-              @reopen="setStatus(q, 'open')"
-              @recommend="recommend(q)"
-              @use-recommendation="useRecommendation(q)"
-            />
-          </li>
-        </ul>
-      </template>
+      </aside>
     </div>
 
     <!-- Action rail. The submit/plan-now pair shows only while the run is actually parked on the
