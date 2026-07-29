@@ -13,7 +13,7 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
-import { builtInBaseSystemPrompt } from '../../agents/promptOverrides.js'
+import { builtInBaseSystemPrompt, builtInDirectivesFor } from '../../agents/promptOverrides.js'
 
 /** Resolve the agent-prompt module, or refuse with a 503 naming what isn't wired. */
 function requireAgentPrompts<E extends AppEnv>(c: Context<E>): AgentPromptsModule {
@@ -31,12 +31,17 @@ function detailFor<E extends AppEnv>(
   agentKind: string,
   revisions: AgentPromptRevision[],
 ): AgentPromptDetail {
-  const builtinText = builtInBaseSystemPrompt(agentKind, c.get('container').agentKindRegistry)
+  const registry = c.get('container').agentKindRegistry
+  const builtinText = builtInBaseSystemPrompt(agentKind, registry)
   const head = revisions[0]
   const promptId = promptIdForKind(agentKind)
   return {
     agentKind,
     builtinText,
+    // MEASURED from the real composition, never restated — see `builtInDirectivesFor`. This is
+    // what lets the editor SHOW the rules an override cannot delete instead of claiming them in
+    // copy, and it is why adding a directive needs no change here or in the SPA.
+    appendedText: builtInDirectivesFor(agentKind, registry),
     ...(promptId ? { builtinVersionLabel: promptVersionLabel(promptId) } : {}),
     effectiveText: head?.text ?? builtinText,
     customized: head?.text != null,

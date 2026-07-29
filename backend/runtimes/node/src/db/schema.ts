@@ -616,7 +616,10 @@ export const agentPromptRevisions = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.agent_kind, t.revision] }),
     // The workspace-wide override index reads every kind's head in one pass (mirrors
-    // idx_agent_prompt_revisions_workspace).
+    // idx_agent_prompt_revisions_workspace). The D1 mirror declares `revision DESC`; this one is
+    // ASC deliberately — Postgres scans a btree backwards at the same cost, so matching the
+    // direction would buy nothing and cost a regenerated snapshot. Neither store's head read
+    // depends on the declared direction.
     index('idx_agent_prompt_revisions_workspace').on(t.workspace_id, t.agent_kind, t.revision),
   ],
 )

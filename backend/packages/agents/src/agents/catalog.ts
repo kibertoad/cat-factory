@@ -37,14 +37,58 @@ import {
 // and the thin one-line roles + generic fallback in ./prompts/roles).
 
 /**
+ * The fragments an override must never be able to delete, whether they reach the shipped prompt
+ * by being APPENDED ({@link applySurfaceDirectives}) or by being written INLINE into a built-in
+ * track prompt. That difference is invisible from the outside and is exactly the trap: an
+ * override replaces the track prompt, so for a built-in kind it silently takes the inline copy
+ * with it. See {@link restoreShippedInvariants}.
+ */
+const OVERRIDE_PRESERVED_FRAGMENTS = [READ_ONLY_GUARDRAIL, FINAL_ANSWER_IN_REPLY] as const
+
+/**
+ * Re-append any invariant the SHIPPED prompt for this kind guaranteed and the overridden
+ * composition now lacks.
+ *
+ * The property, stated once: **an override changes what an agent is told to BE, never how the
+ * platform RUNS it.** `applySurfaceDirectives` alone cannot hold that, because its
+ * final-answer rule is gated on the base being the REGISTRY's prompt — a guard against
+ * double-appending for built-in kinds, whose track prompts carry the rule inline. The moment an
+ * override replaces such a track prompt, the guard reads "already has it" about a string that
+ * no longer exists, and the rule is lost on precisely the kinds that need it (spec-writer,
+ * merger, the testers, the reviewers — every kind whose deliverable IS its visible reply).
+ *
+ * Comparing against the fully COMPOSED shipped prompt rather than its base is what makes this
+ * total: it covers a fragment however it arrived, so a kind that later moves a directive from
+ * inline to appended (or the reverse) needs no change here. Membership is a plain `includes`, so
+ * an override that restates the rule itself is not given a second copy.
+ */
+function restoreShippedInvariants(
+  composed: string,
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string {
+  // No `override` argument ⇒ terminates after exactly one level.
+  const shipped = systemPromptFor(kind, registry)
+  let result = composed
+  for (const fragment of OVERRIDE_PRESERVED_FRAGMENTS) {
+    if (shipped.includes(fragment) && !result.includes(fragment)) {
+      result = `${result}\n\n${fragment}`
+    }
+  }
+  return result
+}
+
+/**
  * The system prompt for a kind: its track prompt plus the surface directives and trait
  * guidance the engine enforces.
  *
  * `override` replaces only the TRACK prompt — a workspace's edited prompt for this kind (see
- * ./prompt-overrides). The directives and trait guidance are still appended on top, because
- * they are invariants of how the platform runs the kind (a read-only kind must not edit; a
- * reasoning kind's answer must land in its visible reply), not editorial content: an override
- * that dropped them would break the run in exactly the ways they exist to prevent.
+ * ./prompt-overrides). The directives and trait guidance are still appended on top, and
+ * {@link restoreShippedInvariants} puts back any invariant the shipped prompt happened to carry
+ * INLINE rather than appended, because they are invariants of how the platform runs the kind (a
+ * read-only kind must not edit; a reasoning kind's answer must land in its visible reply), not
+ * editorial content: an override that dropped them would break the run in exactly the ways they
+ * exist to prevent.
  */
 export function systemPromptFor(
   kind: AgentKind,
@@ -60,7 +104,13 @@ export function systemPromptFor(
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
   const guidance = traitGuidanceFor(kind, registry)
-  return guidance.length ? `${withDirectives}\n\n${guidance.join('\n\n')}` : withDirectives
+  const composed = guidance.length
+    ? `${withDirectives}\n\n${guidance.join('\n\n')}`
+    : withDirectives
+  // Unedited ⇒ byte-for-byte what the kind always sent. Overridden ⇒ put back any invariant the
+  // shipped prompt carried inline, which replacing the track prompt would otherwise have taken
+  // with it. Only reachable with an override, so the unedited path costs nothing.
+  return override === undefined ? composed : restoreShippedInvariants(composed, kind, registry)
 }
 
 /**

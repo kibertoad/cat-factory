@@ -9,9 +9,26 @@ export const HIGH_GRADE = 4
 /** Consecutive high-grade-with-no-recommendations gradings needed to verify a combo. */
 export const VERIFICATION_STREAK = 5
 
-/** `agentKind|model|promptVersion` — the key a verified combo is tracked under. */
-export function comboKeyFor(agentKind: string, model: string, promptVersion: number): string {
-  return `${agentKind}|${model}|${promptVersion}`
+/**
+ * `agentKind|model|promptVersion[|wN]` — the key a verified combo is tracked under.
+ *
+ * The optional `wN` suffix is the WORKSPACE's agent-prompt revision when the step ran an edited
+ * prompt (`PipelineStep.promptRevision`). Without it a workspace that rewrote a kind's prompt
+ * would share a key with the shipped one, so Kaizen would skip grading text it never graded —
+ * inheriting a verification the shipped prompt earned — and, in the other direction, let an
+ * edit's gradings advance the streak of a prompt that is not running anywhere. `promptVersion`
+ * alone cannot express this: it numbers the PRODUCT's prompt, which an override replaces.
+ *
+ * Absent suffix ⇒ the shipped prompt, so an unedited workspace keeps the key it always had.
+ */
+export function comboKeyFor(
+  agentKind: string,
+  model: string,
+  promptVersion: number,
+  promptRevision?: number,
+): string {
+  const base = `${agentKind}|${model}|${promptVersion}`
+  return promptRevision === undefined ? base : `${base}|w${promptRevision}`
 }
 
 /**

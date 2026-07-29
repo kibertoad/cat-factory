@@ -368,7 +368,7 @@ export class AgentContextBuilder {
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
-      this.resolveSystemPromptOverride(workspaceId, agentKind),
+      this.resolveSystemPromptOverride(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -1058,12 +1058,21 @@ export class AgentContextBuilder {
    * built-in — a real state, distinct from never having edited the kind, which is why it is
    * recorded rather than deleted. Both resolve to "no override" here, so a revert keeps
    * tracking the shipped prompt as the product bumps it instead of pinning a stale copy.
+   *
+   * Also PINS the resolved revision onto the step (like {@link resolveSkillsForStep} does for
+   * catalog skills), because the log is append-only: re-reading it at any later point — a
+   * Kaizen grading, a debug read, a post-mortem — would answer about whatever landed since,
+   * not about what this step actually ran.
    */
   private async resolveSystemPromptOverride(
     workspaceId: string,
     agentKind: string,
+    step: PipelineStep,
   ): Promise<{ systemPromptOverride?: string }> {
     const head = await this.deps.agentPrompts?.head(workspaceId, agentKind)
+    // Cleared, not left stale: a re-dispatch after the workspace reverted must not keep
+    // reporting the revision the previous attempt ran under.
+    step.promptRevision = head?.text ? head.revision : undefined
     // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
     // so the context literal stays a flat spread instead of gaining another conditional.
     return head?.text ? { systemPromptOverride: head.text } : {}

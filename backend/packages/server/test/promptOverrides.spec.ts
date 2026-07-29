@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { baseSystemPromptFor, defaultAgentKindRegistry, systemPromptFor } from '@cat-factory/agents'
+import {
+  baseSystemPromptFor,
+  defaultAgentKindRegistry,
+  FINAL_ANSWER_IN_REPLY,
+  READ_ONLY_GUARDRAIL,
+  systemPromptFor,
+} from '@cat-factory/agents'
 import {
   BESPOKE_CONTAINER_SYSTEM_PROMPTS,
   builtInBaseSystemPrompt,
+  builtInDirectivesFor,
   dispatchSystemPromptFor,
 } from '../src/agents/promptOverrides.js'
+import {
+  MERGER_DIRECTIVES,
+  MERGER_SYSTEM_PROMPT,
+  ON_CALL_SYSTEM_PROMPT,
+} from '../src/agents/prompts.js'
 
 // The container-dispatch half of the per-workspace prompt override. Two properties matter and
 // neither is obvious from the call sites: an override must not be able to delete the directives
@@ -14,6 +26,11 @@ import {
 // `systemPromptFor` and sends a bespoke constant.
 
 const registry = defaultAgentKindRegistry()
+
+/** `Object.entries` over a `Partial<Record<…>>` widens the value to `| undefined`; it never is. */
+const bespokeEntries = Object.entries(BESPOKE_CONTAINER_SYSTEM_PROMPTS).map(
+  ([kind, prompt]) => [kind, prompt!] as const,
+)
 
 function context(agentKind: string, systemPromptOverride?: string): AgentRunContext {
   return {
@@ -43,26 +60,92 @@ describe('dispatchSystemPromptFor', () => {
     // The read-only guardrail (and the answer-in-your-reply rule) are how the platform runs a
     // kind, not editorial content. An override that could drop them would let a workspace turn a
     // read-only investigator into one that commits — a run-breaking edit made by accident.
-    const shipped = systemPromptFor('architect', registry)
-    const directives = shipped.slice(baseSystemPromptFor('architect', registry).length)
-    expect(directives.trim()).not.toBe('')
+    //
+    // Measured through `builtInDirectivesFor`, NOT by slicing the base off the shipped prompt:
+    // architect carries the answer-in-your-reply rule INLINE in its track prompt, so the slice
+    // under-reports by exactly the invariant that used to go missing here.
+    const directives = builtInDirectivesFor('architect', registry)
+    expect(directives).toContain(READ_ONLY_GUARDRAIL)
+    expect(directives).toContain(FINAL_ANSWER_IN_REPLY)
     expect(dispatchSystemPromptFor(context('architect', 'Think hard.'), registry)).toBe(
       `Think hard.${directives}`,
     )
   })
 
-  it('overrides a bespoke container kind, sending the override with nothing appended', () => {
-    // The merger's dispatch never went through `systemPromptFor`, so appending directives here
-    // would change what that kind sends — the override stands alone, exactly as its constant did.
+  it('overrides a bespoke kind ROLE while keeping its directives', () => {
+    // The bespoke kinds bypass `applySurfaceDirectives` entirely, so their invariants live in a
+    // declared `directives` half instead. Losing them is not a degraded prompt but a broken run:
+    // without the answer-in-your-reply rule a reasoning model returns an empty visible reply the
+    // harness reads as unusable, and without the JSON contract there is no assessment to parse.
     expect(dispatchSystemPromptFor(context('merger', 'Score generously.'), registry)).toBe(
-      'Score generously.',
+      `Score generously.${MERGER_DIRECTIVES}`,
+    )
+  })
+
+  it.each(bespokeEntries)(
+    'keeps every invariant of the bespoke kind %s across an override',
+    (kind, prompt) => {
+      const overridden = dispatchSystemPromptFor(context(kind, 'Do it my way.'), registry)
+      // Stated as the PROPERTY rather than as string equality, so a directive added to either
+      // constant later is covered by this test without it being updated.
+      expect(overridden.startsWith('Do it my way.')).toBe(true)
+      expect(overridden).toContain(FINAL_ANSWER_IN_REPLY)
+      expect(overridden).toContain('no prose, no code fences')
+      expect(overridden).not.toContain(prompt.role)
+    },
+  )
+
+  it('keeps the on-call read-only guardrail out of the editable half', () => {
+    // on-call is the case that motivates the split: its guardrail is prose inside the constant
+    // rather than a surface directive, so an un-split override would let a workspace turn a
+    // read-only investigator into one that commits — by accident, while editing its wording.
+    const { role, directives } = BESPOKE_CONTAINER_SYSTEM_PROMPTS['on-call']!
+    expect(role).not.toContain('MUST NOT modify')
+    expect(directives).toContain('MUST NOT modify')
+    expect(dispatchSystemPromptFor(context('on-call', 'Investigate fast.'), registry)).toContain(
+      'MUST NOT modify',
     )
   })
 
   it('sends the bespoke constant, not the thin role prompt, when a bespoke kind is unedited', () => {
-    for (const [kind, prompt] of Object.entries(BESPOKE_CONTAINER_SYSTEM_PROMPTS)) {
-      expect(dispatchSystemPromptFor(context(kind), registry)).toBe(prompt)
+    // Byte-for-byte: an unedited workspace must send exactly what it sent before the split.
+    expect(dispatchSystemPromptFor(context('merger'), registry)).toBe(MERGER_SYSTEM_PROMPT)
+    expect(dispatchSystemPromptFor(context('on-call'), registry)).toBe(ON_CALL_SYSTEM_PROMPT)
+    for (const [kind, prompt] of bespokeEntries) {
+      expect(dispatchSystemPromptFor(context(kind), registry)).toBe(prompt.role + prompt.directives)
     }
+  })
+})
+
+describe('builtInDirectivesFor', () => {
+  it('is exactly what an override actually gets appended, on both paths', () => {
+    // This is the contract the editor renders: "here is what the platform adds to whatever you
+    // save". Asserted against the real dispatch so the shown text can never drift from the sent
+    // text — which is the whole reason it is measured rather than written out as copy.
+    for (const kind of ['coder', 'architect', 'spec-writer', 'merger', 'on-call']) {
+      expect(dispatchSystemPromptFor(context(kind, 'My own prompt.'), registry)).toBe(
+        `My own prompt.${builtInDirectivesFor(kind, registry)}`,
+      )
+    }
+  })
+
+  it('reports the answer-in-your-reply rule for every kind whose deliverable is its reply', () => {
+    // architect + spec-writer carry it INLINE in their track prompts rather than appended, so a
+    // naive "diff the shipped prompt against its base" would report nothing for them — and the
+    // editor would promise a rule the override had in fact deleted.
+    for (const kind of ['architect', 'spec-writer', 'merger', 'on-call']) {
+      expect(builtInDirectivesFor(kind, registry)).toContain(FINAL_ANSWER_IN_REPLY)
+    }
+  })
+
+  it('reports the trait guidance a kind gets even when it has no surface directives', () => {
+    // The coder's product is a pushed commit, so it gets neither the final-answer rule nor the
+    // read-only guardrail — but it IS handed its traits' guidance (spec-aware, …), which is just
+    // as non-editable. The editor shows whatever is actually appended, not a curated subset.
+    const directives = builtInDirectivesFor('coder', registry)
+    expect(directives).not.toContain(FINAL_ANSWER_IN_REPLY)
+    expect(directives).not.toContain(READ_ONLY_GUARDRAIL)
+    expect(directives.trim()).not.toBe('')
   })
 })
 

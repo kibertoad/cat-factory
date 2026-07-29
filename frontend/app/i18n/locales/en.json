@@ -4117,7 +4117,13 @@
     "description": "Replace what this agent is told to do, for every run in this workspace.",
     "customized": "Edited",
     "usingBuiltin": "Built-in",
-    "managedNotice": "The platform still appends its own rules to whatever you save here: the read-only guardrail, the answer-in-your-reply rule, and the service's best-practice standards. You can't remove them, so don't restate them.",
+    "@usingBuiltin": {
+      "description": "Badge meaning this agent runs the prompt the product ships. \"Built-in\" refers to that shipped prompt specifically, not to a user-set default."
+    },
+    "managedNotice": "The platform appends its own non-editable rules to whatever you save here.",
+    "showAppended": "Show what gets appended",
+    "hideAppended": "Hide what gets appended",
+    "appendedHeading": "Appended by the platform (not editable)",
     "placeholder": "Describe what this agent should do.",
     "save": "Save as new version",
     "revert": "Back to built-in",
@@ -4129,7 +4135,13 @@
     "historyHeading": "Version history",
     "historyEmpty": "This agent has never been edited in this workspace.",
     "live": "Live",
+    "@live": {
+      "description": "Adjective, not a verb: labels the revision that is currently in effect."
+    },
     "restore": "Load",
+    "@restore": {
+      "description": "Verb, imperative: loads the chosen revision into the editor. It does NOT save it - the user still presses Save."
+    },
     "restoreTooltip": "Load this version into the editor",
     "revision": {
       "edit": "Version {n} (edited)",
@@ -4142,15 +4154,6 @@
       "saveFailed": "Couldn't save the prompt",
       "loadFailed": "Couldn't load the prompt",
       "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
-    },
-    "@live": {
-      "description": "Adjective, not a verb: labels the revision that is currently in effect."
-    },
-    "@restore": {
-      "description": "Verb, imperative: loads the chosen revision into the editor. It does NOT save it - the user still presses Save."
-    },
-    "@usingBuiltin": {
-      "description": "Badge meaning this agent runs the prompt the product ships. \"Built-in\" refers to that shipped prompt specifically, not to a user-set default."
     }
   },
   "riskPolicy": {

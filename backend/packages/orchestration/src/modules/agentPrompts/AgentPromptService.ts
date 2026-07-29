@@ -9,9 +9,18 @@ import type {
 import { ConflictError, requireWorkspace, ValidationError } from '@cat-factory/kernel'
 
 /**
- * Bound on a stored agent-kind id. Kinds are an OPEN string set (a deployment registers its
- * own, exactly as model-preset `overrides` keys are unchecked), so membership is deliberately
- * not validated — but an unbounded path segment would still let junk rows accumulate.
+ * Bound on a stored agent-kind id.
+ *
+ * Membership is deliberately NOT validated. `AgentKind` is an open string set by construction (a
+ * deployment registers its own kinds through `AgentKindRegistry`, exactly as model-preset
+ * `overrides` keys are unchecked), so a closed check here would refuse a company-authored agent
+ * package's kinds — the very extension seam this feature is meant to serve — and it would do so
+ * at the moment that package is first wired, which is the worst time to discover it.
+ *
+ * The accepted cost is that a typo'd kind stores a row nothing ever reads. That is inert: the
+ * editor is only ever opened from the pipeline builder's own steps, the index badges only kinds a
+ * draft actually contains, and a revision for a kind no dispatch resolves is never read. Bounding
+ * the length is what stops an unbounded path segment turning that wart into junk rows at scale.
  */
 const MAX_AGENT_KIND_CHARS = 120
 

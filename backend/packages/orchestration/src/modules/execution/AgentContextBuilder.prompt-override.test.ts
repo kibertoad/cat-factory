@@ -109,3 +109,51 @@ describe('AgentContextBuilder system-prompt override', () => {
     expect(context.systemPromptOverride).toBe('Fix the build only.')
   })
 })
+
+describe('AgentContextBuilder prompt-revision pin', () => {
+  // The sibling of `step.skillVersions`: the prompt log is append-only, so "which prompt did
+  // this step run under" has to be recorded AT dispatch. Kaizen reads it to key its
+  // `(prompt, agent, model)` combo, which is what stops an edited prompt inheriting a
+  // verification the shipped one earned.
+  async function pinFor(head: { agentKind: string; text: string | null } | null) {
+    const s = step()
+    await makeBuilder({ agentPrompts: promptsRepo(head) }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+    )
+    return s.promptRevision
+  }
+
+  it('pins the live revision when the kind runs an edited prompt', async () => {
+    expect(await pinFor({ agentKind: 'coder', text: 'Ship small changes.' })).toBe(1)
+  })
+
+  it('pins nothing when the kind runs the shipped prompt', async () => {
+    expect(await pinFor(null)).toBeUndefined()
+  })
+
+  it('pins nothing after a deliberate revert, so it reads as "the product’s prompt"', async () => {
+    // A revert's head EXISTS with a null text. Pinning its number would file the run under a
+    // revision that carries no prompt — and split it off from every unedited run of the same
+    // kind, which is exactly what it should now be grouped with.
+    expect(await pinFor({ agentKind: 'coder', text: null })).toBeUndefined()
+  })
+
+  it('clears a stale pin when a re-dispatch finds the override gone', async () => {
+    // A step re-dispatched after the workspace reverted must not keep reporting the revision
+    // its previous attempt ran under.
+    const s = step()
+    s.promptRevision = 7
+    await makeBuilder({ agentPrompts: promptsRepo(null) }).buildContext(
+      'ws1',
+      instance([s]),
+      s,
+      true,
+      TASK,
+    )
+    expect(s.promptRevision).toBeUndefined()
+  })
+})

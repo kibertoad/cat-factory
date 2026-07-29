@@ -3,15 +3,26 @@ import { computed, ref, watch } from 'vue'
 import type { AgentPromptRevision } from '~/types/agent-prompts'
 import { agentKindMeta } from '~/utils/catalog'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import {
+  draftForRevision,
+  isDirty,
+  isRevisionConflict,
+  saveIntent,
+} from '~/components/pipeline/AgentPromptEditor.logic'
 
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
-// re-applies its own directives — the read-only guardrail, the answer-in-your-reply rule, the
-// service's best-practice standards — on top of whatever is saved here, so they are neither
-// shown nor editable and cannot be deleted by accident.
+// re-applies its own directives on top of whatever is saved here, so they cannot be deleted by
+// accident — and it SHOWS that appended text (`detail.appendedText`, measured server-side from
+// the real composition) rather than describing it, so what the editor promises can never drift
+// from what the dispatch actually sends.
 //
 // History is the point, not a nicety: every save appends a revision and going back is another
 // append, so nothing a user does here can lose the prompt their runs were on last week.
+//
+// The rules about WHAT to send live in ./AgentPromptEditor.logic.ts, unit-tested there: each has
+// a wrong answer that is silently wrong (a mislabelled history entry, a revert stored as a copy)
+// rather than visibly broken.
 
 const props = defineProps<{ agentKind: string | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -31,12 +42,14 @@ const open = computed({
 const draft = ref('')
 /**
  * The revision the working copy was lifted out of, when the user picked one from the history.
- * Cleared as soon as they type, because the saved text would then no longer BE that revision
- * and recording it would mislabel the entry the next reader tries to trace.
+ * Only a CANDIDATE: `saveIntent` drops it unless the draft still matches that revision's text,
+ * so editing after a restore cannot mislabel the entry the next reader tries to trace.
  */
 const restoredFrom = ref<number | undefined>(undefined)
 /** Whether the built-in is shown beside the editor for comparison. */
 const showBuiltin = ref(false)
+/** Whether the non-editable text the platform appends is expanded. */
+const showDirectives = ref(false)
 
 watch(
   () => props.agentKind,
@@ -46,6 +59,7 @@ watch(
       return
     }
     showBuiltin.value = false
+    showDirectives.value = false
     restoredFrom.value = undefined
     draft.value = ''
     try {
@@ -63,14 +77,14 @@ const detail = computed(() => prompts.detail)
 const label = computed(() => (props.agentKind ? agentKindMeta(props.agentKind).label : ''))
 
 /** The live prompt, so "no change" can be reported instead of appending an identical revision. */
-const effective = computed(() => detail.value?.effectiveText ?? '')
-const dirty = computed(() => draft.value.trim() !== effective.value.trim())
+const dirty = computed(() => isDirty(draft.value, detail.value))
 /** Nothing to revert to when the workspace is already running the shipped prompt. */
 const canRevert = computed(() => detail.value?.customized === true)
+/** What the platform appends to whatever is saved. Empty ⇒ the panel is not offered at all. */
+const directives = computed(() => detail.value?.appendedText ?? '')
 
 function pick(revision: AgentPromptRevision) {
-  // A null-text revision restores the built-in; every other one restores its own text.
-  draft.value = revision.text ?? detail.value?.builtinText ?? ''
+  draft.value = draftForRevision(revision, detail.value)
   restoredFrom.value = revision.revision
 }
 
@@ -82,27 +96,25 @@ function useBuiltin() {
 async function save() {
   const kind = props.agentKind
   if (!kind) return
-  const text = draft.value.trim()
+  const intent = saveIntent(draft.value, detail.value, restoredFrom.value)
   try {
-    // Saving text identical to the built-in is a REVERT, not a copy of it: storing the copy
-    // would pin the workspace to today's wording and quietly stop it tracking the product's
-    // own prompt as that is improved.
-    const isBuiltin = text === (detail.value?.builtinText ?? '').trim()
-    const saved = await prompts.save(kind, isBuiltin ? null : text, restoredFrom.value)
+    const saved = await prompts.save(kind, intent.text, intent.restoredFrom)
     draft.value = saved?.effectiveText ?? draft.value
     restoredFrom.value = undefined
     toast.add({ title: t('agentPrompt.toast.saved'), color: 'success', icon: 'i-lucide-check' })
   } catch (error) {
-    const conflict =
-      (error as { data?: { error?: { details?: { reason?: string } } } })?.data?.error?.details
-        ?.reason === 'prompt_revision_conflict'
+    const conflict = isRevisionConflict(error)
     toast.add({
       title: conflict ? t('agentPrompt.toast.conflict') : t('agentPrompt.toast.saveFailed'),
       color: 'error',
     })
     // The server's view already replaced the store's on a conflict, so re-seed the textarea
-    // from what actually landed rather than leaving the user editing a lost revision.
-    if (conflict) draft.value = prompts.detail?.effectiveText ?? draft.value
+    // from what actually landed rather than leaving the user editing a lost revision — and drop
+    // the restore candidate with it, since it names a revision from the log we just replaced.
+    if (conflict) {
+      draft.value = prompts.detail?.effectiveText ?? draft.value
+      restoredFrom.value = undefined
+    }
   }
 }
 
@@ -152,11 +164,31 @@ function revisionLabel(revision: AgentPromptRevision): string {
           </UBadge>
         </div>
 
-        <!-- What the platform adds on top is stated rather than shown: it is not editable, and
-             a user who does not know it is there writes a prompt that fights it. -->
-        <p class="text-[11px] leading-relaxed text-slate-500">
+        <!-- What the platform appends is SHOWN, not described. A prose summary of it is copy
+             that silently goes stale the moment a directive is added, and a user who does not
+             know what is already there writes a prompt that fights it. -->
+        <p v-if="directives" class="text-[11px] leading-relaxed text-slate-500">
           {{ t('agentPrompt.managedNotice') }}
+          <UButton
+            variant="link"
+            size="xs"
+            class="px-1 align-baseline"
+            @click="showDirectives = !showDirectives"
+          >
+            {{ showDirectives ? t('agentPrompt.hideAppended') : t('agentPrompt.showAppended') }}
+          </UButton>
         </p>
+        <div
+          v-if="directives && showDirectives"
+          class="rounded-md border border-slate-800 bg-slate-950/60 p-2"
+        >
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {{ t('agentPrompt.appendedHeading') }}
+          </h4>
+          <pre
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-300"
+            >{{ directives.trim() }}</pre>
+        </div>
 
         <UTextarea
           v-model="draft"

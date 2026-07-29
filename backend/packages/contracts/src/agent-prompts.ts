@@ -65,6 +65,17 @@ export const agentPromptDetailSchema = v.object({
    * prompt carries no number (see `promptVersionLabel`).
    */
   builtinVersionLabel: v.optional(v.string()),
+  /**
+   * The text the platform APPENDS to whatever this workspace saves — the surface directives, the
+   * trait guidance, and (for a built-in kind whose track prompt carried a rule inline) whatever
+   * the engine puts back. Measured from the real composition rather than restated, so the editor
+   * can SHOW it instead of describing it in copy that goes stale the moment a directive is added.
+   *
+   * It is what makes "an override cannot delete the platform's rules" checkable by the person
+   * making the edit rather than a promise they have to take on trust. Empty for a kind that
+   * appends nothing.
+   */
+  appendedText: v.string(),
   /** The text that will actually be sent: the live override, else `builtinText`. */
   effectiveText: v.string(),
   /** True when a live override replaces the built-in (i.e. the head revision has text). */

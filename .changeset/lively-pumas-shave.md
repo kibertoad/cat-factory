@@ -23,11 +23,20 @@ silently winning last-write.
 
 An override replaces the shipped TRACK prompt only. `systemPromptFor` gained an optional `override`
 argument and still layers the engine-enforced surface directives and trait guidance on top, so a
-workspace cannot edit away the read-only guardrail or the answer-in-your-reply rule. The engine
-resolves the live revision once per dispatch onto `AgentRunContext.systemPromptOverride`; container
-dispatch rides the new `dispatchSystemPromptFor` seam, which also covers the two kinds (`merger`,
-`on-call`) whose dispatch bypasses `systemPromptFor` — so the editor's "built-in" baseline is the
-text those kinds actually run.
+workspace cannot edit away the read-only guardrail or the answer-in-your-reply rule. Holding that
+takes two mechanisms, because an invariant reaches a shipped prompt by two routes and only one of
+them survives having the track prompt replaced: `restoreShippedInvariants` puts back a rule a
+built-in track prompt carried INLINE (without it, editing any kind whose deliverable is its reply —
+spec-writer, the testers, the reviewers — silently drops the answer-in-your-reply rule and the run
+fails on an empty visible reply), and `BESPOKE_CONTAINER_SYSTEM_PROMPTS` declares `merger` /
+`on-call` as a `{ role, directives }` pair since those two bypass `systemPromptFor` entirely. The
+editor SHOWS the resulting appended text (`AgentPromptDetail.appendedText`, measured from the real
+composition) rather than describing it, so the promise is checkable rather than taken on trust.
+
+The engine resolves the live revision once per dispatch onto
+`AgentRunContext.systemPromptOverride` and pins it to `PipelineStep.promptRevision`, which Kaizen
+folds into its `(prompt, agent, model)` combo key — an edited prompt is its own combo rather than
+inheriting a verification the shipped one earned.
 
 New: the `agent_prompt_revisions` table (D1 migration 0068 ⇄ Drizzle), the `AgentPromptRepository`
 kernel port (remote-bucket for mothership mode), `GET|PUT /workspaces/:ws/agent-prompts[/:agentKind]`
