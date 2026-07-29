@@ -2697,6 +2697,7 @@
         "directoryHelp": "Używane tylko przez automatyczne wykrywanie: podkatalog monorepo, w którym znajduje się stos compose.",
         "composeFiles": "Pliki Compose",
         "composeFilesHelp": "Rozdzielone przecinkami, względem repozytorium, w kolejności nadpisywania.",
+        "composeLayersManagedHelp": "Zarządzane przez API — ten stos ma warstwy podane bezpośrednio lub odczytywane z innego repozytorium, więc są tu tylko do odczytu i pozostają nietknięte przy zapisie.",
         "composeProfiles": "Profile Compose (opcjonalnie)",
         "managedNetworks": "Zarządzane sieci (opcjonalnie)",
         "managedNetworksHelp": "Sieci, które ten stos tworzy i posiada, aby konsumenci mogli się z nimi łączyć.",

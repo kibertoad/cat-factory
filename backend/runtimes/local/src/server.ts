@@ -7,7 +7,7 @@ import {
   type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
-  backfillEnvironmentHandlerSeeds,
+  backfillDeclaredSeeds,
   createApp,
   installProcessFailureGuards,
   serveAppWithRealtime,
@@ -23,7 +23,7 @@ import {
   parseLogLevel,
   setLogLevel,
 } from '@cat-factory/server'
-import { runBestEffort } from '@cat-factory/kernel'
+import { runBestEffort, type CreateSharedStackInput } from '@cat-factory/kernel'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -118,6 +118,15 @@ export async function startLocal(
      * Omitted ⇒ no seeding.
      */
     seedEnvironmentHandlers?: RegisterHandlerInput[]
+    /**
+     * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+     * compose infra its previews attach to. Threaded on BOTH local boot paths and backfilled
+     * exactly like {@link seedEnvironmentHandlers}. A seed's compose layers may be inline
+     * documents, paths in another repo, or paths in the stack's own clone, so a local deployment
+     * can declare its whole infra dependency set in code — including a stack with no repo of its
+     * own. Bringing one UP needs the host Docker daemon, which local mode has. Omitted ⇒ no seeding.
+     */
+    seedSharedStacks?: CreateSharedStackInput[]
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -244,6 +253,9 @@ async function bootLocal(
     // so `buildLocalContainer` (via `...options`) hands them to `buildNodeContainer` → `createCore`,
     // and `start()`'s post-listen backfill seeds every existing workspace. Undefined ⇒ no seeding.
     seedEnvironmentHandlers: options.seedEnvironmentHandlers,
+    // …and the declared shared stacks along the same path, so a local deployment can describe its
+    // whole infra dependency set (inline compose documents included) in code.
+    seedSharedStacks: options.seedSharedStacks,
     // Inject the deployment's backend registries (if any) by reference — `start()` never puts a
     // `backendRegistries` on `o`, so this can't clobber one, and when absent `buildLocalContainer`
     // falls back to `createBackendRegistries()` (the built-in-only default). Unchanged from the
@@ -288,6 +300,7 @@ async function startLocalMothership(
     defaultModelPresetId?: string
     taskTypeRegistry?: TaskTypeRegistry
     seedEnvironmentHandlers?: RegisterHandlerInput[]
+    seedSharedStacks?: CreateSharedStackInput[]
   },
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   const {
@@ -297,6 +310,7 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     seedEnvironmentHandlers,
+    seedSharedStacks,
   } = extensions
   logger.info(
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
@@ -319,6 +333,7 @@ async function startLocalMothership(
     defaultModelPresetId,
     taskTypeRegistry,
     seedEnvironmentHandlers,
+    seedSharedStacks,
   })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
@@ -332,7 +347,7 @@ async function startLocalMothership(
   // the mothership path builds `buildLocalContainer` directly and never runs `bootServer`, so it
   // must run the same best-effort backfill itself (new workspaces are seeded by
   // WorkspaceService.create). Fire-and-forget so it doesn't delay serving; a no-op when unwired.
-  void backfillEnvironmentHandlerSeeds(container, logger)
+  void backfillDeclaredSeeds(container, logger)
 
   const app = createApp(container, env)
   // Shared serve + WebSocket-upgrade helper (one implementation with `start()`, so port/host

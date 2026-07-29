@@ -19,6 +19,7 @@ import type {
 import {
   assertFound,
   ConflictError,
+  describeComposeSource,
   getErrorMessage,
   noopLogger,
   requireWorkspace,
@@ -28,10 +29,15 @@ import {
 import {
   type ComposeRuntime,
   classifyComposePs,
-  composeFileDir,
+  composeBringUpNeedsRepo,
   DEFAULT_RECIPE_HEALTH_GATE,
   tailOutput,
 } from '../compose/compose-environment.logic.js'
+import {
+  type ComposeLayerPlan,
+  type ComposeLayerPlanResult,
+  planComposeLayers,
+} from '../compose/compose-sources.js'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
 import {
@@ -104,6 +110,21 @@ const SHORT_TIMEOUT_MS = 60_000
 const UP_TIMEOUT_MS = 330_000
 
 /**
+ * Refuse a stack that reads committed files (a `path` compose layer, an env-file template, a
+ * `copy-file` / `stdinFile` step) without a repo to read them FROM. Enforced at the write boundary
+ * so the operator — or the deployment declaring a stack programmatically — hears about it on save
+ * rather than on a bring-up that clones nothing and then can't find its compose file.
+ */
+function assertStackRepoSatisfied(stack: SharedStack): void {
+  if (stack.cloneUrl || !composeBringUpNeedsRepo(stack)) return
+  throw new ValidationError(
+    'This shared stack reads committed files (a compose file path, an env-file template or a seed ' +
+      'dump) but has no clone URL. Set one, or supply those compose layers inline.',
+    { reason: 'clone_url_required' },
+  )
+}
+
+/**
  * Lifecycle for a workspace's SHARED STACKS — long-lived compose infra a per-PR consumer
  * environment attaches to over an external network (the acme-shared-services pilot). CRUD is
  * runtime-neutral persistence (works on every facade); the bring-up (`ensureUp`) / teardown drive a
@@ -173,7 +194,7 @@ export class SharedStackService {
       id: this.idGenerator.next('ss'),
       workspaceId,
       name: input.name,
-      cloneUrl: input.cloneUrl,
+      cloneUrl: input.cloneUrl ?? null,
       gitRef: input.gitRef ?? null,
       composeFiles: input.composeFiles,
       composeProfiles: input.composeProfiles,
@@ -188,6 +209,7 @@ export class SharedStackService {
       createdAt: now,
       updatedAt: now,
     }
+    assertStackRepoSatisfied(stack)
     await this.stacks.upsert(workspaceId, stack)
     return stack
   }
@@ -279,6 +301,10 @@ export class SharedStackService {
         : {}),
       updatedAt: this.clock.now(),
     }
+    // Validate the MERGED entity, not the patch: `composeFiles` and `cloneUrl` are patched
+    // independently, so dropping the clone URL and adding a `path` layer are each individually
+    // innocent and only conflict once combined.
+    assertStackRepoSatisfied(updated)
     await this.stacks.upsert(workspaceId, updated)
     return updated
   }
@@ -462,21 +488,13 @@ export class SharedStackService {
       return this.persist(workspaceId, stack, { status: 'failed', lastError: hostCmdIssue })
     }
 
-    // Clone/refresh the stack repo into its own long-lived working tree.
-    const cloneStarted = this.clock.now()
-    let checkoutDir: string
-    try {
-      ;({ dir: checkoutDir } = await runtime.checkout(project, {
-        cloneUrl: stack.cloneUrl,
-        ref: stack.gitRef ?? 'HEAD',
-        ...(this.cloneToken ? { token: this.cloneToken } : {}),
-      }))
-      await this.logStep(record, 'clone repo', cloneStarted, { ok: true })
-    } catch (err) {
-      const message = `Could not clone the stack repo: ${err instanceof Error ? err.message : String(err)}`
-      await this.logStep(record, 'clone repo', cloneStarted, { ok: false, error: message })
-      return this.persist(workspaceId, stack, { status: 'failed', lastError: message })
+    // Resolve the compose layers and get the working tree they run out of — a clone for a stack
+    // with committed files, an empty materialized tree for one declared entirely inline.
+    const tree = await this.prepareWorkingTree(workspaceId, stack, runtime, project, record)
+    if ('error' in tree) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: tree.error })
     }
+    const { checkoutDir, planned } = tree
 
     // Create the managed networks the stack owns (its consumers attach to these as external).
     const networkIssue = await this.createManagedNetworks(stack, runtime, record)
@@ -491,11 +509,11 @@ export class SharedStackService {
     }
 
     // The stack runs its committed compose files AS AUTHORED (host ports kept — it is trusted infra,
-    // not an isolated per-PR preview). `--project-directory` is the first file's dir so its relative
-    // build contexts / binds / env_files resolve as written.
-    const composeDir = composeFileDir(stack.composeFiles[0]!)
-    const projectDir = composeDir ? `${checkoutDir}/${composeDir}` : checkoutDir
-    const files = stack.composeFiles.flatMap((f) => ['-f', `${checkoutDir}/${f}`])
+    // not an isolated per-PR preview). `--project-directory` is the first IN-REPO layer's dir so its
+    // relative build contexts / binds / env_files resolve as written; a materialized layer never
+    // moves that anchor.
+    const projectDir = planned.projectDir ? `${checkoutDir}/${planned.projectDir}` : checkoutDir
+    const files = planned.layers.flatMap((layer) => ['-f', `${checkoutDir}/${layer.path}`])
     const scope = ['-p', project, '--project-directory', projectDir, ...files]
     const env: Record<string, string> = stack.composeProfiles.length
       ? { COMPOSE_PROFILES: stack.composeProfiles.join(',') }
@@ -554,6 +572,101 @@ export class SharedStackService {
       })
       if (!ok) {
         return `Could not create network '${network}': ${tailOutput(res.stderr || res.stdout)}`
+      }
+    }
+    return null
+  }
+
+  /**
+   * Resolve the ordered `-f` layers and materialize the working tree they run out of, returning the
+   * checkout dir + the plan (or a blocking `error` for the caller to persist). Split out of
+   * {@link bringUp} because it is the one phase whose shape depends on WHERE the layers come from:
+   *
+   * - layers are planned FIRST, before any daemon work, so an unreadable inline/foreign layer fails
+   *   with its own cause instead of surfacing as a missing file at `up` time;
+   * - a stack with nothing committed to read (every layer inline / from another repo, no env-file
+   *   templates, no seed dumps) needs no clone at all — the shape a deployment declares in code —
+   *   and gets an empty materialized tree instead. Anything that DOES read a committed file needs a
+   *   clone URL, and saying so here beats cloning nothing and failing later as a missing path.
+   */
+  private async prepareWorkingTree(
+    workspaceId: string,
+    stack: SharedStack,
+    runtime: ComposeRuntime,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<{ checkoutDir: string; planned: ComposeLayerPlanResult } | { error: string }> {
+    const planned = await planComposeLayers(
+      stack.composeFiles,
+      this.resolveRepoFiles
+        ? { resolveForeignRepo: (coords) => this.resolveRepoFiles!(workspaceId, coords) }
+        : {},
+    )
+    if ('error' in planned) return planned
+
+    if (composeBringUpNeedsRepo(stack) && !stack.cloneUrl) {
+      return {
+        error:
+          'This stack reads committed files (a compose file path, an env-file template or a seed ' +
+          'dump) but has no clone URL. Set one, or supply those layers inline.',
+      }
+    }
+
+    const started = this.clock.now()
+    const label = stack.cloneUrl ? 'clone repo' : 'working tree'
+    let checkoutDir: string
+    try {
+      const tree = stack.cloneUrl
+        ? await runtime.checkout!(project, {
+            cloneUrl: stack.cloneUrl,
+            ref: stack.gitRef ?? 'HEAD',
+            ...(this.cloneToken ? { token: this.cloneToken } : {}),
+          })
+        : await runtime.workingDir?.(project)
+      if (!tree) {
+        throw new Error('the runtime cannot create a working tree without a repo to clone')
+      }
+      checkoutDir = tree.dir
+      await this.logStep(record, label, started, { ok: true })
+    } catch (err) {
+      const message = `Could not prepare the stack working tree: ${err instanceof Error ? err.message : String(err)}`
+      await this.logStep(record, label, started, { ok: false, error: message })
+      return { error: message }
+    }
+
+    // Write the inline / foreign layers into the tree, each a logged step.
+    const layerIssue = await this.materializeComposeLayers(planned.layers, runtime, project, record)
+    if (layerIssue) return { error: layerIssue }
+    return { checkoutDir, planned }
+  }
+
+  /**
+   * Write the planned `inline` / `repo` compose layers into the working tree, each a logged step.
+   * A `path` layer carries no content and is skipped — it already sits in the clone, where the
+   * stack runs it as authored. Returns a blocking `lastError` on the first failure, else null.
+   */
+  private async materializeComposeLayers(
+    layers: ComposeLayerPlan[],
+    runtime: ComposeRuntime,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    for (const layer of layers) {
+      if (layer.content === undefined) continue
+      const label = `compose layer: ${describeComposeSource(layer.source)}`
+      const started = this.clock.now()
+      try {
+        // Checked per LAYER, not up front: a stack of plain in-repo paths never materializes
+        // anything, so a runtime lacking this seam must still be able to bring one up.
+        if (!runtime.writeCheckoutFile) {
+          throw new Error('the runtime cannot write into a checkout')
+        }
+        await runtime.writeCheckoutFile(project, layer.path, layer.content)
+        await this.logStep(record, label, started, { ok: true })
+      } catch (err) {
+        const message = `Could not write compose layer '${layer.path}': ${err instanceof Error ? err.message : String(err)}`
+        await this.logStep(record, label, started, { ok: false, error: message })
+        return message
       }
     }
     return null

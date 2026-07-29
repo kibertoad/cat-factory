@@ -2838,6 +2838,7 @@
         "directoryHelp": "Yalnızca otomatik algılama tarafından kullanılır: compose yığınının bulunduğu monorepo alt dizini.",
         "composeFiles": "Compose dosyaları",
         "composeFilesHelp": "Virgülle ayrılmış, depoya göreli, geçersiz kılma sırasında.",
+        "composeLayersManagedHelp": "API üzerinden yönetilir — bu yığında satır içi verilen veya başka bir depodan okunan katmanlar var; burada salt okunur gösterilir ve kaydettiğinizde değiştirilmez.",
         "composeProfiles": "Compose profilleri (isteğe bağlı)",
         "managedNetworks": "Yönetilen ağlar (isteğe bağlı)",
         "managedNetworksHelp": "Tüketicilerin bağlanması için bu yığının oluşturup sahip olduğu ağlar.",

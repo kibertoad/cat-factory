@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { composeFileRefSchema } from './compose-sources.js'
 import { preflightRefSchema } from './preflights.js'
 import { nonEmpty, urlString } from './primitives.js'
 
@@ -173,8 +174,13 @@ export type RecipeHealthGate = v.InferOutput<typeof recipeHealthGateSchema>
  * recipe only — autodetection / the analyst merely recommend it.
  */
 export const stackRecipeSchema = v.object({
-  /** Ordered `-f` compose files (base + overrides). Supersedes `composePath` when present (⇒ non-empty). */
-  composeFiles: v.optional(v.pipe(v.array(recipePathString), v.minLength(1))),
+  /**
+   * Ordered `-f` compose layers (base + overrides). Supersedes `composePath` when present
+   * (⇒ non-empty). Each entry is a bare path in the run's own repo (the shorthand the detector
+   * emits) or an explicit {@link composeSourceSchema} — an `inline` document, or a `path` in
+   * ANOTHER `owner/name` repo read checkout-free through the workspace's VCS connection.
+   */
+  composeFiles: v.optional(v.pipe(v.array(composeFileRefSchema), v.minLength(1))),
   /** `COMPOSE_PROFILES` to enable for the project. */
   composeProfiles: v.optional(v.array(recipeName)),
   /** Committed templates materialized into their gitignored targets before `up`. */

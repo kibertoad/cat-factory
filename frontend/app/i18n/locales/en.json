@@ -2917,6 +2917,7 @@
         "directoryHelp": "Used only by Autodetect: the monorepo subdirectory the compose stack lives in.",
         "composeFiles": "Compose files",
         "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
+        "composeLayersManagedHelp": "Managed through the API — this stack has layers supplied inline or read from another repo, so they are shown read-only here and left untouched when you save.",
         "composeProfiles": "Compose profiles (optional)",
         "managedNetworks": "Managed networks (optional)",
         "managedNetworksHelp": "Networks this stack creates and owns for consumers to attach to.",

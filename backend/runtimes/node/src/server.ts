@@ -297,6 +297,14 @@ export async function start(
      */
     seedEnvironmentHandlers?: NodeContainerOptions['seedEnvironmentHandlers']
     /**
+     * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+     * compose infra its previews attach to. Threaded and backfilled exactly like
+     * {@link seedEnvironmentHandlers}; a seed's ordered compose layers may be inline documents,
+     * paths in another repo, or paths in the stack's own clone, so a deployment can describe a
+     * service's full infra dependencies in code. Omitted ⇒ no seeding.
+     */
+    seedSharedStacks?: NodeContainerOptions['seedSharedStacks']
+    /**
      * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
      * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
      * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
@@ -510,39 +518,49 @@ function startBackgroundSweepers(deps: {
 }
 
 /**
- * Boot backfill for a deployment's declared environment-handler seeds: idempotently ensure each
- * seed exists for EVERY existing workspace, so a deployment that ships handler seeds doesn't need a
- * per-workspace manual SPA step (new workspaces are covered by `WorkspaceService.create`). A no-op
- * when the environments module / seeder isn't wired, or no seeds were declared (the seeder itself is
- * then a no-op). BEST-EFFORT: a per-workspace failure is logged and skipped, and a total failure
- * (e.g. the workspace enumeration itself) is caught — a seed failure must never crash boot. Shared
- * by the Node boot (after listen) and the local mothership boot (which doesn't run `bootServer`).
+ * Boot backfill for a deployment's DECLARED SEEDS — the environment handlers that provision an
+ * environment, and the shared stacks its previews attach to: idempotently ensure each exists for
+ * EVERY existing workspace, so a deployment that ships them doesn't need a per-workspace manual SPA
+ * step (new workspaces are covered by `WorkspaceService.create`). A no-op for a seeder that isn't
+ * wired, or whose seed list is empty (the seeder itself is then a no-op). BEST-EFFORT: a
+ * per-workspace failure is logged and skipped, and a total failure (e.g. the workspace enumeration
+ * itself) is caught — a seed failure must never crash boot. Shared by the Node boot (after listen)
+ * and the local mothership boot (which doesn't run `bootServer`).
  *
- * Enumerates via `workspaceService.list(null)` — a null `WorkspaceVisibility` returns ALL boards
- * (the auth-disabled path) — which is exactly the boot-time "every workspace" set. (The container
- * exposes `workspaceService`, not a bare `workspaceRepository`; `list` delegates to
- * `listVisible(null)`.)
+ * The workspace list is enumerated ONCE and both seeders run over it, so adding a seeded primitive
+ * costs no extra pass. Enumerates via `workspaceService.list(null)` — a null `WorkspaceVisibility`
+ * returns ALL boards (the auth-disabled path) — which is exactly the boot-time "every workspace"
+ * set. (The container exposes `workspaceService`, not a bare `workspaceRepository`; `list`
+ * delegates to `listVisible(null)`.)
  */
-export async function backfillEnvironmentHandlerSeeds(
-  container: Pick<ServerContainer, 'environmentHandlerSeeder' | 'workspaceService'>,
+export async function backfillDeclaredSeeds(
+  container: Pick<
+    ServerContainer,
+    'environmentHandlerSeeder' | 'sharedStackSeeder' | 'workspaceService'
+  >,
   log: Logger,
 ): Promise<void> {
-  const seeder = container.environmentHandlerSeeder
-  if (!seeder) return
+  const seeders = [
+    { label: 'environment-handler', seeder: container.environmentHandlerSeeder },
+    { label: 'shared-stack', seeder: container.sharedStackSeeder },
+  ].filter((entry) => entry.seeder !== undefined)
+  if (seeders.length === 0) return
   try {
     const workspaces = await container.workspaceService.list(null)
     for (const ws of workspaces) {
-      try {
-        await seeder.ensureForWorkspace(ws.id)
-      } catch (err) {
-        log.warn('environment-handler seed backfill failed for workspace', {
-          workspaceId: ws.id,
-          err: err instanceof Error ? err.message : String(err),
-        })
+      for (const { label, seeder } of seeders) {
+        try {
+          await seeder!.ensureForWorkspace(ws.id)
+        } catch (err) {
+          log.warn(`${label} seed backfill failed for workspace`, {
+            workspaceId: ws.id,
+            err: err instanceof Error ? err.message : String(err),
+          })
+        }
       }
     }
   } catch (err) {
-    log.warn('environment-handler seed backfill could not enumerate workspaces', {
+    log.warn('declared-seed backfill could not enumerate workspaces', {
       err: err instanceof Error ? err.message : String(err),
     })
   }
@@ -603,6 +621,8 @@ async function bootServer(
     // (and, via the local facade's builder, `buildLocalContainer`). The boot backfill below runs
     // the resulting `container.environmentHandlerSeeder` over every existing workspace.
     seedEnvironmentHandlers: options.seedEnvironmentHandlers,
+    // …and its declared shared stacks, forwarded the same way and backfilled by the same call.
+    seedSharedStacks: options.seedSharedStacks,
   })
   bootClock.mark('container')
   // ADR 0026 D6.2: a one-shot drift sweep at boot — attempt to decrypt every sealed credential
@@ -699,7 +719,7 @@ async function bootServer(
   // (idempotent; new workspaces are seeded by WorkspaceService.create). FIRE-AND-FORGET after the
   // listener binds so it never delays serving; best-effort + fully logged inside, and a no-op when
   // no seeder/seeds are wired — a seed failure must never crash boot.
-  void backfillEnvironmentHandlerSeeds(container, logger)
+  void backfillDeclaredSeeds(container, logger)
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process

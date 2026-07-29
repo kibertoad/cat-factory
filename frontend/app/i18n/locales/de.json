@@ -630,6 +630,7 @@
         "directoryHelp": "Wird nur von der automatischen Erkennung verwendet: das Monorepo-Unterverzeichnis, in dem der Compose-Stack liegt.",
         "composeFiles": "Compose-Dateien",
         "composeFilesHelp": "Kommagetrennt, repo-relativ, in Override-Reihenfolge.",
+        "composeLayersManagedHelp": "Über die API verwaltet — dieser Stack hat Layer, die inline bereitgestellt oder aus einem anderen Repository gelesen werden; sie werden hier schreibgeschützt angezeigt und beim Speichern nicht verändert.",
         "composeProfiles": "Compose-Profile (optional)",
         "managedNetworks": "Verwaltete Netzwerke (optional)",
         "managedNetworksHelp": "Netzwerke, die dieser Stack für Konsumenten erstellt und besitzt, um sich damit zu verbinden.",

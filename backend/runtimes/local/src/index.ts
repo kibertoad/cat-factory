@@ -76,3 +76,7 @@ export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).
 export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
+// The shapes a deployment declares its INFRA DEPENDENCIES with, re-exported so a deploy-app
+// wrapper can type its `seedSharedStacks` (and hand-write an inline compose layer) without a
+// direct `@cat-factory/kernel` / `@cat-factory/contracts` import.
+export type { ComposeFileRef, ComposeSource, CreateSharedStackInput } from '@cat-factory/kernel'

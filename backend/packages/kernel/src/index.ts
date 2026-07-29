@@ -309,6 +309,20 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Where an ordered `-f` compose layer's text comes from (the primary repo, a directly-supplied
+// document, or another repo), and the pure placement rules both consumers share — the compose
+// environment provider and the shared-stack bring-up. See `domain/compose-sources.ts`.
+export {
+  normalizeComposeFileRef,
+  normalizeComposeFileRefs,
+  composePathDir,
+  composeProjectDir,
+  composeBaseDepth,
+  materializedComposePath,
+  composeSourcesNeedPrimaryRepo,
+  describeComposeSource,
+} from './domain/compose-sources.js'
+
 // The marker-delimited splice that makes the engine's PR verification report idempotent.
 export {
   PR_REPORT_MARKER_START,

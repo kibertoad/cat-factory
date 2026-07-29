@@ -21,6 +21,7 @@ import type {
 import type {
   BlockRepository,
   EnvironmentHandlerSeeder,
+  SharedStackSeeder,
   ExecutionRepository,
   GroupCacheHandle,
   PipelineRegistry,
@@ -91,6 +92,12 @@ export interface WorkspaceServiceDependencies {
    * deployment's declared environment handlers onto a new workspace. Absent ⇒ no seeding.
    */
   getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
+  /**
+   * Late-bound the same way, for the same reason: `create` seeds the deployment's declared SHARED
+   * STACKS (the long-lived compose infra its previews attach to) onto a new workspace. Absent ⇒
+   * no seeding.
+   */
+  getSharedStackSeeder?: () => SharedStackSeeder | undefined
 }
 
 /** Creates, reads and deletes boards (workspaces) and assembles snapshots. */
@@ -109,6 +116,7 @@ export class WorkspaceService {
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: Logger
   private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
+  private readonly getSharedStackSeeder?: () => SharedStackSeeder | undefined
 
   constructor({
     workspaceRepository,
@@ -125,6 +133,7 @@ export class WorkspaceService {
     resolveBinaryArtifactStore,
     logger,
     getEnvironmentHandlerSeeder,
+    getSharedStackSeeder,
   }: WorkspaceServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -140,6 +149,7 @@ export class WorkspaceService {
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
     this.logger = logger
     this.getEnvironmentHandlerSeeder = getEnvironmentHandlerSeeder
+    this.getSharedStackSeeder = getSharedStackSeeder
   }
 
   /**
@@ -240,6 +250,9 @@ export class WorkspaceService {
     // Late-bound (the seeder is built after this service in the container) and absent ⇒ a no-op;
     // the seeder swallows per-seed failures, so this never fails workspace creation.
     await this.getEnvironmentHandlerSeeder?.()?.ensureForWorkspace(workspace.id)
+    // …and the pre-declared shared stacks, under exactly the same rules (idempotent, late-bound,
+    // per-seed fault-tolerant), so a board comes up able to attach to the deployment's infra.
+    await this.getSharedStackSeeder?.()?.ensureForWorkspace(workspace.id)
     return this.snapshot(workspace.id)
   }
 
