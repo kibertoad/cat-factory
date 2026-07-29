@@ -1,5 +1,6 @@
 ---
 '@cat-factory/executor-harness': patch
+'@cat-factory/local-server': patch
 ---
 
 Run the executor-harness and smoketest-harness unit suites in CI.
