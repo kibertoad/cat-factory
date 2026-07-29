@@ -3756,6 +3756,8 @@
     "intro": "Explora un tablero del gestor de incidencias en busca de errores abiertos y sin asignar, y clasifícalos por impacto frente a lo difícil que parece arreglar cada uno. Elige uno y se convertirá en una tarea que ejecuta la canalización de corrección de errores.",
     "connectFirst": "Conecta o activa primero una fuente de tareas.",
     "connectSource": "Conectar {label}",
+    "enableSource": "Habilitar {label}",
+    "pickTracker": "Elige un gestor de incidencias",
     "needFrameFirst": "Añade primero un marco de servicio al tablero para que el error elegido tenga dónde aterrizar.",
     "tracker": "Gestor de incidencias",
     "board": "Tablero",

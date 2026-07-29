@@ -3756,6 +3756,8 @@
     "intro": "Parcourez un tableau du gestionnaire de tickets à la recherche de bugs ouverts et non assignés, puis classez-les selon leur impact face à la difficulté apparente du correctif. Choisissez-en un et il devient une tâche qui exécute le pipeline de correction.",
     "connectFirst": "Connectez ou activez d'abord une source de tâches.",
     "connectSource": "Connecter {label}",
+    "enableSource": "Activer {label}",
+    "pickTracker": "Choisir un gestionnaire de tickets",
     "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau, pour que le bug retenu ait un endroit où atterrir.",
     "tracker": "Gestionnaire de tickets",
     "board": "Tableau",

@@ -3768,6 +3768,8 @@
     "intro": "Bir takip panosunu açık ve kimseye atanmamış hatalar için tarayın ve bunları etkilerine karşı düzeltmenin ne kadar zor göründüğüne göre sıralayın. Birini seçin, hata düzeltme hattını çalıştıran bir göreve dönüşsün.",
     "connectFirst": "Önce bir görev kaynağı bağlayın veya etkinleştirin.",
     "connectSource": "{label} bağla",
+    "enableSource": "{label} etkinleştir",
+    "pickTracker": "Bir takip aracı seçin",
     "needFrameFirst": "Seçilen hatanın ineceği bir yer olması için önce panoya bir servis çerçevesi ekleyin.",
     "tracker": "Takip aracı",
     "board": "Pano",

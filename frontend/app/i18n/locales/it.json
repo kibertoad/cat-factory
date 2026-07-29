@@ -3444,6 +3444,8 @@
     "intro": "Esplora una bacheca del tracker alla ricerca di bug aperti e non assegnati e classificali per impatto rispetto a quanto sembra difficile risolverli. Scegline uno e diventerà un'attività che esegue la pipeline di correzione.",
     "connectFirst": "Collega o abilita prima una sorgente di attività.",
     "connectSource": "Collega {label}",
+    "enableSource": "Abilita {label}",
+    "pickTracker": "Scegli un tracker",
     "needFrameFirst": "Aggiungi prima un frame di servizio alla bacheca, così il bug scelto ha dove atterrare.",
     "tracker": "Tracker",
     "board": "Bacheca",

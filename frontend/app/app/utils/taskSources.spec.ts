@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildSourceChoices, reconcileSource } from './ContextIssuePicker.logic'
+import { buildSourceChoices, reconcileSource } from './taskSources'
 import type { TaskSourceState } from '~/types/domain'
 
 /**
- * The pure source-selection behind `<ContextIssuePicker>`. Pins what the always-visible
- * selector promises: the tracker in use is named even when it is the only one, a tracker
- * the workspace hasn't got yet is offered as something to ADD (worded for its actual
- * state), and the selection stays valid as the offered set changes underneath it.
+ * The pure tracker-selection behind `<ContextIssuePicker>` and `<BugHuntModal>`. Pins what
+ * the always-visible selector promises: the tracker in use is named even when it is the only
+ * one, a tracker the workspace hasn't got yet is offered as something to ADD (worded for its
+ * actual state), and the selection stays valid as the offered set changes underneath it.
  */
 const state = (source: string, { available = true, enabled = true } = {}): TaskSourceState =>
   ({
@@ -53,6 +53,17 @@ describe('buildSourceChoices', () => {
       { action: 'connect', source: 'jira', label: 'JIRA', icon: 'i-lucide-jira' },
       { action: 'enable', source: 'linear', label: 'LINEAR', icon: 'i-lucide-linear' },
     ])
+  })
+
+  // What a surface's "nothing connected yet" state renders its add buttons from: it flattens
+  // the groups, so every choice there has to be addable. A `select` leaking through would
+  // offer to connect a tracker the workspace already has.
+  it('yields only addable choices when the workspace offers no tracker', () => {
+    const choices = buildSourceChoices(
+      [state('jira', { available: false }), state('linear', { enabled: false })],
+      undefined,
+    ).flat()
+    expect(choices.map((c) => c.action)).toEqual(['connect', 'enable'])
   })
 
   it('drops empty groups so the menu renders no stray separator', () => {
