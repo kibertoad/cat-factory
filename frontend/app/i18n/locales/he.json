@@ -4299,6 +4299,12 @@
     "recommendationProgress": "{ready} / {total} מוכנות",
     "generatingSuggestion": "מייצר הצעה מבוססת…",
     "currentStandard": "תקן נוכחי: {title}",
+    "grounding": {
+      "standard": "תקן הצוות",
+      "project-spec": "מפרט הפרויקט",
+      "web": "מקור מהאינטרנט",
+      "general-practice": "נוהג מקובל"
+    },
     "accept": "קבל",
     "reject": "דחה",
     "reRequestPlaceholder": "בקש המלצה אחרת…",

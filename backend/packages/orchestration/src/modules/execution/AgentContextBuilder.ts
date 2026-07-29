@@ -31,6 +31,7 @@ import {
   applyConsensusGroup,
   buildExcerpt,
   CONTEXT_BUDGET,
+  describeOwnService,
   resolveServiceFrameBlock,
   selectConsensusGroup,
 } from '@cat-factory/kernel'
@@ -480,6 +481,11 @@ export class AgentContextBuilder {
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
+      // WHICH SYSTEM this work belongs to — the enclosing service frame, or the positive reason
+      // there is none. Always set (never conditionally spread): the "not under a service" case is
+      // the one the prompt has to STATE, so leaving it out would be the silent gap this exists to
+      // close. Derived from the `serviceFrame` already resolved above, so it costs no extra read.
+      ownService: describeOwnService(block, serviceFrame),
       ...(testSecrets.length ? { testSecrets } : {}),
       // Spreads BOTH the pre-PR checks and the dependency-prepopulation install — one frame-chain
       // read, two independently-gated context fields (see `validationChecksFor`).

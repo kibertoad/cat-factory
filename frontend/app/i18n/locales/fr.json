@@ -4288,6 +4288,12 @@
     "recommendationProgress": "{ready} / {total} prêtes",
     "generatingSuggestion": "Génération d'une suggestion étayée…",
     "currentStandard": "Standard actuel : {title}",
+    "grounding": {
+      "standard": "Standard de l'équipe",
+      "project-spec": "Spécification du projet",
+      "web": "Source web",
+      "general-practice": "Pratique générale"
+    },
     "accept": "Accepter",
     "reject": "Rejeter",
     "reRequestPlaceholder": "Demander une autre recommandation…",

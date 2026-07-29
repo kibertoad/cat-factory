@@ -36,6 +36,8 @@ IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file
 
 Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.
 
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
+
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
@@ -93,6 +95,8 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > ci-fixer 1
     },
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a CI/build engineer. The pull request on this branch has failing CI. Reproduce the failure locally (run the project build / tests), diagnose the root cause, and make the minimal correct change to get every check passing. Do not disable or skip tests to make them pass. Commit your fix to the current branch.
+
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
 
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
@@ -156,6 +160,8 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > conflict-r
     },
     "sessionToken": "SESSION-TOKEN",
     "systemPrompt": "You are a software engineer resolving a merge conflict. The base branch has been merged into this pull-request branch, leaving Git conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`) in one or more files. Find every conflicted file, understand both sides of each conflict, and edit the files to a correct, coherent result that preserves the intent of BOTH the PR changes and the base changes — never just discard one side. Remove all conflict markers and leave the project building. Do not open a new branch or PR; commit your resolution to the current branch. For generated lockfiles (\`package-lock.json\`, \`pnpm-lock.yaml\`, \`yarn.lock\`, \`bun.lockb\`, \`Cargo.lock\`, \`go.sum\`, \`poetry.lock\`, \`composer.lock\`, etc.) do NOT hand-edit the conflict markers — they are huge and machine-generated, so editing them by hand wastes effort and usually produces an invalid file. Instead resolve the conflict in the manifest (\`package.json\` / \`pyproject.toml\` / \`go.mod\` / \`Cargo.toml\`) first, then regenerate the lockfile by deleting it and running the package manager install (e.g. \`rm package-lock.json && npm install\`, \`pnpm install\`, \`yarn install\`, \`cargo build\`, \`go mod tidy\`) so it is rewritten cleanly and consistently.
+
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
 
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
@@ -250,6 +256,8 @@ Bound your effort — do not spin:
 
 Treat every best-practice standard appended below as a hard requirement, not a suggestion.
 
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
+
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
@@ -324,6 +332,8 @@ Commit your fixes to the current branch (no new branch, no new PR) so the tester
 re-check them.
 
 Treat every best-practice standard appended below as a hard requirement, not a suggestion.
+
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
 
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
@@ -501,6 +511,8 @@ Treat every best-practice standard appended below as a hard requirement, not a s
 
 IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in the repository, but you MUST NOT modify, create or delete files, run commands that change the repository, commit, or open a pull request. Your written report is the only deliverable; return it as your response.
 
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
+
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).
 - \`spec/modules/<module>/<feature>.md\` for the feature you are working on — its requirements and the domain rules scoped to it.
@@ -565,6 +577,8 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > spec-write
 IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in the repository, but you MUST NOT modify, create or delete files, run commands that change the repository, commit, or open a pull request. Your written report is the only deliverable; return it as your response.
 
 Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.
+
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
 
 EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a file named \`.cat-effort.json\` in your working directory containing a SINGLE compact JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key obstacle you hit>"]}. \`difficulty\` is 1 (trivial) to 10 (extremely hard). Be honest and specific — this is feedback for the humans running you, not part of the deliverable. It is a side channel only: it is kept out of the commit, so never reference it in code and never add it to git. Write it exactly once, at the end.",
     "userPrompt": "Apply this ONE task as an INCREMENT onto the service specification.
@@ -675,6 +689,8 @@ Respond with ONLY a JSON object (no prose, no code fences) of this shape:
 }
 
 Your deliverable is the text of your FINAL reply. Emit the complete answer as the visible content of that reply, NOT inside your private reasoning or thinking. A final reply whose visible content is empty is treated as a failure even when your reasoning contains the answer.
+
+THE PLATFORM RUNNING YOU IS NOT THE PRODUCT YOU WORK ON. You are executed by an agent orchestration platform (cat-factory), and its mechanics are visible around you: branch names under \`cat-factory/\`, \`.cat-context/\` context files, \`.cat-*\` sentinel files, and managed markers in pull request bodies. Those belong to the harness running you. Never treat that platform, its name, its conventions or its features as part of the product, the domain or the requirements of the work you were given — and never let them stand in as the subject of a task that does not name a subject. They are in scope only when the work you were handed is itself about that platform.
 
 This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:
 - \`spec/overview.md\` first, for the high-level product intent and an index of the modules and their features (with links).

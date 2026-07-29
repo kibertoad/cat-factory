@@ -120,6 +120,28 @@ export const recommendationStatusSchema = v.picklist(['pending', 'ready', 'accep
 export type RecommendationStatus = v.InferOutput<typeof recommendationStatusSchema>
 
 /**
+ * Where a Requirement-Writer suggestion actually came from — the Writer's own report of which
+ * precedence level answered the finding:
+ * - `standard`: a team/org best-practice standard settled it (`groundedInFragment` names which).
+ * - `project-spec`: the project's committed `spec/`/`tech-spec/`.
+ * - `web`: a web-search result.
+ * - `general-practice`: the model's own general knowledge, with none of the above behind it.
+ *
+ * Surfaced because a suggestion that rests on nothing but the model looks exactly like one drawn
+ * from the team's own standards once it is sitting in the answer box, and the two deserve very
+ * different scrutiny. `groundedInFragment` already carried the strongest case; this makes the rest
+ * legible instead of leaving "not from a standard" to cover everything from a cited source to a
+ * guess. Null when the Writer did not report a level (an older row, or a garbled response).
+ */
+export const recommendationSourceSchema = v.picklist([
+  'standard',
+  'project-spec',
+  'web',
+  'general-practice',
+])
+export type RecommendationSource = v.InferOutput<typeof recommendationSourceSchema>
+
+/**
  * A Requirement-Writer suggestion for one finding. Recommendations are a first-class
  * collection on the review (NOT on items) so they survive the item churn each re-review
  * causes — the source finding is snapshotted by title/detail rather than referenced by a
@@ -161,6 +183,13 @@ export const requirementRecommendationSchema = v.object({
    * "current standard" signal), else null. Carries the fragment's id + title for the badge.
    */
   groundedInFragment: v.nullable(v.object({ id: v.string(), title: v.string() })),
+  /**
+   * Which precedence level the Writer reports the answer came from (see
+   * {@link recommendationSourceSchema}). Optional so a row written before it existed still parses;
+   * absent/null reads as "not reported", never as `general-practice` — an unreported source is not
+   * evidence of a weak one.
+   */
+  groundedIn: v.optional(v.nullable(recommendationSourceSchema)),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

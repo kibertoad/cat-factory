@@ -16,12 +16,13 @@ import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing
 import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
-import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
+import { FINAL_ANSWER_IN_REPLY, PLATFORM_IS_NOT_THE_PRODUCT } from './prompts/shared.js'
 import {
   environmentSection,
   initiativePresetSection,
   involvedServicesSection,
   linkedContextSection,
+  ownServiceSection,
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
@@ -122,7 +123,12 @@ export function systemPromptFor(
   // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
   // {@link applySurfaceDirectives}. This is the single place that decision lives, so a
   // registered kind gets the SAME treatment a built-in does from its declared `agent.surface`.
-  const withDirectives = applySurfaceDirectives(base, kind, registry)
+  // Then the platform/product boundary, which is UNCONDITIONAL: every kind is run by the same
+  // orchestrator and can see its mechanics, so every kind needs telling that they are not the
+  // subject of the work. Appended here rather than inside `applySurfaceDirectives` because it is
+  // not derived from the surface — and appended AFTER the override, so an edited prompt cannot
+  // delete it (which is why it needs no `OVERRIDE_PRESERVED_FRAGMENTS` entry).
+  const withDirectives = `${applySurfaceDirectives(base, kind, registry)}\n\n${PLATFORM_IS_NOT_THE_PRODUCT}`
   // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
@@ -359,6 +365,10 @@ function buildBaseUserPrompt(
   // frames the agent's role before the task specifics. Empty on every non-initiative run.
   const presetSection = initiativePresetSection(context)
   if (presetSection) lines.push(presetSection)
+  // What system this work belongs to (or that nothing said) — see `ownServiceSection`. Before the
+  // linked context, which it frames.
+  const ownService = ownServiceSection(context)
+  if (ownService) lines.push(ownService)
   // A companion grades a specific preceding producer; name it explicitly so the
   // model rates the right output rather than guessing among the prior-agent sections.
   const companionTarget = companionTargetSection(context)

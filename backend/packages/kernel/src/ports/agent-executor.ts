@@ -26,6 +26,7 @@ import type {
   ResolvedToolServer,
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
+import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
@@ -441,6 +442,24 @@ export interface AgentRunContext {
     description?: string
     envUrl?: string
   }[]
+  /**
+   * The service the work itself belongs to — the enclosing service FRAME's title and description,
+   * resolved by the engine from the block's ancestry. This is the agent's answer to "what system
+   * am I working on", and it was missing: a step's prompt named the pipeline, the block and every
+   * PEER service in {@link involvedServices}, but never the block's OWN service. A container agent
+   * could recover it by reading its checkout; an inline one (a reviewer, a panel participant) had
+   * no way to, so a task titled "implement webhooks" arrived with no identified subject at all —
+   * and a model asked for concrete output against an unidentified subject supplies one, commonly
+   * the most salient proper noun in its prompt (the orchestration platform's own name).
+   *
+   * A DISCRIMINATED result rather than a nullable value, because the two ways of having no
+   * service mean opposite things to the prompt: a frame-level run has none because the block IS
+   * the service (nothing to say), while a task outside any service has none because the platform
+   * genuinely does not know (which must be SAID — an unstated product may not read like an obvious
+   * one). Left undefined by a caller that does not populate it at all, e.g. a test fake, so no
+   * claim is rendered either way.
+   */
+  ownService?: OwnServiceContext
   /**
    * The SENSITIVE test credentials configured for this run's service frame — as non-secret
    * REFERENCES only (each key + its description), NEVER the values. Resolved by the engine

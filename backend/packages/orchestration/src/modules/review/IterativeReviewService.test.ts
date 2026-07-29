@@ -513,3 +513,126 @@ describe('IterativeReviewService (via ClarityReviewService)', () => {
     expect((merged as Record<string, unknown>).incorporatedRequirements).toBeUndefined()
   })
 })
+
+// The inline review kinds run as bare `generateText` calls, so they never pass through
+// `systemPromptFor` — the seam that applies a workspace prompt override AND re-appends what an
+// override must not delete. These pin both halves of the replacement seam: an edited prompt IS sent,
+// and the platform-enforced directives survive it.
+describe('per-workspace prompt overrides (inline review kinds)', () => {
+  function serviceWith(
+    resolveSystemPromptOverride?: (ws: string, kind: string) => Promise<string | undefined>,
+  ) {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    return new RequirementReviewService({
+      ...baseDeps(),
+      requirementReviewRepository,
+      ...(resolveSystemPromptOverride ? { resolveSystemPromptOverride } : {}),
+    })
+  }
+
+  /** The system prompt of the Nth `generateText` call, as the SDK serialized it. */
+  function systemOf(callIndex: number): string {
+    const messages = JSON.parse(script.calls[callIndex]!) as {
+      role: string
+      content: unknown
+    }[]
+    const system = messages.find((m) => m.role === 'system')
+    return typeof system?.content === 'string' ? system.content : JSON.stringify(system?.content)
+  }
+
+  it('sends the shipped prompt when the workspace edited nothing', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith().review(WS, 'blk_1')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+  })
+
+  it('sends the workspace override in place of the shipped role', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => 'You are a laconic reviewer.').review(WS, 'blk_1')
+    const system = systemOf(0)
+    expect(system).toContain('You are a laconic reviewer.')
+    expect(system).not.toContain('meticulous product / requirements analyst')
+  })
+
+  it('keeps the engine-enforced directives an override must not delete', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => 'Say whatever you like.').review(WS, 'blk_1')
+    const system = systemOf(0)
+    // The JSON contract this service parses, the flow-wide scope boundary, and the rule against
+    // inventing a product — all re-appended on top of whatever the workspace saved.
+    expect(system).toContain('Respond with ONLY a JSON object')
+    expect(system).toContain('THIS STAGE SETTLES PRODUCT AND BUSINESS REQUIREMENTS ONLY')
+    expect(system).toContain('THE SYSTEM UNDER DISCUSSION IS ONLY WHAT THE CONTEXT NAMES')
+  })
+
+  it('treats a reverted (blank) override as no override', async () => {
+    script.push({ text: ITEMS_ONE_HIGH })
+    await serviceWith(async () => '   ').review(WS, 'blk_1')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+  })
+
+  it('resolves the override per KIND, so the reviewer and the rework editor differ', async () => {
+    const asked: string[] = []
+    const svc = serviceWith(async (_ws, kind) => {
+      asked.push(kind)
+      return kind === 'requirements-rework' ? 'You are a terse editor.' : undefined
+    })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    const review = await svc.review(WS, 'blk_1')
+    script.push({ text: '# Add export — Requirements' })
+    await svc.incorporate(WS, review.id, {})
+    expect(asked).toContain('requirements-review')
+    expect(asked).toContain('requirements-rework')
+    expect(systemOf(0)).toContain('meticulous product / requirements analyst')
+    expect(systemOf(1)).toContain('You are a terse editor.')
+    expect(systemOf(1)).toContain('Respond with ONLY the revised requirements in Markdown')
+  })
+})
+
+// The inline reviewers have no checkout, so the owning service is their only way to know what
+// software is under discussion (see `product-context.ts`).
+describe('product identity in the reviewed subject', () => {
+  it('states that no system was resolved when the block sits under no service frame', async () => {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    const svc = new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    await svc.review(WS, 'blk_1')
+    // BLOCK is a parentless task, so the ancestry walk resolves it to itself — not a service.
+    expect(script.calls[0]).toContain('NOT STATED')
+  })
+
+  it("names the block's enclosing service frame when there is one", async () => {
+    const requirementReviewRepository = fakeRepo<{
+      id: string
+      blockId: string
+      rev: number
+    }>() as never
+    const frame = {
+      id: 'blk_frame',
+      level: 'frame',
+      title: 'billing-api',
+      description: 'Invoicing and payment collection.',
+    } as unknown as Block
+    const task = { ...BLOCK, level: 'task', parentId: 'blk_frame' } as unknown as Block
+    const svc = new RequirementReviewService({
+      ...baseDeps(),
+      blockRepository: {
+        get: async (_ws: string, id: string) => (id === 'blk_frame' ? frame : task),
+      } as never,
+      requirementReviewRepository,
+    })
+    script.push({ text: JSON.stringify({ items: [] }) })
+    await svc.review(WS, 'blk_1')
+    expect(script.calls[0]).toContain('billing-api')
+    expect(script.calls[0]).toContain('Invoicing and payment collection.')
+    expect(script.calls[0]).not.toContain('NOT STATED')
+  })
+})

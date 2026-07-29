@@ -269,6 +269,36 @@ export function environmentSection(context: AgentRunContext): string {
  * environment. Empty string when the task names no (still-valid) involved services. Lets a
  * cross-service test / change reason about the peer and reach its real environment.
  */
+/**
+ * Render the service the work BELONGS to — the enclosing service frame's title and description.
+ *
+ * Unlike every other section here this one renders when the value is ABSENT too, and that is the
+ * point. A block's own title and description are the only subject an agent gets, and a short one
+ * ("implement webhooks") names no system; with the owning service silently omitted, that reads
+ * exactly like a task whose product is obvious from context, so a model fills the gap itself and
+ * states the invention as confidently as a fact. Naming the absence turns "I must work out what
+ * this is about" into "the platform did not tell me", which is a thing an agent can report instead
+ * of paper over (see the `NO_ASSUMED_PRODUCT` directive, which this section is the input to).
+ *
+ * Empty for a FRAME-level run, where the block under work IS the service and its own title already
+ * answers the question, and for a context that never populated the field.
+ */
+export function ownServiceSection(context: AgentRunContext): string {
+  const own = context.ownService
+  if (!own) return ''
+  if (!own.stated) {
+    if (own.reason === 'block-is-the-service') return ''
+    return (
+      '\n\nThe system this work belongs to: NOT STATED — this work is not under a service on the ' +
+      'board, so no owning system, product or domain was resolved for it. Work only from the ' +
+      'title and description above; do not infer a product, vendor or domain they do not name.'
+    )
+  }
+  const lines = ['', `The system this work belongs to: ${own.title}`]
+  if (own.description?.trim()) lines.push(own.description.trim())
+  return `\n${lines.join('\n')}`
+}
+
 export function involvedServicesSection(context: AgentRunContext): string {
   const involved = context.involvedServices
   if (!involved?.length) return ''
@@ -477,6 +507,9 @@ export function renderStandardUserPrompt(
     // Preset steering FIRST — it frames the agent's role for this initiative before the task
     // specifics. Empty (so byte-identical) on every non-initiative run.
     initiativePresetSection(context) +
+    // What system this work belongs to, BEFORE the linked context and the environment: it frames
+    // everything that follows, and it is the section that states its own absence.
+    ownServiceSection(context) +
     linkedContextSection(context, opts) +
     environmentSection(context) +
     involvedServicesSection(context) +

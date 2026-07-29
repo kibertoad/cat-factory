@@ -4300,6 +4300,12 @@
     "recommendationProgress": "{ready} / {total} hazır",
     "generatingSuggestion": "Temellendirilmiş bir öneri oluşturuluyor…",
     "currentStandard": "Mevcut standart: {title}",
+    "grounding": {
+      "standard": "Ekip standardı",
+      "project-spec": "Proje şartnamesi",
+      "web": "Web kaynağı",
+      "general-practice": "Genel uygulama"
+    },
     "accept": "Kabul et",
     "reject": "Reddet",
     "reRequestPlaceholder": "Farklı bir öneri isteyin…",

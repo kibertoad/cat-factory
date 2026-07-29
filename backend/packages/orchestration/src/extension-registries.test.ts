@@ -46,12 +46,13 @@ describe('agent-kind registry', () => {
   it('uses a registered kind’s system prompt over the generic fallback', () => {
     expect(systemPromptFor('org-auditor', registry)).toContain('"org-auditor" agent') // generic fallback
     registry.register({ kind: 'org-auditor', systemPrompt: 'You audit for compliance.' })
-    expect(systemPromptFor('org-auditor', registry)).toBe('You audit for compliance.')
+    expect(systemPromptFor('org-auditor', registry)).toContain('You audit for compliance.')
+    expect(systemPromptFor('org-auditor', registry)).not.toContain('"org-auditor" agent')
   })
 
   it('supports a function-form system prompt', () => {
     registry.register({ kind: 'org-x', systemPrompt: (kind) => `Role for ${kind}.` })
-    expect(systemPromptFor('org-x', registry)).toBe('Role for org-x.')
+    expect(systemPromptFor('org-x', registry)).toContain('Role for org-x.')
   })
 
   it('never shadows a built-in standard-phase kind', () => {
@@ -113,7 +114,40 @@ describe('agent-kind registry', () => {
       agent: { surface: 'container-coding', clone: { branch: 'pr' } },
     })
     const coding = systemPromptFor('org-coding', registry)
-    expect(coding).toBe('You code.')
+    expect(coding).toContain('You code.')
+    expect(coding).not.toContain('visible content')
+    expect(coding).not.toContain('READ-ONLY exploration')
+  })
+
+  it('tells EVERY kind that the platform running it is not the product, whatever its surface', () => {
+    // Unconditional, unlike the surface directives: any kind can see the orchestrator's mechanics
+    // (its branch names, its `.cat-*` files), and a task with no product context of its own leaves
+    // the platform's name as the most salient subject in the prompt.
+    registry.register({
+      kind: 'org-coding3',
+      systemPrompt: 'You code.',
+      agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    })
+    registry.register({
+      kind: 'org-inline3',
+      systemPrompt: 'You reply.',
+      agent: { surface: 'inline' },
+    })
+    for (const kind of ['org-coding3', 'org-inline3', 'coder', 'architect', 'merger']) {
+      expect(systemPromptFor(kind, registry)).toContain('IS NOT THE PRODUCT YOU WORK ON')
+    }
+  })
+
+  it('keeps the platform/product boundary on a prompt a workspace overrode', () => {
+    registry.register({
+      kind: 'org-inline4',
+      systemPrompt: 'You reply.',
+      agent: { surface: 'inline' },
+    })
+    const overridden = systemPromptFor('org-inline4', registry, 'Be someone else entirely.')
+    expect(overridden).toContain('Be someone else entirely.')
+    expect(overridden).not.toContain('You reply.')
+    expect(overridden).toContain('IS NOT THE PRODUCT YOU WORK ON')
   })
 
   it('does not double-append FINAL_ANSWER_IN_REPLY when a registered id collides with a built-in track', () => {
