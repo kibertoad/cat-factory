@@ -131,7 +131,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 
 - **Board canvas** (`components/board`) — `BoardCanvas` + `nodes/` (`BlockNode`,
   `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
-  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`.
+  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. A running task card expands
+  its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
+  on-screen card past the `steps` zoom band — the two grants are combined in the
+  `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`) — board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).

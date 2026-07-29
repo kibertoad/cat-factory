@@ -79,7 +79,20 @@ function initiativeBreakdownUserPrompt(context: AgentRunContext): string {
 // so the constants below deliberately do NOT restate the final-answer directive.
 // ---------------------------------------------------------------------------
 
-/** Role prompt the initiative-analyst step runs under (returns a prose codebase analysis). */
+/**
+ * Role prompt the initiative-analyst step runs under (returns a prose codebase analysis).
+ *
+ * The step carries two duties the free-standing analysis never had: ANSWER from the repository
+ * anything the repository can answer, and close with a short agenda of what genuinely cannot be
+ * read off the code. Both hold on every planning pipeline, so both live here.
+ *
+ * What does NOT live here is WHY they matter, because that differs by pipeline and this prompt is
+ * shared by all of them: on `pl_initiative` an unread fact becomes a question put to a human about
+ * their own code, while on `pl_initiative_docs` (no interviewer at all) this is simply the only
+ * reading of the repository the plan will get. Asserting either one unconditionally would state a
+ * falsehood on the other pipeline, so the framing is selected in the USER prompt — the half that
+ * sees `AgentRunContext` and therefore knows what actually follows this step.
+ */
 const INITIATIVE_ANALYST_SYSTEM_PROMPT =
   'You are a staff engineer performing a CODEBASE ANALYSIS to ground the planning of a ' +
   'long-running initiative (a cross-cutting refactor, a migration, a strangler conversion). ' +
@@ -88,6 +101,12 @@ const INITIATIVE_ANALYST_SYSTEM_PROMPT =
   'initiative will most likely touch, existing patterns to follow, cross-cutting concerns, ' +
   'risks and likely sequencing constraints. Ground every claim in real file/directory ' +
   'references; do NOT propose the plan itself (no phases/items) and do NOT modify anything. ' +
+  'Investigate rather than speculate: if the current state of something is discoverable, read ' +
+  'it and state what it IS — never leave it as an open question. ' +
+  'Finish with an "## Open questions" section listing ONLY what the code genuinely cannot ' +
+  'settle — intent, priorities, risk tolerance, deadlines, external commitments, and choices ' +
+  'between options the code permits equally. Say briefly why each one needs a human. Leave the ' +
+  'section empty when the code settles everything. ' +
   'Respond with a clear Markdown analysis.'
 
 /** Role prompt the initiative-planner step's agent runs under (returns the plan as JSON). */
@@ -176,6 +195,27 @@ function planShapeLines(template: InitiativePresetPhaseTemplate): string[] {
 }
 
 /**
+ * The analyst's codebase analysis as prompt lines, or [] when there is none.
+ *
+ * Exported because THREE prompts present this same section — the planner's and (on a re-plan) the
+ * analyst's own, both built here, and the inline interviewer's, which assembles its prompt in
+ * `@cat-factory/orchestration` without passing through these builders. One owner of the heading and
+ * the trim rule keeps them from drifting into two shapes a model would read as two different
+ * sections; a consumer that needs extra steering appends it AFTER these lines.
+ *
+ * Whitespace-only reads as ABSENT rather than emitting an empty heading: a model handed
+ * "## Codebase analysis" with nothing under it concludes the repository was read and holds nothing,
+ * which is the opposite of what an empty summary means.
+ */
+export function codebaseAnalysisLines(summary: string | undefined): string[] {
+  const trimmed = summary?.trim()
+  return trimmed ? ['', CODEBASE_ANALYSIS_HEADING, '', trimmed] : []
+}
+
+/** Heading the codebase analysis is presented under, in every prompt that carries it. */
+const CODEBASE_ANALYSIS_HEADING = '## Codebase analysis'
+
+/**
  * Render the planning context an initiative-level run carries (slice 2): the interviewer's
  * synthesized goal / constraints / non-goals + the Q&A digest, and the analyst's codebase
  * analysis. Folded into the analyst and planner prompts so each is grounded in the human's
@@ -212,17 +252,22 @@ function initiativeContextLines(
     lines.push('', '## Planning interview', '')
     for (const { question, answer } of qa) lines.push(`- Q: ${question}`, `  A: ${answer}`)
   }
-  if (opts.includeAnalysis && init.analysisSummary?.trim()) {
-    lines.push('', '## Codebase analysis', '', init.analysisSummary.trim())
-  }
+  if (opts.includeAnalysis) lines.push(...codebaseAnalysisLines(init.analysisSummary))
   return lines
 }
 
 /**
- * The initiative-analyst's task prompt: the agreed goal / constraints from the interview
- * plus the instruction to analyse the repo. The backend's analyst post-completion resolver
- * folds the returned prose onto the `initiatives` entity (`analysisSummary`), which the
- * planner then consumes.
+ * The initiative-analyst's task prompt: the scope agreed so far plus the instruction to analyse
+ * the repo. The backend's analyst post-completion resolver folds the returned prose onto the
+ * `initiatives` entity (`analysisSummary`), which the INTERVIEWER and then the planner consume.
+ *
+ * On `pl_initiative` this step now leads, so the interview context it folds is whatever is settled
+ * BEFORE the interview: a preset form's seeded `qa` (frozen at create, current by construction) and
+ * — on a re-plan — the goal and answered digest a previous planning run agreed (the interviewer's
+ * `resetForFreshRun` fires at the gate, i.e. AFTER this step). On `pl_initiative_docs` (a
+ * `interview: 'skip'` preset, where the form IS the interview) the analyst always led and that
+ * context has always been the form's. Either way the block's own title + description is rendered
+ * as the brief above it, so an absent goal costs the analysis nothing.
  */
 export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
   const block = context.block
@@ -241,9 +286,32 @@ export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
     ...linkedContextLines(context, { materialized: true }),
     '',
     'Explore the repository and produce the analysis described in your instructions — ' +
-      'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
+      'architecture, likely touch points, patterns to follow, risks and sequencing, then the ' +
+      'open questions only a human can settle. Answer from the code everything the code can ' +
+      `answer: ${analystHandoffClause(context)} ` +
       'Respond with a clear Markdown analysis.',
   ].join('\n')
+}
+
+/**
+ * Why reading exhaustively matters on THIS run, which depends on whether a stakeholder interview
+ * follows (see `AgentRunContext.initiative.interviewFollows`). Both clauses argue for the same
+ * behaviour and each is false for the other pipeline, which is precisely why the choice is made
+ * here rather than asserted once in the shared system prompt.
+ *
+ * The `false` reading is also the DEFAULT when the engine did not resolve an initiative context at
+ * all: it promises nothing about a follow-up step, so it cannot mislead a run whose shape we could
+ * not see. Its argument is the stronger of the two anyway — "this is the only reading there will
+ * be" outranks "someone would otherwise be asked".
+ */
+function analystHandoffClause(context: AgentRunContext): string {
+  return context.initiative?.interviewFollows
+    ? 'a stakeholder is interviewed after you, and every fact you establish here is one they ' +
+        'will not be asked about their own codebase. Your open questions are the agenda for that ' +
+        'interview, so keep them few and genuinely unanswerable from the repository.'
+    : 'no one is interviewed after you, so this analysis is the ONLY reading of the repository ' +
+        'the plan will get — a gap you leave stays a gap. Your open questions are recorded for ' +
+        'whoever reviews the plan, not put to anyone during this run.'
 }
 
 /**

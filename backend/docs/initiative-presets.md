@@ -19,7 +19,7 @@ change and no per-facade wiring.
 ## Why presets exist
 
 The generic Initiative runs one fixed pipeline — `pl_initiative`
-(`initiative-interviewer → initiative-analyst → initiative-planner → initiative-committer`,
+(`initiative-analyst → initiative-interviewer → initiative-planner → initiative-committer`,
 human approval after the planner) — then executes the approved plan as a loop of spawned
 tasks. That shape fits open-ended refactors, where an **interview** is how the goal gets
 pinned down. It does NOT fit **task-shaped initiatives** whose inputs are known up front and

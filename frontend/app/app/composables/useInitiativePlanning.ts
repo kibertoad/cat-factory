@@ -6,7 +6,11 @@ import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { agentKindMeta } from '~/utils/catalog'
 import { selectPlanApproval, type InitiativeAttentionKind } from '~/utils/initiative'
-import { interviewGatePhase } from '~/utils/interviewGate'
+import {
+  INITIATIVE_INTERVIEWER_KIND,
+  interviewGatePhase,
+  interviewStepReached,
+} from '~/utils/interviewGate'
 
 /**
  * What an initiative's planning run needs from a human right now: which kind of park it is (the
@@ -54,12 +58,14 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
    * The live interview phase, derived from the entity AND the planning run (see
    * {@link interviewGatePhase} for why the run status is load-bearing).
    */
-  const interviewPhase = computed(() =>
-    interviewGatePhase(
+  const interviewPhase = computed(() => {
+    const run = execution.getByBlock(toValue(blockId))
+    return interviewGatePhase(
       initiative.value?.interview?.status,
-      execution.getByBlock(toValue(blockId))?.status,
-    ),
-  )
+      run?.status,
+      interviewStepReached(run, INITIATIVE_INTERVIEWER_KIND),
+    )
+  })
 
   /**
    * The interviewer has PARKED the planning run for the human. NOT keyed on whether individual
@@ -75,8 +81,20 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
    */
   const awaitingAnswers = computed(() => interviewPhase.value === 'awaiting')
 
-  /** An interviewer pass is running — the human is waiting on the planner, not the reverse. */
-  const interviewing = computed(() => interviewPhase.value === 'working')
+  /**
+   * The planning run is mid-flight with nothing for the human to answer — either an interviewer
+   * pass is running (`working`) or the run has not reached the interview yet (`preparing`, the
+   * codebase analysis that now leads). BOTH phases, deliberately: this drives the card's and
+   * inspector's "Planning in progress" button, which is the only route into the planning window
+   * while a run owns the block. Narrowing it to `working` would drop that route for the whole of
+   * the analysis and fall through to a "Run planning" button for a run already running.
+   *
+   * The two phases are distinguished INSIDE the window, where there is room to say which is which;
+   * the affordance is the same either way.
+   */
+  const interviewing = computed(
+    () => interviewPhase.value === 'working' || interviewPhase.value === 'preparing',
+  )
 
   /**
    * The planner's parked plan-approval gate, or undefined. `pl_initiative` gates the planner step

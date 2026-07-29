@@ -19,7 +19,11 @@
 import { computed, reactive, watch } from 'vue'
 import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
-import { interviewGatePhase } from '~/utils/interviewGate'
+import {
+  DOC_INTERVIEWER_KIND,
+  interviewGatePhase,
+  interviewStepReached,
+} from '~/utils/interviewGate'
 
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
@@ -63,7 +67,13 @@ const resuming = computed(() => docInterview.resuming)
  * actually says, so the questions come back rather than the window sticking on a spinner.
  */
 const phase = computed(() =>
-  resuming.value ? 'working' : interviewGatePhase(session.value?.status, run.value?.status),
+  resuming.value
+    ? 'working'
+    : interviewGatePhase(
+        session.value?.status,
+        run.value?.status,
+        interviewStepReached(run.value, DOC_INTERVIEWER_KIND),
+      ),
 )
 /** The interview converged: the synthesized authoring brief is what the window shows. */
 const converged = computed(() => phase.value === 'converged')
@@ -133,10 +143,21 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
           {{ t('docInterview.intro') }}
         </p>
 
+        <!-- The run is still ahead of the interview (the researcher + outliner steps). Same
+             chrome, different claim: nothing has been asked yet, so the "working on your answers"
+             copy below would describe answers that do not exist. -->
+        <InterviewGateNotice
+          v-if="phase === 'preparing'"
+          variant="working"
+          :title="t('docInterview.preparing')"
+          :hint="t('docInterview.preparingHint')"
+          testid="doc-interview-preparing"
+        />
+
         <!-- A pass is running: the human is waiting on the interviewer. Without this the window is
              byte-identical to the parked state and the submit reads as a no-op. -->
         <InterviewGateNotice
-          v-if="phase === 'working'"
+          v-else-if="phase === 'working'"
           variant="working"
           :title="t('docInterview.working')"
           :hint="t('docInterview.workingHint')"
