@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { showOverrideField } from '~/utils/uiMode'
 
 // Per-service (frame) post-release-health mapping: which observability monitors/SLOs the
 // `post-release-health` gate watches after this service's PRs ship. Keyed by THIS block's
@@ -11,6 +12,7 @@ const props = defineProps<{ block: Block }>()
 
 const store = useReleaseHealthStore()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
 const toast = useToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -20,6 +22,14 @@ const draft = reactive({ monitorIds: '', sloIds: '', envTag: '' })
 
 const connected = computed(() => store.connection.connected)
 const saved = computed(() => store.configForBlock(props.block.id))
+
+// Post-release health is an ADVANCED-tier concern: with no mapping the gate is a pass-through,
+// so basic mode hides the whole section rather than showing a service-level knob whose absence
+// changes nothing. `showOverrideField` (not a bare `isAdvanced`) because the mapping is per
+// SERVICE and durable — once a teammate on the advanced tier maps monitors onto this frame,
+// hiding the panel would leave a basic-mode user with releases being watched (and an on-call
+// agent that can spawn) by a configuration they can neither see nor clear.
+const show = computed(() => showOverrideField(uiMode.isAdvanced, saved.value))
 
 function parseIds(csv: string): string[] {
   return csv
@@ -91,6 +101,7 @@ async function clear() {
 
 <template>
   <InspectorSection
+    v-if="show"
     :title="t('inspector.releaseHealth.title')"
     :hint="t('inspector.releaseHealth.sectionHint')"
   >

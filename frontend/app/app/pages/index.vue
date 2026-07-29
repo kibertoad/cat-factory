@@ -89,6 +89,9 @@ const ModelPresetHealthModal = defineAsyncComponent(
 const IntegrationsHub = defineAsyncComponent(
   () => import('~/components/layout/IntegrationsHub.vue'),
 )
+const ModelProvidersHub = defineAsyncComponent(
+  () => import('~/components/layout/ModelProvidersHub.vue'),
+)
 const PersonalSetupModal = defineAsyncComponent(
   () => import('~/components/layout/PersonalSetupModal.vue'),
 )
@@ -429,6 +432,7 @@ watch(
       <RiskPolicyHealthModal v-if="ui.riskPolicyHealthOpen" />
       <ModelPresetHealthModal v-if="ui.modelPresetHealthOpen" />
       <IntegrationsHub v-if="ui.integrationsOpen" />
+      <ModelProvidersHub v-if="ui.modelProvidersOpen" />
       <PersonalSetupModal v-if="ui.personalSetupOpen" />
       <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
       <AccountSettingsPanel v-if="ui.accountSettingsOpen" />

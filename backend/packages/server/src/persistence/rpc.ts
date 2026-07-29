@@ -63,6 +63,9 @@ const ERROR_STATUS: Record<PersistenceErrorCode, number> = {
   conflict: 409,
   credential_required: 428,
   forbidden: 403,
+  unavailable: 503,
+  unauthorized: 401,
+  rate_limited: 429,
   unknown_method: 400,
   internal: 500,
 }

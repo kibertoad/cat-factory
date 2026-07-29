@@ -36,6 +36,18 @@ Key shape decisions:
   park/signal spine `ReviewGateController` uses, rather than in a parallel review table.
 - **A blocked spawned item halts only its own phase** (non-terminal; siblings keep running) and
   raises a notification; a human retries/skips it to unstick the initiative.
+- **The planning run is an ORDINARY run and is surfaced as one.** `pl_initiative` is a normal
+  pipeline of normal agent steps, so the initiative block gets the same run surfaces a task does:
+  the inspector's execution panel (step list, live phases, step-detail drill-down, Stop / Discard
+  run) and the Focus view. Only the way a run is STARTED differs — an initiative block accepts
+  exactly one pipeline, so it keeps a single "Run planning" control instead of the pipeline picker,
+  on all three surfaces (board card, inspector, Focus).
+- **A re-run re-interviews: the interviewer gate implements the spine's `resetForFreshRun`.** The
+  entity outlives any one run, so on a fresh entry it drops the previous run's round bookkeeping and
+  still-pending questions, keeping the answered + dismissed digest (which is also where a preset
+  form's seeded exchanges live). Without it a run that burned its rounds leaves the entity at
+  `interview.round >= maxRounds`, so the next run's first pass is force-converged and the human is
+  never asked anything again — a wedged plan that no re-run could unwedge.
 
 ## Rationale
 
@@ -61,7 +73,10 @@ Key shape decisions:
 ## Consequences
 
 - An initiative spans exactly one service frame / repo — cross-repo initiatives are out of scope.
-- Deleting an initiative block does not cascade the entity row.
+- Deleting the initiative block IS how an initiative is deleted: the removal cascade reclaims the
+  entity row with it, and the tasks the loop already spawned survive (they are not descendants —
+  only their membership link is detached). The inspector's delete control therefore names the
+  initiative, not the frame it hangs off.
 - Reshaping the policy's pipeline-selection **rules** is not editable from the UI — only the two
   scalar knobs (`maxConcurrent`, `defaultPipelineId`) are inline-editable; changing the rules
   requires re-running `pl_initiative` to re-plan.

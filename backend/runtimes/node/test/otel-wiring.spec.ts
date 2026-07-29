@@ -89,7 +89,11 @@ describe('Node facade: inline OpenTelemetry instrumentation wiring', () => {
       {} as NodeJS.ProcessEnv,
       undefined,
       undefined,
-      { traceSink: shared, recordPrompts: true },
+      {
+        traceSink: shared,
+        recordPrompts: true,
+        workspaceBodiesEnabled: () => Promise.resolve(true),
+      },
     )
     const provider = await resolver.forScope(scope)
     expect(provider).toBeInstanceOf(InstrumentedModelProvider)

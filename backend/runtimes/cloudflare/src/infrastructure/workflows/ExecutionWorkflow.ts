@@ -6,7 +6,7 @@ import {
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
 import type { AgentFailureKind } from '@cat-factory/kernel'
-import { redactSecrets } from '@cat-factory/kernel'
+import { getErrorReason, redactSecrets } from '@cat-factory/kernel'
 import type { AdvanceResult } from '@cat-factory/orchestration'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
@@ -64,15 +64,27 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     // thousands/day a 30s busy-loop would accrue toward the Workflows per-instance limit.
     const pauseRecheckTimeout = decisionTimeout
 
+    // `reason` is NOT optional decoration: the SPA's `AgentFailureCard` branches on it to
+    // render the machine-readable remedies (the "Connect GitHub" jump action, the
+    // deploy-runner hint). This helper used to omit the parameter entirely, so every
+    // failure path on the DEPLOYED runtime discarded the reason the runtime-neutral
+    // `drive.ts` twin has always forwarded — those remedies could never fire in production
+    // (observability-logging-gaps.md, B3). Keep the signature in step with `drive.ts`'s
+    // `fail`; a divergence here is invisible until a user needs the remedy.
     const failRun = async (
       i: number,
       message: string,
       kind: AgentFailureKind = 'agent',
       detail: string | null = null,
+      reason: string | null = null,
     ): Promise<void> => {
-      log.warn(`failing run: ${message}`, { step: i, failureKind: kind })
+      log.warn(`failing run: ${message}`, {
+        step: i,
+        failureKind: kind,
+        ...(reason ? { reason } : {}),
+      })
       await step.do(`fail-${i}`, () =>
-        container.executionService.failRun(workspaceId, executionId, message, kind, detail),
+        container.executionService.failRun(workspaceId, executionId, message, kind, detail, reason),
       )
     }
 
@@ -209,8 +221,18 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           }),
         )) as AdvanceResult
       } catch (error) {
-        // Retries exhausted: persist the failure and open the block for review.
-        await failRun(i, error instanceof Error ? error.message : String(error))
+        // Retries exhausted: persist the failure and open the block for review. A thrown
+        // `DomainError` carries its machine-readable `details.reason` (e.g. a
+        // `providers_unconfigured` conflict), which is exactly the class of failure the SPA
+        // has a remedy for — `getErrorReason` is the read-side dual that lifts it onto the
+        // run rather than leaving the user with prose to string-match.
+        await failRun(
+          i,
+          error instanceof Error ? error.message : String(error),
+          'agent',
+          null,
+          getErrorReason(error) ?? null,
+        )
         return
       }
 
@@ -242,7 +264,13 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // An inline gate may carry the precise classification + diagnostic (e.g. an
         // unparseable companion verdict → `companion_rejected` with its raw reply as
         // detail); record those instead of the generic container-failure framing.
-        await failRun(i, result.error, result.failureKind ?? 'job_failed', result.detail ?? null)
+        await failRun(
+          i,
+          result.error,
+          result.failureKind ?? 'job_failed',
+          result.detail ?? null,
+          result.reason ?? null,
+        )
         return
       }
 
@@ -250,7 +278,11 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       // automatic fresh-container restart, so the eviction is deterministic: fail
       // the run as `evicted` (its hint points at the container logs / instance size).
       if (result.kind === 'job_evicted') {
-        await failRun(i, result.error, 'evicted')
+        // Record the transport's container post-mortem as the failure detail, as `drive.ts`
+        // does — the container is already reclaimed, so this is the only surviving account
+        // of why it died. Dropping it here made an eviction unfalsifiable on the runtime
+        // where containers actually run.
+        await failRun(i, result.error, 'evicted', result.detail ?? null)
         return
       }
 

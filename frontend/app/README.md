@@ -56,10 +56,10 @@ over the WebSocket. How that sync works is written up in
 ## Interface modes (basic / advanced)
 
 The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday
-surface: the run/pipeline options that only exist to override a workspace-level default are
-left at that default, and the nav is trimmed to the destinations that are the **only route**
-to their capability. `advanced` shows everything. The tier resolves in a fixed order, first
-match wins:
+**delivery** surface — plan work on a board, run it, review and merge it: the run/pipeline
+options that only exist to override a workspace-level default are left at that default, and
+the nav is trimmed to what that loop needs. `advanced` shows everything. The tier resolves in
+a fixed order, first match wins:
 
 1. **`NUXT_PUBLIC_UI_MODE`** (`basic` | `advanced`) — the deployment pin. Like
    `NUXT_PUBLIC_API_BASE` it is baked in at **build** time (`ssr: false`), and while it is
@@ -82,20 +82,32 @@ hoc where it can be avoided:
 - **A nav destination** declares `advanced: true` in `app/modular/nav-contributions.ts`. The
   shared `navSlotFilter` drops it in basic mode across all three shells (sidebar, command
   palette, toolbar), independently of its RBAC `gate` — both must pass. A consumer module's
-  own contributions take the same flag. The bar for setting it is **route count, not how
-  advanced the surface feels**: hiding the only way to reach a capability removes the
-  capability from the tier, while hiding a shortcut into a surface a basic destination also
-  opens removes nothing. So the flag belongs on a surface that sits beside the delivery path
-  (Sandbox, Kaizen), on a palette shortcut into a Workspace-settings tab, or on a knob the
-  Integrations hub already offers — and never on a sole route (the pipeline builder, the
-  fragment library, the infrastructure/PREnv windows, the operator + reports views).
-  `nav-contributions.spec.ts` pins the advanced set against a table of each item's
-  alternative route, so promoting one forces that claim to be written down.
+  own contributions take the same flag. The bar is **whether the everyday delivery loop needs
+  it**, and marking an item does one of two distinguishable things:
+  - **Reached another way** — a shortcut whose surface a basic destination also opens, so
+    nothing is lost (the Merge / Service-best-practices palette entries into Workspace
+    settings, the local-models knob the Model providers hub already offers).
+  - **Out of the tier** — the sole route, hidden on purpose, so the capability is _absent_
+    from basic mode and the tier switch is the way to it (Sandbox, Kaizen, repo bootstrap,
+    and the deployment-wide operator + reports rollups).
+
+  Sole-route items stay in basic when the delivery loop runs on them: the pipeline builder,
+  add-from-repo, the fragment library, the infrastructure/PREnv windows, and the workspace /
+  model configuration a run actually reads. `nav-contributions.spec.ts` pins the advanced set
+  against a table naming each item's kind and reason, so promoting one forces that claim to be
+  written down rather than assumed.
+
 - **A less-used option inside a surface** reads `useUiModeStore().isAdvanced`. Hide, never
   disable, and only ever hide an OVERRIDE: what remains must be exactly the default the hidden
   field would have shown, so a basic-mode user never gets different behaviour from an advanced
   one — only fewer choices. An input nothing else supplies (the pipeline, the apriori branches)
   stays in both tiers however advanced it feels.
+- **A whole AUTHORING affordance** may be tier-scoped the same way — the frame header's
+  recurring-schedule and initiative buttons are advanced-only — but only while the tier hides
+  the ability to CREATE, never the ability to SEE. Existing state has to stay legible in basic
+  mode through its normal surfaces (a live schedule still badges its task card and opens its
+  inspector panel; an initiative is still a block on the board with its own inspector), or the
+  tier turns into a way for a user to be acted on by configuration they cannot find.
 - **An override control on an EXISTING entity gates on `showOverrideField(isAdvanced, …values)`**
   (`app/utils/uiMode.ts`) rather than on `isAdvanced` alone. Hiding an override is only safe
   while it is unset — always true for a creation form, never guaranteed for a block that a
@@ -141,8 +153,35 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   by every VCS provider), `vcs` (the GitLab personal-access-token connect),
   `bootstrap`, `documents`, `tasks`, `requirements` (review), `scenarios`
   (acceptance), and `fragments` (the prompt-fragment library).
+- **Model providers** — `ModelProvidersHub.vue`, the sibling hub for the ENGINES
+  (OpenRouter, vendor keys, personal subscriptions, own-machine runners). Kept out
+  of the Integrations hub on purpose: an integration is optional context in or
+  output out, while a provider is what executes the work, so a deployment with none
+  connected runs nothing at all. **A new provider-shaped connection belongs here,
+  never in `IntegrationsHub.vue`.** Both hubs, plus the user-scoped `PersonalSetupModal`,
+  share the `IntegrationBackTitle` Back control, which returns to whichever hub set
+  its came-from marker (`ui.cameFrom{Integrations,ModelProviders,Personal}`) — a panel
+  reachable from more than one hub must not hard-code its return.
 - **Auth** (`components/auth`) — `AuthGate` / `LoginScreen` / `UserMenu`; the app
   is gated when the backend requires sign-in.
+
+## Where a surface lives
+
+Two placements are load-bearing enough to state, because putting a new one in the
+wrong place is invisible until a user cannot find it:
+
+- **The sidebar section is a claim about what the destination IS.** `models` is the
+  engines, `integrations` the optional systems, `infrastructure` where agent
+  containers and test environments run, `configuration` workspace/account settings.
+  `nav-contributions.spec.ts` pins the section order and each section's membership.
+- **A flow that edits ONE entity's config is a section of the window that owns that
+  config, not a sibling nav entry.** The guided Docker Compose environment setup
+  (`ComposeEnvironmentSetupSection.vue` → `EnvironmentSetupWizard.vue`) lives inside
+  Infrastructure → Test environments for exactly this reason: it writes a service's
+  Compose recipe plus the workspace's Compose handler, both configured in that tab.
+  It also carries a full "how it works / when you need this / when you can skip it"
+  explanation there rather than a one-line hint, since the decision to run it has to
+  be made before opening a five-minute wizard.
 
 ## Develop & test
 

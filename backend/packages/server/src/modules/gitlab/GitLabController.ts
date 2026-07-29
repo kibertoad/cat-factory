@@ -10,14 +10,16 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the per-workspace VCS PAT connect service, or null when GitLab connect is unconfigured. */
 function requireVcsConnect<E extends AppEnv>(c: Context<E>): VcsPatConnectionService | null {
   return c.get('container').vcsConnectionService ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'GitLab integration is not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('GitLab integration is not configured')
+}
 
 /**
  * Workspace-scoped GitLab connect endpoints: the per-workspace PAT connect flow, the analogue of
@@ -34,7 +36,7 @@ export function gitlabController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getGitLabConnectionContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
+    if (!vcs) return unavailable()
     const connection = await vcs.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
@@ -43,7 +45,7 @@ export function gitlabController(): Hono<AppEnv> {
   // seal it, and persist the workspace's GitLab connection. Idempotent per workspace.
   buildHonoRoute(app, connectGitLabContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
+    if (!vcs) return unavailable()
     const { pat } = c.req.valid('json')
     const connection = await vcs.connect(param(c, 'workspaceId'), pat)
     return c.json(connection, 201)
@@ -51,7 +53,7 @@ export function gitlabController(): Hono<AppEnv> {
 
   buildHonoRoute(app, disconnectGitLabContract, async (c) => {
     const vcs = requireVcsConnect(c)
-    if (!vcs) return unavailable(c)
+    if (!vcs) return unavailable()
     await vcs.disconnect(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

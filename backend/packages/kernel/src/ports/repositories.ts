@@ -233,6 +233,28 @@ export interface PreloadedBlocks {
   blocks: Block[]
 }
 
+/**
+ * The execution statuses that count as LIVE: a run in one of these has not settled, holds its
+ * block, and occupies a workspace concurrency slot. Shared by {@link ExecutionRepository.listLive}
+ * and {@link ExecutionRepository.countActiveByWorkspace} in BOTH runtime repos, so the projection
+ * and the capacity COUNT cannot drift apart into a cap checked against a set the board disagrees
+ * with (`docs/initiatives/run-admission-control.md`).
+ *
+ * It is the complement of the terminal statuses over {@link ExecutionStatus}, so a new status has
+ * to be classified here rather than silently falling out of both reads.
+ *
+ * NOT to be reused for the `insertLive` cleanup/ON CONFLICT predicates. Those mirror the frozen
+ * partial unique index `uniq_live_execution_per_block`, whose predicate lives in shipped
+ * migrations and can only change by migrating both stores — pointing them at a constant a later
+ * slice may edit would silently retarget an ON CONFLICT at a predicate no index matches. Same
+ * literal today, different invariant.
+ */
+export const LIVE_EXECUTION_STATUSES = [
+  'running',
+  'blocked',
+  'paused',
+] as const satisfies readonly ExecutionStatus[]
+
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
   /**
@@ -242,9 +264,33 @@ export interface ExecutionRepository {
    * blocks) and `resumePaused` (needs the paused runs' ids), both of which previously loaded
    * and JSON-decoded EVERY historical run in the workspace via {@link listByWorkspace} only to
    * discard all but the handful of live rows — so this scales with concurrency, not run history.
-   * Served by the `(workspace_id, kind, status)` index. Empty when no run is live.
+   * Served by the `(workspace_id, kind, status)` index. Empty when no run is live. The predicate
+   * is {@link LIVE_EXECUTION_STATUSES}, shared with {@link countActiveByWorkspace}.
    */
   listLive(workspaceId: string): Promise<LiveRunSummary[]>
+  /**
+   * How many of the workspace's execution runs currently OCCUPY A CONCURRENCY SLOT, as one
+   * SQL `COUNT` over the same `(workspace_id, kind, status)` index {@link listLive} rides.
+   * Backs run admission control: the cap check in front of the durable driver reads a number,
+   * never a row set, so it costs the same whether the workspace has three live runs or three
+   * hundred (`docs/initiatives/run-admission-control.md`).
+   *
+   * "Active" is deliberately the SAME predicate as {@link listLive} — the shared
+   * {@link LIVE_EXECUTION_STATUSES}, so the two cannot drift by editing one query. `blocked`
+   * (parked on a human decision) and `paused` (spend-paused) are in it: a parked run has no
+   * container in flight, but it holds its block and resumes WITHOUT passing admission again, so
+   * excluding it would let a workspace exceed its cap simply by parking — every parked run that
+   * resumes lands on top of whatever was admitted in its place.
+   *
+   * The two stay one set only while "not settled" and "occupies a slot" mean the same thing. The
+   * `queued` state slice 2 introduces is the first that splits them (queued runs are pre-admission
+   * — they must never be counted here, or nothing is ever promoted), and it is what turns this
+   * shared constant into two; see the initiative's gotchas before adding a status.
+   *
+   * Scoped to `kind = 'execution'`, so a live bootstrap job sharing the `agent_runs` table is
+   * never counted against a run cap it has nothing to do with.
+   */
+  countActiveByWorkspace(workspaceId: string): Promise<number>
   /**
    * Every execution belonging to a service, regardless of which workspace it ran under.
    * Backs the board snapshot for a service mounted from another workspace in the same org,

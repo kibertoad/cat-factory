@@ -36,6 +36,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
 - `auth/` — HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
+- `http/errorHandler.ts` — the ONE `app.onError` both facades mount. A controller signals a
+  refusal by THROWING a kernel `DomainError`; the handler maps its `code` to a status and emits
+  `{ error: { code, message, details? } }`. **Do not hand-roll that envelope** — a literal
+  `c.json({ error: { code: 'unavailable', … } }, 503)` structurally cannot carry the
+  machine-readable `details.reason` the SPA maps to translated copy. The full vocabulary is
+  `NotFoundError` (404) / `ValidationError` (422) / `ConflictError` (409) /
+  `CredentialRequiredError` (428) / `ForbiddenError` (403) / `UnavailableError` (503) /
+  `UnauthorizedError` (401) / `RateLimitedError` (429). A controller-local
+  `const unavailable = (): never => { throw new UnavailableError(…) }` keeps the call sites
+  reading `return unavailable()` — `never` is assignable to any declared response type.
+  The one deliberate exception is a handler that flattens distinct causes ON PURPOSE because
+  the distinction is an ORACLE (password reset: "no such token" vs "expired" vs "used").
 - `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
   `requireWorkspacePermission` — the admin-tier controller middleware) and `optionalJsonBody`
