@@ -24,6 +24,14 @@
 -- edit, a repo resync, a re-resolved living Confluence/Notion page) and the brief is
 -- regenerated, which is how "regenerate when the source document changes" needs no change feed.
 --
+-- An EMPTY `brief` is a real, load-bearing state: "this exact body was condensed and the result
+-- was not usable" (the model returned nothing, was cut short by the output budget, or handed
+-- back a restatement that saved nothing). It exists so a standard that cannot be usefully
+-- shortened — an ordinary outcome for a generator told to keep every rule — is not re-condensed
+-- on every implementer dispatch for the rest of its life. It self-clears: edit the standard and
+-- `body_fingerprint` stops matching. `FragmentBriefService` is its only writer; the read side is
+-- kernel's `isNotCondensableMarker`.
+--
 -- Scope is the (owner_kind, owner_id) of the tier that WON the merge for that id, so a row is
 -- bound to a tenant exactly like the fragment it condenses. A `builtin`-tier entry owns no row
 -- of its own and is scoped to the resolving workspace's ACCOUNT, so a deployment-wide standard

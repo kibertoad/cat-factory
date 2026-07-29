@@ -70,7 +70,9 @@ class FakeBriefRepository implements FragmentBriefRepository {
 function fakeGenerator(over: Partial<FragmentBriefGenerator> = {}): FragmentBriefGenerator {
   return {
     enabled: true,
-    generate: vi.fn(async () => ({ brief: 'Terse restatement.', model: 'fake:small' })),
+    generate: vi.fn(
+      async () => ({ outcome: 'brief', brief: 'Terse restatement.', model: 'fake:small' }) as const,
+    ),
     ...over,
   }
 }
@@ -239,7 +241,7 @@ describe('FragmentBriefService.resolveBriefs', () => {
     const generator = fakeGenerator({
       generate: vi.fn(async (_ws: string, input: { title: string }) => {
         if (input.title === 'Bad') throw new Error('model refused')
-        return { brief: 'Terse.', model: 'fake:small' }
+        return { outcome: 'brief', brief: 'Terse.', model: 'fake:small' } as const
       }),
     })
     const briefs = await service(generator, createRecordingLogger()).resolveBriefs('ws1', [
@@ -248,6 +250,81 @@ describe('FragmentBriefService.resolveBriefs', () => {
     ])
     expect(briefs.get('good')).toBe('Terse.')
     expect(briefs.has('bad')).toBe(false)
+  })
+
+  // ---- a standard that cannot be usefully condensed -----------------------------------
+  // The generator is told to return the text near its original length rather than drop a
+  // rule, so "not condensable" is an ORDINARY outcome — and it is the one that hits the
+  // longest standards, which are exactly the ones this feature exists for. It must be
+  // remembered, or those standards re-pay for a model call on every implementer dispatch.
+
+  const notCondensable = () =>
+    fakeGenerator({
+      generate: vi.fn(
+        async () =>
+          ({ outcome: 'not-condensable', model: 'fake:small', reason: 'no shorter' }) as const,
+      ),
+    })
+
+  it('RECORDS a refusal against the body, so the next dispatch does not re-ask', async () => {
+    const generator = notCondensable()
+    const logger = createRecordingLogger()
+    const svc = service(generator, logger)
+
+    const first = await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(first.size).toBe(0)
+    expect(generator.generate).toHaveBeenCalledTimes(1)
+    // A row exists and carries the marker plus the fingerprint of the body it refused.
+    expect(repo.rows).toHaveLength(1)
+    expect(repo.rows[0]?.brief).toBe('')
+    expect(repo.rows[0]?.model).toBe('fake:small')
+
+    const second = await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(second.size).toBe(0)
+    expect(generator.generate).toHaveBeenCalledTimes(1)
+    // Silence would read as "the feature is on" while every implementer gets full bodies.
+    expect(logger.lines.some((l) => l.msg.includes('not condensable'))).toBe(true)
+  })
+
+  it('re-attempts once the standard itself is rewritten', async () => {
+    // The marker is scoped to a BODY, so a curator who edits the standard gets a fresh
+    // attempt with no manual reset and no operator surface.
+    const generator = notCondensable()
+    const svc = service(generator, createRecordingLogger())
+    await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(generator.generate).toHaveBeenCalledTimes(1)
+
+    await svc.resolveBriefs('ws1', [{ entry: entry(), body: `${LONG_BODY} Also: measure first.` }])
+    expect(generator.generate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT record a marker when the generator throws', async () => {
+    // The distinction the port exists for: a provider blip must be retried, never remembered
+    // as "this standard cannot be condensed" — that would disable the feature for a fragment
+    // on the strength of one bad minute.
+    const generator = fakeGenerator({
+      generate: vi.fn(async () => {
+        throw new Error('provider unreachable')
+      }),
+    })
+    const svc = service(generator, createRecordingLogger())
+    await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(repo.rows).toEqual([])
+
+    await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+    expect(generator.generate).toHaveBeenCalledTimes(2)
+  })
+
+  it('lets a curator override a recorded refusal by linking their own brief', async () => {
+    const generator = notCondensable()
+    const svc = service(generator, createRecordingLogger())
+    await svc.resolveBriefs('ws1', [{ entry: entry(), body: LONG_BODY }])
+
+    const briefs = await svc.resolveBriefs('ws1', [
+      { entry: entry({ brief: 'Hand-written.' }), body: LONG_BODY },
+    ])
+    expect(briefs.get('org.standard')).toBe('Hand-written.')
+    expect(generator.generate).toHaveBeenCalledTimes(1)
   })
 })
 

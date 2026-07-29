@@ -60,26 +60,43 @@ gets one **generated once and reused**, **regenerated whenever the standard's bo
   tenant exactly like the fragment it condenses, which is what lets the persistence RPC bind it
   with the existing `owner` rule. A `builtin`-tier entry owns no row, so its condensation is
   paid for once per account rather than once per board.
-- **Every failure folds the FULL BODY.** No model wired, an unreadable store, a refused or
-  over-long condensation — all land on the pre-feature behaviour. A brief is an optimisation of
-  how a standard is STATED; nothing here may change what it REQUIRES.
+- **Every failure folds the FULL BODY.** No model wired, an unreadable store, a refused
+  condensation — all land on the pre-feature behaviour. A brief is an optimisation of how a
+  standard is STATED; nothing here may change what it REQUIRES.
+- **"This standard cannot be usefully condensed" is an ORDINARY outcome, and it is REMEMBERED.**
+  The generator's own safety rule tells the model to return the text near its original length
+  rather than drop a rule, so a refusal is the expected answer for a standard that is all
+  obligations — and those are the LONGEST standards, the ones the feature exists for. The
+  refusal is persisted against the body's fingerprint (an empty `brief`, read back by
+  `isNotCondensableMarker`), so the full text is folded with no further model call. It clears
+  itself: edit the standard and the fingerprint no longer matches. Without this, the standards
+  worth condensing most re-pay for a wasted call on **every implementer dispatch, forever**.
+- **A TRANSIENT failure is deliberately NOT remembered.** `FragmentBriefGenerator.generate`
+  returns `not-condensable` for a model that answered unusably and THROWS for a provider or
+  configuration failure. Collapsing the two forces a choice between re-paying forever and
+  disabling condensation for a fragment on the strength of one bad minute.
+- **Usability is a RATIO, never a fixed character count.** `isUsableBrief` accepts a
+  condensation at most `FRAGMENT_BRIEF_MAX_BODY_RATIO` (0.6) of its body, under an absolute
+  ceiling that only an uncapped document-backed page can reach. A fixed cap gets the top of the
+  range exactly backwards: it refuses a 20k standard condensed to 5k — a 4x per-turn saving,
+  the best outcome available — while accepting a 2k standard "condensed" to 1.9k.
 
 ## Status
 
 **Shipped** in one slice. The pieces:
 
-| Layer         | What landed                                                                                                          |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- |
-| kernel domain | `domain/fragment-brief.ts` — the threshold, the body fingerprint, and `resolveFragmentBrief`'s four outcomes         |
-| kernel ports  | `PromptFragmentRecord.brief`, `ResolvedCatalogEntry.briefScope`, `FragmentBriefRepository`, `FragmentBriefGenerator` |
-| contracts     | `create`/`updatePromptFragmentSchema` accept `brief` (`''` unlinks); `PromptFragment.brief` doc corrected            |
-| agents        | `FragmentBriefService` (resolve + generate + persist), `LlmFragmentBriefGenerator`, `prompts/fragment-brief.ts`      |
-| agents        | `mergeCatalog` carries a managed row's `brief` + each entry's `briefScope`; `brief:` frontmatter for repo files      |
-| orchestration | `fragmentBriefRepository` / `fragmentBriefGenerator` deps; verbosity threaded from `AgentContextBuilder`             |
-| persistence   | D1 `0069_fragment_briefs.sql` ⇄ Drizzle `fragment_briefs` + `prompt_fragments.brief`, both repositories              |
-| mothership    | `fragmentBriefRepository` allow-listed `remote` under the `owner` / `ownerField` rules, with refusal tests           |
-| conformance   | generate → reuse → regenerate-on-change, the linked brief, and "a full-verbosity kind never condenses"               |
-| SPA           | the library editor's short-version field, gated by `showOverrideField` (hidden while unset in basic mode)            |
+| Layer         | What landed                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| kernel domain | `domain/fragment-brief.ts` — threshold, body fingerprint, `isUsableBrief`'s ratio rule, `resolveFragmentBrief`'s five outcomes                    |
+| kernel ports  | `PromptFragmentRecord.brief`, `ResolvedCatalogEntry.briefScope`, `FragmentBriefRepository`, `FragmentBriefGenerator`                              |
+| contracts     | `create`/`updatePromptFragmentSchema` accept `brief` (`''` unlinks); `PromptFragment.brief` doc corrected                                         |
+| agents        | `FragmentBriefService` (resolve + generate + persist, incl. the not-condensable marker), `LlmFragmentBriefGenerator`, `prompts/fragment-brief.ts` |
+| agents        | `mergeCatalog` carries a managed row's `brief` + each entry's `briefScope`; `brief:` frontmatter for repo files                                   |
+| orchestration | `fragmentBriefRepository` / `fragmentBriefGenerator` deps; verbosity threaded from `AgentContextBuilder`                                          |
+| persistence   | D1 `0069_fragment_briefs.sql` ⇄ Drizzle `fragment_briefs` + `prompt_fragments.brief`, both repositories                                           |
+| mothership    | `fragmentBriefRepository` allow-listed `remote` under the `owner` / `ownerField` rules, with refusal tests                                        |
+| conformance   | generate → reuse → regenerate-on-change, the remembered refusal, the linked brief, and "a full-verbosity kind never condenses"                    |
+| SPA           | the library editor's short-version field, gated by `showOverrideField` (hidden while unset in basic mode)                                         |
 
 ## Conventions & gotchas
 
@@ -89,9 +106,21 @@ gets one **generated once and reused**, **regenerated whenever the standard's bo
   and instructs the model to return the text near its original length rather than lose a rule.
   Editing that prompt changes what every implementer is held to — treat it like a versioned
   agent prompt.
-- **An over-long generation is REFUSED, never truncated.** A brief cut mid-sentence is a standard
-  whose last rule trails off, which is worse than folding the full body — so `cleanBrief` returns
-  empty above the cap and the caller degrades.
+- **A generation cut short by the output budget is REFUSED, never stored.** A brief truncated
+  mid-sentence is a standard whose last rule trails off, and it can land comfortably UNDER the
+  size bound (a reasoning model can spend most of `maxOutputTokens` on its private channel), so
+  no downstream check would catch it. The generator therefore inspects `finishReason` directly —
+  the same disposition `IterativeReviewService` gives a length-truncated incorporation document,
+  for the same reason: never persist a silently-incomplete text that later readers treat as
+  authoritative.
+- **`cleanBrief` normalises; it does not judge.** It unwraps a fence and strips a leading label,
+  and that is all. The size rule lives once, in kernel's `isUsableBrief`, so no caller can get a
+  silently shortened standard back from the normaliser.
+- **Duplicate generation is accepted, deliberately.** Two dispatches racing on the same fresh
+  standard both condense and both upsert; it costs one extra cheap call and converges (same
+  fingerprint, same row shape). The claim-table pattern used for the tracker/review posts guards
+  a duplicated EXTERNAL side effect — here the only cost of losing the race is the call a claim
+  round trip would also spend.
 - **A store-read failure must not read as "nothing generated yet."** It would re-condense every
   oversized standard on every dispatch for as long as the store is down. `loadStored` distinguishes
   the two and folds full bodies on an outage.

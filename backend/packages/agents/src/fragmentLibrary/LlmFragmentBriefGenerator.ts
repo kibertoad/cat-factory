@@ -1,11 +1,12 @@
 import type {
+  FragmentBriefGeneration,
   FragmentBriefGenerator,
   FragmentBriefGeneratorInput,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
-import { ValidationError, resolveScopedModelProvider } from '@cat-factory/kernel'
+import { ValidationError, isUsableBrief, resolveScopedModelProvider } from '@cat-factory/kernel'
 import { generateText } from 'ai'
 import { catFactoryObservability } from '../providers/instrumented.js'
 import {
@@ -17,6 +18,12 @@ import {
 // The inline LLM {@link FragmentBriefGenerator}: condenses one long best-practice standard
 // into the terse variant implementer kinds fold every turn. Sits beside `LlmFragmentSelector`
 // (the other inline model call this library owns) so every facade composes the same one.
+//
+// It distinguishes the two ways a condensation can come to nothing, because they need
+// opposite handling: a provider/config failure THROWS (retried next dispatch), while a model
+// that answered unusably returns `not-condensable` (recorded, never re-attempted for that
+// body). Whether the answer is usable is the KERNEL's rule (`isUsableBrief`) — this file owns
+// only how the model is called.
 
 export interface LlmFragmentBriefGeneratorDependencies {
   /** Resolve a {@link ModelProvider} for the run's workspace scope (DB key pool). */
@@ -28,14 +35,15 @@ export interface LlmFragmentBriefGeneratorDependencies {
 }
 
 /**
- * How much output a condensation may produce. Sized off the wire cap on a LINKED brief
- * (4,000 chars ≈ 1,000 tokens) plus headroom for a reasoning model's private channel, so a
- * generated brief can never be longer than one a curator is allowed to author by hand.
+ * How much output one condensation may produce, reasoning channel included.
+ *
+ * This is a BUDGET, not a correctness bound — the bound on what may be stored is the kernel's
+ * ratio rule. Sized so a standard at the 20k wire cap on `body` has room for a faithful
+ * condensation well past the ~quarter the prompt aims for. A body large enough to exhaust it
+ * (only a document-backed page can be) comes back `finishReason: 'length'` and is recorded
+ * `not-condensable` rather than stored half-written.
  */
 const MAX_BRIEF_OUTPUT_TOKENS = 4000
-
-/** Hard ceiling on the stored brief, matching `updatePromptFragmentSchema`'s `brief` cap. */
-export const MAX_GENERATED_BRIEF_CHARS = 4000
 
 export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
   constructor(private readonly deps: LlmFragmentBriefGeneratorDependencies) {}
@@ -47,13 +55,15 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
   async generate(
     workspaceId: string,
     input: FragmentBriefGeneratorInput,
-  ): Promise<{ brief: string; model: string }> {
+  ): Promise<FragmentBriefGeneration> {
     const provider = await resolveScopedModelProvider({ workspaceId }, this.deps)
     const ref = this.deps.modelRef
     if (!provider || !ref) {
       throw new ValidationError('No model is configured for fragment-brief generation')
     }
+    const model = `${ref.provider}:${ref.model}`
     let text: string
+    let finishReason: string
     try {
       const result = await generateText({
         model: provider.resolve(ref),
@@ -70,36 +80,50 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
         }),
       })
       text = result.text
+      finishReason = result.finishReason
     } catch (e) {
+      // Transient: the provider is what failed, not the standard. Throwing keeps it out of
+      // the store so the next dispatch tries again.
       throw new ValidationError(
-        `Fragment-brief generation (${ref.provider}:${ref.model}) failed: ${
+        `Fragment-brief generation (${model}) failed: ${
           e instanceof Error ? e.message : String(e)
         }`,
       )
     }
-    const brief = cleanBrief(text)
-    if (!brief) {
-      throw new ValidationError(
-        `Fragment-brief generation (${ref.provider}:${ref.model}) returned an empty brief`,
-      )
+    // A reply cut off by the output budget is a standard whose last rule trails off — and it
+    // can land UNDER the size bound, so nothing downstream would catch it. Same disposition
+    // the incorporation loop gives a length-truncated document (`IterativeReviewService`):
+    // never persist a silently-incomplete text that later readers treat as authoritative.
+    if (finishReason === 'length') {
+      return {
+        outcome: 'not-condensable',
+        model,
+        reason: 'the condensation was cut short by the output budget',
+      }
     }
-    return { brief, model: `${ref.provider}:${ref.model}` }
+    const brief = cleanBrief(text)
+    if (!isUsableBrief(brief, input.body)) {
+      return {
+        outcome: 'not-condensable',
+        model,
+        reason: brief
+          ? 'the condensation was not materially shorter than the standard'
+          : 'the model returned an empty condensation',
+      }
+    }
+    return { outcome: 'brief', brief, model }
   }
 }
 
 /**
- * Normalise the model's reply into a storable brief: strip a wrapping code fence and a
- * leading label, then clamp to {@link MAX_GENERATED_BRIEF_CHARS}.
- *
- * The clamp is a REFUSAL, not a truncation: a brief cut mid-sentence would be folded into an
- * implementer's prompt as a standard whose last rule trails off, which is worse than folding
- * the full body. An over-long reply means the condensation did not condense, so it is
- * rejected (empty ⇒ the caller falls back to the full body) rather than salvaged.
+ * Normalise the model's reply into the candidate brief: strip a wrapping code fence and a
+ * leading label. Whether what remains is USABLE is the kernel's call (`isUsableBrief`), not
+ * this function's — it neither truncates nor rejects, so there is exactly one place the size
+ * rule lives and no way for a caller to get a silently shortened standard back.
  */
 export function cleanBrief(raw: string): string {
   let text = raw.trim()
   const fenced = /^```[^\n]*\n([\s\S]*?)\n?```$/.exec(text)
   if (fenced?.[1]) text = fenced[1].trim()
-  text = text.replace(/^(condensed standard|brief)\s*[:-]\s*/i, '').trim()
-  return text.length > MAX_GENERATED_BRIEF_CHARS ? '' : text
+  return text.replace(/^(condensed standard|brief)\s*[:-]\s*/i, '').trim()
 }

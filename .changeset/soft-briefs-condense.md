@@ -27,6 +27,14 @@ living document invalidates it and the next coding dispatch re-condenses — no 
 the same mechanism covers all three. Reviewer and planner kinds are untouched: they read the full
 standard, and never trigger a condensation.
 
+A standard that cannot be usefully shortened is a normal outcome — the generator is told to keep
+every rule even where that means returning the text near its original length — so that verdict is
+recorded against the body too, and the full standard is folded without asking again until someone
+edits it. A provider failure is deliberately not recorded, so a bad minute never disables
+condensation for a fragment. Whether a condensation is usable is judged as a proportion of the
+standard it condenses rather than a fixed length, so a very long standard condensed well is
+accepted while a short one restated at almost full length is not.
+
 Adds `prompt_fragments.brief` and a `fragment_briefs` table on both runtimes. No shipped built-in
 reaches the threshold, so the built-in catalog is unchanged; a deployment with no model wired
 folds full bodies exactly as before, as does every failure on the path — a brief changes how a

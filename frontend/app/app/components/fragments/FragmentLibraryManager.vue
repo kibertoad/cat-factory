@@ -180,6 +180,7 @@ function startEdit(f: (typeof library.fragments)[number]) {
     brief: f.brief ?? '',
     tags: (f.tags ?? []).join(', '),
   }
+  showEditBrief.value = showOverrideField(uiMode.isAdvanced, f.brief ?? null)
 }
 function cancelEdit() {
   editDraft.value = null
@@ -195,10 +196,14 @@ const editValid = computed(
 // long standard automatically, fold a short one in full), so it follows the override rule:
 // hidden in basic mode while unset, revealed as soon as the fragment carries one — a
 // basic-mode curator is never left unable to see or clear a brief a teammate linked.
+//
+// Both flags are LATCHED at the moment the form opens rather than tracking the live draft.
+// Recomputing per keystroke makes the control delete itself the instant a basic-mode curator
+// empties it — mid-edit, under the cursor, on the one interaction (clearing, to hand the
+// standard back to auto-generation) the rule exists to keep reachable.
 const uiMode = useUiModeStore()
-function showBriefField(current: string): boolean {
-  return showOverrideField(uiMode.isAdvanced, current || null)
-}
+const showEditBrief = ref(false)
+const showDraftBrief = computed(() => showOverrideField(uiMode.isAdvanced, null))
 
 async function saveEdit() {
   const d = editDraft.value
@@ -717,7 +722,7 @@ async function unlinkSource(id: string) {
               :placeholder="t('fragments.authored.bodyPlaceholder')"
               :rows="4"
             />
-            <div v-if="showBriefField(editDraft.brief)" class="flex flex-col gap-1">
+            <div v-if="showEditBrief" class="flex flex-col gap-1">
               <UTextarea
                 v-model="editDraft.brief"
                 :placeholder="t('fragments.authored.briefPlaceholder')"
@@ -823,7 +828,7 @@ async function unlinkSource(id: string) {
               :placeholder="t('fragments.authored.bodyPlaceholder')"
               :rows="4"
             />
-            <div v-if="showBriefField(draft.brief)" class="flex flex-col gap-1">
+            <div v-if="showDraftBrief" class="flex flex-col gap-1">
               <UTextarea
                 v-model="draft.brief"
                 :placeholder="t('fragments.authored.briefPlaceholder')"

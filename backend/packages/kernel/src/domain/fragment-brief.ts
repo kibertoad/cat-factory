@@ -22,6 +22,15 @@ import { contentHash } from '../shared/markdown.logic.js'
 // condensation round-trip would cost more than it saves, and every condensation risks
 // losing a rule. Below the threshold the full `body` is folded for every kind, which is
 // byte-for-byte the pre-feature behaviour.
+//
+// A third stored state exists and is load-bearing: NOT-CONDENSABLE. The generator's own
+// safety rule tells the model to return text close to the original length rather than drop
+// a rule, so "this standard cannot be usefully shortened" is an ORDINARY outcome, not an
+// error — and it has to be REMEMBERED against the body that produced it. Without that, the
+// standards most worth condensing (the longest ones, the ones whose faithful condensation
+// stays long) re-pay a wasted model call on every single implementer dispatch, forever.
+// It is persisted as an EMPTY `brief` beside the body's fingerprint; see
+// {@link isNotCondensableMarker}.
 // ---------------------------------------------------------------------------
 
 /**
@@ -49,6 +58,60 @@ export function bodyWarrantsBrief(body: string): boolean {
   return body.trim().length >= FRAGMENT_BRIEF_MIN_BODY_CHARS
 }
 
+/**
+ * The largest a generated brief may be RELATIVE to the body it condenses. A brief exists to
+ * cut what an implementer re-sends every turn, so the only question that decides whether a
+ * generation is usable is "did it actually shorten the standard" — which is a RATIO, never a
+ * fixed character count. An absolute cap pinned to the hand-authored wire limit gets this
+ * exactly backwards at the top of the range: it refuses a 20k standard condensed to 5k (a 4x
+ * per-turn saving, the single best outcome this feature can produce) while happily accepting
+ * a 2k standard "condensed" to 1.9k.
+ *
+ * 0.6 is deliberately loose. The generator aims for ~a quarter, so anything near the target
+ * passes comfortably; this bound is here to catch the model handing back a restatement that
+ * saves nothing — at which point folding the full body is strictly better, since it is the
+ * text nobody had to trust a condensation of.
+ */
+export const FRAGMENT_BRIEF_MAX_BODY_RATIO = 0.6
+
+/**
+ * Absolute ceiling on a stored brief, independent of the ratio. Only reachable for a
+ * document-backed body of ~33k+ chars (a linked Confluence/Notion page, which no wire schema
+ * caps), and present purely so one pathological page cannot write an unbounded row and then
+ * fold it into every implementer turn.
+ */
+export const FRAGMENT_BRIEF_MAX_CHARS = 20_000
+
+/**
+ * Whether a model's condensation is usable AS a brief — the domain rule, kept here rather
+ * than in the provider adapter because "did this actually condense the standard" is a
+ * property of the two texts, not of how the model was called.
+ *
+ * A rejection is not a failure to retry: it is the answer for this body (see the
+ * NOT-CONDENSABLE state above). The caller records it against the body's fingerprint and
+ * folds the full text.
+ */
+export function isUsableBrief(brief: string, body: string): boolean {
+  const condensed = brief.trim()
+  const original = body.trim()
+  if (!condensed) return false
+  if (condensed.length > FRAGMENT_BRIEF_MAX_CHARS) return false
+  return condensed.length <= original.length * FRAGMENT_BRIEF_MAX_BODY_RATIO
+}
+
+/**
+ * Whether a stored row records a condensation that was ATTEMPTED and came back unusable,
+ * rather than a brief to fold. Encoded as an empty `brief` beside a real fingerprint.
+ *
+ * The empty string is a sentinel with exactly ONE writer (`FragmentBriefService`, after a
+ * generation the domain rejected), which is what keeps it honest — a status column would add
+ * schema surface to both runtimes to express a binary the row can already carry, on a table
+ * whose whole contract is that it holds derived data safe to drop and re-derive.
+ */
+export function isNotCondensableMarker(stored: StoredFragmentBrief): boolean {
+  return stored.brief.trim().length === 0
+}
+
 /** A previously generated brief as the resolver reads it back. */
 export interface StoredFragmentBrief {
   brief: string
@@ -64,6 +127,12 @@ export type FragmentBriefResolution =
   | { kind: 'generated'; brief: string }
   /** The body is short enough that the full text is folded for every kind. */
   | { kind: 'body-below-threshold' }
+  /**
+   * THIS body was already condensed and the result was unusable. Fold the full text and do
+   * NOT call a model again — the answer will not change until the standard itself does, at
+   * which point the fingerprint stops matching and this becomes a `generate`.
+   */
+  | { kind: 'not-condensable' }
   /** No brief yet, or the stored one condensed a body this fragment no longer has. */
   | { kind: 'generate'; bodyFingerprint: string }
 
@@ -86,7 +155,10 @@ export function resolveFragmentBrief(input: {
   if (!bodyWarrantsBrief(input.body)) return { kind: 'body-below-threshold' }
   const bodyFingerprint = fragmentBodyFingerprint(input.body)
   const stored = input.stored
-  if (stored && stored.bodyFingerprint === bodyFingerprint && stored.brief.trim()) {
+  if (stored && stored.bodyFingerprint === bodyFingerprint) {
+    // The row is ABOUT this exact body, so it is the answer either way: a brief to fold, or
+    // the record that condensing this text produced nothing worth folding.
+    if (isNotCondensableMarker(stored)) return { kind: 'not-condensable' }
     return { kind: 'generated', brief: stored.brief.trim() }
   }
   return { kind: 'generate', bodyFingerprint }

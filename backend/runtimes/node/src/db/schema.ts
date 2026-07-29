@@ -684,6 +684,9 @@ export const promptFragments = pgTable(
 // shadow/tombstone semantics. Scoped by the owner of the tier that won the merge (a builtin-tier
 // entry is scoped to the resolving workspace's account), so a row is bound to a tenant exactly
 // like the fragment it condenses. The PK leads with the owner pair, which is the only read shape.
+// An EMPTY `brief` is a real state — "this body was condensed and the result was unusable" — kept
+// so a standard that cannot be usefully shortened is not re-condensed on every dispatch forever;
+// it self-clears when `body_fingerprint` stops matching. See the D1 0069 header for the full rule.
 export const fragmentBriefs = pgTable(
   'fragment_briefs',
   {

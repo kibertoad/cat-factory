@@ -54,6 +54,27 @@ export interface FragmentBriefGeneratorInput {
 }
 
 /**
+ * What one condensation attempt produced. The two members are the DURABLE outcomes — the
+ * ones that are the answer for this body until the body itself changes, so the caller
+ * persists both against its fingerprint. A transient failure is NOT a member here: it
+ * THROWS, precisely so it is retried on the next dispatch instead of being remembered.
+ *
+ * Keeping "the model answered, and its answer is not usable as a brief" out of the throw
+ * channel is what lets the two be told apart at all. Collapsed into one, the caller must
+ * choose between re-paying for a standard that will never condense (every dispatch, forever)
+ * and permanently disabling condensation for a fragment whose provider merely blipped.
+ */
+export type FragmentBriefGeneration =
+  /** A usable condensation. Stored and folded in place of the body. */
+  | { outcome: 'brief'; brief: string; model: string }
+  /**
+   * The model answered, but the answer cannot serve as a brief — empty, cut short by the
+   * output budget, or not materially shorter than the standard it was asked to condense.
+   * Recorded against the body so the full text is folded WITHOUT another model call.
+   */
+  | { outcome: 'not-condensable'; model: string; reason: string }
+
+/**
  * Condenses one standard's body into a brief. Implemented by the inline LLM helper in
  * `@cat-factory/agents`; optional everywhere, so a deployment with no model wired simply
  * folds full bodies for implementer kinds — the pre-feature behaviour.
@@ -62,12 +83,15 @@ export interface FragmentBriefGenerator {
   /** Whether a provider AND a model ref are wired; false ⇒ never called. */
   readonly enabled: boolean
   /**
-   * Condense `input` for `workspaceId`'s credential scope. Throws on an unresolved model
-   * or an unusable generation — the caller treats any failure as "no brief this run" and
-   * folds the full body, so a condensation outage never changes what a standard REQUIRES.
+   * Condense `input` for `workspaceId`'s credential scope.
+   *
+   * Returns a {@link FragmentBriefGeneration} for either durable outcome. THROWS only for a
+   * transient or configuration failure (no model resolved, the provider call errored) — the
+   * caller swallows that as "no brief this run" and folds the full body, so a condensation
+   * outage never changes what a standard REQUIRES and never poisons the store.
    */
   generate(
     workspaceId: string,
     input: FragmentBriefGeneratorInput,
-  ): Promise<{ brief: string; model: string }>
+  ): Promise<FragmentBriefGeneration>
 }

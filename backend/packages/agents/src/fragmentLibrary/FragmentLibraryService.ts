@@ -357,6 +357,10 @@ export class FragmentLibraryService implements FragmentResolver {
       await this.briefs?.forget(ownerKind, ownerId, fragmentId)
       return
     }
+    // A pure tombstone over an INHERITED id (no row of this tier's own to delete). Nothing to
+    // forget here on purpose: any generated brief for that id belongs to the tier that still
+    // owns it — a built-in's lives at the account scope — and suppressing it on one board must
+    // not delete the condensation its siblings are still folding.
     await this.repo.upsert({
       fragmentId,
       ownerKind,

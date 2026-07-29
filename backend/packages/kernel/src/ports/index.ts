@@ -310,6 +310,7 @@ export type {
 export type {
   FragmentBriefRecord,
   FragmentBriefRepository,
+  FragmentBriefGeneration,
   FragmentBriefGenerator,
   FragmentBriefGeneratorInput,
 } from './fragment-brief.js'

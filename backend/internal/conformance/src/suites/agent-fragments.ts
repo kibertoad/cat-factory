@@ -319,7 +319,11 @@ export function defineAgentFragmentConformance(harness: ConformanceHarness): voi
             enabled: true,
             generate: async (_workspaceId, input) => {
               calls += 1
-              return { brief: `CONDENSED-${input.body.slice(0, 9)}-${calls}`, model: 'fake:small' }
+              return {
+                outcome: 'brief',
+                brief: `CONDENSED-${input.body.slice(0, 9)}-${calls}`,
+                model: 'fake:small',
+              }
             },
           },
         },
@@ -361,6 +365,63 @@ export function defineAgentFragmentConformance(harness: ConformanceHarness): voi
       expect(calls).toBe(2)
     })
 
+    it('REMEMBERS a standard that cannot be condensed, and re-attempts once it is edited', async () => {
+      // The generator is told to keep every rule even if that means returning the text near
+      // its original length, so "not condensable" is an ordinary outcome — and it lands on the
+      // longest standards, the ones this feature exists for. Unremembered, each of those
+      // re-pays for a model call on every implementer dispatch forever. Asserted per runtime
+      // because the memory IS a stored row: the marker has to round-trip D1 and Postgres.
+      let calls = 0
+      const app = harness.makeApp(
+        { echoFragments: true, echoFragmentBriefs: true },
+        {
+          fragmentBriefGenerator: {
+            enabled: true,
+            generate: async () => {
+              calls += 1
+              return { outcome: 'not-condensable', model: 'fake:small', reason: 'no shorter' }
+            },
+          },
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
+        id: 'db.irreducible',
+        title: 'Irreducible standard',
+        summary: 'A standard whose every line is an obligation.',
+        body: longBody('FIRST-REV'),
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        fragmentIds: ['db.irreducible'],
+      })
+
+      // The full body is folded — no brief — and the refusal is recorded.
+      const first = await runCoder(app, wsId)
+      expect(first.output).toContain('[briefs]db.irreducible=[/briefs]')
+      expect(calls).toBe(1)
+
+      // The recorded refusal is read back: same outcome, no second condensation paid for.
+      const second = await runCoder(app, wsId)
+      expect(second.output).toContain('[briefs]db.irreducible=[/briefs]')
+      expect(calls).toBe(1)
+
+      // Editing the standard clears it — the marker is scoped to a BODY, not to a fragment,
+      // so a rewrite earns a fresh attempt with no operator surface to reset.
+      const edited = await app.call(
+        'PATCH',
+        `/workspaces/${wsId}/prompt-fragments/db.irreducible`,
+        {
+          body: longBody('SECOND-RV'),
+        },
+      )
+      expect(edited.status).toBe(200)
+
+      await runCoder(app, wsId)
+      expect(calls).toBe(2)
+    })
+
     it('never condenses for a kind that folds full standards', async () => {
       // `architect` is code-aware but carries no `brief-standards` trait, so it receives the
       // full body — and must not spend a condensation call producing text it would discard.
@@ -372,7 +433,7 @@ export function defineAgentFragmentConformance(harness: ConformanceHarness): voi
             enabled: true,
             generate: async () => {
               calls += 1
-              return { brief: 'CONDENSED', model: 'fake:small' }
+              return { outcome: 'brief', brief: 'CONDENSED', model: 'fake:small' }
             },
           },
         },

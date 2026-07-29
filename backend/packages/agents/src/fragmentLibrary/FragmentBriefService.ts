@@ -52,6 +52,12 @@ function scopeKey(ownerKind: FragmentOwnerKind, ownerId: string): string {
   return `${ownerKind}:${ownerId}`
 }
 
+/**
+ * The stored `brief` of a row that records "this body was condensed and the result was not
+ * usable" (kernel's `isNotCondensableMarker` reads it back). This service is its ONLY writer.
+ */
+const NOT_CONDENSABLE = ''
+
 export class FragmentBriefService {
   private readonly repo: FragmentBriefRepository
   private readonly generator?: FragmentBriefGenerator
@@ -105,6 +111,8 @@ export class FragmentBriefService {
         authoredBrief: candidate.entry.brief,
         stored: stored.get(`${scopeKey(ownerKind, ownerId)}|${candidate.entry.id}`) ?? null,
       })
+      // `not-condensable` lands here as neither: this exact body was already condensed and
+      // the result was unusable, so the full text is folded WITHOUT a second model call.
       if (decision.kind === 'generated') briefs.set(candidate.entry.id, decision.brief)
       else if (decision.kind === 'generate') {
         toGenerate.push({ candidate, bodyFingerprint: decision.bodyFingerprint })
@@ -115,29 +123,53 @@ export class FragmentBriefService {
     if (toGenerate.length === 0 || !generator?.enabled) return briefs
 
     // Bounded fan-out: only the oversized standards THIS dispatch folds, and only the ones
-    // whose stored brief is missing or stale — in the steady state, none.
+    // with no record against their CURRENT body — in the steady state, none.
+    //
+    // Deliberately NOT claim-guarded. Two dispatches racing on the same fresh standard both
+    // condense and both upsert, which costs one extra cheap call and converges (same
+    // fingerprint, identical row shape). A claim table with a TTL — the shape used for the
+    // tracker/review posts — earns its keep against a duplicated EXTERNAL side effect; here
+    // the only cost of losing the race is the call itself, which is the thing a claim round
+    // trip would also spend.
     const generated = await Promise.all(
       toGenerate.map(({ candidate, bodyFingerprint }) =>
         runBestEffort(
           this.log,
           'fragment brief generation',
           async () => {
-            const { brief, model } = await generator.generate(workspaceId, {
+            const result = await generator.generate(workspaceId, {
               title: candidate.entry.title,
               body: candidate.body,
               ...(candidate.entry.summary ? { summary: candidate.entry.summary } : {}),
             })
+            // Both outcomes are persisted against the body's fingerprint. Recording the
+            // refusal is what stops a standard that cannot be usefully shortened — which is
+            // an ORDINARY result of a generator told to keep every rule — from re-paying for
+            // a model call on every implementer dispatch for the rest of its life. It clears
+            // itself: edit the standard and the fingerprint no longer matches.
+            const brief = result.outcome === 'brief' ? result.brief : NOT_CONDENSABLE
             const record: FragmentBriefRecord = {
               ownerKind: candidate.entry.briefScope.ownerKind,
               ownerId: candidate.entry.briefScope.ownerId,
               fragmentId: candidate.entry.id,
               bodyFingerprint,
               brief,
-              model,
+              model: result.model,
               generatedAt: this.clock.now(),
             }
             await this.repo.upsert(record)
-            return { id: candidate.entry.id, brief }
+            if (result.outcome === 'not-condensable') {
+              // Not a failure — but silence here reads as "the feature is on" while every
+              // implementer keeps getting full bodies, so say which standard and why once.
+              this.log.info('fragment brief not condensable; folding the full standard', {
+                workspaceId,
+                fragmentId: candidate.entry.id,
+                reason: result.reason,
+                model: result.model,
+              })
+              return undefined
+            }
+            return { id: candidate.entry.id, brief: result.brief }
           },
           { workspaceId, fragmentId: candidate.entry.id },
         ),

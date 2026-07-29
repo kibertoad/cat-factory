@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FRAGMENT_BRIEF_MAX_CHARS,
   FRAGMENT_BRIEF_MIN_BODY_CHARS,
   bodyWarrantsBrief,
   fragmentBodyFingerprint,
+  isUsableBrief,
   resolveFragmentBrief,
 } from './fragment-brief.js'
 
@@ -81,12 +83,72 @@ describe('resolveFragmentBrief', () => {
     ).toEqual({ kind: 'generate', bodyFingerprint: fragmentBodyFingerprint(LONG) })
   })
 
-  it('regenerates rather than folding an empty stored brief', () => {
+  it('reads an empty stored brief as NOT-CONDENSABLE, so the model is not called again', () => {
+    // The marker: this exact body was condensed and came back unusable. Folding the full
+    // standard is the answer until the standard itself changes — re-asking would re-pay for
+    // the same refusal on every implementer dispatch, forever.
     expect(
       resolveFragmentBrief({
         body: LONG,
         stored: { brief: '  ', bodyFingerprint: fragmentBodyFingerprint(LONG) },
-      }).kind,
-    ).toBe('generate')
+      }),
+    ).toEqual({ kind: 'not-condensable' })
+  })
+
+  it('clears the not-condensable marker when the standard is edited', () => {
+    // The marker is scoped to a BODY, never to a fragment: a curator who rewrites the
+    // standard gets a fresh attempt with no manual reset.
+    expect(
+      resolveFragmentBrief({
+        body: LONG,
+        stored: { brief: '', bodyFingerprint: fragmentBodyFingerprint('an older body') },
+      }),
+    ).toEqual({ kind: 'generate', bodyFingerprint: fragmentBodyFingerprint(LONG) })
+  })
+
+  it('lets an authored brief override a not-condensable marker', () => {
+    expect(
+      resolveFragmentBrief({
+        body: LONG,
+        authoredBrief: 'Hand-written.',
+        stored: { brief: '', bodyFingerprint: fragmentBodyFingerprint(LONG) },
+      }),
+    ).toEqual({ kind: 'authored', brief: 'Hand-written.' })
+  })
+})
+
+describe('isUsableBrief', () => {
+  const body = 'x'.repeat(10_000)
+
+  it('accepts a condensation that is materially shorter', () => {
+    expect(isUsableBrief('y'.repeat(2_500), body)).toBe(true)
+  })
+
+  it('rejects a restatement that saved nothing', () => {
+    // The generator is told to return the text near its original length rather than drop a
+    // rule, so this is an ordinary outcome — and folding the full body is strictly better
+    // than folding a same-size text nobody verified.
+    expect(isUsableBrief('y'.repeat(9_000), body)).toBe(false)
+  })
+
+  it('rejects an empty condensation', () => {
+    expect(isUsableBrief('   ', body)).toBe(false)
+  })
+
+  it('scales with the body, so a big standard condensed well is NOT refused', () => {
+    // The bug this rule replaced: a fixed 4k cap refused a 20k standard condensed to 5k — a
+    // 4x per-turn saving, the best outcome the feature can produce — while accepting a 2k
+    // standard "condensed" to 1.9k.
+    const big = 'x'.repeat(20_000)
+    expect(isUsableBrief('y'.repeat(5_000), big)).toBe(true)
+    expect(isUsableBrief('y'.repeat(5_000), 'x'.repeat(8_000))).toBe(false)
+  })
+
+  it('applies an absolute ceiling for an uncapped document-backed body', () => {
+    // A linked Confluence/Notion page has no wire cap, so the ratio alone would admit an
+    // unbounded row that is then folded into every implementer turn.
+    const huge = 'x'.repeat(200_000)
+    expect(isUsableBrief('y'.repeat(FRAGMENT_BRIEF_MAX_CHARS + 1), huge)).toBe(false)
+    expect(isUsableBrief('y'.repeat(FRAGMENT_BRIEF_MAX_CHARS), huge)).toBe(true)
   })
 })

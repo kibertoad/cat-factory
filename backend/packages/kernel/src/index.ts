@@ -366,9 +366,13 @@ export {
   contentHash,
 } from './shared/markdown.logic.js'
 export {
+  FRAGMENT_BRIEF_MAX_BODY_RATIO,
+  FRAGMENT_BRIEF_MAX_CHARS,
   FRAGMENT_BRIEF_MIN_BODY_CHARS,
   bodyWarrantsBrief,
   fragmentBodyFingerprint,
+  isNotCondensableMarker,
+  isUsableBrief,
   resolveFragmentBrief,
 } from './domain/fragment-brief.js'
 export type { FragmentBriefResolution, StoredFragmentBrief } from './domain/fragment-brief.js'
