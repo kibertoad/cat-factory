@@ -299,7 +299,9 @@
         "focus": "レビューの重点",
         "focusPlaceholder": "例: 認証の変更とエラー処理に注目",
         "derivedTitle": "{ref} をレビュー",
-        "derivedTitleFallback": "プルリクエストをレビュー"
+        "derivedTitleFallback": "プルリクエストをレビュー",
+        "prNotFound": "プルリクエスト #{number} はこのサービスのリポジトリで見つかりませんでした。番号を確認するか、そのプルリクエストがあるリポジトリをサービスに紐付けてください。",
+        "prRepoMismatch": "そのプルリクエストは別のリポジトリにあります。このサービスは {repo} をレビューします。プルリクエストのリポジトリに紐付いたサービスの下にレビュータスクを作成してください。"
       }
     },
     "recurring": {
@@ -943,6 +945,12 @@
       "complexity": "複雑度",
       "risk": "リスク",
       "impact": "影響度"
+    },
+    "reviewTarget": {
+      "title": "レビュー対象のプルリクエスト",
+      "hint": "このタスクがレビューする既存のプルリクエスト。",
+      "prNumber": "PR #{number}",
+      "focus": "重点: {focus}"
     },
     "execution": {
       "title": "実行",

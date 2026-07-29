@@ -792,6 +792,29 @@ export class FetchGitLabClient implements VcsClient {
    * The MR's current description — GitLab's analogue of a PR body — for the verification
    * report's read-splice-write upsert.
    */
+  /**
+   * A merge request by iid — the projection plus its `web_url` — or null when the project has NO
+   * such MR (a 404). Any other failure throws, so "does not exist" stays distinguishable from
+   * "could not be read": the review-task create validation refuses only on the former, and never
+   * turns a GitLab outage into a false "no such merge request".
+   */
+  async getPullRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null> {
+    try {
+      const { json } = await this.request(
+        `/projects/${projectPath(ref)}/merge_requests/${number}`,
+        { connection },
+      )
+      return this.toOpenedMergeRequest(ref, json)
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   async getPullRequestBody(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

@@ -2,6 +2,7 @@ import {
   type Block,
   type CreateReviewInput,
   type ExecutionInstance,
+  type OpenedPullRequest,
   type PrReviewStepState,
   type RepoFiles,
   type WorkspaceSnapshot,
@@ -600,6 +601,52 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       expect(recorder.posted).toHaveLength(1)
       expect(recorder.posted![0]!.input.comments).toHaveLength(0)
       expect(recorder.posted![0]!.input.body).toContain('branch was updated')
+    })
+
+    // Creation-time validation of the review TARGET, driven through the same run-repo seam every
+    // facade wires. Both halves matter: the refusal (a typo'd number never becomes a run with
+    // nothing to review) and the canonical url the task records for the inspector to link.
+    it('refuses a review task whose PR the provider reports as absent, and canonicalises one it confirms', async () => {
+      const { call, createWorkspace } = harness.makeApp(
+        {},
+        {
+          resolveRunRepoContext: async () => ({
+            repo: {
+              ...makeReviewRepo({}),
+              // Only #42 exists on this repo; everything else is a positive "no such PR".
+              getPullRequest: async (number: number) =>
+                number === 42
+                  ? ({ number, url: 'https://github.com/o/r/pull/42' } as OpenedPullRequest)
+                  : null,
+            },
+            baseBranch: 'main',
+            repoId: 'repo_1',
+            owner: 'o',
+            name: 'r',
+          }),
+        },
+      )
+      const { workspace } = await createWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      const missing = await call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Review a PR that never existed',
+        taskType: 'review',
+        taskTypeFields: { prNumber: 4242 },
+      })
+      expect(missing.status).toBe(422)
+      expect(
+        (missing.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
+      ).toBe('review_pr_not_found')
+
+      // A bare number that DOES resolve is accepted and rewritten to the provider's own link.
+      const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Review PR #42',
+        taskType: 'review',
+        taskTypeFields: { prNumber: 42 },
+      })
+      expect(created.status).toBe(201)
+      expect(created.body.taskTypeFields?.prUrl).toBe('https://github.com/o/r/pull/42')
     })
   })
 }

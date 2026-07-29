@@ -69,6 +69,17 @@ export interface RepoFiles {
    */
   openPullRequest(input: OpenPullRequestInput): Promise<OpenedPullRequest>
   /**
+   * A pull request by number — the projection plus its web `url` — or null when the repo has NO
+   * such PR. Any OTHER read failure throws, which is what makes this usable as an EXISTENCE probe:
+   * `review`-task creation refuses a PR reference the provider positively reports as absent, and a
+   * provider blip propagates instead of masquerading as "no such PR". The canonical `url` it
+   * returns is also what the created task records, so the inspector links the reviewed PR without
+   * reconstructing a provider-specific URL.
+   *
+   * Optional: a bound client that can't read a PR omits it, so the validation passes through.
+   */
+  getPullRequest?(number: number): Promise<OpenedPullRequest | null>
+  /**
    * The source (head) branch of a pull request by number, or null when the PR can't be read.
    * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
    * reviewed PR's head branch (a `review` task carries only the PR number). Optional: a bound

@@ -299,7 +299,9 @@
         "focus": "Zakres przeglądu",
         "focusPlaceholder": "np. skup się na zmianach uwierzytelniania i obsłudze błędów",
         "derivedTitle": "Przegląd {ref}",
-        "derivedTitleFallback": "Przegląd pull requesta"
+        "derivedTitleFallback": "Przegląd pull requesta",
+        "prNotFound": "Nie znaleziono pull requesta #{number} w repozytorium tej usługi. Sprawdź numer albo powiąż usługę z repozytorium, w którym znajduje się ten pull request.",
+        "prRepoMismatch": "Ten pull request jest w innym repozytorium. Ta usługa przegląda {repo}, więc utwórz zadanie przeglądu w usłudze powiązanej z repozytorium tego pull requesta."
       }
     },
     "recurring": {
@@ -943,6 +945,12 @@
       "complexity": "Złożoność",
       "risk": "Ryzyko",
       "impact": "Wpływ"
+    },
+    "reviewTarget": {
+      "title": "Przeglądany pull request",
+      "hint": "Istniejący pull request, który przegląda to zadanie.",
+      "prNumber": "PR #{number}",
+      "focus": "Zakres: {focus}"
     },
     "execution": {
       "title": "Wykonanie",

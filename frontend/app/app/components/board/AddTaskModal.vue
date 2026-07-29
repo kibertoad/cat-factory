@@ -28,6 +28,8 @@ import ContextAttachmentFields from '~/components/context/ContextAttachmentField
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
+import { apiErrorEnvelope } from '~/composables/api/errors'
+import type { ReviewTargetReason } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 
 const ui = useUiStore()
@@ -680,13 +682,41 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     }
     toast.add({
       title: t('board.addTask.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
+      description: reviewTargetMessage(e) ?? (e instanceof Error ? e.message : String(e)),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
   } finally {
     saving.value = false
   }
+}
+
+// The backend validates a review task's target PR against the service's repo before creating
+// anything, and refuses with a machine-readable reason. Map it to translated copy here (the
+// backend does not localize prose); an unrecognised failure keeps the raw message.
+// Exhaustive over the closed union, so a new reason fails the typecheck rather than silently
+// falling through to an English sentence from the server.
+// Each message names what the user got wrong, so a detail the backend didn't send would leave a
+// hole in the sentence: those cases return null and the server's own prose is shown instead.
+const REVIEW_TARGET_MESSAGES: Record<
+  ReviewTargetReason,
+  (details: Record<string, unknown>) => string | null
+> = {
+  review_pr_not_found: (d) =>
+    typeof d.prNumber === 'number'
+      ? t('board.addTask.review.prNotFound', { number: d.prNumber })
+      : null,
+  review_pr_repo_mismatch: (d) =>
+    typeof d.expected === 'string'
+      ? t('board.addTask.review.prRepoMismatch', { repo: d.expected })
+      : null,
+}
+
+function reviewTargetMessage(error: unknown): string | null {
+  const details = (apiErrorEnvelope(error)?.details ?? {}) as Record<string, unknown>
+  const reason = details.reason
+  if (typeof reason !== 'string') return null
+  return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
 }
 
 /** Turn a parsed review-debt friction 409 into the dialog context (see ReviewFrictionDialog.vue). */

@@ -207,6 +207,16 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null>
+  /**
+   * A pull request by number — the projection plus its web `url` — or null when the repo has NO
+   * such PR. Any other read failure throws, so "does not exist" stays distinguishable from "could
+   * not be read" (the review-task create validation refuses only on the former). Optional.
+   */
+  getPullRequest?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null>
   /** The source (head) branch of a PR, or null when the PR can't be read. Optional. */
   getPullRequestHeadRef?(
     connection: VcsConnectionRef,

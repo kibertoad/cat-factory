@@ -142,7 +142,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   the board.
 - **Inspector** (`components/panels` + `panels/inspector`) — per-block tabs:
   structure, dependencies, model + fragment picker, live execution, and linked
-  docs/issues/scenarios. Decisions resolve via `DecisionModal`.
+  docs/issues/scenarios. Decisions resolve via `DecisionModal`. A `review` task
+  additionally leads with `TaskReviewTarget`, linking the pull request it reviews —
+  distinct from the execution panel's link to the PR a run PRODUCED, which a review
+  task never has.
 - **Pipeline builder** (`components/pipeline`) — assemble/edit agent chains and
   watch `PipelineProgress`. `PipelinePicker` (+ its `PipelinePreview` pane) is the
   single way a pipeline is chosen anywhere — add-task, run settings, the recurring
