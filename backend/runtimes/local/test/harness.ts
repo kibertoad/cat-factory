@@ -169,6 +169,7 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -260,6 +261,7 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      fragmentBriefGenerator: o.fragmentBriefGenerator,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,

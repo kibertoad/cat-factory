@@ -27,7 +27,25 @@ import {
   mergeCatalog,
   toSelectable,
 } from './fragment-catalog.js'
+import type { FragmentBriefService } from './FragmentBriefService.js'
 import { slugFromPath } from './fragment-source.logic.js'
+
+/**
+ * How verbose a run's folded standards are, mirrored from `@cat-factory/agents`'
+ * `StandardsVerbosity` (declared structurally here so the library layer does not depend on
+ * the prompt-composition layer). Only a `brief` dispatch resolves condensed variants — an
+ * implementer kind is the whole reason they exist, and generating one for a reviewer's
+ * dispatch would pay for text that reviewer will never fold.
+ */
+export type FragmentStandardsVerbosity = 'full' | 'brief'
+
+/** Options for {@link FragmentLibraryService.resolveBodiesForRun}. */
+export interface ResolveBodiesOptions {
+  /** An already-resolved merged catalog, to avoid resolving the same tenant catalog twice. */
+  catalog?: ResolvedCatalogEntry[]
+  /** The dispatching kind's standards verbosity; defaults to `full`. */
+  verbosity?: FragmentStandardsVerbosity
+}
 
 export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository
@@ -69,6 +87,13 @@ export interface FragmentLibraryServiceDependencies {
    * fallback).
    */
   documentBodyCache?: GroupCacheHandle<DocumentContent>
+  /**
+   * Resolves (and, for a long standard with no linked short version, generates) the
+   * condensed variant an implementer dispatch folds. Absent ⇒ only AUTHORED briefs are
+   * folded and every other long standard is sent in full, which is the pre-feature
+   * behaviour rather than a degraded one.
+   */
+  briefService?: FragmentBriefService
 }
 
 /**
@@ -89,6 +114,7 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly documentResolver?: DocumentContentResolver
   private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
   private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
+  private readonly briefs?: FragmentBriefService
 
   constructor(deps: FragmentLibraryServiceDependencies) {
     this.repo = deps.promptFragmentRepository
@@ -99,6 +125,7 @@ export class FragmentLibraryService implements FragmentResolver {
     this.documentResolver = deps.documentContentResolver
     this.catalogCache = deps.catalogCache
     this.documentBodyCache = deps.documentBodyCache
+    this.briefs = deps.briefService
   }
 
   /**
@@ -134,6 +161,7 @@ export class FragmentLibraryService implements FragmentResolver {
       category: input.category?.trim() || null,
       summary: input.summary.trim(),
       body: input.body.trim(),
+      brief: input.brief?.trim() || null,
       appliesTo: input.appliesTo ?? null,
       tags: input.tags && input.tags.length ? input.tags : null,
       sourceId: null,
@@ -184,6 +212,10 @@ export class FragmentLibraryService implements FragmentResolver {
       category: input.category?.trim() || null,
       summary: buildExcerpt(content.body),
       body: content.body,
+      // A living document supplies no short version of itself, so a long page is condensed
+      // automatically — and re-condensed each time the page moves, since the stored brief is
+      // fingerprinted against the body that produced it.
+      brief: null,
       appliesTo: input.appliesTo ?? null,
       tags: input.tags && input.tags.length ? input.tags : null,
       sourceId: null,
@@ -270,6 +302,7 @@ export class FragmentLibraryService implements FragmentResolver {
       category: null,
       summary: '',
       body: '',
+      brief: null,
       appliesTo: null,
       tags: null,
       sourceId: null,
@@ -290,6 +323,9 @@ export class FragmentLibraryService implements FragmentResolver {
       category: patch.category !== undefined ? patch.category.trim() || null : base.category,
       summary: patch.summary?.trim() ?? base.summary,
       body: patch.body?.trim() ?? base.body,
+      // An explicit `''` UNLINKS the short version (handing the fragment back to
+      // auto-generation); omitting the key leaves whatever was linked before.
+      brief: patch.brief !== undefined ? patch.brief.trim() || null : base.brief,
       appliesTo: patch.appliesTo !== undefined ? patch.appliesTo : base.appliesTo,
       tags: patch.tags !== undefined ? (patch.tags.length ? patch.tags : null) : base.tags,
       updatedAt: now,
@@ -316,6 +352,9 @@ export class FragmentLibraryService implements FragmentResolver {
       await this.repo.softDelete(ownerKind, ownerId, fragmentId, now)
       await this.invalidateCatalogTier(ownerKind, ownerId)
       await this.invalidateDocumentBody(existing)
+      // The generated brief condenses a body this tier no longer serves — drop it with the
+      // fragment rather than leaving derived text behind a tombstone.
+      await this.briefs?.forget(ownerKind, ownerId, fragmentId)
       return
     }
     await this.repo.upsert({
@@ -327,6 +366,7 @@ export class FragmentLibraryService implements FragmentResolver {
       category: null,
       summary: '',
       body: '',
+      brief: null,
       appliesTo: null,
       tags: null,
       sourceId: null,
@@ -363,7 +403,10 @@ export class FragmentLibraryService implements FragmentResolver {
       accountId ? this.repo.listByOwner('account', accountId, true) : Promise.resolve([]),
       this.repo.listByOwner('workspace', workspaceId, true),
     ])
-    return mergeCatalog(this.builtins(), accountRows, workspaceRows)
+    return mergeCatalog(this.builtins(), accountRows, workspaceRows, {
+      accountId: accountId ?? null,
+      workspaceId,
+    })
   }
 
   /**
@@ -447,18 +490,24 @@ export class FragmentLibraryService implements FragmentResolver {
    * preserves the input order.
    *
    * A caller that has already resolved the merged catalog (e.g. to also read titles)
-   * may pass it in to avoid a second resolve of the same tenant catalog.
+   * may pass `options.catalog` to avoid a second resolve of the same tenant catalog.
+   *
+   * Under `options.verbosity: 'brief'` — an implementer dispatch — each standard also
+   * resolves the CONDENSED variant the prompt composer will fold in place of its body:
+   * the winning tier's linked `brief`, else a persisted model-generated one, generating
+   * (and storing) it here when a long standard has none or when the stored one condensed
+   * a body this fragment no longer has. See {@link FragmentBriefService}.
    */
   async resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
-    catalog?: ResolvedCatalogEntry[],
+    options: ResolveBodiesOptions = {},
   ): Promise<{ id: string; title: string; body: string; brief?: string }[]> {
     if (ids.length === 0) return []
-    const entries = catalog ?? (await this.resolveCatalog(workspaceId))
+    const entries = options.catalog ?? (await this.resolveCatalog(workspaceId))
     const byId = new Map(entries.map((e) => [e.id, e]))
 
-    const out: { id: string; title: string; body: string; brief?: string }[] = []
+    const resolved: { entry: ResolvedCatalogEntry; body: string }[] = []
     const seen = new Set<string>()
     for (const id of ids) {
       if (seen.has(id)) continue
@@ -468,13 +517,24 @@ export class FragmentLibraryService implements FragmentResolver {
       const body = entry.documentRef
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body
-      // Carry the human title so the prompt composer can render each standard as its own labelled
-      // block (and a code/PR reviewer can cite it by title in its adherence report), plus the
-      // WINNING tier's condensed variant (built-in only today) so the implementer-kind fold can
-      // never pair a tenant override's body with a built-in's brief.
-      out.push({ id, title: entry.title, body, ...(entry.brief ? { brief: entry.brief } : {}) })
+      resolved.push({ entry, body })
     }
-    return out
+
+    // Only an implementer dispatch folds condensed variants, so only it pays to resolve
+    // them; every other kind gets full bodies and never triggers a condensation.
+    const briefs =
+      options.verbosity === 'brief' && this.briefs
+        ? await this.briefs.resolveBriefs(workspaceId, resolved)
+        : new Map<string, string>()
+
+    // Carry the human title so the prompt composer can render each standard as its own labelled
+    // block (and a code/PR reviewer can cite it by title in its adherence report), plus the brief
+    // resolved ALONGSIDE this body — never re-looked-up by id downstream, so a tenant override's
+    // body can never be paired with a built-in's condensed text.
+    return resolved.map(({ entry, body }) => {
+      const brief = briefs.get(entry.id) ?? entry.brief ?? undefined
+      return { id: entry.id, title: entry.title, body, ...(brief ? { brief } : {}) }
+    })
   }
 
   /**
@@ -557,6 +617,7 @@ function recordToWire(record: PromptFragmentRecord): PromptFragment {
     summary: record.summary,
     body: record.body,
   }
+  if (record.brief) fragment.brief = record.brief
   if (record.appliesTo) fragment.appliesTo = record.appliesTo
   if (record.tags && record.tags.length) fragment.tags = record.tags
   if (record.sourceId && record.sourcePath !== null && record.sourceSha !== null) {

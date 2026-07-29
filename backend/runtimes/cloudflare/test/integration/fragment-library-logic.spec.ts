@@ -19,6 +19,7 @@ function record(over: Partial<PromptFragmentRecord>): PromptFragmentRecord {
     category: null,
     summary: 's',
     body: 'b',
+    brief: null,
     appliesTo: null,
     tags: null,
     sourceId: null,
@@ -44,6 +45,9 @@ const builtin: PromptFragment = {
   body: 'builtin body',
 }
 
+/** The resolving workspace + its account, needed only to place a builtin entry's brief scope. */
+const SCOPE = { accountId: 'a1', workspaceId: 'ws1' }
+
 describe('fragment catalog merge', () => {
   it('overrides built-in by id at the account tier, then the workspace tier', () => {
     const merged = mergeCatalog(
@@ -57,6 +61,7 @@ describe('fragment catalog merge', () => {
         }),
       ],
       [record({ fragmentId: 'node.performance', body: 'workspace body' })],
+      SCOPE,
     )
     const entry = merged.find((e) => e.id === 'node.performance')!
     expect(entry.tier).toBe('workspace')
@@ -68,6 +73,7 @@ describe('fragment catalog merge', () => {
       [builtin],
       [],
       [record({ fragmentId: 'node.performance', deletedAt: 5 })],
+      SCOPE,
     )
     expect(merged.map((e) => e.id)).not.toContain('node.performance')
   })
@@ -77,6 +83,7 @@ describe('fragment catalog merge', () => {
       [builtin],
       [record({ fragmentId: 'acc.only', ownerKind: 'account', ownerId: 'a1' })],
       [record({ fragmentId: 'ws.only' })],
+      SCOPE,
     )
     expect(merged.map((e) => e.id)).toEqual(['acc.only', 'node.performance', 'ws.only'])
   })

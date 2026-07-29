@@ -4935,6 +4935,8 @@
       "titlePlaceholder": "Başlık",
       "summaryPlaceholder": "Tek satırlık özet (seçici tarafından kullanılır)",
       "bodyPlaceholder": "Yönerge gövdesi (prompt'a enjekte edilir)",
+      "briefPlaceholder": "Kod ajanlarına verilen kısa sürüm (isteğe bağlı)",
+      "briefHint": "Uzun standartlar, onları her turda yeniden okuyan kod ajanları için otomatik olarak özetlenir. Bunun yerine kendi kısa sürümünüzü buraya bağlayın; otomatik sürüme dönmek için alanı boşaltın.",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (örn. backend, db)",
       "add": "Parça ekle",
       "generateTitle": "Oluştur",

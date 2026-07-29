@@ -27,6 +27,13 @@ export interface ParsedFragmentFile {
   category?: string
   summary: string
   body: string
+  /**
+   * The file's linked SHORT version (`brief:` frontmatter), folded for implementer kinds
+   * in place of the body. Absent ⇒ a body over the size threshold is condensed
+   * automatically; teams that already keep a terse restatement of a guideline link it here
+   * rather than having one synthesized.
+   */
+  brief?: string
   tags?: string[]
   appliesTo?: FragmentAppliesTo
 }
@@ -72,6 +79,8 @@ export function parseFragmentMarkdown(path: string, content: string): ParsedFrag
   }
   const id = str(fm.id)
   if (id) parsed.id = id
+  const brief = str(fm.brief)
+  if (brief) parsed.brief = brief
   const category = str(fm.category)
   if (category) parsed.category = category
   const tags = strArray(fm.tags)

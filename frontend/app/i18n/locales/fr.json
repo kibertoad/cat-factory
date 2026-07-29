@@ -4923,6 +4923,8 @@
       "titlePlaceholder": "Titre",
       "summaryPlaceholder": "Résumé en une ligne (utilisé par le sélecteur)",
       "bodyPlaceholder": "Corps de la consigne (injecté dans le prompt)",
+      "briefPlaceholder": "Version courte transmise aux agents de code (facultatif)",
+      "briefHint": "Les standards longs sont condensés automatiquement pour les agents de code, qui les relisent à chaque tour. Liez ici votre propre version courte pour l'utiliser à la place ; videz le champ pour revenir à la version automatique.",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (par ex. backend, db)",
       "add": "Ajouter le fragment",
       "generateTitle": "Générer",

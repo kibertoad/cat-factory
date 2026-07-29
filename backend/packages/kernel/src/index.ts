@@ -365,6 +365,13 @@ export {
   estimateTokens,
   contentHash,
 } from './shared/markdown.logic.js'
+export {
+  FRAGMENT_BRIEF_MIN_BODY_CHARS,
+  bodyWarrantsBrief,
+  fragmentBodyFingerprint,
+  resolveFragmentBrief,
+} from './domain/fragment-brief.js'
+export type { FragmentBriefResolution, StoredFragmentBrief } from './domain/fragment-brief.js'
 /**
  * The boundary every host-bound body (a PR description, a tracker-issue comment) renders
  * untrusted text through. Exported as a NAMESPACE because its members are deliberately

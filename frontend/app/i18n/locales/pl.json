@@ -4923,6 +4923,8 @@
       "titlePlaceholder": "Tytuł",
       "summaryPlaceholder": "Jednowierszowe podsumowanie (używane przez selektor)",
       "bodyPlaceholder": "Treść wytycznej (wstrzykiwana do promptu)",
+      "briefPlaceholder": "Krótka wersja przekazywana agentom kodującym (opcjonalnie)",
+      "briefHint": "Długie standardy są automatycznie skracane dla agentów kodujących, które czytają je w każdej turze. Podlinkuj tu własną krótką wersję, aby użyć jej zamiast tego; wyczyść pole, by wrócić do wersji automatycznej.",
       "tagsPlaceholder": "Tagi, oddzielone przecinkami (np. backend, db)",
       "add": "Dodaj fragment",
       "generateTitle": "Generuj",

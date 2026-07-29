@@ -1,6 +1,8 @@
 import type {
   DocumentSourceKind,
   FragmentAppliesTo,
+  FragmentBriefRecord,
+  FragmentBriefRepository,
   FragmentOwnerKind,
   FragmentSourceRecord,
   FragmentSourceRepository,
@@ -9,7 +11,7 @@ import type {
 } from '@cat-factory/kernel'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { fragmentSources, promptFragments } from '../db/schema.js'
+import { fragmentBriefs, fragmentSources, promptFragments } from '../db/schema.js'
 
 // Drizzle/Postgres mirrors of the prompt-fragment library D1 repositories (ADR 0006;
 // migration 0020). Rows are scoped by an (owner_kind, owner_id) pair so one table
@@ -39,6 +41,7 @@ function rowToFragment(row: PromptFragmentRow): PromptFragmentRecord {
     category: row.category,
     summary: row.summary,
     body: row.body,
+    brief: row.brief,
     appliesTo: parseJson<FragmentAppliesTo>(row.applies_to),
     tags: parseJson<string[]>(row.tags),
     sourceId: row.source_id,
@@ -103,6 +106,7 @@ export class DrizzlePromptFragmentRepository implements PromptFragmentRepository
       category: record.category,
       summary: record.summary,
       body: record.body,
+      brief: record.brief,
       applies_to: record.appliesTo ? JSON.stringify(record.appliesTo) : null,
       tags: record.tags ? JSON.stringify(record.tags) : null,
       source_id: record.sourceId,
@@ -127,6 +131,7 @@ export class DrizzlePromptFragmentRepository implements PromptFragmentRepository
           category: values.category,
           summary: values.summary,
           body: values.body,
+          brief: values.brief,
           applies_to: values.applies_to,
           tags: values.tags,
           source_id: values.source_id,
@@ -166,6 +171,74 @@ export class DrizzlePromptFragmentRepository implements PromptFragmentRepository
       .from(promptFragments)
       .where(and(eq(promptFragments.source_id, sourceId), isNull(promptFragments.deleted_at)))
     return rows.map(rowToFragment)
+  }
+}
+
+// ---- generated briefs -----------------------------------------------------
+
+type FragmentBriefRow = typeof fragmentBriefs.$inferSelect
+
+function rowToBrief(row: FragmentBriefRow): FragmentBriefRecord {
+  return {
+    ownerKind: row.owner_kind as FragmentOwnerKind,
+    ownerId: row.owner_id,
+    fragmentId: row.fragment_id,
+    bodyFingerprint: row.body_fingerprint,
+    brief: row.brief,
+    model: row.model,
+    generatedAt: row.generated_at,
+  }
+}
+
+/**
+ * Model-generated condensed briefs over Postgres (mirror of D1 migration 0069). Derived data:
+ * a row is replaced wholesale when the body it condenses changes, and dropped with its fragment.
+ */
+export class DrizzleFragmentBriefRepository implements FragmentBriefRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async listByOwner(ownerKind: FragmentOwnerKind, ownerId: string): Promise<FragmentBriefRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(fragmentBriefs)
+      .where(and(eq(fragmentBriefs.owner_kind, ownerKind), eq(fragmentBriefs.owner_id, ownerId)))
+    return rows.map(rowToBrief)
+  }
+
+  async upsert(record: FragmentBriefRecord): Promise<void> {
+    const values = {
+      owner_kind: record.ownerKind,
+      owner_id: record.ownerId,
+      fragment_id: record.fragmentId,
+      body_fingerprint: record.bodyFingerprint,
+      brief: record.brief,
+      model: record.model,
+      generated_at: record.generatedAt,
+    }
+    await this.db
+      .insert(fragmentBriefs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [fragmentBriefs.owner_kind, fragmentBriefs.owner_id, fragmentBriefs.fragment_id],
+        set: {
+          body_fingerprint: values.body_fingerprint,
+          brief: values.brief,
+          model: values.model,
+          generated_at: values.generated_at,
+        },
+      })
+  }
+
+  async delete(ownerKind: FragmentOwnerKind, ownerId: string, fragmentId: string): Promise<void> {
+    await this.db
+      .delete(fragmentBriefs)
+      .where(
+        and(
+          eq(fragmentBriefs.owner_kind, ownerKind),
+          eq(fragmentBriefs.owner_id, ownerId),
+          eq(fragmentBriefs.fragment_id, fragmentId),
+        ),
+      )
   }
 }
 

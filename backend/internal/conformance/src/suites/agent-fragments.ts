@@ -259,5 +259,149 @@ export function defineAgentFragmentConformance(harness: ConformanceHarness): voi
       expect(coder.selectedFragmentIds).toEqual(['design.context'])
       expect(coder.output).toContain('[frags]design.context[/frags]')
     })
+
+    // ---- condensed briefs for implementer kinds ---------------------------------------
+    // `coder` carries the `brief-standards` trait, so it folds a standard's CONDENSED variant
+    // instead of the body. These assert the two STORES that back it round-trip identically on
+    // D1 and Postgres: the linked `brief` column on `prompt_fragments`, and the generated-brief
+    // table keyed by a fingerprint of the body it condensed.
+
+    /** A body comfortably over `FRAGMENT_BRIEF_MIN_BODY_CHARS`, so condensation is warranted. */
+    const longBody = (marker: string) =>
+      `${marker}. ${'Every rule in this standard must survive condensation. '.repeat(40)}`
+
+    async function runCoder(app: ReturnType<ConformanceHarness['makeApp']>, wsId: string) {
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Code',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(start.status).toBe(201)
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+      return exec.steps.find((s) => s.agentKind === 'coder')!
+    }
+
+    it('folds a LINKED brief a tenant authored on its own managed standard', async () => {
+      // Before this, only the code-authored built-in tier could carry a brief — a managed
+      // standard (including one overriding a built-in id) always folded in full.
+      const app = harness.makeApp({ echoFragments: true, echoFragmentBriefs: true })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const created = await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
+        id: 'db.linked-brief',
+        title: 'Linked brief standard',
+        summary: 'A DB-backed standard with its own short version.',
+        body: longBody('LONG-BODY'),
+        brief: 'LINKED-BRIEF',
+      })
+      expect(created.status).toBe(201)
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        fragmentIds: ['db.linked-brief'],
+      })
+
+      const coder = await runCoder(app, wsId)
+      expect(coder.output).toContain('[briefs]db.linked-brief=LINKED-BRIEF[/briefs]')
+    })
+
+    it('GENERATES a brief for a long standard with none, reuses it, and regenerates on change', async () => {
+      // The whole feature in one drive: condense once, serve the persisted copy on the next
+      // dispatch, and re-condense as soon as the standard's body moves. The generator counts
+      // its calls, so "reused" is asserted as an absence of a second condensation rather than
+      // merely as equal text.
+      let calls = 0
+      const app = harness.makeApp(
+        { echoFragments: true, echoFragmentBriefs: true },
+        {
+          fragmentBriefGenerator: {
+            enabled: true,
+            generate: async (_workspaceId, input) => {
+              calls += 1
+              return { brief: `CONDENSED-${input.body.slice(0, 9)}-${calls}`, model: 'fake:small' }
+            },
+          },
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const created = await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
+        id: 'db.long-standard',
+        title: 'Long standard',
+        summary: 'A DB-backed standard with no short version.',
+        body: longBody('FIRST-REV'),
+      })
+      expect(created.status).toBe(201)
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        fragmentIds: ['db.long-standard'],
+      })
+
+      const first = await runCoder(app, wsId)
+      expect(first.output).toContain('[briefs]db.long-standard=CONDENSED-FIRST-REV-1[/briefs]')
+      expect(calls).toBe(1)
+
+      // Same body ⇒ the persisted brief is read back; no second condensation is paid for.
+      const second = await runCoder(app, wsId)
+      expect(second.output).toContain('[briefs]db.long-standard=CONDENSED-FIRST-REV-1[/briefs]')
+      expect(calls).toBe(1)
+
+      // The standard's body moves — the stored brief now condenses a revision this standard
+      // no longer has, so it must be re-condensed rather than folded.
+      const edited = await app.call(
+        'PATCH',
+        `/workspaces/${wsId}/prompt-fragments/db.long-standard`,
+        { body: longBody('SECOND-RV') },
+      )
+      expect(edited.status).toBe(200)
+
+      const third = await runCoder(app, wsId)
+      expect(third.output).toContain('[briefs]db.long-standard=CONDENSED-SECOND-RV-2[/briefs]')
+      expect(calls).toBe(2)
+    })
+
+    it('never condenses for a kind that folds full standards', async () => {
+      // `architect` is code-aware but carries no `brief-standards` trait, so it receives the
+      // full body — and must not spend a condensation call producing text it would discard.
+      let calls = 0
+      const app = harness.makeApp(
+        { echoFragments: true, echoFragmentBriefs: true },
+        {
+          fragmentBriefGenerator: {
+            enabled: true,
+            generate: async () => {
+              calls += 1
+              return { brief: 'CONDENSED', model: 'fake:small' }
+            },
+          },
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      await app.call('POST', `/workspaces/${wsId}/prompt-fragments`, {
+        id: 'db.full-only',
+        title: 'Full-only standard',
+        summary: 'A DB-backed standard read at full length.',
+        body: longBody('FULL-ONLY'),
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        fragmentIds: ['db.full-only'],
+      })
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Plan',
+        agentKinds: ['architect'],
+      })
+      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(start.status).toBe(201)
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+      const architect = exec.steps.find((s) => s.agentKind === 'architect')!
+      expect(architect.output).toContain('[briefs]db.full-only=[/briefs]')
+      expect(calls).toBe(0)
+    })
   })
 }

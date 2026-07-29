@@ -47,13 +47,35 @@ Two rules govern authoring one:
 - **A `brief` must not drop a rule, only its elaboration.** It is the same standard compressed,
   not a subset — an agent folding the brief is held to everything the body demands.
 - **`brief` travels WITH the body it condenses** and is never re-resolved by id downstream. A
-  higher tier that overrides a built-in id supplies no brief (managed rows have no such column),
-  so the override's own full `body` is folded — never the built-in's condensed text over a
-  tenant's standard.
+  higher tier that overrides a built-in id supplies its OWN brief (or none), so the override's
+  own text is folded — never the built-in's condensed text over a tenant's standard.
 
 Omitting `brief` is always safe: the full `body` is used for every kind, unchanged. Fragments
 that can reach an implementer kind carry one; the ones scoped to `spec-writer` / `playwright` /
 document-authoring kinds (which are not implementers) deliberately do not.
+
+Every fragment in **this** package is comfortably under `FRAGMENT_BRIEF_MIN_BODY_CHARS`, so the
+auto-condensation below never acts on the shipped catalog — keep it that way by writing a brief
+by hand when a built-in grows past ~1,500 characters.
+
+### Where a brief comes from at run time
+
+The built-in `brief` above is only the first of three answers. For a fragment resolved through
+the tenant library ([ADR 0006](../../docs/adr/0006-prompt-fragment-library.md)) the resolution
+order is:
+
+1. **The winning tier's linked `brief`** — a built-in's, or the one a tenant authored on its own
+   managed row (the library editor's short-version field, or a repo-sourced guideline file's
+   `brief:` frontmatter key).
+2. **A model-GENERATED condensation**, for a body over `FRAGMENT_BRIEF_MIN_BODY_CHARS` that has
+   no linked brief. Produced once on the first implementer dispatch that folds it, persisted, and
+   **regenerated whenever the body changes** — a library edit, a repo resync, or a living
+   document re-resolved at run time.
+3. **Nothing** — the full `body` is folded for every kind, which is also where every failure on
+   that path lands (no model wired, an unreadable store, a refused condensation).
+
+Design, decisions and gotchas:
+[`docs/initiatives/auto-generated-fragment-briefs.md`](../../../docs/initiatives/auto-generated-fragment-briefs.md).
 
 ## Programmatic deployment seams (custom fragments + per-task-type defaults)
 

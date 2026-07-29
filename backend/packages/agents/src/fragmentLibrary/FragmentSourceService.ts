@@ -283,6 +283,10 @@ export class FragmentSourceService {
       category: parsed.category ?? null,
       summary: parsed.summary,
       body: parsed.body,
+      // The file's `brief:` frontmatter, re-read every sync: dropping the key upstream
+      // unlinks the short version and hands the fragment back to auto-generation, exactly
+      // as dropping any other frontmatter key clears its column.
+      brief: parsed.brief ?? null,
       appliesTo: parsed.appliesTo ?? null,
       tags: parsed.tags && parsed.tags.length ? parsed.tags : null,
       sourceId: source.id,

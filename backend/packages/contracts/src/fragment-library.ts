@@ -27,6 +27,14 @@ const appliesToSchema = v.object({
 
 const tagsSchema = v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))
 
+/**
+ * The condensed variant a tenant LINKS to a managed fragment: the same standard stated
+ * tersely, folded for implementer kinds in place of the full body. Capped well under the
+ * body cap because a brief that isn't materially shorter defeats its own purpose, and an
+ * empty string is accepted as "unlink it" (which re-opens the fragment to auto-generation).
+ */
+const briefSchema = v.pipe(v.string(), v.trim(), v.maxLength(4000))
+
 /** Create a hand-authored fragment at a tier. `id` defaults to a slug of the title. */
 export const createPromptFragmentSchema = v.object({
   id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
@@ -34,6 +42,8 @@ export const createPromptFragmentSchema = v.object({
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000)),
+  /** Optional linked short version; omitted ⇒ a long body is condensed automatically. */
+  brief: v.optional(briefSchema),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),
   /** Semver of the body; defaults to `1.0.0`. */
@@ -47,6 +57,8 @@ export const updatePromptFragmentSchema = v.object({
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   summary: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500))),
   body: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(20000))),
+  /** Send `''` to UNLINK the brief and hand the fragment back to auto-generation. */
+  brief: v.optional(briefSchema),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),
   version: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40))),

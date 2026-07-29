@@ -1,5 +1,5 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import type { FragmentTier, ResolvedCatalogEntry } from '@cat-factory/kernel'
+import type { FragmentOwnerKind, FragmentTier, ResolvedCatalogEntry } from '@cat-factory/kernel'
 import type { FragmentSelectionContext, SelectableFragment } from '@cat-factory/kernel'
 import type { PromptFragmentRecord } from '@cat-factory/kernel'
 
@@ -12,8 +12,29 @@ import type { PromptFragmentRecord } from '@cat-factory/kernel'
 // existing import sites.
 export type { ResolvedCatalogEntry }
 
+/**
+ * Where a generated brief is stored for an entry that owns no managed row of its own.
+ * A `builtin`-tier standard is deployment-wide, so its condensation is scoped to the
+ * resolving workspace's ACCOUNT and paid for once per account rather than once per board.
+ * An accountless workspace (a bare test/dev board) falls back to its own scope, which
+ * costs an extra condensation but can never widen the tenant boundary.
+ */
+export interface CatalogBriefScope {
+  accountId: string | null
+  workspaceId: string
+}
+
+function builtinBriefScope(scope: CatalogBriefScope): {
+  ownerKind: FragmentOwnerKind
+  ownerId: string
+} {
+  return scope.accountId
+    ? { ownerKind: 'account', ownerId: scope.accountId }
+    : { ownerKind: 'workspace', ownerId: scope.workspaceId }
+}
+
 /** Built-in catalog fragment → resolved entry at the `builtin` tier. */
-function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
+function builtinToEntry(fragment: PromptFragment, scope: CatalogBriefScope): ResolvedCatalogEntry {
   return {
     id: fragment.id,
     version: fragment.version,
@@ -22,6 +43,7 @@ function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
     summary: fragment.summary,
     body: fragment.body,
     brief: fragment.brief ?? null,
+    briefScope: builtinBriefScope(scope),
     appliesTo: fragment.appliesTo ?? null,
     tags: fragment.tags ?? null,
     source: fragment.source ?? null,
@@ -41,9 +63,12 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
     category: record.category,
     summary: record.summary,
     body: record.body,
-    // Managed rows carry no condensed variant, so an override of a built-in id folds its own
-    // full body rather than inheriting the built-in's brief. See `ResolvedCatalogEntry.brief`.
-    brief: null,
+    // The tier's OWN linked brief (null when it linked none) — never the built-in's, which
+    // condenses a body this row just replaced. See `ResolvedCatalogEntry.brief`.
+    brief: record.brief,
+    // A managed row is owned by its own tier, so a generated brief is stored right there —
+    // an account fragment condensed once for the account, a workspace one per board.
+    briefScope: { ownerKind: record.ownerKind, ownerId: record.ownerId },
     appliesTo: record.appliesTo,
     tags: record.tags,
     source:
@@ -64,14 +89,19 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
  * Merge the three tiers into one catalog. Later tiers override earlier ones by
  * stable id (workspace > account > built-in); a tombstoned record at any tier
  * *suppresses* the id outright. Returns live entries sorted by id.
+ *
+ * `scope` is the resolving workspace and its account, needed only to place a
+ * `builtin`-tier entry's generated-brief scope (see {@link CatalogBriefScope}); a managed
+ * row carries its own owner, so an override's brief follows the row, not the reader.
  */
 export function mergeCatalog(
   builtins: PromptFragment[],
   accountRows: PromptFragmentRecord[],
   workspaceRows: PromptFragmentRecord[],
+  scope: CatalogBriefScope,
 ): ResolvedCatalogEntry[] {
   const byId = new Map<string, ResolvedCatalogEntry>()
-  for (const b of builtins) byId.set(b.id, builtinToEntry(b))
+  for (const b of builtins) byId.set(b.id, builtinToEntry(b, scope))
   applyTier(byId, accountRows, 'account')
   applyTier(byId, workspaceRows, 'workspace')
   return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
@@ -114,6 +144,9 @@ export function entryToFragment(entry: ResolvedCatalogEntry): PromptFragment {
     summary: entry.summary,
     body: entry.body,
   }
+  // Only the AUTHORED brief travels onto the wire shape: a generated one lives in its own
+  // store, is regenerated behind the scenes, and would read to a curator as text they wrote.
+  if (entry.brief) fragment.brief = entry.brief
   if (entry.appliesTo) fragment.appliesTo = entry.appliesTo
   if (entry.tags && entry.tags.length) fragment.tags = entry.tags
   if (entry.source) fragment.source = entry.source

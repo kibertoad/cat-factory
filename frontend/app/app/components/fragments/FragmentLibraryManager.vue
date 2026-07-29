@@ -14,6 +14,7 @@ import type {
   ResolvedFragment,
 } from '~/types/domain'
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
+import { showOverrideField } from '~/utils/uiMode'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
@@ -131,7 +132,7 @@ const linkingDoc = ref(false)
 const linkingSource = ref(false)
 
 // ---- create a hand-authored fragment --------------------------------------
-const draft = ref({ title: '', summary: '', body: '', tags: '' })
+const draft = ref({ title: '', summary: '', body: '', brief: '', tags: '' })
 const draftValid = computed(
   () => draft.value.title.trim() && draft.value.summary.trim() && draft.value.body.trim(),
 )
@@ -167,6 +168,7 @@ const editDraft = ref<{
   title: string
   summary: string
   body: string
+  brief: string
   tags: string
 } | null>(null)
 function startEdit(f: (typeof library.fragments)[number]) {
@@ -175,6 +177,7 @@ function startEdit(f: (typeof library.fragments)[number]) {
     title: f.title,
     summary: f.summary,
     body: f.body,
+    brief: f.brief ?? '',
     tags: (f.tags ?? []).join(', '),
   }
 }
@@ -188,6 +191,15 @@ const editValid = computed(
     !!editDraft.value.summary.trim() &&
     !!editDraft.value.body.trim(),
 )
+// The linked SHORT VERSION is an OVERRIDE of what the platform does by default (condense a
+// long standard automatically, fold a short one in full), so it follows the override rule:
+// hidden in basic mode while unset, revealed as soon as the fragment carries one — a
+// basic-mode curator is never left unable to see or clear a brief a teammate linked.
+const uiMode = useUiModeStore()
+function showBriefField(current: string): boolean {
+  return showOverrideField(uiMode.isAdvanced, current || null)
+}
+
 async function saveEdit() {
   const d = editDraft.value
   if (!d || !editValid.value) return
@@ -197,6 +209,9 @@ async function saveEdit() {
         title: d.title.trim(),
         summary: d.summary.trim(),
         body: d.body.trim(),
+        // Always sent, so clearing the box UNLINKS the short version and hands the
+        // standard back to auto-generation (an omitted key would leave the old one).
+        brief: d.brief.trim(),
         tags: d.tags
           .split(',')
           .map((t) => t.trim())
@@ -218,12 +233,13 @@ async function createFragment() {
       title: draft.value.title.trim(),
       summary: draft.value.summary.trim(),
       body: draft.value.body.trim(),
+      brief: draft.value.brief.trim() || undefined,
       tags: draft.value.tags
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean),
     })
-    draft.value = { title: '', summary: '', body: '', tags: '' }
+    draft.value = { title: '', summary: '', body: '', brief: '', tags: '' }
     toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
   } catch (e) {
     notifyError(t('fragments.toast.addFailed'), e)
@@ -701,6 +717,14 @@ async function unlinkSource(id: string) {
               :placeholder="t('fragments.authored.bodyPlaceholder')"
               :rows="4"
             />
+            <div v-if="showBriefField(editDraft.brief)" class="flex flex-col gap-1">
+              <UTextarea
+                v-model="editDraft.brief"
+                :placeholder="t('fragments.authored.briefPlaceholder')"
+                :rows="2"
+              />
+              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+            </div>
             <UInput
               v-model="editDraft.tags"
               :placeholder="t('fragments.authored.tagsPlaceholder')"
@@ -799,6 +823,14 @@ async function unlinkSource(id: string) {
               :placeholder="t('fragments.authored.bodyPlaceholder')"
               :rows="4"
             />
+            <div v-if="showBriefField(draft.brief)" class="flex flex-col gap-1">
+              <UTextarea
+                v-model="draft.brief"
+                :placeholder="t('fragments.authored.briefPlaceholder')"
+                :rows="2"
+              />
+              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+            </div>
             <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
             <UButton
               icon="i-lucide-plus"

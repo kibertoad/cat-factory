@@ -34,6 +34,7 @@ import { DrizzleEnvConfigRepairJobRepository } from '../src/repositories/envConf
 import { DrizzleEnvironmentTestRunRepository } from '../src/repositories/environmentTest.js'
 import { DrizzleCustomManifestTypeRepository } from '../src/repositories/customManifestType.js'
 import {
+  DrizzleFragmentBriefRepository,
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
 } from '../src/repositories/fragments.js'
@@ -674,6 +675,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     envConfigRepairJobRepository: DrizzleEnvConfigRepairJobRepository,
     environmentTestRunRepository: DrizzleEnvironmentTestRunRepository,
     customManifestTypeRepository: DrizzleCustomManifestTypeRepository,
+    fragmentBriefRepository: DrizzleFragmentBriefRepository,
     fragmentSourceRepository: DrizzleFragmentSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,
     notificationRepository: DrizzleNotificationRepository,

@@ -36,6 +36,7 @@ import {
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
   hasTrait,
+  standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -149,6 +150,15 @@ export interface FragmentBodyResolver {
   resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
+    options?: {
+      /**
+       * The dispatching kind's standards verbosity. `brief` (an implementer kind) is what
+       * makes the resolver produce condensed variants — including generating and persisting
+       * one for a long standard that has none — so a kind that folds full bodies never pays
+       * for a condensation it would discard.
+       */
+      verbosity?: 'full' | 'brief'
+    },
   ): Promise<{ id: string; title?: string; body: string; brief?: string }[]>
 }
 
@@ -1030,10 +1040,16 @@ export class AgentContextBuilder {
       // `serviceFragmentIds`, where `serviceFrame === block`). Kept in one kernel helper so this
       // and the requirements-review grounding can't drift.
       const ids = applicableFragmentIds(block, serviceFrame)
+      // The verbosity the prompt composer will fold at — resolved HERE, at the same
+      // chokepoint that resolves the bodies, because a condensed variant has to be produced
+      // for the body that actually won the tier merge. Re-deriving it downstream (where only
+      // the id is left) is exactly the "brief travels WITH its body" rule this feature must
+      // not break.
+      const verbosity = standardsVerbosityFor(agentKind, this.deps.agentKindRegistry)
       // Prefer the tenant-catalog resolver (managed + live document-backed
       // fragments) when wired; otherwise resolve against the static built-in pool.
       const fragments = this.deps.fragmentResolver
-        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids)
+        ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, { verbosity })
         : ids
             .map((id) => {
               const fragment = getFragment(id)

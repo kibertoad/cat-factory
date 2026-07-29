@@ -321,6 +321,11 @@ export {
   renderFragmentTitlePrompt,
 } from './agents/prompts/fragment-title.js'
 export {
+  FRAGMENT_BRIEF_AGENT_KIND,
+  FRAGMENT_BRIEF_SYSTEM_PROMPT,
+  renderFragmentBriefPrompt,
+} from './agents/prompts/fragment-brief.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,
@@ -459,7 +464,14 @@ export {
 export {
   FragmentLibraryService,
   type FragmentLibraryServiceDependencies,
+  type FragmentStandardsVerbosity,
+  type ResolveBodiesOptions,
 } from './fragmentLibrary/FragmentLibraryService.js'
+export {
+  FragmentBriefService,
+  type FragmentBriefCandidate,
+  type FragmentBriefServiceDependencies,
+} from './fragmentLibrary/FragmentBriefService.js'
 export {
   FragmentSourceService,
   type FragmentSourceServiceDependencies,
@@ -471,6 +483,11 @@ export {
   type LlmFragmentSelectorDependencies,
 } from './fragmentLibrary/LlmFragmentSelector.js'
 export {
+  LlmFragmentBriefGenerator,
+  type LlmFragmentBriefGeneratorDependencies,
+} from './fragmentLibrary/LlmFragmentBriefGenerator.js'
+export {
+  type CatalogBriefScope,
   type ResolvedCatalogEntry,
   mergeCatalog,
   toSelectable,
