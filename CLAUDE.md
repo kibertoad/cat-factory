@@ -972,8 +972,32 @@ capabilities from a manifest entry. Design:
 - **The harness owns the phase** (`dependency-install.ts`), keyed purely off the job body with no
   agent-kind switch, running in the service `workDir` through the shared `runCapturedCommand` seam.
   It carries its OWN 30s heartbeat — a cold install is the canonical activity-silent phase, and
-  `JOB_INACTIVITY_MS` (10 min) is tighter than its 20-min watchdog. Per-job by construction (command,
-  cwd and env are all arguments), pinned by a concurrency test.
+  `JOB_INACTIVITY_MS` (10 min) is tighter than its watchdog. That watchdog is DERIVED from the
+  configured `JOB_MAX_DURATION_MS` (a third of it, 20 min at the defaults) the same way `git.ts`
+  derives its per-command timeout: setup that can outlast the run it is preparing for is a bug, and
+  a constant sized against a default breaks silently when an operator changes the default. Per-job
+  by construction (command, cwd and env are all arguments), pinned by a concurrency test.
+- **EVERY mode with a checkout runs it, and that is ASSERTED** — explore, its multi-repo fan-out,
+  single-repo coding (the in-place fixers' path too), multi-repo coding and conflict resolution.
+  All of them go through the ONE `prepopulateDependencies` seam, because a mode assembling the
+  run/exclude/note steps itself is one refactor from dropping one: the first cut wired three modes
+  and missed two, and nothing failed. `dependency-install.coverage.test.ts` pins the rule
+  structurally (a function calling `runAgentInWorkspace` must call `prepopulateDependencies`),
+  with `runBootstrap` the one exemption carrying its reason — its target repo is empty, so there
+  is no service config to resolve and nothing on disk to install from. **It runs BEFORE the infra
+  stand-up**, which does its own install and then serves what it built; after it, prepopulation
+  would pay twice and rewrite the `node_modules` a running app resolves out of.
+- **What the install materialises is excluded from git** (`.git/info/exclude`, the same mechanism
+  the harness already uses for its own sentinels), by diffing the untracked paths either side of
+  the install — never a list of well-known directory names, which is both incomplete across
+  ecosystems and would hide a `target/` the agent legitimately authored. Without it a repo whose
+  `.gitignore` omits `node_modules` opens a pull request containing its whole dependency tree, via
+  the agent's own `git add -A` or the conflict flow's whole-tree merge commit.
+- **Captured output reaches a model fenced through `fencedOutput`** (`captured-command.ts`), sized
+  one tick longer than the longest backtick run in the body. A package manager or a failing linter
+  prints backticks often enough that a fixed ``` fence closes mid-tail and spills the rest — plus
+  the instructions after it — into what the model reads as prose. Both consumers of a captured
+  tail use it; that shared seam exists precisely so a fix to one cannot miss the other.
 - **Autodetection had to become un-filtered.** `ecosystem()` no longer nulls an install-only
   detection; the "an install verifies nothing" rule moved into `detectValidationChecks`, where it
   filters each OUTPUT separately. Three things are preserved deliberately and each has a test: the

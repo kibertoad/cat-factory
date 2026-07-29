@@ -1,12 +1,17 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { log } from '../src/logger.js'
 import {
   buildDependencyInstallNote,
+  dependencyInstallTimeoutMs,
   parseDependencyInstallSpec,
+  prepopulateDependencies,
   runDependencyInstall,
+  withDependencyNote,
 } from '../src/dependency-install.js'
 
 // DEPENDENCY PREPOPULATION: the install run against the checkout BEFORE the agent's first turn
@@ -183,5 +188,187 @@ describe('buildDependencyInstallNote', () => {
     })
     expect(note).toContain('timed out after 90s')
     expect(note).not.toContain('exited 124')
+  })
+
+  it('fences a failure tail that itself contains a code fence', () => {
+    // A package manager prints backticks often enough to matter (a linter quoting a template
+    // literal, a test echoing a fixture). A fixed ``` fence would close on the tail's own fence
+    // and spill the rest of it — and the instructions above it — into what the model reads as
+    // prose. The block has to span the whole tail whatever the tail contains.
+    const tail = 'error in:\n```js\nconst a = `x`\n```\nsee above'
+    const note = buildDependencyInstallNote({
+      command: 'pnpm install',
+      exitCode: 1,
+      passed: false,
+      outputTail: tail,
+      durationMs: 1_000,
+    })
+    const fence = '`'.repeat(4)
+    expect(note).toContain(`${fence}\n${tail}\n${fence}`)
+  })
+})
+
+describe('withDependencyNote', () => {
+  it('appends the note, and is the identity when there is none', () => {
+    expect(withDependencyNote('do the work', 'installed')).toBe('do the work\n\ninstalled')
+    expect(withDependencyNote('do the work', undefined)).toBe('do the work')
+  })
+})
+
+describe('dependencyInstallTimeoutMs', () => {
+  // Derived from the CONFIGURED job ceiling rather than hardcoded against the default one — the
+  // install is setup, so a wedged package manager must never be able to consume the run it is
+  // preparing for.
+  it('defaults to a third of the job ceiling', () => {
+    expect(dependencyInstallTimeoutMs({})).toBe(20 * 60_000)
+    expect(dependencyInstallTimeoutMs({ JOB_MAX_DURATION_MS: String(30 * 60_000) })).toBe(
+      10 * 60_000,
+    )
+  })
+
+  it('clamps an override that would let setup eat the run', () => {
+    expect(
+      dependencyInstallTimeoutMs({
+        JOB_MAX_DURATION_MS: String(30 * 60_000),
+        DEPENDENCY_INSTALL_TIMEOUT_MS: String(45 * 60_000),
+      }),
+    ).toBe(10 * 60_000)
+  })
+
+  it('honours an override below the ceiling', () => {
+    expect(dependencyInstallTimeoutMs({ DEPENDENCY_INSTALL_TIMEOUT_MS: '250' })).toBe(250)
+  })
+
+  it('floors the derived ceiling so a tiny job is not a guaranteed timeout', () => {
+    // The floor guards the DERIVED ceiling only; the explicit override above stays honoured.
+    expect(dependencyInstallTimeoutMs({ JOB_MAX_DURATION_MS: '1000' })).toBe(30_000)
+  })
+})
+
+describe('prepopulateDependencies', () => {
+  const exec = promisify(execFile)
+  const git = (cwd: string, ...args: string[]): Promise<unknown> => exec('git', args, { cwd })
+
+  /** A real checkout: the exclusion writes `.git/info/exclude` and git alone can judge it. */
+  async function repo(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'dependency-repo-'))
+    await git(dir, 'init', '-b', 'main')
+    await git(dir, 'config', 'user.email', 'o@e.com')
+    await git(dir, 'config', 'user.name', 'Origin')
+    await writeFile(join(dir, 'package.json'), '{}\n', 'utf8')
+    await git(dir, 'add', '-A')
+    await git(dir, 'commit', '-m', 'base')
+    return dir
+  }
+
+  /** What a broad `git add -A` would sweep into the agent's commit. */
+  async function stageable(dir: string): Promise<string[]> {
+    const { stdout } = await exec(
+      'git',
+      ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory'],
+      { cwd: dir },
+    )
+    return stdout.split('\n').filter((line) => line.trim() !== '')
+  }
+
+  let checkout: string
+  beforeEach(async () => {
+    checkout = await repo()
+  })
+  afterEach(async () => {
+    await rm(checkout, { recursive: true, force: true })
+  })
+
+  it('is a no-op with no declared install', async () => {
+    let phased = false
+    const note = await prepopulateDependencies({
+      spec: undefined,
+      installDir: checkout,
+      repoDir: checkout,
+      agentDir: checkout,
+      logger: log,
+      opts: { log, onPhase: () => (phased = true) },
+    })
+    expect(note).toBeUndefined()
+    // Not even the phase marker: an unconfigured service must be byte-for-byte the old flow.
+    expect(phased).toBe(false)
+  })
+
+  it('keeps what the install created out of the agent’s commits', async () => {
+    // The repo has NO .gitignore for node_modules — the shape this protects. Without the
+    // exclusion the agent's own `git add -A` (or the conflict flow's) would put the whole
+    // dependency tree in the pull request.
+    const note = await prepopulateDependencies({
+      spec: { command: 'mkdir -p node_modules/pkg && echo x > node_modules/pkg/index.js' },
+      installDir: checkout,
+      repoDir: checkout,
+      agentDir: checkout,
+      logger: log,
+      opts,
+    })
+    expect(note).toMatch(/already been installed/i)
+    expect(await stageable(checkout)).toEqual([])
+  })
+
+  it('excludes a partial tree left by a FAILED install too', async () => {
+    await prepopulateDependencies({
+      spec: { command: 'mkdir -p node_modules/half && exit 1' },
+      installDir: checkout,
+      repoDir: checkout,
+      agentDir: checkout,
+      logger: log,
+      opts,
+    })
+    expect(await stageable(checkout)).toEqual([])
+  })
+
+  it('leaves untracked files the install did not create alone', async () => {
+    // Only what the install ADDED is excluded. A file that was already there is the agent's
+    // business — a prior run's work on a persistent checkout, or a resumed edit — and hiding
+    // it from git would lose work rather than protect it.
+    await writeFile(join(checkout, 'notes.md'), 'mine\n', 'utf8')
+    await prepopulateDependencies({
+      spec: { command: 'mkdir -p node_modules/pkg' },
+      installDir: checkout,
+      repoDir: checkout,
+      agentDir: checkout,
+      logger: log,
+      opts,
+    })
+    expect(await stageable(checkout)).toEqual(['notes.md'])
+  })
+
+  it('names the install location when the agent stands somewhere else', async () => {
+    // The multi-repo layout (agent at the workspace root, install in a sibling) and the
+    // conflict flow (agent at the repo root, install in a monorepo service subtree).
+    const service = join(checkout, 'packages', 'api')
+    await mkdir(service, { recursive: true })
+    const note = await prepopulateDependencies({
+      spec: { command: 'true' },
+      installDir: service,
+      repoDir: checkout,
+      agentDir: checkout,
+      logger: log,
+      opts,
+    })
+    expect(note).toContain('`packages/api/` checkout')
+  })
+
+  it('runs the install and reports it even when the directory is not a git checkout', async () => {
+    // The exclusion is a best-effort ADDITION to the phase, never a precondition for it.
+    const plain = await mkdtemp(join(tmpdir(), 'dependency-plain-'))
+    try {
+      const note = await prepopulateDependencies({
+        spec: { command: 'true' },
+        installDir: plain,
+        repoDir: plain,
+        agentDir: plain,
+        logger: log,
+        opts,
+      })
+      expect(note).toMatch(/already been installed/i)
+    } finally {
+      await rm(plain, { recursive: true, force: true })
+    }
   })
 })

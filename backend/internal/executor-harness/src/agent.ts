@@ -36,7 +36,7 @@ import {
   runMultiRepoCoding,
 } from './coding-agent.js'
 import { validationFailureMessage } from './validation-checks.js'
-import { buildDependencyInstallNote, runDependencyInstall } from './dependency-install.js'
+import { prepopulateDependencies, withDependencyNote } from './dependency-install.js'
 import { agentCapabilities, mergeEffort } from './agent-shared.js'
 import { runBootstrap } from './bootstrap-mode.js'
 import {
@@ -542,6 +542,25 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         logger.info('agent(explore): PR head fetch', { number: job.reviewPrNumber, fetched })
       }
 
+      // DEPENDENCY PREPOPULATION, before the agent's first turn. An EXPLORE run is the case this
+      // exists for: a reviewer or architect reading a fresh clone can see that a library is
+      // depended upon but not what it actually exposes, so it reasons about the manifest instead
+      // of the code. Best-effort — the outcome is stated in the prompt either way and never fails
+      // the run. Runs in `workDir` so a monorepo service installs from its own subtree.
+      //
+      // BEFORE the stand-up below, deliberately. The frontend stand-up runs the service's own
+      // install and then SERVES what it built: installing after it would pay for a second install
+      // and, worse, rewrite the `node_modules` the running app resolves out of. Prepopulation is
+      // setup for everything that follows, so it goes first.
+      const dependencyNote = await prepopulateDependencies({
+        spec: job.dependencyInstall,
+        installDir: workDir,
+        repoDir: dir,
+        agentDir: workDir,
+        logger,
+        opts,
+      })
+
       // Optional infra stand-up (the tester): bring the service's docker-compose
       // dependencies up at the repo root for the duration of the run, tearing them down in
       // the `finally`. A stand-up failure is non-fatal — it's surfaced to the agent as a
@@ -554,27 +573,10 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
       // app it just built + served (the backend env resolution already reached the harness).
       const infraNotes = managed ? buildInfraNotes(managed) : []
-      // DEPENDENCY PREPOPULATION, before the agent's first turn. An EXPLORE run is the case this
-      // exists for: a reviewer or architect reading a fresh clone can see that a library is
-      // depended upon but not what it actually exposes, so it reasons about the manifest instead
-      // of the code. Best-effort — the outcome is stated in the prompt either way and never fails
-      // the run. Runs in `workDir` so a monorepo service installs from its own subtree.
-      let dependencyNote: string | undefined
-      if (job.dependencyInstall) {
-        opts.onPhase?.('dependencies')
-        const installed = await runDependencyInstall({
-          cwd: workDir,
-          spec: job.dependencyInstall,
-          logger,
-          opts,
-        })
-        dependencyNote = buildDependencyInstallNote(installed)
-      }
-      const userPrompt = [
-        job.userPrompt,
-        ...(infraNotes.length ? [`Note: ${infraNotes.join(' ')}`] : []),
-        ...(dependencyNote ? [dependencyNote] : []),
-      ].join('\n\n')
+      const userPrompt = withDependencyNote(
+        infraNotes.length ? `${job.userPrompt}\n\nNote: ${infraNotes.join(' ')}` : job.userPrompt,
+        dependencyNote,
+      )
       // The stand-up record (success or failure, with its captured logs) rides back on EVERY
       // result branch — the backend surfaces it on the Tester step regardless of whether the
       // agent then produced a usable report.
@@ -834,20 +836,20 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
     // at the workspace ROOT and reads across every sibling, which is exactly why this matters
     // here: a cross-repo investigator reasoning about a manifest instead of the packages is the
     // complaint that motivated the feature. Same treatment as the reference branches above.
-    let dependencyNote: string | undefined
+    //
+    // The note names the sibling directory rather than saying "this checkout": the agent's cwd is
+    // the workspace root, which has no dependency tree of its own.
     const primaryLeg = legs[0]
-    if (job.dependencyInstall && primaryLeg) {
-      opts.onPhase?.('dependencies')
-      const installed = await runDependencyInstall({
-        cwd: join(root, primaryLeg.dirName),
-        spec: job.dependencyInstall,
-        logger,
-        opts,
-      })
-      // Named by its sibling directory: the agent's cwd is the workspace root, which has no
-      // dependency tree of its own, so "this checkout" would point it at the wrong place.
-      dependencyNote = buildDependencyInstallNote(installed, primaryLeg.dirName)
-    }
+    const dependencyNote = primaryLeg
+      ? await prepopulateDependencies({
+          spec: job.dependencyInstall,
+          installDir: join(root, primaryLeg.dirName),
+          repoDir: join(root, primaryLeg.dirName),
+          agentDir: root,
+          logger,
+          opts,
+        })
+      : undefined
 
     opts.onPhase?.('agent')
     logger.info('multi-repo-explore: running agent', { repos: legs.map((l) => l.dirName) })
@@ -855,7 +857,7 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
       {
         dir: root,
         systemPrompt: job.systemPrompt,
-        userPrompt: dependencyNote ? `${job.userPrompt}\n\n${dependencyNote}` : job.userPrompt,
+        userPrompt: withDependencyNote(job.userPrompt, dependencyNote),
         model: job.model,
         harness: job.harness,
         subscriptionToken: job.subscriptionToken,
@@ -1248,10 +1250,32 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     // there were conflicts), so it would drift onto the original feature task. Lead with the
     // conflict; keep the task only as trailing reference.
     const conflicted = await unmergedPaths(dir, signal)
+
+    // DEPENDENCY PREPOPULATION, before this mode's agent turn. Resolving a conflict is a READING
+    // task before it is a writing one — the agent has to understand what both sides do — so it
+    // needs the dependency tree as much as any other kind. Placed AFTER the clean-merge branches
+    // above so a conflict-free run (the common case) never pays for an install it has no agent to
+    // hand the tree to; and the artifact exclusion inside matters here more than anywhere, because
+    // this flow finishes its merge commit with a whole-tree `git add -A`.
+    const workDir = await deriveWorkDir(dir, job.repo.serviceDirectory)
+    const dependencyNote = await prepopulateDependencies({
+      spec: job.dependencyInstall,
+      installDir: workDir,
+      repoDir: dir,
+      // The agent resolves at the repo ROOT (git's conflict state is repo-wide), so a monorepo
+      // service's install ran somewhere the agent is not standing and the note has to say where.
+      agentDir: dir,
+      logger,
+      opts,
+    })
+
     opts.onPhase?.('agent')
     logger.info('agent(conflict): resolving conflicts with agent', { conflicted })
     const diff = await conflictDiff(dir, conflicted, signal)
-    const userPrompt = buildConflictPrompt(mergeBase, job.branch, conflicted, diff, job.userPrompt)
+    const userPrompt = withDependencyNote(
+      buildConflictPrompt(mergeBase, job.branch, conflicted, diff, job.userPrompt),
+      dependencyNote,
+    )
 
     const { summary, stats, stderrTail, usage, callMetrics, effortReport } =
       await runAgentInWorkspace(

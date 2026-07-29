@@ -104,15 +104,31 @@ had to be preserved deliberately, and each has a test:
 
 ## Consequences
 
-- **An image bump.** The harness gained `src/dependency-install.ts` and two call sites, so the
-  runner image and its four pinned tags move together (see CONTRIBUTING / CLAUDE.md).
+- **An image bump.** The harness gained `src/dependency-install.ts` and a call in every
+  checkout-having mode, so the runner image and its four pinned tags move together (see
+  CONTRIBUTING / CLAUDE.md).
+- **Installed artifacts are hidden from git.** The paths the install adds are written to
+  `.git/info/exclude` — computed by diffing the untracked paths either side of the run, so it is
+  what the install actually materialised rather than a guess at directory names. Without it, a
+  repo whose `.gitignore` does not cover its dependency directory opens a pull request containing
+  the whole tree: the agent's `git add -A` cannot tell it did not put it there, and the
+  conflict-resolution flow stages the whole tree unconditionally to finish its merge commit. The
+  diff is what keeps this safe in the other direction — a `target/` the agent authored, or an
+  untracked file already in a persistent checkout, is not the install's and is left visible.
 - **No new report channel.** Prepopulation is setup, so it publishes no verdict: the outcome
   reaches the agent through its prompt and the operator through the harness log. When the install
   matters to the PR it is _also_ a validation check, and that path already reports.
 - **The watchdog constraint applies.** A cold install is exactly the activity-silent phase
   `JOB_INACTIVITY_MS` (10 min) was never meant to judge, so the phase carries its own 30s
-  heartbeat, like the frontend stand-up and the validation loop. Its own watchdog is 20 min —
-  generous, because unlike a check nothing downstream waits on it.
+  heartbeat, like the frontend stand-up and the validation loop. Its own watchdog is a THIRD of
+  the configured `JOB_MAX_DURATION_MS` — 20 min at the defaults, generous enough for a cold
+  monorepo install, and bounded because the thing downstream that waits on it is the agent. It is
+  derived rather than constant for the reason `git.ts` derives its per-command timeout: a number
+  sized against a default silently breaks its own invariant when an operator changes that default.
+  An explicit `DEPENDENCY_INSTALL_TIMEOUT_MS` is honoured but clamped by the same share.
+- **It runs before the infra stand-up, not after.** The frontend stand-up installs and then serves
+  what it built, so an install after it pays a second time and rewrites the `node_modules` the
+  running app resolves out of. Prepopulation is setup for everything that follows it.
 - **Ecosystems that cache in `HOME` get no reuse from `HARNESS_CLEAN_KEEP`.** That knob preserves
   paths _inside the checkout_ (`node_modules`, `.venv`, `target`), but Maven, Gradle, Go and Cargo
   cache in `~/.m2`, `~/.gradle`, `~/.cargo`, `GOMODCACHE`. A JVM repo therefore reinstalls from
@@ -125,8 +141,17 @@ had to be preserved deliberately, and each has a test:
 
 ## Status
 
-Shipped, on all three checkout-having harness paths: single-repo coding, single-repo explore, and
-the multi-repo explore fan-out.
+Shipped, on EVERY checkout-having harness mode: single-repo coding (which the in-place fixers run
+through), single-repo explore, the multi-repo explore fan-out, multi-repo coding, and conflict
+resolution. Repo bootstrap is the sole exemption, and a principled one — its target repo is empty,
+so there is no service config to resolve and nothing on disk to install from.
+
+Every mode goes through the one `prepopulateDependencies` seam rather than assembling the
+run/exclude/note steps itself, and `dependency-install.coverage.test.ts` asserts the rule
+structurally: a harness function that calls `runAgentInWorkspace` must call
+`prepopulateDependencies`, or be named in an exemption table with its reason. The first cut of
+this feature wired three modes and missed two, and nothing in the build, the type system or the
+test suite said so — which is what a structural guard is for.
 
 Scoped to the PRIMARY checkout. A multi-repo run's peer and reference repos are cloned as siblings
 and are not prepopulated, because the install is declared on ONE service frame — the primary
