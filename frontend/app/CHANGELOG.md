@@ -1,5 +1,28 @@
 # @cat-factory/app
 
+## 0.181.0
+
+### Minor Changes
+
+- 1485e9a: Surface an initiative's attached context documents and tracker issues in its inspector.
+
+  The create-initiative modal stages the same attachments the add-task modal does and links them
+  to the initiative block, and the whole planning pipeline reads them — but the inspector only
+  rendered those sections for a task, so an initiative's attachments became invisible the moment
+  the modal closed. The two context panels now gate on task-or-initiative, which also makes them
+  attachable after create (a re-run of planning picks up the addition).
+
+### Patch Changes
+
+- a140688: Surface the shared run-details metadata (step position, duration, model, run id, call count and
+  token usage) on the two Plan Initiative windows, which previously showed none of it.
+
+  The initiative planning Q&A and tracker windows are reachable both from the run timeline and from
+  the board card / inspector, and the off-path entry point carries no step index — so wiring
+  `StepRunMeta` straight off `useResultView` would still leave them blank on the route people
+  actually use. The new auto-imported `useResultViewRunMeta` composable resolves the prop bundle for
+  both routes, falling back to the block's live run and the step whose agent kind declares the view.
+
 ## 0.180.0
 
 ### Minor Changes
