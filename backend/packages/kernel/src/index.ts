@@ -323,6 +323,14 @@ export {
   describeComposeSource,
 } from './domain/compose-sources.js'
 
+// Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
+export {
+  clearsConsensusBar,
+  consensusGroupBar,
+  selectConsensusGroup,
+  applyConsensusGroup,
+} from './domain/consensus-groups.js'
+
 // The marker-delimited splice that makes the engine's PR verification report idempotent.
 export {
   PR_REPORT_MARKER_START,

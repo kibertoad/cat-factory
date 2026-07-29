@@ -356,6 +356,7 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Decomposes a high-level initiative brief into a service → module → task plan. Runs inline (no repo), the entry agent for the public API.',
       category: 'design',
+      tier: 'advanced',
     },
   },
   // The initiative-analyst reads the repository (read-only, base branch — an initiative block has

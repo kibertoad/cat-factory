@@ -1,8 +1,8 @@
 import type { ConsensusGating, TaskEstimate } from '@cat-factory/kernel'
+import { clearsConsensusBar } from '@cat-factory/kernel'
 
 // Pure gating decision: should an eligible, consensus-enabled step actually run the
 // (expensive) multi-model process, or fall back to the standard single-actor agent?
-// Kept pure for unit testing.
 
 export type ConsensusMode = 'consensus' | 'standard'
 
@@ -16,21 +16,18 @@ export type ConsensusMode = 'consensus' | 'standard'
  *    `standard`) — configuring gating means you must give it at least one bar.
  *  - Gating enabled, estimate absent → `gating.onMissingEstimate` (default `consensus`,
  *    fail-safe to thoroughness: we couldn't prove the task is low-stakes).
+ *
+ * The rule itself lives in kernel as {@link clearsConsensusBar}, and this is deliberately a thin
+ * naming of its two outcomes rather than a second implementation. The engine has to answer the
+ * identical question BEFORE any executor exists — it ranks a step's candidate consensus GROUPS by
+ * the bar each one sets and materialises the winner — so a private copy of the axis comparison
+ * here would be a second chance for the tier a workspace was promised and the panel that actually
+ * runs to disagree. That divergence is precisely what `applyConsensusGroup` drops the step's
+ * `gating` to prevent, and a duplicated predicate would have reintroduced it one edit later.
  */
 export function decideConsensusMode(
   estimate: TaskEstimate | null | undefined,
   gating: ConsensusGating | undefined,
 ): ConsensusMode {
-  if (!gating || !gating.enabled) return 'consensus'
-  if (!estimate) return gating.onMissingEstimate ?? 'consensus'
-
-  const axes: Array<[number | undefined, number]> = [
-    [gating.minComplexity, estimate.complexity],
-    [gating.minRisk, estimate.risk],
-    [gating.minImpact, estimate.impact],
-  ]
-  for (const [threshold, value] of axes) {
-    if (threshold !== undefined && value >= threshold) return 'consensus'
-  }
-  return 'standard'
+  return clearsConsensusBar(gating, estimate) ? 'consensus' : 'standard'
 }

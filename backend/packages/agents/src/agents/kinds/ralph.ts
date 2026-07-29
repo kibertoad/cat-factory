@@ -86,6 +86,7 @@ export const RALPH_AGENT_KINDS: AgentKindDefinition[] = [
         'Persistently re-runs a fresh-context coding iteration until the task’s configured ' +
         'validation command passes (or the iteration budget is spent).',
       category: 'build',
+      tier: 'advanced',
       resultView: 'ralph-loop',
     },
   },

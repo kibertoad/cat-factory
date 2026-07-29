@@ -1130,6 +1130,11 @@ export const consensusSessions = pgTable(
     agent_kind: text('agent_kind').notNull(),
     strategy: text('strategy').notNull(),
     status: text('status').notNull(),
+    // The workspace consensus GROUP whose panel ran (the tier the task's estimate earned), when
+    // the step named a tier set. The NAME is copied, not joined: the library row can be renamed
+    // or deleted afterwards and the transcript must still say which panel produced it.
+    group_id: text('group_id'),
+    group_name: text('group_name'),
     participants: text('participants').notNull().default('[]'),
     rounds: text('rounds').notNull().default('[]'),
     synthesis: text('synthesis'),
@@ -1143,6 +1148,31 @@ export const consensusSessions = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_consensus_sessions_step').on(t.workspace_id, t.execution_id, t.step_index),
     index('idx_consensus_sessions_block').on(t.workspace_id, t.block_id, t.created_at),
+  ],
+)
+
+// The workspace CONSENSUS-GROUP library (mirror of D1 migration 0070): the reusable,
+// estimate-gated panels a pipeline step escalates to. `participants` and `gating` are JSON
+// columns — neither is ever a query predicate, since the tier selection runs in TypeScript over
+// the batch `listByIds` returns. A step names a SET of these (inside the existing
+// `pipelines.consensus` JSON) and the engine picks the most demanding tier the estimate clears.
+export const consensusGroups = pgTable(
+  'consensus_groups',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    strategy: text('strategy').notNull(),
+    participants: text('participants').notNull().default('[]'),
+    synthesizer_model_id: text('synthesizer_model_id'),
+    rounds: integer('rounds'),
+    gating: text('gating').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    index('idx_consensus_groups_workspace').on(t.workspace_id, t.created_at),
   ],
 )
 

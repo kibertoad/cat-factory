@@ -60,6 +60,7 @@ export type {
   TestScreenshot,
   AgentKind,
   AgentCategory,
+  AgentTier,
   CustomAgentKind,
   CustomTaskType,
   TaskTypePresentation,
@@ -96,7 +97,7 @@ export type {
   PreviewStatus,
 } from '@cat-factory/contracts'
 
-import type { AgentCategory, AgentKind } from '@cat-factory/contracts'
+import type { AgentCategory, AgentKind, AgentTier } from '@cat-factory/contracts'
 
 // The document-kind list + the per-kind field descriptors are runtime values (used to render
 // the picker and the conditional per-kind inputs), so they are re-exported as values — the
@@ -114,6 +115,12 @@ export interface AgentArchetype {
   description: string
   /** Palette category this archetype is grouped under. Absent ⇒ ungrouped/system kind. */
   category?: AgentCategory
+  /**
+   * How specialist this kind is — the tier the palette / model-preset override list filter on
+   * (`basic` shows only basic kinds, `intermediate` adds those, `advanced` shows everything).
+   * Absent ⇒ `DEFAULT_AGENT_TIER`, which is how an unclassified deployment kind behaves.
+   */
+  tier?: AgentTier
   /**
    * Optional id of a DEDICATED result window this agent's step opens instead of the
    * generic prose step-detail panel. Resolved through the modular `resultViews` slot

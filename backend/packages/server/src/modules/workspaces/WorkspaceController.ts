@@ -404,6 +404,125 @@ function definedFields<T extends Record<string, unknown>>(fields: T): Partial<T>
   return out
 }
 
+/**
+ * The board-load READ WAVE: every slice `GET /workspaces/:id` composes its snapshot from.
+ *
+ * Extracted from the handler as ONE cohesive collaborator rather than a set of per-slice
+ * helpers, because its defining property is that the reads are CONCURRENT — each is an
+ * independent read keyed by the workspace id (only the service catalog chains on the owning
+ * account), so the board-load latency is the slowest read, not the sum of ~20 sequential
+ * round-trips. Splitting it per slice would be the one refactor that could silently
+ * re-sequence them. Every optional module's slice is `undefined` when that module isn't
+ * wired; the handler gates on that with `definedFields`.
+ */
+async function loadSnapshotSlices(
+  container: ServerContainer,
+  workspaceId: string,
+  budgetAccountId: string | null | undefined,
+) {
+  const [
+    snapshot,
+    spend,
+    // Bootstrap runs, so the board renders a bootstrap's live progress / failure +
+    // retry the moment it loads (no separate, independently failing fetch). undefined
+    // when the bootstrap module isn't configured.
+    bootstrapJobs,
+    // Env-config-repair runs (the durable agent fallback for provider config), so the
+    // infrastructure-providers window renders a repair's live progress / outcome on load.
+    envConfigRepairJobs,
+    // In-flight ephemeral-environment self-test runs, so the service inspector re-attaches
+    // to a running test's live stage after a reconnect (see snapshot coherence note).
+    environmentTestRuns,
+    // Open notifications + merge-preset library, so the board renders the inbox,
+    // per-block badges and the task preset picker on load.
+    notifications,
+    riskPolicies,
+    // The workspace's shared stacks (long-lived compose infra a consumer environment
+    // attaches to), so the Infrastructure window renders the library + each stack's
+    // live status on load.
+    sharedStacks,
+    // The workspace's model presets (the model→agent mapping library a task picks
+    // from), so the board renders the Model Configuration settings + the per-task
+    // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
+    // GLM-5.2) on first read.
+    modelPresets,
+    // The workspace's consensus-group library (the estimate-gated panels a pipeline step
+    // escalates to), so the builder's per-step tier picker and the settings editor render
+    // on load.
+    consensusGroups,
+    // The workspace's default service-fragment selection, for the defaults settings.
+    serviceFragmentDefaults,
+    // The workspace's recurring pipelines + issue-tracker selection, so the board
+    // renders the recurring-task badges and the tracker config on load. Run history
+    // is fetched lazily, not here.
+    recurringPipelines,
+    trackerSettings,
+    // The workspace's initiatives (long-running multi-task work containers), so the
+    // board renders initiative cards + trackers on load.
+    initiatives,
+    // The workspace's runtime settings (human-wait escalation threshold + per-service
+    // task limit), so the board renders the settings panel on load.
+    settings,
+    // In-org shared services: the workspace's mounts + the org catalog it can mount
+    // from (each catalog service annotated with its mount count for the "Shared" badge).
+    mounts,
+    serviceCatalog,
+    infraSetup,
+    // The workspace's projected repos (with each repo's `linkedVia`), so the per-viewer
+    // redaction can tell an App-reachable frame from a personal-PAT one. Only when GitHub is
+    // wired; absent ⇒ no personal repos, so nothing to redact.
+    repoProjections,
+    // The account's repo-sourced Claude Skills catalog (lightweight summaries), so the pipeline
+    // builder's per-step skill picker has its options on load. One cached account read.
+    skills,
+  ] = await Promise.all([
+    container.workspaceService.snapshot(workspaceId),
+    container.spendService.status(workspaceId),
+    container.bootstrap?.service.listJobs(workspaceId),
+    container.envConfigRepair?.service.listJobs(workspaceId),
+    container.environments?.environmentTest?.listRunning(workspaceId),
+    container.notifications?.service.listOpen(workspaceId),
+    container.riskPolicies?.service.list(workspaceId),
+    container.sharedStacks?.service.list(workspaceId),
+    container.modelPresets?.service.list(workspaceId),
+    container.consensusGroups?.service.list(workspaceId),
+    container.serviceFragmentDefaults?.service.get(workspaceId),
+    container.recurring?.service.list(workspaceId),
+    container.tracker?.service.get(workspaceId),
+    container.initiatives?.service.list(workspaceId),
+    container.settings?.service.get(workspaceId),
+    container.services?.service.listMounts(workspaceId),
+    container.services && budgetAccountId !== undefined
+      ? container.services.service.listForAccount(budgetAccountId)
+      : undefined,
+    snapshotInfraSetup(container, workspaceId),
+    container.github ? container.github.service.listRepos(workspaceId) : undefined,
+    snapshotSkills(container, budgetAccountId),
+  ])
+  return {
+    snapshot,
+    spend,
+    bootstrapJobs,
+    envConfigRepairJobs,
+    environmentTestRuns,
+    notifications,
+    riskPolicies,
+    sharedStacks,
+    modelPresets,
+    consensusGroups,
+    serviceFragmentDefaults,
+    recurringPipelines,
+    trackerSettings,
+    initiatives,
+    settings,
+    mounts,
+    serviceCatalog,
+    infraSetup,
+    repoProjections,
+    skills,
+  }
+}
+
 /** Board (workspace) lifecycle and full-snapshot retrieval. */
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -519,80 +638,28 @@ export function workspaceController(): Hono<AppEnv> {
     // Every ingredient below is an independent read keyed by the workspace id (only the
     // service catalog chains on the owning account), so they run concurrently: the
     // board-load latency is the slowest read, not the sum of ~15 sequential round-trips.
-    const [
+    const {
       snapshot,
       spend,
-      // Bootstrap runs, so the board renders a bootstrap's live progress / failure +
-      // retry the moment it loads (no separate, independently failing fetch). undefined
-      // when the bootstrap module isn't configured.
       bootstrapJobs,
-      // Env-config-repair runs (the durable agent fallback for provider config), so the
-      // infrastructure-providers window renders a repair's live progress / outcome on load.
       envConfigRepairJobs,
-      // In-flight ephemeral-environment self-test runs, so the service inspector re-attaches
-      // to a running test's live stage after a reconnect (see snapshot coherence note).
       environmentTestRuns,
-      // Open notifications + merge-preset library, so the board renders the inbox,
-      // per-block badges and the task preset picker on load.
       notifications,
       riskPolicies,
-      // The workspace's shared stacks (long-lived compose infra a consumer environment
-      // attaches to), so the Infrastructure window renders the library + each stack's
-      // live status on load.
       sharedStacks,
-      // The workspace's model presets (the model→agent mapping library a task picks
-      // from), so the board renders the Model Configuration settings + the per-task
-      // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
-      // GLM-5.2) on first read.
       modelPresets,
-      // The workspace's default service-fragment selection, for the defaults settings.
+      consensusGroups,
       serviceFragmentDefaults,
-      // The workspace's recurring pipelines + issue-tracker selection, so the board
-      // renders the recurring-task badges and the tracker config on load. Run history
-      // is fetched lazily, not here.
       recurringPipelines,
       trackerSettings,
-      // The workspace's initiatives (long-running multi-task work containers), so the
-      // board renders initiative cards + trackers on load.
       initiatives,
-      // The workspace's runtime settings (human-wait escalation threshold + per-service
-      // task limit), so the board renders the settings panel on load.
       settings,
-      // In-org shared services: the workspace's mounts + the org catalog it can mount
-      // from (each catalog service annotated with its mount count for the "Shared" badge).
       mounts,
       serviceCatalog,
       infraSetup,
-      // The workspace's projected repos (with each repo's `linkedVia`), so the per-viewer
-      // redaction can tell an App-reachable frame from a personal-PAT one. Only when GitHub is
-      // wired; absent ⇒ no personal repos, so nothing to redact.
       repoProjections,
-      // The account's repo-sourced Claude Skills catalog (lightweight summaries), so the pipeline
-      // builder's per-step skill picker has its options on load. One cached account read.
       skills,
-    ] = await Promise.all([
-      container.workspaceService.snapshot(workspaceId),
-      container.spendService.status(workspaceId),
-      container.bootstrap?.service.listJobs(workspaceId),
-      container.envConfigRepair?.service.listJobs(workspaceId),
-      container.environments?.environmentTest?.listRunning(workspaceId),
-      container.notifications?.service.listOpen(workspaceId),
-      container.riskPolicies?.service.list(workspaceId),
-      container.sharedStacks?.service.list(workspaceId),
-      container.modelPresets?.service.list(workspaceId),
-      container.serviceFragmentDefaults?.service.get(workspaceId),
-      container.recurring?.service.list(workspaceId),
-      container.tracker?.service.get(workspaceId),
-      container.initiatives?.service.list(workspaceId),
-      container.settings?.service.get(workspaceId),
-      container.services?.service.listMounts(workspaceId),
-      container.services && budgetAccountId !== undefined
-        ? container.services.service.listForAccount(budgetAccountId)
-        : undefined,
-      snapshotInfraSetup(container, workspaceId),
-      container.github ? container.github.service.listRepos(workspaceId) : undefined,
-      snapshotSkills(container, budgetAccountId),
-    ])
+    } = await loadSnapshotSlices(container, workspaceId, budgetAccountId)
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry, container)
     const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
@@ -662,6 +729,7 @@ export function workspaceController(): Hono<AppEnv> {
           riskPolicies,
           sharedStacks,
           modelPresets,
+          consensusGroups,
           serviceFragmentDefaults,
           recurringPipelines,
           trackerSettings,

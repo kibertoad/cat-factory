@@ -3168,6 +3168,47 @@
       "saved": "Zapisano domyślne środowisko testowe.",
       "savedState": "Zapisano.",
       "saveFailed": "Nie udało się zapisać domyślnego środowiska testowego."
+    },
+    "consensusGroups": {
+      "title": "Grupy konsensusu",
+      "intro": "Wielokrotnego użytku panele przeglądu, do których może eskalować krok potoku. Każda grupa niesie próg oszacowania, który zadanie musi przekroczyć — cięższa praca dostaje większy panel bez osobnego potoku.",
+      "new": "Nowa grupa",
+      "list": {
+        "empty": "Brak grup konsensusu.",
+        "always": "Zawsze",
+        "bar": "Od {bar}",
+        "editTitle": "Edytuj grupę",
+        "deleteTitle": "Usuń grupę",
+        "participantCount": "brak uczestników | jeden uczestnik | {count} uczestników"
+      },
+      "editor": {
+        "nameLabel": "Nazwa",
+        "namePlaceholder": "Panel dogłębnego przeglądu",
+        "strategyLabel": "Strategia",
+        "descriptionLabel": "Opis",
+        "descriptionPlaceholder": "Do czego służy ten panel",
+        "participantsLabel": "Uczestnicy",
+        "participantsHint": "Co najmniej dwóch. To różnorodność ról i modeli sprawia, że panel bije pojedynczy model.",
+        "addParticipant": "Dodaj uczestnika",
+        "framingPlaceholder": "Perspektywa, z której argumentuje ten uczestnik",
+        "stepModel": "Model kroku",
+        "synthesizerLabel": "Model syntezy",
+        "gatedLabel": "Tylko dla zadań powyżej progu",
+        "gatedHint": "Oszacowanie, które zadanie musi osiągnąć, aby zasłużyć na ten panel. Zostaw wyłączone, aby grupa obowiązywała zawsze.",
+        "complexityThreshold": "Złożoność",
+        "gatingIncomplete": "Ustaw co najmniej jeden próg albo wyłącz warunek.",
+        "unnamedRole": "Recenzent",
+        "cancel": "Anuluj",
+        "save": "Zapisz grupę"
+      },
+      "confirmDelete": {
+        "title": "Usunąć grupę konsensusu?",
+        "body": "Kroki wskazujące „{name}” wrócą do pozostałych grup."
+      },
+      "toast": {
+        "saveFailed": "Nie udało się zapisać grupy konsensusu",
+        "deleteFailed": "Nie udało się usunąć grupy konsensusu"
+      }
     }
   },
   "providers": {
@@ -3935,7 +3976,11 @@
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
       "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
       "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
-      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego"
+      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego",
+      "consensusGroups": "Grupy konsensusu",
+      "consensusGroupsHint": "Wybierz wielokrotnego użytku panele, do których ten krok może eskalować. Każdy ma własny próg oszacowania; uruchamia się najbardziej wymagający, który zadanie przekroczy.",
+      "consensusGroupsActive": "Ten krok uruchamia wybraną grupę. Odznacz wszystkie grupy, aby skonfigurować uczestników tutaj.",
+      "consensusGroupAlways": "zawsze"
     },
     "progress": {
       "status": {
@@ -4043,6 +4088,17 @@
       "loadFailed": "Nie udało się wczytać promptu",
       "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
     }
+  },
+  "agentTier": {
+    "label": "Poziom agentów",
+    "basic": "Podstawowy",
+    "intermediate": "Średni",
+    "advanced": "Zaawansowany",
+    "basicHint": "Tylko codzienni agenci, z których zwykle buduje się potok.",
+    "intermediateHint": "Dodaje agentów, po których sięgasz regularnie.",
+    "advancedHint": "Pokazuje wszystkich agentów, także tych specjalistycznych.",
+    "tooltip": "Wybierz, jak dużą część katalogu agentów pokazać",
+    "hidden": "{count} agent ukryty na tym poziomie. | {count} agenci ukryci na tym poziomie. | {count} agentów ukrytych na tym poziomie."
   },
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
@@ -4387,7 +4443,8 @@
       "synthesizing": "Synteza",
       "done": "Gotowe",
       "failed": "Niepowodzenie"
-    }
+    },
+    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie"
   },
   "brainstorm": {
     "title": {

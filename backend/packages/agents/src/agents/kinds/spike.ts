@@ -326,6 +326,7 @@ export const SPIKE_AGENT_KINDS: AgentKindDefinition[] = [
         'Timeboxed read-only investigation that answers a research question against the context ' +
         'and codebase, and delivers a findings document (as a pull request by default; no code).',
       category: 'design',
+      tier: 'intermediate',
       // The structured findings open in the shared generic viewer (no bespoke window).
       resultView: 'generic-structured',
     },

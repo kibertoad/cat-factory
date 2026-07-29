@@ -28,15 +28,21 @@ describe('customKindToArchetype', () => {
     })
   })
 
-  it('carries category and resultView through when present', () => {
-    const a = customKindToArchetype(kind({ category: 'review', resultView: 'acme:audit' }))
+  it('carries category, tier and resultView through when present', () => {
+    const a = customKindToArchetype(
+      kind({ category: 'review', tier: 'basic', resultView: 'acme:audit' }),
+    )
     expect(a.category).toBe('review')
+    expect(a.tier).toBe('basic')
     expect(a.resultView).toBe('acme:audit')
   })
 
-  it('omits category/resultView when absent (no undefined keys)', () => {
+  it('omits category/tier/resultView when absent (no undefined keys)', () => {
     const a = customKindToArchetype(kind())
     expect('category' in a).toBe(false)
+    // Left UNSET rather than stamped with the default, so the fallback stays in one place
+    // (`agentTierVisibleAt`) instead of being forked into this projection.
+    expect('tier' in a).toBe(false)
     expect('resultView' in a).toBe(false)
   })
 })

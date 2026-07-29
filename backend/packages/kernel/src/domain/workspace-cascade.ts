@@ -49,6 +49,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'blocks',
   'brainstorm_sessions',
   'clarity_reviews',
+  'consensus_groups',
   'consensus_sessions',
   'custom_manifest_types',
   'doc_interview_sessions',

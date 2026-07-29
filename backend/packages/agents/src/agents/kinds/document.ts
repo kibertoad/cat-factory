@@ -470,6 +470,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Investigates the topic, prior art and linked context, producing a research brief before a document is drafted.',
       category: 'docs',
+      tier: 'intermediate',
     },
   },
   {
@@ -485,6 +486,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Turns the brief and research into a kind-appropriate document outline for human review before drafting.',
       category: 'docs',
+      tier: 'intermediate',
     },
   },
   {
@@ -502,6 +504,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Converses with the requester to refine a document’s scope, audience and structure before drafting, synthesizing a refined authoring brief.',
       category: 'docs',
+      tier: 'advanced',
       // Opens the dedicated interactive-interview window (answer / continue / proceed) via the
       // universal result-view seam, not the generic prose panel.
       resultView: 'doc-interview',
@@ -523,6 +526,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Writes the document as in-repo Markdown following the approved outline, and opens a pull request.',
       category: 'docs',
+      tier: 'basic',
     },
   },
   {
@@ -541,6 +545,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Final editorial pass over the drafted document — clarity, consistency, formatting and reviewer feedback.',
       category: 'docs',
+      tier: 'intermediate',
     },
   },
   {
@@ -560,6 +565,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Addresses the document-quality gate’s structural findings on the drafted document and pushes the fix.',
       category: 'docs',
+      tier: 'intermediate',
     },
   },
 ]

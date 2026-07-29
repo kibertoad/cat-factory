@@ -17,6 +17,7 @@ import type {
   BrainstormSessionRepository,
   ClarityReviewRepository,
   Clock,
+  ConsensusGroupRepository,
   ConsensusSessionRepository,
   DocInterviewRepository,
   EmailConnectionRepository,
@@ -107,6 +108,7 @@ import {
 import {
   DrizzleBrainstormSessionRepository,
   DrizzleClarityReviewRepository,
+  DrizzleConsensusGroupRepository,
   DrizzleConsensusSessionRepository,
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
@@ -167,6 +169,7 @@ export interface CoreRepositories {
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   consensusSessionRepository: ConsensusSessionRepository
+  consensusGroupRepository: ConsensusGroupRepository
   clarityReviewRepository: ClarityReviewRepository
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
@@ -220,6 +223,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     kaizenGradingRepository: new DrizzleKaizenGradingRepository(db),
     kaizenVerifiedComboRepository: new DrizzleKaizenVerifiedComboRepository(db),
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
+    consensusGroupRepository: new DrizzleConsensusGroupRepository(db),
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),

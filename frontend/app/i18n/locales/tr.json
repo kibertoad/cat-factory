@@ -3180,6 +3180,47 @@
       "saved": "Varsayılan test ortamı kaydedildi.",
       "savedState": "Kaydedildi.",
       "saveFailed": "Varsayılan test ortamı kaydedilemedi."
+    },
+    "consensusGroups": {
+      "title": "Uzlaşı grupları",
+      "intro": "Bir hat adımının yükselebileceği yeniden kullanılabilir inceleme panelleri. Her grup, bir görevin aşması gereken tahmin eşiğini taşır; böylece ağır iş ayrı bir hat gerekmeden daha geniş bir panel alır.",
+      "new": "Yeni grup",
+      "list": {
+        "empty": "Henüz uzlaşı grubu yok.",
+        "always": "Her zaman",
+        "bar": "{bar} ve üzeri",
+        "editTitle": "Grubu düzenle",
+        "deleteTitle": "Grubu sil",
+        "participantCount": "katılımcı yok | bir katılımcı | {count} katılımcı"
+      },
+      "editor": {
+        "nameLabel": "Ad",
+        "namePlaceholder": "Derin inceleme paneli",
+        "strategyLabel": "Strateji",
+        "descriptionLabel": "Açıklama",
+        "descriptionPlaceholder": "Bu panel ne için",
+        "participantsLabel": "Katılımcılar",
+        "participantsHint": "En az iki. Bir paneli tek modelden üstün kılan şey rol ve model çeşitliliğidir.",
+        "addParticipant": "Katılımcı ekle",
+        "framingPlaceholder": "Bu katılımcının savunduğu bakış açısı",
+        "stepModel": "Adımın modeli",
+        "synthesizerLabel": "Sentez modeli",
+        "gatedLabel": "Yalnızca eşiğin üzerindeki görevler için",
+        "gatedHint": "Bir görevin bu paneli hak etmesi için ulaşması gereken tahmin. Grubun her zaman geçerli olması için kapalı bırak.",
+        "complexityThreshold": "Karmaşıklık",
+        "gatingIncomplete": "En az bir eşik belirle ya da koşulu kapat.",
+        "unnamedRole": "İnceleyici",
+        "cancel": "Vazgeç",
+        "save": "Grubu kaydet"
+      },
+      "confirmDelete": {
+        "title": "Uzlaşı grubu silinsin mi?",
+        "body": "\"{name}\" adını taşıyan adımlar kalan gruplarına geri döner."
+      },
+      "toast": {
+        "saveFailed": "Uzlaşı grubu kaydedilemedi",
+        "deleteFailed": "Uzlaşı grubu silinemedi"
+      }
     }
   },
   "providers": {
@@ -3947,7 +3988,11 @@
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
       "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
       "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
-      "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş"
+      "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş",
+      "consensusGroups": "Uzlaşı grupları",
+      "consensusGroupsHint": "Bu adımın yükselebileceği yeniden kullanılabilir panelleri seç. Her birinin kendi tahmin eşiği vardır; görevin aştığı en zorlu olan çalışır.",
+      "consensusGroupsActive": "Bu adım seçili grubu çalıştırır. Katılımcıları burada ayarlamak için tüm grupların seçimini kaldır.",
+      "consensusGroupAlways": "her zaman"
     },
     "progress": {
       "status": {
@@ -4055,6 +4100,17 @@
       "loadFailed": "İstem yüklenemedi",
       "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
     }
+  },
+  "agentTier": {
+    "label": "Ajan düzeyi",
+    "basic": "Temel",
+    "intermediate": "Orta",
+    "advanced": "İleri",
+    "basicHint": "Yalnızca bir hattın normalde kurulduğu günlük ajanlar.",
+    "intermediateHint": "Düzenli olarak başvurduğunuz ajanları ekler.",
+    "advancedHint": "Uzmanlaşmış olanlar dahil tüm ajanları gösterir.",
+    "tooltip": "Ajan kataloğunun ne kadarının gösterileceğini seçin",
+    "hidden": "Bu düzeyde {count} ajan gizli."
   },
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
@@ -4399,7 +4455,8 @@
       "synthesizing": "Sentezleniyor",
       "done": "Tamamlandı",
       "failed": "Başarısız"
-    }
+    },
+    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu"
   },
   "brainstorm": {
     "title": {

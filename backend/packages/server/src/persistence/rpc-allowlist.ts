@@ -694,6 +694,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The consensus-GROUP library — authored, durable board config (which models review a task
+  // and at what estimate bar), so `remote` like the preset libraries above rather than a local
+  // knob. `listByIds` is on the RUN path, not just the editor's: `AgentContextBuilder` resolves
+  // a tiered step's group set on EVERY dispatch, so omitting it would fail an agent step with
+  // `unknown_method` instead of merely dimming a settings panel.
+  consensusGroupRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    listByIds: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // --- Post-release-health / observability settings surface -----------------------
   // The three settings repositories a mothership-mode SPA manages for the post-release-health
   // flow: the (single) observability connection, the per-block monitor/SLO mapping, and the

@@ -3,10 +3,13 @@ import { computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, PipelinePurpose } from '~/types/domain'
+import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
+import { filterByAgentTier } from '~/utils/agentTier'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
+const agentTier = useAgentTierStore()
 const releaseHealth = useReleaseHealthStore()
 defineEmits<{ (e: 'add', kind: AgentKind): void }>()
 // The purpose of the pipeline being built. When set to a non-`build` classifier, the
@@ -16,7 +19,7 @@ const props = defineProps<{ purpose?: PipelinePurpose | null }>()
 
 // The post-release-health gate is only meaningful — and only accepted by the backend —
 // with an observability integration connected, so it appears in the palette ONLY then.
-const palette = computed(() => {
+const offered = computed(() => {
   const all = releaseHealth.connection.connected
     ? [...agents.archetypes, OBSERVABILITY_GATE_ARCHETYPE]
     : agents.archetypes
@@ -24,6 +27,13 @@ const palette = computed(() => {
   // has no category to gate, so it always shows).
   return all.filter((a) => !a.category || purposeAllowsAgentCategory(props.purpose, a.category))
 })
+
+// Then narrow to the selected tier. Applied AFTER the purpose gate so the "n hidden" hint
+// counts only what the TIER is holding back — a kind the pipeline's purpose rules out is not
+// something a wider tier would reveal, so counting it would send the user chasing a control
+// that cannot help them.
+const palette = computed(() => filterByAgentTier(offered.value, agentTier.tier))
+const hiddenByTier = computed(() => offered.value.length - palette.value.length)
 
 // Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket
 // for runtime-added agents that carry no category. Empty groups are dropped.
@@ -54,6 +64,7 @@ function toggle(id: string) {
 <template>
   <div class="space-y-2">
     <p class="px-1 text-[11px] text-slate-500">{{ t('palette.hint') }}</p>
+    <AgentTierSelect :hidden-count="hiddenByTier" />
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
         <button
