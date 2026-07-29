@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The single tabbed "Infrastructure" window — now a TOP-LEVEL navbar destination (no longer
-// reached through the Integrations hub). Two topical tabs:
+// reached through the Integrations hub). Its topical tabs:
 //   - "Agent containers" — where repo-operating agent containers run. Shows the execution
 //     backend selector, the runner-pool connection (ProviderConnectionTab), and — in local
 //     mode — the warm-container-pool + checkout-reuse settings (the local agent-container
@@ -10,24 +10,33 @@
 //     Compose setup (formerly a standalone "Environment setup" sidebar entry — it writes a
 //     service's Compose recipe plus the workspace's Compose handler, so it belongs beside the
 //     settings it edits rather than at the same level as them).
+//   - "Shared stacks" — long-lived Compose infra a Tester environment attaches to, so it rides
+//     the same probe as the environments tab (nothing to attach to without one).
+//   - "Package registries" — the private npm registries a checkout installs from (formerly an
+//     Integrations-hub row). What a container can resolve its dependencies from is part of the
+//     execution environment, not an optional external system a workspace links in.
 // Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
-import type { ProviderConnectionKind } from '~/types/providerConnections'
+import type { InfrastructureTab } from '~/types/providerConnections'
+import {
+  infrastructureTabs,
+  openInfrastructureTab,
+  repinInfrastructureTab,
+} from '~/components/settings/InfrastructureWindow.logic'
 import InfrastructureBackendPicker from '~/components/settings/InfrastructureBackendPicker.vue'
 import InfraHandlersConfigurator from '~/components/settings/InfraHandlersConfigurator.vue'
 import DefaultProvisionTypeSection from '~/components/settings/DefaultProvisionTypeSection.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
 import ComposeEnvironmentSetupSection from '~/components/settings/ComposeEnvironmentSetupSection.vue'
-
-// The shared-stacks tab uses its own slot key beyond the provider-connection kinds.
-type InfraTabValue = ProviderConnectionKind | 'shared-stacks'
+import PackageRegistriesPanel from '~/components/settings/PackageRegistriesPanel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
 const auth = useAuthStore()
+const packageRegistries = usePackageRegistriesStore()
 
 const open = computed({
   get: () => ui.infrastructureOpen,
@@ -45,35 +54,41 @@ const isLocal = computed(() => auth.localMode?.enabled === true)
 const agentsAvailable = computed(() => (auth.infrastructure?.execution.available.length ?? 0) > 0)
 const envsAvailable = computed(() => (auth.infrastructure?.testEnv.available.length ?? 0) > 0)
 
-const tabs = computed(() => {
-  const out: { value: InfraTabValue; label: string; icon: string; slot: string }[] = []
-  if (agentsAvailable.value)
-    out.push({
-      value: 'runner-pool',
-      label: t('settings.providerConnection.tabs.agentContainers'),
-      icon: 'i-lucide-server-cog',
-      slot: 'runner-pool',
-    })
-  if (envsAvailable.value)
-    out.push({
-      value: 'environment',
-      label: t('settings.providerConnection.tabs.testEnvironments'),
-      icon: 'i-lucide-cloud',
-      slot: 'environment',
-    })
-  // Shared stacks are long-lived compose infra a Tester environment attaches to, so they live
-  // alongside the test-environment config (shown wherever an environment backend is available).
-  if (envsAvailable.value)
-    out.push({
-      value: 'shared-stacks',
-      label: t('settings.sharedStacks.tab'),
-      icon: 'i-lucide-layers',
-      slot: 'shared-stacks',
-    })
-  return out
-})
+// Tab presentation, keyed by the closed `InfrastructureTab` union so a new tab fails to compile
+// until it is given a label and an icon. The labels are literal `t()` calls for the same reason
+// they are not resolved in the logic module: a key assembled at runtime is invisible to the
+// typed-message-key check.
+const TAB_LABELS = computed<Record<InfrastructureTab, string>>(() => ({
+  'runner-pool': t('settings.providerConnection.tabs.agentContainers'),
+  environment: t('settings.providerConnection.tabs.testEnvironments'),
+  'shared-stacks': t('settings.sharedStacks.tab'),
+  'package-registries': t('settings.packageRegistries.tab'),
+}))
+const TAB_ICONS: Record<InfrastructureTab, string> = {
+  'runner-pool': 'i-lucide-server-cog',
+  environment: 'i-lucide-cloud',
+  'shared-stacks': 'i-lucide-layers',
+  'package-registries': 'i-lucide-package',
+}
 
-const activeTab = ref<InfraTabValue>(ui.infrastructureTab)
+// `slot` mirrors `value` — the template names one `<template #…>` per tab value.
+const tabs = computed(() =>
+  infrastructureTabs({
+    agents: agentsAvailable.value,
+    environments: envsAvailable.value,
+    // The module's own probe (the backend 503s with no encryption key), same gate as the
+    // Integrations-hub row this replaced — an unconfigured backend shows no dead tab.
+    packageRegistries: packageRegistries.available === true,
+  }).map((value) => ({
+    value,
+    label: TAB_LABELS.value[value],
+    icon: TAB_ICONS[value],
+    slot: value,
+  })),
+)
+const tabValues = computed(() => tabs.value.map((x) => x.value))
+
+const activeTab = ref<InfrastructureTab>(ui.infrastructureTab)
 
 // Honour the deep-linked tab each time the window opens, falling back to the first available
 // tab if the requested one is off.
@@ -82,24 +97,25 @@ watch(
   (isOpen) => {
     if (!isOpen) return
     void store.ensureLoaded().catch(() => {})
-    const requested = ui.infrastructureTab
-    const available = tabs.value.map((x) => x.value)
-    activeTab.value = available.includes(requested) ? requested : (available[0] ?? requested)
+    // The registries tab gates on this probe, so it has to resolve for the tab to appear at
+    // all — the panel's own load is a no-op once this settled (`ensureLoaded` coalesces).
+    // Swallowed here on purpose: the PANEL reports a load failure, and it can only do that
+    // once the tab it lives in exists, so a probe failure has to leave the window itself alone.
+    void packageRegistries.ensureLoaded().catch(() => {})
+    activeTab.value = openInfrastructureTab(tabValues.value, ui.infrastructureTab)
   },
   { immediate: true },
 )
 // When availability resolves after open, re-pin onto a valid tab — but keep honouring the
-// deep-linked request. The two availability probes resolve independently, so `tabs` can pass
-// through a transient single-tab list; only fall back to the first tab once loading settled.
+// deep-linked request. The three availability probes resolve independently, so `tabs` can pass
+// through a transient short list; only fall back to the first tab once loading settled.
 watch([tabs, () => store.loaded], () => {
-  const list = tabs.value
-  if (list.some((x) => x.value === activeTab.value)) return
-  const requested = ui.infrastructureTab
-  if (list.some((x) => x.value === requested)) {
-    activeTab.value = requested
-  } else if (store.loaded && list.length) {
-    activeTab.value = list[0]!.value
-  }
+  activeTab.value = repinInfrastructureTab(
+    tabValues.value,
+    activeTab.value,
+    ui.infrastructureTab,
+    store.loaded,
+  )
 })
 </script>
 
@@ -156,6 +172,9 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #shared-stacks>
             <SharedStacksPanel />
+          </template>
+          <template #package-registries>
+            <PackageRegistriesPanel />
           </template>
         </UTabs>
 

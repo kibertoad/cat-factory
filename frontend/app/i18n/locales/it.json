@@ -537,20 +537,22 @@
       "incidentNoun": "il provider degli incidenti"
     },
     "packageRegistries": {
-      "title": "Registry di package privati",
+      "tab": "Registry di package",
       "intro": "Connetti i registry privati da cui i tuoi repository installano. Gli agenti li ricevono quando effettuano il checkout di un repository, cosicche le dipendenze private si risolvano durante le installazioni. I token sono in sola scrittura: per modificarne uno, rimuovi la voce e aggiungila di nuovo.",
       "entryNoun": "voce del registry",
       "list": {
         "heading": "Registry connessi",
         "tokenTail": "token …{tail}",
-        "remove": "Rimuovi voce"
+        "remove": "Rimuovi voce",
+        "noScopes": "Nessuno scope (il token autentica solo questo registry)"
       },
       "add": {
         "heading": "Aggiungi un registry",
         "vendor": "Registry",
         "host": "Il token viene inviato solo a {host}.",
         "scopes": "Scope dei package",
-        "scopesHelp": "Scope npm separati da virgola",
+        "scopesHelp": "Facoltativo. Scope npm separati da virgola.",
+        "scopesNote": "Facoltativo. Uno scope indicato qui indirizza a questo registry ogni package che contiene, quindi uno scope che include anche package pubblicati pubblicamente smette di essere risolto. Lascialo vuoto quando il repository include un proprio .npmrc oppure quando le singole dipendenze vengono fissate con un prefisso di registry denominato come gh: (pnpm 11.1 o successivo): il token autentica il registry in ogni caso.",
         "token": "Token di accesso",
         "save": "Aggiungi registry"
       },
@@ -2149,10 +2151,6 @@
         "observability": {
           "label": "Salute post-rilascio",
           "description": "Monitora i monitor e gli SLO dopo il rilascio di una release (Datadog)."
-        },
-        "packageRegistries": {
-          "label": "Registry di pacchetti privati",
-          "description": "Token npm e GitHub Packages che gli agenti usano per installare dipendenze private."
         },
         "apiTokens": {
           "label": "Token di accesso API",

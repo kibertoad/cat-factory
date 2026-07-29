@@ -537,20 +537,22 @@
       "incidentNoun": "der Incident-Provider"
     },
     "packageRegistries": {
-      "title": "Private Package-Registries",
+      "tab": "Package-Registries",
       "intro": "Verbinde die privaten Registries, aus denen deine Repositories installieren. Agenten erhalten sie beim Auschecken eines Repositorys, sodass private Abhängigkeiten während der Installation aufgelöst werden. Tokens sind nur schreibbar: um eines zu ändern, entferne den Eintrag und füge ihn erneut hinzu.",
       "entryNoun": "Registry-Eintrag",
       "list": {
         "heading": "Verbundene Registries",
         "tokenTail": "Token …{tail}",
-        "remove": "Eintrag entfernen"
+        "remove": "Eintrag entfernen",
+        "noScopes": "Keine Scopes (das Token authentifiziert nur dieses Registry)"
       },
       "add": {
         "heading": "Eine Registry hinzufügen",
         "vendor": "Registry",
         "host": "Das Token wird nur an {host} gesendet.",
         "scopes": "Package-Scopes",
-        "scopesHelp": "Kommagetrennte npm-Scopes",
+        "scopesHelp": "Optional. Kommagetrennte npm-Scopes.",
+        "scopesNote": "Optional. Ein hier eingetragener Scope leitet jedes Paket darunter an dieses Registry, sodass ein Scope, der auch öffentlich veröffentlichte Pakete enthält, nicht mehr aufgelöst wird. Lass das Feld leer, wenn das Repository eine eigene .npmrc enthält oder wenn einzelne Abhängigkeiten über ein benanntes Registry-Präfix wie gh: festgelegt werden (pnpm 11.1 oder neuer) - das Token authentifiziert das Registry ohnehin.",
         "token": "Zugriffstoken",
         "save": "Registry hinzufügen"
       },
@@ -2149,10 +2151,6 @@
         "observability": {
           "label": "Post-Release-Health",
           "description": "Überwachen Sie Monitore und SLOs, nachdem ein Release ausgeliefert wurde (Datadog)."
-        },
-        "packageRegistries": {
-          "label": "Private Package-Registries",
-          "description": "npm- und GitHub-Packages-Tokens, mit denen Agenten private Abhängigkeiten installieren."
         },
         "apiTokens": {
           "label": "API-Zugriffstokens",

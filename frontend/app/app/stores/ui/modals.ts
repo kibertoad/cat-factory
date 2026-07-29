@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types/domain'
+import type { InfrastructureTab, ProviderConnectionKind } from '~/types/providerConnections'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   DEFAULT_PROVISION_DEEP_LINK_PARAM,
@@ -452,9 +453,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // model / agent kind, spend + activity per workspace / service / task type). Admin-gated.
   // Distinct from `operatorDashboardOpen`, which answers the deployment-HEALTH question.
   const reportsOpen = ref(false)
-  // Private package registries: the workspace's npm/GitHub-Packages entries agent
-  // containers install with. Opened from the Integrations hub.
-  const packageRegistriesOpen = ref(false)
+  // NOTE: private package registries are no longer a panel of their own — they are a tab of
+  // the Infrastructure window (`infrastructureOpen`), reached from the navbar.
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
@@ -504,13 +504,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeReports() {
     reportsOpen.value = false
-  }
-  function openPackageRegistries() {
-    resetHubReturn()
-    packageRegistriesOpen.value = true
-  }
-  function closePackageRegistries() {
-    packageRegistriesOpen.value = false
   }
   function openApiTokens() {
     resetHubReturn()
@@ -564,7 +557,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     observabilityConnectionOpen,
     operatorDashboardOpen,
     reportsOpen,
-    packageRegistriesOpen,
     apiTokensOpen,
     modelConfigOpen,
     vendorCredentialsOpen,
@@ -582,8 +574,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     openReports,
     closeReports,
     closeOperatorDashboard,
-    openPackageRegistries,
-    closePackageRegistries,
     openApiTokens,
     closeApiTokens,
     openModelConfig,
@@ -683,13 +673,19 @@ function createSettingsModals(resetHubReturn: ResetHubReturn) {
  */
 function createInfraModals(resetHubReturn: ResetHubReturn) {
   // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
-  // reached via the Integrations hub). Two topical tabs: "Agent containers" (the execution
-  // backend + self-hosted runner pool, plus the local-mode warm pool/checkout) and "Test
-  // environments" (the ephemeral-environment provider). `infrastructureOpen` is the modal
-  // flag; `infrastructureTab` selects the tab. `openInfrastructure()` is the navbar entry;
-  // `openProviderConnection(kind)` remains for deep-links (a banner's "Configure…" button).
+  // reached via the Integrations hub). Its topical tabs: "Agent containers" (the execution
+  // backend + self-hosted runner pool, plus the local-mode warm pool/checkout), "Test
+  // environments" (the ephemeral-environment provider), "Shared stacks" (long-lived Compose
+  // infra an environment attaches to) and "Package registries" (the private registries a
+  // checkout installs from). `infrastructureOpen` is the modal flag; `infrastructureTab`
+  // selects the tab. `openInfrastructure()` is the navbar entry; `openProviderConnection(kind)`
+  // remains for deep-links (a banner's "Configure…" button).
+  //
+  // The ref is typed against the FULL `InfrastructureTab` union, not the provider-connection
+  // kinds: a tab this cannot name is a tab nothing can deep-link to, which is how the
+  // non-connection tabs ended up reachable only by opening the window and clicking across.
   const infrastructureOpen = ref(false)
-  const infrastructureTab = ref<'environment' | 'runner-pool'>('runner-pool')
+  const infrastructureTab = ref<InfrastructureTab>('runner-pool')
   // Non-secret prefill captured from the `cat-factory k3s` CLI deep-link (see
   // `consumeK3sSetupDeepLink`). When set, the Test-environments tab's kube engine form seeds the
   // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
@@ -704,12 +700,15 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
 
   // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
   // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
-  function openInfrastructure(tab: 'environment' | 'runner-pool' = 'runner-pool') {
+  function openInfrastructure(tab: InfrastructureTab = 'runner-pool') {
     resetHubReturn()
     infrastructureTab.value = tab
     infrastructureOpen.value = true
   }
-  function openProviderConnection(kind: 'environment' | 'runner-pool') {
+  // Deep-link into a PROVIDER's tab specifically (a config banner's "Configure…" button), so
+  // this one stays narrowed to the connection kinds — it means "connect this provider", not
+  // "open the window somewhere". Use `openInfrastructure(tab)` for any other tab.
+  function openProviderConnection(kind: ProviderConnectionKind) {
     resetHubReturn()
     infrastructureTab.value = kind
     infrastructureOpen.value = true
