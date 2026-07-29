@@ -537,20 +537,22 @@
       "incidentNoun": "der Incident-Provider"
     },
     "packageRegistries": {
-      "title": "Private Package-Registries",
+      "tab": "Package-Registries",
       "intro": "Verbinde die privaten Registries, aus denen deine Repositories installieren. Agenten erhalten sie beim Auschecken eines Repositorys, sodass private Abhängigkeiten während der Installation aufgelöst werden. Tokens sind nur schreibbar: um eines zu ändern, entferne den Eintrag und füge ihn erneut hinzu.",
       "entryNoun": "Registry-Eintrag",
       "list": {
         "heading": "Verbundene Registries",
         "tokenTail": "Token …{tail}",
-        "remove": "Eintrag entfernen"
+        "remove": "Eintrag entfernen",
+        "noScopes": "Keine Scopes (das Token authentifiziert nur dieses Registry)"
       },
       "add": {
         "heading": "Eine Registry hinzufügen",
         "vendor": "Registry",
         "host": "Das Token wird nur an {host} gesendet.",
         "scopes": "Package-Scopes",
-        "scopesHelp": "Kommagetrennte npm-Scopes",
+        "scopesHelp": "Optional. Kommagetrennte npm-Scopes.",
+        "scopesNote": "Optional und besser leer, wenn ein Scope private und öffentliche Pakete mischt: Ein hier eingetragener Scope leitet jedes Paket darunter an dieses Registry, sodass die öffentlich veröffentlichten nicht mehr aufgelöst werden. Das Token authentifiziert das Registry ohnehin, einzelne Abhängigkeiten lassen sich also weiterhin über ein Registry-Präfix in ihrer Version darauf festlegen (von pnpm unterstützt).",
         "token": "Zugriffstoken",
         "save": "Registry hinzufügen"
       },
@@ -2146,10 +2148,6 @@
         "observability": {
           "label": "Post-Release-Health",
           "description": "Überwachen Sie Monitore und SLOs, nachdem ein Release ausgeliefert wurde (Datadog)."
-        },
-        "packageRegistries": {
-          "label": "Private Package-Registries",
-          "description": "npm- und GitHub-Packages-Tokens, mit denen Agenten private Abhängigkeiten installieren."
         },
         "apiTokens": {
           "label": "API-Zugriffstokens",

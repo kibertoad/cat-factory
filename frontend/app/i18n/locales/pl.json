@@ -2087,10 +2087,6 @@
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Prywatne rejestry pakietów",
-          "description": "Tokeny npm i GitHub Packages, których agenci używają do instalowania prywatnych zależności."
-        },
         "apiTokens": {
           "label": "Tokeny dostępu do API",
           "description": "Tokeny, które systemy zewnętrzne przedstawiają, aby wywołać API cat-factory."
@@ -2594,20 +2590,22 @@
       "incidentNoun": "dostawcę incydentów"
     },
     "packageRegistries": {
-      "title": "Prywatne rejestry pakietów",
+      "tab": "Rejestry pakietów",
       "intro": "Połącz prywatne rejestry, z których instalują Twoje repozytoria. Agenci otrzymują je przy pobieraniu repozytorium, dzięki czemu prywatne zależności rozwiązują się podczas instalacji. Tokeny są tylko do zapisu: aby zmienić token, usuń wpis i dodaj go ponownie.",
       "entryNoun": "wpis rejestru",
       "list": {
         "heading": "Połączone rejestry",
         "tokenTail": "token …{tail}",
-        "remove": "Usuń wpis"
+        "remove": "Usuń wpis",
+        "noScopes": "Brak zakresów (token uwierzytelnia tylko ten rejestr)"
       },
       "add": {
         "heading": "Dodaj rejestr",
         "vendor": "Rejestr",
         "host": "Token jest wysyłany tylko do {host}.",
         "scopes": "Zakresy pakietów",
-        "scopesHelp": "Zakresy npm oddzielone przecinkami",
+        "scopesHelp": "Opcjonalne. Zakresy npm oddzielone przecinkami.",
+        "scopesNote": "Opcjonalne, a najlepiej zostawić puste, gdy zakres łączy pakiety prywatne i publiczne: zakres podany tutaj kieruje do tego rejestru każdy pakiet w jego obrębie, więc te opublikowane publicznie przestają się rozwiązywać. Token uwierzytelnia rejestr niezależnie od tego, więc pojedyncze zależności nadal można do niego przypiąć prefiksem rejestru w ich wersji (obsługiwane przez pnpm).",
         "token": "Token dostępu",
         "save": "Dodaj rejestr"
       },

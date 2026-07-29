@@ -3,23 +3,17 @@
 // orgs, GitHub Packages) that agent containers use to resolve private dependencies
 // on checkout. Tokens are write-only: the list renders from the redacted summary
 // (vendor + scopes + token tail) and an entry is edited by deleting + re-adding.
-// Opened from the Integrations hub.
-import { computed, reactive, ref, watch } from 'vue'
+// Renders inline inside the Infrastructure window's "Package registries" tab: what a
+// checkout installs from is part of where agent containers RUN, not an optional
+// external system the workspace links in.
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { PackageRegistryVendor } from '~/types/packageRegistries'
-import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
-const ui = useUiStore()
 const store = usePackageRegistriesStore()
 const toast = useToast()
 const { confirmAction, toastDone } = useConfirmAction()
-
-const open = computed({
-  get: () => ui.packageRegistriesOpen,
-  set: (v: boolean) => (v ? ui.openPackageRegistries() : ui.closePackageRegistries()),
-})
-const back = useIntegrationBack(open)
 
 // The registry vendors a workspace can connect. Fixed set — the host derives from the
 // vendor server-side, so it renders read-only here. Vendor names stay verbatim.
@@ -59,18 +53,13 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-watch(
-  open,
-  async (isOpen) => {
-    if (!isOpen) return
-    try {
-      await store.ensureLoaded()
-    } catch (e) {
-      notifyError(t('settings.packageRegistries.toast.loadFailed'), e)
-    }
-  },
-  { immediate: true },
-)
+onMounted(async () => {
+  try {
+    await store.ensureLoaded()
+  } catch (e) {
+    notifyError(t('settings.packageRegistries.toast.loadFailed'), e)
+  }
+})
 
 async function addEntry() {
   busy.value = true
@@ -111,108 +100,105 @@ async function removeEntry(entryId: string) {
 </script>
 
 <template>
-  <UModal
-    v-model:open="open"
-    :title="t('settings.packageRegistries.title')"
-    :ui="{ content: 'max-w-lg' }"
-  >
-    <template #title>
-      <IntegrationBackTitle :title="t('settings.packageRegistries.title')" @back="back" />
-    </template>
-    <template #body>
-      <div class="space-y-4" data-testid="package-registries-panel">
-        <p class="text-sm text-slate-400">
-          {{ t('settings.packageRegistries.intro') }}
-        </p>
+  <div class="space-y-4" data-testid="package-registries-panel">
+    <p class="text-sm text-slate-400">
+      {{ t('settings.packageRegistries.intro') }}
+    </p>
 
-        <section
-          v-if="store.entries.length"
-          class="space-y-2 rounded-lg border border-slate-700 p-3"
-        >
-          <h3 class="text-sm font-semibold">
-            {{ t('settings.packageRegistries.list.heading') }}
-          </h3>
-          <div
-            v-for="entry in store.entries"
-            :key="entry.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
-          >
-            <div class="min-w-0 space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ vendorLabel(entry.vendor) }}</span>
-                <span class="text-[11px] text-slate-500">
-                  {{ t('settings.packageRegistries.list.tokenTail', { tail: entry.tokenTail }) }}
-                </span>
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <UBadge
-                  v-for="scope in entry.scopes"
-                  :key="scope"
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                >
-                  {{ scope }}
-                </UBadge>
-              </div>
-            </div>
-            <UButton
-              color="error"
-              variant="ghost"
-              icon="i-lucide-trash-2"
-              size="sm"
-              :loading="busy"
-              :data-testid="`package-registry-delete-${entry.id}`"
-              :aria-label="t('settings.packageRegistries.list.remove')"
-              @click="removeEntry(entry.id)"
-            />
+    <section v-if="store.entries.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+      <h3 class="text-sm font-semibold">
+        {{ t('settings.packageRegistries.list.heading') }}
+      </h3>
+      <div
+        v-for="entry in store.entries"
+        :key="entry.id"
+        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
+      >
+        <div class="min-w-0 space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium">{{ vendorLabel(entry.vendor) }}</span>
+            <span class="text-[11px] text-slate-500">
+              {{ t('settings.packageRegistries.list.tokenTail', { tail: entry.tokenTail }) }}
+            </span>
           </div>
-        </section>
-
-        <section class="space-y-3 rounded-lg border border-slate-700 p-3">
-          <h3 class="text-sm font-semibold">
-            {{ t('settings.packageRegistries.add.heading') }}
-          </h3>
-
-          <UFormField :label="t('settings.packageRegistries.add.vendor')">
-            <USelect
-              v-model="form.vendor"
-              :items="VENDORS"
-              value-key="value"
-              class="w-full"
-              data-testid="package-registry-vendor"
-            />
-          </UFormField>
-          <p class="text-[11px] text-slate-500">
-            {{ t('settings.packageRegistries.add.host', { host: vendorHost }) }}
-          </p>
-
-          <UFormField
-            :label="t('settings.packageRegistries.add.scopes')"
-            :help="t('settings.packageRegistries.add.scopesHelp')"
-          >
-            <UInput
-              v-model="form.scopes"
-              placeholder="@my-org, @my-other-org"
-              class="w-full"
-              data-testid="package-registry-scopes"
-            />
-          </UFormField>
-
-          <UFormField :label="t('settings.packageRegistries.add.token')">
-            <SecretInput v-model="form.token" class="w-full" data-testid="package-registry-token" />
-          </UFormField>
-
-          <UButton
-            :loading="busy"
-            :disabled="!parsedScopes.length || !form.token.trim()"
-            data-testid="package-registry-save"
-            @click="addEntry"
-          >
-            {{ t('settings.packageRegistries.add.save') }}
-          </UButton>
-        </section>
+          <div class="flex flex-wrap gap-1">
+            <UBadge
+              v-for="scope in entry.scopes"
+              :key="scope"
+              color="neutral"
+              variant="soft"
+              size="sm"
+            >
+              {{ scope }}
+            </UBadge>
+            <!-- An entry with no scopes authenticates its host without routing any scope to
+                 it (the deliberate mixed public/private setup) — say so, or the row reads as
+                 half-configured. -->
+            <span v-if="!entry.scopes.length" class="text-[11px] text-slate-500">
+              {{ t('settings.packageRegistries.list.noScopes') }}
+            </span>
+          </div>
+        </div>
+        <UButton
+          color="error"
+          variant="ghost"
+          icon="i-lucide-trash-2"
+          size="sm"
+          :loading="busy"
+          :data-testid="`package-registry-delete-${entry.id}`"
+          :aria-label="t('settings.packageRegistries.list.remove')"
+          @click="removeEntry(entry.id)"
+        />
       </div>
-    </template>
-  </UModal>
+    </section>
+
+    <section class="space-y-3 rounded-lg border border-slate-700 p-3">
+      <h3 class="text-sm font-semibold">
+        {{ t('settings.packageRegistries.add.heading') }}
+      </h3>
+
+      <UFormField :label="t('settings.packageRegistries.add.vendor')">
+        <USelect
+          v-model="form.vendor"
+          :items="VENDORS"
+          value-key="value"
+          class="w-full"
+          data-testid="package-registry-vendor"
+        />
+      </UFormField>
+      <p class="text-[11px] text-slate-500">
+        {{ t('settings.packageRegistries.add.host', { host: vendorHost }) }}
+      </p>
+
+      <UFormField
+        :label="t('settings.packageRegistries.add.scopes')"
+        :help="t('settings.packageRegistries.add.scopesHelp')"
+      >
+        <UInput
+          v-model="form.scopes"
+          placeholder="@my-org, @my-other-org"
+          class="w-full"
+          data-testid="package-registry-scopes"
+        />
+      </UFormField>
+      <!-- Why leaving this empty is often the RIGHT answer — a scope mapping is all-or-nothing,
+           so an org publishing some of its `@org` packages publicly breaks under one. -->
+      <p class="text-[11px] text-slate-500">
+        {{ t('settings.packageRegistries.add.scopesNote') }}
+      </p>
+
+      <UFormField :label="t('settings.packageRegistries.add.token')">
+        <SecretInput v-model="form.token" class="w-full" data-testid="package-registry-token" />
+      </UFormField>
+
+      <UButton
+        :loading="busy"
+        :disabled="!form.token.trim()"
+        data-testid="package-registry-save"
+        @click="addEntry"
+      >
+        {{ t('settings.packageRegistries.add.save') }}
+      </UButton>
+    </section>
+  </div>
 </template>

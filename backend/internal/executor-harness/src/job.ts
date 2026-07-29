@@ -420,7 +420,7 @@ export interface PackageRegistrySpec {
   ecosystem: 'npm'
   /** Registry host, e.g. `registry.npmjs.org` — allowlisted, never a full URL. */
   host: string
-  /** npm scopes (`@org`) routed to this registry. */
+  /** npm scopes (`@org`) routed to this registry; EMPTY ⇒ authenticate the host only. */
   scopes: string[]
   token: string
 }
@@ -468,8 +468,12 @@ export function parsePackageRegistries(
         `Invalid job: 'packageRegistries[${i}].host' '${host}' is not an allowed npm registry host`,
       )
     }
-    if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
-      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be a non-empty array`)
+    // An EMPTY scope list is valid and deliberate: the entry then only authenticates its
+    // host, leaving every package to resolve from the default registry unless a dependency
+    // pins this one itself. Mapping a scope is all-or-nothing, so a workspace mixing private
+    // and public packages under one scope must be able to skip it.
+    if (!Array.isArray(entry.scopes)) {
+      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be an array`)
     }
     const scopes = entry.scopes.map((scope, j) => {
       const s = str(scope, `packageRegistries[${i}].scopes[${j}]`).trim()

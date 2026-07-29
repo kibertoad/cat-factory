@@ -2163,10 +2163,6 @@
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
         },
-        "packageRegistries": {
-          "label": "Private package registries",
-          "description": "npm and GitHub Packages tokens agents use to install private dependencies."
-        },
         "apiTokens": {
           "label": "API access tokens",
           "description": "Tokens external systems present to call the cat-factory API."
@@ -2813,20 +2809,22 @@
       "incidentNoun": "the incident provider"
     },
     "packageRegistries": {
-      "title": "Private package registries",
+      "tab": "Package registries",
       "intro": "Connect the private registries your repositories install from. Agents receive them when they check out a repository, so private dependencies resolve during installs. Tokens are write-only: to change one, remove the entry and add it again.",
       "entryNoun": "registry entry",
       "list": {
         "heading": "Connected registries",
         "tokenTail": "token …{tail}",
-        "remove": "Remove entry"
+        "remove": "Remove entry",
+        "noScopes": "No scopes (the token authenticates this registry only)"
       },
       "add": {
         "heading": "Add a registry",
         "vendor": "Registry",
         "host": "The token is sent only to {host}.",
         "scopes": "Package scopes",
-        "scopesHelp": "Comma-separated npm scopes",
+        "scopesHelp": "Optional. Comma-separated npm scopes.",
+        "scopesNote": "Optional, and best left empty when a scope mixes private and public packages: a scope listed here routes every package under it to this registry, so the ones published publicly stop resolving. The token authenticates the registry either way, so single dependencies can still be pinned to it with a registry prefix in their version (supported by pnpm).",
         "token": "Access token",
         "save": "Add registry"
       },

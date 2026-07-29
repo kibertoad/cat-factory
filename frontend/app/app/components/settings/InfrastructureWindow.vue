@@ -10,6 +10,9 @@
 //     Compose setup (formerly a standalone "Environment setup" sidebar entry — it writes a
 //     service's Compose recipe plus the workspace's Compose handler, so it belongs beside the
 //     settings it edits rather than at the same level as them).
+//   - "Package registries" — the private npm registries a checkout installs from (formerly an
+//     Integrations-hub row). What a container can resolve its dependencies from is part of the
+//     execution environment, not an optional external system a workspace links in.
 // Local-specific affordances render inline, gated on `auth.localMode?.enabled`. A tab whose
 // backend integration is disabled (503) simply doesn't render.
 import { computed, ref, watch } from 'vue'
@@ -20,14 +23,17 @@ import DefaultProvisionTypeSection from '~/components/settings/DefaultProvisionT
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
 import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
 import ComposeEnvironmentSetupSection from '~/components/settings/ComposeEnvironmentSetupSection.vue'
+import PackageRegistriesPanel from '~/components/settings/PackageRegistriesPanel.vue'
 
-// The shared-stacks tab uses its own slot key beyond the provider-connection kinds.
-type InfraTabValue = ProviderConnectionKind | 'shared-stacks'
+// The shared-stacks and package-registry tabs use their own slot keys beyond the
+// provider-connection kinds.
+type InfraTabValue = ProviderConnectionKind | 'shared-stacks' | 'package-registries'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useProviderConnectionsStore()
 const auth = useAuthStore()
+const packageRegistries = usePackageRegistriesStore()
 
 const open = computed({
   get: () => ui.infrastructureOpen,
@@ -70,6 +76,15 @@ const tabs = computed(() => {
       icon: 'i-lucide-layers',
       slot: 'shared-stacks',
     })
+  // Gated on the module's own probe (the backend 503s with no encryption key), same as the
+  // Integrations-hub row this replaced — an unconfigured backend shows no dead tab.
+  if (packageRegistries.available === true)
+    out.push({
+      value: 'package-registries',
+      label: t('settings.packageRegistries.tab'),
+      icon: 'i-lucide-package',
+      slot: 'package-registries',
+    })
   return out
 })
 
@@ -82,6 +97,9 @@ watch(
   (isOpen) => {
     if (!isOpen) return
     void store.ensureLoaded().catch(() => {})
+    // The registries tab gates on this probe, so it has to resolve for the tab to appear at
+    // all — the panel's own load is a no-op once this settled (`ensureLoaded` coalesces).
+    void packageRegistries.ensureLoaded().catch(() => {})
     const requested = ui.infrastructureTab
     const available = tabs.value.map((x) => x.value)
     activeTab.value = available.includes(requested) ? requested : (available[0] ?? requested)
@@ -156,6 +174,9 @@ watch([tabs, () => store.loaded], () => {
           </template>
           <template #shared-stacks>
             <SharedStacksPanel />
+          </template>
+          <template #package-registries>
+            <PackageRegistriesPanel />
           </template>
         </UTabs>
 

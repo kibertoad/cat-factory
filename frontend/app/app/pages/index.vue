@@ -437,7 +437,6 @@ watch(
       <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
       <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
       <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
-      <PackageRegistriesPanel v-if="ui.packageRegistriesOpen" />
       <ApiTokensPanel v-if="ui.apiTokensOpen" />
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
       <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />

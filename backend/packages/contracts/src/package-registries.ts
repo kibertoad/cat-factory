@@ -38,7 +38,7 @@ export function packageRegistryHost(vendor: PackageRegistryVendor): string {
   }
 }
 
-/** An npm package scope (`@org`), the granularity private registries key on. */
+/** An npm package scope (`@org`) routed to a private registry. */
 export const npmScopeSchema = v.pipe(
   v.string(),
   v.trim(),
@@ -68,11 +68,22 @@ export const packageRegistryTokenSchema = v.pipe(
   ),
 )
 
-/** Add one registry entry to the workspace (token write-only, never read back). */
+/**
+ * Add one registry entry to the workspace (token write-only, never read back).
+ *
+ * `scopes` may be EMPTY, and that is the right answer more often than it looks: an npmrc
+ * scope mapping is all-or-nothing, so routing `@org` at a private registry makes EVERY
+ * `@org/*` package resolve from it — which breaks an organisation publishing part of that
+ * scope to the public registry. A scope-less entry still emits the host's `_authToken`
+ * line, so individual dependencies can be pinned to the registry through their version
+ * specifier (pnpm's per-dependency registry prefix) while the rest of the scope keeps
+ * resolving publicly. NB an empty list needs harness image >= 1.73.0; older images reject
+ * the job body.
+ */
 export const addPackageRegistrySchema = v.object({
   ecosystem: packageEcosystemSchema,
   vendor: packageRegistryVendorSchema,
-  scopes: v.pipe(v.array(npmScopeSchema), v.minLength(1), v.maxLength(50)),
+  scopes: v.pipe(v.array(npmScopeSchema), v.maxLength(50)),
   token: packageRegistryTokenSchema,
 })
 export type AddPackageRegistryInput = v.InferOutput<typeof addPackageRegistrySchema>

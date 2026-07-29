@@ -452,9 +452,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   // model / agent kind, spend + activity per workspace / service / task type). Admin-gated.
   // Distinct from `operatorDashboardOpen`, which answers the deployment-HEALTH question.
   const reportsOpen = ref(false)
-  // Private package registries: the workspace's npm/GitHub-Packages entries agent
-  // containers install with. Opened from the Integrations hub.
-  const packageRegistriesOpen = ref(false)
+  // NOTE: private package registries are no longer a panel of their own — they are a tab of
+  // the Infrastructure window (`infrastructureOpen`), reached from the navbar.
   // API access tokens: the workspace's inbound public-API keys external systems present to
   // the `/api/v1` surface. Opened from the Integrations hub.
   const apiTokensOpen = ref(false)
@@ -504,13 +503,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeReports() {
     reportsOpen.value = false
-  }
-  function openPackageRegistries() {
-    resetHubReturn()
-    packageRegistriesOpen.value = true
-  }
-  function closePackageRegistries() {
-    packageRegistriesOpen.value = false
   }
   function openApiTokens() {
     resetHubReturn()
@@ -564,7 +556,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     observabilityConnectionOpen,
     operatorDashboardOpen,
     reportsOpen,
-    packageRegistriesOpen,
     apiTokensOpen,
     modelConfigOpen,
     vendorCredentialsOpen,
@@ -582,8 +573,6 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     openReports,
     closeReports,
     closeOperatorDashboard,
-    openPackageRegistries,
-    closePackageRegistries,
     openApiTokens,
     closeApiTokens,
     openModelConfig,
