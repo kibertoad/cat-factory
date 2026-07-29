@@ -104,6 +104,18 @@ InterviewGateNotice.vue` renders the wait and the stopped-run notice for both wi
   because a primary button that is silently greyed out is itself a "nothing happened". Where a
   window also has an RBAC gate on those buttons (the doc one does), the RBAC reason outranks the
   draft gap — a member who cannot execute runs must not be told to finish answering.
+- **A multi-round interview must render PENDING FIRST.** The planning interview accumulates:
+  `applyInterviewQuestions` keeps the answered + dismissed digest and APPENDS the new round after
+  it, so from round two the only questions the human can still act on sit at the bottom, below a
+  wall of ones they already settled. `orderInterviewQuestions` (`app/utils/initiative.ts`) floats
+  the pending ones up for the RENDER only — the stored `qa` order is what the interviewer prompt
+  and the in-repo tracker digest read, so never reorder the entity. Requirements review has no
+  equivalent need: `replaceForBlock` publishes a fresh item set per round rather than accumulating.
+  Two things the ordering has to get right, both pinned by `utils/initiative.spec.ts` and the
+  window's own snapshot comment: keep the interviewer's chronological order WITHIN each group, and
+  re-snapshot the order per ROUND rather than deriving it live from the answers — live, a question
+  jumps out from under the human the moment they blur its textarea, and everything below shifts up
+  while they are reading down the list.
 - **Requirements adoption (6c) uses the slots, not new coupling.** Put its recommend-toggle button
   in the `actions` slot, its severity/category badges in the `badges` slot, drive `requested` from
   `recommend_requested`, and leave its recommendations section OUTSIDE the component — so the
