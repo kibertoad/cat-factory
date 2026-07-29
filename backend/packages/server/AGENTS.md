@@ -39,6 +39,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   inherited). Every dispatcher of the `agent` kind — the executor, the bootstrapper and
   `ContainerEnvConfigRepairer` — puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
+  `agents/promptOverrides.ts` is the container half of the per-workspace **agent prompt
+  override**: `dispatchSystemPromptFor` is what every container prompt assembly rides (the
+  inline + consensus executors pass the override to `systemPromptFor` directly), and
+  `BESPOKE_CONTAINER_SYSTEM_PROMPTS` names the two kinds — `merger` / `on-call` — whose dispatch
+  bypasses `systemPromptFor`. Each entry splits that kind's constant into the EDITABLE role half
+  and the non-editable `directives` tail, so an override replaces the role while the tail is
+  re-appended — the bespoke path's equivalent of `applySurfaceDirectives`.
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).

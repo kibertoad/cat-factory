@@ -1,4 +1,4 @@
-import { runCapturedCommand } from './captured-command.js'
+import { fencedOutput, runCapturedCommand } from './captured-command.js'
 import type { RunOptions } from './runner.js'
 import type { Logger } from './logger.js'
 
@@ -249,7 +249,11 @@ export function buildRepairPrompt(
       const reason = o.timedOut
         ? `timed out after ${Math.round((o.durationMs ?? 0) / 1000)}s`
         : `exited ${o.exitCode}`
-      return `### ${o.label} — ${reason}\n\n\`\`\`\n$ ${o.command}\n${body}\n\`\`\``
+      // Fenced through the shared helper: a failing lint or test routinely prints backticks
+      // (a rule quoting a template literal, a fixture echoing a fenced snippet), and a fixed
+      // three-tick fence closes on the first such run — spilling the rest of the failure, and
+      // the repair INSTRUCTIONS below it, into what the model reads as prose.
+      return `### ${o.label} — ${reason}\n\n${fencedOutput(`$ ${o.command}\n${body}`)}`
     })
     .join('\n\n')
   const remaining = report.maxAttempts - report.attempts

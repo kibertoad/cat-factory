@@ -80,6 +80,11 @@ export const CONFLICT_REASONS = [
   // or by how long the oldest has waited), so task creation is refused outright until the review
   // queue is worked down — an acknowledgement cannot tunnel through this.
   'review_debt_blocked',
+  // Two people edited the same agent's system prompt at once. The prompt log is append-only and
+  // the next revision number comes from a read, so the second save collides rather than being
+  // merged last-write-wins — the SPA reloads the log and asks the user to re-apply their edit on
+  // top of what landed, instead of silently discarding one of the two prompts.
+  'prompt_revision_conflict',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

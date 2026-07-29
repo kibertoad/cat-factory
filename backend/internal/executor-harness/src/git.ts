@@ -537,6 +537,26 @@ export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Pro
 }
 
 /**
+ * The untracked, non-ignored paths in the working tree with whole untracked DIRECTORIES
+ * collapsed to a single `dir/` entry (`--directory`), rather than every file beneath them.
+ *
+ * The sibling {@link listUntrackedFiles} answers "what did the agent forget to commit", where
+ * every individual file is the point. This one answers "what appeared in the tree", where it is
+ * emphatically not: a dependency install leaves tens of thousands of files under one directory,
+ * and enumerating them would cost a multi-megabyte listing to learn a single name.
+ */
+export async function listUntrackedPaths(dir: string, signal?: AbortSignal): Promise<string[]> {
+  const out = await git(
+    ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory'],
+    { cwd: dir, signal },
+  )
+  return out
+    .split('\n')
+    .map((line) => line.replace(/\r$/, '').trim())
+    .filter((path) => path !== '')
+}
+
+/**
  * Locally exclude `pattern` from this checkout via `.git/info/exclude` — a per-clone
  * ignore that never lands in the repo (unlike a `.gitignore`). Used for the harness's
  * follow-up sentinel file so the agent's own `git add` can never stage it and it never
@@ -551,6 +571,38 @@ export async function excludeFromGit(
   try {
     const excludePath = join(dir, '.git', 'info', 'exclude')
     await appendFile(excludePath, `\n${pattern}\n`, 'utf8')
+  } catch {
+    // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
+    void signal
+  }
+}
+
+/**
+ * Locally exclude LITERAL paths — never patterns — from this checkout, in ONE write.
+ *
+ * The sibling {@link excludeFromGit} takes an author-written pattern for a known sentinel. These
+ * paths instead come from the FILESYSTEM (what a dependency install left behind), so two things
+ * differ. Each is escaped, because a directory named `pkg[1]` read as a gitignore character class
+ * excludes something else entirely and, being a no-op on the real path, fails silently. And they
+ * are appended together, because a per-path append would cost one file write per entry to build
+ * a list that is already known in full.
+ *
+ * Anchored: `ls-files` reports repo-root-relative paths and a gitignore pattern containing a
+ * slash is root-anchored, which is what makes `packages/api/node_modules/` exclude that service's
+ * tree and not a same-named directory elsewhere. Best-effort, exactly like its sibling.
+ */
+export async function excludePathsFromGit(
+  dir: string,
+  paths: readonly string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  if (paths.length === 0) return
+  // Escape every gitignore metacharacter, plus a leading `#` (comment) or `!` (negation) which
+  // are only special in that position.
+  const escaped = paths.map((p) => p.replace(/[[\]*?\\]/g, '\\$&').replace(/^([#!])/, '\\$1'))
+  try {
+    const excludePath = join(dir, '.git', 'info', 'exclude')
+    await appendFile(excludePath, `\n${escaped.join('\n')}\n`, 'utf8')
   } catch {
     // A missing .git/info/exclude (worktree layout) or write error is non-fatal.
     void signal

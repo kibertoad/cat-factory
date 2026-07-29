@@ -18,6 +18,14 @@ export interface ValidationConfigRecord {
   checks: { label: string; command: string }[]
   /** How many agent+check rounds the harness may run (1 = check once, no repair round). */
   maxAttempts: number
+  /**
+   * DEPENDENCY PREPOPULATION: the install the harness runs against the checkout BEFORE the
+   * agent's first turn, so it reads a tree whose dependencies are present instead of inferring
+   * them from a manifest. Shares this row because it is resolved by the same frame-chain read
+   * the checks are, but it is a separate concern: a service may declare only this, or only
+   * checks. Absent ⇒ no prepopulation (the pre-feature behaviour).
+   */
+  dependencyInstall?: string
   createdAt: number
   updatedAt: number
 }

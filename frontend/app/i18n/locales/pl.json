@@ -513,7 +513,8 @@
         "env_test_infraless": "Nie ma czego testować",
         "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
         "env_test_no_vcs": "Dostawca Git nie jest połączony",
-        "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się"
+        "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się",
+        "prompt_revision_conflict": "Prompt zmieniony przez kogoś innego"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -537,7 +538,8 @@
         "env_test_not_provisionable_type_mismatch": "Do typu udostępniania tej usługi może pasować więcej niż jeden mechanizm obsługi środowiska. Przypnij manifest id do tej usługi, aby rozwiązywany był dokładnie jeden, albo usuń nakładający się mechanizm obsługi w sekcji Infrastruktura → Środowiska testowe.",
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym.",
         "env_test_connection_failed": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
-        "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie."
+        "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
+        "prompt_revision_conflict": "Inna zmiana tego promptu trafiła pierwsza. Wczytaj go ponownie i nanieś swoją zmianę na wierzch."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1098,6 +1100,8 @@
     "validationChecks": {
       "title": "Walidacja przed PR",
       "sectionHint": "Polecenia uruchamiane na kopii roboczej po zakończeniu pracy programisty, a przed otwarciem żądania scalenia. Niepowodzenie wraca do agenta do naprawy; tylko czysta kopia otwiera żądanie scalenia.",
+      "dependencyInstall": "Instalacja zależności",
+      "dependencyInstallHint": "Uruchamia się przed startem agenta",
       "hint": "Każde polecenie jest uruchamiane przez `sh -c` w kopii roboczej tej usługi, po kolei. Poprawiaj kod, a nie sprawdzenie — agent ma polecenie ich nie osłabiać.",
       "clear": "Wyczyść",
       "configNoun": "sprawdzenia walidacyjne",
@@ -1117,6 +1121,7 @@
         "action": "Wykryj",
         "hint": "Zaproponuj testy na podstawie repozytorium tej usługi",
         "added": "Dodano {count} test | Dodano {count} testy | Dodano {count} testów",
+        "installOnly": "Uzupełniono instalację zależności",
         "found": "Rozpoznano: {ecosystems}.",
         "capped": "Część propozycji pominięto — usługa przyjmuje najwyżej {max} testów.",
         "nothingNew": "Nie ma czego dodać",
@@ -3926,7 +3931,9 @@
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
-      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie."
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
+      "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
+      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego"
     },
     "progress": {
       "status": {
@@ -3998,6 +4005,41 @@
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
         "deleteFailed": "Nie udało się usunąć pipeline'u"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Prompt systemowy: {agent}",
+    "description": "Zastępuje polecenie tego agenta we wszystkich uruchomieniach w tym obszarze roboczym.",
+    "customized": "Zmieniony",
+    "usingBuiltin": "Wbudowany",
+    "managedNotice": "Platforma dopisuje własne, nieedytowalne reguły do wszystkiego, co tutaj zapiszesz.",
+    "showAppended": "Pokaż dopisywany tekst",
+    "hideAppended": "Ukryj dopisywany tekst",
+    "appendedHeading": "Dopisywane przez platformę (bez możliwości edycji)",
+    "placeholder": "Opisz, co ten agent ma robić.",
+    "save": "Zapisz jako nową wersję",
+    "revert": "Wróć do wbudowanego",
+    "loadBuiltin": "Wczytaj tekst wbudowany",
+    "showBuiltin": "Porównaj z wbudowanym",
+    "hideBuiltin": "Ukryj wbudowany",
+    "restoringFrom": "Wczytano z wersji {n}. Zapisz, aby znów była aktywna.",
+    "builtinHeading": "Prompt wbudowany",
+    "historyHeading": "Historia wersji",
+    "historyEmpty": "Ten agent nie był jeszcze zmieniany w tym obszarze roboczym.",
+    "live": "Aktywna",
+    "restore": "Wczytaj",
+    "restoreTooltip": "Wczytaj tę wersję do edytora",
+    "revision": {
+      "edit": "Wersja {n} (zmieniona)",
+      "restored": "Wersja {n} (przywrócona z wersji {from})",
+      "builtin": "Wersja {n} (powrót do wbudowanego)"
+    },
+    "toast": {
+      "saved": "Prompt zapisany",
+      "reverted": "Powrót do wbudowanego promptu",
+      "saveFailed": "Nie udało się zapisać promptu",
+      "loadFailed": "Nie udało się wczytać promptu",
+      "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
     }
   },
   "palette": {
@@ -5028,7 +5070,12 @@
       "forkOf": "Rozgałęzienie · {name}",
       "newVersionOf": "Nowa wersja · {name}",
       "saveVersion": "Zapisz nową wersję",
-      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom."
+      "hint": "Wybierz prompt, aby rozgałęzić wydaną wersję bazową lub wersjonować kandydata. Każdy zapis dodaje niezmienną wersję, którą możesz poddać testom.",
+      "liveInWorkspace": "Aktywny",
+      "fromWorkspace": "Twój obszar roboczy",
+      "promoteTitle": "Ustaw jako aktywny prompt tego agenta",
+      "promoted": "To teraz aktywny prompt dla {agent}",
+      "promoteFailed": "Nie udało się aktywować tego promptu"
     },
     "fixtureKind": {
       "requirements": "wymagania",

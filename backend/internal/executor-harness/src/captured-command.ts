@@ -136,6 +136,23 @@ export async function runCapturedCommand(args: {
   })
 }
 
+/**
+ * Wrap captured command output in a fenced block that the output itself cannot break out of.
+ *
+ * Every consumer of a captured tail embeds it in markdown a MODEL then reads — a repair prompt,
+ * the dependency-install note — and a package manager legitimately prints backticks (a linter
+ * quoting a template literal, a test echoing a fenced snippet from a fixture). A fixed three-tick
+ * fence closes on the first such run, and everything after it reads as prose: the remaining
+ * output, and worse, the INSTRUCTIONS that follow the block. Sizing the fence one tick longer than
+ * the longest run in the body is what CommonMark specifies for exactly this, so the block always
+ * spans the whole tail.
+ */
+export function fencedOutput(text: string): string {
+  const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length))
+  const fence = '`'.repeat(Math.max(3, longestRun + 1))
+  return `${fence}\n${text}\n${fence}`
+}
+
 /** Bound an already-scrubbed output tail to what a REPORT carries, saying what it dropped. */
 export function boundTail(scrubbed: string, maxChars: number): string {
   if (scrubbed.length <= maxChars) return scrubbed

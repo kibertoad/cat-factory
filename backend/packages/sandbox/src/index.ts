@@ -34,6 +34,14 @@ export {
   filterByLabels,
 } from './promptVersions.logic.js'
 
+export {
+  workspacePromptVersionId,
+  workspacePromptLineageId,
+  parseWorkspacePromptVersionId,
+  workspacePromptVersions,
+  sandboxPromptKinds,
+} from './workspacePrompts.js'
+
 export { type ExpandDeps, cellCount, expandMatrix, isRunnableMatrix } from './matrix.logic.js'
 
 export {

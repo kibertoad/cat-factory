@@ -1,0 +1,1 @@
+ALTER TABLE "validation_configs" ADD COLUMN "dependency_install" text;

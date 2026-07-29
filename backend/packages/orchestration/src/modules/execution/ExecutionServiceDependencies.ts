@@ -1,6 +1,7 @@
 import type {
   AccountRepository,
   AgentExecutor,
+  AgentPromptRepository,
   BlockRepository,
   BlueprintService,
   BrainstormSessionRepository,
@@ -137,6 +138,12 @@ export interface ExecutionServiceDependencies {
    * `defaultInitiativePresetRegistry()` when a facade doesn't inject the shared instance.
    */
   initiativePresetRegistry: InitiativePresetRegistry
+  /**
+   * Optional: the workspace's agent system-prompt override log, threaded into the context
+   * builder so each dispatch runs the prompt the workspace edited for that kind. Absent ⇒
+   * every kind runs its shipped prompt (the feature is simply off).
+   */
+  agentPromptRepository?: AgentPromptRepository
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService

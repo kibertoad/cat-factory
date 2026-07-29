@@ -595,6 +595,35 @@ export const modelPresets = pgTable(
     index('idx_model_presets_default').on(t.workspace_id, t.is_default),
   ],
 )
+// Per-workspace agent system-prompt overrides (mirror of D1 migration 0068), edited from the
+// pipeline builder. APPEND-ONLY: one row per revision, the HIGHEST `revision` is live, and
+// restoring an older prompt appends a copy of it (tagged `restored_from`) rather than moving a
+// pointer. `text` NULL is the deliberate way back to the shipped built-in — distinct from
+// having no rows at all, so the log records the revert. The composite primary key is
+// load-bearing: the next revision number comes from a read, so the collision is what keeps two
+// concurrent editors from clobbering each other (surfaced as a 409). Never upsert into it.
+export const agentPromptRevisions = pgTable(
+  'agent_prompt_revisions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    revision: integer('revision').notNull(),
+    text: text('text'),
+    restored_from: integer('restored_from'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    created_by: text('created_by'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.agent_kind, t.revision] }),
+    // The workspace-wide override index reads every kind's head in one pass (mirrors
+    // idx_agent_prompt_revisions_workspace). The D1 mirror declares `revision DESC`; this one is
+    // ASC deliberately — Postgres scans a btree backwards at the same cost, so matching the
+    // direction would buy nothing and cost a regenerated snapshot. Neither store's head read
+    // depends on the declared direction.
+    index('idx_agent_prompt_revisions_workspace').on(t.workspace_id, t.agent_kind, t.revision),
+  ],
+)
+
 // Per-workspace default service-fragment selection (mirror of D1 migration 0040). One
 // row per workspace; the best-practice fragment ids new services inherit, JSON array.
 export const workspaceFragmentDefaults = pgTable('workspace_fragment_defaults', {

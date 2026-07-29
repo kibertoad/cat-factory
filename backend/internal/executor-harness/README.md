@@ -63,21 +63,30 @@ The implementation job (`POST /run`) is the canonical sequence:
    stays distinguishable from the first pass's in telemetry; without that flag the plain path is
    used and the calls are recorded as unattributed
    (see [token-burn instrumentation](../../../docs/initiatives/token-burn-instrumentation.md)),
-3. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
-4. **validate** the checkout, when the job body carries `validationChecks` — the service's
+3. **prepopulate dependencies**, when the job body carries `dependencyInstall` — the
+   service's install command is run with `sh -c` in the checkout BEFORE the agent starts, so
+   it reads real installed packages instead of inferring a library's capabilities from a
+   manifest entry. Best-effort and never a gate: the outcome (success or the captured
+   failure) is folded into the agent's prompt — on EVERY pass, including the repair passes of
+   steps 5 and 6, which start a fresh agent — and the run continues either way. Whatever the
+   install materialises is excluded from git first, so no later `git add -A` can sweep a
+   dependency tree into the pull request (see
+   [dependency prepopulation](../../../docs/initiatives/agent-dependency-prepopulation.md)),
+4. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
+5. **validate** the checkout, when the job body carries `validationChecks` — the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
    while they fail and the attempt budget remains the agent is re-run with the captured output
    as its instruction (see [pre-PR validation](../../../docs/initiatives/pre-pr-validation.md)),
-5. **prove the reproduction**, when the job body carries `reproduction` — the declared check is
+6. **prove the reproduction**, when the job body carries `reproduction` — the declared check is
    run against the pre-fix tree and the tree the PR will open from, in two freshly-created
    symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
    [bugfix reproduction proof](../../../docs/initiatives/bugfix-reproduction-proof.md)). Unlike
-   step 4 this NEVER gates the PR: a failed verification is fed back to the agent while budget
-   remains, then recorded as `inconclusive`. It runs BEFORE step 4 so validation stays the last
+   step 5 this NEVER gates the PR: a failed verification is fed back to the agent while budget
+   remains, then recorded as `inconclusive`. It runs BEFORE step 5 so validation stays the last
    thing to touch the tree,
-6. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
-   ONLY if step 4 ended green. A spent budget returns an error result with the validation report
-   and opens no PR. Absent `validationChecks` / `reproduction`, steps 4 and 5 do not happen at
+7. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
+   ONLY if step 5 ended green. A spent budget returns an error result with the validation report
+   and opens no PR. Absent `validationChecks` / `reproduction`, steps 5 and 6 do not happen at
    all. The PR's description prefers the agent-authored reviewer briefing over the generic
    dispatch-time text the job body carries: a PR-opening agent is prompted to write one to the
    `.cat-pr-description.md` sentinel at the checkout root (one per sibling repo in a multi-repo
@@ -186,6 +195,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`) — talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/captured-command.ts` | The one way the harness runs a declared shell command on its own behalf: `sh -c` with a per-command watchdog, abort handling, conventional exit codes (124/127/130) and a scrub-then-bound output capture. Shared by both pre-PR verification phases so a fix to one cannot miss the other. |
+| `src/dependency-install.ts` | Dependency prepopulation: `prepopulateDependencies` is the ONE seam every checkout-having mode calls — it runs the service's install command before the agent's first turn, excludes what the install materialised from git so no `git add -A` can sweep a dependency tree into the PR, and builds the prompt note describing the outcome. Best-effort — every failure shape becomes a note, never a failed job. Generic — keyed off the job body, never the agent kind. |
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic — keyed off the job body, never the agent kind. |
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic — keyed off the job body, never the agent kind. |
 | `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries — the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers) — with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
@@ -203,6 +213,9 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic — a likely onboarding/auth wedge — WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |
+| `DEPENDENCY_INSTALL_TIMEOUT_MS` | a third of `JOB_MAX_DURATION_MS` (20m at its default) | Watchdog for the pre-agent dependency install; a timeout is reported as a failed install (exit 124), never a failed job. Derived from the job ceiling rather than fixed, and an explicit value is clamped by the same share — the agent is what waits on this, so setup can never consume the run it is preparing for. |
+| `DEPENDENCY_INSTALL_HEARTBEAT_MS` | `30000` (30s) | How often the dependency install feeds the job inactivity watchdog. A cold install is activity-silent and `JOB_INACTIVITY_MS` is tighter than its own watchdog, so without this a healthy install aborts the run as "likely hung". |
 | `VALIDATION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a pre-PR validation check; a timeout counts as a failure (exit 124) so one hung command can't wedge the loop. |
 | `REPRODUCTION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a reproduction-proof setup or check command; a timeout counts as a failure (exit 124). |
 | `REPRODUCTION_HEARTBEAT_MS` | `30000` (30s) | How often the reproduction proof feeds the job inactivity watchdog while it runs commands the agent is not producing output for. |

@@ -190,6 +190,10 @@ export {
   resolvePresetModelForKind,
 } from './modules/modelPresets/ModelPresetService.js'
 export {
+  AgentPromptService,
+  type AgentPromptServiceDependencies,
+} from './modules/agentPrompts/AgentPromptService.js'
+export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,
 } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
@@ -347,6 +351,7 @@ export {
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,
+  type AgentPromptsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
   type SkillLibraryModule,
