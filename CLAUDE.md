@@ -1186,7 +1186,41 @@ which briefs from what the pipeline knows before the run (task, human-chosen for
 marks itself as agent-less. The filename is triple-kept-in-sync (agents ⇄ harness) like
 `EFFORT_REPORT_FILE`; changing the sentinel means an image bump.
 
-Three rules the surface imposes, none of them optional:
+**When the target repo ships a PR TEMPLATE, the briefing IS that template, filled in.** Neither
+host applies a template to an API-created pull request — that only happens in the web form a human
+opens — so a platform that ignores it opens the only pull requests on the repo missing the
+structure its reviewers read, and nothing anywhere fails to say so. The harness discovers it
+(`pr-template.ts`) and folds it into the agent's prompt; the agent that just did the work answers
+the sections, because they are questions ("what is the risk?", "how was this tested?") only it can
+answer — mechanically stuffing the briefing under the first heading would produce the template's
+shape with none of its meaning. Four rules:
+
+- **Discovery is HARNESS-side, off the checkout.** Resolving it backend-side through `RepoFiles`
+  would be an HTTP round trip per dispatch to answer what the container already has on disk, and
+  every PR-opening dispatch has a checkout by definition. Both hosts' conventions are probed
+  whatever the repo's `provider` (the repo's own first), since the discriminator is optional and a
+  GitLab repo dispatched without it would otherwise silently lose its template.
+- **A directory of SEVERAL templates with no `default` resolves to NOTHING.**
+  `.github/PULL_REQUEST_TEMPLATE/` and `.gitlab/merge_request_templates/` exist so a HUMAN can
+  choose per pull request, and the choice is rarely inferable from a diff. Picking one arbitrarily
+  files every run under whichever name sorts first while LOOKING deliberate, which is worse than
+  the free-form briefing. GitLab's `Default.md` is unambiguous, and a lone template is one
+  expressed convention, so both of those are taken.
+- **The note must state that the template WINS**, because the agent has already been told to write
+  a free-form briefing and the two genuinely conflict: a template asking for a test plan or a
+  checklist asks for exactly the "restated diff" `PR_DESCRIPTION_GUIDANCE` rules out. It must also
+  say the host will NOT apply the template itself, or an agent that assumes it will has no reason
+  to reproduce the structure.
+- **It rides EVERY agent pass**, like the dependency note and for the mirror-image reason: a
+  validation or reproduction REPAIR pass starts a fresh agent still carrying the description
+  guidance, which would replace the filled template with a free-form briefing.
+  `pr-template.coverage.test.ts` is the structural guard — it CLASSIFIES every agent-running mode
+  as PR-opening (must resolve the template) or not (named with its reason), because the bug is
+  silent: a new PR-opening mode that never resolves it compiles and passes every behavioural test.
+  The rule can't anchor on `openPullRequest(` — both call sites are in the PUSH phase, long after
+  the prompt was composed.
+
+Three further rules the surface imposes, none of them optional:
 
 - **A PR body is host-parsed, and the briefing is MODEL-authored** — so it crosses a text boundary
   before it is published, exactly as the verification report does. The harness's

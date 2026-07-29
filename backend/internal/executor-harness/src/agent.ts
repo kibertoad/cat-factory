@@ -991,6 +991,10 @@ function buildSingleRepoCodingSpec(
     guardLimits: job.guardLimits,
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+    // Whether a pull request will open at all is exactly `job.pr` (see the `if (job.pr)` guard in
+    // `runSingleRepoCoding`), and it is what decides whether the repo's PR template is worth
+    // resolving. Read off the same field rather than a new job-body flag, so the two can't drift.
+    ...(job.pr ? { opensPr: true } : {}),
     ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
     // Skills + tool servers: installed/wired harness-aware by runAgentInWorkspace.
     ...agentCapabilities(job),

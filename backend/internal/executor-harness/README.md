@@ -68,25 +68,33 @@ The implementation job (`POST /run`) is the canonical sequence:
    it reads real installed packages instead of inferring a library's capabilities from a
    manifest entry. Best-effort and never a gate: the outcome (success or the captured
    failure) is folded into the agent's prompt — on EVERY pass, including the repair passes of
-   steps 5 and 6, which start a fresh agent — and the run continues either way. Whatever the
+   steps 6 and 7, which start a fresh agent — and the run continues either way. Whatever the
    install materialises is excluded from git first, so no later `git add -A` can sweep a
    dependency tree into the pull request (see
    [dependency prepopulation](../../../docs/initiatives/agent-dependency-prepopulation.md)),
-4. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
-5. **validate** the checkout, when the job body carries `validationChecks` — the service's
+4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`)
+   — `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
+   GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout. Found, it is folded
+   into the agent's prompt (on EVERY pass, as with the install above) asking it to write its
+   briefing AS that template, filled in. This exists because neither host applies a template to an
+   API-created pull request, so nothing else would: the template only reaches the web form a human
+   opens. A directory of several templates with no `default` is left alone deliberately — it exists
+   so a human can choose per pull request,
+5. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
+6. **validate** the checkout, when the job body carries `validationChecks` — the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
    while they fail and the attempt budget remains the agent is re-run with the captured output
    as its instruction (see [pre-PR validation](../../../docs/initiatives/pre-pr-validation.md)),
-6. **prove the reproduction**, when the job body carries `reproduction` — the declared check is
+7. **prove the reproduction**, when the job body carries `reproduction` — the declared check is
    run against the pre-fix tree and the tree the PR will open from, in two freshly-created
    symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
    [bugfix reproduction proof](../../../docs/initiatives/bugfix-reproduction-proof.md)). Unlike
-   step 5 this NEVER gates the PR: a failed verification is fed back to the agent while budget
-   remains, then recorded as `inconclusive`. It runs BEFORE step 5 so validation stays the last
+   step 6 this NEVER gates the PR: a failed verification is fed back to the agent while budget
+   remains, then recorded as `inconclusive`. It runs BEFORE step 6 so validation stays the last
    thing to touch the tree,
-7. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
-   ONLY if step 5 ended green. A spent budget returns an error result with the validation report
-   and opens no PR. Absent `validationChecks` / `reproduction`, steps 5 and 6 do not happen at
+8. **commit, push** a branch and **open a PR**, returning `{ prUrl, branch, summary }` — but
+   ONLY if step 6 ended green. A spent budget returns an error result with the validation report
+   and opens no PR. Absent `validationChecks` / `reproduction`, steps 6 and 7 do not happen at
    all. The PR's description prefers the agent-authored reviewer briefing over the generic
    dispatch-time text the job body carries: a PR-opening agent is prompted to write one to the
    `.cat-pr-description.md` sentinel at the checkout root (one per sibling repo in a multi-repo
@@ -94,7 +102,8 @@ The implementation job (`POST /run`) is the canonical sequence:
    title), and `src/pr-description.ts` lifts it — secret-scrubbed, size-capped with a visible
    note, made inert for the host by `src/host-markdown.ts`, kept out of the commit like the
    effort/follow-ups sentinels — onto `openPullRequest`. Absent or unusable ⇒ the fallback text,
-   unchanged. On a RESUMED run the PR already exists, so an agent briefing additionally refreshes
+   unchanged. When the repo ships a template (step 4) that briefing IS the filled template, and
+   it crosses the same scrub/cap/inert boundary on the way out. On a RESUMED run the PR already exists, so an agent briefing additionally refreshes
    its title/description in place (carrying the engine's managed report region across); the
    generic fallback never does, so a human's edit is safe.
 
