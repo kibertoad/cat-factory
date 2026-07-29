@@ -26,8 +26,7 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import {
   type AppConfig,
   createInlineInstrumentation,
-  wrapResolverWithInstrumentation,
-  wrapResolverWithLimiter,
+  wrapResolverWithTelemetry,
 } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
@@ -261,25 +260,21 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
           : {}),
       })
     : baseModelProviderResolver
-  // Observe inline calls AFTER the facade wrap above, never before it. That wrap SUBSTITUTES the
-  // resolved model for a subscription harness ref (local mode answers one with its own
-  // `CliInlineLanguageModel` rather than delegating), so instrumenting underneath it left every
-  // inline step on a host `claude`/`codex` CLI — the default local shape — recording nothing at
-  // all, while the same step on a metered API model recorded fine.
-  const observedModelProviderResolver = wrapResolverWithInstrumentation(
-    wrappedModelProviderResolver,
-    instrument,
-  )
-  // Cap concurrent inline calls to a subscription vendor, OUTERMOST so it sits outside both the
-  // instrumentation (its queue wait is not generation time) and the local facade's
-  // subscription-inline harness wrap (so it sees the un-degraded subscription ref). One limiter
-  // per container = per process for a stock node, per tenant in mothership mode; a pass-through
-  // when nothing is capped. Symmetric with the Worker's wrap in `buildModelProviderResolver`
-  // (see "Keep the runtimes symmetric").
-  const modelProviderResolver = wrapResolverWithLimiter(
-    observedModelProviderResolver,
-    vendorConcurrencyLimiterFromEnv((key) => env[key]),
-  )
+  // Observe inline calls and cap their concurrency, both applied on top of the facade wrap above
+  // — never beneath it. That wrap SUBSTITUTES the resolved model for a subscription harness ref
+  // (local mode answers one with its own `CliInlineLanguageModel` rather than delegating), so
+  // instrumenting underneath it left every inline step on a host `claude`/`codex` CLI — the
+  // default local shape — recording nothing at all while the same step on a metered API model
+  // recorded fine. The composer owns that order (and keeps the limiter outermost, so a queue wait
+  // is not generation time and it sees the un-degraded subscription ref); passing the
+  // already-wrapped resolver in is this facade's only remaining obligation. One limiter per
+  // container = per process for a stock node, per tenant in mothership mode; a pass-through when
+  // nothing is capped. Symmetric with the Worker's `buildModelProviderResolver` (see "Keep the
+  // runtimes symmetric").
+  const modelProviderResolver = wrapResolverWithTelemetry(wrappedModelProviderResolver, {
+    ...(instrument ? { instrument } : {}),
+    limiter: vendorConcurrencyLimiterFromEnv((key) => env[key]),
+  })
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     cloudflareModelsEnabledOverride ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)

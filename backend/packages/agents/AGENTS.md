@@ -32,13 +32,16 @@
   inline generation on Langfuse/OTel. A wrap with neither exit throws at construction.
   Neither exit is wired by hand: the server layer's `createInlineInstrumentation` composes both
   from ONE sink instance, since handing the two halves DIFFERENT sinks typechecks and merely
-  splits the trace. It is applied as the outermost provider wrap but for the concurrency limiter
-  (`wrapResolverWithInstrumentation`): a middleware only sees the model the wrap beneath it
+  splits the trace. Nor is its POSITION: a middleware only sees the model the wrap beneath it
   returned, so composing it under a facade wrap that SUBSTITUTES the model — local mode's
-  subscription-inline harness — makes every call it serves invisible while every other inline
-  call keeps recording.
+  subscription-inline harness — makes every call that wrap serves invisible while every other
+  inline call keeps recording. That order therefore lives in the server layer's
+  `wrapResolverWithTelemetry` (instrumentation inside, concurrency limiter outermost) and the two
+  wraps are not individually exported, for the same reason the exit pair isn't: reversed, it
+  still typechecks.
   A call whose tag names no run is attributed to `scope.executionId`, the run its credential
-  scope was built for; the per-call tag still wins, and neither ⇒ null.
+  scope was built for; the per-call tag still wins, and neither ⇒ null. The scope only carries a
+  LIVE run (`resolveBlockRunContext`), since `block.executionId` outlives the run it names.
   Bodies leaving for a SINK pass the SAME double gate the proxied path applies: the deployment's
   `LLM_RECORD_PROMPTS` **and** the workspace's `storeAgentContext` opt-out, the latter injected
   as the required narrow `WorkspaceBodiesGate` predicate (built by kernel's

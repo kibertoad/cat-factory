@@ -8,8 +8,12 @@ import type {
   ModelScope,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/kernel'
-import { CliInlineLanguageModel, type InlineCliRequest } from '@cat-factory/agents'
-import { wrapResolverWithInstrumentation } from '@cat-factory/server'
+import {
+  CliInlineLanguageModel,
+  type InlineCliRequest,
+  vendorConcurrencyLimiterFromEnv,
+} from '@cat-factory/agents'
+import { wrapResolverWithTelemetry } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import {
@@ -579,13 +583,17 @@ describe('silenceClause', () => {
 })
 
 describe('inline call telemetry across the local subscription wrap', () => {
-  // The ORDER guard. This wrap answers a subscription harness ref with its OWN
-  // `CliInlineLanguageModel` instead of delegating downwards, so it is invisible to anything
-  // wrapped BENEATH it. The inline `llm_call_metrics` feeder shipped underneath — inside
+  // The BEHAVIOURAL half of the order guard, and the only place a substituting wrap really
+  // exists: this wrap answers a subscription harness ref with its OWN `CliInlineLanguageModel`
+  // instead of delegating downwards, so it is invisible to anything wrapped BENEATH it. The
+  // inline `llm_call_metrics` feeder shipped underneath — inside
   // `createScopedModelProviderResolver` — and the consequence was silent and selective: on the
   // default local shape (`LOCAL_NATIVE_INLINE`) every inline step on a host `claude`/`codex`
-  // login recorded zero calls, while the same step on a metered API model recorded fine. The
-  // composition asserted here IS the fix, and no part of it is pinned by the type system.
+  // login recorded zero calls, while the same step on a metered API model recorded fine. Nothing
+  // in the type system holds the fix, so the order lives in ONE composer
+  // (`wrapResolverWithTelemetry`, whose structural assertions are in
+  // `server/src/agents/modelProviderResolver.test.ts`) and this suite drives a real call through
+  // it.
   type GenerateOptions = Parameters<CliInlineLanguageModel['doGenerate']>[0]
   type Generatable = Pick<CliInlineLanguageModel, 'doGenerate'>
 
@@ -608,7 +616,12 @@ describe('inline call telemetry across the local subscription wrap', () => {
     return ''
   }
 
-  /** Compose exactly as `buildNodeModelDeps` does: base → this wrap → the instrumentation. */
+  /**
+   * Compose exactly as `buildNodeModelDeps` does — this wrap first, then the telemetry composer
+   * on top of it. Going through `wrapResolverWithTelemetry` rather than applying the
+   * instrumentation by hand is deliberate: it is the same seam production uses, so this suite
+   * fails if that composer's internal order is ever inverted.
+   */
   function compose(recorded: InlineLlmCall[], cliExec: CliExec): ModelProviderResolver {
     const base: ModelProviderResolver = {
       forScope: async () => ({
@@ -617,19 +630,24 @@ describe('inline call telemetry across the local subscription wrap', () => {
         },
       }),
     }
-    return wrapResolverWithInstrumentation(
+    return wrapResolverWithTelemetry(
       wrapResolverWithInlineHarness({
         inlineHarnesses: ['claude-code'],
         hostCliVendors: new Set(['claude']),
         exec: cliExec,
       })(base),
       {
-        recordCall: (call) => {
-          recorded.push(call)
-          return Promise.resolve()
+        instrument: {
+          recordCall: (call) => {
+            recorded.push(call)
+            return Promise.resolve()
+          },
+          recordPrompts: true,
+          workspaceBodiesEnabled: () => Promise.resolve(true),
         },
-        recordPrompts: true,
-        workspaceBodiesEnabled: () => Promise.resolve(true),
+        // Capped, as a stock deployment's is: the limiter must sit OUTSIDE the instrumentation,
+        // so a substituted subscription call passes through both.
+        limiter: vendorConcurrencyLimiterFromEnv(() => undefined),
       },
     )
   }

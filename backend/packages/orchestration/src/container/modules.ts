@@ -14,7 +14,6 @@
 
 import type {
   AppCaches,
-  Block,
   BugHuntAssessor,
   ExecutionEventPublisher,
   JudgeAssessor,
@@ -66,6 +65,7 @@ import {
   buildEnvironmentTestService,
   buildEnvironmentUserHandlerService,
 } from './environmentsModule.factory.js'
+import { resolveBlockRunContext } from './blockRunContext.js'
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { JudgeService } from '../modules/execution/JudgeService.js'
@@ -736,26 +736,6 @@ export function createForkChatService(deps: CoreDependencies): ForkChatService |
       : undefined,
     resolveRunContext: resolveBlockRunContext(deps),
   })
-}
-
-/**
- * Resolve a block's active run (execution id + initiator) for the iterative reviewers, so an
- * inline subscription reviewer served through a leased per-run activation can lease it. Reads
- * the block's `executionId` and the run's `initiatedBy`; `{}` when the block has no active run
- * (an off-path inspector review with no pipeline) — the reviewer then resolves on a
- * workspace-only scope (pooled lease), unchanged.
- */
-export function resolveBlockRunContext(
-  deps: CoreDependencies,
-): (workspaceId: string, block: Block) => Promise<{ executionId?: string; userId?: string }> {
-  return async (workspaceId, block) => {
-    if (!block.executionId) return {}
-    const instance = await deps.executionRepository.get(workspaceId, block.executionId)
-    return {
-      executionId: block.executionId,
-      ...(instance?.initiatedBy ? { userId: instance.initiatedBy } : {}),
-    }
-  }
 }
 
 export function createRequirementsModule(

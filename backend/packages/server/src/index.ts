@@ -99,9 +99,11 @@ export {
 } from './agents/toolServers.js'
 export {
   createScopedModelProviderResolver,
-  wrapResolverWithInstrumentation,
-  wrapResolverWithLimiter,
+  // The individual instrumentation / limiter wraps are deliberately NOT exported: their
+  // relative order is load-bearing and this composer is what fixes it.
+  wrapResolverWithTelemetry,
   type InlineInstrumentation,
+  type ResolverTelemetryWraps,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {

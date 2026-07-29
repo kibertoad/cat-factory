@@ -18,7 +18,7 @@ import { InitiativeInterviewService } from '../modules/initiative/InitiativeInte
 import type { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
 import type { InitiativeRunHarvest } from '../modules/initiative/initiative.logic.js'
 import { resolvePresetModelForKind } from '../modules/modelPresets/ModelPresetService.js'
-import { resolveBlockRunContext } from './modules.js'
+import { resolveBlockRunContext } from './blockRunContext.js'
 import {
   createBrainstormModule,
   createClarityModule,

@@ -137,17 +137,8 @@ export function createScopedModelProviderResolver(
  * Wrap a {@link ModelProviderResolver} so every model it resolves feeds the inline telemetry
  * exits — `llm_call_metrics` and/or the external trace sink.
  *
- * **Apply this AFTER every wrap that can SUBSTITUTE the resolved model, and only the
- * concurrency limiter outside it.** The instrumentation is an AI-SDK middleware around the
- * model instance, so it observes exactly the model handed back by the wrap beneath it and
- * nothing else. It used to live inside {@link createScopedModelProviderResolver} — i.e.
- * innermost — which made it invisible to the local facade's subscription-inline wrap: that
- * wrap answers a subscription harness ref with its own `CliInlineLanguageModel` instead of
- * delegating to the provider below, so on the default local deployment
- * (`LOCAL_NATIVE_INLINE`) every inline step running on Claude Code / Codex recorded ZERO
- * calls while the same step on a metered API model recorded fine. The ordering IS the fix;
- * a facade that composes these the other way round re-opens it silently, because the wrap
- * still type-checks and every non-substituted call still records.
+ * Module-private on purpose: the ORDER it must be applied in is the whole point, so
+ * {@link wrapResolverWithTelemetry} is the only way to reach it. See that function for why.
  *
  * The scope's `executionId` is threaded in as the attribution FALLBACK for a call whose
  * `catFactoryObservability` tag names no run — see `InstrumentedModelProvider`.
@@ -155,7 +146,7 @@ export function createScopedModelProviderResolver(
  * Returns the resolver unchanged when nothing is wired, so a deployment that retains no
  * metrics and configures no sink pays no middleware.
  */
-export function wrapResolverWithInstrumentation(
+function wrapResolverWithInstrumentation(
   resolver: ModelProviderResolver,
   instrument: InlineInstrumentation | undefined,
 ): ModelProviderResolver {
@@ -177,15 +168,13 @@ export function wrapResolverWithInstrumentation(
 
 /**
  * Wrap a {@link ModelProviderResolver} so every resolved provider caps concurrent inline calls
- * to a subscription vendor behind the shared {@link VendorConcurrencyLimiter}. Apply this as the
- * OUTERMOST wrap in a facade — after {@link wrapResolverWithInstrumentation} AND after any
- * facade-specific wrap (local's subscription-inline harness) — so the limiter sees the
- * un-degraded subscription ref and its queue wait is excluded from generation timing. A
- * pass-through limiter (nothing capped) returns the resolver unchanged. There are two call sites
- * — the Worker's `buildModelProviderResolver` and Node's `buildNodeContainer` (local inherits
- * Node's via `buildLocalContainer`); keep them in step (see "Keep the runtimes symmetric").
+ * to a subscription vendor behind the shared {@link VendorConcurrencyLimiter}. A pass-through
+ * limiter (nothing capped) returns the resolver unchanged.
+ *
+ * Module-private for the same reason as the instrumentation wrap: it has to be OUTSIDE it, and
+ * {@link wrapResolverWithTelemetry} is what guarantees that.
  */
-export function wrapResolverWithLimiter(
+function wrapResolverWithLimiter(
   resolver: ModelProviderResolver,
   limiter: VendorConcurrencyLimiter,
 ): ModelProviderResolver {
@@ -195,6 +184,51 @@ export function wrapResolverWithLimiter(
       return limitModelProvider(await resolver.forScope(scope), limiter)
     },
   }
+}
+
+export interface ResolverTelemetryWraps {
+  /**
+   * How inline calls are observed. Absent (no metric store AND no trace sink) ⇒ no middleware
+   * is added at all, so a deployment that retains nothing pays nothing.
+   */
+  instrument?: InlineInstrumentation
+  /** The per-vendor inline concurrency cap, built ONCE per facade with `vendorConcurrencyLimiterFromEnv`. */
+  limiter: VendorConcurrencyLimiter
+}
+
+/**
+ * Apply a facade's inline-telemetry wraps to its model-provider resolver, in the ONE order that
+ * is correct: `resolver` → instrumentation → concurrency limiter (outermost).
+ *
+ * **This exists because the order is load-bearing and nothing in the type system holds it.** Both
+ * wraps are AI-SDK middlewares around a RESOLVED model, so each observes exactly what the wrap
+ * beneath it returned — and one facade wrap SUBSTITUTES that model rather than delegating: local
+ * mode's subscription-inline harness answers a subscription harness ref with its own
+ * `CliInlineLanguageModel`. The instrumentation shipped INSIDE
+ * {@link createScopedModelProviderResolver} — i.e. innermost, beneath that wrap — so on the
+ * default local deployment (`LOCAL_NATIVE_INLINE`) every inline step running on a host
+ * `claude`/`codex` login recorded ZERO calls while the same step on a metered API model recorded
+ * fine. Reversed, the composition still type-checks and every non-substituted call still records,
+ * so nothing fails until it is the deployment nobody tested on. Same argument as
+ * `createInlineInstrumentation`, which owns the recorder/sink pair for the same reason: a rule
+ * two facades restate in comments is a rule one of them will eventually restate wrongly.
+ *
+ * The limiter is outermost so a queue wait is never counted as generation time, and so it sees
+ * the UN-degraded subscription ref (the facade wrap beneath it may degrade one).
+ *
+ * Facades pass their own wraps in FIRST (so a substituting wrap is beneath the instrumentation)
+ * and hand the result here: the Worker's `buildModelProviderResolver` and Node's
+ * `buildNodeModelDeps`, which local inherits via `buildLocalContainer`. Keep them in step (see
+ * "Keep the runtimes symmetric").
+ */
+export function wrapResolverWithTelemetry(
+  resolver: ModelProviderResolver,
+  wraps: ResolverTelemetryWraps,
+): ModelProviderResolver {
+  return wrapResolverWithLimiter(
+    wrapResolverWithInstrumentation(resolver, wraps.instrument),
+    wraps.limiter,
+  )
 }
 
 /**

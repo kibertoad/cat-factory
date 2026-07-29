@@ -533,7 +533,11 @@ export class FragmentLibraryService implements FragmentResolver {
     // them; every other kind gets full bodies and never triggers a condensation.
     const briefs =
       options.verbosity === 'brief' && this.briefs
-        ? await this.briefs.resolveBriefs(workspaceId, resolved, options.executionId)
+        ? await this.briefs.resolveBriefs(
+            workspaceId,
+            resolved,
+            options.executionId ? { executionId: options.executionId } : {},
+          )
         : new Map<string, string>()
 
     // Carry the human title so the prompt composer can render each standard as its own labelled

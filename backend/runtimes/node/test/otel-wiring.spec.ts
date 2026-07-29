@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { InstrumentedModelProvider } from '@cat-factory/agents'
+import { InstrumentedModelProvider, vendorConcurrencyLimiterFromEnv } from '@cat-factory/agents'
 import { CompositeTraceSink, type LlmTraceSink } from '@cat-factory/kernel'
 import { NodeOtelTraceSink } from '@cat-factory/observability-otel/node'
 import { LangfuseTraceSink } from '@cat-factory/observability-langfuse'
-import { wrapResolverWithInstrumentation } from '@cat-factory/server'
+import { wrapResolverWithTelemetry } from '@cat-factory/server'
 import { createNodeModelProviderResolver, inlineInstrumentFromEnv } from '../src/modelProvider.js'
 
 // Guards the per-facade WIRING of the inline OpenTelemetry (and Langfuse) feeder — the
@@ -31,12 +31,16 @@ function sinkOf(provider: unknown): LlmTraceSink {
   return (provider as { traceSink: LlmTraceSink }).traceSink
 }
 
-/** Compose exactly as a facade does: base resolver, then the instrumentation on top. */
+/** No vendor capped, so the limiter is a pass-through and the instrumentation is what shows. */
+const noCaps = vendorConcurrencyLimiterFromEnv(() => '0')
+
+/** Compose exactly as a facade does: base resolver, then the telemetry wraps on top. */
 function resolverFor(env: NodeJS.ProcessEnv) {
-  return wrapResolverWithInstrumentation(
-    createNodeModelProviderResolver(env, undefined),
-    inlineInstrumentFromEnv(env, bodiesEnabled),
-  )
+  const instrument = inlineInstrumentFromEnv(env, bodiesEnabled)
+  return wrapResolverWithTelemetry(createNodeModelProviderResolver(env, undefined), {
+    ...(instrument ? { instrument } : {}),
+    limiter: noCaps,
+  })
 }
 
 // SDK sinks own background exporters; shut them down after each test so no timers leak.
@@ -91,9 +95,16 @@ describe('Node facade: inline OpenTelemetry instrumentation wiring', () => {
       new NodeOtelTraceSink({ endpoint: 'http://collector.test:4318', serviceName: 'shared' }),
     )
     // Env has OTel OFF — proving the sink came from the passed instrument, not the env.
-    const resolver = wrapResolverWithInstrumentation(
+    const resolver = wrapResolverWithTelemetry(
       createNodeModelProviderResolver({} as NodeJS.ProcessEnv, undefined),
-      { traceSink: shared, recordPrompts: true, workspaceBodiesEnabled: bodiesEnabled },
+      {
+        instrument: {
+          traceSink: shared,
+          recordPrompts: true,
+          workspaceBodiesEnabled: bodiesEnabled,
+        },
+        limiter: noCaps,
+      },
     )
     const provider = await resolver.forScope(scope)
     expect(provider).toBeInstanceOf(InstrumentedModelProvider)

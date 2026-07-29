@@ -112,8 +112,7 @@ import {
   createWebSearchUpstream,
   createInlineInstrumentation,
   createScopedModelProviderResolver,
-  wrapResolverWithInstrumentation,
-  wrapResolverWithLimiter,
+  wrapResolverWithTelemetry,
   ENV_HELP,
   configProblem,
   GitHubIdentityResolver,
@@ -335,23 +334,20 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
       ? (userId) => localModelEndpoints.listResolved(userId)
       : undefined,
   })
-  // Observe inline calls as a wrap OUTSIDE the base resolver, not inside it. The Worker has no
-  // facade wrap that substitutes a resolved model today, so the two orders behave identically
-  // here — but the rule is a runtime-symmetry invariant, not a Node detail: instrumenting
-  // innermost is what hid every local-mode subscription-inline call, and a Worker-side wrap
-  // added later would inherit the same blind spot from a divergent composition.
-  const observed = wrapResolverWithInstrumentation(scoped, instrument)
-  // Cap concurrent inline calls to a subscription vendor, outside the instrumentation so a
-  // queue wait is never counted as generation time. On the Worker the inline path degrades
-  // subscription refs before resolve, so this is a wired pass-through in practice; it bounds
-  // concurrency within one isolate (no cross-isolate/global limiting — see
-  // backend/docs/concurrency-and-redis.md), symmetric with the Node facade's wrap.
-  const resolver = wrapResolverWithLimiter(
-    observed,
-    vendorConcurrencyLimiterFromEnv(
+  // Observe inline calls, then cap concurrency, through the ONE composer that owns their order
+  // (instrumentation inside, limiter outermost). The Worker has no facade wrap that substitutes a
+  // resolved model today, so it could not hit the local-mode blind spot this order exists for —
+  // but going through the shared composer is what keeps that true for a Worker-side wrap added
+  // later, and it keeps the two facades textually symmetric. The limiter bounds concurrency within
+  // one isolate only (no cross-isolate/global limiting — see
+  // backend/docs/concurrency-and-redis.md), and since the Worker's inline path degrades
+  // subscription refs before resolve, it is a wired pass-through here in practice.
+  const resolver = wrapResolverWithTelemetry(scoped, {
+    ...(instrument ? { instrument } : {}),
+    limiter: vendorConcurrencyLimiterFromEnv(
       (key) => (env as unknown as Record<string, string | undefined>)[key],
     ),
-  )
+  })
   modelResolverCache.set(env, resolver)
   return resolver
 }

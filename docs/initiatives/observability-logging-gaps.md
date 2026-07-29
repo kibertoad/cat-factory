@@ -715,7 +715,7 @@ behaviour changes.
 | 5.4 | Read `instance.status().error` into the `finalizeOrphan` stop reason; distinguish `instanceState`'s two swallowed error paths from genuine `missing` (log + treat repeated lookup failures as "unknown", not "missing", to prevent outage-triggered mass re-drives); warn once for an unconfigured workflow binding.                                                                                                                                                                                       | D6, D4                      | P1  |        |
 | 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there (its FAILURE-path legibility already landed via the `detail` fold — what's left is the running view). | D2, D2.1, A5 (harness half) | P1  |        |
 | 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs.                                                                                                                                                                                                                                                                          | C2 (coverage half)          | P2  | ✅     |
-| 5.7 | Close the two attribution holes 5.6 left: apply the instrumentation OUTSIDE any facade wrap that substitutes a resolved model (local mode's subscription-inline harness), and fall back to the credential scope's `executionId` for a call whose tag names no run.                                                                                                                                                                                                                                         | C2 (coverage half)          | P1  | ✅     |
+| 5.7 | Close the two attribution holes 5.6 left: apply the instrumentation OUTSIDE any facade wrap that substitutes a resolved model (local mode's subscription-inline harness), through one composer that owns the order, and fall back to the credential scope's `executionId` — narrowed to a LIVE run — for a call whose tag names no run.                                                                                                                                                                    | C2 (coverage half)          | P1  | ✅     |
 
 #### What 5.6 shipped
 
@@ -811,10 +811,14 @@ causes, both of which record a call the store then cannot be asked for.
   `CliInlineLanguageModel` rather than delegating downwards. Result: with `LOCAL_NATIVE_INLINE`
   on (the default), every inline step on a host `claude`/`codex` login recorded nothing, while
   the same step on a metered API model recorded fine — the hardest shape of this bug to notice,
-  because the feature demonstrably works on the deployment you test it on. `instrument` is now
-  its own exported wrap (`wrapResolverWithInstrumentation`) applied by each facade after its own
-  wraps and inside `wrapResolverWithLimiter`, which stays outermost so a queue wait is never
-  counted as generation time.
+  because the feature demonstrably works on the deployment you test it on. **The order is now
+  owned by ONE composer, `wrapResolverWithTelemetry(resolver, { instrument, limiter })`**, and the
+  two wraps it applies are no longer individually exported: a facade passes its own wraps in
+  first, and the composer puts the instrumentation on top of them with the limiter outermost (so a
+  queue wait is never counted as generation time). Two facades restating the order in comments was
+  the first cut, and it is the same mistake `createInlineInstrumentation` exists to prevent for the
+  recorder/sink pair — the wrong order typechecks and still records every non-substituted call, so
+  nothing fails until it is the deployment nobody tested on.
 - **No usage lifting was needed after all.** The 5.6 note assumed this fix would have to read
   usage off the CLI; #1521 had already made the `claude` runner stream `stream-json` and report
   the three input classes, and the warm-container path reports the same shape, so both branches
@@ -826,22 +830,44 @@ causes, both of which record a call the store then cannot be asked for.
   rollup and `/api/v1/debug/runs/*`. That reads as a step that spent nothing, which is a worse
   failure than an unwritten row. Every run-scoped inline caller already resolves the block's run
   into its `ModelScope` (it must, or a per-run subscription activation could not be leased), so
-  `wrapResolverWithInstrumentation` threads `scope.executionId` in as the fallback. Fixing it
-  there rather than at twelve call sites is deliberate: the scope is load-bearing for
-  credentials, so it cannot rot, whereas a per-call tag is a rule each new site must remember —
-  and the ten that forgot are the evidence.
+  the telemetry wrap threads `scope.executionId` in as the fallback. Fixing it there rather than at
+  twelve call sites is deliberate: the scope is load-bearing for credentials, so it cannot rot,
+  whereas a per-call tag is a rule each new site must remember — and the ten that forgot are the
+  evidence.
 - **A per-call tag still wins**, because a scope is per-provider while a tag is per-call and
   consensus fans one scope out across participants. Both absent ⇒ null, unchanged, for the
   genuinely un-run-scoped callers (the document planner, a bug-hunt rating, a fragment title).
+- **The scope had to stop naming a SETTLED run before it could be trusted for attribution.**
+  `resolveBlockRunContext` read `block.executionId` unconditionally, and nothing clears that
+  pointer when a run finishes (the board reads it to show a task's last run) — so "the block's
+  active run", which both the port's doc and the fallback's premise claimed, was really "the
+  block's last run". Every current `scopeForBlockRun` caller runs mid-run or during a park, so
+  this was latent; making the scope an attribution source is what turns it into a hazard, because
+  a stale id lands the call in a FINISHED run's rollup and `/api/v1/debug/runs/*` and, unlike a
+  null, looks right to whoever reads it. It now gates on `LIVE_EXECUTION_STATUSES` — the same
+  constant `listLive` / `countActiveByWorkspace` use, so a status added later must be classified
+  there rather than defaulting to live — and KEEPS the initiator, which is a durable fact the
+  API-key pool and a user's local endpoints scope by. It also improves the credential path it was
+  written for: a per-run activation is cleared at terminal, so leasing against a settled id could
+  only fail, and confusingly (the id looks valid).
 - **The one live run-path caller the scope could not reach was fixed at the source.** A fragment
   BRIEF is generated during a dispatch, but `LlmFragmentBriefGenerator` built a workspace-only
   scope, so the run is now carried on `FragmentBriefGeneratorInput` from the engine's context
-  builder. `LlmFragmentSelector` has the same shape and was deliberately left alone:
-  `resolveForRun` is retired from the run path, so widening its port would have been dead code.
-- **The ordering is pinned where a substituting wrap actually exists** —
-  `local/src/harnessInline.test.ts` composes base → local wrap → instrumentation and asserts a
-  recorded call (including the killed-CLI case from #1521, and the scope fallback). Conformance
-  cannot reach this: it bypasses the model provider via the fake executor.
+  builder. `LlmFragmentBriefGenerator` deliberately carries the run WITHOUT an initiator: a
+  condensation is platform bookkeeping the engine triggers, not work a person asked for, so there
+  is nobody to name — which also means it cannot run on an individual-usage subscription, the same
+  refusal it gave before and the right one. `LlmFragmentSelector` has the same shape and was left
+  alone: `resolveForRun` is retired from the run path, so widening its port would have been dead
+  code. That chain crosses four optional hops, none of whose omissions fail loudly (the brief is
+  still folded, its spend just goes unattributed), so each hop is asserted:
+  `AgentContextBuilder.fragments`, `FragmentLibraryService`, `FragmentBriefService`.
+- **The ordering is pinned twice, in the two places it can be.** Structurally beside the composer
+  (`server/src/agents/modelProviderResolver.test.ts` asserts facade wrap → instrumentation →
+  limiter by reaching into who wraps whom — no generation to drive, so nothing to rot at an SDK
+  spec bump), and behaviourally where a substituting wrap actually exists
+  (`local/src/harnessInline.test.ts` drives a real call through the same composer, including the
+  killed-CLI case from #1521 and the scope fallback). Conformance cannot reach either: it bypasses
+  the model provider via the fake executor.
 
 ### Phase 6 — Hardening & polish
 

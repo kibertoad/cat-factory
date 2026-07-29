@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { InstrumentedModelProvider } from '@cat-factory/agents'
+import { InstrumentedModelProvider, vendorConcurrencyLimiterFromEnv } from '@cat-factory/agents'
 import type { InlineLlmCall } from '@cat-factory/kernel'
-import { wrapResolverWithInstrumentation } from '@cat-factory/server'
+import { type InlineInstrumentation, wrapResolverWithTelemetry } from '@cat-factory/server'
 import { createNodeModelProviderResolver } from '../src/modelProvider.js'
 
 // Guards the per-facade WIRING of the inline `llm_call_metrics` feeder — the half that can
@@ -18,12 +18,15 @@ import { createNodeModelProviderResolver } from '../src/modelProvider.js'
 // invisible on almost every real deployment.
 //
 // What this file does NOT cover is the composition ORDER (the instrumentation must wrap a
-// facade's model-substituting wrap, not sit beneath it). That property needs a wrap that
-// actually substitutes, so it is pinned where one exists: `local/src/harnessInline.test.ts`.
-// The order itself is composed in `container-model-deps.ts`.
+// facade's model-substituting wrap, not sit beneath it). That order belongs to the ONE composer
+// both facades go through, so it is asserted structurally beside it in
+// `server/src/agents/modelProviderResolver.test.ts` and behaviourally — through a wrap that
+// really substitutes — in `local/src/harnessInline.test.ts`.
 
 const scope = { workspaceId: 'ws_test' }
-const recorderOnly = (recorded: InlineLlmCall[] = []) => ({
+/** No vendor capped, so the limiter is a pass-through and the instrumentation is what shows. */
+const noCaps = vendorConcurrencyLimiterFromEnv(() => '0')
+const recorderOnly = (recorded: InlineLlmCall[] = []): InlineInstrumentation => ({
   recordCall: (call: InlineLlmCall) => {
     recorded.push(call)
     return Promise.resolve()
@@ -34,10 +37,10 @@ const recorderOnly = (recorded: InlineLlmCall[] = []) => ({
 
 describe('Node facade: inline call-metrics instrumentation wiring', () => {
   it('instruments on the metric recorder ALONE, with no trace sink configured', async () => {
-    const resolver = wrapResolverWithInstrumentation(
+    const resolver = wrapResolverWithTelemetry(
       // Env has Langfuse and OTel OFF — proving the wrap came from the recorder.
       createNodeModelProviderResolver({} as NodeJS.ProcessEnv, undefined),
-      recorderOnly(),
+      { instrument: recorderOnly(), limiter: noCaps },
     )
     expect(await resolver.forScope(scope)).toBeInstanceOf(InstrumentedModelProvider)
   })
@@ -47,12 +50,12 @@ describe('Node facade: inline call-metrics instrumentation wiring', () => {
     // metric row for a call that never reached a model. (What it records when a call DOES run
     // is `instrumented.test.ts`' subject — that needs a fake model, not a facade.)
     const recorded: InlineLlmCall[] = []
-    const resolver = wrapResolverWithInstrumentation(
+    const resolver = wrapResolverWithTelemetry(
       createNodeModelProviderResolver(
         { OPENAI_BASE_URL: 'http://unused.test' } as NodeJS.ProcessEnv,
         undefined,
       ),
-      recorderOnly(recorded),
+      { instrument: recorderOnly(recorded), limiter: noCaps },
     )
     const provider = await resolver.forScope(scope)
     // No API key is configured for any direct provider in this env, so `resolve` throws. The
@@ -62,9 +65,9 @@ describe('Node facade: inline call-metrics instrumentation wiring', () => {
   })
 
   it('leaves the resolver untouched when nothing is wired (no middleware to pay for)', async () => {
-    const resolver = wrapResolverWithInstrumentation(
+    const resolver = wrapResolverWithTelemetry(
       createNodeModelProviderResolver({} as NodeJS.ProcessEnv, undefined),
-      undefined,
+      { limiter: noCaps },
     )
     expect(await resolver.forScope(scope)).not.toBeInstanceOf(InstrumentedModelProvider)
   })

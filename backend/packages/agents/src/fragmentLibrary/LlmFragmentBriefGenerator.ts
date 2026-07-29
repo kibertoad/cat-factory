@@ -56,6 +56,14 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
     workspaceId: string,
     input: FragmentBriefGeneratorInput,
   ): Promise<FragmentBriefGeneration> {
+    // The run rides the scope so the condensation's model call is attributed to the step that
+    // spent it. Deliberately NO `userId`: a condensation is platform bookkeeping the engine
+    // triggers, not work a person asked for, so there is no initiator to name — and naming a
+    // wrong one would scope the API-key pool lease to a user who never made this call. The
+    // consequence is that a brief cannot run on an individual-usage subscription (the personal
+    // per-run lease needs both halves and refuses on either) — the same refusal it gave before
+    // the run was threaded here, and the right one: a developer's Claude login is not a budget
+    // the platform may spend on its own housekeeping.
     const provider = await resolveScopedModelProvider(
       { workspaceId, ...(input.executionId ? { executionId: input.executionId } : {}) },
       this.deps,
