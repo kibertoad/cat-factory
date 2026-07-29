@@ -12,7 +12,7 @@
 // step's park routes (its archetype declares this result view), so the approve /
 // request-changes rail has to live here or the gate has no resolving surface at all —
 // which is exactly how an approved-only-over-REST plan gate shipped.
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import type { InitiativeFollowUp, InitiativeItem } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
@@ -26,10 +26,10 @@ import {
 } from '~/utils/initiative'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
-const execution = useExecutionStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
 const toast = useToast()
@@ -105,52 +105,6 @@ async function checkpointControl(action: 'resume' | 'cancel') {
 // `stepIndex`: the card / inspector open the tracker with no step, and that is the entry point a
 // human parked on the gate actually uses. So the rail appears on every route into the window.
 const { planApproval } = useInitiativePlanning(() => blockId.value ?? '')
-
-/** Draft feedback for "request changes" (the planner re-runs with it), and the rail's in-flight
- *  state. Reset when a different initiative opens so a draft can't follow the window. */
-const planFeedback = ref('')
-const requestingChanges = ref(false)
-const resolvingPlan = ref(false)
-watch(blockId, () => {
-  planFeedback.value = ''
-  requestingChanges.value = false
-})
-
-const canRequestChanges = computed(() => planFeedback.value.trim().length > 0)
-
-/**
- * Accept the drafted plan: the run advances to the committer, which persists the initiative and
- * arms the execution loop. The window deliberately stays OPEN — the rail disappears with the
- * approval (live), and the tracker is where the plan then starts executing.
- */
-async function approvePlan() {
-  const parked = planApproval.value
-  if (!parked || resolvingPlan.value) return
-  resolvingPlan.value = true
-  try {
-    await execution.approveStep(parked.instanceId, parked.approval.id)
-  } finally {
-    resolvingPlan.value = false
-  }
-}
-
-/** Send the plan back to the planner with what to change; it re-plans and parks again. */
-async function submitPlanChanges() {
-  const parked = planApproval.value
-  if (!parked || resolvingPlan.value || !canRequestChanges.value) return
-  resolvingPlan.value = true
-  try {
-    const ok = await execution.requestStepChanges(parked.instanceId, parked.approval.id, {
-      feedback: planFeedback.value.trim(),
-    })
-    if (ok) {
-      planFeedback.value = ''
-      requestingChanges.value = false
-    }
-  } finally {
-    resolvingPlan.value = false
-  }
-}
 
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
@@ -294,85 +248,17 @@ async function savePolicy() {
         </div>
 
         <template v-else>
-          <!-- The planner's human gate: the plan below is drafted but NOT yet committed. This
-               is the only surface that can resolve it (the generic approval panel is never
-               reached — the planner's archetype routes its park to this window), so approve /
-               request changes live here, beside the plan they judge. -->
-          <section
+          <!-- The planner's human gate. This window is where the park ROUTES (the planner's
+               archetype declares this result view), so it is the only surface that can resolve
+               it — and the plan it judges is rendered as a navigable document with per-block
+               commenting, the same tools the step reader gives the architect's prose. -->
+          <InitiativePlanReview
             v-if="planApproval"
-            class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
-            data-testid="initiative-plan-review"
-          >
-            <div class="flex items-start gap-2.5">
-              <UIcon
-                name="i-lucide-clipboard-check"
-                class="mt-0.5 h-4 w-4 shrink-0 text-amber-300"
-              />
-              <div class="min-w-0 flex-1">
-                <h3 class="text-[13px] font-semibold text-amber-200">
-                  {{ t('initiative.planReview.title') }}
-                </h3>
-                <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
-                  {{ t('initiative.planReview.body') }}
-                </p>
-                <div v-if="!requestingChanges" class="mt-2.5 flex flex-wrap gap-2">
-                  <button
-                    class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                    :disabled="resolvingPlan || !access.canExecuteRuns.value"
-                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                    data-testid="initiative-plan-approve"
-                    @click="approvePlan"
-                  >
-                    {{ t('initiative.planReview.approve') }}
-                  </button>
-                  <button
-                    class="rounded border border-amber-400/50 px-2.5 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
-                    :disabled="resolvingPlan || !access.canExecuteRuns.value"
-                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                    data-testid="initiative-plan-request-changes"
-                    @click="requestingChanges = true"
-                  >
-                    {{ t('initiative.planReview.requestChanges') }}
-                  </button>
-                </div>
-                <!-- Request-changes composer: the feedback is what the planner re-plans FROM,
-                     so it is required — an empty send would re-run the planner with nothing
-                     to act on and park again on the same plan. -->
-                <div v-else class="mt-2.5">
-                  <UTextarea
-                    v-model="planFeedback"
-                    :rows="3"
-                    autoresize
-                    size="sm"
-                    class="w-full"
-                    data-testid="initiative-plan-feedback"
-                    :placeholder="t('initiative.planReview.feedbackPlaceholder')"
-                  />
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    <button
-                      class="rounded bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-slate-950 hover:bg-amber-400 disabled:opacity-50"
-                      :disabled="
-                        resolvingPlan || !canRequestChanges || !access.canExecuteRuns.value
-                      "
-                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                      data-testid="initiative-plan-send-back"
-                      @click="submitPlanChanges"
-                    >
-                      {{ t('initiative.planReview.sendBack') }}
-                    </button>
-                    <button
-                      class="rounded border border-slate-600 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                      :disabled="resolvingPlan"
-                      data-testid="initiative-plan-cancel-changes"
-                      @click="requestingChanges = false"
-                    >
-                      {{ t('common.cancel') }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
+            :approval="planApproval.approval"
+            :instance-id="planApproval.instanceId"
+            :can-execute="access.canExecuteRuns.value"
+            :output-is-rendered="planApproval.outputIsRendered"
+          />
 
           <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
                    review before the next phase spawns. Read the phase's artifacts/PRs below,

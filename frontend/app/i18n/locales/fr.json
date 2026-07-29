@@ -1284,6 +1284,7 @@
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
       "approveWithCorrections": "Approuver avec corrections",
+      "renderedOutputNote": "Cette sortie est un rendu de ce que l'étape a produit ; elle ne peut pas être modifiée ici. Demandez des modifications pour la faire réviser.",
       "reviewAndApprove": "Réviser et approuver",
       "editHint": "Modifiez les conclusions à gauche ; vos modifications sont enregistrées lorsque vous approuvez.",
       "reviewHint": "Cliquez sur n'importe quel bloc de la sortie pour le commenter, ou laissez un retour global ci-dessous.",
@@ -5351,9 +5352,11 @@
       "title": "Ce plan vous attend",
       "body": "Le planificateur a rédigé les phases et les éléments ci-dessous. Approuvez-les pour valider le plan et lancer le travail, ou renvoyez le plan en indiquant ce qu'il faut changer.",
       "approve": "Approuver le plan",
-      "requestChanges": "Demander des modifications",
       "feedbackPlaceholder": "Que doit changer le planificateur ? Périmètre, ordre des phases, travail manquant, un élément qui a sa place ailleurs…",
-      "sendBack": "Renvoyer au planificateur"
+      "sendBack": "Renvoyer au planificateur",
+      "noDocument": "Ce plan a été rédigé avant que la plateforme ne produise des plans à relire ; il n'y a donc pas de document à parcourir — les sections ci-dessous sont le plan.",
+      "needsFeedback": "Ajoutez d'abord un commentaire ou un retour : le planificateur s'en sert pour replanifier.",
+      "commentHint": "Cliquez sur une partie du plan pour la commenter."
     },
     "planning": {
       "title": "Planifier l'initiative",

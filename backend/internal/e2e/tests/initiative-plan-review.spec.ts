@@ -19,6 +19,13 @@ import {
 // The other initiative specs keep approving that gate over REST deliberately — there it is a
 // TRIGGER on the way to their own subject (a checkpoint, a preset decoration), not the thing under
 // test. This spec is where the UI path itself is pinned.
+//
+// The second spec covers what the rail REVIEWS. The planner emits its plan as JSON and returns a
+// transcript summary as its output, so the gate used to park on a one-line proposal: a rail with
+// nothing to read, no way to navigate a long plan, and no way to say which part needed changing —
+// and a "request changes" that handed that sentence back to the planner as its previous proposal.
+// The engine now renders the ingested plan onto the gate (`renderInitiativePlanForReview`), so the
+// rail carries the document itself, its outline, and per-block comments.
 
 // The plan the fake `initiative-planner` returns. `preset_generic` declares no phase template, so
 // it passes through the ingest normalizer unchanged. One item, routed to a trivial pipeline via
@@ -98,5 +105,70 @@ test.describe('initiative plan review', () => {
     const committed = await getInitiative(request, workspaceId, block.id)
     expect(committed?.status).toBe('executing')
     expect(committed?.items.map((i) => i.phaseId)).toEqual(['phase-one'])
+  })
+
+  test('the rail reviews the rendered plan: outline, per-block comment, send back', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const { workspaceId } = seededBoard
+
+    const pipeline = await createSimplePipeline(request, workspaceId, ['architect'])
+    await setFakeProfile(request, workspaceId, {
+      decisionOnSteps: [],
+      initiativePlan: plan(pipeline.id),
+    })
+
+    const { block } = await createInitiative(request, workspaceId, 'blk_auth', 'preset_generic')
+    const card = page.getByTestId('initiative-card')
+    await expect(card).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await startRun(request, workspaceId, block.id, 'pl_initiative')
+
+    const review = card.getByTestId('initiative-card-review')
+    await expect(review).toBeVisible({ timeout: RUN_TERMINAL_TIMEOUT })
+    await review.click()
+
+    const tracker = page.getByTestId('initiative-tracker-window')
+    await expect(tracker).toBeVisible({ timeout: LIVE_TIMEOUT })
+    const rail = tracker.getByTestId('initiative-plan-review')
+    await expect(rail).toBeVisible()
+
+    // The gate parked on the PLAN, not on the planner's transcript summary: the document carries
+    // the plan's own prose and an outline to navigate it by.
+    const doc = rail.getByTestId('initiative-plan-document')
+    await expect(doc).toContainText('Ship the thing, in one reviewed phase.')
+    await expect(doc).toContainText('Do the phase-one work')
+    await expect(doc).toContainText('The only item of the plan awaiting approval.')
+    await expect(rail.getByTestId('initiative-plan-toc')).toBeVisible()
+
+    // Send back is refused until there is something to re-plan FROM.
+    await expect(rail.getByTestId('initiative-plan-send-back')).toBeDisabled()
+
+    // Comment on a specific block of the plan (GitHub-review style: click the block, write the
+    // note) — the anchoring the rail had no way to express.
+    await doc.locator('.reader-prose [data-src-start]').first().click()
+    const composer = rail.getByTestId('initiative-plan-composer')
+    await expect(composer).toBeVisible()
+    await composer.getByTestId('initiative-plan-comment-body').fill('Split this into two items.')
+    await composer.getByTestId('initiative-plan-comment-add').click()
+    await expect(rail.getByTestId('initiative-plan-comment')).toHaveCount(1)
+
+    // One anchored comment is enough to send back, with or without overall feedback.
+    const sendBack = rail.getByTestId('initiative-plan-send-back')
+    await expect(sendBack).toBeEnabled()
+    await sendBack.click()
+
+    // LIVE: the planner re-runs with the review folded in, so the rail goes while it works and
+    // comes back when the re-plan parks again — the loop the gate exists for.
+    await expect(rail).toBeHidden({ timeout: RUN_TERMINAL_TIMEOUT })
+    await expect(rail).toBeVisible({ timeout: RUN_TERMINAL_TIMEOUT })
+
+    // The drafts do not survive the round: the returning rail reviews the NEW plan clean.
+    await expect(rail.getByTestId('initiative-plan-comment')).toHaveCount(0)
+
+    // The initiative is still awaiting approval — a send-back must never commit the plan.
+    const pending = await getInitiative(request, workspaceId, block.id)
+    expect(pending?.status).not.toBe('executing')
   })
 })

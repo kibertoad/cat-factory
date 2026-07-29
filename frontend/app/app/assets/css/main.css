@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
+/* The shared rendered-markdown reader presentation (see prose.css). */
+@import './prose.css';
 
 /* Toast text should be selectable. Reka UI sets `user-select: none` inline on
  * the toast root (to support swipe-to-dismiss); since `user-select` is

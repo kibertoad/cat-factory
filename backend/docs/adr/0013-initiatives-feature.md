@@ -72,6 +72,39 @@ Key shape decisions:
   owns the approve / request-changes rail. Both halves are load-bearing: the gate first shipped
   with neither, so a finished plan sat behind a spinning "Run planning" and could be cleared only
   by a REST call. A park whose offer or whose resolving surface is missing is not "surfaced as one".
+- **The plan gate parks on the PLAN, not on the planner's chatter.** The rail above can only be as
+  good as what it reviews, and the planner emits its plan as JSON while returning a transcript
+  summary ("Initiative plan drafted.") as `step.output` — so the gate parked on a one-line
+  proposal, and a "request changes" re-run handed the planner that sentence back as its previous
+  proposal rather than the plan it had just written. The gate now parks on a deterministic markdown
+  RENDERING of the plan (`renderInitiativePlanForReview`). Its headings are load-bearing rather than
+  cosmetic — the reader's outline parser splits the document at each one — which is what makes the
+  rail's outline and its per-block commenting possible at all. Those two tools are the SAME ones the
+  step reader gives the architect's prose: `useStepProse` for the outline, `useProseComments` for
+  the anchoring, and one global `.reader-prose` sheet for the presentation, so the review surfaces
+  cannot drift.
+- **What is rendered is the INGESTED plan, which is why this does not ride the generic artifact
+  seam.** `reviewableArtifactOutput` renders the agent's RAW result, and that is sound only while
+  the committed artifact IS that result — true of the spec doc and the blueprint tree, whose files
+  the harness commits and the engine merely validates. The plan is the exception: what gets
+  committed is derived at ingest, where a preset's phase template reorders phases and forces
+  checkpoints, its `seedPlan` hook adds and drops items, and a re-plan carries over items a previous
+  plan already materialised. Rendering the raw draft would therefore show the reviewer a document
+  their approval does not govern — a silent failure, since nothing errors and the reviewer simply
+  approves work they were never shown. So the `initiative-planner`'s post-completion resolver — the
+  one component that knows what was committed — authors the rendering and publishes it through
+  `StepResolution.outputIsRendered`. The renderer takes the shape the draft and the entity share
+  (`InitiativePlanView`), and NOTHING it is handed is dropped: an item naming a phase the plan never
+  declared gets its own section rather than vanishing between the phases.
+- **The rendering is also what the re-plan quotes.** Because a "request changes" hands back the
+  gate's proposal, the planner is re-prompted with the plan as committed rather than with its own
+  pre-ingest draft — the two differ for exactly the presets above.
+- **A rendered proposal is NOT editable, and the engine says so.** "Approve with corrections"
+  rewrites `step.output`, which is right when the output is the agent's own prose and silently
+  useless when it is a rendering of state already ingested — the committed artifact would stay
+  the ingested one. Steps in that position carry `outputIsRendered`; `approveStep` refuses an
+  edited proposal (422 `proposal_not_editable`) and the SPA hides the affordance. Requesting
+  changes is the route for a correction.
 - **A re-run re-interviews: the interviewer gate implements the spine's `resetForFreshRun`.** The
   entity outlives any one run, so on a fresh entry it drops the previous run's round bookkeeping and
   still-pending questions, keeping the answered + dismissed digest (which is also where a preset

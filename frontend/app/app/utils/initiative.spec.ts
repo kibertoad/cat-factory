@@ -1,7 +1,11 @@
 import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import { describe, it, expect } from 'vitest'
 import type { InitiativeItem, InitiativePhase, InitiativeQa } from '~/types/domain'
+import { missingI18nKeys } from '../../test/i18nKeys'
 import {
+  INITIATIVE_ATTENTION_LABEL_KEYS,
+  INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS,
+  INITIATIVE_STATUS_LABEL_KEYS,
   isPendingQuestion,
   orderInterviewQuestions,
   pendingCheckpointPhase,
@@ -198,5 +202,25 @@ describe('selectPlanApproval', () => {
     // `dispatchStepView` routes it to (the generic panel), which is exactly what resolves it.
     const approvals = [parked('some-custom-kind', 'ap_custom')]
     expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_custom')
+  })
+})
+
+/**
+ * These tables are the reason the initiative card and the inspector word one park identically,
+ * and they are exactly the shape both i18n drift guards are blind to: the typed-key check and
+ * `i18n:check` only see a key written literally at a `t()` call site, while the exhaustive
+ * `Record` only proves every enum MEMBER has an entry — never that the entry still names a key
+ * the catalog holds. Without this, deleting a key reads as a clean removal and the affordance
+ * renders its own key path to the user.
+ */
+describe('the initiative label-key tables', () => {
+  it('name keys the base catalog actually holds', () => {
+    expect(
+      missingI18nKeys([
+        ...Object.values(INITIATIVE_ATTENTION_LABEL_KEYS),
+        ...Object.values(INITIATIVE_STATUS_LABEL_KEYS),
+        ...Object.values(INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS),
+      ]),
+    ).toEqual([])
   })
 })

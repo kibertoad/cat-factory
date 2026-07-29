@@ -148,6 +148,14 @@ const {
 
 const approvalPending = computed(() => step.value?.approval?.status === 'pending')
 const approvalId = computed(() => step.value?.approval?.id ?? null)
+// Whether "approve with corrections" applies. A step whose output is a deterministic
+// RENDERING of an artifact it already produced (the initiative plan, the spec doc, the
+// blueprint tree — `step.outputIsRendered`, set by the engine's `reviewableArtifactOutput`
+// seam) has no editable proposal: the artifact was ingested into domain state before the gate
+// was raised, so an edit typed over the rendering would never reach it. The backend refuses
+// such an edit; hiding the affordance is what stops a reviewer typing corrections into a
+// dead end. Their route is "request changes", which re-runs the producer with the correction.
+const proposalEditable = computed(() => step.value?.outputIsRendered !== true)
 // A companion step parked at its automatic-rework cap: instead of the generic
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
@@ -261,6 +269,7 @@ async function copyOutput() {
         <!-- ToC sidebar (only meaningful when there are prose headings) -->
         <aside
           v-if="outline.hasToc"
+          data-testid="step-detail-toc"
           class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
         >
           <div class="border-b border-slate-800 px-4 py-3">
@@ -646,6 +655,7 @@ async function copyOutput() {
               <!-- composer for the block the human just clicked -->
               <div
                 v-if="draftTarget"
+                data-testid="step-review-composer"
                 class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
               >
                 <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
@@ -656,6 +666,7 @@ async function copyOutput() {
                   >{{ draftTarget.quotedSource }}</pre>
                 <UTextarea
                   v-model="draftBody"
+                  data-testid="step-review-comment-body"
                   :rows="3"
                   autoresize
                   size="sm"
@@ -669,6 +680,7 @@ async function copyOutput() {
                   <UButton
                     color="primary"
                     size="xs"
+                    data-testid="step-review-comment-add"
                     :disabled="!draftBody.trim()"
                     @click="addDraftComment"
                   >
@@ -681,6 +693,7 @@ async function copyOutput() {
               <div
                 v-for="(c, idx) in reviewComments"
                 :key="idx"
+                data-testid="step-review-comment"
                 class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
               >
                 <div class="mb-1 flex items-start justify-between gap-2">
@@ -709,6 +722,7 @@ async function copyOutput() {
                 </label>
                 <UTextarea
                   v-model="feedback"
+                  data-testid="step-review-feedback"
                   :rows="3"
                   autoresize
                   size="sm"
@@ -763,6 +777,7 @@ async function copyOutput() {
               {{ t('panels.stepDetail.approveAndProceed') }}
             </UButton>
             <UButton
+              v-if="proposalEditable"
               color="primary"
               variant="soft"
               size="sm"
@@ -773,6 +788,9 @@ async function copyOutput() {
             >
               {{ t('panels.stepDetail.approveWithCorrections') }}
             </UButton>
+            <p v-else class="text-[10px] text-slate-500" data-testid="step-rendered-output-note">
+              {{ t('panels.stepDetail.renderedOutputNote') }}
+            </p>
 
             <!-- destructive: a two-step inline confirm instead of a native dialog -->
             <div
@@ -812,6 +830,7 @@ async function copyOutput() {
                 size="sm"
                 icon="i-lucide-rotate-ccw"
                 class="flex-1"
+                data-testid="step-request-changes"
                 :disabled="!canRequestChanges"
                 :loading="submitting"
                 @click="requestChanges"
@@ -848,127 +867,5 @@ async function copyOutput() {
 .reader-fade-enter-from,
 .reader-fade-leave-to {
   opacity: 0;
-}
-
-/* Approval mode: each source-mapped block becomes a comment target — a hover
-   highlight + a "+" gutter affordance, GitHub-review style. */
-.reader-prose.review-mode :deep([data-src-start]) {
-  position: relative;
-  cursor: pointer;
-  border-radius: 0.375rem;
-  transition: background 0.12s ease;
-}
-.reader-prose.review-mode :deep([data-src-start]:hover) {
-  background: rgb(99 102 241 / 0.08);
-  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.5);
-}
-.reader-prose.review-mode :deep([data-src-start])::before {
-  content: '+';
-  position: absolute;
-  left: -1.4rem;
-  top: 0.1rem;
-  display: none;
-  height: 1.1rem;
-  width: 1.1rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-  background: rgb(99 102 241);
-  color: white;
-  font-size: 0.8rem;
-  line-height: 1;
-}
-.reader-prose.review-mode :deep([data-src-start]:hover)::before {
-  display: flex;
-}
-/* Persistent markers: amber for a block that already has a comment, indigo for
-   the block whose composer is currently open. */
-.reader-prose :deep(.cf-commented) {
-  background: rgb(234 179 8 / 0.1);
-  box-shadow: inset 2px 0 0 rgb(234 179 8 / 0.6);
-}
-.reader-prose :deep(.cf-selected) {
-  background: rgb(99 102 241 / 0.12);
-  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.8);
-}
-
-/* Styling for the markdown HTML injected via v-html (out of scoped reach without
-   :deep), kept close to the inspector's existing prose styling. */
-.reader-prose :deep(p) {
-  margin: 0.5rem 0;
-}
-.reader-prose :deep(ul),
-.reader-prose :deep(ol) {
-  margin: 0.5rem 0;
-  padding-left: 1.25rem;
-}
-.reader-prose :deep(ul) {
-  list-style: disc;
-}
-.reader-prose :deep(ol) {
-  list-style: decimal;
-}
-.reader-prose :deep(li) {
-  margin: 0.2rem 0;
-}
-.reader-prose :deep(strong) {
-  font-weight: 600;
-  color: rgb(226 232 240);
-}
-.reader-prose :deep(em) {
-  font-style: italic;
-}
-.reader-prose :deep(code) {
-  border-radius: 0.25rem;
-  background: rgb(30 41 59 / 0.8);
-  padding: 0.1rem 0.3rem;
-  font-family: ui-monospace, monospace;
-  font-size: 0.85em;
-  color: rgb(199 210 254);
-}
-.reader-prose :deep(pre) {
-  margin: 0.6rem 0;
-  overflow: auto;
-  border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
-  padding: 0.75rem 0.9rem;
-}
-.reader-prose :deep(pre code) {
-  background: transparent;
-  padding: 0;
-  color: rgb(203 213 225);
-}
-.reader-prose :deep(blockquote) {
-  margin: 0.6rem 0;
-  border-left: 3px solid rgb(99 102 241 / 0.5);
-  padding-left: 0.75rem;
-  color: rgb(148 163 184);
-}
-.reader-prose :deep(table) {
-  margin: 0.6rem 0;
-  border-collapse: collapse;
-  font-size: 0.95em;
-}
-.reader-prose :deep(th),
-.reader-prose :deep(td) {
-  border: 1px solid rgb(51 65 85);
-  padding: 0.3rem 0.6rem;
-}
-.reader-prose :deep(th) {
-  background: rgb(30 41 59 / 0.6);
-  font-weight: 600;
-}
-.reader-prose :deep(hr) {
-  margin: 1rem 0;
-  border: none;
-  border-top: 1px solid rgb(51 65 85);
-}
-.reader-prose :deep(h1),
-.reader-prose :deep(h2),
-.reader-prose :deep(h3),
-.reader-prose :deep(h4) {
-  margin: 0.6rem 0 0.3rem;
-  font-weight: 600;
-  color: rgb(226 232 240);
 }
 </style>
