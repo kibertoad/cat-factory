@@ -103,7 +103,7 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       cleanup()
       reject(err)
     })
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       cleanup()
       if (killedReason === 'timeout') {
         reject(new Error(`${command} timed out after ${timeoutMs}ms`))
@@ -114,7 +114,15 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
         return
       }
       if (code !== 0) {
-        reject(new Error(`${command} exited with code ${code}: ${stderr.slice(-700)}`))
+        // `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as
+        // JSON on STDOUT and leaves stderr EMPTY — so on a non-zero exit a stderr-only message
+        // carries nothing but the code, and the reason the caller's in-band `is_error` check
+        // would have surfaced is dropped on the floor. Carry whichever stream spoke. A `null`
+        // code means a SIGNAL killed it (this path's own SIGKILL escalation, an OOM kill), worth
+        // distinguishing from the CLI's own failure exit rather than rendering "code null".
+        const how = code === null ? `killed by ${signal ?? 'signal'}` : `exited with code ${code}`
+        const tail = (stderr.trim() || stdout.trim()).slice(-700) || '(no output)'
+        reject(new Error(`${command} ${how}: ${tail}`))
         return
       }
       resolve(stdout)

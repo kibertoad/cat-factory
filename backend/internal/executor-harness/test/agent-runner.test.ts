@@ -24,6 +24,17 @@ function fakeCli(name: string, lines: string[]): void {
 }
 
 /**
+ * Like {@link fakeCli} but ends badly: it prints `lines` to stdout, optionally something on
+ * stderr, and exits with `code`. Models the failure this file's `runClaudeCode failure
+ * reporting` block is about — a CLI whose only account of what went wrong is on STDOUT.
+ */
+function failingCli(name: string, lines: string[], code: number, stderr = ''): void {
+  const out = JSON.stringify(lines.length ? lines.join('\n') + '\n' : '')
+  const script = `#!/usr/bin/env node\nprocess.stdin.resume()\nprocess.stdin.on('data', () => {})\nif (${JSON.stringify(stderr)}) process.stderr.write(${JSON.stringify(stderr)})\nprocess.stdout.write(${out}, () => process.exit(${code}))\n`
+  writeFileSync(join(binDir, name), script, { mode: 0o755 })
+}
+
+/**
  * A fake CLI that records its argv + the stdin it received into `argv.json` / `stdin.txt`
  * under its cwd, then emits one `result` line. Lets a test assert HOW the harness passed the
  * system prompt (argv vs folded into stdin) without depending on the real `claude` binary.
@@ -739,5 +750,63 @@ describe.skipIf(!unix)('runCodex telemetry', () => {
     expect(calls[0]!.responseText).toBe('All done')
     expect(calls[0]!.inputTokens).toBe(500)
     expect(calls[0]!.outputTokens).toBe(80)
+  })
+})
+
+// The failure this covers: a headless agent CLI reports an upstream refusal (quota, rate limit,
+// a provider outage it retried out on) in its STDOUT event stream and exits non-zero with an
+// EMPTY stderr. The harness used to surface `claude exited with code 1: ` — the exit code and
+// nothing else — while the CLI's own explanation sat in a variable only the success path read.
+describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
+  const run = (): Promise<unknown> =>
+    runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+  it("folds the CLI's terminal result into a bad exit that left nothing on stderr", async () => {
+    failingCli(
+      'claude',
+      [
+        JSON.stringify({
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          result: 'Claude AI usage limit reached|1785302400',
+        }),
+      ],
+      1,
+    )
+    await expect(run()).rejects.toThrow(/Claude AI usage limit reached\|1785302400/)
+    await expect(run()).rejects.toThrow(/error_during_execution/)
+    // The empty stderr is named as empty rather than trailing off after a colon.
+    await expect(run()).rejects.toThrow(/\(no stderr output\)/)
+  })
+
+  it('keeps stderr as the message when that is where the CLI spoke', async () => {
+    failingCli('claude', [], 1, 'claude: command not usable here\n')
+    await expect(run()).rejects.toThrow(/command not usable here/)
+  })
+
+  it('names the signal instead of "code null" when something killed the CLI', async () => {
+    const script = `#!/usr/bin/env node\nprocess.stdin.resume()\nprocess.kill(process.pid, 'SIGKILL')\n`
+    writeFileSync(join(binDir, 'claude'), script, { mode: 0o755 })
+    await expect(run()).rejects.toThrow(/killed by SIGKILL/)
+  })
+
+  it('reports a Codex bad exit with the last thing the agent said', async () => {
+    failingCli('codex', [JSON.stringify({ type: 'agent_message', message: 'quota exhausted' })], 1)
+    await expect(
+      runCodex({
+        cwd,
+        model: 'gpt-5.5-codex',
+        systemPrompt: 'SYS',
+        userPrompt: 'USER',
+        ambientAuth: true,
+      }),
+    ).rejects.toThrow(/quota exhausted/)
   })
 })

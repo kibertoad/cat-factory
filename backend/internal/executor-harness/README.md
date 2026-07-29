@@ -203,6 +203,7 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic — a likely onboarding/auth wedge — WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |
 | `VALIDATION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a pre-PR validation check; a timeout counts as a failure (exit 124) so one hung command can't wedge the loop. |
 | `REPRODUCTION_COMMAND_TIMEOUT_MS` | `900000` (15m) | Per-command watchdog for a reproduction-proof setup or check command; a timeout counts as a failure (exit 124). |
 | `REPRODUCTION_HEARTBEAT_MS` | `30000` (30s) | How often the reproduction proof feeds the job inactivity watchdog while it runs commands the agent is not producing output for. |
