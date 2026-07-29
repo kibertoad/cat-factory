@@ -58,6 +58,11 @@ import {
   type ReproductionReport,
   type ReproductionSpec,
 } from './reproduction-proof.js'
+import {
+  buildDependencyInstallNote,
+  runDependencyInstall,
+  type DependencyInstallSpec,
+} from './dependency-install.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -130,6 +135,13 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * `docs/initiatives/pre-pr-validation.md`.
    */
   validationChecks?: ValidationChecksSpec
+  /**
+   * DEPENDENCY PREPOPULATION: the service's install command, run against the checkout BEFORE the
+   * agent's first turn so it works against a tree whose dependencies are present. Best-effort —
+   * a failure becomes a note in the agent's prompt, never a failed run. Absent ⇒ no install
+   * phase. See `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: DependencyInstallSpec
   /**
    * BUGFIX REPRODUCTION PROOF: the run's declared reproduction command + test files. When set, the
    * harness runs that command against the pre-fix tree AND the tree the PR will open from, feeding
@@ -366,11 +378,34 @@ export async function runCodingAgent(
           opts,
         )
 
+      // DEPENDENCY PREPOPULATION: install the service's dependencies into the checkout BEFORE the
+      // agent's first turn, so it reads real packages instead of inferring capabilities from a
+      // manifest. Runs in `workDir` (a monorepo service installs from its own subtree, exactly
+      // where its manifest and lockfile live), and its outcome is STATED to the agent either way —
+      // a silent absence of dependencies reads to an agent as "this environment is offline".
+      // Best-effort by construction: a failed install never fails the run. Keyed purely off the
+      // job body (no agent-kind switch); absent ⇒ this is a no-op.
+      let dependencyNote: string | undefined
+      if (spec.dependencyInstall) {
+        opts.onPhase?.('dependencies')
+        // Never rejects — every failure shape comes back as a non-zero outcome — so the phase
+        // below needs no unwinding and the run continues either way.
+        const installed = await runDependencyInstall({
+          cwd: workDir,
+          spec: spec.dependencyInstall,
+          logger,
+          opts,
+        })
+        dependencyNote = buildDependencyInstallNote(installed)
+      }
+
       let outcome: CodingAgentOutcome
       try {
         opts.onPhase?.('agent')
         logger.info('coding-agent: running agent', { serviceDirectory })
-        let agentRun = await runAgentPass(spec.userPrompt)
+        let agentRun = await runAgentPass(
+          dependencyNote ? `${spec.userPrompt}\n\n${dependencyNote}` : spec.userPrompt,
+        )
         const foldPass = (run: typeof agentRun): void => {
           agentRun = mergeAgentPasses(agentRun, run)
         }

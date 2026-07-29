@@ -314,9 +314,11 @@ export class AgentContextBuilder {
       // only — the kinds that receive the values out of band. Advertised in the tester prompt so
       // the agent knows which env vars are injected; values are resolved separately at dispatch.
       testSecrets,
-      // The service frame's PRE-PR validation checks (walked up the frame chain), forwarded by
-      // the container executor onto a PR-opening coding job body so the harness can run them
-      // against the checkout before it opens the PR. `null` ⇒ the service configured none.
+      // The service frame's validation config (walked up the frame chain), which yields TWO
+      // context fields from ONE read: the PRE-PR validation checks, forwarded onto a PR-opening
+      // coding job body so the harness runs them before it opens the PR; and the DEPENDENCY
+      // PREPOPULATION install, forwarded onto EVERY dispatch that gets a checkout so the agent
+      // starts against a tree whose dependencies are present. `{}` ⇒ the service declared neither.
       validationChecks,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
@@ -433,6 +435,8 @@ export class AgentContextBuilder {
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
+      // Spreads BOTH the pre-PR checks and the dependency-prepopulation install — one frame-chain
+      // read, two independently-gated context fields (see `validationChecksFor`).
       ...validationChecks,
       ...reproduction,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
@@ -632,11 +636,22 @@ export class AgentContextBuilder {
   private async validationChecksFor(
     workspaceId: string,
     frame: Block | null,
-  ): Promise<{ validationChecks?: ResolvedValidationChecks }> {
+  ): Promise<{ validationChecks?: ResolvedValidationChecks; dependencyInstall?: string }> {
     if (!frame) return {}
     try {
       const resolved = await this.deps.resolveValidationChecks?.(workspaceId, frame.id)
-      return resolved ? { validationChecks: resolved } : {}
+      if (!resolved) return {}
+      // ONE read yields TWO context fields. The DEPENDENCY PREPOPULATION install shares the
+      // frame's config row, but the container executor gates the two differently: the checks
+      // travel only on a PR-opening dispatch, the install on every dispatch that gets a
+      // checkout. So it is lifted to its own top-level field here rather than left nested,
+      // which would tie prepopulation to the pre-PR gate and silently exclude every explore
+      // kind. Both ride the same spread-ready fragment so the fold at the `buildContext` call
+      // site stays branch-free (see this method's contract above).
+      return {
+        validationChecks: resolved,
+        ...(resolved.dependencyInstall ? { dependencyInstall: resolved.dependencyInstall } : {}),
+      }
     } catch {
       // A config-store read failure must never wedge a run — a mothership node whose server
       // doesn't reflect this repository, or a transient store outage, would otherwise fail EVERY

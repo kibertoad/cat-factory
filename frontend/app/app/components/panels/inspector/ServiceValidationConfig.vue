@@ -27,9 +27,15 @@ const busy = ref(false)
 const detecting = ref(false)
 const rows = ref<ValidationCheck[]>([])
 const maxAttempts = ref(VALIDATION_DEFAULT_MAX_ATTEMPTS)
+// DEPENDENCY PREPOPULATION: the install run BEFORE the agent's first turn, so it reads a tree
+// whose dependencies are present. Edited beside the checks because it comes from the same
+// per-service row, but it is independent of them — a service may declare only this.
+const dependencyInstall = ref('')
 
 const saved = computed(() => store.forBlock(props.block.id))
-const configured = computed(() => saved.value.checks.length > 0)
+const configured = computed(
+  () => saved.value.checks.length > 0 || Boolean(saved.value.dependencyInstall),
+)
 const canAdd = computed(() => rows.value.length < VALIDATION_MAX_CHECKS)
 /** A row is only submittable once it has a command; the label falls back to the command. */
 const submittable = computed(() =>
@@ -46,6 +52,7 @@ watch(
   (config) => {
     rows.value = config.checks.map((c) => ({ ...c }))
     maxAttempts.value = config.maxAttempts
+    dependencyInstall.value = config.dependencyInstall ?? ''
   },
   { immediate: true },
 )
@@ -114,7 +121,13 @@ async function detect() {
     }
     const merged = mergeDetectedChecks(rows.value, result.checks, VALIDATION_MAX_CHECKS)
     rows.value = merged.rows
-    if (merged.added === 0) {
+    // Fill the install only when the operator has not written one. Detection is assistive, and
+    // overwriting a hand-tuned install (a workspace filter, an offline flag) with the generic
+    // guess is the same failure `mergeDetectedChecks` refuses to make on the check rows.
+    const suggestedInstall = result.dependencyInstall?.trim() ?? ''
+    const filledInstall = suggestedInstall !== '' && dependencyInstall.value.trim() === ''
+    if (filledInstall) dependencyInstall.value = suggestedInstall
+    if (merged.added === 0 && !filledInstall) {
       toast.add({
         title: t('inspector.validationChecks.detect.nothingNew'),
         description:
@@ -128,7 +141,13 @@ async function detect() {
     }
     const names = result.ecosystems.map(ecosystemLabel).join(', ')
     toast.add({
-      title: t('inspector.validationChecks.detect.added', { count: merged.added }, merged.added),
+      // An install-only detection fills nothing but the install field, and reporting it as
+      // "0 checks added" would read as a failed press on the one repo shape prepopulation is
+      // most for (dependencies to install, nothing declared to verify).
+      title:
+        merged.added === 0
+          ? t('inspector.validationChecks.detect.installOnly')
+          : t('inspector.validationChecks.detect.added', { count: merged.added }, merged.added),
       // Name what was recognised AND what was left out: a cap that silently swallowed a
       // suggestion reads as "that is everything your repo has".
       description: [
@@ -152,7 +171,12 @@ async function detect() {
 async function save() {
   busy.value = true
   try {
-    await store.save(props.block.id, submittable.value, maxAttempts.value)
+    await store.save(
+      props.block.id,
+      submittable.value,
+      maxAttempts.value,
+      dependencyInstall.value.trim() || undefined,
+    )
     toast.add({
       title: t('inspector.validationChecks.savedToast'),
       icon: 'i-lucide-check',
@@ -172,6 +196,7 @@ async function clear() {
   try {
     await store.remove(props.block.id)
     rows.value = []
+    dependencyInstall.value = ''
     toastDone('clear', noun)
   } catch (e) {
     notifyError(t('inspector.validationChecks.clearFailed'), e)
@@ -204,6 +229,19 @@ async function clear() {
     </template>
 
     <div class="space-y-2">
+      <UFormField
+        :label="t('inspector.validationChecks.dependencyInstall')"
+        :hint="t('inspector.validationChecks.dependencyInstallHint')"
+      >
+        <UInput
+          v-model="dependencyInstall"
+          placeholder="pnpm install --frozen-lockfile"
+          size="sm"
+          class="w-full"
+          data-testid="validation-dependency-install"
+        />
+      </UFormField>
+
       <p class="text-[11px] text-slate-500">
         {{ t('inspector.validationChecks.hint') }}
       </p>

@@ -36,6 +36,7 @@ import {
   runMultiRepoCoding,
 } from './coding-agent.js'
 import { validationFailureMessage } from './validation-checks.js'
+import { buildDependencyInstallNote, runDependencyInstall } from './dependency-install.js'
 import { agentCapabilities, mergeEffort } from './agent-shared.js'
 import { runBootstrap } from './bootstrap-mode.js'
 import {
@@ -553,9 +554,27 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
       // app it just built + served (the backend env resolution already reached the harness).
       const infraNotes = managed ? buildInfraNotes(managed) : []
-      const userPrompt = infraNotes.length
-        ? `${job.userPrompt}\n\nNote: ${infraNotes.join(' ')}`
-        : job.userPrompt
+      // DEPENDENCY PREPOPULATION, before the agent's first turn. An EXPLORE run is the case this
+      // exists for: a reviewer or architect reading a fresh clone can see that a library is
+      // depended upon but not what it actually exposes, so it reasons about the manifest instead
+      // of the code. Best-effort — the outcome is stated in the prompt either way and never fails
+      // the run. Runs in `workDir` so a monorepo service installs from its own subtree.
+      let dependencyNote: string | undefined
+      if (job.dependencyInstall) {
+        opts.onPhase?.('dependencies')
+        const installed = await runDependencyInstall({
+          cwd: workDir,
+          spec: job.dependencyInstall,
+          logger,
+          opts,
+        })
+        dependencyNote = buildDependencyInstallNote(installed)
+      }
+      const userPrompt = [
+        job.userPrompt,
+        ...(infraNotes.length ? [`Note: ${infraNotes.join(' ')}`] : []),
+        ...(dependencyNote ? [dependencyNote] : []),
+      ].join('\n\n')
       // The stand-up record (success or failure, with its captured logs) rides back on EVERY
       // result branch — the backend surfaces it on the Tester step regardless of whether the
       // agent then produced a usable report.
@@ -809,13 +828,34 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
       }
     }
 
+    // DEPENDENCY PREPOPULATION for the PRIMARY leg. The install is declared on ONE service frame
+    // (the primary repo's), so it is run in that leg's checkout — never fanned out across the
+    // peers, whose services declare their own configs the dispatch never resolved. The agent runs
+    // at the workspace ROOT and reads across every sibling, which is exactly why this matters
+    // here: a cross-repo investigator reasoning about a manifest instead of the packages is the
+    // complaint that motivated the feature. Same treatment as the reference branches above.
+    let dependencyNote: string | undefined
+    const primaryLeg = legs[0]
+    if (job.dependencyInstall && primaryLeg) {
+      opts.onPhase?.('dependencies')
+      const installed = await runDependencyInstall({
+        cwd: join(root, primaryLeg.dirName),
+        spec: job.dependencyInstall,
+        logger,
+        opts,
+      })
+      // Named by its sibling directory: the agent's cwd is the workspace root, which has no
+      // dependency tree of its own, so "this checkout" would point it at the wrong place.
+      dependencyNote = buildDependencyInstallNote(installed, primaryLeg.dirName)
+    }
+
     opts.onPhase?.('agent')
     logger.info('multi-repo-explore: running agent', { repos: legs.map((l) => l.dirName) })
     const run = await runAgentInWorkspace(
       {
         dir: root,
         systemPrompt: job.systemPrompt,
-        userPrompt: job.userPrompt,
+        userPrompt: dependencyNote ? `${job.userPrompt}\n\n${dependencyNote}` : job.userPrompt,
         model: job.model,
         harness: job.harness,
         subscriptionToken: job.subscriptionToken,
@@ -972,6 +1012,10 @@ function buildSingleRepoCodingSpec(
     // (see docs/initiatives/bugfix-reproduction-proof.md). Forwarded straight off the job body —
     // like the checks above, the loop is generic machinery keyed on the data, not the agent kind.
     ...(job.reproduction ? { reproduction: job.reproduction } : {}),
+    // Dependency prepopulation: the service's install, run against the checkout BEFORE the
+    // agent's first turn (see docs/initiatives/agent-dependency-prepopulation.md). Forwarded
+    // straight off the job body like the two phases above — generic machinery keyed on the data.
+    ...(job.dependencyInstall ? { dependencyInstall: job.dependencyInstall } : {}),
   }
 }
 

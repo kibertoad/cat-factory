@@ -12,6 +12,7 @@ import {
   type ReproductionReport,
   type ReproductionSpec,
 } from './reproduction-proof.js'
+import { parseDependencyInstallSpec, type DependencyInstallSpec } from './dependency-install.js'
 import {
   parseMcpServerSpecs,
   parseSkillSpecs,
@@ -885,6 +886,18 @@ export interface AgentJob extends HarnessAuthFields {
    * `docs/initiatives/bugfix-reproduction-proof.md`.
    */
   reproduction?: ReproductionSpec
+  /**
+   * DEPENDENCY PREPOPULATION: the service's install command, run against the checkout BEFORE the
+   * agent's first turn so it reads a tree whose dependencies are present rather than inferring
+   * them from a manifest. Applies to EVERY mode that gets a checkout (explore as well as coding)
+   * — unlike {@link validationChecks}, which is a pre-PR gate — because an agent reading or
+   * reviewing a tree needs its dependencies as much as one changing it.
+   *
+   * Best-effort: a failure becomes a note in the agent's prompt, never a failed job. Absent ⇒ the
+   * run behaves exactly as before. Deliberately keyed off job DATA, not the agent kind. See
+   * `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: DependencyInstallSpec
 }
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
@@ -1309,6 +1322,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     validation: parseValidationSpec(o.validation),
     validationChecks: parseValidationChecksSpec(o.validationChecks),
     reproduction: parseReproductionSpec(o.reproduction),
+    dependencyInstall: parseDependencyInstallSpec(o.dependencyInstall),
     reviewPrNumber: posInt(o.reviewPrNumber),
   })
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
@@ -1349,6 +1363,7 @@ interface ParsedAgentJobParts {
   validation: ReturnType<typeof parseValidationSpec>
   validationChecks: ReturnType<typeof parseValidationChecksSpec>
   reproduction: ReturnType<typeof parseReproductionSpec>
+  dependencyInstall: ReturnType<typeof parseDependencyInstallSpec>
   reviewPrNumber: number | undefined
 }
 
@@ -1404,6 +1419,7 @@ function assembleAgentJob(
     validation,
     validationChecks,
     reproduction,
+    dependencyInstall,
     reviewPrNumber,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
@@ -1435,6 +1451,7 @@ function assembleAgentJob(
     ...(validation ? { validation } : {}),
     ...(validationChecks ? { validationChecks } : {}),
     ...(reproduction ? { reproduction } : {}),
+    ...(dependencyInstall ? { dependencyInstall } : {}),
   }
 }
 

@@ -1090,6 +1090,8 @@
     "validationChecks": {
       "title": "Walidacja przed PR",
       "sectionHint": "Polecenia uruchamiane na kopii roboczej po zakończeniu pracy programisty, a przed otwarciem żądania scalenia. Niepowodzenie wraca do agenta do naprawy; tylko czysta kopia otwiera żądanie scalenia.",
+      "dependencyInstall": "Instalacja zależności",
+      "dependencyInstallHint": "Uruchamia się przed startem agenta",
       "hint": "Każde polecenie jest uruchamiane przez `sh -c` w kopii roboczej tej usługi, po kolei. Poprawiaj kod, a nie sprawdzenie — agent ma polecenie ich nie osłabiać.",
       "clear": "Wyczyść",
       "configNoun": "sprawdzenia walidacyjne",
@@ -1109,6 +1111,7 @@
         "action": "Wykryj",
         "hint": "Zaproponuj testy na podstawie repozytorium tej usługi",
         "added": "Dodano {count} test | Dodano {count} testy | Dodano {count} testów",
+        "installOnly": "Uzupełniono instalację zależności",
         "found": "Rozpoznano: {ecosystems}.",
         "capped": "Część propozycji pominięto — usługa przyjmuje najwyżej {max} testów.",
         "nothingNew": "Nie ma czego dodać",

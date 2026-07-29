@@ -946,6 +946,44 @@ fresh approval id; `maxChatTurns` (default 15) is a hard budget. Phase B CAS-rec
 re-arms the step, and `AgentContextBuilder` folds `buildImplementationChoice` into the `build`
 prompt as a binding directive. Pass-through everywhere it can't run. Scoped to the primary repo.
 
+### Dependency prepopulation (the install BEFORE the agent's first turn)
+
+A service frame declares ONE install command the harness runs against the checkout before the agent
+starts, so a repo-aware agent reads real installed packages instead of inferring a library's
+capabilities from a manifest entry. Design:
+[`docs/initiatives/agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
+
+- **It shares the `validation_configs` row but NOT the validation gate.** Resolution rides the
+  frame-chain read `resolveValidationChecks` already does on every dispatch, so prepopulation costs
+  ZERO extra round trips — but the two are threaded onto the job body under DIFFERENT rules, and
+  that difference is the feature. `validationChecks` rides only a PR-opening single-repo coding
+  dispatch; `dependencyInstall` rides the BASE body, so every dispatch that gets a checkout (explore
+  kinds, in-place fixers) gets it. Folding it in beside the checks typechecks, passes every harness
+  test, and leaves every read-only agent exactly as blind as before.
+- **A service may declare EITHER independently.** `ValidationConfigService.set` deletes the row only
+  when both are empty and `resolveForFrame` returns a config when either is set — a delete or a
+  resolve keyed on `checks` alone silently drops the install for the very repo shape this exists for
+  (dependencies to install, nothing declared to verify).
+- **NEVER a gate.** A check is a VERDICT about the work; an install is SETUP. Every failure shape
+  becomes a prompt NOTE and the run continues. The note is stated in BOTH directions: on success
+  "installed, don't re-run" (or the agent burns its budget reinstalling), on failure the cause plus
+  "you have network access, install what you need" (or the agent concludes the environment is
+  offline and works around a gap that isn't there).
+- **The harness owns the phase** (`dependency-install.ts`), keyed purely off the job body with no
+  agent-kind switch, running in the service `workDir` through the shared `runCapturedCommand` seam.
+  It carries its OWN 30s heartbeat — a cold install is the canonical activity-silent phase, and
+  `JOB_INACTIVITY_MS` (10 min) is tighter than its 20-min watchdog. Per-job by construction (command,
+  cwd and env are all arguments), pinned by a concurrency test.
+- **Autodetection had to become un-filtered.** `ecosystem()` no longer nulls an install-only
+  detection; the "an install verifies nothing" rule moved into `detectValidationChecks`, where it
+  filters each OUTPUT separately. Three things are preserved deliberately and each has a test: the
+  task-runner fallback keys off whether a language ecosystem VERIFIES (not whether one was
+  detected), a non-verifying group consumes none of `VALIDATION_MAX_CHECKS`, and `truncated` counts
+  only the cap.
+- **`HARNESS_CLEAN_KEEP` does not help a JVM repo.** It preserves paths inside the CHECKOUT
+  (`node_modules`, `.venv`, `target`); Maven/Gradle/Go/Cargo cache in `HOME`, which the "per-job
+  state, NEVER HOME-global" rule governs. Don't assume a warm cache there without designing it.
+
 ### Pre-PR validation (checks in the container BEFORE the PR opens)
 
 A service frame can declare install/lint/test/build commands the harness runs against the checkout

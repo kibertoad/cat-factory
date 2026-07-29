@@ -338,4 +338,49 @@ describe('detectValidationChecks', () => {
       expect(result.ecosystems).not.toContain('elixir')
     })
   })
+
+  describe('dependencyInstall', () => {
+    it('suggests the install of an ecosystem that contributes no checks at all', () => {
+      // The whole point of prepopulation: a repo with dependencies to install and nothing
+      // declared to verify. It contributes no CHECK (an install verifies nothing), yet it is
+      // exactly the repo whose agent would otherwise read a manifest instead of the packages.
+      const result = detect({
+        'package.json': pkg({ dependencies: { zod: '^3' } }),
+        'pnpm-lock.yaml': null,
+      })
+      expect(result.checks).toEqual([])
+      expect(result.ecosystems).toEqual([])
+      expect(result.truncated).toBe(false)
+      expect(result.dependencyInstall).toBe('pnpm install --frozen-lockfile')
+    })
+
+    it('still falls back to the task runner when the only language hit is install-only', () => {
+      // An install-only language detection no longer nulls out inside `ecosystem()`, so the
+      // fallback has to key off whether anything VERIFIES — not merely whether a language
+      // ecosystem was detected — or a Makefile-driven repo would silently lose its checks.
+      const result = detect({
+        'package.json': pkg({ dependencies: { zod: '^3' } }),
+        Makefile: 'test:\n\tgo test ./...\n',
+      })
+      expect(result.ecosystems).toEqual(['make'])
+      expect(result.checks).toEqual([{ label: 'test', command: 'make test' }])
+      expect(result.dependencyInstall).toBe('npm install')
+    })
+
+    it('chains every detected ecosystem’s install, deduplicated', () => {
+      const result = detect({
+        'package.json': pkg({ scripts: { test: 'vitest run' } }),
+        'package-lock.json': null,
+        Gemfile: null,
+        Rakefile: null,
+      })
+      expect(result.dependencyInstall).toBe('npm ci && bundle install')
+    })
+
+    it('is absent when nothing detected declares an install', () => {
+      const result = detect({ 'go.mod': null })
+      expect(result.checks.length).toBeGreaterThan(0)
+      expect(result.dependencyInstall).toBeUndefined()
+    })
+  })
 })

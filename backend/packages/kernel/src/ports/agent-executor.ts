@@ -138,6 +138,22 @@ export interface AgentRunContext {
     maxAttempts: number
   }
   /**
+   * DEPENDENCY PREPOPULATION: the install command the harness runs against the checkout BEFORE
+   * the agent's first turn, so a repo-aware agent reads a tree whose dependencies are actually
+   * present instead of inferring what a library can do from a manifest entry.
+   *
+   * Resolved from the SAME frame-chain read as {@link validationChecks} (so it costs a dispatch
+   * no extra round trip) but forwarded on the job body under a DIFFERENT rule: every dispatch
+   * that gets a checkout — explore kinds and in-place fixers included — not only a PR-opening
+   * one. A reviewer or an architect reading the tree needs the dependencies as much as a coder
+   * does, and neither opens a PR.
+   *
+   * Best-effort in the harness by construction: a failed install is reported to the agent (which
+   * may install what it needs itself) and the run continues. Absent ⇒ the harness's existing
+   * path, unchanged. See `docs/initiatives/agent-dependency-prepopulation.md`.
+   */
+  dependencyInstall?: string
+  /**
    * The BUGFIX REPRODUCTION the harness must PROVE for this run: the command that runs the
    * declared reproduction test(s), those test paths, and an optional setup command that makes a
    * fresh worktree runnable. Resolved by the engine from the run's prior `repro-test` step
