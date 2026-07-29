@@ -4280,11 +4280,21 @@
     "inspector": {
       "runPlanning": "Esegui pianificazione",
       "answerPlanning": "Rispondi alle domande di pianificazione",
+      "reviewPlan": "Rivedi il piano",
+      "resolveDecision": "Risolvi",
       "planningInProgress": "Pianificazione in corso",
       "pause": "Pausa",
       "resume": "Riprendi",
       "cancel": "Annulla iniziativa",
       "hint": "La pipeline di pianificazione esplora il codebase, redige il piano multi-fase per l'approvazione, poi effettua il commit del documento del tracker nel repository."
+    },
+    "planReview": {
+      "title": "Questo piano ti sta aspettando",
+      "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
+      "approve": "Approva il piano",
+      "requestChanges": "Richiedi modifiche",
+      "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
+      "sendBack": "Rimanda al planner"
     },
     "planning": {
       "title": "Pianifica l'iniziativa",
@@ -4292,9 +4302,11 @@
       "intro": "Il pianificatore sta definendo l'ambito di questa iniziativa. Rispondi alle sue domande per dare forma all'obiettivo e ai vincoli, poi invia le risposte. Puoi anche chiedergli di pianificare subito con quello che ha gia.",
       "empty": "Nessuna iniziativa trovata per questo blocco.",
       "converged": "Nessuna domanda in sospeso. Il pianificatore ha cio che gli serve e sta redigendo il piano.",
-      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa per avviare l'intervista.",
+      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa: prima analizza il codice, poi ti intervista.",
       "working": "Il pianificatore sta elaborando le tue risposte",
       "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure iniziera a redigere il piano se ha abbastanza informazioni.",
+      "preparing": "Esplorazione del codice prima dell'intervista",
+      "preparingHint": "La pianificazione legge prima il repository, cosi non ti viene chiesto cio che il codice puo rispondere. Le domande compariranno qui al termine.",
       "failed": "L'esecuzione della pianificazione si e interrotta",
       "failedHint": "Si e conclusa prima che il pianificatore potesse rispondere. Le tue risposte sono salvate; riesegui la pianificazione dall'iniziativa.",
       "answerPlaceholder": "La tua risposta",
@@ -4645,6 +4657,8 @@
     "converged": "Nessuna domanda in sospeso. L'intervistatore ha ciò che gli serve e il documento è in fase di redazione.",
     "working": "L'intervistatore sta elaborando le tue risposte",
     "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure inizierà la stesura se ha abbastanza informazioni.",
+    "preparing": "Ricerca sul documento prima dell'intervista",
+    "preparingHint": "L'esecuzione raccoglie prima il contesto e abbozza una scaletta. Le domande compariranno qui al termine.",
     "failed": "L'esecuzione del documento si è interrotta",
     "failedHint": "Si è conclusa prima che l'intervistatore potesse rispondere. Le tue risposte sono salvate; riesegui l'attività del documento.",
     "answerPlaceholder": "La tua risposta",

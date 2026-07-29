@@ -186,3 +186,56 @@ describe('initiative analyst prompt fold — phaseTemplate', () => {
     expect(analyst).not.toContain('migration-blast-zone')
   })
 })
+
+// The analyst leads `pl_initiative`, ahead of the inline interviewer that has no checkout. That
+// makes "answer it from the code" a duty of THIS step: anything it declines to read becomes a
+// question put to a human about their own repository. Asserted on the resolved prompt (system +
+// user, the shape the engine actually dispatches) since the duty is split across both halves.
+describe('initiative analyst prompt — answers from the code, hands over the rest', () => {
+  const registry = defaultAgentKindRegistry()
+  const system = () => registry.systemPrompt('initiative-analyst') ?? ''
+  const user = (over: NonNullable<AgentRunContext['initiative']>) =>
+    userPromptFor(context(over, 'initiative-analyst'), registry, { materialized: true })
+
+  it('states the read-it-do-not-defer duty for every pipeline', () => {
+    // Both halves of the duty are unconditional, so both belong in the SYSTEM prompt: read what is
+    // discoverable, and close with the agenda of what is not.
+    expect(system()).toContain('never leave it as an open question')
+    expect(system()).toContain('## Open questions')
+    expect(user({ interviewFollows: true })).toContain('open questions only a human can settle')
+  })
+
+  it('does NOT assert an interview in the shared system prompt', () => {
+    // The system prompt is dispatched by `pl_initiative_docs` too, which has no interviewer at all.
+    // An ordering claim here would be a flat falsehood on that pipeline — the reason the framing
+    // moved to the user prompt, which can see what actually follows this step.
+    expect(system()).not.toContain('interviews the stakeholder')
+    expect(system()).not.toContain('interviewed after you')
+  })
+
+  it('tells the analyst its findings spare a human when an interview follows', () => {
+    const prompt = user({ interviewFollows: true })
+    expect(prompt).toContain('a stakeholder is interviewed after you')
+    expect(prompt).toContain('the agenda for that interview')
+  })
+
+  it('tells the analyst it is the only reading there will be when none does', () => {
+    // `pl_initiative_docs` and any other `interview: 'skip'` chain. The argument is stronger here,
+    // not weaker: nobody is coming along to fill a gap the analysis leaves.
+    const prompt = user({ interviewFollows: false })
+    expect(prompt).toContain('no one is interviewed after you')
+    expect(prompt).toContain('ONLY reading of the repository')
+    expect(prompt).not.toContain('a stakeholder is interviewed after you')
+  })
+
+  it('never promises an interview when the engine resolved no initiative context', () => {
+    // An un-resolved context says nothing about what follows, so it must take the clause that
+    // promises nothing rather than the one that names a step it cannot see.
+    const prompt = userPromptFor(
+      { ...context({}, 'initiative-analyst'), initiative: undefined } as unknown as AgentRunContext,
+      registry,
+      { materialized: true },
+    )
+    expect(prompt).toContain('no one is interviewed after you')
+  })
+})

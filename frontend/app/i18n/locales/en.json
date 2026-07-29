@@ -3676,6 +3676,8 @@
     "converged": "No questions are pending. The interviewer has what it needs and the document is being drafted.",
     "working": "The interviewer is working on your answers",
     "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or drafting starts if it has enough.",
+    "preparing": "Researching the document before the interview",
+    "preparingHint": "The run gathers background and drafts an outline first. Questions appear here once that is done.",
     "failed": "The document run stopped",
     "failedHint": "It ended before the interviewer could answer. Your answers are saved; re-run the document task to try again.",
     "answerPlaceholder": "Your answer",
@@ -5455,11 +5457,21 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "reviewPlan": "Review plan",
+      "resolveDecision": "Resolve",
       "planningInProgress": "Planning in progress",
       "pause": "Pause",
       "resume": "Resume",
       "cancel": "Cancel initiative",
       "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
+    },
+    "planReview": {
+      "title": "This plan is waiting for you",
+      "body": "The planner drafted the phases and items below. Approve them to commit the plan and start the work, or send the plan back with what to change.",
+      "approve": "Approve plan",
+      "requestChanges": "Request changes",
+      "feedbackPlaceholder": "What should the planner change? Scope, phase order, missing work, an item that belongs elsewhere…",
+      "sendBack": "Send back to the planner"
     },
     "planning": {
       "title": "Plan the initiative",
@@ -5467,9 +5479,11 @@
       "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then submit them. You can also have it plan now with what it already has.",
       "empty": "No initiative found for this block.",
       "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
-      "idle": "Planning has not started yet. Run planning from the initiative to begin the interview.",
+      "idle": "Planning has not started yet. Run planning from the initiative: it analyzes the codebase first, then interviews you.",
       "working": "The planner is working on your answers",
       "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or it starts drafting the plan if it has enough.",
+      "preparing": "Exploring the codebase before the interview",
+      "preparingHint": "Planning reads the repository first, so you are not asked what the code can answer. Questions appear here once that is done.",
       "failed": "The planning run stopped",
       "failedHint": "It ended before the planner could answer. Your answers are saved; re-run planning from the initiative to try again.",
       "answerPlaceholder": "Your answer",

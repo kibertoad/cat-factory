@@ -131,7 +131,10 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
 
 - **Board canvas** (`components/board`) — `BoardCanvas` + `nodes/` (`BlockNode`,
   `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
-  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`.
+  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. A running task card expands
+  its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
+  on-screen card past the `steps` zoom band — the two grants are combined in the
+  `taskExpansion` store and driven by `useTaskExpansion`.
 - **Sidebar & chrome** (`components/layout`) — board/account switchers, palettes
   entry points, the language + [interface-mode](#interface-modes-basic--advanced)
   switchers, the `SpendWarningBanner`, and the toolbar (zoom, LOD, decision queue).
@@ -174,9 +177,13 @@ Two placements are load-bearing enough to state, because putting a new one in th
 wrong place is invisible until a user cannot find it:
 
 - **The sidebar section is a claim about what the destination IS.** `models` is the
-  engines, `integrations` the optional systems, `infrastructure` where agent
-  containers and test environments run, `configuration` workspace/account settings.
-  `nav-contributions.spec.ts` pins the section order and each section's membership.
+  model layer — the engines, the per-agent model choice, and the surfaces that
+  evaluate a prompt+agent+model combination (Sandbox, Kaizen); `integrations` the
+  optional EXTERNAL systems; `infrastructure` where agent containers and test
+  environments run; `configuration` workspace/account settings. A surface that
+  connects to nothing does not belong in `integrations` however configuration-shaped
+  it feels. `nav-contributions.spec.ts` pins the section order and each section's
+  membership.
 - **A flow that edits ONE entity's config is a section of the window that owns that
   config, not a sibling nav entry.** The guided Docker Compose environment setup
   (`ComposeEnvironmentSetupSection.vue` → `EnvironmentSetupWizard.vue`) lives inside
