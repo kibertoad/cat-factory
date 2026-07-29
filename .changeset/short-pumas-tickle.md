@@ -59,7 +59,9 @@ SPA replaces the button with a note. This looks like a removal but is the opposi
 were already being silently discarded, because the committed artifact is the ingested one and never
 the text typed over its rendering. It only bites a deployment that gates a `spec-writer` or
 `blueprints` step, where the affordance was accepting corrections and dropping them. Requesting
-changes is the route for a correction.
+changes is the route for a correction. The `task-estimator`'s summary deliberately stays editable
+and the resolver now says why: the flag marks an output an edit cannot REACH, and that summary is
+itself what downstream steps read via `priorOutputs`.
 
 An alternative considered and rejected: routing the planner step to the generic step reader (by
 dropping its `resultView`), which would have delivered the same tools with no new UI at all. It was
