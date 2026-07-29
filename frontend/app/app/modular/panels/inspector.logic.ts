@@ -36,6 +36,7 @@ export const inspectorPanels = definePanelGroup<Block>(INSPECTOR_PANELS_SLOT)
  *  a silently-dropped panel). */
 export const INSPECTOR_PANEL_IDS = [
   // task body (rendered in this order under the identity block)
+  'task-review-target',
   'task-context-docs',
   'task-context-issues',
   'recurring-schedule',
@@ -119,6 +120,10 @@ const isDeployableFrame = (b: Block) => isFrame(b) && b.type !== 'document'
  * extensibility value.
  */
 export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
+  // FIRST in the task body: for a review task the reviewed PR is what the task IS, so it reads
+  // above the context it was given and the run that acts on it. Gated on the task TYPE alone —
+  // the panel itself hides when the task carries no PR reference.
+  { id: 'task-review-target', order: 5, when: (b) => isTask(b) && b.taskType === 'review' },
   // Shared with the initiative body — an initiative takes the same attachments a task does.
   { id: 'task-context-docs', order: 10, when: takesContext },
   { id: 'task-context-issues', order: 20, when: takesContext },

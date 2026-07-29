@@ -600,6 +600,20 @@ export interface GitHubClient {
     number: number,
   ): Promise<string | null>
   /**
+   * A pull request by number — the projection plus its web `url` — or null when the repo has NO
+   * such PR (a 404). Any other read failure THROWS, so a caller can tell "this PR does not exist"
+   * apart from "the provider could not answer": the review-task create validation refuses only on
+   * the former, and never turns a provider blip into a false "no such PR".
+   *
+   * Optional (see {@link getPullRequestBaseRef}); a provider that can't read a PR omits it and the
+   * validation passes through rather than guessing.
+   */
+  getPullRequest?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null>
+  /**
    * The source (head) branch of a PR (`pulls/{n}.head.ref`), or null when the PR can't be read.
    * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
    * reviewed PR's head branch (a `review` task carries only the PR number, never an own work

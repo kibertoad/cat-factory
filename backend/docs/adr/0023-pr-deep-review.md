@@ -225,7 +225,20 @@ so a human curates the findings themselves — not just which to act on:
   target is effectively "a PR on this service's repo" (URL or `#number`), and `post` is the
   fallback when a PR can't be pushed to. Resolving `prUrl` → owner/repo/number server-side is a
   future follow-up.
+  - **That constraint is now ENFORCED at creation, not merely documented.** `BoardService.addTask`
+    resolves a review task's target through the same `resolveRunRepoContext` seam the run uses and
+    refuses two cases before writing the block: a PR the provider positively reports as absent
+    (`review_pr_not_found`), and a `prUrl` naming a different repository (`review_pr_repo_mismatch`)
+    — which previously reviewed whatever PR carried that number on the linked repo, silently. Only
+    a positive 404 refuses: the new optional `getPullRequest` port method reports "no such PR" as
+    `null` and THROWS every other failure, so an outage or a revoked token logs and passes through
+    rather than making task creation depend on the provider being reachable. Every unwired case
+    (no VCS connection, a provider without the capability, an unparseable reference) passes through
+    too. A confirmed target is rewritten to the provider's own `url`, which is what the inspector's
+    "Under review" panel links. See `orchestration/src/modules/board/reviewTaskTarget.ts`.
 - GitLab omits `getPullRequestHeadRef`/`getPullRequestHeadSha`/`createReview` (optional methods), so
   the `fix`/`post` resolutions report the operation unresolvable/unsupported on a GitLab deployment
   rather than acting on the wrong repo — consistent with `listChangedFiles`. Where the head-sha read
-  is absent the drift check is simply inert (posting keeps the per-line diff filtering).
+  is absent the drift check is simply inert (posting keeps the per-line diff filtering). It DOES
+  implement `getPullRequest` (a plain MR read it can serve), so create-time target validation is
+  live on a GitLab deployment even though the `fix`/`post` resolutions are not.

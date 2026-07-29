@@ -80,6 +80,13 @@ describe('inspector panel group', () => {
     expect(visibleIds(block('module'))).toEqual(['container-summary'])
   })
 
+  // The reviewed PR is the review task's SUBJECT, so it leads the body — above the context the
+  // task was given and the run that acts on it. Every other task type never sees the panel.
+  it('a review task leads with its review target', () => {
+    const review = { ...block('task'), taskType: 'review' } as Block
+    expect(visibleIds(review)[0]).toBe('task-review-target')
+  })
+
   it('a task shows the task body in the pre-slice-4 order', () => {
     expect(visibleIds(block('task'))).toEqual([
       'task-context-docs',

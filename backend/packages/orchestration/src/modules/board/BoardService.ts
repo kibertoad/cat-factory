@@ -27,6 +27,7 @@ import type {
   InitiativeRepository,
   Logger,
   RepoProjectionRepository,
+  ResolveRunRepoContext,
   Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
@@ -61,6 +62,7 @@ import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { PublicBoardReads } from './publicBoardReads.js'
+import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
@@ -147,6 +149,13 @@ export interface BoardServiceDependencies {
    * supplies a real one.
    */
   logger?: Logger
+  /**
+   * The run-repo seam (checkout-free {@link RepoFiles} bound to the repo a block's run targets).
+   * Wired whenever a VCS provider is connected; used at task creation to validate a `review`
+   * task's target pull request against the very repo its review will run against. Absent ⇒ the
+   * target is taken on trust, exactly as before.
+   */
+  resolveRunRepoContext?: ResolveRunRepoContext
 }
 
 /**
@@ -187,6 +196,7 @@ export class BoardService {
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
   private readonly workspaceSettings?: WorkspaceSettingsReader
+  private readonly resolveRunRepoContext?: ResolveRunRepoContext
   private readonly log: Logger
   private readonly reviewFrictionGuard: ReviewFrictionGuard
   /** The external `/api/v1` board surface (see publicBoardReads.ts). */
@@ -208,6 +218,7 @@ export class BoardService {
     taskTypeRegistry,
     workspaceSettings,
     reviewFrictionNotifications,
+    resolveRunRepoContext,
     logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -224,6 +235,7 @@ export class BoardService {
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
     this.workspaceSettings = workspaceSettings
+    this.resolveRunRepoContext = resolveRunRepoContext
     this.log = (logger ?? noopLogger).child({ service: 'board' })
     this.reviewFrictionGuard = new ReviewFrictionGuard({
       clock,
@@ -609,30 +621,6 @@ export class BoardService {
     }
   }
 
-  /**
-   * For a REVIEW task, fold the target PR reference (URL / #number) and any review focus into the
-   * description so the read-only `pr-reviewer` (which clones the base branch and fetches the PR
-   * head by number) knows WHICH PR to review from its prompt. Returns the description unchanged
-   * for non-review tasks or when there is nothing to prepend. Split out of {@link addTask} to keep
-   * it under the complexity ceiling.
-   */
-  private buildReviewDescription(
-    taskType: Block['taskType'],
-    fields: Block['taskTypeFields'],
-    description: string,
-  ): string {
-    if (taskType !== 'review') return description
-    const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
-    const focus = fields?.reviewFocus?.trim()
-    const preamble = [
-      ref ? `Review pull request ${ref}.` : '',
-      focus ? `Review focus: ${focus}` : '',
-    ]
-      .filter(Boolean)
-      .join(' ')
-    return preamble ? [preamble, description].filter(Boolean).join('\n\n') : description
-  }
-
   /** Add a task inside a container (a service frame or a module). */
   async addTask(
     workspaceId: string,
@@ -688,14 +676,21 @@ export class BoardService {
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
     }
-    // A REVIEW task targets an existing open PR — fold its reference + focus into the description
-    // so the read-only `pr-reviewer` knows WHICH PR to review from its prompt (see
-    // {@link buildReviewDescription}).
-    block.description = this.buildReviewDescription(
+    // A REVIEW task targets an EXISTING pull request, so its reference is checked against the
+    // provider BEFORE the block is written: a PR the provider positively reports as absent fails
+    // here rather than as a dispatched run with nothing to review. The confirmed PR's own web url
+    // replaces whatever was typed, which is what the inspector links (see
+    // {@link resolveReviewTaskTarget} for the pass-through cases).
+    block.taskTypeFields = await resolveReviewTaskTarget(
+      { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
+      homeWorkspaceId,
+      containerId,
       taskType,
       block.taskTypeFields,
-      block.description,
     )
+    // Fold the (now canonical) PR reference + focus into the description, so the read-only
+    // `pr-reviewer` knows WHICH PR to review from its prompt.
+    block.description = buildReviewDescription(taskType, block.taskTypeFields, block.description)
     // Best-practice fragments the task OWNS from creation. A task owns its selection outright —
     // the engine folds these and does NOT re-union the service's fragments at run time, so a
     // per-task removal actually takes effect. The SERVICE-inherited set is the create form's

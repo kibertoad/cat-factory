@@ -16,6 +16,7 @@ import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
+import TaskReviewTarget from '~/components/panels/inspector/TaskReviewTarget.vue'
 import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
@@ -65,6 +66,7 @@ function blockPanel(component: Component, id: InspectorPanelId): PanelComponent 
 /** Exhaustive id → sub-panel map. Typed `Record<InspectorPanelId, …>` so adding a
  *  spec without a component (or vice-versa) fails the typecheck. */
 const COMPONENTS: Record<InspectorPanelId, Component> = {
+  'task-review-target': TaskReviewTarget,
   'task-context-docs': TaskContextDocs,
   'task-context-issues': TaskContextIssues,
   'recurring-schedule': RecurringScheduleSettings,

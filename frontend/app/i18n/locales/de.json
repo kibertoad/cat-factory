@@ -1285,6 +1285,12 @@
       "risk": "Risiko",
       "impact": "Wirkung"
     },
+    "reviewTarget": {
+      "title": "Geprüfter Pull Request",
+      "hint": "Der bestehende Pull Request, den diese Aufgabe prüft.",
+      "prNumber": "PR #{number}",
+      "focus": "Schwerpunkt: {focus}"
+    },
     "execution": {
       "title": "Ausführung",
       "hint": "Der Live-Lauf der Pipeline: jeder Agent-Schritt, sein Fortschritt und der resultierende Pull Request.",
@@ -2421,7 +2427,9 @@
         "focus": "Prüfungsschwerpunkt",
         "focusPlaceholder": "z. B. Fokus auf die Auth-Änderungen und Fehlerbehandlung",
         "derivedTitle": "{ref} prüfen",
-        "derivedTitleFallback": "Pull Request prüfen"
+        "derivedTitleFallback": "Pull Request prüfen",
+        "prNotFound": "Pull Request #{number} wurde im Repository dieses Service nicht gefunden. Prüfe die Nummer, oder verknüpfe den Service mit dem Repository, in dem der Pull Request liegt.",
+        "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist."
       }
     },
     "recurring": {

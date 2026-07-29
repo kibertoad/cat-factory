@@ -299,7 +299,9 @@
         "focus": "İnceleme odağı",
         "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan",
         "derivedTitle": "{ref} incele",
-        "derivedTitleFallback": "Pull request'i incele"
+        "derivedTitleFallback": "Pull request'i incele",
+        "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
+        "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
       }
     },
     "recurring": {
@@ -941,6 +943,12 @@
       "complexity": "Karmaşıklık",
       "risk": "Risk",
       "impact": "Etki"
+    },
+    "reviewTarget": {
+      "title": "İncelenen pull request",
+      "hint": "Bu görevin incelediği mevcut pull request.",
+      "prNumber": "PR #{number}",
+      "focus": "Odak: {focus}"
     },
     "execution": {
       "title": "Yürütme",

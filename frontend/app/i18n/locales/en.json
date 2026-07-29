@@ -326,7 +326,9 @@
         "focus": "Review focus",
         "focusPlaceholder": "e.g. focus on the auth changes and error handling",
         "derivedTitle": "Review {ref}",
-        "derivedTitleFallback": "Review pull request"
+        "derivedTitleFallback": "Review pull request",
+        "prNotFound": "Pull request #{number} was not found in this service's repository. Check the number, or link the service to the repository that pull request is on.",
+        "prRepoMismatch": "That pull request is on a different repository. This service reviews {repo}, so create the review task under the service linked to the pull request's repository."
       }
     },
     "recurring": {
@@ -1004,6 +1006,12 @@
       "complexity": "Complexity",
       "risk": "Risk",
       "impact": "Impact"
+    },
+    "reviewTarget": {
+      "title": "Under review",
+      "hint": "The existing pull request this task reviews.",
+      "prNumber": "PR #{number}",
+      "focus": "Focus: {focus}"
     },
     "execution": {
       "title": "Execution",

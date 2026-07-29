@@ -299,7 +299,9 @@
         "focus": "Фокус огляду",
         "focusPlaceholder": "напр. зосередься на змінах автентифікації та обробці помилок",
         "derivedTitle": "Огляд {ref}",
-        "derivedTitleFallback": "Огляд pull request"
+        "derivedTitleFallback": "Огляд pull request",
+        "prNotFound": "Pull request #{number} не знайдено в репозиторії цього сервісу. Перевірте номер або звʼяжіть сервіс із репозиторієм, у якому міститься цей pull request.",
+        "prRepoMismatch": "Цей pull request у іншому репозиторії. Цей сервіс оглядає {repo}, тож створіть завдання огляду під сервісом, звʼязаним із репозиторієм цього pull request."
       }
     },
     "recurring": {
@@ -941,6 +943,12 @@
       "complexity": "Складність",
       "risk": "Ризик",
       "impact": "Вплив"
+    },
+    "reviewTarget": {
+      "title": "Pull request на огляді",
+      "hint": "Наявний pull request, який оглядає це завдання.",
+      "prNumber": "PR #{number}",
+      "focus": "Фокус: {focus}"
     },
     "execution": {
       "title": "Виконання",

@@ -76,6 +76,12 @@ export function makeRepoFiles(
     deleteBranch: (branch) => client.deleteBranch(installationId, ref, branch),
     commitFiles: (input) => client.commitFiles(installationId, ref, input),
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
+    // Read a PR by number (projection + web url), the existence probe `review`-task creation
+    // validates its target against; present only when the wired client can read a PR (else the
+    // validation passes through and the task is created unchecked, as before).
+    ...(client.getPullRequest
+      ? { getPullRequest: (number: number) => client.getPullRequest!(installationId, ref, number) }
+      : {}),
     // The PR-deep-review resolutions: present only when the wired client can read a PR head /
     // post a batched inline review (the deep-review "fix" / "post" resolutions probe for them).
     ...(client.getPullRequestHeadRef

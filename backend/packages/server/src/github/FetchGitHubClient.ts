@@ -41,6 +41,12 @@ import { logger } from '../observability/logger.js'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { postPrReview } from './reviewPosting.js'
+import {
+  listPrReviewThreads,
+  replyToPrReviewThread,
+  resolvePrReviewThread,
+  type GitHubGraphQlFn,
+} from './reviewThreads.js'
 import { searchCode, searchIssues } from './searchApi.js'
 import {
   decodeBase64Utf8,
@@ -58,26 +64,6 @@ import {
 // responses to projection entities with the shared pure mappers. Octokit is
 // deliberately avoided — Web Crypto + fetch cover everything we need without the
 // bundle weight (see backend/docs/adr/0001-github-app-integration.md).
-
-/** Shape of the `reviewThreads` GraphQL query response (one page). */
-interface ReviewThreadsQueryData {
-  repository?: {
-    pullRequest?: {
-      reviewThreads?: {
-        nodes?: {
-          id: string
-          isResolved: boolean
-          path: string | null
-          line: number | null
-          comments?: {
-            nodes?: { author?: { login?: string }; body?: string; createdAt?: string }[]
-          }
-        }[]
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null }
-      }
-    }
-  }
-}
 
 const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
@@ -172,6 +158,13 @@ interface GhIssueCommentPayload {
 
 export class FetchGitHubClient implements GitHubClient {
   constructor(private readonly deps: FetchGitHubClientDependencies) {}
+
+  /**
+   * `graphql` as a plain delegate, for the extracted review-thread helpers (a private method
+   * can't be handed over directly). The REST half passes `request` the same way.
+   */
+  private readonly graphqlFn: GitHubGraphQlFn = (installationId, query, variables) =>
+    this.graphql(installationId, query, variables)
 
   // ---- installation-level (app JWT) --------------------------------------
 
@@ -906,22 +899,38 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  /**
+   * `GET /pulls/{n}` — the one read every single-PR accessor below is a projection of. A 404 (the
+   * repo has no such PR: never opened, or hard-deleted) answers null; ANY other failure throws, so
+   * a caller can tell "this PR does not exist" from "the provider could not answer". That
+   * distinction is what makes {@link getPullRequest} usable as an existence check.
+   */
+  private async readPullRequest(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<gp.GhPullPayload | null> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+        installationId,
+      })
+      return json as gp.GhPullPayload
+    } catch (error) {
+      if (error instanceof GitHubApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
+  // A missing PR degrades differently per caller, but always to null: no base to gate against
+  // (the human-review gate falls back to its default), no head branch to push to (the deep-review
+  // "fix" reports it unresolvable rather than cloning the wrong ref), no head sha to compare
+  // against (the drift check skips).
   async getPullRequestBaseRef(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
   ): Promise<string | null> {
-    try {
-      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
-        installationId,
-      })
-      return (json as { base?: { ref?: string } }).base?.ref ?? null
-    } catch (error) {
-      // A deleted/missing PR (404) just means "no base to gate against" — fall back to the
-      // caller's default. Other errors propagate (the gate's probe maps them to "keep waiting").
-      if (error instanceof GitHubApiError && error.status === 404) return null
-      throw error
-    }
+    return (await this.readPullRequest(installationId, ref, number))?.base?.ref ?? null
   }
 
   async getPullRequestHeadRef(
@@ -929,17 +938,7 @@ export class FetchGitHubClient implements GitHubClient {
     ref: GitHubRepoRef,
     number: number,
   ): Promise<string | null> {
-    try {
-      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
-        installationId,
-      })
-      return (json as { head?: { ref?: string } }).head?.ref ?? null
-    } catch (error) {
-      // A deleted/missing PR (404) means the head branch is unresolvable — the "fix" resolution
-      // then reports the PR branch can't be pushed to rather than cloning the wrong ref.
-      if (error instanceof GitHubApiError && error.status === 404) return null
-      throw error
-    }
+    return (await this.readPullRequest(installationId, ref, number))?.head?.ref ?? null
   }
 
   async getPullRequestHeadSha(
@@ -947,86 +946,43 @@ export class FetchGitHubClient implements GitHubClient {
     ref: GitHubRepoRef,
     number: number,
   ): Promise<string | null> {
-    try {
-      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
-        installationId,
-      })
-      return (json as { head?: { sha?: string } }).head?.sha ?? null
-    } catch (error) {
-      // A deleted/missing PR (404) means there is no head to compare against — the deep-review
-      // drift check treats a null as "unknown" and skips, rather than failing the post.
-      if (error instanceof GitHubApiError && error.status === 404) return null
-      throw error
-    }
+    return (await this.readPullRequest(installationId, ref, number))?.head?.sha ?? null
   }
 
-  async listReviewThreads(
+  async getPullRequest(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<OpenedPullRequest | null> {
+    const payload = await this.readPullRequest(installationId, ref, number)
+    return payload ? this.toOpenedPullRequest(payload) : null
+  }
+
+  // The GraphQL review-thread reads/writes live in `reviewThreads.ts` (the sibling of
+  // `reviewPosting.ts`, the REST half); these stay thin delegates over the shared executor.
+  listReviewThreads(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
   ): Promise<GitHubReviewThread[]> {
-    // `comments(last:50)` reads the NEWEST 50 comments per thread (oldest→newest within the
-    // window), so the last node is the true latest — the caller derives the thread's
-    // isBot/latestCommentAt from it. `first:50` would misclassify a thread with >50 comments (a
-    // human re-open as comment #51+ would be invisible and a stale bot reply read as "latest"),
-    // wrongly dropping a re-opened long thread from the outstanding set.
-    const query = `query($owner:String!,$repo:String!,$number:Int!,$cursor:String){
-      repository(owner:$owner,name:$repo){
-        pullRequest(number:$number){
-          reviewThreads(first:100,after:$cursor){
-            nodes{ id isResolved path line comments(last:50){ nodes{ author{login} body createdAt } } }
-            pageInfo{ hasNextPage endCursor }
-          }
-        }
-      }
-    }`
-    const threads: GitHubReviewThread[] = []
-    let cursor: string | null = null
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const data: ReviewThreadsQueryData = await this.graphql<ReviewThreadsQueryData>(
-        installationId,
-        query,
-        { owner: ref.owner, repo: ref.repo, number, cursor },
-      )
-      const conn = data.repository?.pullRequest?.reviewThreads
-      for (const node of conn?.nodes ?? []) {
-        threads.push({
-          id: node.id,
-          isResolved: node.isResolved,
-          path: node.path ?? null,
-          line: node.line ?? null,
-          comments: (node.comments?.nodes ?? []).map((c) => ({
-            author: c.author?.login ?? '',
-            body: c.body ?? '',
-            createdAt: parseGitHubTime(c.createdAt),
-          })),
-        })
-      }
-      if (!conn?.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break
-      cursor = conn.pageInfo.endCursor
-    }
-    return threads
+    return listPrReviewThreads(this.graphqlFn, installationId, ref, number)
   }
 
-  async replyToReviewThread(
+  replyToReviewThread(
     installationId: number,
     _ref: GitHubRepoRef,
     threadId: string,
     body: string,
   ): Promise<void> {
-    const mutation = `mutation($threadId:ID!,$body:String!){
-      addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId,body:$body}){ comment{ id } }
-    }`
-    await this.graphql(installationId, mutation, { threadId, body })
+    return replyToPrReviewThread(this.graphqlFn, installationId, threadId, body)
   }
 
-  async resolveReviewThread(
+  resolveReviewThread(
     installationId: number,
     _ref: GitHubRepoRef,
     threadId: string,
   ): Promise<void> {
-    const mutation = `mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ id } } }`
-    await this.graphql(installationId, mutation, { threadId })
+    return resolvePrReviewThread(this.graphqlFn, installationId, threadId)
   }
 
   createReview(

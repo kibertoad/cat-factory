@@ -299,7 +299,9 @@
         "focus": "Objet de la revue",
         "focusPlaceholder": "p. ex. concentrez-vous sur les changements d'authentification et la gestion des erreurs",
         "derivedTitle": "Examiner {ref}",
-        "derivedTitleFallback": "Examiner la pull request"
+        "derivedTitleFallback": "Examiner la pull request",
+        "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
+        "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
       }
     },
     "recurring": {
@@ -941,6 +943,12 @@
       "complexity": "Complexité",
       "risk": "Risque",
       "impact": "Impact"
+    },
+    "reviewTarget": {
+      "title": "Pull request en revue",
+      "hint": "La pull request existante que cette tâche examine.",
+      "prNumber": "PR n° {number}",
+      "focus": "Objet : {focus}"
     },
     "execution": {
       "title": "Exécution",

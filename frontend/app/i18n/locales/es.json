@@ -299,7 +299,9 @@
         "focus": "Enfoque de la revisión",
         "focusPlaceholder": "p. ej., céntrate en los cambios de autenticación y el manejo de errores",
         "derivedTitle": "Revisar {ref}",
-        "derivedTitleFallback": "Revisar la pull request"
+        "derivedTitleFallback": "Revisar la pull request",
+        "prNotFound": "No se encontró la pull request n.º {number} en el repositorio de este servicio. Comprueba el número, o vincula el servicio al repositorio en el que está esa pull request.",
+        "prRepoMismatch": "Esa pull request está en otro repositorio. Este servicio revisa {repo}, así que crea la tarea de revisión en el servicio vinculado al repositorio de la pull request."
       }
     },
     "recurring": {
@@ -941,6 +943,12 @@
       "complexity": "Complejidad",
       "risk": "Riesgo",
       "impact": "Impacto"
+    },
+    "reviewTarget": {
+      "title": "Pull request en revisión",
+      "hint": "La pull request existente que revisa esta tarea.",
+      "prNumber": "PR n.º {number}",
+      "focus": "Enfoque: {focus}"
     },
     "execution": {
       "title": "Ejecución",
