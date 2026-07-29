@@ -1454,11 +1454,19 @@ error handling — and the phased plan to close them — are tracked in
   in-app surface no matter what it spent. Two rules govern that path:
   - **The provider takes EXACTLY ONE exit per call.** `LlmObservabilityService.record` already
     fans out to the external trace sink, so a recorded call must NOT also be emitted to the
-    provider's `traceSink` — that would double every inline generation on Langfuse/OTel. A facade
-    hands the composed sink to the RECORDER's service; the provider's own sink is the fallback for
-    an inline call carrying no `workspaceId`, which the workspace-scoped store cannot file.
-    Bodies reach the recorder UNGATED: the service applies the same `LLM_RECORD_PROMPTS` +
-    `storeAgentContext` gate, plus `redactSecrets` and the delta chain.
+    provider's `traceSink` — that would double every inline generation on Langfuse/OTel. The
+    composed sink goes to the RECORDER's service; the provider's own sink is the fallback for an
+    inline call carrying no `workspaceId`, which the workspace-scoped store cannot file. **A
+    facade never assembles that pair by hand**: `createInlineInstrumentation`
+    (`@cat-factory/server`) builds both exits from ONE sink instance, because handing the two
+    halves different sinks typechecks and merely splits the trace. Bodies reach the recorder
+    UNGATED — the service applies the same `LLM_RECORD_PROMPTS` + `storeAgentContext` gate, plus
+    `redactSecrets` and the delta chain — and reach it as THUNKS, so a prompts-off deployment
+    never pays to serialise a prompt the gate is about to drop.
+  - **Any service in front of that store needs its `workspaceSettingsRepository`.** An absent one
+    makes `createStoreAgentContextGate` an OPEN gate, so the harness and inline recorders both
+    wire it: a subscription harness's `stream-json` carries full bodies, and without the
+    repository an opted-out workspace's are retained anyway.
   - **State what an inline call does NOT know; never fill a proxy-shaped field with a guess.**
     `turnIndex` null (no job-scoped counter), `httpStatus` null (the SDK owns the transport, so a
     failure is an exception whose message is the cause), `phase` `''` (phases are boundaries the

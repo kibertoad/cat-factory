@@ -397,15 +397,17 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
         durationMs: 0,
         ok: true,
         errorMessage: null,
-        promptText: '[]',
-        responseText: '',
-        reasoningText: '',
+        // Bodies are THUNKS: the recorder resolves one only once its gate says it will be
+        // stored, so a prompts-off deployment never serialises a prompt it then drops.
+        promptText: () => '[]',
+        responseText: () => '',
+        reasoningText: () => '',
         ...overrides,
       })
       await record(
         call({
-          promptText: '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
-          responseText: 'brief',
+          promptText: () => '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+          responseText: () => 'brief',
           promptTokens: 300,
           cacheReadTokens: 40,
           cacheWriteTokens: 10,
@@ -416,10 +418,10 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       )
       await record(
         call({
-          promptText:
+          promptText: () =>
             '[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"brief"}]',
           messageCount: 3,
-          responseText: 'outline',
+          responseText: () => 'outline',
           agentKind: 'doc-researcher',
           promptTokens: 400,
           completionTokens: 20,

@@ -30,15 +30,19 @@
   direct `traceSink` emit, for a call carrying no `workspaceId` — the store is workspace-scoped
   — and for a deployment with a sink but no metric store. Taking both would double every
   inline generation on Langfuse/OTel. A wrap with neither exit throws at construction.
+  Neither exit is wired by hand: the server layer's `createInlineInstrumentation` composes both
+  from ONE sink instance, since handing the two halves DIFFERENT sinks typechecks and merely
+  splits the trace.
   Bodies leaving for a SINK pass the SAME double gate the proxied path applies: the deployment's
   `LLM_RECORD_PROMPTS` **and** the workspace's `storeAgentContext` opt-out, the latter injected
   as the required narrow `WorkspaceBodiesGate` predicate (built by kernel's
   `createStoreAgentContextGate`, so both facades wire it from one place). It is required, not
   optional, because an absent gate is an OPEN gate — which is how an opted-out workspace's
   inline prompts reached Langfuse/OTel for months. A call taken by the RECORDER is gated by the
-  same rule inside the service instead, so bodies reach it ungated. Any new inline call site
-  must tag its `workspaceId` via `catFactoryObservability`, or no opt-out can apply to it AND
-  it records no metric row.
+  same rule inside the service instead, so bodies reach it ungated — and as THUNKS, so the far
+  side's gate costs a prompts-off deployment nothing. Any new inline call site must tag its
+  `workspaceId` via `catFactoryObservability`, or no opt-out can apply to it AND it records no
+  metric row.
 - `fragmentLibrary/` — the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`) — the ONE

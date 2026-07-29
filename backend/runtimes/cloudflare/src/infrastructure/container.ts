@@ -23,7 +23,6 @@ import {
   type WebSearchAvailability,
   type WorkRunner,
   type ProviderRegistry,
-  createStoreAgentContextGate,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -92,7 +91,6 @@ import {
   resolvePackageRegistriesForDispatch,
   LlmObservabilityService,
   makeHarnessCallRecorder,
-  makeInlineCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
@@ -112,6 +110,7 @@ import {
   buildInfrastructureCapabilities,
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
+  createInlineInstrumentation,
   createScopedModelProviderResolver,
   wrapResolverWithLimiter,
   ENV_HELP,
@@ -306,39 +305,24 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     buildLangfuseSink(loadLangfuseConfig(env)),
     buildOtelSink(loadOtelConfig(env)),
   ])
-  const recordPrompts = loadObservabilityConfig(env).recordPrompts
-  const workspaceSettingsRepository = new D1WorkspaceSettingsRepository({ db })
   // Persist inline calls to the SAME `llm_call_metrics` store the proxy writes for Pi and
   // the executor writes for a subscription harness, so an inline agent kind (`doc-researcher`,
   // the judges, consensus, the requirements writer) is visible to `ObservabilityPanel`, the
-  // per-step rollups and `/api/v1/debug/*` rather than only to an external trace backend. A
-  // standalone service over the required telemetry DB, exactly like `recordHarnessCalls` — both
-  // are stateless writers against the same table. The composed sink is handed to THIS service,
-  // never to the provider alongside the recorder: the service owns the fan-out for a call it
-  // records, so passing both would double every inline generation on Langfuse/OTel.
-  const recordCall = makeInlineCallRecorder(
-    new LlmObservabilityService({
-      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
-      idGenerator: new CryptoIdGenerator(),
-      clock: new SystemClock(),
-      recordPrompts,
-      ...(traceSink ? { traceSink } : {}),
-      workspaceSettingsRepository,
-    }),
-  )
-  const instrument = {
-    recordCall,
-    // The sink exit remains for the calls the recorder structurally cannot take — an inline
-    // call tagged with no workspace has no row to be filed under.
+  // per-step rollups and `/api/v1/debug/*` rather than only to an external trace backend.
+  // Composed through the shared factory so the recorder's service and the provider's fallback
+  // sink cannot be handed two DIFFERENT instances — the service owns the fan-out for a call it
+  // records, so a mismatch would split the trace (and wiring both to the provider would double
+  // every inline generation on Langfuse/OTel). No cache handle is passed because
+  // `workspaceSettings` is a pass-through in the isolate-safe profile.
+  const instrument = createInlineInstrumentation({
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
     ...(traceSink ? { traceSink } : {}),
-    recordPrompts,
-    // The second half of the body gate: the workspace's own `storeAgentContext`
-    // opt-out, the same one the proxied path honours. No cache handle is passed
-    // because `workspaceSettings` is a pass-through in the isolate-safe profile.
-    workspaceBodiesEnabled: createStoreAgentContextGate({
-      repository: workspaceSettingsRepository,
-    }),
-  }
+    recordPrompts: loadObservabilityConfig(env).recordPrompts,
+    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+    idGenerator: new CryptoIdGenerator(),
+    clock: new SystemClock(),
+    logger,
+  })
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const scoped = createScopedModelProviderResolver({
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
@@ -1226,13 +1210,19 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
   // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
   // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
   // A standalone service over the required telemetry DB (the proxy path builds its own
-  // from the same table; both are stateless writers).
+  // from the same table; both are stateless writers). The settings repository is REQUIRED
+  // here, not optional hygiene: a subscription harness's `stream-json` carries the FULL
+  // prompt and response, and an absent repository makes `createStoreAgentContextGate` an
+  // open gate — so without it an opted-out workspace's bodies are retained anyway, which is
+  // exactly the privacy half of C2 (observability-logging-gaps.md) wearing a different hat.
   const recordHarnessCalls = makeHarnessCallRecorder(
     new LlmObservabilityService({
       llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
       idGenerator: new CryptoIdGenerator(),
       clock,
       recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      logger,
     }),
   )
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a

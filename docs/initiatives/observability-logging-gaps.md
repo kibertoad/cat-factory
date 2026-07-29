@@ -725,17 +725,32 @@ behaviour changes.
   step's token rollup and in `/api/v1/debug/*` alongside container calls.
 - **EXACTLY ONE exit runs per call, and that is the load-bearing rule.** The service already
   fans a recorded call out to the trace sink, so a provider that took both exits would double
-  every inline generation on Langfuse/OTel. The facade therefore hands the composed sink to the
-  RECORDER's service and leaves the provider's own `traceSink` for the calls the recorder
-  structurally cannot take — an inline call tagged with no `workspaceId` has no row to be filed
-  under, and the metric store is workspace-scoped. A provider wired with neither exit now throws
-  at construction: it would otherwise pay the middleware, reach nothing, and still satisfy the
+  every inline generation on Langfuse/OTel. The composed sink therefore goes to the RECORDER's
+  service, and the provider's own `traceSink` is left for the calls the recorder structurally
+  cannot take — an inline call tagged with no `workspaceId` has no row to be filed under, and
+  the metric store is workspace-scoped. A provider wired with neither exit now throws at
+  construction: it would otherwise pay the middleware, reach nothing, and still satisfy the
   facades' `instanceof InstrumentedModelProvider` wiring assertions.
+- **Neither facade assembles that pair by hand.** `createInlineInstrumentation`
+  (`@cat-factory/server`) builds the recorder's service and the provider's fallback sink from
+  ONE `traceSink` argument, because the invariant above is otherwise enforced only in prose:
+  passing the two halves DIFFERENT sink instances typechecks and merely splits the trace. It
+  also collapses the ~25 lines of near-identical wiring the two facades would each carry, and
+  is what the Node `InlineInstrument` type now aliases rather than restating.
 - **The body gate moved to ONE side.** A recorded call passes its bodies through UNGATED and the
   service applies `LLM_RECORD_PROMPTS` + `storeAgentContext` — the same rule from the same kernel
   factory, plus `redactSecrets` and the prompt delta chain. Re-gating in the provider would have
   withheld text the store is entitled to keep and reinstated the two-places-one-rule shape that
-  produced the privacy half of C2 in the first place.
+  produced the privacy half of C2 in the first place. The bodies cross as THUNKS
+  (`InlineLlmCallBody`) and `record` resolves its gate BEFORE touching one, so keeping the rule
+  on the far side costs a prompts-off deployment nothing — it never serialises the AI-SDK prompt
+  array (on a judge or a reviewer: a rubric and a diff) that the next line would discard.
+- **The harness recorder's own gate was open, and is closed here.** `makeHarnessCallRecorder`'s
+  service was built with no `workspaceSettingsRepository` on EITHER facade, which makes
+  `createStoreAgentContextGate` return a constant `true` — so a subscription harness's full
+  `stream-json` prompt and response were retained for a workspace that had opted out. That is
+  the privacy half of C2 in a second place, unnoticed because the gap is silent by construction;
+  both facades now thread the repository (and, on Node, the settings cache slice).
 - **The mapping states what an inline call does NOT know**, rather than filling proxy-shaped
   fields with plausible values: `turnIndex` null (no job-scoped counter), `httpStatus` null (the
   SDK owns the transport, so a failure arrives as an exception whose message is the cause),
@@ -753,6 +768,13 @@ behaviour changes.
 - **A failing inline call records too.** It is the row an operator goes looking for, so the
   middleware's catch path feeds the recorder with `ok: false` and the exception message before
   rethrowing — the exception itself still propagates untouched.
+- **Test the readers against the SDK's OWN mock, never a hand-rolled result.** The feeder's
+  readers parse `unknown`, so a stand-in built to the shape the reader expects proves nothing.
+  Consolidating both provider suites onto `MockLanguageModelV3` + a real `generateText`
+  immediately surfaced a live one: `finishReason` is `{ unified, raw }` in the current spec, not
+  a bare string, so every inline call had been exporting a null finish reason to the trace
+  sinks. That failure mode is silent by construction — a null there is indistinguishable from a
+  provider that reported nothing.
 - **The `null`-workspace fallback is the same deliberate fail-open as Phase 2b's**, for the same
   reason and with the same caveat: an untagged inline call is a missing tag, not a policy. It now
   costs a missing metric ROW as well as missing trace bodies, which makes tagging

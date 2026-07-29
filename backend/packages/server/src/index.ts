@@ -103,6 +103,11 @@ export {
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {
+  createInlineInstrumentation,
+  type InlineInstrumentation,
+  type InlineInstrumentationOptions,
+} from './agents/inlineInstrumentation.js'
+export {
   resolveWorkspaceCapabilities,
   type CapabilityServices,
 } from './agents/providerCapabilities.js'

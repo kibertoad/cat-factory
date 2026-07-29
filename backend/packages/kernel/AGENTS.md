@@ -98,6 +98,9 @@ else imports its **ports** and domain types from here.
   (proxy, subscription harness, inline) land in one table. Its `InlineLlmCall` is deliberately
   NARROWER than the row: it states only what a direct AI-SDK call can honestly report, and the
   adapter fills the proxy-shaped rest with not-applicable values rather than plausible ones.
+  Its bodies are `InlineLlmCallBody` THUNKS — the recorder owns the body gate and the caller
+  cannot see it, so handing over the work rather than the result is what lets a prompts-off
+  deployment skip serialising a prompt that is about to be dropped.
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,

@@ -359,12 +359,27 @@ export interface InlineLlmCall {
   durationMs: number
   ok: boolean
   errorMessage: string | null
-  /** The request messages serialised as JSON (the FULL prompt — the store owns the delta). */
-  promptText: string
-  responseText: string
+  /**
+   * The request messages serialised as JSON (the FULL prompt — the store owns the delta).
+   *
+   * A THUNK, not a string, because every body here sits behind the recorder's
+   * `LLM_RECORD_PROMPTS` + `storeAgentContext` gate and the caller cannot see that gate — the
+   * whole point of {@link InlineLlmCallRecorder} owning it is that the rule lives in one
+   * place. Handing over the work instead of the result lets a deployment with recording off
+   * skip serialising an AI-SDK prompt array (on a judge or a reviewer: a rubric and a diff)
+   * that would be dropped on the next line, without the caller having to know why.
+   */
+  promptText: InlineLlmCallBody
+  responseText: InlineLlmCallBody
   /** The model's reasoning trace when it arrived on a separate channel, else ''. */
-  reasoningText: string
+  reasoningText: InlineLlmCallBody
 }
+
+/**
+ * One prompt/response/reasoning body of an inline call, resolved by the recorder ONLY when the
+ * body gate says it will be kept. Never called more than once per body.
+ */
+export type InlineLlmCallBody = () => string
 
 /**
  * Persist one inline LLM call into the same store the proxy and the subscription harnesses

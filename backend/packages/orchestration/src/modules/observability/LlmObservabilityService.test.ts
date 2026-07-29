@@ -418,6 +418,54 @@ describe('LlmObservabilityService storeAgentContext gating', () => {
     expect(sink.events[0]!.input).toBe('')
     expect(sink.events[0]!.output).toBe('')
   })
+
+  // A body may be handed over as a THUNK, so that a producer which would have to BUILD the
+  // string (the inline feeder JSON-serialises the whole AI-SDK prompt) pays nothing when the
+  // gate is going to drop it anyway. That only holds if the gate is resolved BEFORE any body
+  // is touched — an easy thing to undo by moving the scrub back to the top of `record`.
+  it('never resolves a lazy body the gate is about to drop', async () => {
+    const repo = new MemoryRepo()
+    let resolved = 0
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      workspaceSettingsRepository: settingsRepo(false),
+    })
+    await service.record(
+      input({
+        promptText: () => {
+          resolved += 1
+          return '[{"role":"user"}]'
+        },
+      }),
+    )
+
+    expect(resolved).toBe(0)
+    expect(repo.recorded[0]!.promptText).toBe('')
+    expect(repo.recorded[0]!.promptTokens).toBe(100)
+  })
+
+  it('resolves a lazy body exactly once when it IS kept', async () => {
+    const repo = new MemoryRepo()
+    let resolved = 0
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+    })
+    await service.record(
+      input({
+        promptText: () => {
+          resolved += 1
+          return '[{"role":"user"}]'
+        },
+      }),
+    )
+
+    expect(resolved).toBe(1)
+    expect(JSON.parse(repo.recorded[0]!.promptText)).toHaveLength(1)
+  })
 })
 
 describe('LlmObservabilityService.exportForExecution', () => {
@@ -573,9 +621,10 @@ describe('makeInlineCallRecorder', () => {
       durationMs: 1200,
       ok: true,
       errorMessage: null,
-      promptText: '[{"role":"system","content":"s"}]',
-      responseText: 'brief',
-      reasoningText: '',
+      // Bodies are THUNKS: the service resolves one only after its gate says it is kept.
+      promptText: () => '[{"role":"system","content":"s"}]',
+      responseText: () => 'brief',
+      reasoningText: () => '',
       ...overrides,
     }
   }
@@ -626,12 +675,12 @@ describe('makeInlineCallRecorder', () => {
         clock: seqClock,
       }),
     )
-    await record(call({ promptText: '[{"role":"system","content":"s"}]', messageCount: 1 }))
+    await record(call({ promptText: () => '[{"role":"system","content":"s"}]', messageCount: 1 }))
     await record(
       call({
-        promptText: '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+        promptText: () => '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
         messageCount: 2,
-        responseText: 'second',
+        responseText: () => 'second',
       }),
     )
 
@@ -651,7 +700,7 @@ describe('makeInlineCallRecorder', () => {
       call({
         ok: false,
         finishReason: null,
-        responseText: '',
+        responseText: () => '',
         errorMessage: 'upstream refused (Authorization: Bearer sk-ant-supersecretvalue1234)',
       }),
     )

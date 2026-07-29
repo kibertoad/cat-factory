@@ -5,8 +5,6 @@ import {
 } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import {
-  type InlineLlmCallRecorder,
-  type LlmTraceSink,
   type ModelProviderResolver,
   type WorkspaceSettingsRepository,
   composeTraceSinks,
@@ -17,7 +15,7 @@ import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { parseOtlpHeaders } from '@cat-factory/observability-otel'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
-import { createScopedModelProviderResolver } from '@cat-factory/server'
+import { type InlineInstrumentation, createScopedModelProviderResolver } from '@cat-factory/server'
 
 // The Node deployment's ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
@@ -27,28 +25,17 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 // Inline calls are wrapped for Langfuse exactly like the proxied path when configured.
 
 /**
- * The instrumentation the scoped resolver wraps inline calls with. At least one exit must be
- * present: the metric recorder (so inline calls reach `llm_call_metrics` and every in-app
- * observability surface) and/or one shared external trace sink.
+ * The instrumentation the scoped resolver wraps inline calls with: the metric recorder (so
+ * inline calls reach `llm_call_metrics` and every in-app observability surface) and/or one
+ * shared external trace sink, at least one of the two.
+ *
+ * An ALIAS of the server layer's composed shape rather than a second declaration of it — the
+ * pairing rule between the two exits (the recorder's service owns the trace fan-out, so both
+ * must hold the same sink instance) is enforced by `createInlineInstrumentation` building
+ * them together, and a facade-local restatement of the fields would be a place to drift from
+ * it. Kept as a named export because it is what this module's public signature takes.
  */
-export interface InlineInstrument {
-  /**
-   * The composed external sink. When {@link recordCall} is also set this MUST be the same
-   * instance the recorder's `LlmObservabilityService` carries — that service performs the
-   * fan-out for a recorded call, so wiring a different sink here would split the trace.
-   */
-  traceSink?: LlmTraceSink
-  /** Persist each workspace-scoped inline call to `llm_call_metrics` (`makeInlineCallRecorder`). */
-  recordCall?: InlineLlmCallRecorder
-  recordPrompts: boolean
-  /**
-   * The per-workspace `storeAgentContext` opt-out applied to prompt/response bodies before
-   * they leave for the sink — the same gate the proxied path runs. Required, so a wiring
-   * site cannot instrument inline calls while honouring only `LLM_RECORD_PROMPTS`. A call
-   * the recorder takes is gated by the same rule inside the service instead.
-   */
-  workspaceBodiesEnabled: WorkspaceBodiesGate
-}
+export type InlineInstrument = InlineInstrumentation
 
 /**
  * Build the inline instrumentation from the process env — Langfuse (fetch) and/or the

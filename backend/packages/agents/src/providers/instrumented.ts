@@ -165,9 +165,24 @@ function readRequestMaxTokens(params: unknown): number | null {
   return typeof max === 'number' ? max : null
 }
 
+/**
+ * The call's finish reason, across the SDK's two shapes.
+ *
+ * The current (v3) spec reports an OBJECT — `{ unified, raw? }` — where `unified` is the
+ * provider-independent reason and `raw` whatever the vendor called it; only the older flat
+ * spec reports the bare string. Reading the string alone silently answered `null` for every
+ * real call, which is invisible in telemetry (a null finish reason reads as "the provider
+ * didn't say") and is why this has a test driving the SDK's own mock model rather than a
+ * hand-rolled stand-in that returned the shape the reader wanted.
+ *
+ * `unified` is the one stored: it is what makes `length` comparable across providers, which
+ * is the whole reason a truncated-output signal can be computed at all.
+ */
 function readFinishReason(result: unknown): string | null {
   const reason = (result as { finishReason?: unknown })?.finishReason
-  return typeof reason === 'string' ? reason : null
+  if (typeof reason === 'string') return reason
+  const unified = (reason as { unified?: unknown } | undefined)?.unified
+  return typeof unified === 'string' ? unified : null
 }
 
 /**
@@ -350,6 +365,8 @@ export class InstrumentedModelProvider implements ModelProvider {
    * `LLM_RECORD_PROMPTS` + `storeAgentContext` double gate this class applies to the sink
    * exit — gating here as well would drop a body the service is entitled to store and put
    * the rule in two places, which is how the sink half drifted open in the first place.
+   * They are handed over as THUNKS so keeping the gate on the far side costs nothing: a
+   * deployment with recording off never pays to serialise the prompt array.
    *
    * Best-effort and off the response path, exactly like the sink exit.
    */
@@ -392,9 +409,11 @@ export class InstrumentedModelProvider implements ModelProvider {
           durationMs: call.durationMs,
           ok,
           errorMessage: call.errMessage,
-          promptText: safeJson((params as { prompt?: unknown })?.prompt),
-          responseText: ok ? readOutputText(result) : '',
-          reasoningText: ok ? readReasoningText(result) : '',
+          // Thunks: the service resolves a body only after its gate says it will be stored,
+          // so a prompts-off deployment never serialises a prompt array it then drops.
+          promptText: () => safeJson((params as { prompt?: unknown })?.prompt),
+          responseText: () => (ok ? readOutputText(result) : ''),
+          reasoningText: () => (ok ? readReasoningText(result) : ''),
         }),
       { workspaceId, executionId, source: 'inline' },
     )
