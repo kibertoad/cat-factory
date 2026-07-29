@@ -594,9 +594,29 @@ export function taskCard(page: Page, blockId: string): Locator {
  * a real regression the original run.spec never caught). Shared by every run-driving spec.
  */
 export async function resolveDecision(page: Page, card: Locator): Promise<void> {
-  await card.getByTestId('task-resolve').click()
   const modal = page.getByTestId('decision-modal')
-  await expect(modal).toBeVisible()
+  await openAttention(card, modal)
   await modal.getByTestId('decision-option').first().click()
   await expect(modal).toBeHidden({ timeout: LIVE_TIMEOUT })
+}
+
+/**
+ * Click a task card's attention affordance (`task-resolve` — "Resolve" for a decision, "Approve"
+ * for an approval gate) until the surface it opens is actually up.
+ *
+ * The retry is the point, and it is not a timing guess. That button is `v-if`-ed on what the task
+ * needs from a human, and the reason flips mid-flight as a run advances — a decision is resolved
+ * (button unmounts), then the step completes and the approval gate mints its approval (button
+ * remounts as "Approve"). Under load that remount can land between Playwright's hit-test and its
+ * mouse event, so the click is dispatched to a node Vue has just detached and NO handler runs.
+ * Confirmed by instrumenting the component: on a failing run the click never reached the handler,
+ * while it did on every passing one. Waiting longer cannot help — after a lost click nothing is
+ * pending — so the only correct answer is to click again, which is what a user does too. Opening
+ * either surface is a UI-only action, so re-clicking is safe.
+ */
+export async function openAttention(card: Locator, surface: Locator): Promise<void> {
+  await expect(async () => {
+    if (await surface.isHidden()) await card.getByTestId('task-resolve').click()
+    await expect(surface).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
 }
