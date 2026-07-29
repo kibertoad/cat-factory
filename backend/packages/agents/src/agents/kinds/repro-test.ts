@@ -177,6 +177,7 @@ export const REPRO_TEST_AGENT_KINDS: AgentKindDefinition[] = [
         'Writes one or more tests that fail for the reported reason (or concedes when the bug ' +
         'cannot be reproduced), committing them so the fix has a red test to turn green.',
       category: 'test',
+      tier: 'intermediate',
       // The structured outcome opens in the shared generic viewer (no bespoke window); the
       // engine consumes `outcome`/`notes` server-side.
       resultView: 'generic-structured',

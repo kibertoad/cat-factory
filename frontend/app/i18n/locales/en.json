@@ -4212,6 +4212,23 @@
       "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
     }
   },
+  "agentTier": {
+    "label": "Agent tier",
+    "@label": {
+      "description": "Label of the control that chooses how much of the agent catalog is shown. \"Tier\" here means level of depth/specialisation, never a pricing plan."
+    },
+    "basic": "Basic",
+    "intermediate": "Intermediate",
+    "advanced": "Advanced",
+    "@advanced": {
+      "description": "The widest of the three levels: selecting it shows every agent, not only the advanced ones."
+    },
+    "basicHint": "Only the everyday agents a pipeline is normally built from.",
+    "intermediateHint": "Adds the agents you reach for regularly.",
+    "advancedHint": "Shows every agent, including the specialist ones.",
+    "tooltip": "Choose how much of the agent catalog to show",
+    "hidden": "{count} agent hidden at this tier. | {count} agents hidden at this tier."
+  },
   "riskPolicy": {
     "health": {
       "title": "Risk policy updates",

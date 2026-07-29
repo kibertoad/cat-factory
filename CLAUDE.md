@@ -1985,6 +1985,27 @@ basic mode always STARTS railed). Full model:
   before `openBoard`; `ui-mode.spec.ts` owns the default, the switch, the rail, and the palette
   route back.
 
+### Agent tiers are a SEPARATE axis from the interface mode
+
+An agent kind declares `presentation.tier` — `basic` / `intermediate` / `advanced` — and the two
+surfaces that enumerate the whole catalog (the pipeline builder's palette, a model preset's
+per-agent overrides) show the selected tier and everything BELOW it, opening on `basic`. The
+vocabulary, the default and the cumulative predicate live in `@cat-factory/contracts`
+(`AGENT_TIERS` / `DEFAULT_AGENT_TIER` / `agentTierVisibleAt`), beside `purposeAllowsAgentCategory`,
+so a deployment-registered kind's tier and the SPA's built-ins are read by ONE rule.
+
+- **Never fold this into `isAdvanced`.** The interface mode decides which SURFACES exist; the tier
+  decides how much of one surface's catalog is LISTED. Conflating them makes both un-tunable —
+  and the tier control must stay visible in basic mode, since it is the only route to what it
+  hides (the "never mark the way BACK as advanced" rule, applied to a catalog).
+- **A new BUILT-IN kind declares its tier** in `utils/catalog.ts` (`catalog.spec.ts` fails
+  otherwise). Only a deployment-registered kind may leave it to the default, which is
+  `intermediate` — installed deliberately, but not part of the everyday loop by omission.
+- **A tier filter over EXISTING settings keeps what is already set**, exactly as
+  `showOverrideField` does for one field: the model-preset list always renders a kind the edited
+  preset pins a model for, whatever the tier, or the user owns a setting they can neither read
+  nor clear. And a narrowed list SAYS how much it is holding back.
+
 ## Internationalization (i18n)
 
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. The

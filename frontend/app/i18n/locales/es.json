@@ -4088,6 +4088,17 @@
       "conflict": "Otra persona cambió este prompt. Se recargó: vuelve a aplicar tu edición."
     }
   },
+  "agentTier": {
+    "label": "Nivel de agentes",
+    "basic": "Básico",
+    "intermediate": "Intermedio",
+    "advanced": "Avanzado",
+    "basicHint": "Solo los agentes de uso diario con los que se arma una pipeline.",
+    "intermediateHint": "Añade los agentes que usas con regularidad.",
+    "advancedHint": "Muestra todos los agentes, incluidos los especializados.",
+    "tooltip": "Elige cuánto del catálogo de agentes se muestra",
+    "hidden": "{count} agente oculto en este nivel. | {count} agentes ocultos en este nivel."
+  },
   "palette": {
     "hint": "Haz clic en un agente para añadirlo al pipeline.",
     "customAgents": "Agentes personalizados"
