@@ -71,7 +71,7 @@ function plan(pipelineId: string) {
 }
 
 test.describe('initiative plan review gate', () => {
-  // Drives a full planning run (interviewer → analyst → planner) to its human gate, then a
+  // Drives a full planning run (analyst → interviewer → planner) to its human gate, then a
   // request-changes round that re-runs the planner — many durable steps, so the slow budget.
   test.slow()
 
@@ -83,8 +83,9 @@ test.describe('initiative plan review gate', () => {
     const { workspaceId } = seededBoard
     const pipeline = await createSimplePipeline(request, workspaceId, ['coder'])
 
-    // The fake inline interviewer converges on its first pass, so the run reaches the planner
-    // without a human answering anything; the planner then returns the plan above.
+    // The analyst reads the repo, then the fake inline interviewer converges on its first pass —
+    // so the run reaches the planner without a human answering anything, and the planner returns
+    // the plan above.
     await setFakeProfile(request, workspaceId, {
       decisionOnSteps: [],
       confidence: 1,
