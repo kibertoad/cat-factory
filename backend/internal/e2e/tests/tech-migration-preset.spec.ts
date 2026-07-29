@@ -23,7 +23,8 @@ import {
 // end on the keyless e2e backend:
 //   - the interviewer runs an INLINE LLM (not the faked agent executor); `testServer.ts` injects a
 //     converging fake inline model (`fakeInlineModel.ts`), so the interviewer converges on its first
-//     pass over the seeded intake-form qa and the run advances to the analyst — no human Q&A needed.
+//     pass over the seeded intake-form qa and the run advances to the planner (the analyst having
+//     already run ahead of it) — no human Q&A needed.
 //   - the `initiative-planner` gate (`gate: true` in `pl_initiative`) parks the run for human
 //     approval, but no SPA surface exposes that gate for an initiative-level block, so it is
 //     approved over REST (a trigger) — see `findParkedApproval` / `approveStep`.
@@ -85,7 +86,7 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   request,
   seededBoard,
 }) => {
-  // Drives a full planning run (interviewer → analyst → planner → gate → committer) then a loop
+  // Drives a full planning run (analyst → interviewer → planner → gate → committer) then a loop
   // spawn — several durable pg-boss steps — so give it the slow budget.
   test.slow()
   const { workspaceId } = seededBoard
@@ -117,9 +118,10 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   )
   await expect(page.getByTestId('initiative-card')).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-  // Start the preset's full-interview planning pipeline against the anchor block. The interviewer
-  // converges on the seeded qa (fake inline model) → analyst → planner returns MIGRATION_PLAN → the
-  // ingest normalizer accepts the five template phases → the run PARKS at the planner's human gate.
+  // Start the preset's full-interview planning pipeline against the anchor block. The analyst reads
+  // the repo → the interviewer converges on the seeded qa (fake inline model) → planner returns
+  // MIGRATION_PLAN → the ingest normalizer accepts the five template phases → the run PARKS at the
+  // planner's human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
   // Approve the parked planner gate over REST — the gate has its own SPA review surface (see

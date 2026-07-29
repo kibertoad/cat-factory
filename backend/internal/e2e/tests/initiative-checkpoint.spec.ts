@@ -84,8 +84,9 @@ async function driveToCheckpointPause(page: Page, request: APIRequestContext, wo
   const card = page.getByTestId('initiative-card')
   await expect(card).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-  // Start the generic full-interview planning pipeline. The fake inline interviewer converges on
-  // its first pass → analyst → planner returns the plan → the run PARKS at the planner human gate.
+  // Start the generic full-interview planning pipeline. The analyst analyses the repo → the fake
+  // inline interviewer converges on its first pass → planner returns the plan → the run PARKS at
+  // the planner human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
   // Approve the parked planner gate over REST. The gate has its own SPA review surface (see
@@ -117,7 +118,7 @@ async function driveToCheckpointPause(page: Page, request: APIRequestContext, wo
 }
 
 test.describe('initiative phase checkpoint', () => {
-  // Each spec drives a full planning run (interviewer → analyst → planner → gate → committer) then a
+  // Each spec drives a full planning run (analyst → interviewer → planner → gate → committer) then a
   // loop wave to the pause — many durable pg-boss steps — so give it the slow budget.
   test.slow()
 

@@ -439,16 +439,17 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless.',
   },
-  // The Initiative Planning pipeline's two steps. Only runnable on an initiative
+  // The Initiative Planning pipeline's steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
-  // system kinds, never palette archetypes.
+  // system kinds, never palette archetypes. The analyst runs FIRST, ahead of the
+  // interviewer, so the interview covers only what the code cannot answer.
   'initiative-interviewer': {
     kind: 'initiative-interviewer',
     label: 'Initiative Interviewer',
     icon: 'i-lucide-messages-square',
     color: '#818cf8',
     description:
-      'Interviews you on the goals, scope and constraints of the initiative, then synthesizes the agreed brief the analyst and planner build on.',
+      'Interviews you on the goals, scope and constraints the codebase cannot answer, then synthesizes the agreed brief the planner builds on.',
     // Opens the dedicated planning Q&A window (answer / continue / proceed) while parked.
     resultView: 'initiative-planning',
   },
@@ -458,7 +459,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-microscope',
     color: '#818cf8',
     description:
-      'Explores the codebase and writes an analysis (architecture, touch points, risks) that grounds the plan. Makes no changes.',
+      'Explores the codebase first and writes an analysis (architecture, touch points, risks) that grounds both the interview and the plan. Makes no changes.',
     resultView: 'initiative-tracker',
   },
   'initiative-planner': {
