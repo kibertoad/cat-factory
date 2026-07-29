@@ -1410,14 +1410,14 @@
     },
     "phase": {
       "title": "Token'lar nereye gitti",
-      "subtitle": "çalıştırmanın aşamasına göre",
+      "subtitle": "çalıştırmanın aşamasına göre, taşıma maliyetine göre sıralanır",
       "columns": {
         "phase": "Aşama",
         "turns": "Tur",
         "tokensInOut": "Token (giriş / çıkış)",
         "carryCost": "Taşıma maliyeti"
       },
-      "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez.",
+      "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez. En sonda çalışan bir aşama ne kadar harcarsa harcasın az taşır; bu sütunu yanındaki token sayılarıyla birlikte okuyun.",
       "unattributed": "Atanmamış",
       "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi"
     },

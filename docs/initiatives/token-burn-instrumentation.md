@@ -184,7 +184,13 @@ after it)` is charged within `partition by agent_kind`, because that is what the
 - **It is a PROXY and says so everywhere it surfaces.** It re-counts tokens the model saw once,
   per subsequent turn — which is precisely the re-send being measured — so it is comparable
   BETWEEN a run's phases and meaningless as an absolute. Both surfaces sort by it and neither
-  presents it as a token total.
+  presents it as a token total. **Sorting by it is not the same as sorting by spend**, and the
+  difference is systematic rather than incidental: the last turn of a conversation carries
+  nothing by construction, so a phase concentrated at the tail (a validation repair round that
+  ends the run) scores near zero however many tokens it burned. Both surfaces therefore say what
+  they are ordered by — the panel in its subtitle and on the column header, the debug API in
+  `debug-api.md` — and both keep the token columns beside it. Do NOT let a future surface present
+  this ranking as "the phases that spent the most".
 - **No migration, no schema change.** The columns Slice 2 added are all it reads, so this is a
   read-only change on both telemetry stores — which is also why there is no runtime-asymmetry
   risk beyond the SQL itself (asserted by the conformance suite on real D1 and real Postgres).
@@ -193,6 +199,14 @@ after it)` is charged within `partition by agent_kind`, because that is what the
   not by step index), so two steps of one kind carry identical numbers and a naive sum over
   `steps` doubles them. Folding the rollup rather than the loaded call list also keeps the
   breakdown honest on a long run, where that list is capped.
+- **`byPhase` rides the emit payload, and that is a deliberate trade.** It is attached to EVERY
+  step (duplicated across steps sharing a kind — which is why the panel dedupes), so it lands in
+  the persisted `ExecutionInstance` JSON and in the real-time push on every step settlement: on
+  the order of a few hundred numbers, single-digit KB for a large pipeline. It buys the surface
+  with no extra query and no new endpoint, since the rollup already had to be attached. The knob
+  to reach for if a run ever makes this hurt is the number of PHASES a harness emits, not a cap
+  on the array — a dropped phase row is exactly the silent under-report the `''` slice exists to
+  prevent.
 
 ## Target pattern (Slice 2 — the reference implementation)
 

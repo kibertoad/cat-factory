@@ -74,4 +74,14 @@ describe('foldRunPhaseMetrics', () => {
   it('is empty when no step carries a rollup, so the section simply does not render', () => {
     expect(foldRunPhaseMetrics([{ agentKind: 'coder' } as unknown as PipelineStep])).toEqual([])
   })
+
+  it('returns fresh rows rather than aliasing the store objects it folded', () => {
+    // The single-kind case is the one that used to pass a `step.metrics.byPhase` row straight
+    // through: a caller mutating what a fold handed it would have written into the store.
+    const row = phase({ phase: 'agent', calls: 3, carryCostTokens: 90 })
+    const folded = foldRunPhaseMetrics([step('coder', [row])])
+    expect(folded[0]).not.toBe(row)
+    folded[0]!.calls = 999
+    expect(row.calls).toBe(3)
+  })
 })

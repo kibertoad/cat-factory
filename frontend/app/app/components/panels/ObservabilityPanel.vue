@@ -437,9 +437,15 @@ function exportJson() {
                       <th class="py-1 px-3 text-end font-normal">
                         {{ t('observability.phase.columns.tokensInOut') }}
                       </th>
-                      <th class="py-1 ps-3 text-end font-normal">
+                      <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
+                           with tokens, and the two orders genuinely differ: a phase that runs
+                           late carries almost nothing however much it spent (nothing after it
+                           re-sends its context). Leaving that implicit invites reading row 1
+                           as "the phase that burned the most", which is the neighbouring
+                           column. -->
+                      <th aria-sort="descending" class="py-1 ps-3 text-end font-normal">
                         <span :title="t('observability.phase.carryCostHint')">
-                          {{ t('observability.phase.columns.carryCost') }}
+                          {{ t('observability.phase.columns.carryCost') }} ↓
                         </span>
                       </th>
                     </tr>

@@ -224,7 +224,11 @@ export const llmPhaseInsightSchema = v.object({
    * Compare phases of one run against each other; the absolute number means nothing.
    */
   carryCostTokens: v.number(),
-  /** Share of the run's total carry cost this phase accounts for, 0..1; null when it is 0. */
+  /**
+   * Share of the run's total carry cost this phase accounts for, 0..1. Null only when the RUN
+   * carried nothing (a single-turn conversation charges no carry cost at all, so the share has
+   * no denominator); a phase that itself carried nothing inside a run that did reports `0`.
+   */
   carryCostShare: v.nullable(v.number()),
   upstreamMs: v.number(),
   overheadMs: v.number(),

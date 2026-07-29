@@ -69,6 +69,17 @@ export function transportRatio(m: Pick<StepMetrics, 'upstreamMs' | 'overheadMs'>
   return total > 0 ? m.overheadMs / total : null
 }
 
+/** Zero cell, so the fold below has one accumulator shape and never aliases a store row. */
+const EMPTY_PHASE: Omit<StepPhaseMetrics, 'phase'> = {
+  calls: 0,
+  promptTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  completionTokens: 0,
+  carryCostTokens: 0,
+  errors: 0,
+}
+
 /**
  * The run's model spend split by the PHASE that spent it, folded from the per-step rollups the
  * engine already pushes. Rows come back costliest-carry-cost first — the slice worth attacking.
@@ -82,6 +93,10 @@ export function transportRatio(m: Pick<StepMetrics, 'upstreamMs' | 'overheadMs'>
  * 2. **Read it off the rollup, not off the loaded calls.** The panel's call list is capped, so
  *    folding phases client-side from it would silently under-report exactly the long runs this
  *    breakdown exists for. The rollup is a SQL aggregate over every row.
+ *
+ * Every returned row is a FRESH object, never a row of `step.metrics.byPhase` passed through:
+ * those belong to the store, and a fold whose output aliases its input is a trap for the next
+ * caller that reasonably assumes it may mutate what a fold handed it.
  */
 export function foldRunPhaseMetrics(steps: readonly PipelineStep[]): StepPhaseMetrics[] {
   const seenKinds = new Set<string>()
@@ -91,22 +106,17 @@ export function foldRunPhaseMetrics(steps: readonly PipelineStep[]): StepPhaseMe
     if (!rows?.length || seenKinds.has(step.agentKind)) continue
     seenKinds.add(step.agentKind)
     for (const row of rows) {
-      const prev = byPhase.get(row.phase)
-      byPhase.set(
-        row.phase,
-        prev
-          ? {
-              phase: row.phase,
-              calls: prev.calls + row.calls,
-              promptTokens: prev.promptTokens + row.promptTokens,
-              cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
-              cacheWriteTokens: prev.cacheWriteTokens + row.cacheWriteTokens,
-              completionTokens: prev.completionTokens + row.completionTokens,
-              carryCostTokens: prev.carryCostTokens + row.carryCostTokens,
-              errors: prev.errors + row.errors,
-            }
-          : row,
-      )
+      const prev = byPhase.get(row.phase) ?? EMPTY_PHASE
+      byPhase.set(row.phase, {
+        phase: row.phase,
+        calls: prev.calls + row.calls,
+        promptTokens: prev.promptTokens + row.promptTokens,
+        cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
+        cacheWriteTokens: prev.cacheWriteTokens + row.cacheWriteTokens,
+        completionTokens: prev.completionTokens + row.completionTokens,
+        carryCostTokens: prev.carryCostTokens + row.carryCostTokens,
+        errors: prev.errors + row.errors,
+      })
     }
   }
   return [...byPhase.values()].sort(

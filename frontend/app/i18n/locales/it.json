@@ -3012,14 +3012,14 @@
     },
     "phase": {
       "title": "Dove sono finiti i token",
-      "subtitle": "per fase dell'esecuzione",
+      "subtitle": "per fase dell'esecuzione, ordinato per costo di trascinamento",
       "columns": {
         "phase": "Fase",
         "turns": "Turni",
         "tokensInOut": "Token (in / out)",
         "carryCost": "Costo di trascinamento"
       },
-      "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla.",
+      "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla. Una fase che viene eseguita per ultima trascina poco per quanto abbia speso, quindi leggi questa colonna insieme ai token accanto.",
       "unattributed": "Non attribuito",
       "unattributedHint": "registrato da un canale che non riporta la fase"
     },

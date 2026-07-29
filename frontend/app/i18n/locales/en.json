@@ -1476,14 +1476,14 @@
     },
     "phase": {
       "title": "Where the tokens went",
-      "subtitle": "by phase of the run",
+      "subtitle": "by phase of the run, ordered by carry cost",
       "columns": {
         "phase": "Phase",
         "turns": "Turns",
         "tokensInOut": "Tokens (in / out)",
         "carryCost": "Carry cost"
       },
-      "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing.",
+      "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing. A phase that runs late carries little however much it spent, so read this column alongside the tokens beside it.",
       "unattributed": "Unattributed",
       "unattributedHint": "recorded by a channel that reports no phase"
     },

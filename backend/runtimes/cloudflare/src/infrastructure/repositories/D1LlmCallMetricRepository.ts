@@ -82,7 +82,10 @@ function rowToSummary(r: SummaryRow): LlmCallMetricSummary {
     overheadMs: r.overhead_ms,
     errors: r.errors,
     warnings: r.warnings,
-    carryCostTokens: r.carry_cost_tokens,
+    // Coerced, matching the `node:sqlite` store line for line: these two files mirror each
+    // other by contract, and the carry cost is the one column a driver may hand back as
+    // something other than a plain number (it is the 64-bit sum).
+    carryCostTokens: Number(r.carry_cost_tokens),
   }
 }
 
