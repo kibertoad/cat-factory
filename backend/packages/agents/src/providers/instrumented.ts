@@ -7,6 +7,7 @@ import type {
   Logger,
   ModelProvider,
   ModelRef,
+  StoreAgentContextGate,
 } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
@@ -18,15 +19,19 @@ import {
 
 /**
  * Whether prompt/response BODIES may leave this workspace for a trace sink — the
- * per-workspace `storeAgentContext` opt-out, resolved by the caller layer (which owns the
- * settings repository and its cache slice) and passed in as a narrow predicate so this
- * package needs no persistence dependency.
+ * per-workspace `storeAgentContext` opt-out, passed in as a narrow predicate so this package
+ * needs no persistence dependency.
+ *
+ * The type and its one implementation are kernel's `StoreAgentContextGate` /
+ * `createStoreAgentContextGate`: the proxied path applies the SAME rule, and a second name
+ * for it here is how the two came to state it differently in the first place (C2). Aliased
+ * rather than redeclared so a change to the rule reaches both paths.
  *
  * `null` is an inline call carrying no workspace tag: there is no workspace whose opt-out
  * could apply, so the deployment switch alone governs it. That is a reason to TAG the call,
  * not to guess — every first-party inline site passes its `workspaceId`.
  */
-export type WorkspaceBodiesGate = (workspaceId: string | null) => Promise<boolean>
+export type WorkspaceBodiesGate = StoreAgentContextGate
 
 // Re-exported so existing `@cat-factory/agents` consumers keep importing the inline
 // observability tag from here; the canonical, dependency-free definition lives in the

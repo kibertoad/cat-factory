@@ -9,15 +9,11 @@ import type { WorkspaceSettingsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the workspace-settings module or send a 503, returning null when unconfigured. */
-function requireSettings<E extends AppEnv>(c: Context<E>): WorkspaceSettingsModule | null {
-  return c.get('container').settings ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError('Workspace settings are not configured')
+/** Resolve the workspace-settings module, or refuse with a 503 naming what isn't wired. */
+function requireSettings<E extends AppEnv>(c: Context<E>): WorkspaceSettingsModule {
+  return requireCapability(c.get('container').settings, 'Workspace settings are not configured')
 }
 
 /**
@@ -31,13 +27,11 @@ export function workspaceSettingsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)
-    if (!settings) return unavailable()
     return c.json(await settings.service.get(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, updateWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)
-    if (!settings) return unavailable()
     const workspaceId = param(c, 'workspaceId')
     // `update` invalidates the shared `workspaceSettings` cache slice after it commits, so a
     // budget edit takes effect immediately for SpendService's pricing overlay (which reads

@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
 // ---------------------------------------------------------------------------
 // Interactive document-interview endpoints (WS5). Drive the parked `doc-interviewer` gate
@@ -20,41 +20,36 @@ import { UnavailableError } from '@cat-factory/kernel'
 // `/workspaces/:workspaceId`.
 // ---------------------------------------------------------------------------
 
-const unavailable = (): never => {
-  throw new UnavailableError('The document interviewer is not configured')
-}
-
 export function docInterviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  const require = <E extends AppEnv>(c: Context<E>) =>
-    c.get('container').executionService.docInterview ?? null
+  const requireDocInterview = <E extends AppEnv>(c: Context<E>) =>
+    requireCapability(
+      c.get('container').executionService.docInterview,
+      'The document interviewer is not configured',
+    )
 
   buildHonoRoute(app, getDocInterviewContract, async (c) => {
-    const interview = require(c)
-    if (!interview) return unavailable()
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.getByBlock(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, answerDocInterviewContract, async (c) => {
-    const interview = require(c)
-    if (!interview) return unavailable()
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     const { questionId, answer } = c.req.valid('json')
     return c.json(await interview.answer(param(c, 'workspaceId'), blockId, questionId, answer), 200)
   })
 
   buildHonoRoute(app, continueDocInterviewContract, async (c) => {
-    const interview = require(c)
-    if (!interview) return unavailable()
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.continue(param(c, 'workspaceId'), blockId), 200)
   })
 
   buildHonoRoute(app, proceedDocInterviewContract, async (c) => {
-    const interview = require(c)
-    if (!interview) return unavailable()
+    const interview = requireDocInterview(c)
     const { blockId } = c.req.valid('param')
     return c.json(await interview.proceed(param(c, 'workspaceId'), blockId), 200)
   })

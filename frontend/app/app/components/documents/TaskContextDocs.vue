@@ -4,8 +4,12 @@ import type { Block } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
-// Documents (from any source) attached to a task as agent context, shown inside
-// the InspectorPanel. Attaching uses the SAME inline picker as task creation
+// Documents (from any source) attached to a task OR an initiative as agent
+// context, shown inside the InspectorPanel. An initiative takes the same
+// attachments (the create-initiative modal stages them exactly as the add-task one
+// does) and its whole planning pipeline reads them, so it gets the same section —
+// only the prose differs, which is why the hint/empty copy is level-keyed below.
+// Attaching uses the SAME inline picker as task creation
 // (source selector + repo→file browse + free-text search + paste-by-reference —
 // ContextDocumentPicker), NOT the old dropdown that opened a second, page-level
 // "Import a page…" modal on top of the inspector. Stacked page-level modals don't
@@ -27,6 +31,18 @@ onMounted(() => {
 })
 
 const linked = computed(() => documents.docsForBlock(props.block.id))
+
+// Two STATIC literal keys per string, picked by level — the copy names what reads the
+// document (the agents implementing a task vs the pipeline that plans an initiative), which
+// is the whole point of the hint. Assembling one key from `block.level` would defeat the
+// typed message-key check for a two-member choice that gains nothing from being dynamic.
+const isInitiative = computed(() => props.block.level === 'initiative')
+const hint = computed(() =>
+  isInitiative.value ? t('documents.taskDocs.hintInitiative') : t('documents.taskDocs.hint'),
+)
+const emptyHint = computed(() =>
+  isInitiative.value ? t('documents.taskDocs.emptyInitiative') : t('documents.taskDocs.empty'),
+)
 // Already-linked docs, so the inline picker filters them out / never re-offers them.
 const chosenKeys = computed(() =>
   linked.value.map((d) =>
@@ -71,7 +87,7 @@ async function attach(item: PendingContext) {
   <InspectorSection
     v-if="documents.available"
     :title="t('documents.taskDocs.heading')"
-    :hint="t('documents.taskDocs.hint')"
+    :hint="hint"
     :count="linked.length"
   >
     <template #actions>
@@ -130,7 +146,7 @@ async function attach(item: PendingContext) {
       </a>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      {{ t('documents.taskDocs.empty') }}
+      {{ emptyHint }}
     </p>
   </InspectorSection>
 </template>

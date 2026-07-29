@@ -1,6 +1,4 @@
 import {
-  type AgentContextFile,
-  type AgentContextFragment,
   type AgentContextRecorder,
   type AgentJobHandle,
   type AgentJobUpdate,
@@ -12,10 +10,10 @@ import {
   type LlmTraceSink,
   type Logger,
   type ModelRef,
-  type RecordAgentContextInput,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobView,
   type RunnerJobResult,
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
@@ -30,6 +28,7 @@ import {
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
   isSubscriptionVendor,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
@@ -47,6 +46,8 @@ import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { containerJobLog } from './containerAgentLogging.js'
+import { buildAgentContextRecord } from './agentContextRecord.js'
 import {
   UI_TESTER_AGENT_KIND,
   isTesterKind,
@@ -177,124 +178,6 @@ function providerOf(model: string | undefined): string {
   if (!model) return 'unknown'
   const colon = model.indexOf(':')
   return colon > 0 ? model.slice(0, colon) : model
-}
-
-/**
- * Strip any embedded `user:pass@` userinfo from a URL before it is stored in an
- * observability snapshot. The allow-list promises "never a credential-bearing URL", but
- * the injected-doc URLs and a tester's ephemeral `environmentUrl` are operator-supplied
- * and could carry credentials in their userinfo, so defang them here. Non-URL strings
- * (and URLs with no userinfo) pass through unchanged.
- */
-export function stripUrlCredentials(value: string): string {
-  if (!value) return value
-  try {
-    const url = new URL(value)
-    if (!url.username && !url.password) return value
-    url.username = ''
-    url.password = ''
-    return url.toString()
-  } catch {
-    return value
-  }
-}
-
-/**
- * Redact credential-bearing URLs from the tester's `infra` spec before it is stored.
- * An `ephemeral` run carries the provisioned `environmentUrl`; the env's access
- * credentials live on a separate field that is never copied, but the URL itself is
- * operator-mapped and could embed userinfo, so strip it. Returns the value untouched
- * when it is not an `infra` object.
- */
-function redactInfra(infra: unknown): unknown {
-  if (!infra || typeof infra !== 'object' || Array.isArray(infra)) return infra
-  const copy = { ...(infra as Record<string, unknown>) }
-  if (typeof copy.environmentUrl === 'string') {
-    copy.environmentUrl = stripUrlCredentials(copy.environmentUrl)
-  }
-  return copy
-}
-
-/**
- * Build the redacted agent-context snapshot from a dispatched job body + run context.
- * Deliberately an ALLOW-LIST: it copies the composed prompts, the folded-in fragment
- * bodies and the injected context files, plus a handful of structural fields — and
- * NEVER any credential (the GitHub token, the proxy session token, a leased
- * subscription token, or the clone/environment URL that embeds them).
- */
-function buildAgentContextRecord(
-  context: AgentRunContext,
-  body: Record<string, unknown>,
-  model: string,
-  ids: {
-    workspaceId: string
-    executionId: string
-    /**
-     * The tool servers actually wired for this dispatch, and any that were declared but could
-     * not be. Passed in rather than read off `context` because the harness (not the engine)
-     * decides what is servable, so the run context the engine built does not carry them. Safe to
-     * record: this is the NON-SECRET projection — the credentials live only on the job body's
-     * `mcpServers` field, which this allow-list deliberately never copies.
-     */
-    toolServers?: ResolvedToolServers
-  },
-): RecordAgentContextInput {
-  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
-  const repo = (body.repo ?? {}) as Record<string, unknown>
-  const contextFiles = Array.isArray(body.contextFiles)
-    ? (body.contextFiles as unknown[]).map((f): AgentContextFile => {
-        const file = (f ?? {}) as Record<string, unknown>
-        return {
-          path: str(file.path),
-          title: str(file.title),
-          url: stripUrlCredentials(str(file.url)),
-          content: str(file.content),
-        }
-      })
-    : []
-  const fragments: AgentContextFragment[] = (context.block.resolvedFragments ?? []).map((fr) => ({
-    id: fr.id,
-    body: fr.body,
-  }))
-  return {
-    workspaceId: ids.workspaceId,
-    executionId: ids.executionId,
-    agentKind: context.agentKind,
-    stepIndex: context.stepIndex,
-    model,
-    // Record the harness the body actually carried; don't guess. A body without an
-    // explicit harness records `null` rather than mislabelling a codex / claude-code
-    // dispatch as `pi`.
-    harness: typeof body.harness === 'string' ? body.harness : null,
-    systemPrompt: str(body.systemPrompt),
-    userPrompt: str(body.userPrompt),
-    fragments,
-    contextFiles,
-    extras: {
-      pipelineName: context.pipelineName,
-      mode: body.mode,
-      repo: { owner: str(repo.owner), name: str(repo.name), baseBranch: str(repo.baseBranch) },
-      branch: body.branch,
-      serviceDirectory: repo.serviceDirectory,
-      webSearch: body.webSearch ?? false,
-      infra: redactInfra(body.infra),
-      decisions: context.decisions,
-      ...(ids.toolServers?.toolServers.length
-        ? { toolServers: ids.toolServers.toolServers.map((t) => t.id) }
-        : {}),
-      ...(ids.toolServers?.unavailableToolServers.length
-        ? {
-            unavailableToolServers: ids.toolServers.unavailableToolServers.map((t) => ({
-              id: t.id,
-              reason: t.reason,
-            })),
-          }
-        : {}),
-      ...(context.revision
-        ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
-        : {}),
-    },
-  }
 }
 
 /**
@@ -584,7 +467,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
     const jobId = body.jobId as string
     const ref: RunnerJobRef = { runId: executionId, jobId }
-    await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    const jobLog = containerJobLog(this.deps.logger, {
+      workspaceId,
+      executionId,
+      jobId,
+      agentKind: context.agentKind,
+    })
+    try {
+      await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    } catch (error) {
+      jobLog.dispatchFailed(error, { model, provider, kind })
+      throw error
+    }
+    jobLog.dispatched({ model, provider, kind })
     // Capture the complete provided context for observability (best-effort, gated inside
     // the recorder). This is the only place the fully composed prompts + the injected
     // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
@@ -596,18 +491,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
     // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
     // swallow guarantees a recorder failure still never breaks a dispatch.
-    if (this.deps.agentContextObservability) {
-      try {
-        await this.deps.agentContextObservability.record(
-          buildAgentContextRecord(context, body, model, {
-            workspaceId,
-            executionId,
-            toolServers,
-          }),
-        )
-      } catch {
-        // Swallowed: observability never breaks a dispatch.
-      }
+    const recorder = this.deps.agentContextObservability
+    if (recorder) {
+      await runBestEffort(jobLog.logger, 'containerAgent.recordAgentContext', () =>
+        recorder.record(
+          buildAgentContextRecord(context, body, model, { workspaceId, executionId, toolServers }),
+        ),
+      )
     }
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
@@ -629,24 +519,39 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
-    const view = await this.jobs.poll(handle.workspaceId, refForHandle(handle))
+    const jobLog = containerJobLog(this.deps.logger, {
+      workspaceId: handle.workspaceId,
+      executionId: handle.runId,
+      jobId: handle.jobId,
+      agentKind: handle.agentKind,
+    })
+    // A poll that THROWS is as opaque as a dispatch that throws — the durable driver retries or
+    // fails the step with a transport error and nothing records which job/backend it was against.
+    // Logged and re-thrown; the lifecycle is unchanged.
+    let view: RunnerJobView
+    try {
+      view = await this.jobs.poll(handle.workspaceId, refForHandle(handle))
+    } catch (error) {
+      jobLog.pollFailed(error)
+      throw error
+    }
     // Forward any tool spans the harness drained on this poll to the trace sink, as
     // child spans under the RUN's trace (the run id is the trace id the LLM proxy's
     // generations also use, so per-step jobs share one trace). Isolated + best-effort:
     // never affects the lifecycle.
-    if (this.deps.llmTraceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
-      try {
-        await this.deps.llmTraceSink.recordToolSpans(
+    const traceSink = this.deps.llmTraceSink
+    if (traceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
+      const spans = view.spans
+      await runBestEffort(jobLog.logger, 'containerAgent.recordToolSpans', () =>
+        traceSink.recordToolSpans?.(
           {
             workspaceId: handle.workspaceId ?? null,
             executionId: handle.runId ?? handle.jobId,
             agentKind: handle.agentKind ?? 'agent',
           },
-          view.spans,
-        )
-      } catch {
-        // Swallowed: the sink logs its own errors; observability never breaks a run.
-      }
+          spans,
+        ),
+      )
     }
     // Per-call telemetry the harness drained on this poll: record it NOW rather than waiting
     // for the terminal result. A run whose container dies mid-flight never produces one, so
@@ -664,7 +569,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(f.suggestedAction ? { suggestedAction: f.suggestedAction } : {}),
     }))
     const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
-    if (view.state === 'running') return buildRunningUpdate(view, followUps)
+    if (view.state === 'running') {
+      jobLog.progress({ progress: view.progress })
+      return buildRunningUpdate(view, followUps)
+    }
     const failureMeta = buildFailureMeta(view)
     // Completed OR failed: a subscription harness attaches its per-call telemetry to
     // BOTH — a failed token-spending run (no changes / unusable output / unresolved
@@ -673,11 +581,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const result = view.result ?? {}
     await this.recordHarnessCallsOnce(handle, result)
     if (view.state === 'failed') {
+      jobLog.settled('failed', { failureCause: view.failureCause, evicted: view.evicted })
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
     if (result.error) {
+      jobLog.settled('failed', { failureCause: view.failureCause, cleanExit: true })
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
     // Best-effort subscription usage attribution, split into their own methods so `pollJob` stays
@@ -704,6 +614,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       runResult.usageBilling = 'subscription'
       runResult.usageVendor = handle.provider ?? providerOf(handle.model)
     }
+    jobLog.settled('done', { model: handle.model })
     return { state: 'done', result: runResult, ...followUps }
   }
 

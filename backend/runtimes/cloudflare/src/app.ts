@@ -5,6 +5,7 @@ import {
   isConfigValidationError,
   logger,
   mountAuthGate,
+  mountRequestLogging,
   registerCoreControllers,
 } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
@@ -12,6 +13,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import {
   CORS_ALLOWED_HEADERS,
+  CORS_EXPOSED_HEADERS,
   corsReflectsWhenUnset,
   resolveCorsOrigin,
 } from './infrastructure/config/cors'
@@ -61,6 +63,11 @@ function logMisconfiguredOnce(problems: ConfigProblem[]): void {
 export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  // Correlation FIRST — before CORS and before the container build — so a CORS denial and the
+  // misconfiguration fallback below are logged and carry an id like any other response. Shared
+  // verbatim with the Node service.
+  mountRequestLogging(app)
+
   // CORS allowlist is per-deployment configuration (CORS_ALLOWED_ORIGINS), not
   // hardcoded, since each org provisions this system with its own frontend
   // origin(s). An explicit `*` reflects any origin; an unset allowlist reflects only
@@ -80,6 +87,8 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
       // (real-time self-echo suppression) on its calls, so each must be allow-listed or
       // the browser drops the whole request with "CORS Missing Allow Header".
       allowHeaders: [...CORS_ALLOWED_HEADERS],
+      // …and the correlation id back out, or the SPA can see it on the wire but not read it.
+      exposeHeaders: [...CORS_EXPOSED_HEADERS],
     }),
   )
   app.use('*', async (c, next) => {

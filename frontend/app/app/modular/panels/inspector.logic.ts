@@ -82,6 +82,14 @@ const isFrame = (b: Block) => b.level === 'frame'
  * Before this it had no run surface at all, which is why a stuck plan was a dead end.
  */
 const hasRuns = (b: Block) => isTask(b) || b.level === 'initiative'
+/**
+ * A block that carries attached CONTEXT (imported documents + tracker issues). The
+ * create-initiative modal stages the same attachments the add-task modal does and links them
+ * to the initiative block, and the whole planning pipeline reads them — so an initiative
+ * whose inspector never showed them left the user with no evidence the attachment landed and
+ * no way to reach the source. Same panels, same store reads (both are keyed by block id only).
+ */
+const takesContext = (b: Block) => isTask(b) || b.level === 'initiative'
 /** frame OR module — the "container" panels. */
 const isContainer = (b: Block) => b.level === 'frame' || b.level === 'module'
 /**
@@ -111,8 +119,9 @@ const isDeployableFrame = (b: Block) => isFrame(b) && b.type !== 'document'
  * extensibility value.
  */
 export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
-  { id: 'task-context-docs', order: 10, when: isTask },
-  { id: 'task-context-issues', order: 20, when: isTask },
+  // Shared with the initiative body — an initiative takes the same attachments a task does.
+  { id: 'task-context-docs', order: 10, when: takesContext },
+  { id: 'task-context-issues', order: 20, when: takesContext },
   { id: 'recurring-schedule', order: 30, when: isTask },
   // Shared with the initiative body — the panel renders a RUN, and an initiative has one.
   { id: 'task-execution', order: 40, when: hasRuns },
@@ -133,8 +142,8 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   // test-infra and release-health panels above it.
   { id: 'service-validation-checks', order: 180, when: isDeployableFrame },
   { id: 'epic-children', order: 200, when: (b) => b.level === 'epic' },
-  // Ordered BEFORE the shared execution panel (40) so an initiative reads the way a task does:
-  // its own identity + controls first, the run detail under them. Levels never overlap, so this
+  // Ordered FIRST so an initiative reads the way a task does: its own identity + controls, then
+  // the context it was given (10/20), then the run detail (40). Levels never overlap, so this
   // number only ever competes with the task ids the initiative body doesn't render.
-  { id: 'initiative-inspector', order: 35, when: (b) => b.level === 'initiative' },
+  { id: 'initiative-inspector', order: 5, when: (b) => b.level === 'initiative' },
 ]

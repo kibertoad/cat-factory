@@ -703,6 +703,17 @@ export interface ValidationSpec {
 
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
+  /**
+   * The backend run this job belongs to, bound onto the per-job logger beside `jobId` and used
+   * for NOTHING else. The container is the far side of the platform's longest seam: the backend
+   * knows a run as `executionId` and the harness knew it only as `jobId`, so a container log line
+   * could not be joined to the run that dispatched it except through the
+   * `${executionId}-${agentKind}` job-id naming convention. Optional because a body predating the
+   * field (or a hand-rolled acceptance fixture) must still run — an absent id costs correlation,
+   * never the job.
+   */
+  workspaceId?: string
+  executionId?: string
   mode: AgentMode
   systemPrompt: string
   userPrompt: string
@@ -1435,6 +1446,8 @@ function assembleAgentJob(
  */
 function collectOptionalRequestFields(o: Record<string, unknown>): Partial<AgentJob> {
   return {
+    ...(typeof o.workspaceId === 'string' && o.workspaceId ? { workspaceId: o.workspaceId } : {}),
+    ...(typeof o.executionId === 'string' && o.executionId ? { executionId: o.executionId } : {}),
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
     ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
     ...(o.webSearch === true ? { webSearch: true } : {}),

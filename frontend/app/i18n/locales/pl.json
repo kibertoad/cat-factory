@@ -3650,10 +3650,12 @@
     "taskDocs": {
       "heading": "Dokumenty kontekstowe",
       "hint": "Dokumenty dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
+      "hintInitiative": "Dokumenty dołączone do tej inicjatywy jako kontekst. Ich treść trafia do agentów planowania tworzących plan.",
       "attach": "Dołącz",
       "connectSource": "Połącz źródło",
       "connectSourceNamed": "Połącz {source}",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
+      "emptyInitiative": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci planowania przeczytali je podczas tworzenia planu tej inicjatywy.",
       "attached": "Dokument dołączony"
     },
     "templates": {
@@ -3696,11 +3698,13 @@
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",
       "hint": "Zgłoszenia z trackera dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
+      "hintInitiative": "Zgłoszenia z trackera dołączone do tej inicjatywy jako kontekst. Ich treść trafia do agentów planowania tworzących plan.",
       "attach": "Dołącz",
       "connectSource": "Połącz źródło",
       "connectSourceNamed": "Połącz {source}",
       "attached": "Dołączono zgłoszenie",
-      "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania."
+      "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania.",
+      "emptyHintInitiative": "Dołącz zgłoszenie Jira, aby agenci planowania widzieli jego opis i komentarze podczas tworzenia planu tej inicjatywy."
     },
     "import": {
       "titleCreate": "Utwórz zadanie ze zgłoszenia",
@@ -3758,6 +3762,8 @@
     "intro": "Przeszukaj tablicę systemu zgłoszeń w poszukiwaniu otwartych, nieprzypisanych błędów i uszereguj je według wpływu w stosunku do przewidywanej trudności naprawy. Wybierz jeden, a stanie się zadaniem uruchamiającym potok naprawy błędów.",
     "connectFirst": "Najpierw połącz lub włącz źródło zadań.",
     "connectSource": "Połącz {label}",
+    "enableSource": "Włącz {label}",
+    "pickTracker": "Wybierz system zgłoszeń",
     "needFrameFirst": "Najpierw dodaj ramkę usługi do tablicy, aby wybrany błąd miał gdzie wylądować.",
     "tracker": "System zgłoszeń",
     "board": "Tablica",

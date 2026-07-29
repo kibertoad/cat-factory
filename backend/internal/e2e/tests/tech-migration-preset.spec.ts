@@ -23,7 +23,8 @@ import {
 // end on the keyless e2e backend:
 //   - the interviewer runs an INLINE LLM (not the faked agent executor); `testServer.ts` injects a
 //     converging fake inline model (`fakeInlineModel.ts`), so the interviewer converges on its first
-//     pass over the seeded intake-form qa and the run advances to the analyst — no human Q&A needed.
+//     pass over the seeded intake-form qa and the run advances to the planner (the analyst having
+//     already run ahead of it) — no human Q&A needed.
 //   - the `initiative-planner` gate (`gate: true` in `pl_initiative`) parks the run for human
 //     approval, but no SPA surface exposes that gate for an initiative-level block, so it is
 //     approved over REST (a trigger) — see `findParkedApproval` / `approveStep`.

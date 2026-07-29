@@ -136,6 +136,12 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
     // no-op is a clean non-event (the config may already be acceptable).
     const body = {
       jobId,
+      // The run's correlation ids, matching `buildCommonBody` — a repair dispatches the same
+      // `agent` kind, so its container lines join to the backend's on `executionId` like any
+      // other. As with bootstrap, the job id IS the run id here (no separate execution row),
+      // which is what `sessionService.mint` is handed above.
+      workspaceId,
+      executionId: jobId,
       mode: 'coding',
       systemPrompt,
       userPrompt: spec.prompt,

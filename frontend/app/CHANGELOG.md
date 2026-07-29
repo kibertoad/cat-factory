@@ -1,5 +1,81 @@
 # @cat-factory/app
 
+## 0.181.0
+
+### Minor Changes
+
+- 1485e9a: Surface an initiative's attached context documents and tracker issues in its inspector.
+
+  The create-initiative modal stages the same attachments the add-task modal does and links them
+  to the initiative block, and the whole planning pipeline reads them — but the inspector only
+  rendered those sections for a task, so an initiative's attachments became invisible the moment
+  the modal closed. The two context panels now gate on task-or-initiative, which also makes them
+  attachable after create (a re-run of planning picks up the addition).
+
+### Patch Changes
+
+- a140688: Surface the shared run-details metadata (step position, duration, model, run id, call count and
+  token usage) on the two Plan Initiative windows, which previously showed none of it.
+
+  The initiative planning Q&A and tracker windows are reachable both from the run timeline and from
+  the board card / inspector, and the off-path entry point carries no step index — so wiring
+  `StepRunMeta` straight off `useResultView` would still leave them blank on the route people
+  actually use. The new auto-imported `useResultViewRunMeta` composable resolves the prop bundle for
+  both routes, falling back to the block's live run and the step whose agent kind declares the view.
+
+## 0.180.0
+
+### Minor Changes
+
+- 150314c: Add a tracker from the bug hunt. The hunt's tracker field is now the same two-tier menu the
+  context-issue picker uses: the trackers the workspace offers, then the ones it could add. Picking
+  one to add routes straight to that tracker's own connect screen instead of leaving the user to
+  find the Integrations hub, and the connect form opens over the hunt so the board scope, issue type
+  and labels already typed survive the detour. Once the tracker turns up offered it becomes the
+  hunt's selection automatically. A tracker that is connected but toggled off for the workspace is
+  offered as "enable" rather than "connect".
+
+### Patch Changes
+
+- 9f23fcb: Float still-unanswered questions to the top of the initiative planning window. A multi-round
+  interview keeps the answered/dismissed digest and appends each new round after it, so from round
+  two the questions the human could still act on sat below everything they had already settled. The
+  render order is now pending-first (chronological within each group), re-snapshotted per round so
+  answering one doesn't reshuffle the list. The stored `qa` order — which the interviewer prompt and
+  the in-repo tracker digest read — is unchanged.
+
+## 0.179.0
+
+### Minor Changes
+
+- a8cc6b2: Roll a run's model spend up by the PHASE that spent it, so "why did this small task cost a million
+  tokens" is a breakdown rather than a guess. The per-call phase axis already existed; what was
+  missing was the aggregate that reads it.
+
+  Each phase reports its turns, the three input classes, its output, and a **carry cost**: each
+  call's total input counted once for every later turn in the SAME conversation that had to re-send
+  it. That is the figure a plain token sum cannot produce — it separates a phase that read a lot from
+  a phase that made everything after it expensive, which is precisely the distinction between "trim
+  the prompt" and "cut the turns". It is a proxy: comparable between one run's phases, meaningless as
+  an absolute.
+
+  It surfaces two ways, both folds over one aggregate: `step.metrics.byPhase` on every pipeline step
+  (pushed live, rendered as a run-level table in the model-activity panel) and `llm.byPhase` on the
+  remote debugging overview (`GET /api/v1/debug/runs/:runId`), ordered costliest-first. The
+  unattributed `""` phase is always a row, never a dropped one — a run metered by a channel with no
+  phase concept must not read as a run that spent nothing outside the agent.
+
+  Compatibility break: `LlmCallMetricSummary` (the `LlmCallMetricRepository.summarizeByExecution`
+  row) is now keyed by `(agentKind, phase)` rather than by `agentKind` alone, and carries
+  `carryCostTokens`. Consumers fold it with the new kernel helpers (`foldRollupTotals`,
+  `foldRollupsByAgentKind`, `foldRollupsByPhase`) instead of indexing it directly. No migration: the
+  aggregate reads only columns that already exist on both telemetry stores.
+
+### Patch Changes
+
+- Updated dependencies [a8cc6b2]
+  - @cat-factory/contracts@0.189.0
+
 ## 0.178.2
 
 ### Patch Changes

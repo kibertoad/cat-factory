@@ -3650,10 +3650,12 @@
     "taskDocs": {
       "heading": "Documents de contexte",
       "hint": "Documents joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
+      "hintInitiative": "Documents joints à cette initiative comme contexte. Leur contenu est fourni aux agents de planification qui rédigent le plan.",
       "attach": "Joindre",
       "connectSource": "Connecter une source",
       "connectSourceNamed": "Connecter {source}",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
+      "emptyInitiative": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification le lisent en rédigeant cette initiative.",
       "attached": "Document joint"
     },
     "templates": {
@@ -3696,11 +3698,13 @@
     "contextIssues": {
       "title": "Tickets de contexte",
       "hint": "Tickets du tracker joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
+      "hintInitiative": "Tickets du tracker joints à cette initiative comme contexte. Leur contenu est fourni aux agents de planification qui rédigent le plan.",
       "attach": "Joindre",
       "connectSource": "Connecter une source",
       "connectSourceNamed": "Connecter {source}",
       "attached": "Ticket joint",
-      "emptyHint": "Joignez un ticket Jira pour que les agents voient sa description et ses commentaires lors de l'implémentation de cette tâche."
+      "emptyHint": "Joignez un ticket Jira pour que les agents voient sa description et ses commentaires lors de l'implémentation de cette tâche.",
+      "emptyHintInitiative": "Joignez un ticket Jira pour que les agents de planification voient sa description et ses commentaires en rédigeant cette initiative."
     },
     "import": {
       "titleCreate": "Créer une tâche à partir d'un ticket",
@@ -3758,6 +3762,8 @@
     "intro": "Parcourez un tableau du gestionnaire de tickets à la recherche de bugs ouverts et non assignés, puis classez-les selon leur impact face à la difficulté apparente du correctif. Choisissez-en un et il devient une tâche qui exécute le pipeline de correction.",
     "connectFirst": "Connectez ou activez d'abord une source de tâches.",
     "connectSource": "Connecter {label}",
+    "enableSource": "Activer {label}",
+    "pickTracker": "Choisir un gestionnaire de tickets",
     "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau, pour que le bug retenu ait un endroit où atterrir.",
     "tracker": "Gestionnaire de tickets",
     "board": "Tableau",

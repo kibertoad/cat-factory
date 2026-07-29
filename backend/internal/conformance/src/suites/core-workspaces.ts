@@ -247,6 +247,26 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.body.error.code).toBe('not_found')
     })
 
+    // The request-correlation middleware is FACADE-mounted, so "is it wired here" is exactly the
+    // kind of question only a cross-runtime assertion answers: a facade that forgot
+    // `mountRequestLogging` still serves every route, it just silently loses the id a user
+    // quotes back and the line an operator greps. Asserted through a REFUSED request, because
+    // the envelope is where the id becomes user-visible.
+    it('correlates a refused request with an id, adopting the caller-supplied one', async () => {
+      const { call } = harness.makeApp()
+
+      const minted = await call<{ error: { requestId?: string } }>('GET', '/workspaces/missing')
+      expect(minted.body.error.requestId).toEqual(expect.any(String))
+
+      const propagated = await call<{ error: { requestId?: string } }>(
+        'GET',
+        '/workspaces/missing',
+        undefined,
+        { 'X-Request-Id': 'conformance-req-1' },
+      )
+      expect(propagated.body.error.requestId).toBe('conformance-req-1')
+    })
+
     it('isolates blocks between boards', async () => {
       const { createWorkspace } = harness.makeApp()
       const a = await createWorkspace()

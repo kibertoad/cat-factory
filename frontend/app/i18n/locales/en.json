@@ -3758,10 +3758,12 @@
     "taskDocs": {
       "heading": "Context documents",
       "hint": "Documents attached to this task as context. Their content is given to the agents that work on the task.",
+      "hintInitiative": "Documents attached to this initiative as context. Their content is given to the planning agents that shape it.",
       "attach": "Attach",
       "connectSource": "Connect a source",
       "connectSourceNamed": "Connect {source}",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
+      "emptyInitiative": "Attach a requirement, RFC or PRD so the planning agents read it while shaping this initiative.",
       "attached": "Document attached"
     },
     "templates": {
@@ -3804,11 +3806,13 @@
     "contextIssues": {
       "title": "Context issues",
       "hint": "Tracker issues attached to this task as context. Their content is given to the agents that work on the task.",
+      "hintInitiative": "Tracker issues attached to this initiative as context. Their content is given to the planning agents that shape it.",
       "attach": "Attach",
       "connectSource": "Connect a source",
       "connectSourceNamed": "Connect {source}",
       "attached": "Issue attached",
-      "emptyHint": "Attach a Jira issue so agents see its description and comments while implementing this task."
+      "emptyHint": "Attach a Jira issue so agents see its description and comments while implementing this task.",
+      "emptyHintInitiative": "Attach a Jira issue so the planning agents see its description and comments while shaping this initiative."
     },
     "import": {
       "titleCreate": "Create task from issue",
@@ -3869,6 +3873,8 @@
     "intro": "Scan a tracker board for open, unassigned bugs and rank them by impact against how hard each looks to fix. Pick one and it becomes a task running the bug-fix pipeline.",
     "connectFirst": "Connect or enable a task source first.",
     "connectSource": "Connect {label}",
+    "enableSource": "Enable {label}",
+    "pickTracker": "Pick a tracker",
     "needFrameFirst": "Add a service frame to the board first, so a picked-up bug has somewhere to land.",
     "tracker": "Tracker",
     "board": "Board",

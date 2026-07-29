@@ -107,7 +107,10 @@ describe('interviewStepReached', () => {
   it('degrades to true when the run is not cached yet', () => {
     // Over-reporting "still preparing" would leave a genuinely parked interview looking dormant,
     // which is worse than generic copy — so an unknown run keeps the pre-existing reading.
+    // Both spellings of "no run": `useResultViewRunMeta` resolves to null, a store lookup to
+    // undefined, and the two windows use one each.
     expect(interviewStepReached(undefined, INITIATIVE_INTERVIEWER_KIND)).toBe(true)
+    expect(interviewStepReached(null, INITIATIVE_INTERVIEWER_KIND)).toBe(true)
   })
 
   it('degrades to true for a chain carrying no such step', () => {

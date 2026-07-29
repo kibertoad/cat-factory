@@ -46,9 +46,13 @@ export const DOC_INTERVIEWER_KIND = 'doc-interviewer'
  * Degrades to `true` (today's reading, no `preparing` claim) when the run is not cached yet or the
  * chain carries no such step: a phase that over-reports "we are still preparing" would leave a
  * genuinely-parked interview looking dormant, which is worse than the copy being generic.
+ *
+ * Takes `null` as well as `undefined` because the two window seams spell "no run" differently —
+ * `useResultViewRunMeta` resolves to `null`, a store lookup to `undefined` — and both mean the same
+ * thing here.
  */
 export function interviewStepReached(
-  run: Pick<ExecutionInstance, 'steps' | 'currentStep'> | undefined,
+  run: Pick<ExecutionInstance, 'steps' | 'currentStep'> | null | undefined,
   agentKind: string,
 ): boolean {
   if (!run) return true

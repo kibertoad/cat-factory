@@ -1,10 +1,10 @@
 import {
   type Clock,
   type IdGenerator,
-  DEFAULT_WORKSPACE_SETTINGS,
+  type StoreAgentContextGate,
+  createStoreAgentContextGate,
   noopLogger,
   normalizeCallPhase,
-  readCachedWorkspaceSettings,
   redactSecrets,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -52,7 +52,7 @@ export interface LlmObservabilityServiceDependencies {
   workspaceSettingsRepository?: WorkspaceSettingsRepository
   /**
    * The shared {@link AppCaches.workspaceSettings} slice. When wired alongside the settings
-   * repository, {@link bodiesEnabled} resolves the row through it — this read runs per
+   * repository, the shared body-capture gate resolves the row through it — this read runs per
    * recorded LLM call, so caching it (invalidated by `WorkspaceSettingsService.update`)
    * avoids a DB read per call. Absent ⇒ read live.
    */
@@ -156,8 +156,12 @@ export class LlmObservabilityService {
   private readonly clock: Clock
   private readonly recordPrompts: boolean
   private readonly traceSink?: LlmTraceSink
-  private readonly workspaceSettings?: WorkspaceSettingsRepository
-  private readonly workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * The per-workspace `storeAgentContext` half of the double gate, built from the SHARED kernel
+   * factory the inline path also uses so the two cannot drift apart again — they already had,
+   * and the inline half was exporting the bodies of a workspace that had opted out.
+   */
+  private readonly bodiesEnabled: StoreAgentContextGate
   private readonly log: Logger
 
   constructor({
@@ -175,8 +179,10 @@ export class LlmObservabilityService {
     this.clock = clock
     this.recordPrompts = recordPrompts
     this.traceSink = traceSink
-    this.workspaceSettings = workspaceSettingsRepository
-    this.workspaceSettingsCache = workspaceSettingsCache
+    this.bodiesEnabled = createStoreAgentContextGate({
+      repository: workspaceSettingsRepository,
+      cache: workspaceSettingsCache,
+    })
     this.log = (logger ?? noopLogger).child({ service: 'llmObservability' })
   }
 
@@ -278,22 +284,6 @@ export class LlmObservabilityService {
         ),
       )
     }
-  }
-
-  /**
-   * Whether prompt/response bodies may be stored for this workspace. True when no settings
-   * source is wired (defer to the deployment switch); otherwise the workspace's
-   * `storeAgentContext` toggle (defaulting on for a workspace with no saved settings).
-   */
-  private async bodiesEnabled(workspaceId: string): Promise<boolean> {
-    if (!this.workspaceSettings) return true
-    const settings =
-      (await readCachedWorkspaceSettings(
-        this.workspaceSettingsCache,
-        this.workspaceSettings,
-        workspaceId,
-      )) ?? DEFAULT_WORKSPACE_SETTINGS
-    return settings.storeAgentContext
   }
 
   /**
