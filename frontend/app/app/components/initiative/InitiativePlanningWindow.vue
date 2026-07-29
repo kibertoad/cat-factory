@@ -10,16 +10,25 @@
 // (`ui.openInitiativePlanning`) or as the interviewer step's result view. Live `initiative`
 // stream events patch the store, so an open window follows the interview as it progresses.
 //
+// An interview runs over MULTIPLE ROUNDS and the entity keeps the settled ones, so the list is a
+// mix of what the human still owes an answer and what they already dealt with. It renders pending
+// first (`orderInterviewQuestions`) — see the `order` snapshot below for why that is recomputed per
+// round rather than live.
+//
 // CONTINUE/PROCEED ARE ASYNC. They only record the intent on the parked step and wake the durable
 // driver; the interviewer LLM then runs for as long as it takes, and the response carries the
 // PRE-resume entity. So the window must not key its body on the entity alone — that renders
 // identically before and after the click, which reads as the button having done nothing. The
 // phase below folds the planning RUN's status in, so the wait is visible and a failed pass says
 // so instead of leaving the human staring at questions they already submitted.
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
 import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
-import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
+import {
+  INITIATIVE_STATUS_LABEL_KEYS,
+  isPendingQuestion,
+  orderInterviewQuestions,
+} from '~/utils/initiative'
 import { interviewGatePhase } from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
@@ -41,9 +50,7 @@ const questions = computed(() =>
   (initiative.value?.qa ?? []).map((q, i) => ({ ...q, key: q.id ?? `q-${i}` })),
 )
 /** Questions still needing an answer: not dismissed, and not yet answered (mirrors backend). */
-const pending = computed(() =>
-  questions.value.filter((q) => q.status !== 'dismissed' && !(q.answer ?? '').trim()),
-)
+const pending = computed(() => questions.value.filter(isPendingQuestion))
 
 // Per-question answer drafts, seeded from the entity and refreshed as new rounds arrive
 // without clobbering an answer the human is mid-edit on.
@@ -57,6 +64,28 @@ watch(
   },
   { immediate: true },
 )
+
+/**
+ * Render order (pending first — see `orderInterviewQuestions`), re-snapshotted ONLY when the
+ * question SET changes, i.e. when a round lands. Deriving it live from the answers instead would
+ * yank a question out from under the human the moment they blurred its textarea and shuffle
+ * everything below it up, while they are reading down the list. Re-snapshotting per ROUND rather
+ * than per question is what keeps a window left open across rounds correct: a question answered in
+ * round one has to sink below round two's new ones, which a rank frozen at first sight never would.
+ */
+const order = ref<string[]>([])
+watch(
+  () => questions.value.map((q) => q.key).join('|'),
+  () => {
+    order.value = orderInterviewQuestions(questions.value).map((q) => q.key)
+  },
+  { immediate: true },
+)
+const orderedQuestions = computed(() => {
+  const rank = new Map(order.value.map((key, i) => [key, i]))
+  // A question the snapshot has not seen is by definition new, so it is pending and sorts first.
+  return [...questions.value].sort((a, b) => (rank.get(a.key) ?? -1) - (rank.get(b.key) ?? -1))
+})
 
 const resuming = computed(() => initiatives.resuming)
 
@@ -221,7 +250,7 @@ async function onDiscard() {
         <!-- Interview questions — the shared clarification surface (answer / not-relevant /
                  recommend), reused with the requirements-review window. -->
         <ul v-else class="space-y-4">
-          <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
+          <li v-for="q in orderedQuestions" :key="q.key" data-testid="initiative-planning-question">
             <ClarificationItem
               v-model:answer="drafts[q.key]"
               :prompt="q.question"

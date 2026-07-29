@@ -6,6 +6,7 @@ import type {
   InitiativePhase,
   InitiativePresetDescriptor,
   InitiativePresetInputs,
+  InitiativeQa,
   InitiativeStatus,
 } from '~/types/domain'
 
@@ -109,6 +110,37 @@ export function initiativeProgress(
     settled: items.filter((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status)).length,
     total: items.length,
   }
+}
+
+/**
+ * Whether a planning-interview question still needs a human answer: not dismissed, and no answer
+ * yet. Mirrors the backend `isPendingQuestion` (orchestration `initiative.logic.ts`) — the rule the
+ * interviewer, the retained-across-rounds digest and the continue gate all key off — so the window's
+ * pending list, its unanswered counter and its render order can never disagree with the engine
+ * about what is still open.
+ */
+export function isPendingQuestion(q: Partial<Pick<InitiativeQa, 'answer' | 'status'>>): boolean {
+  return q.status !== 'dismissed' && (q.answer ?? '').trim().length === 0
+}
+
+/**
+ * Interview questions in the order the planning window renders them: everything still pending
+ * first, everything already settled (answered, or dismissed as not relevant) after, each group
+ * keeping the interviewer's own chronological order.
+ *
+ * Each round APPENDS its new questions after the digest retained from the previous ones (backend
+ * `applyInterviewQuestions`: `[...retainedQa, ...pending]`), so from round two onwards the only
+ * questions the human still has to act on sit below a growing wall of ones they already settled —
+ * on a long interview, below the fold entirely. This reorders the RENDER only; the stored `qa`
+ * order, which the interviewer prompt and the in-repo tracker digest read, is untouched.
+ */
+export function orderInterviewQuestions<T extends Partial<Pick<InitiativeQa, 'answer' | 'status'>>>(
+  qa: readonly T[],
+): T[] {
+  const pending: T[] = []
+  const settled: T[] = []
+  for (const q of qa) (isPendingQuestion(q) ? pending : settled).push(q)
+  return [...pending, ...settled]
 }
 
 /**
