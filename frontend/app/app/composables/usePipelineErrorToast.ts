@@ -195,6 +195,23 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.prompt_revision_conflict',
     descriptionKey: 'errors.conflict.description.prompt_revision_conflict',
   },
+  // The three ways a recurring SCHEDULE blocks a pipeline edit (delete / make one-off / enable
+  // bug-intake). No jump action: a schedule is reached through its own frame's inspector, not from
+  // a workspace-level route, so there is no single target to deep-link to — the description names
+  // the remedy instead. What each one must convey is that the fix is on the SCHEDULE and not on the
+  // pipeline the user is looking at, which is the part the refusal alone doesn't make obvious.
+  pipeline_schedule_attached: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_attached',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_attached',
+  },
+  pipeline_schedule_requires_recurring: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_requires_recurring',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_requires_recurring',
+  },
+  pipeline_schedule_intake_unconfigured: {
+    titleKey: 'errors.conflict.title.pipeline_schedule_intake_unconfigured',
+    descriptionKey: 'errors.conflict.description.pipeline_schedule_intake_unconfigured',
+  },
 }
 
 /**

@@ -34,8 +34,17 @@ export interface PipelineHealth {
  */
 export interface RetiredPipelineHealth {
   pipeline: Pipeline
-  /** The live pipeline that supersedes it, when the catalog names one (already resolved to a name). */
-  replacement?: Pipeline
+  /**
+   * The live pipeline that supersedes it, when the catalog names one — resolved to a display name
+   * so the advisory can write "Use {name} instead".
+   *
+   * Deliberately NOT a {@link Pipeline}: the replacement usually is NOT one this workspace stores.
+   * The canonical retirement is "old flow superseded by a NEWLY SHIPPED built-in", and a new
+   * built-in lives in `catalogVersions` with no row until someone reseeds it — it is literally a
+   * {@link NewPipeline} at that moment. Typing this as a stored `Pipeline` made the replacement
+   * unresolvable in exactly the case `replacedBy` exists for, silently dropping the sentence.
+   */
+  replacement?: { id: string; name: string }
 }
 
 /** A brand-new built-in pipeline that appeared in the catalog but isn't in the workspace yet. */
@@ -189,10 +198,30 @@ export function usePipelineHealth() {
       .filter((p) => retiredIds.value.has(p.id))
       .map((pipeline) => {
         const replacementId = retiredIds.value.get(pipeline.id)
-        const replacement = replacementId ? store.getPipeline(replacementId) : undefined
+        const replacement = replacementId ? resolveReplacement(replacementId) : undefined
         return { pipeline, ...(replacement ? { replacement } : {}) }
       }),
   )
+
+  /**
+   * Name the pipeline a retirement points at. Two sources, in order, because a replacement is a
+   * LIVE catalog id and a live catalog id may or may not have been seeded into this workspace yet:
+   * the stored row's authored name when there is one, else the catalog-derived name — the same
+   * `builtinPipelineName` fallback `newPipelines` uses for exactly this "in the catalog, no row
+   * yet" state. Reading only the store would blank the replacement on the most common retirement
+   * (superseded by a newly shipped built-in, which by definition has no row until it is added).
+   *
+   * An id in neither returns undefined and the advisory falls back to the un-named copy: the
+   * backend guards `replacedBy` against naming a non-existent pipeline, but a SPA running against
+   * a newer backend can still be handed one it doesn't know, and inventing a name for it would be
+   * worse than saying nothing.
+   */
+  function resolveReplacement(id: string): { id: string; name: string } | undefined {
+    const stored = store.getPipeline(id)
+    if (stored) return { id, name: stored.name }
+    if (id in store.catalogVersions) return { id, name: builtinPipelineName(id) }
+    return undefined
+  }
 
   // An invalid built-in is reseeded (not deleted) and that also clears any "outdated" flag, so
   // exclude it from the outdated list to avoid offering the same fix twice.

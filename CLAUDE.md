@@ -695,15 +695,27 @@ pipelines look like whenever their package isn't wired.
 - **The two sets are disjoint by construction.** `retiredPipelines()` filters out anything
   `seedPipelines()` still yields, so a live built-in can never be offered a delete and a retired one
   can never be offered a reseed. A kernel unit test guards the hand-authored list against naming a
-  pipeline the builders still ship.
+  pipeline the builders still ship. Note `seedPipelines()` itself does NOT filter — it does not need
+  to, because a retired built-in's definition is deleted — so do not "fix" it by adding one; that
+  would make the tombstone authoritative over the builders and let a stray id delete a live pipeline
+  from every palette.
 - **A deployment retires its OWN pipelines via `PipelineRegistry.retire(id, { replacedBy })`**, the
-  inverse of `register` (each drops the other's entry for that id). It cannot retire a built-in.
+  inverse of `register` (each drops the other's entry for that id). It CANNOT retire a built-in —
+  the live entry wins — and `validateRegistrations` raises `retirement_of_live_pipeline` at boot so
+  that ignored call is never silent. Retiring an id nothing currently defines is legitimate and
+  raises nothing: that is the tombstone for a pipeline an older version of the deployment's own
+  package shipped, and reaching boards that still store the row is the entire point.
 - **`replacedBy` is an ID, never prose** — the backend does not localize copy, so the SPA resolves
-  it to the pipeline's name and writes the sentence. The WHY of a retirement lives in a comment
-  beside its tombstone.
-- **Deleting a pipeline a recurring SCHEDULE points at is refused (409)**, retired or custom alike:
-  every future fire resolves it by id, so the breakage would be invisible — the work just stops.
-  A task pinned to a deleted pipeline is fine by contrast: it falls back to the run-time picker.
+  it to the pipeline's name and writes the sentence. Resolve it against the stored row AND the
+  catalog: the usual retirement is superseded-by-a-newly-shipped-built-in, and a new built-in has no
+  row until someone adds it, so a store-only lookup blanks the replacement in the main case. The WHY
+  of a retirement lives in a comment beside its tombstone.
+- **Deleting a pipeline a recurring SCHEDULE points at is refused (409)**, retired or custom alike,
+  and a PAUSED schedule counts (pausing is not detaching): every future fire resolves it by id, so
+  the breakage would be invisible — the work just stops. A task pinned to a deleted pipeline is fine
+  by contrast: it falls back to the run-time picker. All three schedule refusals (this one plus
+  `update`'s one-off and bug-intake edits) carry a `details.reason`, so the SPA words them from the
+  catalog rather than surfacing the English message.
 
 ### Repo bootstrap (async + observable + board-integrated)
 

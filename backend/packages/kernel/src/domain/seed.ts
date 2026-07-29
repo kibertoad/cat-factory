@@ -896,8 +896,24 @@ export interface RetiredPipeline {
   replacedBy?: string
 }
 
-/** The built-in catalog plus a deployment's registered pipelines, before the live/retired split. */
-function allPipelines(registry?: PipelineRegistry): Pipeline[] {
+/**
+ * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
+ * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
+ * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
+ * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
+ * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
+ * instance so a deployment's custom pipelines are seeded into every new workspace.
+ *
+ * There is deliberately NO retirement filter here, and that is the whole reason retirement costs
+ * nothing at the ~40 call sites: a retired built-in is one whose DEFINITION was deleted from the
+ * builders above, so it is already absent from what this returns. The tombstone in
+ * {@link buildRetiredPipelines} is a second, independent assertion — it says "this id used to be
+ * ours and is now obsolete", which is knowledge no filter over the live catalog could reconstruct.
+ * Retiring a built-in is therefore TWO edits, and `retiredPipelines` drops a tombstone whose
+ * definition is still present rather than papering over a half-done one (a kernel unit test and the
+ * `retirement_of_live_pipeline` boot check both catch that state).
+ */
+export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
   const builtins: Pipeline[] = [
     ...buildDeliveryPipelines(),
     ...buildBuildVariantPipelines(),
@@ -918,23 +934,6 @@ function allPipelines(registry?: PipelineRegistry): Pipeline[] {
 }
 
 /**
- * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
- * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
- * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
- * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
- * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
- * instance so a deployment's custom pipelines are seeded into every new workspace.
- *
- * RETIRED pipelines ({@link retiredPipelines}) are excluded here, which is what makes retirement
- * cost nothing at the call sites: a withdrawn built-in is not seeded into a new workspace, does not
- * appear in the snapshot's catalog versions (so the SPA never offers to ADD it back), and
- * `PipelineService.reseed` refuses it because it resolves nothing.
- */
-export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
-  return allPipelines(registry)
-}
-
-/**
  * The built-in pipelines withdrawn from the catalog — the tombstones a workspace seeded before the
  * withdrawal can act on ({@link buildRetiredPipelines}, plus anything a deployment retired on its
  * own {@link PipelineRegistry}).
@@ -947,6 +946,12 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
 export function retiredPipelines(registry?: PipelineRegistry): RetiredPipeline[] {
   const builtins = buildRetiredPipelines()
   const merged = registry ? registry.mergeRetired(builtins) : builtins
+  // Nothing to filter ⇒ don't rebuild the catalog. This is the case on EVERY deployment that has
+  // retired nothing (including, today, the built-in list), and it sits on `WorkspaceService.
+  // snapshot()` — the board-load path, which already builds the catalog once for
+  // `pipelineCatalogVersions`. Without this the feature doubles that work forever to filter an
+  // empty list.
+  if (merged.length === 0) return merged
   const live = new Set(seedPipelines(registry).map((p) => p.id))
   return merged.filter((p) => !live.has(p.id))
 }

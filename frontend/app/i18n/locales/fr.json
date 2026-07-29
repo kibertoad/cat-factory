@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Gestionnaire d'environnement non configuré",
         "env_test_no_vcs": "Fournisseur Git non connecté",
         "env_test_connection_failed": "Échec de la connexion à l'environnement",
-        "prompt_revision_conflict": "Invite modifiée par quelqu'un d'autre"
+        "prompt_revision_conflict": "Invite modifiée par quelqu'un d'autre",
+        "pipeline_schedule_attached": "Une planification récurrente utilise ce pipeline",
+        "pipeline_schedule_requires_recurring": "Une planification récurrente exige ce pipeline",
+        "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun.",
         "env_test_connection_failed": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion.",
         "env_test_connection_failed_detail": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion : {detail}. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion.",
-        "prompt_revision_conflict": "Une autre modification de cette invite est arrivée en premier. Rechargez-la et réappliquez la vôtre par-dessus."
+        "prompt_revision_conflict": "Une autre modification de cette invite est arrivée en premier. Rechargez-la et réappliquez la vôtre par-dessus.",
+        "pipeline_schedule_attached": "Une planification récurrente pointe encore vers ce pipeline, et chaque exécution qu'elle lance le résout par son identifiant. Détachez ou supprimez d'abord cette planification, puis retirez le pipeline.",
+        "pipeline_schedule_requires_recurring": "Une planification récurrente pointe encore vers ce pipeline. Le limiter à une exécution unique casserait chaque exécution future. Détachez d'abord cette planification.",
+        "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

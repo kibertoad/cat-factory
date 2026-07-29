@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
         "env_test_no_vcs": "Git sağlayıcısı bağlı değil",
         "env_test_connection_failed": "Ortam bağlantısı başarısız",
-        "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi"
+        "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi",
+        "pipeline_schedule_attached": "Yinelenen bir zamanlama bu hattı kullanıyor",
+        "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama bu hatta ihtiyaç duyuyor",
+        "pipeline_schedule_intake_unconfigured": "Zamanlamada sorun alımı yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
         "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
         "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
-        "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın."
+        "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın.",
+        "pipeline_schedule_attached": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor ve başlattığı her çalışma hattı kimliğiyle çözümlüyor. Önce o zamanlamayı ayırın veya silin, sonra hattı kaldırın.",
+        "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor, bu yüzden yalnızca tek seferlik yapmak gelecekteki her çalışmayı bozar. Önce o zamanlamayı ayırın.",
+        "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

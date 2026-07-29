@@ -13,7 +13,12 @@ const { t } = useI18n()
 const ui = useUiStore()
 const pipelines = usePipelinesStore()
 const { invalid, outdated, newPipelines, retired, hasIssues } = usePipelineHealth()
-const toast = useToast()
+// Failures go through the shared conflict presenter rather than a raw `toast.add`: the refusals
+// this screen actually provokes are 409s (a recurring schedule still points at the pipeline), and
+// those carry a machine-readable `details.reason` the presenter turns into translated remedy copy.
+// Dumping `error.message` instead would put untranslated backend prose in front of every non-English
+// user — on the one screen whose whole purpose is telling them what to do next.
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.pipelineHealthOpen,
@@ -27,17 +32,14 @@ const busy = ref<Set<string>>(new Set())
 const isBusy = (id: string) => busy.value.has(id)
 const anyBusy = computed(() => busy.value.size > 0)
 
-async function run(id: string, action: () => Promise<unknown>, failTitle: string) {
+/** `failTitleKey` is an i18n KEY (not resolved copy) — `present` uses it only when the failure has
+ *  no mapped conflict reason of its own. */
+async function run(id: string, action: () => Promise<unknown>, failTitleKey: string) {
   busy.value = new Set(busy.value).add(id)
   try {
     await action()
   } catch (e) {
-    toast.add({
-      title: failTitle,
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, failTitleKey)
   } finally {
     const next = new Set(busy.value)
     next.delete(id)
@@ -46,15 +48,15 @@ async function run(id: string, action: () => Promise<unknown>, failTitle: string
 }
 
 const reseed = (id: string) =>
-  run(id, () => pipelines.reseed(id), t('pipeline.health.toast.reseedFailed'))
+  run(id, () => pipelines.reseed(id), 'pipeline.health.toast.reseedFailed')
 const remove = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), t('pipeline.health.toast.deleteFailed'))
+  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.deleteFailed')
 // Same call as `remove`, different failure copy: the retired section says "Remove" (the pipeline is
 // gone from the catalog), so a failure toast reading "could not DELETE" would name an action the
-// user was never offered. The likely failure is also specific — a recurring schedule still points
-// at it, which the backend reports as a 409 whose message names the fix.
+// user was never offered. This is only the FALLBACK title — the likely failure here is a recurring
+// schedule still pointing at the pipeline, which arrives as a 409 the presenter words itself.
 const removeRetired = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), t('pipeline.health.toast.removeFailed'))
+  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.removeFailed')
 
 // Removals are deliberately per-row with no bulk twin, unlike the reseeds below: a reseed restores
 // what the catalog says, while a delete is the one irreversible action on this screen (a built-in

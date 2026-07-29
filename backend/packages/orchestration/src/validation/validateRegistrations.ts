@@ -164,8 +164,10 @@ export function collectRegistrationProblems(
   //    output likely can't feed those post-ops from `result.custom`. Heuristic, so a warning.
   problems.push(...checkPostOpsStructuredOutput(agentKinds, registry))
 
-  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
+  // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc), and pipeline
+  //    RETIREMENTS that name a still-live pipeline (an inert `retire()` call).
   problems.push(...checkPipelineKinds(opts, registeredKindIds, gateKinds, builtInHelperKinds))
+  problems.push(...checkPipelineRetirements(opts))
 
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
@@ -355,6 +357,43 @@ function checkPipelineKinds(
     }
   }
   return problems
+}
+
+/**
+ * Section 4b of {@link collectRegistrationProblems}: a registry RETIREMENT that names a pipeline the
+ * live catalog still ships. `retiredPipelines()` keeps a live pipeline over a tombstone for it —
+ * deliberately, or a deployment could empty the curated built-in palette one `retire()` call at a
+ * time — so such a call does exactly nothing. That is the failure this check exists for: the
+ * deployment believes it withdrew a pipeline, every workspace keeps offering it, and nothing
+ * anywhere says why. An ERROR rather than a warning because there is no forward state in which the
+ * call starts working (unlike `skills_without_container`, which a container surface would fix); it
+ * is the same shape as a typo'd id, and boot is where the author can still act on it.
+ *
+ * Retiring an id that resolves to NOTHING is not a problem and must not be reported: a tombstone for
+ * a pipeline an older version of the deployment's own package shipped is the intended use — the
+ * definition is long gone from their code, and the whole point is to reach the boards that still
+ * store the row.
+ */
+function checkPipelineRetirements(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.pipelineRegistry
+  if (!registry) return []
+  const retired = registry.retired()
+  if (retired.length === 0) return []
+  // Resolve the live catalog THROUGH the registry, so a deployment that both registers and retires
+  // is judged on its own merged catalog rather than kernel's built-ins alone.
+  const live = new Set(seedPipelines(registry).map((p) => p.id))
+  return retired
+    .filter((pipeline) => live.has(pipeline.id))
+    .map((pipeline) => ({
+      severity: 'error' as const,
+      code: 'retirement_of_live_pipeline',
+      message:
+        `Pipeline "${pipeline.id}" is retired on the pipeline registry but the live catalog still ` +
+        `ships it, so the retirement has no effect. A deployment can only withdraw its OWN ` +
+        `registered pipelines; withdrawing a BUILT-IN means deleting its definition from kernel's ` +
+        `seed builders and naming it in buildRetiredPipelines(). Drop the retire() call or remove ` +
+        `the definition that keeps it live.`,
+    }))
 }
 
 /**

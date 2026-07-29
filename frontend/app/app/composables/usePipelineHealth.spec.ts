@@ -195,7 +195,28 @@ describe('usePipelineHealth', () => {
     const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
     const live = builtin(['coder', 'reviewer'], { id: 'pl_simple', name: 'Simple', version: 1 })
     const { retired } = scan([stale, live], {}, [{ id: 'pl_gone', replacedBy: 'pl_simple' }])
-    expect(retired.value[0]!.replacement?.name).toBe('Simple')
+    expect(retired.value[0]!.replacement).toEqual({ id: 'pl_simple', name: 'Simple' })
+  })
+
+  it('names a replacement that is in the catalog but NOT yet stored on this board', () => {
+    // The canonical retirement: an old flow superseded by a NEWLY SHIPPED built-in. The replacement
+    // is in `catalogVersions` with no row until someone adds it — it is simultaneously a
+    // `newPipelines` entry — so resolving only against stored pipelines silently dropped the
+    // "Use X instead" sentence in exactly the case `replacedBy` exists to serve.
+    const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const { retired, newPipelines } = scan([stale], { pl_bug_triage: 1 }, [
+      { id: 'pl_gone', replacedBy: 'pl_bug_triage' },
+    ])
+    expect(newPipelines.value.map((p) => p.id)).toContain('pl_bug_triage')
+    expect(retired.value[0]!.replacement).toEqual({ id: 'pl_bug_triage', name: 'bug triage' })
+  })
+
+  it('leaves the replacement unnamed when the id resolves nowhere', () => {
+    // A SPA running against a newer backend can be handed a `replacedBy` it knows nothing about.
+    // The advisory falls back to the un-named copy rather than inventing a name for it.
+    const stale = builtin(['coder'], { id: 'pl_gone', name: 'Old flow', version: 1 })
+    const { retired } = scan([stale], {}, [{ id: 'pl_gone', replacedBy: 'pl_from_the_future' }])
+    expect(retired.value[0]!.replacement).toBeUndefined()
   })
 
   it('keeps an INVALID retired built-in out of the invalid list (its Reseed could only fail)', () => {

@@ -4636,7 +4636,10 @@
         "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
         "env_test_no_vcs": "Git-Anbieter nicht verbunden",
         "env_test_connection_failed": "Umgebungsverbindung fehlgeschlagen",
-        "prompt_revision_conflict": "Prompt von jemand anderem geändert"
+        "prompt_revision_conflict": "Prompt von jemand anderem geändert",
+        "pipeline_schedule_attached": "Wiederkehrender Zeitplan nutzt diese Pipeline",
+        "pipeline_schedule_requires_recurring": "Wiederkehrender Zeitplan braucht diese Pipeline",
+        "pipeline_schedule_intake_unconfigured": "Zeitplan ohne Ticket-Erfassung"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -4661,7 +4664,10 @@
         "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden.",
         "env_test_connection_failed": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
         "env_test_connection_failed_detail": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden: {detail}. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
-        "prompt_revision_conflict": "Eine andere Änderung an diesem Prompt war zuerst da. Laden Sie ihn neu und wenden Sie Ihre Änderung darauf erneut an."
+        "prompt_revision_conflict": "Eine andere Änderung an diesem Prompt war zuerst da. Laden Sie ihn neu und wenden Sie Ihre Änderung darauf erneut an.",
+        "pipeline_schedule_attached": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline, und jeder von ihm gestartete Lauf löst die Pipeline über ihre ID auf. Lösen oder löschen Sie zuerst diesen Zeitplan und entfernen Sie danach die Pipeline.",
+        "pipeline_schedule_requires_recurring": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline. Sie nur einmalig zu machen würde jeden künftigen Lauf unterbrechen. Lösen Sie zuerst diesen Zeitplan.",
+        "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

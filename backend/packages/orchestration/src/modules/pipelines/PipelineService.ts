@@ -295,6 +295,7 @@ export class PipelineService {
       if (schedules.some((s) => s.pipelineId === id)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule, so it cannot be made one-off. Detach the schedule first.',
+          'pipeline_schedule_requires_recurring',
         )
       }
     }
@@ -313,6 +314,7 @@ export class PipelineService {
       if (schedules.some((s) => s.pipelineId === id && !s.issueIntake)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule with no issue-intake configuration, so a bug-intake step cannot be enabled. Configure issue intake on the schedule first.',
+          'pipeline_schedule_intake_unconfigured',
         )
       }
     }
@@ -413,11 +415,17 @@ export class PipelineService {
     // someone notices the work stopped. Refuse and point at the schedule — the same disposition
     // `update` takes for the availability/bug-intake edits that would strand a schedule. Applies to
     // a custom pipeline as much as a retired built-in: the fire path cannot tell them apart.
+    //
+    // A DISABLED schedule blocks the delete too, deliberately: `enabled` is a pause button, so
+    // filtering on it would let a delete strand a schedule whose owner re-enables it next week —
+    // and the breakage would then be attributed to the re-enable, not to this. The cost is that
+    // finishing a retirement cleanup means deleting a paused schedule, which the message names.
     if (this.pipelineScheduleRepository) {
       const schedules = await this.pipelineScheduleRepository.list(workspaceId)
       if (schedules.some((s) => s.pipelineId === id)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule, so it cannot be deleted. Detach the schedule first.',
+          'pipeline_schedule_attached',
         )
       }
     }

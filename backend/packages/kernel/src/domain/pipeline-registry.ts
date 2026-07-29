@@ -47,6 +47,13 @@ export class PipelineRegistry {
    * Retiring an id this registry had registered drops the registration (the inverse of
    * {@link register}), so a deployment can withdraw a pipeline by editing one line rather than
    * having to also delete its definition.
+   *
+   * Retiring an id the BUILT-IN catalog still ships has no effect — `retiredPipelines` keeps a live
+   * pipeline, or a deployment could empty the curated palette one id at a time. That is deliberate,
+   * but it must never be SILENT: `validateRegistrations` raises `retirement_of_live_pipeline` at
+   * boot, so the deployment learns its call did nothing at startup rather than from a cleanup that
+   * never appeared. Retiring an id NOTHING currently defines is legitimate by contrast — that is
+   * exactly the tombstone for a pipeline an older version of the deployment's package shipped.
    */
   retire(id: string, options?: { replacedBy?: string }): void {
     const at = this.extra.findIndex((p) => p.id === id)

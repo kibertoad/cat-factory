@@ -413,12 +413,34 @@ describe('PipelineService — retirement (removing a built-in that is no longer 
 
   it('refuses to delete a pipeline a recurring schedule still points at', async () => {
     // Every future fire resolves the pipeline by id, so deleting it would break the schedule
-    // silently — the failure only shows up as work that quietly stopped happening.
+    // silently — the failure only shows up as work that quietly stopped happening. The refusal
+    // carries `details.reason`, not just prose: the SPA maps that to translated remedy copy, and
+    // the raw message is English-only.
     const store = storeWithRetiredCopy()
     await expect(
       svc(store, {
         pipelineRegistry: retiringRegistry(),
         pipelineScheduleRepository: scheduleRepo([RETIRED]),
+      }).remove(WS, RETIRED),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      details: { reason: 'pipeline_schedule_attached' },
+    })
+    expect(store.has(RETIRED)).toBe(true)
+  })
+
+  it('blocks the delete on a DISABLED schedule too', async () => {
+    // `enabled` is a pause button, not a detach: filtering on it would let the delete strand a
+    // schedule whose owner re-enables it later, and the breakage would then look like the
+    // re-enable's fault rather than this deletion's.
+    const store = storeWithRetiredCopy()
+    const paused = {
+      list: async () => [{ id: 'sch_0', pipelineId: RETIRED, enabled: false }],
+    } as unknown as PipelineScheduleRepository
+    await expect(
+      svc(store, {
+        pipelineRegistry: retiringRegistry(),
+        pipelineScheduleRepository: paused,
       }).remove(WS, RETIRED),
     ).rejects.toBeInstanceOf(ConflictError)
     expect(store.has(RETIRED)).toBe(true)
