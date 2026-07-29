@@ -1,5 +1,6 @@
 import type {
   AccountRepository,
+  AgentPromptRepository,
   AgentRunContext,
   Block,
   BlockRepository,
@@ -178,6 +179,13 @@ export interface AgentContextBuilderDeps {
   agentKindRegistry: AgentKindRegistry
   /** App-owned initiative-preset registry: resolves a spawned/planning run's preset steering. */
   initiativePresetRegistry: InitiativePresetRegistry
+  /**
+   * Optional: the workspace's agent system-prompt override log. When wired, each dispatch
+   * resolves the live revision for the kind being run and folds it onto the context, so the
+   * container / inline / consensus executors all send the workspace's own prompt. Absent (or
+   * no revision for the kind) ⇒ the shipped prompt, unchanged.
+   */
+  agentPrompts?: AgentPromptRepository
   documents?: DocumentRepository
   /**
    * Optional: canonicalise a URL named in a block's description to the (source,
@@ -315,9 +323,11 @@ export class AgentContextBuilder {
       // only — the kinds that receive the values out of band. Advertised in the tester prompt so
       // the agent knows which env vars are injected; values are resolved separately at dispatch.
       testSecrets,
-      // The service frame's PRE-PR validation checks (walked up the frame chain), forwarded by
-      // the container executor onto a PR-opening coding job body so the harness can run them
-      // against the checkout before it opens the PR. `null` ⇒ the service configured none.
+      // The service frame's validation config (walked up the frame chain), which yields TWO
+      // context fields from ONE read: the PRE-PR validation checks, forwarded onto a PR-opening
+      // coding job body so the harness runs them before it opens the PR; and the DEPENDENCY
+      // PREPOPULATION install, forwarded onto EVERY dispatch that gets a checkout so the agent
+      // starts against a tree whose dependencies are present. `{}` ⇒ the service declared neither.
       validationChecks,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
@@ -335,6 +345,11 @@ export class AgentContextBuilder {
       // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
       // resolve — a step asked to apply a skill must never run against nothing.
       runSkills,
+      // The workspace's own system prompt for the kind being dispatched, when it edited one
+      // from the pipeline builder. Resolved HERE — once per dispatch, in the engine — rather
+      // than in each executor, so the container / inline / consensus paths cannot disagree
+      // about which prompt a step ran under.
+      systemPromptOverride,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -355,6 +370,7 @@ export class AgentContextBuilder {
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
+      this.resolveSystemPromptOverride(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
@@ -384,6 +400,7 @@ export class AgentContextBuilder {
       // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
       ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
       isFinalStep,
+      ...systemPromptOverride,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.
       // Gated on the EFFECTIVE dispatched kind matching the step's own kind, so a HELPER
@@ -434,6 +451,8 @@ export class AgentContextBuilder {
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
       ...(testSecrets.length ? { testSecrets } : {}),
+      // Spreads BOTH the pre-PR checks and the dependency-prepopulation install — one frame-chain
+      // read, two independently-gated context fields (see `validationChecksFor`).
       ...validationChecks,
       ...reproduction,
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
@@ -639,11 +658,22 @@ export class AgentContextBuilder {
   private async validationChecksFor(
     workspaceId: string,
     frame: Block | null,
-  ): Promise<{ validationChecks?: ResolvedValidationChecks }> {
+  ): Promise<{ validationChecks?: ResolvedValidationChecks; dependencyInstall?: string }> {
     if (!frame) return {}
     try {
       const resolved = await this.deps.resolveValidationChecks?.(workspaceId, frame.id)
-      return resolved ? { validationChecks: resolved } : {}
+      if (!resolved) return {}
+      // ONE read yields TWO context fields. The DEPENDENCY PREPOPULATION install shares the
+      // frame's config row, but the container executor gates the two differently: the checks
+      // travel only on a PR-opening dispatch, the install on every dispatch that gets a
+      // checkout. So it is lifted to its own top-level field here rather than left nested,
+      // which would tie prepopulation to the pre-PR gate and silently exclude every explore
+      // kind. Both ride the same spread-ready fragment so the fold at the `buildContext` call
+      // site stays branch-free (see this method's contract above).
+      return {
+        validationChecks: resolved,
+        ...(resolved.dependencyInstall ? { dependencyInstall: resolved.dependencyInstall } : {}),
+      }
     } catch {
       // A config-store read failure must never wedge a run — a mothership node whose server
       // doesn't reflect this repository, or a transient store outage, would otherwise fail EVERY
@@ -1033,6 +1063,34 @@ export class AgentContextBuilder {
       step.selectedFragmentIds = undefined
       return null
     }
+  }
+
+  /**
+   * The workspace's live system prompt for the kind being dispatched, or undefined to run the
+   * shipped one. One point read per dispatch, in the same wave as the rest of the context.
+   *
+   * The head revision's `text` is `null` when the workspace deliberately went BACK to the
+   * built-in — a real state, distinct from never having edited the kind, which is why it is
+   * recorded rather than deleted. Both resolve to "no override" here, so a revert keeps
+   * tracking the shipped prompt as the product bumps it instead of pinning a stale copy.
+   *
+   * Also PINS the resolved revision onto the step (like {@link resolveSkillsForStep} does for
+   * catalog skills), because the log is append-only: re-reading it at any later point — a
+   * Kaizen grading, a debug read, a post-mortem — would answer about whatever landed since,
+   * not about what this step actually ran.
+   */
+  private async resolveSystemPromptOverride(
+    workspaceId: string,
+    agentKind: string,
+    step: PipelineStep,
+  ): Promise<{ systemPromptOverride?: string }> {
+    const head = await this.deps.agentPrompts?.head(workspaceId, agentKind)
+    // Cleared, not left stale: a re-dispatch after the workspace reverted must not keep
+    // reporting the revision the previous attempt ran under.
+    step.promptRevision = head?.text ? head.revision : undefined
+    // Returns the SPREAD-READY slice (like `buildRevisionContext`) rather than a nullable value,
+    // so the context literal stays a flat spread instead of gaining another conditional.
+    return head?.text ? { systemPromptOverride: head.text } : {}
   }
 
   /**

@@ -511,7 +511,8 @@
         "env_test_infraless": "Test edilecek bir şey yok",
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
         "env_test_no_vcs": "Git sağlayıcısı bağlı değil",
-        "env_test_connection_failed": "Ortam bağlantısı başarısız"
+        "env_test_connection_failed": "Ortam bağlantısı başarısız",
+        "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -535,7 +536,8 @@
         "env_test_not_provisionable_type_mismatch": "Birden fazla ortam işleyicisi bu hizmetin sağlama türüyle eşleşebilir. Tam olarak biri çözümlensin diye bu hizmet için bir manifest id sabitle ya da Altyapı → Test ortamları bölümündeki çakışan işleyiciyi kaldır.",
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
         "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
-        "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin."
+        "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
+        "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1090,6 +1092,8 @@
     "validationChecks": {
       "title": "PR öncesi doğrulama",
       "sectionHint": "Kodlayıcı işini bitirdikten sonra ve bir çekme isteği açılmadan önce çalışma kopyası üzerinde çalıştırılan komutlar. Bir hata düzeltilmesi için aracıya geri verilir; yalnızca sorunsuz bir çalışma kopyası çekme isteği açar.",
+      "dependencyInstall": "Bağımlılık kurulumu",
+      "dependencyInstallHint": "Aracı başlamadan önce çalışır",
       "hint": "Her komut bu hizmetin çalışma kopyasında sırayla `sh -c` ile çalıştırılır. Denetimi değil kodu düzeltin — aracıya denetimleri zayıflatmaması söylenir.",
       "clear": "Temizle",
       "configNoun": "doğrulama denetimleri",
@@ -1109,6 +1113,7 @@
         "action": "Algıla",
         "hint": "Bu hizmetin deposundan denetimler öner",
         "added": "{count} denetim eklendi | {count} denetim eklendi",
+        "installOnly": "Bağımlılık kurulumu dolduruldu",
         "found": "{ecosystems} algılandı.",
         "capped": "Bazı öneriler dışarıda bırakıldı — bir hizmet en fazla {max} denetim alır.",
         "nothingNew": "Eklenecek bir şey yok",
@@ -3931,7 +3936,9 @@
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
-      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin."
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
+      "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
+      "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş"
     },
     "progress": {
       "status": {
@@ -4003,6 +4010,41 @@
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
         "deleteFailed": "Pipeline silinemedi"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Sistem istemi: {agent}",
+    "description": "Bu çalışma alanındaki tüm çalıştırmalar için bu ajana verilen yönergeyi değiştirir.",
+    "customized": "Düzenlendi",
+    "usingBuiltin": "Yerleşik",
+    "managedNotice": "Platform, burada kaydettiğiniz her şeye kendi düzenlenemez kurallarını ekler.",
+    "showAppended": "Eklenen metni göster",
+    "hideAppended": "Eklenen metni gizle",
+    "appendedHeading": "Platform tarafından eklenir (düzenlenemez)",
+    "placeholder": "Bu ajanın ne yapması gerektiğini açıklayın.",
+    "save": "Yeni sürüm olarak kaydet",
+    "revert": "Yerleşik metne dön",
+    "loadBuiltin": "Yerleşik metni yükle",
+    "showBuiltin": "Yerleşik metinle karşılaştır",
+    "hideBuiltin": "Yerleşik metni gizle",
+    "restoringFrom": "{n}. sürümden yüklendi. Yeniden etkin yapmak için kaydedin.",
+    "builtinHeading": "Yerleşik istem",
+    "historyHeading": "Sürüm geçmişi",
+    "historyEmpty": "Bu ajan bu çalışma alanında hiç düzenlenmedi.",
+    "live": "Etkin",
+    "restore": "Yükle",
+    "restoreTooltip": "Bu sürümü düzenleyiciye yükle",
+    "revision": {
+      "edit": "Sürüm {n} (düzenlendi)",
+      "restored": "Sürüm {n} ({from}. sürümden geri alındı)",
+      "builtin": "Sürüm {n} (yerleşik metne dönüldü)"
+    },
+    "toast": {
+      "saved": "İstem kaydedildi",
+      "reverted": "Yerleşik isteme dönüldü",
+      "saveFailed": "İstem kaydedilemedi",
+      "loadFailed": "İstem yüklenemedi",
+      "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
     }
   },
   "palette": {
@@ -5033,7 +5075,12 @@
       "forkOf": "Çatal · {name}",
       "newVersionOf": "Yeni sürüm · {name}",
       "saveVersion": "Yeni sürüm kaydet",
-      "hint": "Sevk edilmiş bir temeli çatallamak veya bir adayı sürümlemek için bir prompt seçin. Her kaydetme, teste sokabileceğiniz değiştirilemez bir sürüm ekler."
+      "hint": "Sevk edilmiş bir temeli çatallamak veya bir adayı sürümlemek için bir prompt seçin. Her kaydetme, teste sokabileceğiniz değiştirilemez bir sürüm ekler.",
+      "liveInWorkspace": "Etkin",
+      "fromWorkspace": "Çalışma alanınız",
+      "promoteTitle": "Bu ajanın etkin istemi yap",
+      "promoted": "Artık {agent} için etkin istem",
+      "promoteFailed": "Bu istem etkinleştirilemedi"
     },
     "fixtureKind": {
       "requirements": "gereksinimler",

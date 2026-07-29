@@ -23,7 +23,7 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/agents'
+import { catFactoryObservability, systemPromptFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import {
@@ -191,7 +191,16 @@ export class SandboxRunService {
           const started = this.deps.clock.now()
           const candidate = await generateText({
             model: provider.resolve(candidateRef),
-            system: prompt.systemText,
+            // Composed exactly as production dispatch composes a workspace prompt override: the
+            // stored text is the BASE (track) prompt, and `systemPromptFor` layers the surface
+            // directives and trait guidance on top. Grading the bare base would measure text that
+            // is never sent — which matters most at the moment a well-graded candidate is promoted
+            // to the live prompt, since the promoted prompt would then behave unlike the graded one.
+            system: systemPromptFor(
+              experiment.agentKind,
+              this.deps.agentKindRegistry,
+              prompt.systemText,
+            ),
             prompt: taskInput,
             temperature: 0.2,
             maxOutputTokens: 4000,

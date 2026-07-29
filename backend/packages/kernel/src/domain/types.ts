@@ -467,6 +467,12 @@ export type {
   ModelPreset,
   CreateModelPresetInput,
   UpdateModelPresetInput,
+  // Per-workspace agent system-prompt overrides (an append-only revision log per kind).
+  AgentPromptRevision,
+  AgentPromptDetail,
+  AgentPromptSummary,
+  SaveAgentPromptInput,
+  PromoteAgentPromptInput,
   // Per-workspace default service-fragment selection (new services inherit it).
   ServiceFragmentDefaults,
   SetServiceFragmentDefaultsInput,

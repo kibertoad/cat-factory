@@ -320,6 +320,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Per-workspace agent system-prompt overrides — durable org state (an edit changes how every
+  // run in the workspace behaves), so `remote` like the preset libraries above. `head` is on the
+  // RUN path, not just the editor's: `AgentContextBuilder` resolves the live revision on EVERY
+  // dispatch, so omitting it would fail an agent step with `unknown_method` rather than merely
+  // dimming a panel.
+  agentPromptRepository: {
+    listRevisions: { scope: { kind: 'workspace', arg: 0 } },
+    listRevisionsByKinds: { scope: { kind: 'workspace', arg: 0 } },
+    listHeads: { scope: { kind: 'workspace', arg: 0 } },
+    head: { scope: { kind: 'workspace', arg: 0 } },
+    append: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // --- Agent-context run-path reads -----------------------------------------------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
   // (it builds the agent context on each dispatch), so these reads are on the run path, not just

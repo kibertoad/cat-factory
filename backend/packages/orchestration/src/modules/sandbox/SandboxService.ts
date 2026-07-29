@@ -1,4 +1,5 @@
 import type {
+  AgentPromptRepository,
   Clock,
   IdGenerator,
   ModelRef,
@@ -34,6 +35,8 @@ import {
   type SandboxAgentKindMeta,
   baselineVersionId,
   sandboxKindMeta,
+  sandboxPromptKinds,
+  workspacePromptVersions,
 } from '@cat-factory/sandbox'
 
 /** A safety ceiling on how many cells one experiment may expand to (cost guard). */
@@ -91,6 +94,12 @@ export interface SandboxOverview {
 
 export interface SandboxServiceDependencies {
   sandboxPromptVersionRepository: SandboxPromptVersionRepository
+  /**
+   * Optional: the workspace's agent-prompt override log, so the browser can offer the prompts the
+   * workspace is ACTUALLY running beside the shipped baselines. Absent (the feature unwired) ⇒
+   * baselines and stored candidates only, exactly as before.
+   */
+  agentPromptRepository?: AgentPromptRepository
   sandboxFixtureRepository: SandboxFixtureRepository
   sandboxExperimentRepository: SandboxExperimentRepository
   sandboxRunRepository: SandboxRunRepository
@@ -133,7 +142,16 @@ export class SandboxService {
 
   // ---- prompt versions ------------------------------------------------------
 
-  /** The shipped baselines (synthetic) followed by stored candidate versions. */
+  /**
+   * The shipped baselines (synthetic), the workspace's OWN prompts (also synthetic), then the
+   * stored candidate versions.
+   *
+   * The workspace rows are what make an experiment mean something on a workspace that has edited a
+   * prompt: without them the only control on offer is what the PRODUCT ships, so a candidate is
+   * measured against text nobody there runs — silently, and while looking entirely correct. They
+   * are projected per request from the revision log rather than synced, so a prompt saved in the
+   * pipeline builder shows up on the next read with nothing to fall behind.
+   */
   async listPrompts(workspaceId: string, agentKind?: string): Promise<SandboxPromptVersion[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const baselines = listBaselines(this.deps.clock.now(), this.deps.agentKindRegistry)
@@ -141,7 +159,35 @@ export class SandboxService {
       ? await this.deps.sandboxPromptVersionRepository.listByKind(workspaceId, agentKind)
       : await this.deps.sandboxPromptVersionRepository.list(workspaceId)
     const baseSlice = agentKind ? baselines.filter((b) => b.agentKind === agentKind) : baselines
-    return [...baseSlice, ...candidates]
+    return [...baseSlice, ...(await this.workspacePrompts(workspaceId, agentKind)), ...candidates]
+  }
+
+  /**
+   * The workspace's own agent prompts for the sandbox's catalog kinds, as synthetic versions.
+   * ONE batched read for every kind (`listRevisionsByKinds`) — a point read per catalog kind would
+   * be the banned N+1 on a surface the browser opens every time.
+   */
+  private async workspacePrompts(
+    workspaceId: string,
+    agentKind?: string,
+  ): Promise<SandboxPromptVersion[]> {
+    const repo = this.deps.agentPromptRepository
+    if (!repo) return []
+    const kinds = sandboxPromptKinds(agentKind)
+    if (kinds.length === 0) return []
+    return workspacePromptVersions(await repo.listRevisionsByKinds(workspaceId, kinds))
+  }
+
+  /**
+   * Resolve a prompt version by id across all three origins, for a caller that holds only an id
+   * (the promote path). Kept here rather than in the controller so the synthetic origins stay an
+   * implementation detail of this service.
+   */
+  async getPrompt(workspaceId: string, id: string): Promise<SandboxPromptVersion | null> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const stored = await this.deps.sandboxPromptVersionRepository.get(workspaceId, id)
+    if (stored) return stored
+    return (await this.listPrompts(workspaceId)).find((version) => version.id === id) ?? null
   }
 
   /** Clone a shipped baseline into a fresh editable candidate lineage at version 1. */

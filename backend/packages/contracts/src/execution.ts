@@ -982,6 +982,19 @@ export const pipelineStepSchema = v.object({
     ),
   ),
   /**
+   * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
+   * {@link skillVersions}, and pinned for the same reason: what a step ran under must be
+   * recoverable afterwards, and the prompt log is append-only, so re-reading it later would
+   * answer about a revision that may have landed since.
+   *
+   * Absent when the kind ran the SHIPPED prompt — including after a deliberate revert, whose
+   * head revision means "follow the built-in" and so pins nothing. So absent reads as "the
+   * product's prompt", never as "unknown", which is what lets Kaizen treat an edited prompt as
+   * its own `(prompt, agent, model)` combo instead of inheriting a verification earned by text
+   * that is no longer running.
+   */
+  promptRevision: v.optional(v.number()),
+  /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
    * a Workflows replay re-attaches to the running job instead of starting a new

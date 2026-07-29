@@ -422,6 +422,9 @@ function rowToValidationConfig(row: ValidationConfigRow): ValidationConfigRecord
     blockId: row.block_id,
     checks: parseValidationChecks(row.checks),
     maxAttempts: row.max_attempts,
+    // Absent rather than empty — mirrors the D1 repository; a stored `''` would otherwise reach
+    // the harness as a command to run.
+    ...(row.dependency_install ? { dependencyInstall: row.dependency_install } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -465,6 +468,7 @@ export class DrizzleValidationConfigRepository implements ValidationConfigReposi
       block_id: record.blockId,
       checks: JSON.stringify(record.checks),
       max_attempts: record.maxAttempts,
+      dependency_install: record.dependencyInstall ?? null,
       created_at: record.createdAt,
       updated_at: record.updatedAt,
     }
@@ -476,6 +480,7 @@ export class DrizzleValidationConfigRepository implements ValidationConfigReposi
         set: {
           checks: values.checks,
           max_attempts: values.max_attempts,
+          dependency_install: values.dependency_install,
           updated_at: values.updated_at,
         },
       })

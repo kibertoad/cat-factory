@@ -511,7 +511,8 @@
         "env_test_infraless": "Nada que probar",
         "env_test_not_provisionable": "Gestor de entorno no configurado",
         "env_test_no_vcs": "Proveedor de Git no conectado",
-        "env_test_connection_failed": "Fallo de conexión del entorno"
+        "env_test_connection_failed": "Fallo de conexión del entorno",
+        "prompt_revision_conflict": "Otra persona cambió el prompt"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -535,7 +536,8 @@
         "env_test_not_provisionable_type_mismatch": "Más de un gestor de entorno podría coincidir con el tipo de aprovisionamiento de este servicio. Fija un manifest id para este servicio de modo que se resuelva exactamente uno, o elimina el gestor superpuesto en Infraestructura → Entornos de prueba.",
         "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno.",
         "env_test_connection_failed": "El gestor de entornos de este servicio no superó su prueba de conexión. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
-        "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión."
+        "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
+        "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1090,6 +1092,8 @@
     "validationChecks": {
       "title": "Validación previa al PR",
       "sectionHint": "Comandos que se ejecutan sobre la copia de trabajo cuando el programador termina y antes de abrir una solicitud de incorporación. Un fallo vuelve al agente para que lo corrija; solo una copia sin errores abre un PR.",
+      "dependencyInstall": "Instalación de dependencias",
+      "dependencyInstallHint": "Se ejecuta antes de que empiece el agente",
       "hint": "Cada comando se ejecuta con `sh -c` en la copia de trabajo de este servicio, en orden. Hay que arreglar el código, no la comprobación: al agente se le indica que no las debilite.",
       "clear": "Vaciar",
       "configNoun": "comprobaciones de validación",
@@ -1109,6 +1113,7 @@
         "action": "Detectar",
         "hint": "Sugerir comprobaciones a partir del repositorio de este servicio",
         "added": "Se añadió {count} comprobación | Se añadieron {count} comprobaciones",
+        "installOnly": "Se rellenó la instalación de dependencias",
         "found": "Se reconoció {ecosystems}.",
         "capped": "Se omitieron algunas sugerencias: un servicio admite como máximo {max} comprobaciones.",
         "nothingNew": "No hay nada que añadir",
@@ -3919,7 +3924,9 @@
       "skillNoneAvailable": "No hay habilidades disponibles. Vincula una fuente de habilidades en la configuración de la cuenta.",
       "skillMissing": "Esta habilidad ya no está en el catálogo; elige otra.",
       "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar.",
-      "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo."
+      "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo.",
+      "promptEditTooltip": "Editar el prompt del sistema de este agente",
+      "promptEditedTooltip": "El prompt del sistema de este agente está editado para este espacio de trabajo"
     },
     "progress": {
       "status": {
@@ -3991,6 +3998,41 @@
         "reseedFailed": "No se pudo regenerar el pipeline",
         "deleteFailed": "No se pudo eliminar el pipeline"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Prompt del sistema: {agent}",
+    "description": "Sustituye lo que se le pide a este agente en todas las ejecuciones de este espacio de trabajo.",
+    "customized": "Editado",
+    "usingBuiltin": "Predeterminado",
+    "managedNotice": "La plataforma añade sus propias reglas, no editables, a todo lo que guardes aquí.",
+    "showAppended": "Ver el texto añadido",
+    "hideAppended": "Ocultar el texto añadido",
+    "appendedHeading": "Añadido por la plataforma (no editable)",
+    "placeholder": "Describe qué debe hacer este agente.",
+    "save": "Guardar como versión nueva",
+    "revert": "Volver al predeterminado",
+    "loadBuiltin": "Cargar el texto predeterminado",
+    "showBuiltin": "Comparar con el predeterminado",
+    "hideBuiltin": "Ocultar el predeterminado",
+    "restoringFrom": "Cargado desde la versión {n}. Guarda para volver a activarla.",
+    "builtinHeading": "Prompt predeterminado",
+    "historyHeading": "Historial de versiones",
+    "historyEmpty": "Este agente nunca se ha editado en este espacio de trabajo.",
+    "live": "Activa",
+    "restore": "Cargar",
+    "restoreTooltip": "Cargar esta versión en el editor",
+    "revision": {
+      "edit": "Versión {n} (editada)",
+      "restored": "Versión {n} (restaurada desde la versión {from})",
+      "builtin": "Versión {n} (vuelta al predeterminado)"
+    },
+    "toast": {
+      "saved": "Prompt guardado",
+      "reverted": "De vuelta al prompt predeterminado",
+      "saveFailed": "No se pudo guardar el prompt",
+      "loadFailed": "No se pudo cargar el prompt",
+      "conflict": "Otra persona cambió este prompt. Se recargó: vuelve a aplicar tu edición."
     }
   },
   "palette": {
@@ -5021,7 +5063,12 @@
       "forkOf": "Bifurcación · {name}",
       "newVersionOf": "Nueva versión de · {name}",
       "saveVersion": "Guardar nueva versión",
-      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba."
+      "hint": "Elige un prompt para bifurcar una base publicada o versionar un candidato. Cada guardado añade una versión inmutable que puedes poner a prueba.",
+      "liveInWorkspace": "Activo",
+      "fromWorkspace": "Tu espacio de trabajo",
+      "promoteTitle": "Convertir en el prompt activo de este agente",
+      "promoted": "Ahora es el prompt activo de {agent}",
+      "promoteFailed": "No se pudo activar este prompt"
     },
     "fixtureKind": {
       "requirements": "requisitos",

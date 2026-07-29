@@ -1433,6 +1433,8 @@
     "validationChecks": {
       "title": "Prüfungen vor dem PR",
       "sectionHint": "Befehle, die nach dem Coder und vor dem Öffnen eines Pull Requests im Checkout laufen. Ein Fehlschlag geht zur Behebung an den Agenten zurück; nur ein fehlerfreier Checkout öffnet einen PR.",
+      "dependencyInstall": "Abhängigkeiten installieren",
+      "dependencyInstallHint": "Läuft, bevor der Agent startet",
       "hint": "Jeder Befehl läuft der Reihe nach mit `sh -c` im Checkout dieses Dienstes. Der Agent soll den Code reparieren, nicht die Prüfung abschwächen.",
       "clear": "Leeren",
       "configNoun": "Prüfungen",
@@ -1452,6 +1454,7 @@
         "action": "Erkennen",
         "hint": "Prüfungen aus dem Repository dieses Dienstes vorschlagen",
         "added": "{count} Prüfung hinzugefügt | {count} Prüfungen hinzugefügt",
+        "installOnly": "Abhängigkeitsinstallation eingetragen",
         "found": "Erkannt: {ecosystems}.",
         "capped": "Einige Vorschläge wurden ausgelassen — ein Dienst nimmt höchstens {max} Prüfungen auf.",
         "nothingNew": "Nichts hinzuzufügen",
@@ -3605,7 +3608,9 @@
       "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
       "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
       "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
-      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung."
+      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung.",
+      "promptEditTooltip": "Systemprompt dieses Agenten bearbeiten",
+      "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet"
     },
     "progress": {
       "status": {
@@ -3677,6 +3682,41 @@
         "reseedFailed": "Pipeline konnte nicht neu aufgesetzt werden",
         "deleteFailed": "Pipeline konnte nicht gelöscht werden"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "Systemprompt: {agent}",
+    "description": "Ersetzt die Anweisung dieses Agenten für alle Läufe in diesem Arbeitsbereich.",
+    "customized": "Bearbeitet",
+    "usingBuiltin": "Standard",
+    "managedNotice": "Die Plattform hängt an alles, was Sie hier speichern, ihre eigenen, nicht bearbeitbaren Regeln an.",
+    "showAppended": "Angehängten Text anzeigen",
+    "hideAppended": "Angehängten Text ausblenden",
+    "appendedHeading": "Von der Plattform angehängt (nicht bearbeitbar)",
+    "placeholder": "Beschreiben Sie, was dieser Agent tun soll.",
+    "save": "Als neue Version speichern",
+    "revert": "Zurück zum Standard",
+    "loadBuiltin": "Standardtext laden",
+    "showBuiltin": "Mit Standard vergleichen",
+    "hideBuiltin": "Standard ausblenden",
+    "restoringFrom": "Aus Version {n} geladen. Speichern, um sie wieder aktiv zu setzen.",
+    "builtinHeading": "Standardprompt",
+    "historyHeading": "Versionsverlauf",
+    "historyEmpty": "Dieser Agent wurde in diesem Arbeitsbereich noch nie bearbeitet.",
+    "live": "Aktiv",
+    "restore": "Laden",
+    "restoreTooltip": "Diese Version in den Editor laden",
+    "revision": {
+      "edit": "Version {n} (bearbeitet)",
+      "restored": "Version {n} (aus Version {from} wiederhergestellt)",
+      "builtin": "Version {n} (zurück zum Standard)"
+    },
+    "toast": {
+      "saved": "Prompt gespeichert",
+      "reverted": "Zurück zum Standardprompt",
+      "saveFailed": "Prompt konnte nicht gespeichert werden",
+      "loadFailed": "Prompt konnte nicht geladen werden",
+      "conflict": "Jemand anderes hat diesen Prompt geändert. Neu geladen - wenden Sie Ihre Änderung erneut an."
     }
   },
   "requirements": {
@@ -4523,7 +4563,8 @@
         "env_test_infraless": "Nichts zu testen",
         "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
         "env_test_no_vcs": "Git-Anbieter nicht verbunden",
-        "env_test_connection_failed": "Umgebungsverbindung fehlgeschlagen"
+        "env_test_connection_failed": "Umgebungsverbindung fehlgeschlagen",
+        "prompt_revision_conflict": "Prompt von jemand anderem geändert"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -4547,7 +4588,8 @@
         "env_test_not_provisionable_type_mismatch": "Mehr als ein Umgebungs-Handler könnte auf den Bereitstellungstyp dieses Service passen. Lege für diesen Service eine manifest id fest, sodass genau einer aufgelöst wird, oder entferne den überlappenden Handler in Infrastruktur → Testumgebungen.",
         "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden.",
         "env_test_connection_failed": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
-        "env_test_connection_failed_detail": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden: {detail}. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut."
+        "env_test_connection_failed_detail": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden: {detail}. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
+        "prompt_revision_conflict": "Eine andere Änderung an diesem Prompt war zuerst da. Laden Sie ihn neu und wenden Sie Ihre Änderung darauf erneut an."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -5286,7 +5328,12 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "Neue Version von · {name}",
       "saveVersion": "Neue Version speichern",
-      "hint": "Wähle einen Prompt, um eine ausgelieferte Baseline zu forken oder einen Kandidaten zu versionieren. Jedes Speichern hängt eine unveränderliche Version an, die du testen kannst."
+      "hint": "Wähle einen Prompt, um eine ausgelieferte Baseline zu forken oder einen Kandidaten zu versionieren. Jedes Speichern hängt eine unveränderliche Version an, die du testen kannst.",
+      "liveInWorkspace": "Aktiv",
+      "fromWorkspace": "Ihr Arbeitsbereich",
+      "promoteTitle": "Diesen Prompt für diesen Agenten aktiv schalten",
+      "promoted": "Jetzt der aktive Prompt für {agent}",
+      "promoteFailed": "Prompt konnte nicht aktiviert werden"
     },
     "fixtureKind": {
       "requirements": "Anforderungen",
