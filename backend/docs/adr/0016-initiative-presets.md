@@ -7,7 +7,7 @@
 ## Context
 
 The Initiative feature (ADR 0013) plans a cross-cutting body of work through one fixed pipeline
-(`pl_initiative`: interviewer → analyst → planner → committer, with human approval after the
+(`pl_initiative`: analyst → interviewer → planner → committer, with human approval after the
 planner). That shape fits open-ended refactors, where an interview is how the goal gets pinned
 down. It does not fit **task-shaped** initiatives whose inputs are known up front and enumerable
 as a form — "refresh this service's documentation," "sweep the dependency tree," "audit

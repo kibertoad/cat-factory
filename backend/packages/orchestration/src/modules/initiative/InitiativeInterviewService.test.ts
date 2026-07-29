@@ -396,3 +396,57 @@ describe('InitiativeInterviewService linked context', () => {
     expect(withNone.prompt()).toBe(unwired.prompt())
   })
 })
+
+// The codebase-analysis fold. `pl_initiative` runs the analyst BEFORE this gate precisely so the
+// interviewer has a first-hand reading of the repository to interview AROUND — without it, an inline
+// kind with no checkout can only ask the stakeholder to describe their own code, which is the
+// interrogation the reorder exists to end. A run with no analysis (an unreachable repo, an
+// analyst that produced nothing, the interviewer driven outside `pl_initiative`) must degrade to
+// the previous, un-grounded prompt rather than claim an analysis it does not have.
+describe('InitiativeInterviewService — codebase-analysis grounding', () => {
+  const ANALYSIS = 'Auth lives in `services/auth`; sessions are signed JWTs with no refresh table.'
+  /** A phrase unique to the analysis fold's steering — never in the static system prompt. */
+  const ANALYSIS_STEERING = 'READ THE TARGET REPOSITORY'
+
+  beforeEach(() => {
+    presetRegistry = new InitiativePresetRegistry()
+  })
+
+  it('folds the analysis into the interview prompt and forbids re-asking what it settles', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      { finalize: false },
+    )
+    expect(cap.prompt()).toContain('## Codebase analysis')
+    expect(cap.prompt()).toContain('no refresh table')
+    expect(cap.prompt()).toContain(ANALYSIS_STEERING)
+  })
+
+  it('grounds a recommended answer in the analysis', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).recommendAnswer(
+      'ws_1',
+      BLOCK,
+      initiative({ analysisSummary: ANALYSIS }),
+      'How should existing sessions be handled?',
+    )
+    expect(cap.prompt()).toContain('no refresh table')
+  })
+
+  it('leaves both prompts unchanged when there is no analysis', async () => {
+    // Whitespace-only is the shape a model that returned nothing usable lands in, so it must read
+    // as absent rather than emitting an empty "## Codebase analysis" heading the model would then
+    // treat as "the repository was read and holds nothing".
+    for (const analysisSummary of ['', '   ']) {
+      const cap = capturingModel()
+      await makeService(cap.model).runInterview('ws_1', BLOCK, initiative({ analysisSummary }), {
+        finalize: false,
+      })
+      expect(cap.prompt()).not.toContain('## Codebase analysis')
+      expect(cap.prompt()).not.toContain(ANALYSIS_STEERING)
+    }
+  })
+})

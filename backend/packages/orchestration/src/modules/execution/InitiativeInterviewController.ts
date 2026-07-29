@@ -42,9 +42,13 @@ function initiativeInterviewKind(
     entityName: 'Initiative',
     enabled: () => !!interviewService?.enabled,
     // Runs on every FRESH entry — including when no interviewer is wired — so a stale brief from an
-    // earlier wired run can't bleed into the analyst/planner. The answered + dismissed digest (the
+    // earlier wired run can't bleed into the planner. The answered + dismissed digest (the
     // preset form's seeded exchanges among it) survives; only the round bookkeeping and the last
     // run's unanswered questions go.
+    //
+    // It does NOT touch `analysisSummary`, which matters now that the analyst runs AHEAD of this
+    // gate in `pl_initiative`: the reset fires between the two, and clearing the analysis here
+    // would throw away the very reading of the repository this interview is meant to be grounded in.
     async resetForFreshRun(workspaceId, blockId) {
       await initiativeService.resetInterview(workspaceId, blockId)
     },

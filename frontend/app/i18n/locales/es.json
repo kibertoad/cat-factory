@@ -5285,7 +5285,7 @@
       "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, y luego envialas. Tambien puedes pedirle que planifique ahora con lo que ya tiene.",
       "empty": "No se encontro ninguna iniciativa para este bloque.",
       "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
-      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa para iniciar la entrevista.",
+      "idle": "La planificacion aun no ha comenzado. Ejecuta la planificacion desde la iniciativa: primero analiza el codigo y despues te entrevista.",
       "working": "El planificador esta procesando tus respuestas",
       "workingHint": "Esto tarda un momento. Las preguntas de seguimiento apareceran aqui cuando termine, o empezara a redactar el plan si ya tiene suficiente.",
       "failed": "La ejecucion de planificacion se detuvo",

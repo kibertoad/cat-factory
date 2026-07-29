@@ -4275,7 +4275,7 @@
       "intro": "Il pianificatore sta definendo l'ambito di questa iniziativa. Rispondi alle sue domande per dare forma all'obiettivo e ai vincoli, poi invia le risposte. Puoi anche chiedergli di pianificare subito con quello che ha gia.",
       "empty": "Nessuna iniziativa trovata per questo blocco.",
       "converged": "Nessuna domanda in sospeso. Il pianificatore ha cio che gli serve e sta redigendo il piano.",
-      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa per avviare l'intervista.",
+      "idle": "La pianificazione non e ancora iniziata. Esegui la pianificazione dall'iniziativa: prima analizza il codice, poi ti intervista.",
       "working": "Il pianificatore sta elaborando le tue risposte",
       "workingHint": "Richiede qualche istante. Le domande di follow-up compariranno qui al termine, oppure iniziera a redigere il piano se ha abbastanza informazioni.",
       "failed": "L'esecuzione della pianificazione si e interrotta",

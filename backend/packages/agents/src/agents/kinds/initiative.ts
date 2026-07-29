@@ -79,15 +79,31 @@ function initiativeBreakdownUserPrompt(context: AgentRunContext): string {
 // so the constants below deliberately do NOT restate the final-answer directive.
 // ---------------------------------------------------------------------------
 
-/** Role prompt the initiative-analyst step runs under (returns a prose codebase analysis). */
+/**
+ * Role prompt the initiative-analyst step runs under (returns a prose codebase analysis).
+ *
+ * This step runs FIRST in `pl_initiative` — ahead of the interviewer — so the prompt carries two
+ * duties the free-standing analysis never had: ANSWER from the repository anything the repository
+ * can answer (the interviewer that follows is inline and has no checkout, so whatever this step
+ * leaves unread becomes a question put to a human about their own code), and hand that interviewer
+ * a short agenda of what genuinely cannot be read off the code.
+ */
 const INITIATIVE_ANALYST_SYSTEM_PROMPT =
   'You are a staff engineer performing a CODEBASE ANALYSIS to ground the planning of a ' +
   'long-running initiative (a cross-cutting refactor, a migration, a strangler conversion). ' +
+  'You run BEFORE anyone interviews the stakeholder, so the repository is yours to read and ' +
+  'nobody will be asked what you could have looked up. ' +
   'Explore the repository and produce a concise, concrete analysis a planner will use to ' +
   'decompose the work: the relevant architecture and module boundaries, the files/areas the ' +
   'initiative will most likely touch, existing patterns to follow, cross-cutting concerns, ' +
   'risks and likely sequencing constraints. Ground every claim in real file/directory ' +
   'references; do NOT propose the plan itself (no phases/items) and do NOT modify anything. ' +
+  'Investigate rather than speculate: if the current state of something is discoverable, read ' +
+  'it and state what it IS — never leave it as an open question. ' +
+  'Finish with an "## Open questions" section listing ONLY what the code genuinely cannot ' +
+  'settle — intent, priorities, risk tolerance, deadlines, external commitments, and choices ' +
+  'between options the code permits equally. Say briefly why each one needs a human. Leave the ' +
+  'section empty when the code settles everything. ' +
   'Respond with a clear Markdown analysis.'
 
 /** Role prompt the initiative-planner step's agent runs under (returns the plan as JSON). */
@@ -219,10 +235,16 @@ function initiativeContextLines(
 }
 
 /**
- * The initiative-analyst's task prompt: the agreed goal / constraints from the interview
- * plus the instruction to analyse the repo. The backend's analyst post-completion resolver
- * folds the returned prose onto the `initiatives` entity (`analysisSummary`), which the
- * planner then consumes.
+ * The initiative-analyst's task prompt: the scope agreed so far plus the instruction to analyse
+ * the repo. The backend's analyst post-completion resolver folds the returned prose onto the
+ * `initiatives` entity (`analysisSummary`), which the INTERVIEWER and then the planner consume.
+ *
+ * On `pl_initiative` this step now leads, so the interview context it folds is whatever is settled
+ * BEFORE the interview: a preset form's seeded `qa` (frozen at create, current by construction) and
+ * — on a re-plan — the goal a previous planning run agreed. On `pl_initiative_docs` (a
+ * `interview: 'skip'` preset, where the form IS the interview) the analyst always led and that
+ * context has always been the form's. Either way the block's own title + description is rendered
+ * as the brief above it, so an absent goal costs the analysis nothing.
  */
 export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
   const block = context.block
@@ -241,7 +263,10 @@ export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
     ...linkedContextLines(context, { materialized: true }),
     '',
     'Explore the repository and produce the analysis described in your instructions — ' +
-      'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
+      'architecture, likely touch points, patterns to follow, risks and sequencing, then the ' +
+      'open questions only a human can settle. Answer from the code everything the code can ' +
+      'answer: a stakeholder is interviewed after you, and every fact you establish here is one ' +
+      'they will not be asked about their own codebase. ' +
       'Respond with a clear Markdown analysis.',
   ].join('\n')
 }

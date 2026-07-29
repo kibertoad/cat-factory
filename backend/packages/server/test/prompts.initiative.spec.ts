@@ -186,3 +186,24 @@ describe('initiative analyst prompt fold — phaseTemplate', () => {
     expect(analyst).not.toContain('migration-blast-zone')
   })
 })
+
+// The analyst leads `pl_initiative`, ahead of the inline interviewer that has no checkout. That
+// makes "answer it from the code" a duty of THIS step: anything it declines to read becomes a
+// question put to a human about their own repository. Asserted on the resolved prompt (system +
+// user, the shape the engine actually dispatches) since the duty is split across both halves.
+describe('initiative analyst prompt — answers from the code, hands over the rest', () => {
+  const registry = defaultAgentKindRegistry()
+
+  it('tells the analyst it precedes the interview and must end with the open questions', () => {
+    const ctx = context({}, 'initiative-analyst')
+    const system = registry.systemPrompt('initiative-analyst') ?? ''
+    const user = userPromptFor(ctx, registry, { materialized: true })
+    // It must know it runs first — otherwise "someone will ask the human later" is a live excuse
+    // for leaving the repository unread.
+    expect(system).toContain('BEFORE anyone interviews the stakeholder')
+    expect(system).toContain('never leave it as an open question')
+    // And it must hand the interviewer an agenda rather than a blank page.
+    expect(system).toContain('## Open questions')
+    expect(user).toContain('open questions only a human can settle')
+  })
+})

@@ -85,7 +85,7 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   request,
   seededBoard,
 }) => {
-  // Drives a full planning run (interviewer → analyst → planner → gate → committer) then a loop
+  // Drives a full planning run (analyst → interviewer → planner → gate → committer) then a loop
   // spawn — several durable pg-boss steps — so give it the slow budget.
   test.slow()
   const { workspaceId } = seededBoard
@@ -117,9 +117,10 @@ test('a tech-migration initiative interviews, plans a 5-phase migration, and spa
   )
   await expect(page.getByTestId('initiative-card')).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-  // Start the preset's full-interview planning pipeline against the anchor block. The interviewer
-  // converges on the seeded qa (fake inline model) → analyst → planner returns MIGRATION_PLAN → the
-  // ingest normalizer accepts the five template phases → the run PARKS at the planner's human gate.
+  // Start the preset's full-interview planning pipeline against the anchor block. The analyst reads
+  // the repo → the interviewer converges on the seeded qa (fake inline model) → planner returns
+  // MIGRATION_PLAN → the ingest normalizer accepts the five template phases → the run PARKS at the
+  // planner's human gate.
   await startRun(request, workspaceId, block.id, 'pl_initiative')
 
   // Approve the parked planner gate over REST (no SPA affordance exposes it for an initiative

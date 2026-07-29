@@ -5450,7 +5450,7 @@
       "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then submit them. You can also have it plan now with what it already has.",
       "empty": "No initiative found for this block.",
       "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
-      "idle": "Planning has not started yet. Run planning from the initiative to begin the interview.",
+      "idle": "Planning has not started yet. Run planning from the initiative: it analyzes the codebase first, then interviews you.",
       "working": "The planner is working on your answers",
       "workingHint": "This takes a moment. Follow-up questions appear here when it is done, or it starts drafting the plan if it has enough.",
       "failed": "The planning run stopped",

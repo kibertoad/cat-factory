@@ -7,7 +7,7 @@
 //
 // This resolver replaces the real per-scope key-pool resolver with one whose model is an
 // `ai/test` mock that returns a fixed, immediately-CONVERGING interview decision. It makes the
-// full-interview `pl_initiative` planning pipeline (interviewer → analyst → planner → committer)
+// full-interview `pl_initiative` planning pipeline (analyst → interviewer → planner → committer)
 // run deterministically end to end: the interviewer runs one pass over the seeded intake-form qa,
 // converges (no questions), and the run advances to the analyst — exactly what the migration-preset
 // e2e (T10) needs, and what any future inline-gate spec can reuse.

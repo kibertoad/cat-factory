@@ -4275,7 +4275,7 @@
       "intro": "Der Planer grenzt diese Initiative ein. Beantworten Sie seine Fragen, um Ziel und Einschränkungen zu formen, und senden Sie sie dann ab. Sie können ihn auch mit dem, was er bereits hat, jetzt planen lassen.",
       "empty": "Keine Initiative für diesen Block gefunden.",
       "converged": "Keine Fragen ausstehend. Der Planer hat, was er braucht, und entwirft den Plan.",
-      "idle": "Die Planung wurde noch nicht gestartet. Führen Sie die Planung von der Initiative aus, um das Interview zu beginnen.",
+      "idle": "Die Planung wurde noch nicht gestartet. Führen Sie die Planung von der Initiative aus: Zuerst wird die Codebasis analysiert, danach werden Sie befragt.",
       "working": "Der Planer verarbeitet Ihre Antworten",
       "workingHint": "Das dauert einen Moment. Rückfragen erscheinen hier, sobald er fertig ist, oder er beginnt mit dem Entwurf des Plans, wenn ihm die Angaben genügen.",
       "failed": "Der Planungslauf wurde abgebrochen",

@@ -5285,7 +5285,7 @@
       "intro": "Planista okresla zakres tej inicjatywy. Odpowiedz na pytania, aby uksztaltowac cel i ograniczenia, a nastepnie wyslij odpowiedzi. Mozesz tez poprosic go, aby zaplanowal teraz na podstawie tego, co juz ma.",
       "empty": "Nie znaleziono inicjatywy dla tego bloku.",
       "converged": "Brak oczekujacych pytan. Planista ma to, czego potrzebuje, i tworzy plan.",
-      "idle": "Planowanie jeszcze sie nie rozpoczelo. Uruchom planowanie z poziomu inicjatywy, aby rozpoczac wywiad.",
+      "idle": "Planowanie jeszcze sie nie rozpoczelo. Uruchom planowanie z poziomu inicjatywy: najpierw analizuje kod, a potem przeprowadza z toba wywiad.",
       "working": "Planista przetwarza Twoje odpowiedzi",
       "workingHint": "To chwile potrwa. Pytania uzupelniajace pojawia sie tutaj po zakonczeniu, a jesli informacji wystarczy, planista zacznie tworzyc plan.",
       "failed": "Uruchomienie planowania zostalo przerwane",

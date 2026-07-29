@@ -76,7 +76,7 @@ const isTask = (b: Block) => b.level === 'task'
 const isFrame = (b: Block) => b.level === 'frame'
 /**
  * A block whose inspector carries a pipeline RUN. An initiative's planning pipeline is an
- * ordinary run of ordinary agent steps (interviewer → analyst → planner → committer), so it
+ * ordinary run of ordinary agent steps (analyst → interviewer → planner → committer), so it
  * gets the same execution panel a task does — step list, live phases, step-detail drill-down,
  * and the Stop / Discard-run controls that are the only way to unwedge a stalled planning run.
  * Before this it had no run surface at all, which is why a stuck plan was a dead end.

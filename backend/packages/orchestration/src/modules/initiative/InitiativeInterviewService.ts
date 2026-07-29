@@ -38,14 +38,31 @@ import {
 // runtime-neutral ModelProvider port, so this never imports a provider SDK or a key.
 // ---------------------------------------------------------------------------
 
-/** Role prompt the interviewer runs under. Returns ONLY a JSON decision object. */
+/**
+ * Role prompt the interviewer runs under. Returns ONLY a JSON decision object.
+ *
+ * The CODEBASE-QUESTIONS BAN is the load-bearing clause. This is an inline kind with no checkout,
+ * so left to itself it reaches for the only source it has — the human — and asks them to describe
+ * their own repository. `pl_initiative` now runs the analyst FIRST precisely so that source exists;
+ * the rule below is what makes the interviewer spend its rounds on the half a repository cannot
+ * answer instead of re-deriving the half it already has.
+ */
 const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
   'You are a staff engineer INTERVIEWING a stakeholder to scope a long-running initiative (a ' +
   'cross-cutting refactor, a migration, a strangler conversion) BEFORE it is planned. You are ' +
-  'given the initiative brief and the answers gathered so far. Decide whether you understand ' +
+  'given the initiative brief, a codebase analysis of the target repository where one is ' +
+  'available, and the answers gathered so far. Decide whether you understand ' +
   'the goal, scope boundaries, constraints and success criteria well enough to plan. If NOT, ' +
   'ask a small batch of focused, high-leverage clarifying questions — each answerable in a ' +
-  'sentence or two, no yes/no trivia, no questions the brief already answers. If you have ' +
+  'sentence or two, no yes/no trivia, no questions the brief already answers. ' +
+  'NEVER ask the stakeholder about the CURRENT STATE OF THE CODE — what the codebase contains, ' +
+  'which frameworks/libraries/patterns it uses, how a module is structured, where something ' +
+  'lives, what test coverage exists. Those are read from the repository, not from a human, and ' +
+  'asking them wastes the interview on facts the platform already holds or can go and read. ' +
+  'Ask ONLY about what no amount of code reading could recover: intent and desired outcome, ' +
+  'priorities and sequencing preferences, risk and downtime tolerance, deadlines and external ' +
+  'commitments, scope boundaries, and choices between options the code permits equally. ' +
+  'If you have ' +
   'enough (or you are told this is the final round), STOP asking and synthesize the agreed ' +
   'goal, the constraints to honour, and the explicit non-goals. Respond with ONLY a JSON ' +
   'object of shape {"done": boolean, "questions": string[], "goal": string, "constraints": ' +
@@ -61,9 +78,11 @@ const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
  */
 const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
   'You are a staff engineer helping scope a long-running initiative. You are given the ' +
-  'initiative brief, the answers gathered so far, and ONE clarifying question the stakeholder ' +
-  'wants a suggested answer for. Propose the most sensible answer you can, grounded in the brief ' +
-  'and prior answers, stated as a concrete recommendation the stakeholder can accept or edit. Be ' +
+  'initiative brief, a codebase analysis of the target repository where one is available, the ' +
+  'answers gathered so far, and ONE clarifying question the stakeholder ' +
+  'wants a suggested answer for. Propose the most sensible answer you can, grounded in the brief, ' +
+  'the codebase analysis and prior answers, stated as a concrete recommendation the stakeholder ' +
+  'can accept or edit. Be ' +
   'specific and concise (a sentence or two). Reply with ONLY the suggested answer — no preamble, ' +
   'no restating the question, no JSON, no code fences.'
 
@@ -248,7 +267,33 @@ export class InitiativeInterviewService {
     return renderLinkedContext(docs, tasks)
   }
 
-  /** Assemble the interviewer prompt: the brief + the answered digest + the round intent. */
+  /**
+   * The analyst's codebase analysis as prompt lines, or [] when there is none. On `pl_initiative`
+   * the analyst runs BEFORE this gate and its prose is folded onto the entity by the engine's
+   * analyst post-completion resolver, so by the time an interview pass runs the summary is this
+   * run's own reading of the repository.
+   *
+   * Empty when the analyst produced nothing, when no repo is reachable, or when the interviewer is
+   * driven outside `pl_initiative` — the prompt then degrades to its previous, un-grounded shape
+   * rather than claiming an analysis it does not have.
+   */
+  private analysisLines(initiative: Initiative): string[] {
+    const summary = initiative.analysisSummary?.trim()
+    if (!summary) return []
+    return [
+      '',
+      '## Codebase analysis',
+      '',
+      summary,
+      '',
+      'The analysis above was produced by an agent that READ THE TARGET REPOSITORY for this ' +
+        'initiative. Treat everything it establishes as already known — do NOT ask the ' +
+        'stakeholder to describe, confirm or restate any of it. Where it lists open questions, ' +
+        'those are the facts the code could not settle: start there.',
+    ]
+  }
+
+  /** Assemble the interviewer prompt: the brief + the analysis + the answered digest + the intent. */
   private buildPrompt(
     block: Block,
     initiative: Initiative,
@@ -280,6 +325,10 @@ export class InitiativeInterviewService {
           'about anything it states. Ask only about what it leaves genuinely open or ambiguous.',
       )
     }
+    // The analyst's first-hand reading of the repository, after the stakeholder's own material and
+    // before the answers gathered so far: it is the other half of the BRIEF, and the half that
+    // decides which questions are worth a human's time at all.
+    lines.push(...this.analysisLines(initiative))
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
     if (answered.length) {
       lines.push('', 'Answers gathered so far:')
@@ -334,6 +383,10 @@ export class InitiativeInterviewService {
     // the action a stakeholder reaches for precisely when they would rather the platform read
     // the document than answer from it themselves.
     if (linked) lines.push(linked)
+    // The codebase analysis is the single best source a suggested answer can be grounded in — a
+    // stakeholder reaches for "recommend something" precisely when they would rather the platform
+    // work the answer out than supply it themselves.
+    lines.push(...this.analysisLines(initiative))
     if (initiative.goal?.trim()) lines.push('', `Goal so far: ${initiative.goal.trim()}`)
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
     if (answered.length) {
