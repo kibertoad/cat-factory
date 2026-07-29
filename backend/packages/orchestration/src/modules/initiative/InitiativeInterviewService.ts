@@ -13,7 +13,11 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability, renderLinkedContext } from '@cat-factory/agents'
+import {
+  catFactoryObservability,
+  codebaseAnalysisLines,
+  renderLinkedContext,
+} from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import type { LinkedContext } from '../execution/linked-context.js'
 import { extractJson } from '../requirements/requirements.logic.js'
@@ -39,52 +43,103 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Role prompt the interviewer runs under. Returns ONLY a JSON decision object.
+ * Where the interviewer's questions may come from, and what it must not spend them on.
  *
- * The CODEBASE-QUESTIONS BAN is the load-bearing clause. This is an inline kind with no checkout,
- * so left to itself it reaches for the only source it has — the human — and asks them to describe
- * their own repository. `pl_initiative` now runs the analyst FIRST precisely so that source exists;
- * the rule below is what makes the interviewer spend its rounds on the half a repository cannot
- * answer instead of re-deriving the half it already has.
+ * This is the load-bearing clause of the whole gate. The interviewer is an INLINE kind with no
+ * checkout, so left to itself it reaches for the only source it has — the human — and asks them to
+ * describe their own repository. `pl_initiative` runs the analyst FIRST precisely so a second
+ * source exists, and the ban below is what redirects the bounded rounds onto the half a repository
+ * cannot answer.
+ *
+ * It is therefore a rule about WHERE AN ANSWER COMES FROM, and it is only true while the code has
+ * actually been read. With no analysis in hand — the analyst produced nothing, no repo is
+ * reachable, or this gate is driven outside `pl_initiative` — an absolute ban would leave the
+ * interviewer forbidden from asking about the code AND holding nothing that read it, which is
+ * strictly worse than before the analyst ever led. So the clause degrades with the fold it depends
+ * on: same predicate, one decision, no way for the prompt and the context to disagree about
+ * whether the repository was read.
  */
-const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
-  'You are a staff engineer INTERVIEWING a stakeholder to scope a long-running initiative (a ' +
-  'cross-cutting refactor, a migration, a strangler conversion) BEFORE it is planned. You are ' +
-  'given the initiative brief, a codebase analysis of the target repository where one is ' +
-  'available, and the answers gathered so far. Decide whether you understand ' +
-  'the goal, scope boundaries, constraints and success criteria well enough to plan. If NOT, ' +
-  'ask a small batch of focused, high-leverage clarifying questions — each answerable in a ' +
-  'sentence or two, no yes/no trivia, no questions the brief already answers. ' +
-  'NEVER ask the stakeholder about the CURRENT STATE OF THE CODE — what the codebase contains, ' +
-  'which frameworks/libraries/patterns it uses, how a module is structured, where something ' +
-  'lives, what test coverage exists. Those are read from the repository, not from a human, and ' +
-  'asking them wastes the interview on facts the platform already holds or can go and read. ' +
-  'Ask ONLY about what no amount of code reading could recover: intent and desired outcome, ' +
-  'priorities and sequencing preferences, risk and downtime tolerance, deadlines and external ' +
-  'commitments, scope boundaries, and choices between options the code permits equally. ' +
-  'If you have ' +
-  'enough (or you are told this is the final round), STOP asking and synthesize the agreed ' +
-  'goal, the constraints to honour, and the explicit non-goals. Respond with ONLY a JSON ' +
-  'object of shape {"done": boolean, "questions": string[], "goal": string, "constraints": ' +
-  'string[], "nonGoals": string[]}. When done is false, `questions` is non-empty; when done ' +
-  'is true, `questions` is empty and you MUST fill `goal` (and `constraints`/`nonGoals` where ' +
-  'they apply). No prose, no code fences.'
+function codebaseQuestionRule(hasAnalysis: boolean): string {
+  return hasAnalysis
+    ? 'NEVER ask the stakeholder about the CURRENT STATE OF THE CODE — what the codebase ' +
+        'contains, which frameworks/libraries/patterns it uses, how a module is structured, where ' +
+        'something lives, what test coverage exists. The repository has been READ for you and the ' +
+        'analysis is above; asking anyway wastes the interview on facts the platform already ' +
+        'holds. Ask ONLY about what no amount of code reading could recover: '
+    : 'No codebase analysis is available for this initiative, so the repository has NOT been read ' +
+        'for you. Still spend your questions first on what no amount of code reading could ' +
+        'recover, and ask about the current state of the code only where the plan genuinely turns ' +
+        'on it and the brief leaves it open. What only a human can settle: '
+}
+
+/**
+ * Whether this initiative carries a usable codebase analysis. The SINGLE predicate behind both the
+ * fold ({@link InitiativeInterviewService.analysisLines}) and the two system prompts, so a prompt
+ * can never promise an analysis the prompt body does not carry, or ban codebase questions on the
+ * strength of a reading that never happened. Deliberately shares
+ * `codebaseAnalysisLines`' whitespace-only-is-absent rule by construction rather than by
+ * restating it.
+ */
+function hasCodebaseAnalysis(initiative: Initiative): boolean {
+  return codebaseAnalysisLines(initiative.analysisSummary).length > 0
+}
+
+/** The facts a human is genuinely the authority on — the interview's proper subject, always. */
+const HUMAN_ONLY_FACTS =
+  'intent and desired outcome, priorities and sequencing preferences, risk and downtime ' +
+  'tolerance, deadlines and external commitments, scope boundaries, and choices between options ' +
+  'the code permits equally. '
+
+/**
+ * Role prompt the interviewer runs under. Returns ONLY a JSON decision object. Composed rather than
+ * constant so {@link codebaseQuestionRule} can key off whether an analysis was actually folded in.
+ */
+function initiativeInterviewSystemPrompt(hasAnalysis: boolean): string {
+  return (
+    'You are a staff engineer INTERVIEWING a stakeholder to scope a long-running initiative (a ' +
+    'cross-cutting refactor, a migration, a strangler conversion) BEFORE it is planned. You are ' +
+    'given the initiative brief, ' +
+    (hasAnalysis ? 'a codebase analysis of the target repository, ' : '') +
+    'and the answers gathered so far. Decide whether you understand ' +
+    'the goal, scope boundaries, constraints and success criteria well enough to plan. If NOT, ' +
+    'ask a small batch of focused, high-leverage clarifying questions — each answerable in a ' +
+    'sentence or two, no yes/no trivia, no questions the brief already answers. ' +
+    codebaseQuestionRule(hasAnalysis) +
+    HUMAN_ONLY_FACTS +
+    'If you have ' +
+    'enough (or you are told this is the final round), STOP asking and synthesize the agreed ' +
+    'goal, the constraints to honour, and the explicit non-goals. Respond with ONLY a JSON ' +
+    'object of shape {"done": boolean, "questions": string[], "goal": string, "constraints": ' +
+    'string[], "nonGoals": string[]}. When done is false, `questions` is non-empty; when done ' +
+    'is true, `questions` is empty and you MUST fill `goal` (and `constraints`/`nonGoals` where ' +
+    'they apply). No prose, no code fences.'
+  )
+}
 
 /**
  * Role prompt for the per-question answer RECOMMENDER — the interviewer's "recommend something"
  * action. Given the brief + answers so far + one specific question, it drafts a concrete answer
  * the stakeholder can adopt or edit (the planning analogue of the requirements Writer). Returns
  * ONLY the suggested answer prose — no preamble, no JSON.
+ *
+ * Keyed on the same predicate as the interview prompt: promising an analysis this call was not
+ * given invites a recommendation invented to fill the gap, which a stakeholder then adopts as if
+ * the platform had read the code.
  */
-const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
-  'You are a staff engineer helping scope a long-running initiative. You are given the ' +
-  'initiative brief, a codebase analysis of the target repository where one is available, the ' +
-  'answers gathered so far, and ONE clarifying question the stakeholder ' +
-  'wants a suggested answer for. Propose the most sensible answer you can, grounded in the brief, ' +
-  'the codebase analysis and prior answers, stated as a concrete recommendation the stakeholder ' +
-  'can accept or edit. Be ' +
-  'specific and concise (a sentence or two). Reply with ONLY the suggested answer — no preamble, ' +
-  'no restating the question, no JSON, no code fences.'
+function initiativeRecommendSystemPrompt(hasAnalysis: boolean): string {
+  return (
+    'You are a staff engineer helping scope a long-running initiative. You are given the ' +
+    'initiative brief, ' +
+    (hasAnalysis ? 'a codebase analysis of the target repository, ' : '') +
+    'the answers gathered so far, and ONE clarifying question the stakeholder ' +
+    'wants a suggested answer for. Propose the most sensible answer you can, grounded in the ' +
+    (hasAnalysis ? 'brief, the codebase analysis and prior answers' : 'brief and prior answers') +
+    ', stated as a concrete recommendation the stakeholder ' +
+    'can accept or edit. Be ' +
+    'specific and concise (a sentence or two). Reply with ONLY the suggested answer — no preamble, ' +
+    'no restating the question, no JSON, no code fences.'
+  )
+}
 
 /**
  * Whether this initiative's preset FORM actually seeded any `qa` at create (T3). Re-derived from
@@ -188,7 +243,7 @@ export class InitiativeInterviewService {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: INITIATIVE_INTERVIEW_SYSTEM_PROMPT,
+        system: initiativeInterviewSystemPrompt(hasCodebaseAnalysis(initiative)),
         prompt: this.buildPrompt(block, initiative, opts.finalize, linked),
         temperature: 0.2,
         maxOutputTokens: 3000,
@@ -228,7 +283,7 @@ export class InitiativeInterviewService {
       const model = modelProvider.resolve(ref)
       const result = await generateText({
         model,
-        system: INITIATIVE_RECOMMEND_SYSTEM_PROMPT,
+        system: initiativeRecommendSystemPrompt(hasCodebaseAnalysis(initiative)),
         prompt: this.buildRecommendPrompt(block, initiative, question, linked),
         temperature: 0.3,
         maxOutputTokens: 800,
@@ -275,16 +330,19 @@ export class InitiativeInterviewService {
    *
    * Empty when the analyst produced nothing, when no repo is reachable, or when the interviewer is
    * driven outside `pl_initiative` — the prompt then degrades to its previous, un-grounded shape
-   * rather than claiming an analysis it does not have.
+   * rather than claiming an analysis it does not have. {@link hasCodebaseAnalysis} is the SAME
+   * predicate the system prompt keys off, so the two halves can never disagree about whether the
+   * repository was read.
+   *
+   * The section itself is rendered by `@cat-factory/agents` — the analyst's and planner's prompts
+   * present it too, and one owner of the heading keeps a model from meeting it in two shapes. Only
+   * the steering below it is this gate's own.
    */
   private analysisLines(initiative: Initiative): string[] {
-    const summary = initiative.analysisSummary?.trim()
-    if (!summary) return []
+    const section = codebaseAnalysisLines(initiative.analysisSummary)
+    if (!section.length) return []
     return [
-      '',
-      '## Codebase analysis',
-      '',
-      summary,
+      ...section,
       '',
       'The analysis above was produced by an agent that READ THE TARGET REPOSITORY for this ' +
         'initiative. Treat everything it establishes as already known — do NOT ask the ' +

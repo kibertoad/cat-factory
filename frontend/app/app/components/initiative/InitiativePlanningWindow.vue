@@ -20,7 +20,11 @@ import { computed, reactive, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
 import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
-import { interviewGatePhase } from '~/utils/interviewGate'
+import {
+  INITIATIVE_INTERVIEWER_KIND,
+  interviewGatePhase,
+  interviewStepReached,
+} from '~/utils/interviewGate'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const board = useBoardStore()
@@ -69,7 +73,11 @@ const resuming = computed(() => initiatives.resuming)
 const phase = computed(() =>
   resuming.value
     ? 'working'
-    : interviewGatePhase(initiative.value?.interview?.status, run.value?.status),
+    : interviewGatePhase(
+        initiative.value?.interview?.status,
+        run.value?.status,
+        interviewStepReached(run.value, INITIATIVE_INTERVIEWER_KIND),
+      ),
 )
 
 /**
@@ -180,10 +188,21 @@ async function onDiscard() {
           {{ t('initiative.planning.intro') }}
         </p>
 
+        <!-- The run is still ahead of the interview — the codebase analysis that grounds it. It
+             wears the working chrome but says something different on purpose: nothing has been
+             asked yet, so "working on your answers" would describe answers that do not exist. -->
+        <InterviewGateNotice
+          v-if="phase === 'preparing'"
+          variant="working"
+          :title="t('initiative.planning.preparing')"
+          :hint="t('initiative.planning.preparingHint')"
+          testid="initiative-planning-preparing"
+        />
+
         <!-- A pass is running: the human is waiting on the planner. Without this the window is
              byte-identical to the parked state and the submit reads as a no-op. -->
         <InterviewGateNotice
-          v-if="phase === 'working'"
+          v-else-if="phase === 'working'"
           variant="working"
           :title="t('initiative.planning.working')"
           :hint="t('initiative.planning.workingHint')"
@@ -243,8 +262,8 @@ async function onDiscard() {
     <!-- Action rail. The submit/plan-now pair shows only while the run is actually parked on the
          human: mid-pass they would re-submit a question set already in flight, and the resume is a
          no-op once it isn't. Discard is the opposite — it is offered for as long as a run owns the
-         block, because the phases where those two are hidden (working, failed) are exactly the ones
-         a wedged run sits in. -->
+         block, because the phases where those two are hidden (preparing, working, failed) are
+         exactly the ones a wedged run sits in. -->
     <footer
       v-if="initiative && (canDiscard || (phase === 'awaiting' && questions.length > 0))"
       class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"

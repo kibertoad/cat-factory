@@ -29,6 +29,20 @@ Key shape decisions:
   priorities, risk tolerance, deadlines, and choices the code permits equally. The analyst closes
   its report with the open questions it could not settle, which is the interview's agenda.
 
+  Two consequences follow from the ordering being a PIPELINE fact rather than a global one, and
+  both are load-bearing. The analyst kind is shared with `pl_initiative_docs` (and any other
+  `interview: 'skip'` preset), which has no interviewer at all, so its role prompt states only the
+  duties that hold everywhere — read what is discoverable, close with the open questions — and the
+  reason they matter is selected per run in the USER prompt from
+  `AgentRunContext.initiative.interviewFollows`, read off the running chain. Either framing
+  asserted unconditionally would be a plain falsehood on the other pipeline. Symmetrically, the
+  interviewer's ban on codebase questions is a rule about where an ANSWER COMES FROM, so it holds
+  only while an analysis is actually in hand: with none (an unreachable repo, an analyst that
+  produced nothing, the gate driven outside `pl_initiative`) the prompt says the repository was not
+  read and allows the questions back, keeping the human-only facts as the priority. The ban and the
+  analysis fold share ONE predicate, so the role prompt can never claim a reading the task prompt
+  does not carry.
+
 - **Just-in-time task spawning**: the tracker is the source of truth; task blocks are created only
   when about to start, not up front.
 - **No initiative-level pause gates**: spawned tasks run standard pipelines, which carry their own

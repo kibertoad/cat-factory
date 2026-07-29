@@ -69,7 +69,8 @@ function initiativeInterviewKind(
         await initiativeService.recordInterviewQuestions(workspaceId, block.id, output.questions)
         return 'park'
       }
-      // Converged: fold the synthesized brief onto the entity and advance to the analyst.
+      // Converged: fold the synthesized brief onto the entity and advance to the planner (the
+      // analyst already ran, ahead of this gate — its analysis is what the interview built on).
       await initiativeService.recordInterviewOutcome(workspaceId, block.id, {
         goal: output.goal,
         constraints: output.constraints,

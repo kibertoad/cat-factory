@@ -24,7 +24,21 @@ Behaviour changes worth knowing about:
 - The interview is restricted to what no amount of code reading recovers: intent, priorities, risk
   and downtime tolerance, deadlines, external commitments, and choices the code permits equally.
   The "recommend an answer" action is grounded in the analysis too.
-- `pl_initiative` is reseeded (version 5) with a new description. `pl_initiative_docs` is unchanged
-  — it never had an interviewer and already led with the analyst.
+- That restriction is a rule about where an ANSWER comes from, so it now lifts when there is no
+  analysis to lean on (an unreachable repo, an analyst that produced nothing, the gate driven
+  outside `pl_initiative`): the interviewer is told the repository was NOT read and may ask about
+  it again, with the human-only facts still first. The ban and the analysis fold share one
+  predicate, so the role prompt can never promise a reading the task prompt does not carry.
+- `pl_initiative` is reseeded (version 5) with a new description. `pl_initiative_docs` keeps its
+  steps — it never had an interviewer and already led with the analyst — but the shared analyst
+  kind now learns from the running chain whether an interview actually follows it
+  (`AgentRunContext.initiative.interviewFollows`) and states the matching reason to read
+  exhaustively. Asserting "a stakeholder is interviewed after you" unconditionally would be false
+  on every interview-less planning pipeline, including a deployment's own.
 - The technological-migration preset's interviewer steering no longer asks for the operational
   surface (scheduled jobs, ops tooling, monitoring, CI); its analyst already inventories that.
+- Both interview windows (initiative planning, document authoring) gained a `preparing` state.
+  Neither gate leads its pipeline, so a running run used to read as "the interviewer is working on
+  your answers" for the whole of a lead-in the human had not answered anything into — now the
+  window says what is actually happening and the "Planning in progress" route into it stays
+  available throughout.
