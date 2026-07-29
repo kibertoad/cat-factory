@@ -1,5 +1,99 @@
 # @cat-factory/app
 
+## 0.188.0
+
+### Minor Changes
+
+- 7248b72: Open the consensus mechanism to the review agents, and make the panels a reusable, tiered library.
+
+  A review is a judgement, which is the thing a panel of independent models is measurably better at
+  than one model — but until now only the code `reviewer` among the review kinds could be run as
+  one. The deep PR reviewer and the document/design/spec companions are now eligible too. What a
+  panel can SEE differs by kind and is the reason the set stops where it does: `pr-reviewer` gets its
+  whole input from backend-prepared context files, which the inline prompt builder now folds in, so a
+  panel reads the same diff the container reviewer would; the checkout-exploring companions trade
+  ground-truth depth for judgement diversity, which is why consensus stays opt-in per step and gated
+  on the task estimate.
+
+  The gating is what made the feature hard to actually use: a panel costs several model calls, so
+  "run it only when the work is heavy" was already possible, but the panel itself had to be
+  hand-written onto each step. A workspace now keeps a library of **consensus groups** — named
+  panels (roles, perspective framings, models, strategy, synthesizer) each carrying the estimate bar
+  it is worth paying for. A step names a SET of groups, and at dispatch the engine picks the most
+  demanding tier the task's estimate clears, falling back to the standard single agent when none
+  does. "A two-model review above 0.4 risk, the full panel above 0.8" is one step instead of three
+  conditional pipelines, and the panels are shared across every pipeline in the workspace.
+
+  Two decisions worth knowing when reading the code. The tier is selected in the ENGINE, not in the
+  consensus executor, so the optional `@cat-factory/consensus` package never learns a group store
+  exists and the executor still consumes one already-decided config; and the selected group's gating
+  is deliberately dropped when it is materialised, because selection IS the gate — carrying it
+  forward would have the executor re-decide the same question against the same estimate, where any
+  future divergence silently turns a selected tier into a skipped step.
+
+  Running a container kind as an inline panel is where this feature's sharp edge is, and three
+  seams now carry that fact instead of assuming a filesystem. `dispatchDeliversCheckout` is the one
+  definition of "does this dispatch hand the agent a checkout", shared by the composite executor's
+  routing and by the engine, which passes it to a kind's repo hooks; the `pr-reviewer` diff renderer
+  branches on it, so a panel is never handed the manifest-plus-`git diff` shape it cannot act on and
+  anything that still does not fit its (larger) inline budget is named as unreviewable rather than
+  passed off as reviewed; and the consensus executor appends a directive stating the participant's
+  real surface, since the shipped prompts of most eligible kinds describe a machine the participant
+  is not on. The prompt fold that feeds inline callers is also bounded now, and leaves the standards
+  files to the system prompt, which folds them at the kind's configured verbosity.
+
+  Also fixes a silent pre-existing bug found next door: `ExecutionService` never forwarded
+  `agentPromptRepository` to the context builder, so a workspace's edited agent prompts never reached
+  a dispatch. The forwarding was a hand-maintained list of ~28 field names; it now passes the
+  dependency object it already has, which is why that class of omission can't recur.
+
+  Adds a `consensus_groups` table and two `consensus_sessions` columns (the tier that fired, recorded
+  by value so the transcript survives the library row being renamed or deleted) on both runtimes.
+  A workspace that authors no group is byte-for-byte unaffected.
+
+- 449d856: Classify agent kinds into three tiers (`basic` / `intermediate` / `advanced`) and open the two
+  surfaces that enumerate the whole catalog — the pipeline builder's palette and a model preset's
+  per-agent overrides — on the basic tier, with a control on each to widen the view.
+
+  Both surfaces listed every kind the deployment knows about: ~30 palette blocks across six
+  categories, and a per-agent override row for each of those plus the engine kinds that run a model.
+  That is the full roster for someone assembling their first pipeline, and the everyday kinds
+  (architect, coder, tester, documenter) are scattered through it. The tier is the axis that was
+  missing — categories say what a kind is FOR, not how far off the main path it sits.
+
+  Tiers are CUMULATIVE, which is the main decision to sanity-check: the control is a level dial
+  (`basic` → `intermediate` → `advanced`), not a set of exclusive filters, so the widest level shows
+  the entire catalog and there is no separate "show all" option that would duplicate it. Exclusive
+  filters were rejected because a real pipeline mixes tiers — reaching for one specialist kind should
+  not hide the coder while you do it.
+
+  The vocabulary, the default and the predicate live in `@cat-factory/contracts` beside
+  `purposeAllowsAgentCategory`, so a deployment-registered kind's declared `presentation.tier` and the
+  SPA's own built-ins are read by one rule. A kind that declares no tier is treated as `intermediate`:
+  `basic` would let anything unclassified into the default view, and `advanced` would bury a kind a
+  deployment deliberately installed. Built-ins are not allowed that freedom — `catalog.spec.ts` fails
+  if one forgets its tier, since the silent outcome would be it vanishing from the default view for
+  no stated reason.
+
+  Two things worth looking at when reviewing. The model-preset list always keeps a kind the edited
+  preset already pins a model for, whatever the tier — that override may have been written by a
+  teammate, by the API, or by this user at a wider tier, and a hidden row is one they can neither read
+  nor clear (the rule `showOverrideField` already states for a single field). And this is deliberately
+  NOT the basic/advanced interface mode: that tier decides which surfaces exist, this one decides how
+  much of one surface's catalog is listed, so the axes stay separate and the tier control is visible
+  in both interface modes — it is the only route to what it hides.
+
+  Compatibility note: `post-release-health` is tiered `intermediate` rather than `advanced` even
+  though it is the most specialist gate, because the palette already offers it only once an
+  observability integration is connected, and that connection is a stronger statement of intent than
+  the tier.
+
+### Patch Changes
+
+- Updated dependencies [7248b72]
+- Updated dependencies [449d856]
+  - @cat-factory/contracts@0.195.0
+
 ## 0.187.0
 
 ### Minor Changes
