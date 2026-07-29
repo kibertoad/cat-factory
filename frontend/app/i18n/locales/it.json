@@ -658,6 +658,32 @@
         "removeFailed": "Impossibile eliminare lo stack condiviso"
       }
     },
+    "composeEnvSetup": {
+      "title": "Configurazione guidata Docker Compose per un servizio",
+      "lead": "Accompagna un servizio nella creazione della ricetta Docker Compose da cui vengono avviati i suoi ambienti di test, invece di scrivere a mano il percorso del compose e i passi di preparazione.",
+      "how": {
+        "title": "Come funziona",
+        "scan": "Analizza il repository collegato al servizio in cerca di file compose, profili, file di ambiente e dump di dati iniziali.",
+        "analyse": "Esegue facoltativamente l'agente analista degli ambienti per abbozzare i passi di preparazione e un controllo di salute dagli script del repository.",
+        "preflight": "Esegue i controlli preliminari della ricetta sulla macchina che la provisionerà.",
+        "save": "Salva la ricetta sul servizio e registra l'handler Docker Compose del workspace.",
+        "outcome": "Da quel momento il Deployer avvia esattamente quello stack ogni volta che una pipeline ha bisogno di un ambiente reale, e il Tester ci gira contro. Nulla viene applicato finché non salvi."
+      },
+      "needed": {
+        "title": "Ti serve quando",
+        "running": "I test del servizio richiedono l'applicazione realmente in esecuzione: test di API o interfaccia, migrazioni, dati iniziali.",
+        "compose": "Il servizio viene provisionato con Docker Compose e non ha ancora una ricetta salvata.",
+        "setup": "Avviare lo stack richiede più di un comando: profili, file di ambiente, dati iniziali o un controllo di prontezza."
+      },
+      "notNeeded": {
+        "title": "Puoi saltarlo quando",
+        "inContainer": "La pipeline si limita a lint, build o test unitari. Girano dentro il container dell'agente come controlli di validazione pre-PR, senza provisionare alcun ambiente.",
+        "otherBackend": "Il servizio viene provisionato in altro modo (Kubernetes, un'anteprima cloud, o nessuna infrastruttura). Configuralo sopra.",
+        "noRepo": "Il servizio non ha un repository collegato, quindi non c'è nulla da analizzare."
+      },
+      "start": "Avvia la configurazione guidata",
+      "rerunHint": "Rieseguila quando vuoi per cambiare una ricetta salvata."
+    },
     "localMode": {
       "title": "Modalita locale",
       "intro": "Ottimizzazione per il runner di container locale, memorizzata sul deployment di questa macchina (ha sostituito le variabili d'ambiente {poolVars} / {harnessVars}). Il salvataggio ridimensiona il pool caldo in tempo reale, senza necessita di riavvio; i run in corso mantengono il container che gia detengono.",
@@ -1975,7 +2001,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Torna a La mia configurazione",
-      "backToIntegrations": "Torna a Integrazioni"
+      "backToIntegrations": "Torna a Integrazioni",
+      "backToModelProviders": "Torna a Provider di modelli"
     },
     "commandBar": {
       "searchPlaceholder": "Cerca o esegui un comando…",
@@ -2043,23 +2070,21 @@
     },
     "integrationsHub": {
       "title": "Integrazioni",
-      "intro": "Connetti e gestisci i sistemi esterni che questo workspace può collegare.",
+      "intro": "Connetti e gestisci i sistemi esterni opzionali che questo workspace può collegare. I modelli su cui girano i tuoi agenti si trovano in Provider di modelli.",
       "searchPlaceholder": "Cerca integrazioni…",
       "noMatches": "Nessuna integrazione corrisponde a \"{query}\".",
       "getStarted": {
         "title": "Per iniziare",
-        "body": "Connetti una sorgente di codice e un provider di modelli per eseguire la tua prima pipeline."
+        "body": "Connetti una sorgente di codice, così le tue pipeline hanno qualcosa su cui lavorare."
       },
       "status": {
         "connected": "Connesso",
-        "keyConnected": "Chiave connessa",
         "notConnected": "Non connesso",
         "needsAttention": "Richiede attenzione",
         "disabled": "Disabilitato",
         "recommended": "Consigliato"
       },
       "groups": {
-        "models": "Modelli e provider",
         "sourceControl": "Controllo del codice sorgente",
         "communication": "Comunicazione",
         "documents": "Documenti",
@@ -2069,16 +2094,6 @@
         "personal": "Personale (solo tu)"
       },
       "items": {
-        "openrouter": {
-          "description": "Un unico gateway per oltre 300 modelli. Aggiungi la tua chiave e abilita i modelli in un solo posto."
-        },
-        "vendors": {
-          "label": "Vendor e chiavi",
-          "description": "Abbonamenti LLM del workspace e chiavi API dei provider."
-        },
-        "personalSubs": {
-          "label": "Abbonamenti personali (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Connetti la GitHub App del workspace, esplora repo, PR e issue."
         },
@@ -2118,16 +2133,51 @@
           "label": "Il mio token GitHub",
           "description": "Un personal access token usato per le esecuzioni che avvii tu (push, PR, CI, merge)."
         },
-        "localRunners": {
-          "label": "I miei runner locali",
-          "description": "I runner di modelli sulla tua macchina (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Template ed esempi"
         },
         "bugHunt": {
           "label": "Caccia ai bug",
           "description": "Valuta i bug aperti e non assegnati di una bacheca e scegline uno da correggere"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Provider di modelli",
+      "intro": "I motori su cui girano i tuoi agenti. Almeno un provider deve essere connesso prima che qualsiasi passo di una pipeline possa essere eseguito.",
+      "searchPlaceholder": "Cerca provider…",
+      "noMatches": "Nessun provider corrisponde a \"{query}\".",
+      "getStarted": {
+        "title": "Nessun provider ancora connesso",
+        "body": "I passi di agente non possono partire finché non c'è un modello raggiungibile. Una chiave OpenRouter è il modo più rapido per sbloccare un catalogo ampio, ma vanno bene anche le chiavi dei vendor, un piano personale o un runner locale tuo."
+      },
+      "status": {
+        "connected": "Connesso",
+        "keyConnected": "Chiave connessa",
+        "notConnected": "Non connesso",
+        "recommended": "Consigliato",
+        "connectedCount": "nessuno connesso | {count} connesso | {count} connessi"
+      },
+      "groups": {
+        "workspace": "Provider del workspace",
+        "personal": "Personale (solo tu)",
+        "personalNote": "Appartengono al tuo account e non al workspace, e vengono usati solo per le esecuzioni che avvii tu. Sono elencati anche in La mia configurazione."
+      },
+      "items": {
+        "openrouter": {
+          "description": "Un unico gateway per oltre 300 modelli. Aggiungi la tua chiave e abilita i modelli in un solo posto."
+        },
+        "vendors": {
+          "label": "Vendor e chiavi",
+          "description": "Abbonamenti LLM del workspace e chiavi API dei provider."
+        },
+        "personalSubs": {
+          "label": "I miei abbonamenti",
+          "description": "Piani a uso individuale che sblocchi con una password personale (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "I miei runner locali",
+          "description": "I runner di modelli sulla tua macchina (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -4356,6 +4406,8 @@
     "repositories": "Repository",
     "addFromRepo": "Aggiungi da un repository esistente",
     "bootstrapRepo": "Inizializza repository",
+    "models": "Modelli",
+    "modelProviders": "Provider di modelli",
     "integrations": "Integrazioni",
     "infrastructure": "Infrastruttura",
     "sandbox": "Sandbox",
@@ -4367,8 +4419,7 @@
     "modelConfiguration": "Configurazione del modello",
     "accountSettings": "Impostazioni dell'account",
     "operatorDashboard": "Osservabilità della piattaforma",
-    "reports": "Report",
-    "environmentSetup": "Configurazione dell'ambiente"
+    "reports": "Report"
   },
   "errors": {
     "action": {
@@ -5263,8 +5314,8 @@
   },
   "environmentWizard": {
     "progress": "Passaggio {index} di {total}",
-    "title": "Configura un ambiente di test",
-    "subtitle": "Rileva, rivedi e salva una ricetta Docker Compose in modo che il Deployer la esegua.",
+    "title": "Configurazione dell'ambiente Docker Compose",
+    "subtitle": "Costruisci la ricetta Docker Compose da cui vengono avviati gli ambienti di test di un servizio: analizza il repository, rivedi, controlli preliminari, salva.",
     "recommended": "consigliato",
     "steps": {
       "pick": "Scegli servizio",
@@ -5274,6 +5325,7 @@
     },
     "pick": {
       "intro": "Scegli il servizio per cui configurare un ambiente Docker Compose.",
+      "scope": "Viene modificato solo il servizio che scegli. Riesegui più tardi per modificarne la ricetta.",
       "empty": "Ancora nessun servizio. Aggiungi prima un servizio."
     },
     "review": {

@@ -111,6 +111,8 @@
     "repositories": "リポジトリ",
     "addFromRepo": "既存のリポジトリから追加",
     "bootstrapRepo": "リポジトリをブートストラップ",
+    "models": "モデル",
+    "modelProviders": "モデルプロバイダー",
     "integrations": "連携",
     "infrastructure": "インフラストラクチャ",
     "sandbox": "サンドボックス",
@@ -122,8 +124,7 @@
     "modelConfiguration": "モデル設定",
     "accountSettings": "アカウント設定",
     "operatorDashboard": "プラットフォームの可観測性",
-    "reports": "レポート",
-    "environmentSetup": "環境セットアップ"
+    "reports": "レポート"
   },
   "board": {
     "toast": {
@@ -1934,7 +1935,8 @@
     },
     "integrationBack": {
       "backToMySetup": "マイセットアップに戻る",
-      "backToIntegrations": "Integrations に戻る"
+      "backToIntegrations": "Integrations に戻る",
+      "backToModelProviders": "モデルプロバイダーに戻る"
     },
     "commandBar": {
       "searchPlaceholder": "検索またはコマンドを実行…",
@@ -1995,23 +1997,21 @@
     },
     "integrationsHub": {
       "title": "Integrations",
-      "intro": "このワークスペースが連携できる外部システムを接続・管理します。",
+      "intro": "このワークスペースが連携できる任意の外部システムを接続・管理します。エージェントを動かすモデルはモデルプロバイダーにあります。",
       "searchPlaceholder": "Integrations を検索…",
       "noMatches": "\"{query}\" に一致する Integration はありません。",
       "getStarted": {
         "title": "はじめに",
-        "body": "コードソースとモデルプロバイダーを接続して、最初のパイプラインを実行しましょう。"
+        "body": "コードソースを接続すると、パイプラインが作業対象を持てるようになります。"
       },
       "status": {
         "connected": "接続済み",
-        "keyConnected": "キー接続済み",
         "notConnected": "未接続",
         "needsAttention": "対応が必要",
         "disabled": "無効",
         "recommended": "おすすめ"
       },
       "groups": {
-        "models": "モデルとプロバイダー",
         "sourceControl": "ソース管理",
         "communication": "コミュニケーション",
         "documents": "ドキュメント",
@@ -2021,16 +2021,6 @@
         "personal": "個人（あなたのみ）"
       },
       "items": {
-        "openrouter": {
-          "description": "300以上のモデルへの単一ゲートウェイ。キーを追加すれば、1か所でモデルを有効化できます。"
-        },
-        "vendors": {
-          "label": "ベンダーとキー",
-          "description": "ワークスペースの LLM サブスクリプションとプロバイダー API キー。"
-        },
-        "personalSubs": {
-          "label": "個人サブスクリプション (Claude、ChatGPT/Codex、GLM)"
-        },
         "github": {
           "description": "ワークスペースの GitHub App を接続し、リポジトリ、PR、Issue を閲覧します。"
         },
@@ -2070,16 +2060,51 @@
           "label": "マイ GitHub トークン",
           "description": "自分が開始した実行 (push、PR、CI、マージ) に使用するパーソナルアクセストークン。"
         },
-        "localRunners": {
-          "label": "マイローカルランナー",
-          "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
-        },
         "documentTemplates": {
           "label": "テンプレートと例"
         },
         "bugHunt": {
           "label": "バグハント",
           "description": "ボードの未割り当ての未解決バグを評価し、修正するものをひとつ選びます"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "モデルプロバイダー",
+      "intro": "エージェントを動かすエンジンです。パイプラインのステップを実行するには、少なくとも1つのプロバイダーが接続されている必要があります。",
+      "searchPlaceholder": "プロバイダーを検索…",
+      "noMatches": "「{query}」に一致するプロバイダーはありません。",
+      "getStarted": {
+        "title": "プロバイダーが未接続です",
+        "body": "モデルに到達できるまでエージェントのステップは実行できません。OpenRouter のキーが幅広いカタログを最も早く使える方法ですが、ベンダーキー、個人プラン、自分のローカルランナーでも同様に動作します。"
+      },
+      "status": {
+        "connected": "接続済み",
+        "keyConnected": "キー接続済み",
+        "notConnected": "未接続",
+        "recommended": "おすすめ",
+        "connectedCount": "接続なし | {count}件接続済み | {count}件接続済み"
+      },
+      "groups": {
+        "workspace": "ワークスペースのプロバイダー",
+        "personal": "個人（あなたのみ）",
+        "personalNote": "これらはワークスペースではなくあなたのアカウントに属し、あなたが開始した実行にのみ使われます。マイセットアップにも表示されます。"
+      },
+      "items": {
+        "openrouter": {
+          "description": "300以上のモデルへの単一ゲートウェイ。キーを追加すれば、1か所でモデルを有効化できます。"
+        },
+        "vendors": {
+          "label": "ベンダーとキー",
+          "description": "ワークスペースの LLM サブスクリプションとプロバイダー API キー。"
+        },
+        "personalSubs": {
+          "label": "マイサブスクリプション",
+          "description": "個人パスワードでアンロックする個人利用プラン（Claude、GLM、Codex）。"
+        },
+        "localRunners": {
+          "label": "マイローカルランナー",
+          "description": "自分のマシンで動かすモデルランナー（Ollama、LM Studio、vLLM）。"
         }
       }
     },
@@ -2791,6 +2816,32 @@
         "stopFailed": "共有スタックを停止できませんでした",
         "removeFailed": "共有スタックを削除できませんでした"
       }
+    },
+    "composeEnvSetup": {
+      "title": "サービス向け Docker Compose ガイド付きセットアップ",
+      "lead": "compose のパスやセットアップ手順を手書きする代わりに、1つのサービスのテスト環境を立ち上げるための Docker Compose レシピ作成をガイドします。",
+      "how": {
+        "title": "仕組み",
+        "scan": "サービスにリンクされたリポジトリを調べ、compose ファイル、プロファイル、env ファイル、シードダンプを探します。",
+        "analyse": "任意で環境アナリストエージェントを実行し、リポジトリ自身のスクリプトからセットアップ手順とヘルスゲートを草案します。",
+        "preflight": "レシピのプリフライトチェックを、実際にプロビジョニングするマシン上で実行します。",
+        "save": "レシピをサービスに保存し、ワークスペースの Docker Compose ハンドラーを登録します。",
+        "outcome": "以降、パイプラインが実際の環境を必要とするたびに Deployer がそのスタックをそのまま立ち上げ、Tester がそれに対して実行されます。保存するまで何も適用されません。"
+      },
+      "needed": {
+        "title": "必要なケース",
+        "running": "サービスのテストにアプリの実行が必要な場合（API や UI のテスト、マイグレーション、シードデータ）。",
+        "compose": "サービスが Docker Compose でプロビジョニングされ、まだレシピが保存されていない場合。",
+        "setup": "スタックの起動に複数のコマンドが必要な場合（プロファイル、env ファイル、シードデータ、準備完了チェック）。"
+      },
+      "notNeeded": {
+        "title": "不要なケース",
+        "inContainer": "パイプラインが lint、ビルド、ユニットテストのみを行う場合。これらは PR 前の検証チェックとしてエージェントコンテナ内で実行され、環境はプロビジョニングされません。",
+        "otherBackend": "サービスが別の方法でプロビジョニングされる場合（Kubernetes、クラウドプレビュー、インフラなし）。代わりに上部で設定してください。",
+        "noRepo": "サービスにリンクされたリポジトリがなく、調べる対象がない場合。"
+      },
+      "start": "ガイド付きセットアップを開始",
+      "rerunHint": "保存済みのレシピを変更するには、いつでも再実行できます。"
     },
     "localMode": {
       "title": "ローカルモード",
@@ -5267,8 +5318,8 @@
   },
   "environmentWizard": {
     "progress": "ステップ {index} / {total}",
-    "title": "テスト環境をセットアップ",
-    "subtitle": "Docker Compose レシピを検出・確認・保存して、Deployer がプロビジョニングできるようにします。",
+    "title": "Docker Compose 環境セットアップ",
+    "subtitle": "サービスのテスト環境を立ち上げる Docker Compose レシピを作成します。リポジトリの調査、確認、プリフライト、保存の順に進みます。",
     "recommended": "推奨",
     "steps": {
       "pick": "サービス選択",
@@ -5278,6 +5329,7 @@
     },
     "pick": {
       "intro": "Docker Compose 環境をセットアップするサービスを選択します。",
+      "scope": "変更されるのは選んだサービスだけです。後で再実行すればレシピを編集できます。",
       "empty": "サービスがまだありません。まずサービスを追加してください。"
     },
     "review": {

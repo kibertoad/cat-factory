@@ -126,6 +126,8 @@
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
     "bootstrapRepo": "Bootstrap repo",
+    "models": "Models",
+    "modelProviders": "Model providers",
     "integrations": "Integrations",
     "infrastructure": "Infrastructure",
     "sandbox": "Sandbox",
@@ -143,8 +145,7 @@
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
     "operatorDashboard": "Platform observability",
-    "reports": "Reports",
-    "environmentSetup": "Environment setup"
+    "reports": "Reports"
   },
   "board": {
     "toast": {
@@ -2003,7 +2004,8 @@
     },
     "integrationBack": {
       "backToMySetup": "Back to My setup",
-      "backToIntegrations": "Back to Integrations"
+      "backToIntegrations": "Back to Integrations",
+      "backToModelProviders": "Back to Model providers"
     },
     "commandBar": {
       "searchPlaceholder": "Search or run a command…",
@@ -2071,23 +2073,21 @@
     },
     "integrationsHub": {
       "title": "Integrations",
-      "intro": "Connect and manage the external systems this workspace can link in.",
+      "intro": "Connect and manage the optional external systems this workspace can link in. The models your agents run on live under Model providers.",
       "searchPlaceholder": "Search integrations…",
       "noMatches": "No integrations match \"{query}\".",
       "getStarted": {
         "title": "Get started",
-        "body": "Connect a code source and a model provider to run your first pipeline."
+        "body": "Connect a code source so your pipelines have something to work on."
       },
       "status": {
         "connected": "Connected",
-        "keyConnected": "Key connected",
         "notConnected": "Not connected",
         "needsAttention": "Needs attention",
         "disabled": "Disabled",
         "recommended": "Recommended"
       },
       "groups": {
-        "models": "Models and providers",
         "sourceControl": "Source control",
         "communication": "Communication",
         "documents": "Documents",
@@ -2097,16 +2097,6 @@
         "personal": "Personal (only you)"
       },
       "items": {
-        "openrouter": {
-          "description": "One gateway to 300+ models. Add your key and enable models in one place."
-        },
-        "vendors": {
-          "label": "Vendors and keys",
-          "description": "Workspace LLM subscriptions and provider API keys."
-        },
-        "personalSubs": {
-          "label": "Personal subscriptions (Claude, ChatGPT/Codex, GLM)"
-        },
         "github": {
           "description": "Connect the workspace's GitHub App, browse repos, PRs and issues."
         },
@@ -2146,16 +2136,51 @@
           "label": "My GitHub token",
           "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
         },
-        "localRunners": {
-          "label": "My local runners",
-          "description": "Your own-machine model runners (Ollama, LM Studio, vLLM…)."
-        },
         "documentTemplates": {
           "label": "Templates & examples"
         },
         "bugHunt": {
           "label": "Bug hunt",
           "description": "Rate a board's open, unassigned bugs and pick one to fix"
+        }
+      }
+    },
+    "modelProvidersHub": {
+      "title": "Model providers",
+      "intro": "The engines your agents run on. At least one provider has to be connected before any pipeline step can run.",
+      "searchPlaceholder": "Search providers…",
+      "noMatches": "No providers match \"{query}\".",
+      "getStarted": {
+        "title": "No provider connected yet",
+        "body": "Agent steps cannot run until a model is reachable. An OpenRouter key is the quickest way to unlock a wide catalogue, but vendor keys, a personal plan or your own local runner work just as well."
+      },
+      "status": {
+        "connected": "Connected",
+        "keyConnected": "Key connected",
+        "notConnected": "Not connected",
+        "recommended": "Recommended",
+        "connectedCount": "none connected | {count} connected | {count} connected"
+      },
+      "groups": {
+        "workspace": "Workspace providers",
+        "personal": "Personal (only you)",
+        "personalNote": "These belong to your account rather than the workspace, and are used only for runs you start. They are also listed under My setup."
+      },
+      "items": {
+        "openrouter": {
+          "description": "One gateway to 300+ models. Add your key and enable models in one place."
+        },
+        "vendors": {
+          "label": "Vendors and keys",
+          "description": "Workspace LLM subscriptions and provider API keys."
+        },
+        "personalSubs": {
+          "label": "My subscriptions",
+          "description": "Individual-usage plans you unlock with a personal password (Claude, GLM, Codex)."
+        },
+        "localRunners": {
+          "label": "My local runners",
+          "description": "Your own-machine model runners (Ollama, LM Studio, vLLM)."
         }
       }
     },
@@ -2869,6 +2894,32 @@
         "stopFailed": "Could not stop the shared stack",
         "removeFailed": "Could not delete the shared stack"
       }
+    },
+    "composeEnvSetup": {
+      "title": "Guided Docker Compose setup for a service",
+      "lead": "Walks one service through building the Docker Compose recipe its test environments are stood up from, instead of hand-writing the compose path and setup steps.",
+      "how": {
+        "title": "How it works",
+        "scan": "Scans the service's linked repository for compose files, profiles, env files and seed dumps.",
+        "analyse": "Optionally runs the environment analyst agent to draft setup steps and a health gate from the repository's own scripts.",
+        "preflight": "Runs the recipe's preflight checks on the machine that will provision it.",
+        "save": "Saves the recipe onto the service and registers the workspace's Docker Compose handler.",
+        "outcome": "After that the Deployer stands up exactly that stack whenever a pipeline needs a live environment, and the Tester runs against it. Nothing is applied until you save."
+      },
+      "needed": {
+        "title": "You need this when",
+        "running": "The service's tests need the app actually running: API or UI tests, migrations, seeded data.",
+        "compose": "The service is provisioned as Docker Compose and has no recipe saved yet.",
+        "setup": "Standing the stack up takes more than one command: profiles, env files, seed data or a readiness check."
+      },
+      "notNeeded": {
+        "title": "You can skip it when",
+        "inContainer": "The pipeline only lints, builds or runs unit tests. Those run inside the agent container as pre-PR validation checks, with no environment provisioned.",
+        "otherBackend": "The service is provisioned some other way (Kubernetes, a cloud preview, or no infrastructure at all). Configure that above instead.",
+        "noRepo": "The service has no linked repository, so there is nothing to scan."
+      },
+      "start": "Start guided setup",
+      "rerunHint": "Re-run it any time to change a saved recipe."
     },
     "localMode": {
       "title": "Local mode",
@@ -5420,8 +5471,8 @@
   },
   "environmentWizard": {
     "progress": "Step {index} of {total}",
-    "title": "Set up a test environment",
-    "subtitle": "Detect, review, and save a Docker Compose recipe so the Deployer provisions it.",
+    "title": "Docker Compose environment setup",
+    "subtitle": "Build the Docker Compose recipe one service's test environments are stood up from: scan the repository, review, preflight, save.",
     "recommended": "recommended",
     "steps": {
       "pick": "Pick service",
@@ -5431,6 +5482,7 @@
     },
     "pick": {
       "intro": "Choose the service to set up a Docker Compose environment for.",
+      "scope": "Only the service you pick is changed. Run this again later to edit its recipe.",
       "empty": "No services yet. Add a service first."
     },
     "review": {
