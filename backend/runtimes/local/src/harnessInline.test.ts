@@ -5,9 +5,11 @@ import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import {
   type CliExec,
+  CliExecFailure,
   detectHostInlineClis,
   makeInlineHarnessPredicate,
   runnerForVendor,
+  silenceClause,
   spawnCliExec,
   wrapResolverWithInlineHarness,
 } from './harnessInline.js'
@@ -186,13 +188,26 @@ describe('runnerForVendor', () => {
   }
 
   describe('claude', () => {
-    it('parses the JSON result, flags/system + prompt over stdin, and splits usage by class', async () => {
+    /** One `stream-json` line. */
+    function event(value: Record<string, unknown>): string {
+      return JSON.stringify(value)
+    }
+    /** An assistant envelope: one CONTENT BLOCK of the call `id`, repeating that call's usage. */
+    function envelope(id: string, usage: Record<string, number>): string {
+      return event({ type: 'assistant', message: { id, model: 'claude-opus-5', usage } })
+    }
+
+    it('reads the terminal result event, flags/system + prompt over stdin, and splits usage by class', async () => {
       const { exec, calls } = fakeExec(
-        JSON.stringify({
-          subtype: 'success',
-          result: 'REVIEW OK',
-          usage: { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 3 },
-        }),
+        [
+          envelope('msg_1', { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 3 }),
+          event({
+            type: 'result',
+            subtype: 'success',
+            result: 'REVIEW OK',
+            usage: { input_tokens: 10, cache_read_input_tokens: 5, output_tokens: 3 },
+          }),
+        ].join('\n'),
       )
       const result = await runnerForVendor('claude', exec)(req)
       expect(result.text).toBe('REVIEW OK')
@@ -206,6 +221,11 @@ describe('runnerForVendor', () => {
         outputTokens: 3,
       })
       expect(calls[0]!.command).toBe('claude')
+      // `--verbose` is mandatory alongside `stream-json` in print mode; without it the CLI refuses
+      // and the step fails before reaching the model.
+      expect(calls[0]!.args).toEqual(
+        expect.arrayContaining(['--output-format', 'stream-json', '--verbose']),
+      )
       expect(calls[0]!.args).toContain('--append-system-prompt')
       expect(calls[0]!.args).toContain('You are a reviewer.')
       expect(calls[0]!.args).toContain('claude-opus-5')
@@ -214,7 +234,8 @@ describe('runnerForVendor', () => {
 
     it('throws when claude reports an in-band error (is_error, exit 0) instead of returning the error text', async () => {
       const { exec } = fakeExec(
-        JSON.stringify({
+        event({
+          type: 'result',
           subtype: 'error_during_execution',
           is_error: true,
           result: 'Credit balance too low',
@@ -224,14 +245,91 @@ describe('runnerForVendor', () => {
     })
 
     it('throws on an error_* subtype even without is_error', async () => {
-      const { exec } = fakeExec(JSON.stringify({ subtype: 'error_max_turns', result: '' }))
+      const { exec } = fakeExec(event({ type: 'result', subtype: 'error_max_turns', result: '' }))
       await expect(runnerForVendor('claude', exec)(req)).rejects.toThrow(/error_max_turns/)
     })
 
-    it('falls back to raw stdout when the output is not JSON', async () => {
+    it('falls back to raw stdout when the stream carries no terminal result event', async () => {
       const { exec } = fakeExec('plain text answer')
       const result = await runnerForVendor('claude', exec)(req)
       expect(result.text).toBe('plain text answer')
+    })
+
+    // The point of streaming rather than taking the one-shot `json` object: a killed run has no
+    // terminal event, so without the partial stream it could report nothing about what it spent —
+    // and nothing else records it either (a failed step writes no `token_usage` row).
+    it('reports what a TIMED-OUT run had already burned, from its partial stream', async () => {
+      const partial = [
+        envelope('msg_1', {
+          input_tokens: 100,
+          cache_read_input_tokens: 900_000,
+          cache_creation_input_tokens: 50_000,
+          output_tokens: 4_000,
+        }),
+        envelope('msg_2', { input_tokens: 40, cache_read_input_tokens: 500_000 }),
+      ].join('\n')
+      const exec: CliExec = async () => {
+        throw new CliExecFailure(
+          'claude timed out after 300000ms; silent for 69s',
+          'timeout',
+          partial,
+        )
+      }
+      await expect(runnerForVendor('claude', exec)(req)).rejects.toThrow(
+        /timed out after 300000ms; silent for 69s; burned 1\.45M tokens \(1\.40M cache-read\) across 2 model calls/,
+      )
+    })
+
+    // Envelopes are per CONTENT BLOCK, each repeating the SAME call's usage, so summing them
+    // multiplies the burn — the trap that made the container harness's metering untrustworthy
+    // (575 rows for ~230 real calls). Fold by `message.id` first.
+    it('counts a multi-block response ONCE rather than once per envelope', async () => {
+      const usage = { input_tokens: 1_000, output_tokens: 2_000 }
+      // Six envelopes, one call: text plus five parallel tool_use blocks.
+      const partial = [
+        envelope('msg_same', usage),
+        envelope('msg_same', usage),
+        envelope('msg_same', usage),
+        envelope('msg_same', usage),
+        envelope('msg_same', usage),
+        envelope('msg_same', usage),
+      ].join('\n')
+      const exec: CliExec = async () => {
+        throw new CliExecFailure('claude aborted', 'aborted', partial)
+      }
+      await expect(runnerForVendor('claude', exec)(req)).rejects.toThrow(
+        /burned 3\.0k tokens \(0 cache-read\) across 1 model call$/,
+      )
+    })
+
+    it('says no model call completed when the run died before the model answered', async () => {
+      const exec: CliExec = async () => {
+        throw new CliExecFailure(
+          'claude timed out after 300000ms; no output at all in 300s',
+          'timeout',
+          '',
+        )
+      }
+      await expect(runnerForVendor('claude', exec)(req)).rejects.toThrow(
+        /no output at all in 300s; no model call completed$/,
+      )
+    })
+
+    it('keeps the CliExecFailure as the cause so the kill reason survives enrichment', async () => {
+      const original = new CliExecFailure('claude timed out after 300000ms', 'timeout', '')
+      const exec: CliExec = async () => {
+        throw original
+      }
+      await expect(runnerForVendor('claude', exec)(req)).rejects.toMatchObject({
+        cause: { reason: 'timeout' },
+      })
+    })
+
+    it('passes a non-CliExecFailure through untouched (a spawn ENOENT is not a burn story)', async () => {
+      const exec: CliExec = async () => {
+        throw new Error('spawn claude ENOENT')
+      }
+      await expect(runnerForVendor('claude', exec)(req)).rejects.toThrow(/^spawn claude ENOENT$/)
     })
   })
 
@@ -267,9 +365,9 @@ describe('spawnCliExec', () => {
     }
   })
 
-  // `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as JSON on
-  // STDOUT and leaves stderr EMPTY, so a stderr-only failure message carried the exit code and
-  // nothing else — the same defect the container harness's `streamCli` had.
+  // `claude -p` reports an API refusal (quota, rate limit, auth) on STDOUT and leaves stderr EMPTY,
+  // so a stderr-only failure message carried the exit code and nothing else — the same defect the
+  // container harness's `streamCli` had.
   const runFailing = (body: string): Promise<string> =>
     spawnCliExec(process.execPath, ['-e', body], '', { timeoutMs: 30_000 })
 
@@ -311,5 +409,56 @@ describe('spawnCliExec', () => {
     )
     expect(message).not.toMatch(/ghp_0123456789/)
     expect(message).toMatch(/auth failed for/)
+  })
+
+  /** Run `body` and hand back whatever it rejected with. */
+  const failureFrom = (body: string, timeoutMs: number): Promise<unknown> =>
+    spawnCliExec(process.execPath, ['-e', body], '', { timeoutMs }).then(
+      () => null,
+      (err: unknown) => err,
+    )
+
+  // The watchdog path is the one that used to throw the partial output away, so the run that spent a
+  // whole poll budget and the run that never started read identically.
+  it('rejects a TIMED-OUT run as a CliExecFailure carrying its partial stdout', async () => {
+    const failure = await failureFrom(
+      'process.stdout.write("partial event\\n");setInterval(() => {}, 1000)',
+      300,
+    )
+    expect(failure).toBeInstanceOf(CliExecFailure)
+    const { reason, stdout, message } = failure as CliExecFailure
+    expect(reason).toBe('timeout')
+    expect(stdout).toContain('partial event')
+    expect(message).toMatch(/timed out after 300ms/)
+  })
+
+  it('tags a bad exit as `exit` and keeps carrying its output', async () => {
+    const failure = await failureFrom('process.stdout.write("boom");process.exit(4)', 30_000)
+    expect(failure).toBeInstanceOf(CliExecFailure)
+    expect((failure as CliExecFailure).reason).toBe('exit')
+    expect((failure as CliExecFailure).stdout).toBe('boom')
+  })
+
+  // A fast failure must NOT gain a silence clause (the threshold's whole purpose), which is also
+  // what keeps every message asserted above unchanged.
+  it('leaves a fast failure free of a silence clause', async () => {
+    const failure = await failureFrom('process.exit(5)', 30_000)
+    expect((failure as CliExecFailure).message).not.toMatch(/silent|no output at all/)
+  })
+})
+
+describe('silenceClause', () => {
+  const start = 1_000_000
+
+  it('stays empty below the reporting threshold', () => {
+    expect(silenceClause(start, undefined, start + 29_000)).toBe('')
+    expect(silenceClause(start, start + 1_000, start + 20_000)).toBe('')
+  })
+
+  it('separates a run that went quiet from one that never spoke at all', () => {
+    // Measured from the LAST output, not the start: this run talked, then stalled for 69s.
+    expect(silenceClause(start, start + 10_000, start + 79_000)).toBe('silent for 69s')
+    // Nothing ever arrived, so the window is the whole run — the wedge-before-first-token case.
+    expect(silenceClause(start, undefined, start + 300_000)).toBe('no output at all in 300s')
   })
 })

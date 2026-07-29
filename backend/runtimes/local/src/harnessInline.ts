@@ -61,11 +61,10 @@ const EXIT_OUTPUT_TAIL_CHARS = 700
 /**
  * The message a badly-ended inline CLI fails with.
  *
- * `claude -p --output-format json` reports an API refusal (quota, rate limit, auth) as JSON on
- * STDOUT and leaves stderr EMPTY, so a stderr-only message carries nothing but the exit code and
- * the reason the caller's in-band `is_error` check would have surfaced is dropped on the floor.
- * Carry whichever stream actually spoke, and say so when neither did rather than trailing off
- * after a colon.
+ * `claude -p` reports an API refusal (quota, rate limit, auth) as JSON on STDOUT and leaves stderr
+ * EMPTY, so a stderr-only message carries nothing but the exit code, and the reason the caller's
+ * in-band `is_error` check would have surfaced is dropped on the floor. Carry whichever stream
+ * actually spoke, and say so when neither did rather than trailing off after a colon.
  *
  * Both streams are command output, so both are scrubbed at this emit site — the sibling in the
  * container harness (`streamCli`) redacts its stderr tail for the same reason, and stdout here is
@@ -84,12 +83,69 @@ function cliExitMessage(
   return `${command} ${describeProcessExit(code, killSignal)}: ${tail}`
 }
 
+/**
+ * How long a run must have been quiet before its silence is worth reporting. Mirrors the container
+ * harness's `SILENCE_BREADCRUMB_MS` and its reasoning: without the threshold every fast failure (a
+ * missing binary, an auth rejection) would gain a true-but-useless "said nothing" clause for a
+ * phase where the CLI was never going to have spoken yet.
+ */
+const SILENCE_BREADCRUMB_MS = 30_000
+
+/**
+ * How quiet the run had gone before it died, or `''` when silence isn't part of the story. Exit
+ * status alone can't separate a CLI that stalled from one that died on its first line — and for the
+ * watchdog kill silence IS the whole diagnosis, because the message otherwise reports only that the
+ * budget elapsed.
+ *
+ * The container harness's twin says "no activity" because its channel also carries synthetic
+ * keep-alive beats. Here the channel is literally the child's stdout/stderr, so this claims exactly
+ * that much and no more: the CLI itself was silent.
+ *
+ * Exported for its own test (like {@link spawnCliExec}): reaching the threshold through a real
+ * subprocess would mean a 30s test.
+ */
+export function silenceClause(
+  startedAt: number,
+  lastOutputAt: number | undefined,
+  now: number,
+): string {
+  const silentMs = now - (lastOutputAt ?? startedAt)
+  if (silentMs < SILENCE_BREADCRUMB_MS) return ''
+  const secs = Math.round(silentMs / 1000)
+  return lastOutputAt === undefined ? `no output at all in ${secs}s` : `silent for ${secs}s`
+}
+
+/**
+ * A CLI run that ended badly, carrying the evidence only the SPAWN SITE holds: everything the child
+ * had written before it died, and (already folded into `message`) how quiet it had gone.
+ *
+ * The partial stdout rides along because the spawn site cannot interpret it — only the vendor runner
+ * knows its own output format. {@link makeClaudeRunner} catches this to append what Claude Code's
+ * event stream says the run had already consumed; the previous `reject(new Error(...))` discarded
+ * that buffer outright, which is why a killed run could burn millions of tokens and report nothing.
+ */
+export class CliExecFailure extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'timeout' | 'aborted' | 'exit',
+    /** Everything the CLI wrote to stdout before it died — its partial event stream. */
+    readonly stdout: string,
+  ) {
+    super(message)
+    this.name = 'CliExecFailure'
+  }
+}
+
 /** The default {@link CliExec}: a real `node:child_process` spawn with a timeout watchdog.
  * Exported for its own tests (the sanitized-env contract); callers use the runner builders. */
 export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
   new Promise((resolve, reject) => {
     const { signal, timeoutMs = DEFAULT_CLI_TIMEOUT_MS } = opts
     if (signal?.aborted) {
+      // Deliberately a plain Error, not a {@link CliExecFailure}: nothing ran, so there is no
+      // stream to account for and no silence to measure. The message already says as much, and the
+      // vendor runner passes a non-`CliExecFailure` through untouched rather than appending a
+      // redundant "no model call completed".
       reject(new Error(`${command} aborted before start`))
       return
     }
@@ -104,6 +160,11 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     child.stdin.end(stdin)
     let stdout = ''
     let stderr = ''
+    // When the child last spoke on EITHER stream, so a failure can say how long it had been quiet.
+    // `undefined` until the first byte — the honest distinction between a run that went quiet and
+    // one that never produced anything at all.
+    const startedAt = Date.now()
+    let lastOutputAt: number | undefined
     let killedReason: 'aborted' | 'timeout' | undefined
     let killTimer: ReturnType<typeof setTimeout> | undefined
     // Terminate the child (SIGTERM), escalating to SIGKILL if it doesn't exit promptly.
@@ -123,9 +184,11 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
       if (killTimer) clearTimeout(killTimer)
     }
     child.stdout.on('data', (chunk: Buffer) => {
+      lastOutputAt = Date.now()
       stdout += chunk.toString()
     })
     child.stderr.on('data', (chunk: Buffer) => {
+      lastOutputAt = Date.now()
       stderr += chunk.toString()
       if (stderr.length > 8_000) stderr = stderr.slice(-8_000)
     })
@@ -138,18 +201,27 @@ export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
     // line in this handler that reaches for it.
     child.on('close', (code, killSignal) => {
       cleanup()
+      // Every bad end goes out as a {@link CliExecFailure} carrying the partial stdout and the
+      // silence clause. The watchdog and abort paths used to reject with the bare fact that the
+      // budget elapsed — no output, no timing, nothing about what the run had already done — which
+      // made a run that burned through a poll budget indistinguishable from one that never reached
+      // the model. The vendor runner adds what the stream says it consumed.
+      const failed = (reason: 'timeout' | 'aborted' | 'exit', base: string): void => {
+        const silence = silenceClause(startedAt, lastOutputAt, Date.now())
+        reject(new CliExecFailure(silence ? `${base}; ${silence}` : base, reason, stdout))
+      }
       if (killedReason === 'timeout') {
-        reject(new Error(`${command} timed out after ${timeoutMs}ms`))
+        failed('timeout', `${command} timed out after ${timeoutMs}ms`)
         return
       }
       if (killedReason === 'aborted') {
-        reject(new Error(`${command} aborted`))
+        failed('aborted', `${command} aborted`)
         return
       }
       if (code !== 0) {
         // BOTH streams, not just stderr — see {@link cliExitMessage} for why, and for what is
         // scrubbed out of them on the way.
-        reject(new Error(cliExitMessage(command, code, killSignal, stderr, stdout)))
+        failed('exit', cliExitMessage(command, code, killSignal, stderr, stdout))
         return
       }
       resolve(stdout)
@@ -190,34 +262,158 @@ function claudeUsage(raw: unknown): InlineCliResult['usage'] {
 const CLAUDE_ERROR_SUBTYPES = new Set(['error_max_turns', 'error_during_execution'])
 
 /**
- * A runner for the ambient `claude` CLI (`--output-format json`), which returns a single result
- * object `{ result, usage, subtype, is_error }`. The role rides `--append-system-prompt`; the
- * prompt goes over stdin. Bypass permissions so the headless run never blocks on an approval
- * prompt (an inline text task uses no tools anyway).
+ * Fold Claude Code's `stream-json` output into the run's terminal `result` event plus the
+ * cumulative telemetry of the calls that got as far as reporting usage.
+ *
+ * Envelopes are keyed by `message.id` BEFORE summing, because the stream emits one envelope per
+ * CONTENT BLOCK of a response, each repeating that ONE call's `usage` — a turn that answers with
+ * text and then fires five tool calls arrives as six envelopes. Summing per envelope therefore
+ * multiplies the burn: on the run that motivated this change, 117 envelopes carried 31 real calls
+ * and the naive sum inflated 1.47M tokens to 5.53M (3.8x). The container harness hit exactly this
+ * trap and fixed it the same way — see `claude-call-aggregator.ts` and
+ * docs/initiatives/token-burn-instrumentation.md.
+ */
+function claudeStreamTelemetry(stdout: string): {
+  calls: number
+  usage: InlineCliResult['usage']
+  result: Record<string, unknown> | undefined
+} {
+  const usageByCall = new Map<string, unknown>()
+  let result: Record<string, unknown> | undefined
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    let event: unknown
+    try {
+      event = JSON.parse(trimmed)
+    } catch {
+      continue // a wrapper/progress line that isn't an event
+    }
+    if (typeof event !== 'object' || event === null) continue
+    const e = event as Record<string, unknown>
+    // The terminal event, the same object `--output-format json` used to emit on its own. LAST one
+    // wins: it is the run's authoritative account of itself.
+    if (e.type === 'result') {
+      result = e
+      continue
+    }
+    const message = e.message
+    if (typeof message !== 'object' || message === null) continue
+    const m = message as Record<string, unknown>
+    if (m.usage === undefined) continue
+    // Keyed by call id, so a response's repeated per-block usage is counted ONCE. An envelope
+    // without an id can't be folded, so it stands alone rather than colliding with its siblings.
+    usageByCall.set(typeof m.id === 'string' ? m.id : `anon:${usageByCall.size}`, m.usage)
+  }
+  let inputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+  let outputTokens = 0
+  for (const raw of usageByCall.values()) {
+    const one = claudeUsage(raw)
+    if (!one) continue
+    inputTokens += one.inputTokens ?? 0
+    cacheReadTokens += one.cacheReadTokens ?? 0
+    cacheWriteTokens += one.cacheWriteTokens ?? 0
+    outputTokens += one.outputTokens ?? 0
+  }
+  return {
+    calls: usageByCall.size,
+    usage:
+      usageByCall.size === 0
+        ? undefined
+        : { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens },
+    result,
+  }
+}
+
+/** Compact token counts: a breadcrumb is read by a human, not summed by anything. */
+function formatTokens(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(2)}M`
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`
+  return String(count)
+}
+
+/**
+ * What the run consumed before it died, in the two terms that change the diagnosis: whether the
+ * model was reached at all, and whether a warm cache carried the input (`claudeUsage` keeps the
+ * input classes apart for precisely this reason — a cache-heavy run is ~0.1x the base rate).
+ */
+function claudeBurnClause(calls: number, usage: InlineCliResult['usage']): string {
+  if (calls === 0 || !usage) return 'no model call completed'
+  const total =
+    (usage.inputTokens ?? 0) +
+    (usage.cacheReadTokens ?? 0) +
+    (usage.cacheWriteTokens ?? 0) +
+    (usage.outputTokens ?? 0)
+  return (
+    `burned ${formatTokens(total)} tokens ` +
+    `(${formatTokens(usage.cacheReadTokens ?? 0)} cache-read) ` +
+    `across ${calls} model call${calls === 1 ? '' : 's'}`
+  )
+}
+
+/**
+ * A runner for the ambient `claude` CLI. The role rides `--append-system-prompt`; the prompt goes
+ * over stdin. Bypass permissions so the headless run never blocks on an approval prompt (an inline
+ * text task uses no tools anyway).
+ *
+ * Streams `--output-format stream-json --verbose` rather than taking the single-object `json`: that
+ * lone result object exists ONLY if the CLI reaches the end, so a run the watchdog killed reported
+ * nothing whatsoever about what it had already spent — and nothing else recorded it either, because
+ * a failed step writes no `token_usage` row on either transport. The terminal event carries the same
+ * fields the single object did, so the success path is unchanged; the difference is that a killed run
+ * now still has a stream to account for itself with. Stream volume is bounded by the watchdog.
  */
 function makeClaudeRunner(exec: CliExec): InlineCliRunner {
   return async (req: InlineCliRequest): Promise<InlineCliResult> => {
-    const args = ['-p', '--output-format', 'json', '--permission-mode', 'bypassPermissions']
+    const args = [
+      '-p',
+      '--output-format',
+      'stream-json',
+      // Required alongside `stream-json` in print mode, exactly as the container harness runs it.
+      '--verbose',
+      '--permission-mode',
+      'bypassPermissions',
+    ]
     if (req.system.trim()) args.push('--append-system-prompt', req.system)
     args.push('--model', req.model)
-    const stdout = await exec('claude', args, req.prompt, req.signal ? { signal: req.signal } : {})
-    let parsed: Record<string, unknown>
+    let stdout: string
     try {
-      parsed = JSON.parse(stdout) as Record<string, unknown>
-    } catch {
-      // Not JSON (older CLI / a wrapper line) — fall back to the raw text.
+      stdout = await exec('claude', args, req.prompt, req.signal ? { signal: req.signal } : {})
+    } catch (error) {
+      if (error instanceof CliExecFailure) throw claudeFailureWithBurn(error)
+      throw error
+    }
+    const { result } = claudeStreamTelemetry(stdout)
+    if (!result) {
+      // No terminal event (an older CLI, or a wrapper that swallowed the stream) — fall back to the
+      // raw text, as the single-object path did when its JSON wouldn't parse.
       return { text: stdout.trim(), finishReason: 'stop' }
     }
-    const subtype = typeof parsed.subtype === 'string' ? parsed.subtype : undefined
-    if (parsed.is_error === true || (subtype && CLAUDE_ERROR_SUBTYPES.has(subtype))) {
-      const detail = typeof parsed.result === 'string' ? parsed.result : (subtype ?? 'error')
+    const subtype = typeof result.subtype === 'string' ? result.subtype : undefined
+    if (result.is_error === true || (subtype && CLAUDE_ERROR_SUBTYPES.has(subtype))) {
+      const detail = typeof result.result === 'string' ? result.result : (subtype ?? 'error')
       throw new Error(
-        `claude reported an error (${subtype ?? 'is_error'}): ${detail.slice(0, 700)}`,
+        `claude reported an error (${subtype ?? 'is_error'}): ` +
+          detail.slice(0, EXIT_OUTPUT_TAIL_CHARS),
       )
     }
-    const text = typeof parsed.result === 'string' ? parsed.result : ''
-    return { text, finishReason: 'stop', usage: claudeUsage(parsed.usage) }
+    const text = typeof result.result === 'string' ? result.result : ''
+    // The terminal event's own cumulative figure, not the folded per-call sum: on a run that
+    // finished, the CLI's account of itself is authoritative.
+    return { text, finishReason: 'stop', usage: claudeUsage(result.usage) }
   }
+}
+
+/**
+ * Re-throw a badly-ended `claude` run with what its PARTIAL stream says it had already consumed.
+ * The cause chain is kept so a caller that wants the reason (`timeout` / `aborted` / `exit`) still
+ * has it.
+ */
+function claudeFailureWithBurn(failure: CliExecFailure): Error {
+  const { calls, usage } = claudeStreamTelemetry(failure.stdout)
+  return new Error(`${failure.message}; ${claudeBurnClause(calls, usage)}`, { cause: failure })
 }
 
 /**
