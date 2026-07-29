@@ -3010,6 +3010,19 @@
       "cacheWrite": "{tokens} in den Cache geschrieben",
       "cacheWriteHint": "Eingabe-Tokens, die in den Cache des Providers geschrieben wurden (1,25x bis 2x der Preis frischer Eingabe-Tokens)"
     },
+    "phase": {
+      "title": "Wohin die Tokens geflossen sind",
+      "subtitle": "nach Phase des Laufs, sortiert nach Mitschleppkosten",
+      "columns": {
+        "phase": "Phase",
+        "turns": "Runden",
+        "tokensInOut": "Tokens (ein / aus)",
+        "carryCost": "Mitschleppkosten"
+      },
+      "carryCostHint": "Wie stark jede Phase die nachfolgenden Runden belastet hat: ihr Kontext einmal für jede spätere Runde gezählt, die ihn erneut senden musste. Vergleichen Sie die Phasen eines Laufs miteinander; für sich allein sagt die Zahl nichts aus. Eine spät laufende Phase schleppt wenig mit, wie viel sie auch verbraucht hat; lesen Sie diese Spalte daher zusammen mit den Tokens daneben.",
+      "unattributed": "Nicht zugeordnet",
+      "unattributedHint": "von einem Kanal erfasst, der keine Phase meldet"
+    },
     "metricsBar": {
       "calls": "{count} Aufruf | {count} Aufrufe",
       "inputCompletionTokens": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",

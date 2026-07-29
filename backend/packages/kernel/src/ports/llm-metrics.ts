@@ -126,13 +126,14 @@ export interface LlmCallMetric {
 }
 
 /**
- * Per-agent-kind aggregate over a run's calls, attached to the matching pipeline
- * step for at-a-glance board display. Computed by SQL aggregation — it never reads
- * the heavy prompt/response text columns.
+ * The numeric aggregate every rollup grain carries — the run's totals, one agent kind's,
+ * one phase's, or one `(agentKind, phase)` cell's. Named apart from
+ * {@link LlmCallMetricSummary} because the store computes the FINEST grain once and the
+ * coarser ones are folded from it (`domain/llm-rollup.ts`): a second SQL pass per grain
+ * would be free to disagree with the breakdown it sits next to.
  */
-export interface LlmCallMetricSummary {
-  agentKind: string
-  /** Number of calls recorded for this agent kind in the run. */
+export interface LlmCallRollupTotals {
+  /** Number of calls (turns) recorded in this cell. */
   calls: number
   /** Sum of FRESH (uncached) input tokens — exclusive of both cache classes. */
   promptTokens: number
@@ -156,6 +157,39 @@ export interface LlmCallMetricSummary {
   errors: number
   /** Calls that produced a warning (truncated or content-filtered) but did not fail. */
   warnings: number
+  /**
+   * CARRY COST proxy, in token-turns: `Σ (this call's total input) × (turns left in its
+   * conversation after it)`. It answers the question a plain token sum cannot — how much a
+   * phase's context is DRAGGED ALONG by everything that follows it. A phase that loads a
+   * large tree early and then hands over is cheap by its own token count and expensive here;
+   * a late phase of the same size is the reverse. That contrast is what decides
+   * `token-burn-instrumentation` Slice 4's "prefix size dominates" vs "turn count dominates".
+   *
+   * The conversation, not the run, is the partition: the delta chain is keyed by
+   * `(workspace, execution, agentKind)`, so a merger step's turns do not carry a coder step's
+   * context and must not be counted as if they did.
+   *
+   * It is a PROXY, deliberately: it re-counts tokens the model saw once per subsequent turn,
+   * which is exactly the re-send it is measuring, so it is comparable BETWEEN phases of a run
+   * and meaningless as an absolute. Being a product of two sums it outgrows a 32-bit integer
+   * on any real run — every store aggregates it as a 64-bit sum.
+   */
+  carryCostTokens: number
+}
+
+/**
+ * One `(agentKind, phase)` cell of a run's model activity — the finest grain the store
+ * aggregates, and the only one it computes. Attached to the matching pipeline step for
+ * at-a-glance board display (folded up to the kind) and grouped by phase for the burn
+ * breakdown (`docs/initiatives/token-burn-instrumentation.md`). Computed by SQL
+ * aggregation — it never reads the heavy prompt/response text columns.
+ *
+ * `phase` is `''` for a call nothing could attribute (an older harness image, an inline
+ * call, the un-phased proxy path). That is a REAL cell of the breakdown, never dropped.
+ */
+export interface LlmCallMetricSummary extends LlmCallRollupTotals {
+  agentKind: string
+  phase: string
 }
 
 /** The most recent call's chain tip for delta prompt storage. */
@@ -347,8 +381,14 @@ export interface LlmCallMetricRepository {
    */
   get(workspaceId: string, id: string, body?: LlmCallBodyWindow): Promise<LlmCallMetricPage | null>
   /**
-   * Per-agent-kind aggregates for a run, for the board rollups. Aggregates in SQL
-   * and deliberately selects no text columns, so it is cheap to run on every emit.
+   * Per-`(agentKind, phase)` aggregates for a run — the board rollups AND the per-phase
+   * burn breakdown, from ONE `GROUP BY`. Aggregates in SQL and deliberately selects no text
+   * columns, so it is cheap to run on every emit.
+   *
+   * It returns the FINEST grain rather than one shape per consumer: the coarser views (a
+   * step's per-kind rollup, the run's per-phase breakdown, the run totals) are pure folds
+   * over this result (`domain/llm-rollup.ts`). A second aggregate per grain would double the
+   * cost of an emit and could only ever disagree with the breakdown beside it.
    */
   summarizeByExecution(workspaceId: string, executionId: string): Promise<LlmCallMetricSummary[]>
   /**

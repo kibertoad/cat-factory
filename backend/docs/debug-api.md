@@ -145,6 +145,16 @@ The failure classes and where each one's evidence lives:
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately — a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.
+- **"why did this small task cost so much?" — read `llm.byPhase`.** It re-cuts the same aggregate
+  by WHICH slice of the run's work spent the tokens (the agent's own edit loop, a pre-PR
+  validation repair round, a reproduction-proof repair round, …), which `byAgentKind` cannot
+  answer because one coder step contains every phase. Rows lead with `carryCostTokens` — each
+  call's context counted once for every later turn in its conversation that had to re-send it —
+  so the phase that made everything after it expensive sorts first, not merely the one that read
+  the most. Compare a run's phases against each other; the absolute number means nothing.
+  `phase: ""` is the unattributed slice (an older harness image, an inline call, the un-phased
+  proxy path) and is always present rather than dropped, so "we could not attribute this" never
+  reads as "nothing was spent here". `/llm-calls?phase=` drills into any row, `""` included.
 
 ### 3. Grep for the cause (`?contains=`)
 

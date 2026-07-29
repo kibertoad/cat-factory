@@ -16,6 +16,79 @@ import type { D1Database } from '@cloudflare/workers-types'
 // constant so the warning classification matches the service + the Node store.
 const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join(', ')
 
+/**
+ * The run's calls with each one's total input and the number of turns left in ITS conversation
+ * after it — the two factors of the carry-cost proxy (`LlmCallRollupTotals.carryCostTokens`).
+ *
+ * `PARTITION BY agent_kind` is the conversation boundary, not a convenience: the prompt delta
+ * chain is keyed by `(workspace, execution, agent_kind)`, so a later step's turns never re-send
+ * an earlier step's context and must not be counted as carrying it.
+ *
+ * The order is `(created_at, message_count, id)` rather than `turn_index`: a proxied row's turn
+ * index is deliberately NULL (the proxy has no job-scoped counter), so ordering by it would
+ * heap every Pi call at one end of its conversation. `message_count` breaks the same-millisecond
+ * ties a burst produces, and `id` makes the result deterministic.
+ */
+const CARRY_COST_SUBQUERY_SQL = `SELECT
+       agent_kind,
+       phase,
+       prompt_tokens,
+       cache_read_tokens,
+       cache_write_tokens,
+       completion_tokens,
+       request_max_tokens,
+       finish_reason,
+       upstream_ms,
+       overhead_ms,
+       ok,
+       (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
+       COUNT(*) OVER (PARTITION BY agent_kind)
+         - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
+         AS turns_after
+     FROM llm_call_metrics
+     WHERE workspace_id = ? AND execution_id = ?`
+
+interface SummaryRow {
+  agent_kind: string
+  phase: string
+  calls: number
+  prompt_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  completion_tokens: number
+  peak_completion_tokens: number
+  max_output_tokens: number | null
+  truncated_calls: number
+  upstream_ms: number
+  overhead_ms: number
+  errors: number
+  warnings: number
+  carry_cost_tokens: number
+}
+
+function rowToSummary(r: SummaryRow): LlmCallMetricSummary {
+  return {
+    agentKind: r.agent_kind,
+    phase: r.phase,
+    calls: r.calls,
+    promptTokens: r.prompt_tokens,
+    cacheReadTokens: r.cache_read_tokens,
+    cacheWriteTokens: r.cache_write_tokens,
+    completionTokens: r.completion_tokens,
+    peakCompletionTokens: r.peak_completion_tokens,
+    maxOutputTokens: r.max_output_tokens,
+    truncatedCalls: r.truncated_calls,
+    upstreamMs: r.upstream_ms,
+    overheadMs: r.overhead_ms,
+    errors: r.errors,
+    warnings: r.warnings,
+    // Coerced, matching the `node:sqlite` store line for line: these two files mirror each
+    // other by contract, and the carry cost is the one column a driver may hand back as
+    // something other than a plain number (it is the 64-bit sum).
+    carryCostTokens: Number(r.carry_cost_tokens),
+  }
+}
+
 interface MetricRow {
   id: string
   workspace_id: string
@@ -429,6 +502,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
       .prepare(
         `SELECT
            agent_kind                                                   AS agent_kind,
+           phase                                                        AS phase,
            COUNT(*)                                                     AS calls,
            COALESCE(SUM(prompt_tokens), 0)                              AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens), 0)                          AS cache_read_tokens,
@@ -440,42 +514,14 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
            COALESCE(SUM(upstream_ms), 0)                                AS upstream_ms,
            COALESCE(SUM(overhead_ms), 0)                                AS overhead_ms,
            COALESCE(SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END), 0)         AS errors,
-           COALESCE(SUM(CASE WHEN ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL}) THEN 1 ELSE 0 END), 0) AS warnings
-         FROM llm_call_metrics
-         WHERE workspace_id = ? AND execution_id = ?
-         GROUP BY agent_kind`,
+           COALESCE(SUM(CASE WHEN ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL}) THEN 1 ELSE 0 END), 0) AS warnings,
+           COALESCE(SUM(input_tokens * turns_after), 0)                 AS carry_cost_tokens
+         FROM (${CARRY_COST_SUBQUERY_SQL})
+         GROUP BY agent_kind, phase`,
       )
       .bind(workspaceId, executionId)
-      .all<{
-        agent_kind: string
-        calls: number
-        prompt_tokens: number
-        cache_read_tokens: number
-        cache_write_tokens: number
-        completion_tokens: number
-        peak_completion_tokens: number
-        max_output_tokens: number | null
-        truncated_calls: number
-        upstream_ms: number
-        overhead_ms: number
-        errors: number
-        warnings: number
-      }>()
-    return (results ?? []).map((r) => ({
-      agentKind: r.agent_kind,
-      calls: r.calls,
-      promptTokens: r.prompt_tokens,
-      cacheReadTokens: r.cache_read_tokens,
-      cacheWriteTokens: r.cache_write_tokens,
-      completionTokens: r.completion_tokens,
-      peakCompletionTokens: r.peak_completion_tokens,
-      maxOutputTokens: r.max_output_tokens,
-      truncatedCalls: r.truncated_calls,
-      upstreamMs: r.upstream_ms,
-      overheadMs: r.overhead_ms,
-      errors: r.errors,
-      warnings: r.warnings,
-    }))
+      .all<SummaryRow>()
+    return (results ?? []).map(rowToSummary)
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

@@ -8357,6 +8357,86 @@
                           },
                           "type": "array"
                         },
+                        "byPhase": {
+                          "items": {
+                            "properties": {
+                              "cacheHitRate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cacheReadTokens": {
+                                "type": "number"
+                              },
+                              "cacheWriteTokens": {
+                                "type": "number"
+                              },
+                              "calls": {
+                                "type": "number"
+                              },
+                              "carryCostShare": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "carryCostTokens": {
+                                "type": "number"
+                              },
+                              "completionTokens": {
+                                "type": "number"
+                              },
+                              "errors": {
+                                "type": "number"
+                              },
+                              "overheadMs": {
+                                "type": "number"
+                              },
+                              "phase": {
+                                "type": "string"
+                              },
+                              "promptTokens": {
+                                "type": "number"
+                              },
+                              "truncatedCalls": {
+                                "type": "number"
+                              },
+                              "upstreamMs": {
+                                "type": "number"
+                              },
+                              "warnings": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "phase",
+                              "calls",
+                              "promptTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "cacheHitRate",
+                              "completionTokens",
+                              "carryCostTokens",
+                              "carryCostShare",
+                              "upstreamMs",
+                              "overheadMs",
+                              "errors",
+                              "warnings",
+                              "truncatedCalls"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "totals": {
                           "properties": {
                             "cacheHitRate": {
@@ -8429,7 +8509,8 @@
                       },
                       "required": [
                         "totals",
-                        "byAgentKind"
+                        "byAgentKind",
+                        "byPhase"
                       ],
                       "type": "object"
                     },

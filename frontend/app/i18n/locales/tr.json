@@ -1408,6 +1408,19 @@
       "cacheWrite": "{tokens} önbelleğe yazıldı",
       "cacheWriteHint": "Sağlayıcının önbelleğine yazılan giriş token'ları (yeni girişin 1,25 ila 2 katı fiyat)"
     },
+    "phase": {
+      "title": "Token'lar nereye gitti",
+      "subtitle": "çalıştırmanın aşamasına göre, taşıma maliyetine göre sıralanır",
+      "columns": {
+        "phase": "Aşama",
+        "turns": "Tur",
+        "tokensInOut": "Token (giriş / çıkış)",
+        "carryCost": "Taşıma maliyeti"
+      },
+      "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez. En sonda çalışan bir aşama ne kadar harcarsa harcasın az taşır; bu sütunu yanındaki token sayılarıyla birlikte okuyun.",
+      "unattributed": "Atanmamış",
+      "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi"
+    },
     "metricsBar": {
       "calls": "{count} çağrı | {count} çağrı",
       "inputCompletionTokens": "Toplam giriş / çıkış token'i. Giriş, önbelleğe alınmış token'ları da sayar: bunlar hâlâ bağlam penceresini kaplar, tıpkı Claude Code'un kendi bağlam göstergesinin saydığı gibi.",
