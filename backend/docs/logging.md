@@ -83,8 +83,43 @@ const log = (opts.log ?? noopLogger).child({ workspaceId, executionId })
 
 …rather than re-spreading `{ workspaceId, executionId }` at each call site — which is how a deeply
 nested emit (the poll-failure warnings inside `driveExecution`'s `pollUntil`) ends up with no ids
-at all. The standard keys are `workspaceId`, `executionId`, `blockId`, `jobId`, plus a `scope` /
-`sweep` / `cron` / `runner` tag naming the subsystem.
+at all. The standard keys are `requestId`, `workspaceId`, `executionId`, `blockId`, `jobId`, plus a
+`scope` / `sweep` / `cron` / `runner` tag naming the subsystem.
+
+Three seams bind those ids for you, so most code inherits correlation rather than arranging it:
+
+### The request (`mountRequestLogging`)
+
+Both facades mount it FIRST — before CORS, before the per-request container — so nothing that can
+produce a response escapes it. It adopts a safe, bounded `X-Request-Id` from the caller or mints
+one, echoes it on the response, puts it in **every error envelope**, and binds
+`{ requestId, method, path }` onto a request-scoped child logger. Reach that logger from a
+controller with `requestLogger(c)`; it falls back to the process-wide one when the middleware
+isn't mounted, so no call site branches.
+
+One line per request: `info` on success, `warn` on a 4xx (with the `errorCode` `handleError`
+mapped, when the refusal came through a thrown `DomainError`), `error` on a 5xx. `/health` and
+`/ready` drop to `debug` when they succeed — an orchestrator probes them every few seconds, and a
+per-poll line is exactly what the level table above says `info` is not for.
+
+Only the **pathname** is logged, never the raw URL: a query string routinely carries a token (the
+WebSocket `?ticket=`, an OAuth `?code=`), and this value lands in every line for the request. For
+the same reason a client-supplied id is refused unless it is short and matches `[\w\-=]+` — it is
+attacker-controlled text going straight into a log stream.
+
+### The container (`containerJobLog`)
+
+The workflow↔container seam was the platform's blindest: the durable driver knows a run as
+`executionId`, the harness knew it only as `jobId`, and `ContainerAgentExecutor` — the thing that
+joins them — logged nothing at all. It now emits one line per lifecycle transition (dispatched /
+dispatch-failed / running at `debug` / settled) with `{ workspaceId, executionId, jobId, agentKind }`
+bound, and the same two ids ride the **job body** so the harness binds them onto its own per-job
+child logger beside `jobId`. A container line and a backend line for the same run now join on
+`executionId`.
+
+### The durable driver
+
+`ExecutionWorkflow` / `driveExecution` bind `{ workspaceId, executionId }` at the top of the run.
 
 ## Best-effort work: `runBestEffort`, never `.catch(() => {})`
 

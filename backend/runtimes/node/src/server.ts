@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import {
   type AppEnv,
   CORS_ALLOWED_HEADERS,
+  CORS_EXPOSED_HEADERS,
   type ConfigProblem,
   type ServerContainer,
   corsReflectsWhenUnset,
@@ -12,6 +13,7 @@ import {
   logger,
   parseLogLevel,
   mountAuthGate,
+  mountRequestLogging,
   setLogLevel,
   registerCoreControllers,
   resolveCorsOrigin,
@@ -89,6 +91,11 @@ export function createApp(
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  // Correlation FIRST — before CORS and before the container is stashed — so every response,
+  // including a CORS denial, carries a request id and produces one log line. Shared verbatim
+  // with the Worker.
+  mountRequestLogging(app)
+
   app.use(
     '*',
     cors({
@@ -98,6 +105,8 @@ export function createApp(
       // would otherwise echo the requested headers, masking a drift like the missing
       // X-Connection-Id the Worker hit).
       allowHeaders: [...CORS_ALLOWED_HEADERS],
+      // …and the correlation id back out, or the SPA can see it on the wire but not read it.
+      exposeHeaders: [...CORS_EXPOSED_HEADERS],
     }),
   )
   app.use('*', async (c, next) => {

@@ -111,6 +111,14 @@ export function buildCommonBody(
       : undefined
   return {
     jobId,
+    // The run's correlation ids, carried purely so the container's own log lines can be joined
+    // to the backend's. The harness binds them onto its per-job child logger beside `jobId` and
+    // reads them for nothing else — before this, the two halves of a run shared no id at all and
+    // were stitched only by the `${executionId}-${agentKind}` naming convention. Riding the job
+    // body means every transport (Cloudflare container, local container, runner pool) carries
+    // them with no transport-specific wiring, exactly like `validationChecks`.
+    ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+    ...(context.executionId ? { executionId: context.executionId } : {}),
     model,
     ...auth,
     ghToken,

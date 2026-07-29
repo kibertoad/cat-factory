@@ -45,6 +45,21 @@ describe('parseAgentJob', () => {
     expect(job.repo.provider).toBeUndefined()
   })
 
+  // The backend's correlation ids: bound onto the per-job logger so a container line can be
+  // joined to the run that dispatched it. Optional — a body from a backend older than the
+  // field still runs, it just logs without them.
+  it('carries the run correlation ids when the backend sends them', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding', workspaceId: 'ws_1', executionId: 'ex_1' })
+    expect(job.workspaceId).toBe('ws_1')
+    expect(job.executionId).toBe('ex_1')
+  })
+
+  it('runs without the correlation ids', () => {
+    const job = parseAgentJob({ ...base, mode: 'coding', workspaceId: '', executionId: 42 })
+    expect(job.workspaceId).toBeUndefined()
+    expect(job.executionId).toBeUndefined()
+  })
+
   it('rejects an unknown repo.provider', () => {
     expect(() =>
       parseAgentJob({ ...base, mode: 'coding', repo: { ...base.repo, provider: 'bitbucket' } }),

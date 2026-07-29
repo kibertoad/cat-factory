@@ -228,7 +228,12 @@ is named: it adapts pino onto the port. Full patterns:
   text goes through `redactSecrets` at the emit site. Never log an auth header or a decrypted
   credential — not even at `debug`, which is a level operators turn on in production.
 - **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the
-  top of the scope so a deeply nested emit still carries them.
+  top of the scope so a deeply nested emit still carries them. Three seams do it for you:
+  `mountRequestLogging` (mounted FIRST by both facades — mints/adopts `X-Request-Id`, binds a
+  request-scoped child reachable as `requestLogger(c)`, logs one line per request and puts the id
+  in every error envelope), `containerJobLog` (the workflow↔container seam; the same ids also ride
+  the job body so the harness binds them beside `jobId`), and the durable drivers. A request line
+  logs the PATHNAME only — a query string carries the WS `?ticket=` and OAuth `?code=`.
 - **`LOG_LEVEL`** (`process.env` on Node/local, a wrangler var on the Worker) is applied FIRST in
   each boot path; an unrecognised value falls back to `info`. The threshold is checked in the
   adapter, not on the pino instance — pino children snapshot their parent's level at creation.

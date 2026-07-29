@@ -30,6 +30,7 @@ import {
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
   isSubscriptionVendor,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
@@ -47,6 +48,7 @@ import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { containerJobLog } from './containerAgentLogging.js'
 import {
   UI_TESTER_AGENT_KIND,
   isTesterKind,
@@ -584,7 +586,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
     const jobId = body.jobId as string
     const ref: RunnerJobRef = { runId: executionId, jobId }
-    await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    const jobLog = containerJobLog(this.deps.logger, {
+      workspaceId,
+      executionId,
+      jobId,
+      agentKind: context.agentKind,
+    })
+    try {
+      await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
+    } catch (error) {
+      jobLog.dispatchFailed(error, { model, provider, kind })
+      throw error
+    }
+    jobLog.dispatched({ model, provider, kind })
     // Capture the complete provided context for observability (best-effort, gated inside
     // the recorder). This is the only place the fully composed prompts + the injected
     // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
@@ -596,18 +610,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
     // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
     // swallow guarantees a recorder failure still never breaks a dispatch.
-    if (this.deps.agentContextObservability) {
-      try {
-        await this.deps.agentContextObservability.record(
-          buildAgentContextRecord(context, body, model, {
-            workspaceId,
-            executionId,
-            toolServers,
-          }),
-        )
-      } catch {
-        // Swallowed: observability never breaks a dispatch.
-      }
+    const recorder = this.deps.agentContextObservability
+    if (recorder) {
+      await runBestEffort(jobLog.logger, 'containerAgent.recordAgentContext', () =>
+        recorder.record(
+          buildAgentContextRecord(context, body, model, { workspaceId, executionId, toolServers }),
+        ),
+      )
     }
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
@@ -629,24 +638,30 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
   /** Poll a dispatched job for its state, mapping the runner view into an update. */
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
+    const jobLog = containerJobLog(this.deps.logger, {
+      workspaceId: handle.workspaceId,
+      executionId: handle.runId,
+      jobId: handle.jobId,
+      agentKind: handle.agentKind,
+    })
     const view = await this.jobs.poll(handle.workspaceId, refForHandle(handle))
     // Forward any tool spans the harness drained on this poll to the trace sink, as
     // child spans under the RUN's trace (the run id is the trace id the LLM proxy's
     // generations also use, so per-step jobs share one trace). Isolated + best-effort:
     // never affects the lifecycle.
-    if (this.deps.llmTraceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
-      try {
-        await this.deps.llmTraceSink.recordToolSpans(
+    const traceSink = this.deps.llmTraceSink
+    if (traceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
+      const spans = view.spans
+      await runBestEffort(jobLog.logger, 'containerAgent.recordToolSpans', () =>
+        traceSink.recordToolSpans?.(
           {
             workspaceId: handle.workspaceId ?? null,
             executionId: handle.runId ?? handle.jobId,
             agentKind: handle.agentKind ?? 'agent',
           },
-          view.spans,
-        )
-      } catch {
-        // Swallowed: the sink logs its own errors; observability never breaks a run.
-      }
+          spans,
+        ),
+      )
     }
     // Per-call telemetry the harness drained on this poll: record it NOW rather than waiting
     // for the terminal result. A run whose container dies mid-flight never produces one, so
@@ -664,7 +679,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(f.suggestedAction ? { suggestedAction: f.suggestedAction } : {}),
     }))
     const followUps = streamedFollowUps.length > 0 ? { followUps: streamedFollowUps } : {}
-    if (view.state === 'running') return buildRunningUpdate(view, followUps)
+    if (view.state === 'running') {
+      jobLog.progress({ progress: view.progress })
+      return buildRunningUpdate(view, followUps)
+    }
     const failureMeta = buildFailureMeta(view)
     // Completed OR failed: a subscription harness attaches its per-call telemetry to
     // BOTH — a failed token-spending run (no changes / unusable output / unresolved
@@ -673,11 +691,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const result = view.result ?? {}
     await this.recordHarnessCallsOnce(handle, result)
     if (view.state === 'failed') {
+      jobLog.settled('failed', { failureCause: view.failureCause, evicted: view.evicted })
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
     if (result.error) {
+      jobLog.settled('failed', { failureCause: view.failureCause, cleanExit: true })
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
     // Best-effort subscription usage attribution, split into their own methods so `pollJob` stays
@@ -704,6 +724,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       runResult.usageBilling = 'subscription'
       runResult.usageVendor = handle.provider ?? providerOf(handle.model)
     }
+    jobLog.settled('done', { model: handle.model })
     return { state: 'done', result: runResult, ...followUps }
   }
 

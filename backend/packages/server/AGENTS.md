@@ -48,6 +48,14 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   reading `return unavailable()` — `never` is assignable to any declared response type.
   The one deliberate exception is a handler that flattens distinct causes ON PURPOSE because
   the distinction is an ORACLE (password reset: "no such token" vs "expired" vs "used").
+  Every envelope also carries the request's `requestId` (see below).
+- `http/requestLogging.ts` — `mountRequestLogging`, mounted **first** by both facades (before
+  CORS and the per-request container). Mints/adopts `X-Request-Id`, binds a request-scoped child
+  logger, echoes the id on the response + in every error envelope, and logs one line per request
+  (`info`, 4xx `warn`, 5xx `error`). Reach the bound logger from a controller with
+  `requestLogger(c)`. ⚠️ It deliberately does NOT set the header on a 101: Hono implements a
+  post-`next()` `c.header()` by rebuilding the response, which drops Cloudflare's `webSocket`
+  property and would break the SPA's live stream on the deployed runtime only.
 - `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
   `requireWorkspacePermission` — the admin-tier controller middleware) and `optionalJsonBody`
