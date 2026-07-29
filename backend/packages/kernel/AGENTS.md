@@ -43,6 +43,11 @@ else imports its **ports** and domain types from here.
   runner pool's JSON), so every path normalises here before it becomes a grouping key; an
   unrecognisable one becomes the unattributed `''` slice rather than a group of its own. See
   `docs/initiatives/token-burn-instrumentation.md`.
+- `domain/llm-rollup.ts` — `foldRollupTotals` / `foldRollupsByAgentKind` / `foldRollupsByPhase`,
+  the folds over the telemetry stores' ONE `(agentKind, phase)` aggregate. The store computes the
+  finest grain and every coarser view (a step's per-kind rollup, the run's per-phase burn
+  breakdown, the run totals) is derived here, so the numbers on a surface can't disagree with the
+  totals beside them. A new consumer folds; it does not add a second `GROUP BY` on the emit path.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).
@@ -67,6 +72,17 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})` — keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `domain/errors.ts` — the **`DomainError` hierarchy**, the whole vocabulary a service may raise
+  toward the wire: `NotFoundError` (404), `ValidationError` (422), `ConflictError` (409),
+  `CredentialRequiredError` (428), `ForbiddenError` (403), `UnauthorizedError` (401),
+  `UnavailableError` (503), `RateLimitedError` (429). Every one can carry `details.reason`, the
+  machine-readable code the SPA maps to translated copy (`getErrorReason` is the read side). A
+  hand-built `c.json({ error: { code } }, status)` structurally cannot, which is why controllers
+  raise these instead — see `@cat-factory/server`'s `http/guards.ts`.
+- `shared/agent-context-gate.ts` — `createStoreAgentContextGate`, the per-workspace
+  `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
+  the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
+  because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
 - `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
   (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
   custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,

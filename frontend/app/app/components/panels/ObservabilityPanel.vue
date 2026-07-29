@@ -8,7 +8,13 @@ import type {
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
-import { formatMs, formatTokens, pct, totalInputTokens } from '~/utils/observability'
+import {
+  foldRunPhaseMetrics,
+  formatMs,
+  formatTokens,
+  pct,
+  totalInputTokens,
+} from '~/utils/observability'
 
 // Drill-down overlay for a run's LLM activity. Opened via
 // `ui.openObservability(instanceId)` from a step surface; loads the full per-call
@@ -150,6 +156,26 @@ const totals = computed(() => {
 
 function sum(items: LlmCallMetric[], pick: (m: LlmCallMetric) => number): number {
   return items.reduce((acc, m) => acc + pick(m), 0)
+}
+
+// Where the run's tokens went, by PHASE. Unlike the totals above (derived from the capped call
+// list), this reads the engine's SQL rollup off the steps, so it stays honest on a long run.
+const phaseRows = computed(() => foldRunPhaseMetrics(instance.value?.steps ?? []))
+const phaseCarryTotal = computed(() =>
+  phaseRows.value.reduce((acc, p) => acc + p.carryCostTokens, 0),
+)
+/** Share of the run's carry cost a phase accounts for (0..100), or null when nothing carried. */
+function carryShare(carryCostTokens: number): number | null {
+  return phaseCarryTotal.value > 0 ? pct(carryCostTokens / phaseCarryTotal.value) : null
+}
+/**
+ * The phase label as shown. The vocabulary belongs to the HARNESS — it is whatever its handlers
+ * pass to `onPhase`, so there is deliberately no closed union to translate against; a newer
+ * image's phase must render verbatim rather than disappear. The one label the platform owns is
+ * the empty string, which means "nothing could attribute this call" and needs saying in words.
+ */
+function phaseLabel(phase: string): string {
+  return phase || t('observability.phase.unattributed')
 }
 function isWarning(finishReason: string | null): boolean {
   return finishReason === 'length' || finishReason === 'content_filter'
@@ -381,6 +407,84 @@ function exportJson() {
                     )
                   }}
                 </UBadge>
+              </div>
+            </section>
+
+            <!-- where the run's tokens went, by phase (the engine's SQL rollup, not the
+                 capped call list) -->
+            <section
+              v-if="phaseRows.length"
+              class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+            >
+              <div class="flex items-baseline gap-2">
+                <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
+                  {{ t('observability.phase.title') }}
+                </h2>
+                <span class="text-[11px] text-slate-600">
+                  {{ t('observability.phase.subtitle') }}
+                </span>
+              </div>
+              <div class="mt-3 overflow-x-auto">
+                <table class="w-full min-w-[32rem] text-[12px]">
+                  <thead>
+                    <tr class="text-[11px] uppercase tracking-wide text-slate-500">
+                      <th class="py-1 pe-3 text-start font-normal">
+                        {{ t('observability.phase.columns.phase') }}
+                      </th>
+                      <th class="py-1 px-3 text-end font-normal">
+                        {{ t('observability.phase.columns.turns') }}
+                      </th>
+                      <th class="py-1 px-3 text-end font-normal">
+                        {{ t('observability.phase.columns.tokensInOut') }}
+                      </th>
+                      <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
+                           with tokens, and the two orders genuinely differ: a phase that runs
+                           late carries almost nothing however much it spent (nothing after it
+                           re-sends its context). Leaving that implicit invites reading row 1
+                           as "the phase that burned the most", which is the neighbouring
+                           column. -->
+                      <th aria-sort="descending" class="py-1 ps-3 text-end font-normal">
+                        <span :title="t('observability.phase.carryCostHint')">
+                          {{ t('observability.phase.columns.carryCost') }} ↓
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-slate-800/70">
+                      <td class="py-1.5 pe-3 text-slate-200">
+                        <span :class="p.phase ? '' : 'text-slate-400 italic'">
+                          {{ phaseLabel(p.phase) }}
+                        </span>
+                        <span v-if="!p.phase" class="ms-1.5 text-[11px] text-slate-600">
+                          {{ t('observability.phase.unattributedHint') }}
+                        </span>
+                        <UBadge
+                          v-if="p.errors"
+                          color="error"
+                          variant="subtle"
+                          size="sm"
+                          class="ms-2"
+                        >
+                          {{ t('observability.metricsBar.errors', { count: p.errors }, p.errors) }}
+                        </UBadge>
+                      </td>
+                      <td class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                        {{ p.calls }}
+                      </td>
+                      <td class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                        {{ formatTokens(totalInputTokens(p)) }}↑
+                        {{ formatTokens(p.completionTokens) }}↓
+                      </td>
+                      <td class="py-1.5 ps-3 text-end tabular-nums text-slate-300">
+                        {{ formatTokens(p.carryCostTokens) }}
+                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-slate-600">
+                          · {{ carryShare(p.carryCostTokens) }}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </section>
 

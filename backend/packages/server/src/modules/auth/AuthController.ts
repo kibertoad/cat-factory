@@ -40,6 +40,7 @@ import {
   UnauthorizedError,
   RateLimitedError,
 } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
 // fragment for OAuth redirects, or the JSON body for password login) which it carries
@@ -63,6 +64,17 @@ interface OAuthState {
   /** Optional invite token to redeem after a brand-new Google/GitHub signup. */
   invite?: string
   exp: number
+}
+
+// The one controller that keeps a local thrower rather than `requireCapability`: what it
+// guards is a boolean FLAG (`cfg.githubEnabled` / `cfg.passwordEnabled`), not an absent
+// value, so there is nothing for the accessor to narrow and return.
+/**
+ * The Google OAuth client, or a 503. Wraps the nullable `googleClient(cfg)` builder so the two
+ * OAuth routes don't restate the refusal.
+ */
+function requireGoogle(cfg: AuthConfig) {
+  return requireCapability(googleClient(cfg), 'Authentication is not configured')
 }
 
 const unavailable = (): never => {
@@ -406,8 +418,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, googleLoginContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable()
+    const google = requireGoogle(cfg)
     const nonce = crypto.randomUUID()
     const state: OAuthState = {
       aud: TOKEN_AUDIENCE.oauthState,
@@ -431,8 +442,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, googleCallbackContract, async (c) => {
     const cfg = authConfig(c)
-    const google = googleClient(cfg)
-    if (!google) return unavailable()
+    const google = requireGoogle(cfg)
     const state = await consumeState(c, cfg)
     const code = c.req.query('code')
     if (!code || !state) {
@@ -548,8 +558,7 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, patLoginContract, async (c) => {
     const cfg = authConfig(c)
     const container = c.get('container')
-    const registry = container.vcsIdentity
-    if (!registry) return unavailable()
+    const registry = requireCapability(container.vcsIdentity, 'Authentication is not configured')
     const { provider, token } = c.req.valid('json')
     const entry = registry[provider]
     if (!entry) {

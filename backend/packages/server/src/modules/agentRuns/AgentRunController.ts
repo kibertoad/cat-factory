@@ -1,14 +1,12 @@
 import { retryAgentRunContract, stopAgentRunContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { personalGateForRun, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { UnavailableError } from '@cat-factory/kernel'
-
-const unavailable = (message: string): never => {
-  throw new UnavailableError(message)
-}
+import { requireCapability } from '../../http/guards.js'
 
 /**
  * Cross-cutting endpoints over any "agent run" (bootstrap or execution),
@@ -16,6 +14,19 @@ const unavailable = (message: string): never => {
  * `/workspaces/:workspaceId`. This is the single retry path the board uses for a
  * failed run of either flow (replacing the bootstrap-only retry route).
  */
+/** Resolve the repo-bootstrap module, or refuse with a 503 naming what isn't wired. */
+function requireBootstrap<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(c.get('container').bootstrap, 'Repo bootstrap is not configured')
+}
+
+/** Resolve the env-config-repair module, or refuse with a 503 naming what isn't wired. */
+function requireEnvConfigRepair<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').envConfigRepair,
+    'Environment config repair is not configured',
+  )
+}
+
 export function agentRunController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -32,10 +43,11 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'bootstrap') {
-      const bootstrap = container.bootstrap
-      if (!bootstrap) return unavailable('Repo bootstrap is not configured')
+      const bootstrap = requireBootstrap(c)
+      // A capability that IS wired but can't act: a predicate, not an absent value, so it
+      // throws directly rather than through the accessor.
       if (!bootstrap.service.canBootstrap) {
-        return unavailable(
+        throw new UnavailableError(
           'Repo bootstrapping needs the GitHub App and the implementation container to be configured',
         )
       }
@@ -44,9 +56,10 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'env-config-repair') {
-      const repair = container.envConfigRepair
-      if (!repair || !repair.service.canRepair) {
-        return unavailable('Environment config repair is not configured')
+      const repair = requireEnvConfigRepair(c)
+      // Wired but unable to act — a predicate, not an absent value.
+      if (!repair.service.canRepair) {
+        throw new UnavailableError('Environment config repair is not configured')
       }
       // No same-id re-drive (unlike bootstrap/execution): a repair run is a one-shot
       // clone→fix→push, so retry STARTS a fresh run from the failed job's coords (recovering
@@ -86,15 +99,13 @@ export function agentRunController(): Hono<AppEnv> {
     }
 
     if (ref.kind === 'bootstrap') {
-      const bootstrap = container.bootstrap
-      if (!bootstrap) return unavailable('Repo bootstrap is not configured')
+      const bootstrap = requireBootstrap(c)
       const run = await bootstrap.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }
 
     if (ref.kind === 'env-config-repair') {
-      const repair = container.envConfigRepair
-      if (!repair) return unavailable('Environment config repair is not configured')
+      const repair = requireEnvConfigRepair(c)
       const run = await repair.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }

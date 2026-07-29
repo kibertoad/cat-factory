@@ -7,6 +7,7 @@ import type {
   LlmCallMetricSummary,
   PipelineStep,
 } from '@cat-factory/kernel'
+import { foldRollupTotals, foldRollupsByAgentKind, foldRollupsByPhase } from '@cat-factory/kernel'
 import type {
   DebugAgentContextDetail,
   DebugAgentContextEntry,
@@ -18,6 +19,7 @@ import type {
   DebugText,
   LlmExportInsight,
   LlmExportTotals,
+  LlmPhaseInsight,
 } from '@cat-factory/contracts'
 import {
   cacheHitRate,
@@ -257,19 +259,25 @@ export function toDebugAgentContextDetail(
 }
 
 /**
- * Fold the per-agent-kind SQL rollups into the run-level totals + insight list the overview
- * reports. Built from {@link LlmCallMetricSummary} — the aggregate the store computes without
- * touching a text column — rather than from the calls themselves, so a 3,000-call run costs
- * one GROUP BY here instead of reading 3,000 rows to add them up in JavaScript.
+ * Fold the store's `(agentKind, phase)` rollup cells into the run-level totals + the two
+ * breakdowns the overview reports. Built from {@link LlmCallMetricSummary} — the aggregate the
+ * store computes without touching a text column — rather than from the calls themselves, so a
+ * 3,000-call run costs one GROUP BY here instead of reading 3,000 rows to add them up in
+ * JavaScript.
  *
- * The output reuses the metrics EXPORT's shapes on purpose: both describe the same run's model
- * activity, and two independently-derived totals would eventually disagree.
+ * Both breakdowns are folds over the SAME cells (kernel's `foldRollupsBy*`), so they total
+ * identically to each other and to `totals` by construction — the alternative, one aggregate
+ * per axis, could only ever produce two answers to the same question.
+ *
+ * The per-kind output reuses the metrics EXPORT's shapes on purpose: both describe the same
+ * run's model activity, and two independently-derived totals would eventually disagree.
  */
 export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
   totals: LlmExportTotals
   byAgentKind: LlmExportInsight[]
+  byPhase: LlmPhaseInsight[]
 } {
-  const byAgentKind: LlmExportInsight[] = summaries.map((s) => ({
+  const byAgentKind: LlmExportInsight[] = foldRollupsByAgentKind(summaries).map((s) => ({
     agentKind: s.agentKind,
     calls: s.calls,
     promptTokens: s.promptTokens,
@@ -287,29 +295,52 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
     errors: s.errors,
     warnings: s.warnings,
   }))
-  const total = <K extends keyof LlmCallMetricSummary>(key: K): number =>
-    summaries.reduce((acc, s) => acc + (s[key] as number), 0)
-  const promptTokens = total('promptTokens')
-  const cacheReadTokens = total('cacheReadTokens')
-  const cacheWriteTokens = total('cacheWriteTokens')
-  const upstreamMs = total('upstreamMs')
-  const overheadMs = total('overheadMs')
+  const phases = foldRollupsByPhase(summaries)
+  // Denominator for each phase's share of the carry cost. Folded from the phase rows
+  // themselves rather than re-summed off `summaries`, so the shares provably sum to 1.
+  const runCarryCost = phases.reduce((acc, p) => acc + p.carryCostTokens, 0)
+  const byPhase: LlmPhaseInsight[] = phases
+    .map((p) => ({
+      phase: p.phase,
+      calls: p.calls,
+      promptTokens: p.promptTokens,
+      cacheReadTokens: p.cacheReadTokens,
+      cacheWriteTokens: p.cacheWriteTokens,
+      cacheHitRate: cacheHitRate(p.cacheReadTokens, p.cacheWriteTokens, p.promptTokens),
+      completionTokens: p.completionTokens,
+      carryCostTokens: p.carryCostTokens,
+      carryCostShare: runCarryCost > 0 ? p.carryCostTokens / runCarryCost : null,
+      upstreamMs: p.upstreamMs,
+      overheadMs: p.overheadMs,
+      errors: p.errors,
+      warnings: p.warnings,
+      truncatedCalls: p.truncatedCalls,
+    }))
+    // Expensive slice first: the caller reading this is asking which phase to attack, and a
+    // store-order list buries the answer behind whichever phase happened to run first.
+    .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls)
+  const runTotals = foldRollupTotals(summaries)
   return {
     totals: {
-      calls: total('calls'),
-      promptTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      cacheHitRate: cacheHitRate(cacheReadTokens, cacheWriteTokens, promptTokens),
-      completionTokens: total('completionTokens'),
-      upstreamMs,
-      overheadMs,
-      transportOverheadRatio: transportOverheadRatio(upstreamMs, overheadMs),
-      errors: total('errors'),
-      warnings: total('warnings'),
-      truncatedCalls: total('truncatedCalls'),
+      calls: runTotals.calls,
+      promptTokens: runTotals.promptTokens,
+      cacheReadTokens: runTotals.cacheReadTokens,
+      cacheWriteTokens: runTotals.cacheWriteTokens,
+      cacheHitRate: cacheHitRate(
+        runTotals.cacheReadTokens,
+        runTotals.cacheWriteTokens,
+        runTotals.promptTokens,
+      ),
+      completionTokens: runTotals.completionTokens,
+      upstreamMs: runTotals.upstreamMs,
+      overheadMs: runTotals.overheadMs,
+      transportOverheadRatio: transportOverheadRatio(runTotals.upstreamMs, runTotals.overheadMs),
+      errors: runTotals.errors,
+      warnings: runTotals.warnings,
+      truncatedCalls: runTotals.truncatedCalls,
     },
     byAgentKind,
+    byPhase,
   }
 }
 

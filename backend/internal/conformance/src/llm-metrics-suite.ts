@@ -197,6 +197,7 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(summaries).toHaveLength(1)
       const s = summaries[0]!
       expect(s.agentKind).toBe('coder')
+      expect(s.phase).toBe('agent')
       expect(s.calls).toBe(3)
       // The two cache classes are aggregated APART: a lumped sum cannot tell a run riding a
       // warm cache from one re-writing its prefix, and they are priced an order of magnitude
@@ -211,6 +212,9 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(s.warnings).toBe(1)
       expect(s.upstreamMs).toBe(305)
       expect(s.overheadMs).toBe(35)
+      // Carry cost = SUM(this call's total input x turns left after it), in call order:
+      // (100+40+15)x2 + (100+60+25)x1 + 100x0.
+      expect(s.carryCostTokens).toBe(495)
     })
 
     it('groups summaries by agent kind', async () => {
@@ -224,6 +228,53 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       )
       const summaries = await repo.summarizeByExecution(ws, e1)
       expect(summaries.map((s) => s.agentKind).sort()).toEqual(['coder', 'reviewer'])
+    })
+
+    it('cuts the rollup by phase and charges carry cost per conversation, not per run', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // A coder conversation of three turns spanning two phases, plus a separate reviewer
+      // conversation whose calls carry no phase at all.
+      const call = (
+        id: string,
+        createdAt: number,
+        phase: string,
+        promptTokens: number,
+        agentKind = 'coder',
+      ) =>
+        repo.record(
+          metric({
+            id: `${ws}-${id}`,
+            workspaceId: ws,
+            executionId: e1,
+            agentKind,
+            createdAt,
+            phase,
+            promptTokens,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          }),
+        )
+      await call('1', 10, 'agent', 100)
+      await call('2', 20, 'agent', 200)
+      await call('3', 30, 'validation-repair', 50)
+      await call('4', 40, '', 400, 'reviewer')
+      await call('5', 50, '', 10, 'reviewer')
+
+      const cells = (await repo.summarizeByExecution(ws, e1)).sort((a, b) =>
+        `${a.agentKind}/${a.phase}`.localeCompare(`${b.agentKind}/${b.phase}`),
+      )
+      expect(cells.map((c) => [c.agentKind, c.phase, c.calls])).toEqual([
+        // The un-phased slice is a REAL cell of the breakdown, never dropped: a run metered
+        // by a channel with no phase concept must not read as a run that spent nothing.
+        ['coder', 'agent', 2],
+        ['coder', 'validation-repair', 1],
+        ['reviewer', '', 2],
+      ])
+      // Carry cost partitions by CONVERSATION (the delta chain's `(execution, agentKind)` key),
+      // not by run: the coder's first turn is re-sent by the two coder turns after it, never by
+      // the reviewer's. Run-wide accounting would charge `agent` 100x4 + 200x3 = 1000 instead.
+      expect(cells.map((c) => c.carryCostTokens)).toEqual([400, 0, 400])
     })
 
     it("records a subscription harness's per-call telemetry through the observability sink", async () => {

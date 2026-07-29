@@ -78,10 +78,13 @@ describe('RunStateMachine.emitInstance — metrics rollup gating', () => {
     const llmObservability = {
       summarizeByExecution: async () => {
         summarizeCalls += 1
+        // The store returns the FINEST grain, one cell per (agentKind, phase); the step's
+        // headline numbers are a fold up to the kind and `byPhase` is the same cells re-cut.
         return [
           {
             agentKind: 'coder',
-            calls: 4,
+            phase: 'agent',
+            calls: 3,
             promptTokens: 10,
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
@@ -93,6 +96,24 @@ describe('RunStateMachine.emitInstance — metrics rollup gating', () => {
             overheadMs: 1,
             errors: 0,
             warnings: 0,
+            carryCostTokens: 20,
+          },
+          {
+            agentKind: 'coder',
+            phase: 'validation-repair',
+            calls: 1,
+            promptTokens: 4,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            completionTokens: 2,
+            peakCompletionTokens: 2,
+            maxOutputTokens: 100,
+            truncatedCalls: 0,
+            upstreamMs: 1,
+            overheadMs: 1,
+            errors: 0,
+            warnings: 0,
+            carryCostTokens: 900,
           },
         ]
       },
@@ -130,6 +151,13 @@ describe('RunStateMachine.emitInstance — metrics rollup gating', () => {
     await machine.emitInstance('ws_1', instance)
     expect(summarizeCalls()).toBe(1)
     expect(instance.steps[0]!.metrics?.calls).toBe(4)
+    // The per-phase breakdown rides the SAME aggregate — no second query on the emit path —
+    // and leads with the phase that burdened the run most, not with store order.
+    expect(instance.steps[0]!.metrics?.byPhase?.map((p) => [p.phase, p.calls])).toEqual([
+      ['validation-repair', 1],
+      ['agent', 3],
+    ])
+    expect(instance.steps[0]!.metrics?.carryCostTokens).toBe(920)
   })
 
   it('skips the rollup on a progress-only fold (rollUpMetrics: false)', async () => {

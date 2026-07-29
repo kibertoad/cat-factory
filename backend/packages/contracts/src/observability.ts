@@ -193,6 +193,52 @@ export const llmExportTotalsSchema = v.object({
 export type LlmExportTotals = v.InferOutput<typeof llmExportTotalsSchema>
 
 /**
+ * One PHASE's slice of a run's model activity — the burn breakdown
+ * (`docs/initiatives/token-burn-instrumentation.md`). Deliberately a SEPARATE shape from
+ * {@link llmExportInsightSchema} rather than that shape with the key swapped: a phase has no
+ * output ceiling of its own to report headroom against (a phase spans whatever requests its
+ * loop made), and it carries the one figure only this axis can produce — the carry cost.
+ */
+export const llmPhaseInsightSchema = v.object({
+  /**
+   * The phase label, or `''` for the UNATTRIBUTED slice (an older harness image, an inline
+   * call, the un-phased proxy path). A real row, never omitted: dropping it would under-report
+   * the run while the table still looked complete.
+   */
+  phase: v.string(),
+  /** Model calls (turns) spent in this phase. */
+  calls: v.number(),
+  /** Fresh (uncached) input tokens. */
+  promptTokens: v.number(),
+  /** Input tokens served from the prefix cache. */
+  cacheReadTokens: v.number(),
+  /** Input tokens written into the cache. */
+  cacheWriteTokens: v.number(),
+  /** (read + write) / (prompt + read + write), 0..1; null when there was no input at all. */
+  cacheHitRate: v.nullable(v.number()),
+  completionTokens: v.number(),
+  /**
+   * Carry-cost proxy in token-turns: `Σ (a call's total input) x (turns left in its
+   * conversation after it)`. What a plain token sum cannot say — how much of the run's cost
+   * this phase INFLICTED on the turns that followed it, rather than merely spent itself.
+   * Compare phases of one run against each other; the absolute number means nothing.
+   */
+  carryCostTokens: v.number(),
+  /**
+   * Share of the run's total carry cost this phase accounts for, 0..1. Null only when the RUN
+   * carried nothing (a single-turn conversation charges no carry cost at all, so the share has
+   * no denominator); a phase that itself carried nothing inside a run that did reports `0`.
+   */
+  carryCostShare: v.nullable(v.number()),
+  upstreamMs: v.number(),
+  overheadMs: v.number(),
+  errors: v.number(),
+  warnings: v.number(),
+  truncatedCalls: v.number(),
+})
+export type LlmPhaseInsight = v.InferOutput<typeof llmPhaseInsightSchema>
+
+/**
  * LLM-friendly export of a run's model activity: a self-describing, structured JSON
  * bundle (totals + per-agent insights + every call) intended to be handed straight
  * to a model for analysis ("why did this run truncate / spend / stall?"). Field

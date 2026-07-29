@@ -102,7 +102,6 @@ export {
   wrapResolverWithLimiter,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
-export { createStoreAgentContextGate } from './agents/storeAgentContextGate.js'
 export {
   resolveWorkspaceCapabilities,
   type CapabilityServices,
@@ -176,6 +175,7 @@ export {
 } from './notifications/machineNotifications.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
+export { assertCapability, assertUser, requireCapability, requireUser } from './http/guards.js'
 export { handleError } from './http/errorHandler.js'
 export {
   CORS_ALLOWED_HEADERS,

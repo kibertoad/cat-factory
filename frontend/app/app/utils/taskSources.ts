@@ -1,18 +1,20 @@
 import type { TaskSourceKind, TaskSourceState } from '~/types/domain'
 
 /**
- * Pure source-selection logic for `<ContextIssuePicker>`: which tracker the picker is
- * searching, and what the source menu offers. Kept out of the component so both the
- * template's `computed`s and the unit spec call the same code.
+ * Pure tracker-selection logic shared by every surface that picks a task source: which
+ * tracker is selected, and what its menu offers. Kept out of the components so their
+ * `computed`s and the unit spec call the same code.
  *
  * The menu is deliberately two-tier — pick an already-offered tracker, or go and add
- * one — because "attach a context issue" is where a user first discovers a tracker is
- * missing, and sending them to the Integrations hub loses their in-progress task.
+ * one — because a tracker-picking surface is exactly where a user discovers the tracker
+ * they want is missing, and sending them off to the Integrations hub loses whatever they
+ * had in progress. Today `<ContextIssuePicker>` (attach a context issue) and
+ * `<BugHuntModal>` (scan a board for bugs) both render it.
  */
 
-/** One row of the picker's source menu. */
+/** One row of a tracker menu. */
 export type SourceChoice =
-  /** An offered tracker the picker can search right now. */
+  /** An offered tracker the surface can use right now. */
   | { action: 'select'; source: TaskSourceKind; label: string; icon: string; active: boolean }
   /**
    * A configured tracker that is not offered yet, so it can be added from here. `connect`
@@ -23,8 +25,8 @@ export type SourceChoice =
   | { action: 'connect' | 'enable'; source: TaskSourceKind; label: string; icon: string }
 
 /**
- * The picker's source menu, as non-empty groups (the offered trackers, then the ones the
- * user could add). Empty groups are dropped so the menu never renders a stray separator.
+ * A tracker menu, as non-empty groups (the offered trackers, then the ones the user could
+ * add). Empty groups are dropped so the menu never renders a stray separator.
  */
 export function buildSourceChoices(
   sources: TaskSourceState[],
@@ -54,13 +56,13 @@ export function buildSourceChoices(
 }
 
 /**
- * The source the picker should hold once the offered set changes — after a connect, a
+ * The source a surface should hold once the offered set changes — after a connect, a
  * disconnect, or the per-workspace toggle flipping elsewhere.
  *
  * `awaiting` is the tracker the user just left to connect: the moment it becomes offered
  * it wins, so they land back on the source they went to add rather than on whatever was
  * selected before. Otherwise a still-offered selection is kept, and a selection that
- * stopped being offered falls back to the first one (searching a tracker the workspace no
+ * stopped being offered falls back to the first one (reading a tracker the workspace no
  * longer offers only yields errors).
  */
 export function reconcileSource(

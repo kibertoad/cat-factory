@@ -4,6 +4,7 @@ import {
   agentSearchQuerySchema,
   llmExportInsightSchema,
   llmExportTotalsSchema,
+  llmPhaseInsightSchema,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
 
@@ -358,10 +359,19 @@ export const debugRunOverviewSchema = v.object({
   /**
    * The run's model activity, aggregated in SQL. `byAgentKind` reuses the same insight shape
    * the LLM-metrics export publishes, derived ratios included, so the two never disagree.
+   *
+   * `byPhase` re-cuts the SAME aggregate along the other axis — WHICH slice of the run's work
+   * spent the tokens (the agent's edit loop, a validation repair round, a reproduction-proof
+   * round, …) — with the carry cost that says how much each phase burdened the turns after it.
+   * It is the axis a caller asked "why did this trivial task cost a million tokens" needs, and
+   * `byAgentKind` cannot answer it: one coder step contains every phase. Both are folds over
+   * one `GROUP BY`, so their totals agree by construction. Rows are ordered by descending
+   * carry cost — the expensive slice first, which is what the caller is looking for.
    */
   llm: v.object({
     totals: llmExportTotalsSchema,
     byAgentKind: v.array(llmExportInsightSchema),
+    byPhase: v.array(llmPhaseInsightSchema),
   }),
   signals: v.array(debugSignalSchema),
 })

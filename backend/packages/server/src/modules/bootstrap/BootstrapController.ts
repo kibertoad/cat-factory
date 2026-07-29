@@ -15,14 +15,11 @@ import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the bootstrap module or send a 503, returning null when unconfigured. */
-function requireBootstrap<E extends AppEnv>(c: Context<E>): BootstrapModule | null {
-  return c.get('container').bootstrap ?? null
-}
-
-const unavailable = (message: string): never => {
-  throw new UnavailableError(message)
+/** Resolve the bootstrap module, or refuse with a 503 naming what isn't wired. */
+function requireBootstrap<E extends AppEnv>(c: Context<E>): BootstrapModule {
+  return requireCapability(c.get('container').bootstrap, 'Repo bootstrap is not configured')
 }
 
 /**
@@ -39,13 +36,11 @@ export function bootstrapController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listReferenceArchitecturesContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     return c.json(await bootstrap.service.listReferenceArchitectures(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, createReferenceArchitectureContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     const created = await bootstrap.service.createReferenceArchitecture(
       param(c, 'workspaceId'),
       c.req.valid('json'),
@@ -55,7 +50,6 @@ export function bootstrapController(): Hono<AppEnv> {
 
   buildHonoRoute(app, updateReferenceArchitectureContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     const updated = await bootstrap.service.updateReferenceArchitecture(
       param(c, 'workspaceId'),
       c.req.valid('param').id,
@@ -66,7 +60,6 @@ export function bootstrapController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteReferenceArchitectureContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     await bootstrap.service.deleteReferenceArchitecture(
       param(c, 'workspaceId'),
       c.req.valid('param').id,
@@ -78,13 +71,11 @@ export function bootstrapController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listBootstrapJobsContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     return c.json(await bootstrap.service.listJobs(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, getBootstrapJobContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
     return c.json(
       await bootstrap.service.getJob(param(c, 'workspaceId'), c.req.valid('param').id),
       200,
@@ -95,9 +86,10 @@ export function bootstrapController(): Hono<AppEnv> {
   // wired; otherwise the run path is unavailable even though CRUD works.
   buildHonoRoute(app, startBootstrapJobContract, async (c) => {
     const bootstrap = requireBootstrap(c)
-    if (!bootstrap) return unavailable('Repo bootstrap is not configured')
+    // Wired but unable to act — a predicate, not an absent value, so it throws directly
+    // rather than through the accessor.
     if (!bootstrap.service.canBootstrap) {
-      return unavailable(
+      throw new UnavailableError(
         'Repo bootstrapping needs the GitHub App and the implementation container to be configured',
       )
     }

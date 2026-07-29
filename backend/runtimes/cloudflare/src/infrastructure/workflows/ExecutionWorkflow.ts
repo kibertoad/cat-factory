@@ -5,9 +5,13 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
-import type { AgentFailureKind } from '@cat-factory/kernel'
-import { getErrorReason, redactSecrets } from '@cat-factory/kernel'
-import type { AdvanceResult } from '@cat-factory/orchestration'
+import { redactSecrets } from '@cat-factory/kernel'
+import type { AdvanceResult, RunFailure } from '@cat-factory/orchestration'
+import {
+  failureFromAdvanceError,
+  failureFromDriver,
+  failureFromResult,
+} from '@cat-factory/orchestration'
 import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
@@ -64,27 +68,28 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     // thousands/day a 30s busy-loop would accrue toward the Workflows per-instance limit.
     const pauseRecheckTimeout = decisionTimeout
 
-    // `reason` is NOT optional decoration: the SPA's `AgentFailureCard` branches on it to
-    // render the machine-readable remedies (the "Connect GitHub" jump action, the
-    // deploy-runner hint). This helper used to omit the parameter entirely, so every
-    // failure path on the DEPLOYED runtime discarded the reason the runtime-neutral
-    // `drive.ts` twin has always forwarded — those remedies could never fire in production
-    // (observability-logging-gaps.md, B3). Keep the signature in step with `drive.ts`'s
-    // `fail`; a divergence here is invisible until a user needs the remedy.
-    const failRun = async (
-      i: number,
-      message: string,
-      kind: AgentFailureKind = 'agent',
-      detail: string | null = null,
-      reason: string | null = null,
-    ): Promise<void> => {
-      log.warn(`failing run: ${message}`, {
+    // Takes the shared {@link RunFailure} rather than positional arguments of its own. The
+    // positional form is how this driver silently dropped `AgentFailure.reason` on the DEPLOYED
+    // runtime for every failure — the helper simply had no `reason` parameter while the
+    // runtime-neutral `drive.ts` twin forwarded it, disabling the SPA's whole `AgentFailureCard`
+    // remedy branch on Cloudflare only. Every parameter carried a default, so a call site that
+    // stopped short read as deliberate. With one shape shared by both drivers, a dropped field
+    // is a typecheck failure (observability-logging-gaps.md, B3).
+    const failRun = async (i: number, failure: RunFailure): Promise<void> => {
+      log.warn(`failing run: ${failure.message}`, {
         step: i,
-        failureKind: kind,
-        ...(reason ? { reason } : {}),
+        failureKind: failure.kind,
+        ...(failure.reason ? { reason: failure.reason } : {}),
       })
       await step.do(`fail-${i}`, () =>
-        container.executionService.failRun(workspaceId, executionId, message, kind, detail, reason),
+        container.executionService.failRun(
+          workspaceId,
+          executionId,
+          failure.message,
+          failure.kind,
+          failure.detail,
+          failure.reason,
+        ),
       )
     }
 
@@ -137,9 +142,11 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
           await failRun(
             i,
-            `Job status was unreadable for ${pollReadFailures} consecutive polls; ` +
-              `the container appears unreachable (last error: ${attempt.message})`,
-            'timeout',
+            failureFromDriver(
+              `Job status was unreadable for ${pollReadFailures} consecutive polls; ` +
+                `the container appears unreachable (last error: ${attempt.message})`,
+              'timeout',
+            ),
           )
           return null
         }
@@ -151,7 +158,13 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         }
       }
       if (!polled && result.kind === 'awaiting_job') {
-        await failRun(i, 'Implementation job did not finish within its polling budget', 'timeout')
+        await failRun(
+          i,
+          failureFromDriver(
+            'Implementation job did not finish within its polling budget',
+            'timeout',
+          ),
+        )
         return null
       }
       return result
@@ -188,9 +201,11 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
           await failRun(
             i,
-            `Gate precheck was unreadable for ${pollReadFailures} consecutive polls ` +
-              `(last error: ${attempt.message})`,
-            'timeout',
+            failureFromDriver(
+              `Gate precheck was unreadable for ${pollReadFailures} consecutive polls ` +
+                `(last error: ${attempt.message})`,
+              'timeout',
+            ),
           )
           return null
         }
@@ -226,13 +241,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // `providers_unconfigured` conflict), which is exactly the class of failure the SPA
         // has a remedy for — `getErrorReason` is the read-side dual that lifts it onto the
         // run rather than leaving the user with prose to string-match.
-        await failRun(
-          i,
-          error instanceof Error ? error.message : String(error),
-          'agent',
-          null,
-          getErrorReason(error) ?? null,
-        )
+        await failRun(i, failureFromAdvanceError(error))
         return
       }
 
@@ -264,13 +273,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // An inline gate may carry the precise classification + diagnostic (e.g. an
         // unparseable companion verdict → `companion_rejected` with its raw reply as
         // detail); record those instead of the generic container-failure framing.
-        await failRun(
-          i,
-          result.error,
-          result.failureKind ?? 'job_failed',
-          result.detail ?? null,
-          result.reason ?? null,
-        )
+        await failRun(i, failureFromResult(result))
         return
       }
 
@@ -282,7 +285,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // does — the container is already reclaimed, so this is the only surviving account
         // of why it died. Dropping it here made an eviction unfalsifiable on the runtime
         // where containers actually run.
-        await failRun(i, result.error, 'evicted', result.detail ?? null)
+        await failRun(i, failureFromResult(result))
         return
       }
 

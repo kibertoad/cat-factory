@@ -1408,6 +1408,19 @@
       "cacheWrite": "{tokens} escritos en caché",
       "cacheWriteHint": "Tokens de entrada escritos en la caché del proveedor (de 1,25 a 2 veces el precio de la entrada fresca)"
     },
+    "phase": {
+      "title": "Adónde fueron los tokens",
+      "subtitle": "por fase de la ejecución, ordenado por coste de arrastre",
+      "columns": {
+        "phase": "Fase",
+        "turns": "Turnos",
+        "tokensInOut": "Tokens (entrada / salida)",
+        "carryCost": "Coste de arrastre"
+      },
+      "carryCostHint": "Cuánto cargó cada fase sobre los turnos posteriores: su contexto contado una vez por cada turno que tuvo que reenviarlo. Compara entre sí las fases de una ejecución; por sí sola la cifra no significa nada. Una fase que se ejecuta al final arrastra poco por mucho que haya gastado, así que lee esta columna junto a los tokens de al lado.",
+      "unattributed": "Sin atribuir",
+      "unattributedHint": "registrado por un canal que no informa de la fase"
+    },
     "metricsBar": {
       "calls": "{count} llamada | {count} llamadas",
       "inputCompletionTokens": "Tokens totales de entrada / salida. La entrada tambien cuenta los tokens en caché: siguen ocupando la ventana de contexto, igual que los cuenta el medidor de contexto de Claude Code.",
@@ -3743,6 +3756,8 @@
     "intro": "Explora un tablero del gestor de incidencias en busca de errores abiertos y sin asignar, y clasifícalos por impacto frente a lo difícil que parece arreglar cada uno. Elige uno y se convertirá en una tarea que ejecuta la canalización de corrección de errores.",
     "connectFirst": "Conecta o activa primero una fuente de tareas.",
     "connectSource": "Conectar {label}",
+    "enableSource": "Habilitar {label}",
+    "pickTracker": "Elige un gestor de incidencias",
     "needFrameFirst": "Añade primero un marco de servicio al tablero para que el error elegido tenga dónde aterrizar.",
     "tracker": "Gestor de incidencias",
     "board": "Tablero",

@@ -10,15 +10,12 @@ import type { TestSecretsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
-import { UnavailableError } from '@cat-factory/kernel'
+import { requireCapability } from '../../http/guards.js'
 
-/** Resolve the test-secrets service or send a 503, returning null when unconfigured. */
-function requireTestSecrets<E extends AppEnv>(c: Context<E>): TestSecretsService | null {
-  return c.get('container').testSecrets ?? null
-}
-
-const unavailable = (): never => {
-  throw new UnavailableError(
+/** Resolve the test-secrets service, or refuse with a 503 naming what isn't wired. */
+function requireTestSecrets<E extends AppEnv>(c: Context<E>): TestSecretsService {
+  return requireCapability(
+    c.get('container').testSecrets,
     'The sensitive test-credential store is not configured (needs ENCRYPTION_KEY)',
   )
 }
@@ -35,13 +32,11 @@ export function testSecretsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable()
     return c.json(await svc.getView(param(c, 'workspaceId'), c.req.valid('param').blockId), 200)
   })
 
   buildHonoRoute(app, setServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable()
     const view = await svc.set(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
@@ -52,7 +47,6 @@ export function testSecretsController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)
-    if (!svc) return unavailable()
     await svc.deleteFor(param(c, 'workspaceId'), c.req.valid('param').blockId)
     return c.body(null, 204)
   })

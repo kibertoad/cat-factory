@@ -1,7 +1,7 @@
 import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import { describe, it, expect } from 'vitest'
-import type { InitiativeItem, InitiativePhase } from '~/types/domain'
-import { pendingCheckpointPhase } from './initiative'
+import type { InitiativeItem, InitiativePhase, InitiativeQa } from '~/types/domain'
+import { isPendingQuestion, orderInterviewQuestions, pendingCheckpointPhase } from './initiative'
 
 // `pendingCheckpointPhase` mirrors the backend `pendingCheckpoint` (orchestration
 // `initiative.logic.ts`); these pin the same ordering/edge cases the loop pauses on, so the
@@ -69,5 +69,84 @@ describe('pendingCheckpointPhase', () => {
   it.each([...INITIATIVE_ITEM_TERMINAL_STATUSES])('fires on the terminal status %s', (status) => {
     const phases = [phase({ id: 'p1', checkpoint: true })]
     expect(pendingCheckpointPhase(phases, [item('a', 'p1', status)])?.id).toBe('p1')
+  })
+})
+
+// `isPendingQuestion` mirrors the backend rule of the same name (orchestration
+// `initiative.logic.ts`); `orderInterviewQuestions` is what the planning window renders by, so a
+// multi-round interview puts what the human still owes an answer above what they already settled.
+
+const qa = (over: Partial<InitiativeQa> & { id: string }): InitiativeQa => ({
+  question: over.id,
+  answer: '',
+  status: 'open',
+  ...over,
+})
+
+describe('isPendingQuestion', () => {
+  it('is pending while unanswered and not dismissed', () => {
+    expect(isPendingQuestion(qa({ id: 'a' }))).toBe(true)
+  })
+
+  it('is settled once answered', () => {
+    expect(isPendingQuestion(qa({ id: 'a', answer: 'yes' }))).toBe(false)
+  })
+
+  it('treats a whitespace-only answer as unanswered', () => {
+    expect(isPendingQuestion(qa({ id: 'a', answer: '   \n' }))).toBe(true)
+  })
+
+  it('is settled once dismissed, answered or not', () => {
+    expect(isPendingQuestion(qa({ id: 'a', status: 'dismissed' }))).toBe(false)
+  })
+
+  it('treats an absent answer/status (a hand-authored exchange) as pending', () => {
+    expect(isPendingQuestion({})).toBe(true)
+  })
+})
+
+describe('orderInterviewQuestions', () => {
+  const ids = (list: InitiativeQa[]) => orderInterviewQuestions(list).map((q) => q.id)
+
+  it('floats a later round of unanswered questions above the settled digest', () => {
+    // The shape the backend's `[...retainedQa, ...pending]` append produces on round two.
+    const list = [
+      qa({ id: 'r1-answered', answer: 'yes' }),
+      qa({ id: 'r1-dismissed', status: 'dismissed' }),
+      qa({ id: 'r2-a' }),
+      qa({ id: 'r2-b' }),
+    ]
+    expect(ids(list)).toEqual(['r2-a', 'r2-b', 'r1-answered', 'r1-dismissed'])
+  })
+
+  it('keeps chronological order within each group', () => {
+    const list = [
+      qa({ id: 'p1' }),
+      qa({ id: 's1', answer: 'yes' }),
+      qa({ id: 'p2' }),
+      qa({ id: 's2', status: 'dismissed' }),
+      qa({ id: 'p3' }),
+    ]
+    expect(ids(list)).toEqual(['p1', 'p2', 'p3', 's1', 's2'])
+  })
+
+  it('leaves a first round (all pending) exactly as the interviewer asked it', () => {
+    const list = [qa({ id: 'a' }), qa({ id: 'b' }), qa({ id: 'c' })]
+    expect(ids(list)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('leaves a fully settled interview in its digest order', () => {
+    const list = [qa({ id: 'a', answer: 'x' }), qa({ id: 'b', status: 'dismissed' })]
+    expect(ids(list)).toEqual(['a', 'b'])
+  })
+
+  it('does not mutate the stored order (the interviewer prompt + tracker digest read it)', () => {
+    const list = [qa({ id: 'answered', answer: 'x' }), qa({ id: 'pending' })]
+    orderInterviewQuestions(list)
+    expect(list.map((q) => q.id)).toEqual(['answered', 'pending'])
+  })
+
+  it('handles an empty interview', () => {
+    expect(orderInterviewQuestions([])).toEqual([])
   })
 })

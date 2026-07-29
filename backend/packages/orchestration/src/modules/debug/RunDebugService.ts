@@ -153,7 +153,7 @@ export class RunDebugService {
         failures: 0,
       },
     ])
-    const { totals, byAgentKind } = foldLlmRollup(summaries)
+    const { totals, byAgentKind, byPhase } = foldLlmRollup(summaries)
     const steps = execution.steps.map(toDebugRunStep)
     const sinks = {
       // The LLM call count is FOLDED from the per-kind rollup rather than counted separately:
@@ -175,7 +175,7 @@ export class RunDebugService {
       steps,
       diagnostics: execution.diagnostics ?? null,
       sinks,
-      llm: { totals, byAgentKind },
+      llm: { totals, byAgentKind, byPhase },
       signals: deriveSignals({
         execution,
         steps,
