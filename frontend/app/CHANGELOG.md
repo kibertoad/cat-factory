@@ -1,5 +1,26 @@
 # @cat-factory/app
 
+## 0.180.0
+
+### Minor Changes
+
+- 150314c: Add a tracker from the bug hunt. The hunt's tracker field is now the same two-tier menu the
+  context-issue picker uses: the trackers the workspace offers, then the ones it could add. Picking
+  one to add routes straight to that tracker's own connect screen instead of leaving the user to
+  find the Integrations hub, and the connect form opens over the hunt so the board scope, issue type
+  and labels already typed survive the detour. Once the tracker turns up offered it becomes the
+  hunt's selection automatically. A tracker that is connected but toggled off for the workspace is
+  offered as "enable" rather than "connect".
+
+### Patch Changes
+
+- 9f23fcb: Float still-unanswered questions to the top of the initiative planning window. A multi-round
+  interview keeps the answered/dismissed digest and appends each new round after it, so from round
+  two the questions the human could still act on sat below everything they had already settled. The
+  render order is now pending-first (chronological within each group), re-snapshotted per round so
+  answering one doesn't reshuffle the list. The stored `qa` order — which the interviewer prompt and
+  the in-repo tracker digest read — is unchanged.
+
 ## 0.179.0
 
 ### Minor Changes
