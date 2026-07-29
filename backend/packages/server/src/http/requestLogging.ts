@@ -38,6 +38,13 @@ const SAFE_REQUEST_ID = /^[\w\-=]+$/
  * `backend/docs/logging.md` says `info` is not for — they would bury the request stream in a
  * healthy deployment. A probe that FAILS still logs at its normal level, which is the only time
  * anyone wants to see one.
+ *
+ * The LLM proxy (`llmProxyController`, mounted on this same app) is the deployment's highest-volume
+ * route — one request per model call, so hundreds per coding run — and is DELIBERATELY not quieted.
+ * The distinction that earns `/health` its demotion is that a probe fires when nothing is
+ * happening, whereas every proxy line corresponds to real billable work and joins to a
+ * `llm_call_metrics` row we already retain. Quieting it would blind the request stream exactly
+ * where the traffic is.
  */
 const QUIET_PATHS = new Set(['/health', '/ready'])
 
@@ -81,11 +88,18 @@ export function mountRequestLogging<E extends AppEnv>(app: Hono<E>, base: Logger
     // The PATHNAME only, never the raw URL: a query string routinely carries a token (the
     // WebSocket `?ticket=`, an OAuth `?code=`) and this value lands in every line for the
     // request. Route params stay in the path, which is what makes a line greppable at all.
-    const path = new URL(c.req.url).pathname
+    // `c.req.path` is Hono's own already-computed pathname (a string slice, no URL parse) —
+    // identical value, and this runs on every request including the LLM proxy's hot path.
+    const path = c.req.path
     const log = base.child({ requestId, method, path })
     c.set('requestId', requestId)
     c.set('log', log)
 
+    // On workerd `Date.now()` is frozen between I/O operations, so this reads 0 for a request
+    // that performs none and otherwise snaps to the last I/O boundary rather than true wall
+    // clock. It is a coarse "was this slow" signal, never a latency measurement — and for a
+    // STREAMED response (the LLM proxy) it covers time-to-headers, not time-to-last-byte,
+    // because `next()` resolves as soon as the handler returns the Response.
     const startedAt = Date.now()
     await next()
     const durationMs = Date.now() - startedAt

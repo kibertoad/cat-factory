@@ -569,6 +569,11 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
   what they were shown and an operator greps one line. `handleError` also stashes the code it
   mapped on the context so the request line names it, and now reports an unexpected fault through
   the REQUEST logger — the 500's own line and the envelope the caller received share an id.
+- **The misconfiguration fallback is covered on every facade.** The Worker inherits the middleware
+  (it serves the fallback from INSIDE `createApp`'s container-build middleware), but Node/local
+  `serve()` the standalone `createMisconfiguredApp` instead — so that app mounts it and the
+  expose-header itself. Without that, the one deployment shape an operator is actively debugging
+  would be the only one with no ids and no request lines.
 - **`X-Request-Id` joined both CORS lists** — `CORS_ALLOWED_HEADERS` so a caller that already has
   an id can propagate it instead of the backend minting a second one for the same request, and a
   new `CORS_EXPOSED_HEADERS` so a browser can actually READ it off the response (without
@@ -581,10 +586,18 @@ best-effort (a fix adds a log/counter, never a throw into the caller).
 - **`containerAgentLogging.ts`** — the seam's log vocabulary as a small collaborator
   (`ContainerAgentExecutor.ts` had 29 lines of headroom against its budget, so the messages and
   their rationale were extracted rather than the budget raised). `ContainerAgentExecutor` now logs
-  dispatched / dispatch-failed / running (`debug`) / settled, with the ids bound once.
-- **A dispatch that THROWS is logged and re-thrown.** That failure class had no account anywhere:
-  the job never gets a handle, so no poll can report it, and the resolved model/backend of a job
-  that never existed was recorded nowhere.
+  dispatched / dispatch-failed / poll-failed / running (`debug`) / settled, with the ids bound once.
+  A second extraction, **`agentContextRecord.ts`** (the observability snapshot's allow-list
+  projection), ratcheted the file's budget 1520 → 1450 rather than growing it.
+- **A dispatch or poll that THROWS is logged and re-thrown.** Those failure classes had no account
+  anywhere: a failed dispatch never gets a handle, so no poll can report it, and a failed poll's
+  transport fault was recorded against no job, backend or run.
+- **Every `agent`-kind dispatcher carries the ids, not just the execution path.**
+  `ContainerRepoBootstrapper` and `ContainerEnvConfigRepairer` hand-build their job bodies instead
+  of going through `buildCommonBody`; a bootstrap is a first-class agent run (one `agent_runs`
+  table, one retry surface), so leaving it out would have left exactly one agent flow whose
+  container logs join to nothing. Neither has a separate execution row, so the job id doubles as
+  the run id — matching the session token each already mints.
 - **Two bare `catch {}` swallows in the executor became `runBestEffort`** (the agent-context
   snapshot write and the tool-span forward) now that the class has a bound logger to report
   through — 1.2d sites, drained here because they are in the file this slice gave a logger.

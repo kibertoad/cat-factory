@@ -108,7 +108,12 @@ describe('mountRequestLogging', () => {
     // envelope the caller received without the emit site re-spreading them.
     expect(fault?.fields?.requestId).toBe(res.headers.get(REQUEST_ID_HEADER))
     expect(fault?.fields?.path).toBe('/boom')
-    expect(String(fault?.fields?.err)).not.toContain('sk-secret')
+    // The WHOLE line, not just `err`. A stack's first line is `Error: <message>` verbatim, so
+    // asserting only on the scrubbed field would pass while `stack` republished the secret
+    // right beside it.
+    expect(JSON.stringify(fault)).not.toContain('sk-secret')
+    // Redaction must not gut the stack — what identifies the fault still survives.
+    expect(fault?.fields?.stack).toContain('kaboom')
     expect(logger.lines.find((l) => l.msg === 'request failed')?.level).toBe('error')
   })
 

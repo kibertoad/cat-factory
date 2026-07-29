@@ -30,7 +30,9 @@ interface Harness {
   logger: ReturnType<typeof createRecordingLogger>
 }
 
-function makeExecutor(opts: { view?: RunnerJobView; dispatchError?: Error } = {}): Harness {
+function makeExecutor(
+  opts: { view?: RunnerJobView; dispatchError?: Error; pollError?: Error } = {},
+): Harness {
   const bodies: Record<string, unknown>[] = []
   const logger = createRecordingLogger()
   const transport: RunnerTransport = {
@@ -39,6 +41,7 @@ function makeExecutor(opts: { view?: RunnerJobView; dispatchError?: Error } = {}
       bodies.push(spec as Record<string, unknown>)
     },
     async poll() {
+      if (opts.pollError) throw opts.pollError
       return opts.view ?? { state: 'running' }
     },
   }
@@ -118,6 +121,14 @@ describe('container seam correlation', () => {
     const line = logger.lines.find((l) => l.msg === 'container job dispatch failed')
     expect(line?.level).toBe('warn')
     expect(line?.fields).toMatchObject({ executionId: 'ex_1', err: 'no runner available' })
+  })
+
+  it('names a poll that threw, and still surfaces the fault to the driver', async () => {
+    const { executor, logger } = makeExecutor({ pollError: new Error('runner unreachable') })
+    await expect(executor.pollJob(handle)).rejects.toThrow('runner unreachable')
+    const line = logger.lines.find((l) => l.msg === 'container job poll failed')
+    expect(line?.level).toBe('warn')
+    expect(line?.fields).toMatchObject({ executionId: 'ex_1', jobId: 'job_1' })
   })
 
   it('keeps a still-running poll off the info stream', async () => {

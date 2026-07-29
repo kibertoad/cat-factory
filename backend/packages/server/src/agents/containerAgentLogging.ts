@@ -32,6 +32,12 @@ export interface ContainerJobLog {
    */
   dispatchFailed(error: unknown, fields?: LogFields): void
   /**
+   * A poll against the job's backend threw. Logged and RE-THROWN by the caller — the durable
+   * driver decides whether to retry or fail the step, and without this the transport fault is
+   * recorded against no job, backend or run.
+   */
+  pollFailed(error: unknown, fields?: LogFields): void
+  /**
    * One poll of a still-running job. `debug`, deliberately: this fires every few seconds for the
    * whole life of a run, which is precisely what the level table says `info` is not for.
    */
@@ -57,6 +63,8 @@ export function containerJobLog(base: Logger | undefined, ids: ContainerJobIds):
     dispatched: (fields) => logger.info('container job dispatched', fields),
     dispatchFailed: (error, fields) =>
       logger.warn('container job dispatch failed', { ...fields, ...describeError(error) }),
+    pollFailed: (error, fields) =>
+      logger.warn('container job poll failed', { ...fields, ...describeError(error) }),
     progress: (fields) => logger.debug('container job running', fields),
     settled: (outcome, fields) => {
       if (outcome === 'done') logger.info('container job completed', fields)

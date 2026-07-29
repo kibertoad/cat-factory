@@ -98,6 +98,13 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
       repo: 'simpler-service3',
     })
     expect(dispatch).toHaveBeenCalledTimes(1)
+    // A bootstrap is a first-class agent run (same `agent_runs` table, same retry surface), so
+    // its job body carries the same correlation ids an execution step's does — without them the
+    // container's own log lines join to nothing. No separate execution row: the job id IS the
+    // run id, which is what the session token is minted against.
+    const [, spec] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(spec.workspaceId).toBe('ws_1')
+    expect(spec.executionId).toBe('boot_1')
   })
 })
 

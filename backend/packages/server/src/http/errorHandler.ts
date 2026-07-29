@@ -1,4 +1,4 @@
-import { DomainError, describeError } from '@cat-factory/kernel'
+import { DomainError, describeError, redactSecrets } from '@cat-factory/kernel'
 import { SchemaValidationError } from '@toad-contracts/core'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -76,12 +76,15 @@ export function handleError<E extends AppEnv>(error: unknown, c: Context<E>): Re
   }
   // Unexpected fault: log it through the REQUEST-scoped logger (so the line carries the same
   // `requestId` the client just received, plus method/path from the bound fields) but never leak
-  // internals to the client. `describeError` scrubs the message; the stack is attached explicitly
-  // because this is the one class of failure where it is what identifies the fault.
+  // internals to the client. The stack is attached explicitly because this is the one class of
+  // failure where it is what identifies the fault — and it goes through `redactSecrets` in its
+  // own right: a stack's FIRST LINE is `Error: <message>` verbatim, so attaching it raw beside
+  // the scrubbed `err` would republish exactly what `describeError` just removed.
   c.set('errorCode', 'internal')
+  const stack = error instanceof Error ? redactSecrets(error.stack ?? null) : null
   requestLogger(c).error('unhandled request error', {
     ...describeError(error),
-    ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+    ...(stack ? { stack } : {}),
   })
   return c.json(
     { error: { code: 'internal', message: 'Internal server error', ...correlation } },

@@ -100,22 +100,40 @@ isn't mounted, so no call site branches.
 One line per request: `info` on success, `warn` on a 4xx (with the `errorCode` `handleError`
 mapped, when the refusal came through a thrown `DomainError`), `error` on a 5xx. `/health` and
 `/ready` drop to `debug` when they succeed — an orchestrator probes them every few seconds, and a
-per-poll line is exactly what the level table above says `info` is not for.
+per-poll line is exactly what the level table above says `info` is not for. The LLM proxy is
+deliberately NOT quieted despite being the highest-volume route (one request per model call): a
+probe fires when nothing is happening, whereas every proxy line marks real billable work and joins
+to an `llm_call_metrics` row. Quiet the idle chatter, never the work.
 
 Only the **pathname** is logged, never the raw URL: a query string routinely carries a token (the
 WebSocket `?ticket=`, an OAuth `?code=`), and this value lands in every line for the request. For
 the same reason a client-supplied id is refused unless it is short and matches `[\w\-=]+` — it is
 attacker-controlled text going straight into a log stream.
 
+`durationMs` is a coarse "was this slow" signal, not a latency measurement. On workerd `Date.now()`
+is frozen between I/O operations, so a request performing none reads 0 and every other value snaps
+to the last I/O boundary; and for a STREAMED response it covers time-to-headers, because `next()`
+resolves when the handler returns the `Response`, not when its body finishes.
+
+The **misconfiguration fallback** mounts it too. The Worker inherits it (it serves the fallback from
+inside `createApp`), but Node/local swap in the whole `createMisconfiguredApp` — so it mounts the
+middleware itself, or the one deployment shape someone is actively debugging would be the only one
+with no ids and no request lines.
+
 ### The container (`containerJobLog`)
 
 The workflow↔container seam was the platform's blindest: the durable driver knows a run as
 `executionId`, the harness knew it only as `jobId`, and `ContainerAgentExecutor` — the thing that
 joins them — logged nothing at all. It now emits one line per lifecycle transition (dispatched /
-dispatch-failed / running at `debug` / settled) with `{ workspaceId, executionId, jobId, agentKind }`
-bound, and the same two ids ride the **job body** so the harness binds them onto its own per-job
-child logger beside `jobId`. A container line and a backend line for the same run now join on
-`executionId`.
+dispatch-failed / poll-failed / running at `debug` / settled) with
+`{ workspaceId, executionId, jobId, agentKind }` bound, and the same two ids ride the **job body**
+so the harness binds them onto its own per-job child logger beside `jobId`. A container line and a
+backend line for the same run now join on `executionId`.
+
+Every dispatcher of the `agent` kind puts those ids on its body, not just the execution path:
+`ContainerRepoBootstrapper` and `ContainerEnvConfigRepairer` hand-build their bodies rather than
+going through `buildCommonBody`, and a bootstrap is a first-class agent run. Neither has a separate
+execution row, so the job id doubles as the run id (matching the session token they mint).
 
 ### The durable driver
 
