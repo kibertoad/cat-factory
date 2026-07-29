@@ -207,7 +207,12 @@ Two values behave in ways worth knowing before you read a number off this:
 - **`phase=` (empty) is a real query**, selecting the UNATTRIBUTED slice — an older harness image,
   an inline call, or the un-phased proxy path. It is not "no filter". A run whose calls are all
   unattributed was metered by a channel with no phase concept; it did **not** spend nothing outside
-  the agent loop.
+  the agent loop. An INLINE call (a judge, consensus, the requirements writer, an inline agent kind
+  such as `doc-researcher` / `doc-outliner` / the document interviewer) always lands here: phases
+  are boundaries the container harness owns, so a call made outside a container has none to claim.
+  It is recognisable by the company it keeps — `turnIndex` null, `httpStatus` null,
+  `upstreamMs === totalMs`. So a run built entirely of inline steps reports its whole spend under
+  `phase=""`, which is a complete answer rather than a missing one.
 - **`turnIndex` is `null`**, not 0, wherever the producing channel has no turn concept (the LLM
   proxy sees one HTTP request at a time with no job-scoped counter). A 0 there would read as "the
   first turn" and sort every proxied call to the front of its phase.

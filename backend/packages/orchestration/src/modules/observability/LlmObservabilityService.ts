@@ -10,6 +10,7 @@ import {
 } from '@cat-factory/kernel'
 import type {
   GroupCacheHandle,
+  InlineLlmCall,
   Logger,
   HarnessCallMetric,
   LlmCallMetric,
@@ -86,6 +87,24 @@ const DEFAULT_LIST_LIMIT = 1000
 const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0, promptHash: '' }
 
 /**
+ * A prompt/response/reasoning body, either already in hand or resolvable on demand.
+ *
+ * Every use of a body here sits behind the `recordPrompts` + `storeAgentContext` gate, so a
+ * deployment with prompt recording off (or a workspace that opted out) does work it then
+ * discards: serialising a prompt array and scrubbing it, per call. A producer that HOLDS the
+ * string passes it as one and nothing changes; a producer that would have to BUILD it passes
+ * the thunk and pays only when the gate opens. The inline feeder is the case that matters —
+ * it JSON-serialises the whole AI-SDK prompt, which on a judge or a reviewer carries a rubric
+ * and a diff, inside a CPU-metered isolate.
+ */
+export type LlmCallBody = string | (() => string)
+
+/** Resolve a {@link LlmCallBody}. Only ever called when the body is going to be kept. */
+function resolveBody(body: LlmCallBody): string {
+  return typeof body === 'string' ? body : body()
+}
+
+/**
  * Details of one proxied LLM call, handed in by the LLM proxy. The proxy owns the
  * timing (it wraps the upstream call): {@link totalMs} is the end-to-end time it
  * spent and {@link upstreamMs} the slice waiting on the model — the difference is
@@ -135,10 +154,10 @@ export interface RecordLlmCallInput {
   ok: boolean
   httpStatus: number | null
   errorMessage: string | null
-  promptText: string
-  responseText: string
+  promptText: LlmCallBody
+  responseText: LlmCallBody
   /** The model's reasoning/thinking trace, when emitted on a separate channel (else ''). */
-  reasoningText: string
+  reasoningText: LlmCallBody
 }
 
 /**
@@ -199,17 +218,28 @@ export class LlmObservabilityService {
    * still recorded.
    */
   async record(rawInput: RecordLlmCallInput): Promise<void> {
+    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
+    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
+    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
+    // always recorded regardless.
+    //
+    // Resolved FIRST, before the bodies are touched at all: a body may be a thunk the
+    // producer would rather not run (the inline feeder serialises the whole AI-SDK prompt),
+    // and scrubbing a body this gate is about to drop is work nobody reads either way.
+    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(rawInput.workspaceId))
     // Unlike the agent-context snapshot (a structural allow-list), the prompt/response
     // bodies captured here are free text that can contain a credential the agent read or
     // echoed. Scrub known secret shapes BEFORE anything is stored, delta-chained, or
     // fanned out to the external trace sink — the redacted text is what every downstream
     // consumer sees. Done up front so the delta chain stays consistent (each tip is
     // already redacted) and Langfuse never receives a raw secret.
-    const input: RecordLlmCallInput = {
+    const scrub = (body: LlmCallBody): string =>
+      recordBodies ? (redactSecrets(resolveBody(body)) ?? '') : ''
+    const input = {
       ...rawInput,
-      promptText: redactSecrets(rawInput.promptText) ?? '',
-      responseText: redactSecrets(rawInput.responseText) ?? '',
-      reasoningText: redactSecrets(rawInput.reasoningText) ?? '',
+      promptText: scrub(rawInput.promptText),
+      responseText: scrub(rawInput.responseText),
+      reasoningText: scrub(rawInput.reasoningText),
       // errorMessage is a free-text upstream/proxy error string that is kept as diagnostic
       // metadata even when bodies are dropped (like httpStatus/finishReason) AND fanned out
       // to the trace sink — so it too must be scrubbed. An upstream 4xx/5xx message can
@@ -218,11 +248,6 @@ export class LlmObservabilityService {
       errorMessage: redactSecrets(rawInput.errorMessage),
     }
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
-    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
-    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
-    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
-    // always recorded regardless.
-    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(input.workspaceId))
     const stored = recordBodies
       ? await this.computeStoredPromptForChain(input)
       : EMPTY_STORED_PROMPT
@@ -291,7 +316,13 @@ export class LlmObservabilityService {
    * `(workspace, execution, agentKind)` conversation (or the full array when it can't
    * be chained). Only reached when prompt recording is enabled.
    */
-  private async computeStoredPromptForChain(input: RecordLlmCallInput): Promise<StoredPrompt> {
+  private async computeStoredPromptForChain(input: {
+    workspaceId: string
+    executionId: string | null
+    agentKind: string
+    /** Already resolved and scrubbed — a chain tip must never hold an unredacted body. */
+    promptText: string
+  }): Promise<StoredPrompt> {
     const prev =
       input.executionId != null
         ? await this.repository.latestChainTip(
@@ -410,4 +441,78 @@ export function makeHarnessCallRecorder(
       })
     }
   }
+}
+
+/**
+ * Build the instrumented model provider's `recordCall` dependency: map an INLINE (non-proxied)
+ * LLM call onto the SAME {@link LlmObservabilityService} the proxy and the subscription
+ * harnesses feed, so a judge, a consensus round, the requirements writer or an inline agent
+ * kind (`doc-researcher`, `doc-outliner`, the document interviewer) lands in `llm_call_metrics`
+ * exactly like a container call. Before this, every one of those was invisible to
+ * `ObservabilityPanel`, to a step's token rollup and to `/api/v1/debug/*` — a run made entirely
+ * of inline steps reported zero model activity no matter how many tokens it spent
+ * (`docs/initiatives/observability-logging-gaps.md`, C2 coverage half).
+ *
+ * The sibling of {@link makeHarnessCallRecorder}, and it fills the store's proxy-shaped fields
+ * the same deliberate way — with what an inline call actually knows rather than a plausible
+ * guess:
+ *
+ * - `id` is left to the service to mint. The proxy mints its own so the live activity event and
+ *   the row share one, and the harness derives one from `(jobId, seq)` so a durable replay is
+ *   idempotent. An inline call has neither: it is a single awaited SDK call inside one service
+ *   method, so there is no second channel to reconcile with and nothing to re-record.
+ * - `streaming` is false — every inline site calls `generateText`, never `streamText`.
+ * - `phase` is left absent ⇒ the unattributed `''` slice. Phases are boundaries the HARNESS
+ *   owns inside a container run; an inline call sits outside all of them, and stamping one
+ *   would file it under a loop it never ran in.
+ * - `turnIndex` is null, like the proxy's. There is no job-scoped counter here either, so these
+ *   rows order by `createdAt`.
+ * - `httpStatus` is null: the AI SDK owns the transport, so a failure arrives as an exception
+ *   whose message is already on `errorMessage` (scrubbed by the service) rather than a status.
+ * - `upstreamMs` is the whole `durationMs`, which makes the derived overhead 0 — honestly so.
+ *   Splitting transport from execution is the PROXY's observation; an inline call has no hop
+ *   between the caller and the model, so any non-zero overhead here would be fabricated.
+ *
+ * Two consequences of sharing the store with the other two producers, both already safe:
+ *
+ * - **The delta chain is keyed `(workspace, execution, agentKind)`, which an inline call can
+ *   share with a proxied or harness one** — an inline judge and a container agent under one
+ *   run and one kind. Their prompts are different shapes entirely (the AI-SDK prompt array vs
+ *   the vendor wire messages), but `computeStoredPrompt` HASH-VERIFIES the tip's prefix before
+ *   eliding it, so a cross-producer tip degrades to storing the full array rather than
+ *   corrupting a reconstruction. Interleaving costs compression, never correctness.
+ * - **The bodies are passed as THUNKS**, so a deployment with `LLM_RECORD_PROMPTS` off (or a
+ *   workspace that opted out) never pays to serialise a prompt the service is about to drop.
+ *   The gate stays in ONE place — inside `record`, which resolves it before touching a body.
+ */
+export function makeInlineCallRecorder(
+  service: LlmObservabilityService,
+): (call: InlineLlmCall) => Promise<void> {
+  return (call) =>
+    service.record({
+      workspaceId: call.workspaceId,
+      executionId: call.executionId,
+      agentKind: call.agentKind,
+      provider: call.provider,
+      model: call.model,
+      streaming: false,
+      turnIndex: null,
+      messageCount: call.messageCount,
+      toolCount: call.toolCount,
+      requestMaxTokens: call.requestMaxTokens,
+      promptTokens: call.promptTokens,
+      cacheReadTokens: call.cacheReadTokens,
+      cacheWriteTokens: call.cacheWriteTokens,
+      completionTokens: call.completionTokens,
+      totalTokens: call.totalTokens,
+      finishReason: call.finishReason,
+      totalMs: call.durationMs,
+      upstreamMs: call.durationMs,
+      ok: call.ok,
+      httpStatus: null,
+      errorMessage: call.errorMessage,
+      promptText: call.promptText,
+      responseText: call.responseText,
+      reasoningText: call.reasoningText,
+    })
 }
