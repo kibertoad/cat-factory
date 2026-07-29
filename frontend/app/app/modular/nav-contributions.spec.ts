@@ -285,10 +285,20 @@ describe('nav grouping helpers', () => {
       'workspaceContext',
       'configuration',
     ])
-    // The engines are their own section, ahead of the optional integrations; `model-config`
-    // sits beside the providers it picks models from rather than under `configuration`.
+    // The model layer is its own section, ahead of the optional integrations: the engines,
+    // the per-agent model choice (beside the providers it picks from, rather than under
+    // `configuration`), and the two surfaces that evaluate a prompt+agent+model. Sandbox and
+    // Kaizen used to sit under `integrations`, which read as a claim they connect to an
+    // external system; they don't — they exercise and grade what this section configures.
     const models = groups.find((g) => g.group === 'models')
-    expect(models?.items.map((i) => i.id)).toEqual(['model-providers', 'model-config'])
+    expect(models?.items.map((i) => i.id)).toEqual([
+      'model-providers',
+      'model-config',
+      'sandbox',
+      'kaizen',
+    ])
+    const integrations = groups.find((g) => g.group === 'integrations')
+    expect(integrations?.items.map((i) => i.id)).toEqual(['integrations-hub'])
     const configuration = groups.find((g) => g.group === 'configuration')
     expect(configuration?.items.map((i) => i.id)).toEqual([
       'workspace-settings',

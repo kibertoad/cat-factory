@@ -83,12 +83,22 @@ const selected = computed(() => ui.selectedBlockId === props.id)
 // kept (gated off) so the prior behaviour is one edit away if we want chips back.
 const showExpanded = computed(() => true)
 
-// Surface a pending decision from this frame OR any of its tasks (O(tasks) map
+// Every child whose parked run the frame badge speaks for: its tasks AND its initiative
+// blocks. An initiative is a frame child like a module and runs an ordinary pipeline (its
+// planner parks on a real approval gate), so leaving it out made a whole class of parked run
+// invisible at frame level — the badge read "nothing needs you" while a plan sat waiting.
+const attentionIds = computed(() => {
+  const ids = new Set(taskIds.value)
+  for (const i of initiativeBlocks.value) ids.add(i.id)
+  return ids
+})
+
+// Surface a pending decision from this frame OR any of its children (O(children) map
 // lookups, not a scan of every open decision per frame).
 const blockDecisions = computed(() => {
   const byBlock = execution.decisionsByBlock
   const out = [...(byBlock.get(props.id) ?? [])]
-  for (const id of taskIds.value) {
+  for (const id of attentionIds.value) {
     const list = byBlock.get(id)
     if (list) out.push(...list)
   }
@@ -100,14 +110,14 @@ function openFirstDecision() {
   if (d) ui.openDecision(d.instanceId, d.decision.id)
 }
 
-// Surface a pending approval gate from this frame OR any of its tasks — but NOT an
+// Surface a pending approval gate from this frame OR any of its children — but NOT an
 // iterative reviewer gate (requirements-review / clarity-review) that's mid-cycle
 // (incorporating / re-reviewing in the driver), which is background work needing no human,
 // so it stays off the frame's "Approval" badge.
 const blockApprovals = computed(() => {
   const byBlock = execution.approvalsByBlock
   const candidates = [...(byBlock.get(props.id) ?? [])]
-  for (const id of taskIds.value) {
+  for (const id of attentionIds.value) {
     const list = byBlock.get(id)
     if (list) candidates.push(...list)
   }

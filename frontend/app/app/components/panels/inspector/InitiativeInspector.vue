@@ -6,7 +6,12 @@
 // with slice 4.
 import type { Block, InitiativeStatus } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
-import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
+import {
+  INITIATIVE_ATTENTION_ICONS,
+  INITIATIVE_ATTENTION_LABEL_KEYS,
+  INITIATIVE_STATUS_LABEL_KEYS,
+  initiativeProgress,
+} from '~/utils/initiative'
 
 const props = defineProps<{ block: Block }>()
 
@@ -24,6 +29,7 @@ const {
   running,
   awaitingAnswers,
   interviewing,
+  attention,
   starting,
   runPlanning,
   openPlanning,
@@ -56,8 +62,23 @@ function control(action: 'pause' | 'resume' | 'cancel') {
     </p>
 
     <div class="flex flex-wrap items-center gap-2">
+      <!-- Parked for a human (the drafted plan awaits approval, or an agent raised a decision).
+           The same affordance the board card carries, resolved from the same composable — the
+           run's park must not be reachable only through the execution panel's step list. -->
       <UButton
-        v-if="awaitingAnswers"
+        v-if="attention"
+        data-testid="initiative-review"
+        :data-attention="attention.kind"
+        color="warning"
+        variant="solid"
+        size="sm"
+        :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
+        @click="attention.open()"
+      >
+        {{ t(INITIATIVE_ATTENTION_LABEL_KEYS[attention.kind]) }}
+      </UButton>
+      <UButton
+        v-else-if="awaitingAnswers"
         data-testid="initiative-answer-planning"
         color="primary"
         variant="solid"

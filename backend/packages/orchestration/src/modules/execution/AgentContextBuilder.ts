@@ -51,6 +51,7 @@ import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
+import { interviewFollowsStep } from '../initiative/initiative.logic.js'
 import { resolveRunSkills } from './run-skills.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import {
@@ -346,7 +347,7 @@ export class AgentContextBuilder {
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
       this.validationChecksFor(workspaceId, serviceFrame),
-      this.resolveInitiativeContext(workspaceId, block, agentKind),
+      this.resolveInitiativeContext(workspaceId, block, agentKind, instance),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
         : Promise.resolve<string | null>(null),
@@ -550,6 +551,7 @@ export class AgentContextBuilder {
     workspaceId: string,
     block: Block,
     agentKind: string,
+    instance: ExecutionInstance,
   ): Promise<AgentRunContext['initiative']> {
     if (!this.deps.initiatives) return undefined
     // A run spawned INSIDE an initiative (not the planning run itself): the preset steering only.
@@ -572,6 +574,11 @@ export class AgentContextBuilder {
       ...(initiative.nonGoals?.length ? { nonGoals: initiative.nonGoals } : {}),
       ...(qa.length ? { qa } : {}),
       ...(initiative.analysisSummary ? { analysisSummary: initiative.analysisSummary } : {}),
+      // Read off THIS run's chain, so a planning pipeline with no interviewer (`pl_initiative_docs`,
+      // any `interview: 'skip'` preset, a deployment's own chain) tells the analyst the truth about
+      // what follows it rather than inheriting `pl_initiative`'s shape. Always present — `false` is
+      // the load-bearing half of this flag, so it must not be elided like the sparse fields above.
+      interviewFollows: interviewFollowsStep(instance.steps, instance.currentStep),
       ...(preset ? { preset } : {}),
     }
   }

@@ -509,6 +509,23 @@ export interface AgentRunContext {
     qa?: { question: string; answer: string }[]
     analysisSummary?: string
     /**
+     * Whether a stakeholder INTERVIEW step still lies ahead of the running step in THIS run's
+     * pipeline. Resolved from the pipeline's own shape, not from the preset: `pl_initiative` leads
+     * with the analyst and interviews after it (`true` for the analyst), while `pl_initiative_docs`
+     * and any other `interview: 'skip'` planning pipeline has no interviewer at all (`false`).
+     *
+     * It exists because the analyst is SHARED across those pipelines while the reason it must read
+     * rather than defer differs: with an interview ahead, every fact it establishes is one a human
+     * is not asked about their own codebase; with none, this analysis is the only reading of the
+     * repository the plan will ever get. Both motivate the same behaviour, and each is FALSE for
+     * the other pipeline — so the framing is selected here rather than asserted unconditionally.
+     *
+     * Present only on an initiative-LEVEL (planning) run; a spawned run carries preset steering
+     * alone. Reports the step's presence, not whether its interviewer is wired — an unwired
+     * interviewer passes through, which makes reading MORE important, never less.
+     */
+    interviewFollows?: boolean
+    /**
      * The initiative PRESET's planning steering for THIS step, resolved by the engine from the
      * entity's `presetId` against the registry. `label` names the preset; `promptAddition` is its
      * per-agent-kind steering text (already resolved for the running kind); `phaseTemplate` is the

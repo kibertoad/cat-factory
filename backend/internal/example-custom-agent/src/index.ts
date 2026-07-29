@@ -618,7 +618,7 @@ export const ORG_AUDIT_PRESET: InitiativePresetRegistration = {
         placeholder: 'e.g. the payments and identity services only',
       },
     ],
-    // Reuse the built-in generic planning pipeline — interviewer → analyst → planner(gate) →
+    // Reuse the built-in generic planning pipeline — analyst → interviewer → planner(gate) →
     // committer — so no new planning pipeline is registered; all deviation is descriptor data + hooks.
     planningPipelineId: 'pl_initiative',
     interview: 'full',
@@ -764,7 +764,7 @@ export const ORG_RESEARCH_PRESET: InitiativePresetRegistration = {
         default: DEFAULT_DOCS_ROOT,
       },
     ],
-    // Reuse the built-in generic planning pipeline (interviewer → analyst → planner(gate) →
+    // Reuse the built-in generic planning pipeline (analyst → interviewer → planner(gate) →
     // committer) — no new planning pipeline is registered; all deviation is descriptor data + hooks.
     planningPipelineId: 'pl_initiative',
     interview: 'full',
