@@ -12,7 +12,6 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
-const documents = useDocumentsStore()
 const fragments = useFragmentsStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
@@ -29,13 +28,6 @@ onMounted(() => {
   fragments.ensureLoaded()
   github.ensureLoaded()
 })
-
-/** Open the document import/spawn flow, targeting this container's frame. */
-function spawnFromDocument() {
-  if (!block.value) return
-  const frameId = isFrame.value ? block.value.id : (board.serviceOf(block.value)?.id ?? null)
-  ui.openDocumentImport(frameId)
-}
 
 const block = computed<Block | undefined>(() =>
   ui.selectedBlockId ? board.getBlock(ui.selectedBlockId) : undefined,
@@ -451,17 +443,8 @@ const showOriginalDescription = ref(false)
         </UButton>
         <!-- Tracker entry points (import an issue, hunt bugs) live on the service frame's
              header, where they are already scoped to a frame — the inspector doesn't
-             duplicate them. -->
-        <UButton
-          v-if="isContainer && documents.available && documents.anyConnected"
-          color="neutral"
-          variant="soft"
-          size="xs"
-          icon="i-lucide-wand-sparkles"
-          @click="spawnFromDocument"
-        >
-          {{ t('panels.inspector.spawnFromDocument') }}
-        </UButton>
+             duplicate them. Document spawn is board-level only (command bar, Integrations
+             hub, templates modal), since planning is target-blind. -->
       </div>
 
       <!-- service (frame): navigate the prescriptive spec tree (+ Gherkin scenarios when

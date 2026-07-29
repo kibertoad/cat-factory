@@ -112,6 +112,15 @@ modules and tasks are added inside that existing service frame. A document linke
 to a block is resolved at execution time and injected into the agent prompt (see
 `userPromptFor` in `core/src/modules/agents/agent-catalog.ts`).
 
+**The SPA never sends `frameId`.** Planning is target-blind — `plan(record)` takes
+only the document, and its prompt asks for a whole architecture (top-level frames →
+modules → tasks) — so the `frameId` path can only flatten the planned frames into
+the target, discarding the frame titles, types and descriptions the preview renders.
+That makes the spawn produce something other than what the user approved, so the
+affordance is board-level only. Scoping a spawn to one service is a target-aware
+PLAN (a second prompt yielding modules and tasks for an existing service), not a
+target-aware write; until that exists, `frameId` is an API-only capability.
+
 The `credentials` bag a source expects is described by its descriptor
 (`GET /document-sources` → `credentialFields`), so the connect UI renders
 generically — no per-source form is hard-coded in the frontend.

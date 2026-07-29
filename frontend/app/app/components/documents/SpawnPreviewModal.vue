@@ -4,10 +4,16 @@ import type { DocumentBoardPlan } from '~/types/domain'
 // Preview the structure an imported document expands into, then spawn it. The
 // plan is fetched fresh on open; a badge makes clear whether an LLM or the
 // deterministic heading parser produced it.
+//
+// A spawn always creates new top-level frames. The planner's job is to decompose a
+// document into services, so spawning into an existing frame could only flatten the
+// planned frames into it — silently discarding the frame titles and types rendered
+// below, i.e. producing something other than what this preview showed. Scoping a
+// spawn to one service needs a target-aware PLAN (a prompt that yields modules and
+// tasks for an existing service), not a target-aware write.
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const board = useBoardStore()
 const toast = useToast()
 
 const open = computed({
@@ -16,11 +22,6 @@ const open = computed({
     if (!v) ui.closeSpawnPreview()
   },
 })
-
-const targetFrameId = computed(() => ui.spawnPreview?.targetFrameId ?? null)
-const targetFrameTitle = computed(() =>
-  targetFrameId.value ? board.getBlock(targetFrameId.value)?.title : null,
-)
 
 const plan = ref<DocumentBoardPlan | null>(null)
 const loadingPlan = ref(false)
@@ -54,11 +55,7 @@ async function spawn() {
   if (!preview) return
   spawning.value = true
   try {
-    const result = await documents.spawn(
-      preview.source,
-      preview.externalId,
-      targetFrameId.value ?? undefined,
-    )
+    const result = await documents.spawn(preview.source, preview.externalId)
     toast.add({
       title: t('documents.spawn.spawned'),
       description: t('documents.spawn.summary', {
@@ -100,14 +97,7 @@ async function spawn() {
                 : t('documents.spawn.plannerHeadings')
             }}
           </UBadge>
-          <span v-if="targetFrameTitle" class="text-xs text-slate-400">
-            <i18n-t keypath="documents.spawn.intoFrame" scope="global">
-              <template #frame>
-                <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
-              </template>
-            </i18n-t>
-          </span>
-          <span v-else class="text-xs text-slate-400">{{ t('documents.spawn.asTopLevel') }}</span>
+          <span class="text-xs text-slate-400">{{ t('documents.spawn.asTopLevel') }}</span>
         </div>
 
         <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-slate-400">

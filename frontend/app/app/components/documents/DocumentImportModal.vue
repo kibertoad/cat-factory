@@ -4,12 +4,11 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
-// to import from (Confluence, Notion, …). Carries an optional target frame from
-// the inspector so "Preview & spawn" lands the structure inside that frame.
+// to import from (Confluence, Notion, …). "Preview & spawn" always creates new
+// top-level frames — see `SpawnPreviewModal` for why there is no frame target.
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const board = useBoardStore()
 const toast = useToast()
 
 const open = computed({
@@ -19,11 +18,6 @@ const open = computed({
   },
 })
 const back = useIntegrationBack(open)
-
-const targetFrameId = computed(() => ui.documentImport?.targetFrameId ?? null)
-const targetFrameTitle = computed(() =>
-  targetFrameId.value ? board.getBlock(targetFrameId.value)?.title : null,
-)
 
 /** Which connected source we're importing from (defaults to the first). */
 const source = ref<DocumentSourceKind | undefined>(undefined)
@@ -78,7 +72,7 @@ async function doImport() {
 }
 
 function preview(externalId: string) {
-  if (source.value) ui.openSpawnPreview(source.value, externalId, targetFrameId.value)
+  if (source.value) ui.openSpawnPreview(source.value, externalId)
 }
 </script>
 
@@ -106,14 +100,6 @@ function preview(externalId: string) {
       </div>
 
       <div v-else class="space-y-4">
-        <p v-if="targetFrameTitle" class="text-xs text-slate-400">
-          <i18n-t keypath="documents.import.spawningInto" scope="global">
-            <template #frame>
-              <span class="font-medium text-slate-200">{{ targetFrameTitle }}</span>
-            </template>
-          </i18n-t>
-        </p>
-
         <UFormField v-if="sourceItems.length > 1" :label="t('documents.import.sourceLabel')">
           <USelect v-model="source" :items="sourceItems" class="w-full" />
         </UFormField>
