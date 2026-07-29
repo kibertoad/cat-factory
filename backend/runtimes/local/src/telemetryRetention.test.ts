@@ -30,6 +30,8 @@ async function seed(store: LocalTelemetryStore, createdAt: number, id: string): 
     model: 'claude',
     createdAt,
     streaming: false,
+    phase: 'agent',
+    turnIndex: null,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: null,
@@ -50,8 +52,6 @@ async function seed(store: LocalTelemetryStore, createdAt: number, id: string): 
     promptHash: id,
     responseText: '',
     reasoningText: '',
-    phase: '',
-    turnIndex: null,
   })
   await store.agentContextSnapshotRepository.record({
     id,

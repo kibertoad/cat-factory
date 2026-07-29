@@ -20,7 +20,7 @@ const unavailable = (): never => {
 /** Drop undefined query params so valibot's optionals don't see empty strings. */
 function presentQuery<E extends AppEnv>(c: Context<E>): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const key of ['subsystem', 'executionId', 'targetId', 'limit', 'before']) {
+  for (const key of ['subsystem', 'executionId', 'targetId', 'limit']) {
     const value = c.req.query(key)
     if (value !== undefined && value !== '') out[key] = value
   }

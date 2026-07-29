@@ -62,6 +62,7 @@ import { AgentContextObservabilityService } from './modules/observability/AgentC
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
 import { PlatformObservabilityService } from './modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from './modules/reports/ReportsService.js'
+import { RunDebugService } from './modules/debug/RunDebugService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -364,6 +365,12 @@ export interface OptionalCoreModules {
   agentContextObservability?: AgentContextObservabilityService
   /** Present only when the agent-search-query repository is wired (see CoreDependencies). */
   searchQueryObservability?: SearchQueryObservabilityService
+  /**
+   * The remote debugging reader (`/api/v1/debug/*`). Always built — its run index and overview
+   * work off the execution store alone, and each telemetry sink it reads is independently
+   * optional, so an unwired sink degrades to an empty page rather than to a missing surface.
+   */
+  runDebug?: RunDebugService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
   /** Present only when a facade wired the per-workspace VCS PAT connect service (GitLab connect). */

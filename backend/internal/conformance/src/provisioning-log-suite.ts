@@ -131,6 +131,46 @@ export function defineProvisioningLogSuite(
       expect((await repo.list(ws, { limit: 2 })).map((r) => r.id)).toEqual([`${ws}-3`, `${ws}-2`])
     })
 
+    // --- the remote debugging surface's bounded page (`/api/v1/debug/runs/:runId/logs`) ---
+    it('pages with a composite keyset cursor, keeping rows that share a millisecond', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.append(record({ id: `${ws}-a`, workspaceId: ws, executionId: e1, createdAt: 10 }))
+      // Provisioning attempts are appended in bursts, so same-millisecond rows are the norm
+      // here — the exact case the old `before: number` keyset dropped between pages.
+      await repo.append(record({ id: `${ws}-b`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+      await repo.append(record({ id: `${ws}-c`, workspaceId: ws, executionId: e1, createdAt: 20 }))
+
+      const first = await repo.list(ws, { executionId: e1, limit: 2 })
+      expect(first.map((r) => r.id)).toEqual([`${ws}-c`, `${ws}-b`])
+      const last = first[first.length - 1]!
+      const second = await repo.list(ws, {
+        executionId: e1,
+        limit: 2,
+        cursor: { createdAt: last.createdAt, id: last.id },
+      })
+      expect(second.map((r) => r.id)).toEqual([`${ws}-a`])
+    })
+
+    it("counts a run's attempts, and its failures separately", async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.append(record({ id: `${ws}-ok`, workspaceId: ws, executionId: e1 }))
+      await repo.append(
+        record({ id: `${ws}-f1`, workspaceId: ws, executionId: e1, outcome: 'failure' }),
+      )
+      await repo.append(
+        record({ id: `${ws}-f2`, workspaceId: ws, executionId: e1, outcome: 'failure' }),
+      )
+      await repo.append(record({ id: `${ws}-x`, workspaceId: ws, executionId: e2 }))
+
+      // Total + failures come back from ONE aggregate pass. The failure count is what a run
+      // overview reports as its highest-severity signal: for a run whose container never came
+      // up there is no model telemetry at all to explain it.
+      expect(await repo.countByExecution(ws, e1)).toEqual({ total: 3, failures: 2 })
+      expect(await repo.countByExecution(ws, e2)).toEqual({ total: 1, failures: 0 })
+    })
+
     it('prunes rows older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws } = ids()

@@ -146,6 +146,59 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return tryDecodeRows(results, rowToExecution, runContext)
   }
 
+  async listRecent(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]> {
+    // Same predicates and ordering as `listInternal`, minus its anchor-block join: the debug
+    // run index deliberately spans every run in the workspace (see the port). Driven by
+    // idx_agent_runs_workspace (workspace_id, created_at) walked in reverse.
+    const where = [`workspace_id = ?`, `kind = 'execution'`]
+    const binds: (string | number)[] = [workspaceId]
+    if (opts.statuses && opts.statuses.length > 0) {
+      where.push(`status IN (${opts.statuses.map(() => '?').join(', ')})`)
+      binds.push(...opts.statuses)
+    }
+    if (opts.since != null) {
+      where.push(`created_at >= ?`)
+      binds.push(opts.since)
+    }
+    if (opts.cursor) {
+      where.push(`(created_at < ? OR (created_at = ? AND id < ?))`)
+      binds.push(opts.cursor.createdAt, opts.cursor.createdAt, opts.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_runs
+         WHERE ${where.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds, opts.limit)
+      .all<ExecutionRow>()
+    // List read: drop a corrupt run rather than failing the whole page. Note the interaction
+    // with the caller's peek-one-extra pagination: a dropped row shrinks the page below
+    // `limit + 1`, so a page containing a corrupt run reads as the LAST page and later rows
+    // become unreachable until the row is repaired — accepted, matching every other list read.
+    return tryDecodeRows(results, rowToExecution, runContext)
+  }
+
+  async exists(workspaceId: string, id: string): Promise<boolean> {
+    // One indexed probe, no row decode (see the port). Mirrors the Drizzle repo.
+    const row = await this.db
+      .prepare(
+        `SELECT 1 AS one FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`,
+      )
+      .bind(workspaceId, id)
+      .first<{ one: number }>()
+    return row != null
+  }
+
   async get(workspaceId: string, id: string): Promise<ExecutionInstance | null> {
     const row = await this.db
       .prepare(`SELECT * FROM agent_runs WHERE workspace_id = ? AND id = ? AND kind = 'execution'`)

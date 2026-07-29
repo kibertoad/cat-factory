@@ -372,7 +372,11 @@
   engine leans on: `record` is first-write-wins on a duplicate id (so the harness-call recorder's
   deterministic id stays idempotent across the live drain, the terminal list and a driver replay,
   without corrupting a stored prompt delta), `latestChainTip` skips `message_count = 0` subagent
-  calls, and the quota upsert accumulates-or-re-anchors in one statement.
+  calls, and the quota upsert accumulates-or-re-anchors in one statement. It also serves the remote
+  debugging surface's BOUNDED reads (`listPage` / `get` / `listIndex` / `countByExecution`, with the
+  body slicing, `?contains=` search and match offsets done in SQL exactly as on D1), so
+  `/api/v1/debug/*` works on a mothership-mode node without any of those pages crossing the machine
+  RPC — routing a page over a long run is precisely the bulk read this bucket exists to forbid.
 - **The composition seam is the registry, not the consumers.** `createRemoteRepositoryRegistry`
   gained a `localFirst` map: any repository named there is served locally for the WHOLE registry, so
   the recorders, the observability endpoints, the board's per-step rollups and the retention sweep

@@ -328,7 +328,37 @@ export interface ExecutionRepository {
       since?: number
     },
   ): Promise<ExecutionInstance[]>
+  /**
+   * One BOUNDED page of the workspace's runs, newest first (`created_at DESC, id DESC`) —
+   * the run index the remote debugging surface leads with.
+   *
+   * The sibling of {@link ExecutionRepository.listInternal}, and deliberately WITHOUT its
+   * anchor-block join: the public JOB surface may only ever surface runs it created, whereas
+   * a debugger that cannot see the run that failed is useless — a service frame's blueprint
+   * run and a recurring bug-intake fire are exactly the ones someone asks about. The scope
+   * that remains is the workspace, which is the whole reach of the key doing the asking.
+   *
+   * Same keyset contract as `listInternal` (composite `(createdAt, id)`, exclusive), and the
+   * same reason for it. NOT {@link ExecutionRepository.listByWorkspace} with a slice: that
+   * one reads and JSON-decodes every historical run in the workspace before anything is
+   * discarded, which is precisely what a paginated surface must not do.
+   */
+  listRecent(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      statuses?: ExecutionStatus[]
+      since?: number
+    },
+  ): Promise<ExecutionInstance[]>
   get(workspaceId: string, id: string): Promise<ExecutionInstance | null>
+  /**
+   * Whether the workspace has this run — one indexed probe that decodes NOTHING. The 404
+   * guard the per-run debug lists apply on EVERY page: answering it with `get` would
+   * JSON-decode the heaviest row in the request only to discard it.
+   */
+  exists(workspaceId: string, id: string): Promise<boolean>
   getByBlock(workspaceId: string, blockId: string): Promise<ExecutionInstance | null>
   /**
    * Persist the run (force-write). Bumps the row's monotonic `rev` on every write so a

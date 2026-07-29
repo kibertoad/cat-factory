@@ -89,6 +89,7 @@ import { githubDelegationController } from './modules/persistence/GitHubDelegati
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
+import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
 
 /**
@@ -156,6 +157,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // a headless run include the clarification loop at all. Same in-controller key auth, gated on
   // the `decide` rung of the scope ladder. See docs/initiatives/headless-clarification-loop.md.
   app.route('/', publicDecisionController())
+  // The public REMOTE DEBUGGING surface (`/api/v1/debug/*`): read-scoped, keyset-paginated reads
+  // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
+  // budget. See backend/docs/debug-api.md.
+  app.route('/', publicDebugController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())

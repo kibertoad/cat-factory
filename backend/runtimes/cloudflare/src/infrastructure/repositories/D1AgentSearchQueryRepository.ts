@@ -1,4 +1,8 @@
-import type { AgentSearchQuery, AgentSearchQueryRepository } from '@cat-factory/kernel'
+import type {
+  AgentSearchQuery,
+  AgentSearchQueryPageQuery,
+  AgentSearchQueryRepository,
+} from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -69,6 +73,41 @@ export class D1AgentSearchQueryRepository implements AgentSearchQueryRepository 
       .bind(workspaceId, executionId)
       .all<SearchQueryRow>()
     return (results ?? []).map(rowToQuery)
+  }
+
+  async listPage(
+    workspaceId: string,
+    query: AgentSearchQueryPageQuery,
+  ): Promise<AgentSearchQuery[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: unknown[] = [workspaceId, query.executionId]
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` millisecond
+      // are not skipped between pages. Mirrors the Drizzle repo.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM agent_search_queries
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds)
+      .all<SearchQueryRow>()
+    return (results ?? []).map(rowToQuery)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM agent_search_queries WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .bind(workspaceId, executionId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

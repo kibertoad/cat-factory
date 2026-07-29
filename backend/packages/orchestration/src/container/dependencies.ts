@@ -29,7 +29,9 @@ import type {
   AccountInvitationRepository,
   AccountRepository,
   AccountSkillRepository,
+  AgentContextSnapshotRepository,
   AgentExecutor,
+  AgentSearchQueryRepository,
   AppCaches,
   BlockRepository,
   BootstrapJobRepository,
@@ -449,6 +451,21 @@ export interface CoreDependencies {
    * proxy for the write path. Absent → no search queries are stored.
    */
   searchQueryObservability?: SearchQueryObservabilityService
+  /**
+   * The two telemetry stores behind the sinks above, handed in ALONGSIDE them (the facade
+   * builds each sink from its repository, so passing the repository too costs it one line).
+   *
+   * The sinks are WRITE services — recorders with a capture gate and a redaction pass — and
+   * the remote debugging surface is a pure reader that needs neither. Threading these makes
+   * the telemetry repository set symmetric with `llmCallMetricRepository` and
+   * `provisioningLogRepository`, which the core already takes directly, so the debug reader
+   * has ONE kind of dependency rather than two repositories and two services.
+   *
+   * Absent → the matching debug reads return empty pages and the run overview reports that
+   * sink as unavailable, which is a different statement from a count of zero.
+   */
+  agentContextSnapshotRepository?: AgentContextSnapshotRepository
+  agentSearchQueryRepository?: AgentSearchQueryRepository
   /**
    * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
    * service fans every recorded call out to it as a generation. Opt-in and default-off;

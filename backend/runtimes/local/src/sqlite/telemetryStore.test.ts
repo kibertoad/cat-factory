@@ -27,6 +27,8 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     model: 'claude',
     createdAt: 1000,
     streaming: false,
+    phase: 'agent',
+    turnIndex: null,
     messageCount: 3,
     toolCount: 2,
     requestMaxTokens: 4096,
@@ -47,8 +49,6 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     promptHash: 'hash-1',
     responseText: 'done',
     reasoningText: '',
-    phase: 'build',
-    turnIndex: 4,
     ...overrides,
   }
 }
@@ -152,6 +152,147 @@ describe('SqliteLlmCallMetricRepository', () => {
     expect(summaries.find((s) => s.agentKind === 'tester')?.calls).toBe(1)
   })
 
+  it('slices bodies in SQL on a bounded page, and reads no body bytes at a zero budget', async () => {
+    // The properties that make the page safe to expose remotely, and that a hand-written SELECT
+    // list can silently lose on ONE store: `substr` is 1-based (an off-by-one drops the leading
+    // character), and a 0 budget must select a literal '' while still reporting the real length.
+    const repo = store.llmCallMetricRepository
+    await repo.record(
+      metric({
+        id: 'c1',
+        promptText: '0123456789',
+        responseText: 'abcdefghij',
+        reasoningText: 'th',
+      }),
+    )
+
+    const [sizesOnly] = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 0,
+    })
+    expect(sizesOnly!.prompt).toEqual({ text: '', totalChars: 10 })
+    expect(sizesOnly!.response).toEqual({ text: '', totalChars: 10 })
+    expect(sizesOnly!.phase).toBe('agent')
+    expect(sizesOnly!.turnIndex).toBeNull()
+
+    const [preview] = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 4,
+    })
+    expect(preview!.prompt).toEqual({ text: '0123', totalChars: 10 })
+
+    // A point read's window is what makes the TAIL of a long body reachable.
+    const windowed = await repo.get('ws_1', 'c1', { chars: 3, offset: 6 })
+    expect(windowed!.prompt).toEqual({ text: '678', totalChars: 10 })
+    // An omitted budget returns the whole body rather than an empty string.
+    expect((await repo.get('ws_1', 'c1'))!.response.text).toBe('abcdefghij')
+    // Workspace-scoped, so a foreign id reads as missing rather than leaking.
+    expect(await repo.get('ws_other', 'c1')).toBeNull()
+  })
+
+  it('searches bodies in SQL, reporting a literal match offset, and narrows by outcome', async () => {
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'c_hit', responseText: 'xxxNeedleYYY' }))
+    await repo.record(metric({ id: 'c_miss', createdAt: 900, responseText: 'nothing here' }))
+    await repo.record(metric({ id: 'c_pct', createdAt: 800, responseText: 'a%b' }))
+    await repo.record(metric({ id: 'c_err', createdAt: 700, ok: false }))
+    await repo.record(metric({ id: 'c_warn', createdAt: 600, finishReason: 'length' }))
+
+    // ASCII-case-insensitive, and the offset is where a point read should start.
+    const found = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 0,
+      contains: 'needle',
+    })
+    expect(found.map((r) => r.id)).toEqual(['c_hit'])
+    expect(found[0]!.response.matchOffset).toBe(3)
+    expect(found[0]!.prompt.matchOffset).toBeNull()
+
+    // `%` is a LITERAL, not a wildcard — the shared escaper plus SQLite's mandatory ESCAPE clause.
+    expect(
+      (
+        await repo.listPage('ws_1', {
+          executionId: 'exec_1',
+          limit: 10,
+          bodyChars: 0,
+          contains: 'a%b',
+        })
+      ).map((r) => r.id),
+    ).toEqual(['c_pct'])
+
+    const errors = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 0,
+      outcome: 'error',
+    })
+    expect(errors.map((r) => r.id)).toEqual(['c_err'])
+    const warnings = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 0,
+      outcome: 'warning',
+    })
+    expect(warnings.map((r) => r.id)).toEqual(['c_warn'])
+    // `ok` must admit a NULL finish reason, or a plain successful call vanishes from the filter.
+    await repo.record(metric({ id: 'c_null', createdAt: 500, finishReason: null }))
+    const oks = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 10,
+      bodyChars: 0,
+      outcome: 'ok',
+    })
+    expect(oks.map((r) => r.id)).toContain('c_null')
+    expect(oks.map((r) => r.id)).not.toContain('c_err')
+  })
+
+  it('narrows by phase in SQL, treating the empty phase as a queryable slice', async () => {
+    const repo = store.llmCallMetricRepository
+    await repo.record(metric({ id: 'c_agent', phase: 'agent' }))
+    await repo.record(metric({ id: 'c_repair', createdAt: 900, phase: 'validation-repair' }))
+    await repo.record(metric({ id: 'c_none', createdAt: 800, phase: '' }))
+
+    const page = (phase: string) =>
+      repo
+        .listPage('ws_1', { executionId: 'exec_1', limit: 10, bodyChars: 0, phase })
+        .then((rows) => rows.map((r) => r.id))
+
+    expect(await page('validation-repair')).toEqual(['c_repair'])
+    // '' selects the unattributed slice; a truthiness check here would return the whole run.
+    expect(await page('')).toEqual(['c_none'])
+    expect(await page('nope')).toEqual([])
+  })
+
+  it('walks a page by composite keyset in both directions', async () => {
+    const repo = store.llmCallMetricRepository
+    // A same-millisecond burst: the tie is the whole reason the keyset carries `id`.
+    await repo.record(metric({ id: 'c_a', createdAt: 1000 }))
+    await repo.record(metric({ id: 'c_b', createdAt: 1000 }))
+    await repo.record(metric({ id: 'c_c', createdAt: 2000 }))
+
+    const first = await repo.listPage('ws_1', { executionId: 'exec_1', limit: 2, bodyChars: 0 })
+    expect(first.map((r) => r.id)).toEqual(['c_c', 'c_b'])
+    const next = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 2,
+      bodyChars: 0,
+      cursor: { createdAt: first[1]!.createdAt, id: first[1]!.id },
+    })
+    expect(next.map((r) => r.id)).toEqual(['c_a'])
+
+    // `oldest` walks forwards, which is how a caller reads deltas back into a transcript.
+    const oldest = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 3,
+      bodyChars: 0,
+      order: 'oldest',
+    })
+    expect(oldest.map((r) => r.id)).toEqual(['c_a', 'c_b', 'c_c'])
+  })
+
   it('prunes by age and reports how many rows it reclaimed', async () => {
     const repo = store.llmCallMetricRepository
     await repo.record(metric({ id: 'old', createdAt: 500 }))
@@ -209,6 +350,42 @@ describe('SqliteAgentContextSnapshotRepository', () => {
     expect(await repo.deleteOlderThan(1500)).toBe(1)
     expect((await repo.listByExecution('ws_1', 'exec_1')).map((s) => s.id)).toEqual(['s2'])
   })
+
+  it('indexes by SIZE without selecting a body, and point-reads the whole snapshot', async () => {
+    const repo = store.agentContextSnapshotRepository
+    await repo.record(snapshot({ id: 's1', createdAt: 1000, systemPrompt: 'sys', userPrompt: 'u' }))
+    await repo.record(snapshot({ id: 's2', createdAt: 2000, stepIndex: 3 }))
+
+    const index = await repo.listIndex('ws_1', { executionId: 'exec_1', limit: 10 })
+    expect(index.map((r) => r.id)).toEqual(['s2', 's1'])
+    // Sizes are SQL `length()`s of the body-bearing columns, never the bodies themselves.
+    const s1 = index.find((r) => r.id === 's1')!
+    expect(s1.systemPromptChars).toBe(3)
+    expect(s1.userPromptChars).toBe(1)
+    expect(s1.fragmentsChars).toBeGreaterThan(0)
+    expect(s1).not.toHaveProperty('systemPrompt')
+
+    expect(
+      (await repo.listIndex('ws_1', { executionId: 'exec_1', limit: 10, stepIndex: 3 })).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['s2'])
+    expect(
+      (
+        await repo.listIndex('ws_1', {
+          executionId: 'exec_1',
+          limit: 10,
+          cursor: { createdAt: 2000, id: 's2' },
+        })
+      ).map((r) => r.id),
+    ).toEqual(['s1'])
+
+    // The point read carries the bodies; the count is one indexed COUNT over the run.
+    expect((await repo.get('ws_1', 's1'))!.systemPrompt).toBe('sys')
+    expect(await repo.get('ws_other', 's1')).toBeNull()
+    expect(await repo.countByExecution('ws_1', 'exec_1')).toBe(2)
+    expect(await repo.countByExecution('ws_1', 'exec_absent')).toBe(0)
+  })
 })
 
 function search(overrides: Partial<AgentSearchQuery> = {}): AgentSearchQuery {
@@ -246,6 +423,26 @@ describe('SqliteAgentSearchQueryRepository', () => {
     await repo.record(search({ id: 'q_new', createdAt: 9000 }))
     expect(await repo.deleteOlderThan(1000)).toBe(1)
     expect((await repo.listByExecution('ws_1', 'exec_1')).map((q) => q.id)).toEqual(['q_new'])
+  })
+
+  it('bounds a page by row count on a composite keyset, and counts a run', async () => {
+    const repo = store.agentSearchQueryRepository
+    // Same-millisecond rows again: these carry no unbounded body, so the bound is on ROW COUNT.
+    await repo.record(search({ id: 'q_a', createdAt: 1000 }))
+    await repo.record(search({ id: 'q_b', createdAt: 1000 }))
+    await repo.record(search({ id: 'q_c', createdAt: 2000 }))
+
+    const first = await repo.listPage('ws_1', { executionId: 'exec_1', limit: 2 })
+    expect(first.map((q) => q.id)).toEqual(['q_c', 'q_b'])
+    const next = await repo.listPage('ws_1', {
+      executionId: 'exec_1',
+      limit: 2,
+      cursor: { createdAt: first[1]!.createdAt, id: first[1]!.id },
+    })
+    expect(next.map((q) => q.id)).toEqual(['q_a'])
+
+    expect(await repo.countByExecution('ws_1', 'exec_1')).toBe(3)
+    expect(await repo.countByExecution('ws_other', 'exec_1')).toBe(0)
   })
 })
 
@@ -288,9 +485,43 @@ describe('SqliteProvisioningLogRepository', () => {
       'p1',
     ])
     expect((await repo.list('ws_1', { targetId: 'job_1' })).map((r) => r.id)).toHaveLength(3)
-    expect((await repo.list('ws_1', { before: 2000 })).map((r) => r.id)).toEqual(['p1'])
+    expect(
+      (await repo.list('ws_1', { cursor: { createdAt: 2000, id: 'p2' } })).map((r) => r.id),
+    ).toEqual(['p1'])
     expect((await repo.list('ws_1', { limit: 1 })).map((r) => r.id)).toEqual(['p3'])
     expect(await repo.list('ws_other')).toEqual([])
+  })
+
+  it('pages rows sharing a millisecond, which a bare createdAt bound would drop', async () => {
+    // The reason the keyset is composite: provisioning attempts are appended in bursts, so a
+    // `created_at`-only bound would skip the tie instead of continuing through it.
+    const repo = store.provisioningLogRepository
+    await repo.append(logRecord({ id: 'p_a', createdAt: 5000 }))
+    await repo.append(logRecord({ id: 'p_b', createdAt: 5000 }))
+    await repo.append(logRecord({ id: 'p_c', createdAt: 5000 }))
+
+    const first = await repo.list('ws_1', { limit: 2 })
+    expect(first.map((r) => r.id)).toEqual(['p_c', 'p_b'])
+    const last = first[first.length - 1]!
+    const next = await repo.list('ws_1', {
+      limit: 2,
+      cursor: { createdAt: last.createdAt, id: last.id },
+    })
+    expect(next.map((r) => r.id)).toEqual(['p_a'])
+  })
+
+  it('counts a run total and its failures in one pass', async () => {
+    // The pair travels together (see the port): for a run whose container never came up there is
+    // no LLM telemetry at all, so the failure count is the only thing that explains the run.
+    const repo = store.provisioningLogRepository
+    await repo.append(logRecord({ id: 'ok_1' }))
+    await repo.append(logRecord({ id: 'bad_1', outcome: 'failure' }))
+    await repo.append(logRecord({ id: 'bad_2', outcome: 'failure' }))
+    await repo.append(logRecord({ id: 'other', executionId: 'exec_2' }))
+
+    expect(await repo.countByExecution('ws_1', 'exec_1')).toEqual({ total: 3, failures: 2 })
+    // A run with no rows is a real zero, not a missing answer.
+    expect(await repo.countByExecution('ws_1', 'exec_absent')).toEqual({ total: 0, failures: 0 })
   })
 
   it('round-trips the verbatim error + structured detail of a failure', async () => {

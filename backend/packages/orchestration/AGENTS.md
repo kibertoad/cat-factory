@@ -67,6 +67,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   (**Reports** — cross-cutting usage analytics: spend by model/agent kind and spend + run activity
   by workspace/service/task type, over the `ReportsRepository` port; see CLAUDE.md → "Reports" and
   `backend/docs/reports.md`). `ReportsService` lives in its own `reports/` dir beside them.
+- `debug/` — the read service behind the PUBLIC remote **run debugging** surface (`/api/v1/debug/*`):
+  `RunDebugService` issues the bounded reads (a keyset-paged run index plus the four telemetry
+  sinks, each independently optional; the body search and slice windows ride to the stores in
+  SQL), `debug.logic.ts` holds the pure projections — the `debugText` slice-and-say-so shape
+  (offset-windowed, match-offset-carrying), the step/call/snapshot projections, the rollup fold,
+  and `deriveSignals` (the precomputed diagnostic hints the overview leads with) — and
+  `promptMessages.ts` owns the lenient `?view=messages` parse of a stored prompt delta into
+  independently-budgeted per-message rows. Every bound lives in the contract or the SQL, never
+  here. See `backend/docs/debug-api.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, … — the other module services. In `review/`, EVERY write to a review

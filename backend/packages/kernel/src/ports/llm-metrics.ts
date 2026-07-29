@@ -166,6 +166,120 @@ export interface LlmPromptChainTip {
   promptHash: string
 }
 
+/**
+ * A stored text body sliced to a caller's budget, plus the length of what is stored. The
+ * two travel together because they answer different questions and one without the other
+ * misleads: an empty `text` with `totalChars: 0` means the model returned nothing, while an
+ * empty `text` with `totalChars: 40000` means the caller asked for no body bytes.
+ *
+ * `totalChars` is computed in SQL (`length(col)`), so a page that asks for no bodies still
+ * reports every size without the text columns ever leaving the store.
+ */
+export interface LlmCallBodySlice {
+  /** `min(budget, remaining)` characters of the stored body, starting at the slice offset. */
+  text: string
+  /** Full stored length of the body. */
+  totalChars: number
+  /**
+   * 0-based CODE-POINT offset of the first case-insensitive occurrence of the page query's
+   * `contains` term in THIS body, or null when the term does not occur here (the row matched
+   * via a sibling body). Only set when the query searched — a plain page carries no offsets.
+   * Computed in SQL (`instr`/`position`, both of which count characters like `substr` does),
+   * so it composes directly with a point read's slice offset: a caller jumps to the match
+   * without transferring the bytes before it.
+   */
+  matchOffset?: number | null
+}
+
+/**
+ * Escape a literal term for use inside a SQL `LIKE`/`ILIKE` pattern with `\` as the escape
+ * character (Postgres' default; SQLite is told via `ESCAPE '\'`). Shared by both runtime
+ * stores so a term containing `%`/`_` narrows to the literal text on each, never to a
+ * wildcard match on one runtime only.
+ */
+export function escapeLikePattern(term: string): string {
+  return term.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+}
+
+/** The slice window a point read applies to each stored body, in code points. */
+export interface LlmCallBodyWindow {
+  /** Max characters to return per body; omit for the whole body from `offset` on. */
+  chars?: number
+  /** 0-based code-point offset the slice starts at; omit for 0 (the head). */
+  offset?: number
+}
+
+/**
+ * One row of a BOUNDED page over the call log — the shape the remote debugging surface
+ * reads. It is {@link LlmCallMetric} with the three unbounded text columns replaced by
+ * budgeted slices (and the chain hash, which is storage bookkeeping, dropped).
+ *
+ * It exists alongside {@link LlmCallMetric} rather than replacing it because the two reads
+ * genuinely differ: the metrics EXPORT needs whole bodies and the intact delta chain so it
+ * can reconstruct full prompts, while a page walked by a remote client must never be able
+ * to return more bytes than the caller budgeted for.
+ */
+export interface LlmCallMetricPage extends Omit<
+  LlmCallMetric,
+  'promptText' | 'responseText' | 'reasoningText' | 'promptHash'
+> {
+  /** The messages this call APPENDED (see {@link LlmCallMetric.promptText}), sliced. */
+  prompt: LlmCallBodySlice
+  response: LlmCallBodySlice
+  reasoning: LlmCallBodySlice
+}
+
+/** Outcome classes a call page may narrow to, applied in SQL. */
+export type LlmCallOutcomeFilter = 'ok' | 'warning' | 'error'
+
+/** A bounded, keyset-paginated query over one run's calls. */
+export interface LlmCallPageQuery {
+  executionId: string
+  /** Narrow to one step kind's conversation. */
+  agentKind?: string
+  /**
+   * Narrow to one PHASE's calls (see {@link LlmCallMetric.phase}) — an exact match, applied in
+   * SQL like {@link LlmCallPageQuery.agentKind}. `''` is a queryable value, not "no filter": it
+   * selects the unattributed slice, which is the only way to ask "what did the un-phased
+   * channels spend" without paging the whole run.
+   */
+  phase?: string
+  /**
+   * Narrow to a single outcome class. `error` is `ok = 0`; `warning` is a successful call
+   * whose finish reason is in {@link LLM_WARNING_FINISH_REASONS}; `ok` is the rest.
+   */
+  outcome?: LlmCallOutcomeFilter
+  /**
+   * Chronological direction. `newest` (the default) is triage order; `oldest` walks a
+   * conversation forwards, which is how a caller reads an agent kind's prompt deltas back
+   * into a transcript.
+   */
+  order?: 'newest' | 'oldest'
+  /** Hard cap on rows returned. */
+  limit: number
+  /**
+   * EXCLUSIVE keyset on the `(createdAt, id)` composite the ordering uses — not a bare
+   * timestamp, because calls are recorded off the response path and a burst shares a
+   * millisecond, which a timestamp-only cursor would silently drop from the next page.
+   */
+  cursor?: { createdAt: number; id: string }
+  /**
+   * Per-body slice budget in characters. 0 means the text columns are not read at all (only
+   * their `length()`), so a sweep over a long run costs no body bytes.
+   */
+  bodyChars: number
+  /**
+   * Narrow to calls whose prompt delta, response or reasoning contains this literal substring,
+   * matched case-insensitively IN SQL — the grep a debugging client roots a stuck tool loop
+   * with, collapsed to one indexed-scan query instead of paging every body through the caller.
+   * `%`/`_` in the term match literally (escaped via {@link escapeLikePattern}). Case folding
+   * is ASCII on SQLite (`LIKE`'s default) and locale-aware on Postgres (`ILIKE`); conformance
+   * pins the ASCII behaviour the two share. Matched rows report a per-body
+   * {@link LlmCallBodySlice.matchOffset}.
+   */
+  contains?: string
+}
+
 export interface LlmCallMetricRepository {
   /**
    * Append one metered call, IGNORING a call whose {@link LlmCallMetric.id} is already stored.
@@ -211,6 +325,27 @@ export interface LlmCallMetricRepository {
     limit?: number,
     agentKind?: string,
   ): Promise<LlmCallMetric[]>
+  /**
+   * One BOUNDED, keyset-paginated page of a run's calls with each text body sliced to the
+   * query's budget — the read the remote debugging surface walks. Distinct from
+   * {@link LlmCallMetricRepository.listByExecution}, which returns whole bodies for the
+   * export: this one can never return more bytes than `limit x 3 x bodyChars`, which is what
+   * makes it safe to expose to a client that pages through a long run.
+   *
+   * Every filter (`agentKind`, `outcome`) and the slicing itself are applied IN SQL, so a
+   * narrowed or un-previewed page does not read rows (or text columns) it will discard.
+   */
+  listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]>
+  /**
+   * One call by id, each body sliced to the window (omit for the whole stored bodies). The
+   * window's `offset` is what makes the TAIL of a large body reachable — the last tool result
+   * in a long delta, the end of a build log — without transferring the bytes before it; the
+   * slice happens in SQL (`substr(col, offset + 1, chars)`), like the page's.
+   * Keyed by the call's own id — the page hands the caller that id, so requiring the run id
+   * too would only create a mismatched pair that 404s inexplicably. Scoped to the workspace,
+   * so a foreign id is indistinguishable from a missing one.
+   */
+  get(workspaceId: string, id: string, body?: LlmCallBodyWindow): Promise<LlmCallMetricPage | null>
   /**
    * Per-agent-kind aggregates for a run, for the board rollups. Aggregates in SQL
    * and deliberately selects no text columns, so it is cheap to run on every emit.

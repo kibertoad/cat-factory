@@ -68,6 +68,8 @@ import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTest
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
+import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
+import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
 import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
@@ -255,6 +257,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     // Telemetry lives in the dedicated TELEMETRY_DB database.
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // The stores behind the agent-context + search-query sinks below, handed in alongside
+    // them for the remote debugging reader — a pure reader that wants neither capture gate.
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
     // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for

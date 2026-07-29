@@ -79,8 +79,6 @@ export const provisioningLogQuerySchema = v.object({
   targetId: v.optional(v.pipe(v.string(), v.minLength(1))),
   /** Cap the rows returned; the service clamps to a hard maximum. */
   limit: v.optional(positiveInt),
-  /** Keyset on `createdAt` (exclusive) for paging older rows. */
-  before: v.optional(positiveInt),
 })
 export type ProvisioningLogQueryInput = v.InferOutput<typeof provisioningLogQuerySchema>
 

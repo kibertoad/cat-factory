@@ -105,6 +105,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // a mothership-mode node — which has no `db` — tried to start a run.
     countActiveByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The per-run debug lists' 404 guard: `get` without the row decode. Same scope shape.
+    exists: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     // The one-live-run-per-block insert used by start/retry/restart. Workspace-scoped like
@@ -118,6 +120,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // One bounded page of the workspace's headless (`internal`-anchored) runs — the public API's
     // job list. Workspace-scoped like every other list read here.
     listInternal: { scope: { kind: 'workspace', arg: 0 } },
+    // One bounded page of ALL the workspace's runs — the remote debugging surface's run index
+    // (`GET /api/v1/debug/runs`). Workspace-scoped exactly like `listInternal`; it is wider only
+    // in WHICH runs it returns (no `internal` anchor join), and that width is bounded by the same
+    // workspace the scope rule already pins. Remote because the runs themselves are org/durable
+    // state and live on the mothership even in mothership mode — unlike the per-run TELEMETRY the
+    // rest of that surface reads, which stays local by design.
+    listRecent: { scope: { kind: 'workspace', arg: 0 } },
   },
   accountRepository: {
     // Reads only — `rename`/`updateSettings` are admin-gated (see allow-list note above).

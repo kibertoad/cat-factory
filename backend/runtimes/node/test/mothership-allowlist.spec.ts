@@ -218,21 +218,33 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // observability panel and the board's per-step rollups. `summarizeByExecution` used to be a
   // remote stopgap; against the MOTHERSHIP's telemetry store it could only ever report zeros for
   // a laptop's own run, so it moved to the local store with the rest.
+  //
+  // That makes EVERY read on them `telemetry`, never `pending` — the remote debugging surface's
+  // bounded pages (`listPage`/`get`/`listIndex`/`countByExecution`) included. Routing those would
+  // be the exact shape the bucket exists to forbid, since a page over a long run is a bulk read of
+  // the heaviest columns in the system.
   llmCallMetricRepository: {
     record: 'telemetry',
     latestChainTip: 'telemetry',
     listByExecution: 'telemetry',
     summarizeByExecution: 'telemetry',
+    listPage: 'telemetry',
+    get: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   agentContextSnapshotRepository: {
     record: 'telemetry',
     listByExecution: 'telemetry',
+    listIndex: 'telemetry',
+    get: 'telemetry',
+    countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   agentSearchQueryRepository: {
     record: 'telemetry',
     listByExecution: 'telemetry',
+    listPage: 'telemetry',
+    countByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the
@@ -362,7 +374,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The provisioning event log is local-first too, and unusually literally so: in mothership mode
   // the containers/environments it records are provisioned BY THIS NODE, so the rows describe local
   // infrastructure and the panels that read them ("View logs") want exactly this machine's history.
-  provisioningLogRepository: { append: 'telemetry', list: 'telemetry', deleteOlderThan: 'sweeper' },
+  // The debug surface's `countByExecution` reads that same local history.
+  provisioningLogRepository: {
+    append: 'telemetry',
+    list: 'telemetry',
+    countByExecution: 'telemetry',
+    deleteOlderThan: 'sweeper',
+  },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /
   // stop surface); `listByWorkspace`/`listByServices` were already remote. `blockServiceId` is a

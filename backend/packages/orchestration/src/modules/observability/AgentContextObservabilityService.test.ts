@@ -23,6 +23,17 @@ function fakeRepo() {
     async listByExecution(_w, e) {
       return rows.filter((r) => r.executionId === e)
     },
+    // The bounded debug-page reads are exercised against the real stores by the conformance
+    // suite (they are pure SQL projections); this double only needs to satisfy the port.
+    async listIndex() {
+      return []
+    },
+    async get(_w, id) {
+      return rows.find((r) => r.id === id) ?? null
+    },
+    async countByExecution(_w, e) {
+      return rows.filter((r) => r.executionId === e).length
+    },
     async deleteOlderThan() {
       return 0
     },

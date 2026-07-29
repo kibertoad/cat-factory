@@ -38,11 +38,69 @@ export interface AgentContextRecorder {
   record(input: RecordAgentContextInput): Promise<void>
 }
 
+/**
+ * A snapshot reduced to its IDENTITY plus the SIZE of each body family — the projection the
+ * remote debugging surface pages over.
+ *
+ * A snapshot row can be megabytes (it holds the whole composed system prompt plus the full
+ * content of every injected context file), so a page of them must never carry bodies. Every
+ * size here is a SQL `length()`, so listing a run's dispatches reads no body bytes at all;
+ * the caller picks the one it wants and point-reads it.
+ *
+ * Sizes, not element counts: counting the entries of the `fragments` / `contextFiles` JSON
+ * columns would mean either parsing them (which reads the very bodies this projection exists
+ * to avoid) or calling `json_array_length` on a column that would fail the WHOLE page if a
+ * single row were ever malformed. A length answers "is there a lot in here" just as well.
+ */
+export interface AgentContextSnapshotIndex {
+  id: string
+  agentKind: string
+  stepIndex: number
+  createdAt: number
+  model: string | null
+  harness: string | null
+  systemPromptChars: number
+  userPromptChars: number
+  /** Serialized length of the folded best-practice fragments. */
+  fragmentsChars: number
+  /** Serialized length of the injected `.cat-context/*` files (bodies included). */
+  contextFilesChars: number
+}
+
+/** A bounded, keyset-paginated query over one run's captured dispatches. */
+export interface AgentContextIndexQuery {
+  executionId: string
+  /** Narrow to one step's dispatches (a retried step records one snapshot per attempt). */
+  stepIndex?: number
+  limit: number
+  /** EXCLUSIVE keyset on the `(createdAt, id)` composite the ordering uses. */
+  cursor?: { createdAt: number; id: string }
+}
+
 export interface AgentContextSnapshotRepository {
   /** Append one captured dispatch context. */
   record(snapshot: AgentContextSnapshot): Promise<void>
   /** Snapshots recorded for a run, newest first. */
   listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]>
+  /**
+   * One BOUNDED page of {@link AgentContextSnapshotIndex} rows for a run, newest first —
+   * identity plus sizes, never a body. See the type's note for why this is not just
+   * {@link AgentContextSnapshotRepository.listByExecution} with a limit.
+   */
+  listIndex(
+    workspaceId: string,
+    query: AgentContextIndexQuery,
+  ): Promise<AgentContextSnapshotIndex[]>
+  /**
+   * One snapshot by id, with its bodies. Whole rather than sliced: the fragment and
+   * context-file bodies live inside JSON columns, so there is no portable way to budget them
+   * per element in SQL — and the recorder already caps a snapshot at a few megabytes, which
+   * is an acceptable single point read. The CALLER applies the per-body budget it promised
+   * its own client. Workspace-scoped, so a foreign id reads as missing.
+   */
+  get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null>
+  /** How many dispatches the run captured — one indexed COUNT, no rows read. */
+  countByExecution(workspaceId: string, executionId: string): Promise<number>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many were
    * removed. The full prompt + injected-file bodies make this heavy, so it is pruned

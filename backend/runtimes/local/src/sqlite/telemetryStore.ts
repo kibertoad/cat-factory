@@ -1,15 +1,23 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   LLM_WARNING_FINISH_REASONS,
+  escapeLikePattern,
   type AgentContextFile,
   type AgentContextFragment,
+  type AgentContextIndexQuery,
   type AgentContextSnapshot,
+  type AgentContextSnapshotIndex,
   type AgentContextSnapshotRepository,
   type AgentSearchQuery,
+  type AgentSearchQueryPageQuery,
   type AgentSearchQueryRepository,
+  type LlmCallBodyWindow,
   type LlmCallMetric,
+  type LlmCallMetricPage,
   type LlmCallMetricRepository,
   type LlmCallMetricSummary,
+  type LlmCallOutcomeFilter,
+  type LlmCallPageQuery,
   type LlmPromptChainTip,
   type ProvisioningLogQuery,
   type ProvisioningLogRecord,
@@ -58,6 +66,138 @@ import { openSqliteDb } from './db.js'
 
 /** `length` / `content_filter` as a SQL list literal — shared constant, so the two agree. */
 const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join(', ')
+
+// --- the bounded-page helpers, mirroring `D1LlmCallMetricRepository` -------------------------
+// D1 IS SQLite, so these are the same SQL shapes; see that file for why each case exists. The
+// notes kept here are the ones a reader of THIS file needs to not break it.
+
+/** The metadata columns a bounded page selects, plus each body's full `length()`. */
+const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
+  created_at, streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
+  prompt_tokens,
+  cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
+  overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
+  length(prompt_text)    AS prompt_chars,
+  length(response_text)  AS response_chars,
+  length(reasoning_text) AS reasoning_chars`
+
+/**
+ * The three body columns windowed to `bodyChars` from `offsetChars`. The cases are NOT
+ * interchangeable: a huge sentinel length makes SQLite return an EMPTY string (so "everything"
+ * selects the columns raw), and a 0 budget selects a literal `''` so a sweep reads no body bytes
+ * at all. `substr` is 1-based and counts code points, matching the wire contract's offsets.
+ */
+function bodyColumns(bodyChars: number | undefined, offsetChars = 0): string {
+  if (bodyChars !== undefined && bodyChars <= 0) {
+    return `'' AS prompt_text, '' AS response_text, '' AS reasoning_text`
+  }
+  if (bodyChars === undefined && offsetChars <= 0) {
+    return `prompt_text, response_text, reasoning_text`
+  }
+  if (bodyChars === undefined) {
+    return `substr(prompt_text, ?)    AS prompt_text,
+            substr(response_text, ?)  AS response_text,
+            substr(reasoning_text, ?) AS reasoning_text`
+  }
+  return `substr(prompt_text, ?, ?)    AS prompt_text,
+          substr(response_text, ?, ?)  AS response_text,
+          substr(reasoning_text, ?, ?) AS reasoning_text`
+}
+
+/** The window binds `bodyColumns` needs, in the order its placeholders appear. */
+function bodyBinds(bodyChars: number | undefined, offsetChars = 0): number[] {
+  if (bodyChars !== undefined && bodyChars <= 0) return []
+  if (bodyChars === undefined && offsetChars <= 0) return []
+  const from = Math.max(0, offsetChars) + 1
+  if (bodyChars === undefined) return [from, from, from]
+  return [from, bodyChars, from, bodyChars, from, bodyChars]
+}
+
+/**
+ * The per-body first-match columns a SEARCHED page adds: the 0-based code-point offset of the
+ * term in each body, or NULL where it does not occur. `instr` counts characters like `substr`,
+ * so the offset feeds a point read's window directly.
+ */
+const MATCH_COLUMNS = `,
+  nullif(instr(lower(prompt_text), ?), 0) - 1    AS prompt_match,
+  nullif(instr(lower(response_text), ?), 0) - 1  AS response_match,
+  nullif(instr(lower(reasoning_text), ?), 0) - 1 AS reasoning_match`
+
+/** The lowered-term binds {@link MATCH_COLUMNS} needs (SQLite's `LIKE` folds ASCII only). */
+function matchBinds(contains: string): string[] {
+  const lowered = contains.toLowerCase()
+  return [lowered, lowered, lowered]
+}
+
+/** The SQL predicate for one outcome class, or null for "no narrowing". Mirrors `classifyCall`. */
+function outcomeClause(outcome: LlmCallOutcomeFilter | undefined): string | null {
+  if (outcome === 'error') return 'ok = 0'
+  if (outcome === 'warning') return `ok = 1 AND finish_reason IN (${WARNING_REASONS_SQL})`
+  if (outcome === 'ok') {
+    return `ok = 1 AND (finish_reason IS NULL OR finish_reason NOT IN (${WARNING_REASONS_SQL}))`
+  }
+  return null
+}
+
+interface PageRow extends Omit<MetricRow, 'prompt_hash'> {
+  prompt_chars: number
+  response_chars: number
+  reasoning_chars: number
+  prompt_match?: number | null
+  response_match?: number | null
+  reasoning_match?: number | null
+}
+
+/** Attach a searched row's per-body match offset; a plain page's slices carry none. */
+function withMatch(
+  slice: { text: string; totalChars: number },
+  match: number | null | undefined,
+): LlmCallMetricPage['prompt'] {
+  return match === undefined ? slice : { ...slice, matchOffset: match }
+}
+
+function rowToPage(row: PageRow): LlmCallMetricPage {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    provider: row.provider,
+    model: row.model,
+    createdAt: row.created_at,
+    streaming: row.streaming === 1,
+    phase: row.phase,
+    turnIndex: row.turn_index,
+    messageCount: row.message_count,
+    toolCount: row.tool_count,
+    requestMaxTokens: row.request_max_tokens,
+    promptTokens: row.prompt_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
+    completionTokens: row.completion_tokens,
+    totalTokens: row.total_tokens,
+    finishReason: row.finish_reason,
+    upstreamMs: row.upstream_ms,
+    overheadMs: row.overhead_ms,
+    totalMs: row.total_ms,
+    ok: row.ok === 1,
+    httpStatus: row.http_status,
+    errorMessage: row.error_message,
+    promptPrefixCount: row.prompt_prefix_count,
+    prompt: withMatch(
+      { text: row.prompt_text, totalChars: row.prompt_chars ?? 0 },
+      row.prompt_match,
+    ),
+    response: withMatch(
+      { text: row.response_text, totalChars: row.response_chars ?? 0 },
+      row.response_match,
+    ),
+    reasoning: withMatch(
+      { text: row.reasoning_text, totalChars: row.reasoning_chars ?? 0 },
+      row.reasoning_match,
+    ),
+  }
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS llm_call_metrics (
@@ -345,6 +485,77 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     return rows.map(rowToMetric)
   }
 
+  async listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]> {
+    const ascending = query.order === 'oldest'
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    // The SELECT-list binds come FIRST (slices, then match offsets), ahead of every WHERE
+    // placeholder.
+    const binds: (string | number | null)[] = [
+      ...bodyBinds(query.bodyChars),
+      ...(query.contains != null ? matchBinds(query.contains) : []),
+      workspaceId,
+      query.executionId,
+    ]
+    if (query.agentKind != null) {
+      clauses.push('agent_kind = ?')
+      binds.push(query.agentKind)
+    }
+    // `!= null`, not a truthiness check: '' is the unattributed slice and a legitimate filter.
+    if (query.phase != null) {
+      clauses.push('phase = ?')
+      binds.push(query.phase)
+    }
+    const outcome = outcomeClause(query.outcome)
+    if (outcome) clauses.push(`(${outcome})`)
+    if (query.contains != null) {
+      // The shared escaper makes `%`/`_` in the term literal; SQLite has no default escape
+      // character, so `ESCAPE '\'` is mandatory here (unlike Postgres).
+      const pattern = `%${escapeLikePattern(query.contains)}%`
+      clauses.push(
+        `(prompt_text LIKE ? ESCAPE '\\' OR response_text LIKE ? ESCAPE '\\' OR reasoning_text LIKE ? ESCAPE '\\')`,
+      )
+      binds.push(pattern, pattern, pattern)
+    }
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY: calls are recorded off the response path, so a
+      // burst genuinely shares a millisecond and a `created_at`-only bound would drop the ties.
+      const cmp = ascending ? '>' : '<'
+      clauses.push(`(created_at ${cmp} ? OR (created_at = ? AND id ${cmp} ?))`)
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    const direction = ascending ? 'ASC' : 'DESC'
+    const rows = this.db
+      .prepare(
+        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(query.bodyChars)}${
+          query.contains != null ? MATCH_COLUMNS : ''
+        }
+         FROM llm_call_metrics
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at ${direction}, id ${direction}
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as PageRow[]
+    return rows.map(rowToPage)
+  }
+
+  async get(
+    workspaceId: string,
+    id: string,
+    body?: LlmCallBodyWindow,
+  ): Promise<LlmCallMetricPage | null> {
+    const row = this.db
+      .prepare(
+        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(body?.chars, body?.offset ?? 0)}
+         FROM llm_call_metrics
+         WHERE workspace_id = ? AND id = ?`,
+      )
+      .get(...bodyBinds(body?.chars, body?.offset ?? 0), workspaceId, id) as unknown as
+      | PageRow
+      | undefined
+    return row ? rowToPage(row) : null
+  }
+
   async summarizeByExecution(
     workspaceId: string,
     executionId: string,
@@ -445,6 +656,53 @@ interface SnapshotRow {
   extras: string
 }
 
+/** Identity + the four body SIZES a bounded index page selects (never a body). */
+interface IndexRow {
+  id: string
+  agent_kind: string
+  step_index: number
+  created_at: number
+  model: string | null
+  harness: string | null
+  system_prompt_chars: number
+  user_prompt_chars: number
+  fragments_chars: number
+  context_files_chars: number
+}
+
+function rowToSnapshot(row: SnapshotRow): AgentContextSnapshot {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    stepIndex: row.step_index,
+    createdAt: row.created_at,
+    model: row.model,
+    harness: row.harness,
+    systemPrompt: row.system_prompt,
+    userPrompt: row.user_prompt,
+    fragments: parseArray<AgentContextFragment>(row.fragments),
+    contextFiles: parseArray<AgentContextFile>(row.context_files),
+    extras: parseObject(row.extras),
+  }
+}
+
+function rowToIndex(row: IndexRow): AgentContextSnapshotIndex {
+  return {
+    id: row.id,
+    agentKind: row.agent_kind,
+    stepIndex: row.step_index,
+    createdAt: row.created_at,
+    model: row.model,
+    harness: row.harness,
+    systemPromptChars: row.system_prompt_chars ?? 0,
+    userPromptChars: row.user_prompt_chars ?? 0,
+    fragmentsChars: row.fragments_chars ?? 0,
+    contextFilesChars: row.context_files_chars ?? 0,
+  }
+}
+
 /** The per-dispatch agent-context sink — the local-sqlite mirror of `D1AgentContextSnapshotRepository`. */
 class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotRepository {
   constructor(private readonly db: DatabaseSync) {}
@@ -482,21 +740,56 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
          ORDER BY created_at DESC, id DESC`,
       )
       .all(workspaceId, executionId) as unknown as SnapshotRow[]
-    return rows.map((row) => ({
-      id: row.id,
-      workspaceId: row.workspace_id,
-      executionId: row.execution_id,
-      agentKind: row.agent_kind,
-      stepIndex: row.step_index,
-      createdAt: row.created_at,
-      model: row.model,
-      harness: row.harness,
-      systemPrompt: row.system_prompt,
-      userPrompt: row.user_prompt,
-      fragments: parseArray<AgentContextFragment>(row.fragments),
-      contextFiles: parseArray<AgentContextFile>(row.context_files),
-      extras: parseObject(row.extras),
-    }))
+    return rows.map(rowToSnapshot)
+  }
+
+  async listIndex(
+    workspaceId: string,
+    query: AgentContextIndexQuery,
+  ): Promise<AgentContextSnapshotIndex[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.stepIndex != null) {
+      clauses.push('step_index = ?')
+      binds.push(query.stepIndex)
+    }
+    if (query.cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // Sizes only — the four body-bearing columns are MEASURED, never selected, so listing a
+    // run's dispatches costs no body bytes even though a single snapshot can be megabytes.
+    const rows = this.db
+      .prepare(
+        `SELECT id, agent_kind, step_index, created_at, model, harness,
+                length(system_prompt) AS system_prompt_chars,
+                length(user_prompt)   AS user_prompt_chars,
+                length(fragments)     AS fragments_chars,
+                length(context_files) AS context_files_chars
+         FROM agent_context_snapshots
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as IndexRow[]
+    return rows.map(rowToIndex)
+  }
+
+  async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {
+    const row = this.db
+      .prepare('SELECT * FROM agent_context_snapshots WHERE workspace_id = ? AND id = ?')
+      .get(workspaceId, id) as unknown as SnapshotRow | undefined
+    return row ? rowToSnapshot(row) : null
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM agent_context_snapshots WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .get(workspaceId, executionId) as unknown as { n: number } | undefined
+    return row?.n ?? 0
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -516,6 +809,20 @@ interface SearchQueryRow {
   query: string
   result_count: number
   created_at: number
+}
+
+function rowToQuery(row: SearchQueryRow): AgentSearchQuery {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    // The stored provider column is free-text TEXT; narrow it back to the wire union.
+    provider: isWebSearchProvider(row.provider) ? row.provider : null,
+    query: row.query,
+    resultCount: row.result_count,
+    createdAt: row.created_at,
+  }
 }
 
 /** The performed-web-search sink — the local-sqlite mirror of `D1AgentSearchQueryRepository`. */
@@ -549,17 +856,40 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
          ORDER BY created_at DESC, id DESC`,
       )
       .all(workspaceId, executionId) as unknown as SearchQueryRow[]
-    return rows.map((row) => ({
-      id: row.id,
-      workspaceId: row.workspace_id,
-      executionId: row.execution_id,
-      agentKind: row.agent_kind,
-      // The stored provider column is free-text TEXT; narrow it back to the wire union.
-      provider: isWebSearchProvider(row.provider) ? row.provider : null,
-      query: row.query,
-      resultCount: row.result_count,
-      createdAt: row.created_at,
-    }))
+    return rows.map(rowToQuery)
+  }
+
+  async listPage(
+    workspaceId: string,
+    query: AgentSearchQueryPageQuery,
+  ): Promise<AgentSearchQuery[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY, so rows sharing a `created_at` millisecond are
+      // not skipped between pages.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM agent_search_queries
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...binds) as unknown as SearchQueryRow[]
+    return rows.map(rowToQuery)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM agent_search_queries WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .get(workspaceId, executionId) as unknown as { n: number } | undefined
+    return row?.n ?? 0
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -631,9 +961,11 @@ class SqliteProvisioningLogRepository implements ProvisioningLogRepository {
       clauses.push('target_id = ?')
       binds.push(query.targetId)
     }
-    if (query.before != null) {
-      clauses.push('created_at < ?')
-      binds.push(query.before)
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY: provisioning attempts are appended in bursts,
+      // so a `created_at`-only bound would silently drop rows sharing a millisecond.
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
     }
     // Newest first; `LIMIT -1` means "no limit" in SQLite, so an omitted cap reads all.
     binds.push(query.limit ?? -1)
@@ -659,6 +991,22 @@ class SqliteProvisioningLogRepository implements ProvisioningLogRepository {
       detail: row.detail,
       createdAt: row.created_at,
     }))
+  }
+
+  async countByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<{ total: number; failures: number }> {
+    // Total + failures in ONE aggregate pass over the run's slice (see the port).
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN outcome = 'failure' THEN 1 ELSE 0 END), 0) AS failures
+         FROM provisioning_log
+         WHERE workspace_id = ? AND execution_id = ?`,
+      )
+      .get(workspaceId, executionId) as unknown as { total: number; failures: number } | undefined
+    return { total: row?.total ?? 0, failures: row?.failures ?? 0 }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

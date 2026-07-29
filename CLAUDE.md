@@ -1341,6 +1341,57 @@ error handling — and the phased plan to close them — are tracked in
 - **Parity** asserted by `defineAgentContextSuite`. Cloudflare fails fast at build if `TELEMETRY_DB`
   is unbound.
 
+### Remote debugging reads (`/api/v1/debug/*`)
+
+The same three sinks plus the provisioning event log, exposed to an EXTERNAL caller — in practice
+an LLM asked to diagnose a run. Full model: [`backend/docs/debug-api.md`](./backend/docs/debug-api.md).
+
+The whole surface is shaped by one rule, and a new endpoint on it must obey the same one: **a
+response's size has to be computable BEFORE the request.** The SPA drill-down loads a run's whole
+telemetry into a browser, which is fine for a human with a scrollbar and useless for a caller with
+a context budget.
+
+- **Fan-out lists NEVER carry bodies; bodies are always a point read.** A snapshot row is
+  routinely megabytes (it holds every injected context file's full content), so the list
+  projection is identity + SQL `length()`. The one opt-in exception is `?bodyChars=` on the
+  LLM-call list, where a size alone can't tell an empty reply from an un-previewed one.
+- **Slice, filter AND SEARCH in SQL** (`substr`/`length`/`instr`, the outcome predicate, the
+  agent-kind narrowing, the `?contains=` body search). A zero budget selects a literal `''`, so a
+  sweep reads no body bytes out of the store at all — doing it in TypeScript would transfer
+  everything and then throw it away. Same logic for finding: locating a marker (a tool-validation
+  error, a repeated apology) is ONE `LIKE`-filtered request, never a paged sweep of bodies grepped
+  in the caller's context. A searched row reports per-body `matchOffset`s (code points, so they
+  feed `substr` directly); keep the LIKE-escaping on kernel's shared `escapeLikePattern` and the
+  case folding ASCII-parity-tested (SQLite `LIKE` ⇄ Postgres `ILIKE`).
+- **Every body is a `debugText`** (`{ text, chars, offset, totalChars, truncated }`). A bare
+  truncated string reads exactly like a short one, so a model would report "the agent said
+  nothing" from a payload that merely hit its budget. Point reads take `?bodyOffset=`, so the
+  MIDDLE and TAIL of a large body are reachable (the last tool result, the end of a build log —
+  where causes actually sit); the ceiling on the offset sits above the store's per-body cap so no
+  stored byte is unreachable.
+- **The prompt delta has TWO presentations, one storage shape.** `?view=messages` on the call
+  point read parses the stored delta into per-message rows budgeted INDEPENDENTLY (one huge tool
+  result can't hide the messages after it); the parse is lenient across both producers' content
+  shapes and DEGRADES to the raw window with `promptMessages: null` — never a guess, never less
+  than the raw read (`promptMessages.ts`).
+- **A failed run with clean calls gets a POINTER, not silence** (`failure_outside_model_calls`):
+  tool-execution errors happen inside the container and exist only as prompt-delta text, so
+  every call reads `ok` while the run is dead. The signal names the shape and routes the caller
+  to the search. A first-class per-call tool-error count needs harness capture (an image-bumping
+  change) — do NOT fake one by pattern-matching bodies at record time.
+- **Keyset cursors ride the `(createdAt, id)` COMPOSITE**, never a bare timestamp: telemetry is
+  appended in same-millisecond bursts and a timestamp-only cursor silently drops the ties.
+- **`available: false` ≠ `count: 0`.** The overview's per-sink block distinguishes "this deployment
+  retains none of this" from "nothing happened", because they need different follow-up.
+- **`read` scope, deliberately not `admin`** — `admin` also merges PRs and deletes tasks, so gating
+  a read-only diagnostic surface behind it would hand a debugging agent a destructive key. What
+  text is retained at all stays governed at CAPTURE time (`LLM_RECORD_PROMPTS` + `storeAgentContext`).
+- **Run scope is the WORKSPACE**, wider than the task surface's `loadScopedRun` on purpose: a
+  frame's blueprint run and a recurring bug-intake fire are exactly what someone asks about.
+- **Telemetry reads stay OFF the mothership RPC** (`telemetry` bucket — local-first by design);
+  only `ExecutionRepository.listRecent`/`exists`, which read org/durable run state, are
+  allow-listed.
+
 ### External trace destinations (the `LlmTraceSink` seam)
 
 Exporting the same activity to an operator's backend goes through ONE kernel port and never a second

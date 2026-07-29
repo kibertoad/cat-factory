@@ -1,7 +1,9 @@
 import type {
   AgentContextFile,
   AgentContextFragment,
+  AgentContextIndexQuery,
   AgentContextSnapshot,
+  AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -39,6 +41,34 @@ function parseObject(text: string): Record<string, unknown> {
       : {}
   } catch {
     return {}
+  }
+}
+
+interface IndexRow {
+  id: string
+  agent_kind: string
+  step_index: number
+  created_at: number
+  model: string | null
+  harness: string | null
+  system_prompt_chars: number
+  user_prompt_chars: number
+  fragments_chars: number
+  context_files_chars: number
+}
+
+function rowToIndex(row: IndexRow): AgentContextSnapshotIndex {
+  return {
+    id: row.id,
+    agentKind: row.agent_kind,
+    stepIndex: row.step_index,
+    createdAt: row.created_at,
+    model: row.model,
+    harness: row.harness,
+    systemPromptChars: row.system_prompt_chars ?? 0,
+    userPromptChars: row.user_prompt_chars ?? 0,
+    fragmentsChars: row.fragments_chars ?? 0,
+    contextFilesChars: row.context_files_chars ?? 0,
   }
 }
 
@@ -107,6 +137,58 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
       .bind(workspaceId, executionId)
       .all<SnapshotRow>()
     return (results ?? []).map(rowToSnapshot)
+  }
+
+  async listIndex(
+    workspaceId: string,
+    query: AgentContextIndexQuery,
+  ): Promise<AgentContextSnapshotIndex[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: unknown[] = [workspaceId, query.executionId]
+    if (query.stepIndex != null) {
+      clauses.push('step_index = ?')
+      binds.push(query.stepIndex)
+    }
+    if (query.cursor) {
+      clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
+    }
+    binds.push(query.limit)
+    // Sizes only — the four body-bearing columns are MEASURED, never selected, so listing a
+    // run's dispatches costs no body bytes even though a single snapshot can be megabytes.
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, agent_kind, step_index, created_at, model, harness,
+                length(system_prompt) AS system_prompt_chars,
+                length(user_prompt)   AS user_prompt_chars,
+                length(fragments)     AS fragments_chars,
+                length(context_files) AS context_files_chars
+         FROM agent_context_snapshots
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .bind(...binds)
+      .all<IndexRow>()
+    return (results ?? []).map(rowToIndex)
+  }
+
+  async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {
+    const row = await this.db
+      .prepare('SELECT * FROM agent_context_snapshots WHERE workspace_id = ? AND id = ?')
+      .bind(workspaceId, id)
+      .first<SnapshotRow>()
+    return row ? rowToSnapshot(row) : null
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM agent_context_snapshots WHERE workspace_id = ? AND execution_id = ?',
+      )
+      .bind(workspaceId, executionId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

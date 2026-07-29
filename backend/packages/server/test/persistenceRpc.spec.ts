@@ -99,6 +99,12 @@ function makeRegistry(): {
         throw new ConflictError('already terminal', 'invalid_state' as never)
       },
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // The remote debugging surface's run index — echoes the bound workspace like every other
+      // workspace-scoped list stub below.
+      listRecent: async (workspaceId: string) => [{ ws: workspaceId }],
+      // The per-run debug lists' 404 guard probe. The stub echoes the workspace so the READS
+      // table can prove the call reached it (the real method returns a boolean).
+      exists: async (workspaceId: string) => ({ ws: workspaceId }),
       // Run admission control's capacity read (workspace-scoped SQL COUNT → a number).
       countActiveByWorkspace: async (_ws: string) => 2,
     },
@@ -760,6 +766,8 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'trackerSettingsRepository', method: 'get', args: [] },
     { repo: 'notificationRepository', method: 'listOpen', args: [] },
     { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'executionRepository', method: 'listRecent', args: [{ limit: 10 }] },
+    { repo: 'executionRepository', method: 'exists', args: ['exec_1'] },
     { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
     { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },

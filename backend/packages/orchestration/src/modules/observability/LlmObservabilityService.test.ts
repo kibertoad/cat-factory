@@ -7,6 +7,7 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmGenerationEvent,
+  LlmCallMetricPage,
   LlmPromptChainTip,
   LlmTraceSink,
 } from '@cat-factory/kernel'
@@ -60,6 +61,14 @@ class MemoryRepo implements LlmCallMetricRepository {
   }
   async summarizeByExecution(): Promise<LlmCallMetricSummary[]> {
     return []
+  }
+  // The bounded debug-page reads are exercised against the real stores by the conformance
+  // suite (they are pure SQL projections); this double only needs to satisfy the port.
+  async listPage(): Promise<LlmCallMetricPage[]> {
+    return []
+  }
+  async get(): Promise<LlmCallMetricPage | null> {
+    return null
   }
   async deleteOlderThan(): Promise<number> {
     return 0

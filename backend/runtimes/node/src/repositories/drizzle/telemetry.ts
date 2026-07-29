@@ -6,15 +6,22 @@
 
 import { parseJsonArray } from './_shared.js'
 import type {
+  AgentContextIndexQuery,
   AgentContextSnapshot,
+  AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
   AgentSearchQuery,
+  AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
+  LlmCallBodyWindow,
   LlmCallMetric,
+  LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcomeFilter,
+  LlmCallPageQuery,
   LlmPromptChainTip,
   ProvisioningLogQuery,
   ProvisioningLogRecord,
@@ -25,9 +32,25 @@ import type {
   UsageBilling,
   UsageBreakdownRow,
 } from '@cat-factory/kernel'
-import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
+import { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
-import { and, asc, count, desc, eq, gt, gte, inArray, lt, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   agentContextSnapshots,
@@ -226,6 +249,200 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
   }
 }
 
+/**
+ * The SQL predicate for one outcome class, or undefined for "no narrowing". Mirrors
+ * `classifyCall`: a failed call is an `error`; a successful one cut short by the output limit
+ * or a content filter is a `warning`; the rest are `ok`. Kept in SQL so a narrowed page spends
+ * its `limit` on rows the caller wants, rather than filtering a page down to three rows.
+ */
+function llmOutcomeFilter(outcome: LlmCallOutcomeFilter | undefined) {
+  const reasons = [...LLM_WARNING_FINISH_REASONS]
+  if (outcome === 'error') return eq(llmCallMetrics.ok, 0)
+  if (outcome === 'warning') {
+    return and(eq(llmCallMetrics.ok, 1), inArray(llmCallMetrics.finish_reason, reasons))
+  }
+  if (outcome === 'ok') {
+    // `finish_reason` is nullable and a plain `NOT IN (...)` is UNKNOWN for NULL in SQL, which
+    // would silently drop clean calls that recorded no finish reason. Mirrors the D1 repo's
+    // explicit `finish_reason IS NULL OR finish_reason NOT IN (...)`.
+    return and(
+      eq(llmCallMetrics.ok, 1),
+      or(isNull(llmCallMetrics.finish_reason), notInArray(llmCallMetrics.finish_reason, reasons)),
+    )
+  }
+  return undefined
+}
+
+/**
+ * The column set for a bounded page: every metadata column, plus each text body windowed to
+ * the caller's budget (from `offsetChars` on) and its full `length()` alongside. The cases,
+ * kept in step with the D1 repo's `bodyColumns`:
+ *
+ *  - `undefined` budget at offset 0 selects the column RAW. Deliberately not a huge sentinel
+ *    length: SQLite returns an EMPTY string for one of those, so a shared "give me
+ *    everything" sentinel would make the two stores disagree on the point read that exists
+ *    to return whole bodies.
+ *  - `undefined` budget at a later offset selects the REST of the body (two-argument
+ *    `substr`).
+ *  - `0` selects a literal empty string rather than `substr(col, 1, 0)`, so a sweep over a
+ *    long run never makes the database materialise (or the driver transfer) a single prompt
+ *    byte — the whole reason bodies are opt-in on this surface.
+ *  - anything else slices the window; `substr` is 1-based and counts characters, so the
+ *    parameter is `offset + 1`.
+ *
+ * The lengths are reported either way, because a size is what tells the caller which rows are
+ * worth a point read.
+ *
+ * `containsLower` (the search term, ASCII-lowered like the D1 repo's) additionally selects a
+ * per-body first-match offset — `nullif(position(term in lower(col)), 0) - 1`, NULL where
+ * the term does not occur. `position` counts characters like `substr`, so the offset feeds a
+ * point read's window directly.
+ */
+function llmPageColumns(bodyChars: number | undefined, offsetChars = 0, containsLower?: string) {
+  const from = Math.max(0, offsetChars) + 1
+  const slice = (column: AnyPgColumn) => {
+    if (bodyChars !== undefined && bodyChars <= 0) return sql<string>`''`
+    if (bodyChars === undefined && offsetChars <= 0) return column
+    if (bodyChars === undefined) return sql<string>`substr(${column}, ${from})`
+    return sql<string>`substr(${column}, ${from}, ${bodyChars})`
+  }
+  // Selected as literal NULL on an unsearched page (a plain conditional spread would make the
+  // select shape a union type): `rowToLlmCallPage`'s `searched` flag keeps "no search ran"
+  // distinct from "searched, no match" on the domain shape.
+  const match = (column: AnyPgColumn) =>
+    containsLower === undefined
+      ? sql<number | null>`NULL`
+      : sql<number | null>`nullif(position(${containsLower} in lower(${column})), 0) - 1`
+  return {
+    prompt_match: match(llmCallMetrics.prompt_text),
+    response_match: match(llmCallMetrics.response_text),
+    reasoning_match: match(llmCallMetrics.reasoning_text),
+    id: llmCallMetrics.id,
+    workspace_id: llmCallMetrics.workspace_id,
+    execution_id: llmCallMetrics.execution_id,
+    agent_kind: llmCallMetrics.agent_kind,
+    provider: llmCallMetrics.provider,
+    model: llmCallMetrics.model,
+    created_at: llmCallMetrics.created_at,
+    streaming: llmCallMetrics.streaming,
+    phase: llmCallMetrics.phase,
+    turn_index: llmCallMetrics.turn_index,
+    message_count: llmCallMetrics.message_count,
+    tool_count: llmCallMetrics.tool_count,
+    request_max_tokens: llmCallMetrics.request_max_tokens,
+    prompt_tokens: llmCallMetrics.prompt_tokens,
+    cache_read_tokens: llmCallMetrics.cache_read_tokens,
+    cache_write_tokens: llmCallMetrics.cache_write_tokens,
+    completion_tokens: llmCallMetrics.completion_tokens,
+    total_tokens: llmCallMetrics.total_tokens,
+    finish_reason: llmCallMetrics.finish_reason,
+    upstream_ms: llmCallMetrics.upstream_ms,
+    overhead_ms: llmCallMetrics.overhead_ms,
+    total_ms: llmCallMetrics.total_ms,
+    ok: llmCallMetrics.ok,
+    http_status: llmCallMetrics.http_status,
+    error_message: llmCallMetrics.error_message,
+    prompt_prefix_count: llmCallMetrics.prompt_prefix_count,
+    prompt_text: slice(llmCallMetrics.prompt_text),
+    prompt_chars: sql<number>`length(${llmCallMetrics.prompt_text})::int`,
+    response_text: slice(llmCallMetrics.response_text),
+    response_chars: sql<number>`length(${llmCallMetrics.response_text})::int`,
+    reasoning_text: slice(llmCallMetrics.reasoning_text),
+    reasoning_chars: sql<number>`length(${llmCallMetrics.reasoning_text})::int`,
+  }
+}
+
+type LlmPageRow = { [K in keyof ReturnType<typeof llmPageColumns>]: unknown }
+
+function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage {
+  const r = row as {
+    prompt_match: number | string | null
+    response_match: number | string | null
+    reasoning_match: number | string | null
+    id: string
+    workspace_id: string
+    execution_id: string | null
+    agent_kind: string
+    provider: string
+    model: string
+    created_at: number
+    streaming: number
+    phase: string
+    turn_index: number | null
+    message_count: number
+    tool_count: number
+    request_max_tokens: number | null
+    prompt_tokens: number
+    cache_read_tokens: number
+    cache_write_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    finish_reason: string | null
+    upstream_ms: number
+    overhead_ms: number
+    total_ms: number
+    ok: number
+    http_status: number | null
+    error_message: string | null
+    prompt_prefix_count: number
+    prompt_text: string
+    prompt_chars: number
+    response_text: string
+    response_chars: number
+    reasoning_text: string
+    reasoning_chars: number
+  }
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    executionId: r.execution_id,
+    agentKind: r.agent_kind,
+    provider: r.provider,
+    model: r.model,
+    createdAt: r.created_at,
+    streaming: r.streaming === 1,
+    phase: r.phase,
+    turnIndex: r.turn_index,
+    messageCount: r.message_count,
+    toolCount: r.tool_count,
+    requestMaxTokens: r.request_max_tokens,
+    promptTokens: r.prompt_tokens,
+    cacheReadTokens: r.cache_read_tokens,
+    cacheWriteTokens: r.cache_write_tokens,
+    completionTokens: r.completion_tokens,
+    totalTokens: r.total_tokens,
+    finishReason: r.finish_reason,
+    upstreamMs: r.upstream_ms,
+    overheadMs: r.overhead_ms,
+    totalMs: r.total_ms,
+    ok: r.ok === 1,
+    httpStatus: r.http_status,
+    errorMessage: r.error_message,
+    promptPrefixCount: r.prompt_prefix_count,
+    // A searched row attaches each body's first-match offset (null = the term occurs only in
+    // a sibling body); an unsearched row carries none, so the two states stay distinct.
+    prompt: {
+      text: r.prompt_text,
+      totalChars: Number(r.prompt_chars ?? 0),
+      ...(searched ? { matchOffset: r.prompt_match == null ? null : Number(r.prompt_match) } : {}),
+    },
+    response: {
+      text: r.response_text,
+      totalChars: Number(r.response_chars ?? 0),
+      ...(searched
+        ? { matchOffset: r.response_match == null ? null : Number(r.response_match) }
+        : {}),
+    },
+    reasoning: {
+      text: r.reasoning_text,
+      totalChars: Number(r.reasoning_chars ?? 0),
+      ...(searched
+        ? { matchOffset: r.reasoning_match == null ? null : Number(r.reasoning_match) }
+        : {}),
+    },
+  }
+}
+
 export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -328,6 +545,69 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       .orderBy(desc(llmCallMetrics.created_at), desc(llmCallMetrics.id))
     const rows = await (limit == null ? base : base.limit(limit))
     return rows.map(rowToLlmMetric)
+  }
+
+  async listPage(workspaceId: string, query: LlmCallPageQuery): Promise<LlmCallMetricPage[]> {
+    const ascending = query.order === 'oldest'
+    const filters = [
+      eq(llmCallMetrics.workspace_id, workspaceId),
+      eq(llmCallMetrics.execution_id, query.executionId),
+    ]
+    if (query.agentKind != null) filters.push(eq(llmCallMetrics.agent_kind, query.agentKind))
+    // `!= null`, not a truthiness check: '' is the unattributed slice and a legitimate filter.
+    if (query.phase != null) filters.push(eq(llmCallMetrics.phase, query.phase))
+    const outcome = llmOutcomeFilter(query.outcome)
+    if (outcome) filters.push(outcome)
+    if (query.contains != null) {
+      // The surface's grep. ILIKE for case-insensitivity (SQLite's plain LIKE is already
+      // ASCII-insensitive; conformance pins the ASCII behaviour the two share), with `%`/`_`
+      // in the term made literal by the shared escaper — Postgres' default escape character
+      // is the backslash it uses, so no ESCAPE clause is needed here.
+      const pattern = `%${escapeLikePattern(query.contains)}%`
+      filters.push(
+        or(
+          ilike(llmCallMetrics.prompt_text, pattern),
+          ilike(llmCallMetrics.response_text, pattern),
+          ilike(llmCallMetrics.reasoning_text, pattern),
+        )!,
+      )
+    }
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY. Calls are recorded off the response path, so a
+      // burst genuinely shares a millisecond; a `created_at`-only bound would drop the ties.
+      const { createdAt, id } = query.cursor
+      const [timeCmp, idCmp] = ascending ? [gt, gt] : [lt, lt]
+      filters.push(
+        or(
+          timeCmp(llmCallMetrics.created_at, createdAt),
+          and(eq(llmCallMetrics.created_at, createdAt), idCmp(llmCallMetrics.id, id)),
+        )!,
+      )
+    }
+    const searched = query.contains != null
+    const rows = await this.db
+      .select(llmPageColumns(query.bodyChars, 0, query.contains?.toLowerCase()))
+      .from(llmCallMetrics)
+      .where(and(...filters))
+      .orderBy(
+        ascending ? asc(llmCallMetrics.created_at) : desc(llmCallMetrics.created_at),
+        ascending ? asc(llmCallMetrics.id) : desc(llmCallMetrics.id),
+      )
+      .limit(query.limit)
+    return rows.map((row) => rowToLlmCallPage(row, searched))
+  }
+
+  async get(
+    workspaceId: string,
+    id: string,
+    body?: LlmCallBodyWindow,
+  ): Promise<LlmCallMetricPage | null> {
+    const rows = await this.db
+      .select(llmPageColumns(body?.chars, body?.offset ?? 0))
+      .from(llmCallMetrics)
+      .where(and(eq(llmCallMetrics.workspace_id, workspaceId), eq(llmCallMetrics.id, id)))
+      .limit(1)
+    return rows[0] ? rowToLlmCallPage(rows[0]) : null
   }
 
   async summarizeByExecution(
@@ -461,6 +741,83 @@ export class DrizzleAgentContextSnapshotRepository implements AgentContextSnapsh
     return rows.map(rowToAgentContextSnapshot)
   }
 
+  async listIndex(
+    workspaceId: string,
+    query: AgentContextIndexQuery,
+  ): Promise<AgentContextSnapshotIndex[]> {
+    const filters = [
+      eq(agentContextSnapshots.workspace_id, workspaceId),
+      eq(agentContextSnapshots.execution_id, query.executionId),
+    ]
+    if (query.stepIndex != null) {
+      filters.push(eq(agentContextSnapshots.step_index, query.stepIndex))
+    }
+    if (query.cursor) {
+      const { createdAt, id } = query.cursor
+      filters.push(
+        or(
+          lt(agentContextSnapshots.created_at, createdAt),
+          and(eq(agentContextSnapshots.created_at, createdAt), lt(agentContextSnapshots.id, id)),
+        )!,
+      )
+    }
+    // Sizes only — the four body-bearing columns are never selected, just measured, so listing a
+    // run's dispatches costs no body bytes even though a single snapshot can be megabytes.
+    const rows = await this.db
+      .select({
+        id: agentContextSnapshots.id,
+        agentKind: agentContextSnapshots.agent_kind,
+        stepIndex: agentContextSnapshots.step_index,
+        createdAt: agentContextSnapshots.created_at,
+        model: agentContextSnapshots.model,
+        harness: agentContextSnapshots.harness,
+        systemPromptChars: sql<number>`length(${agentContextSnapshots.system_prompt})::int`,
+        userPromptChars: sql<number>`length(${agentContextSnapshots.user_prompt})::int`,
+        fragmentsChars: sql<number>`length(${agentContextSnapshots.fragments})::int`,
+        contextFilesChars: sql<number>`length(${agentContextSnapshots.context_files})::int`,
+      })
+      .from(agentContextSnapshots)
+      .where(and(...filters))
+      .orderBy(desc(agentContextSnapshots.created_at), desc(agentContextSnapshots.id))
+      .limit(query.limit)
+    return rows.map((r) => ({
+      id: r.id,
+      agentKind: r.agentKind,
+      stepIndex: r.stepIndex,
+      createdAt: r.createdAt,
+      model: r.model,
+      harness: r.harness,
+      systemPromptChars: Number(r.systemPromptChars ?? 0),
+      userPromptChars: Number(r.userPromptChars ?? 0),
+      fragmentsChars: Number(r.fragmentsChars ?? 0),
+      contextFilesChars: Number(r.contextFilesChars ?? 0),
+    }))
+  }
+
+  async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {
+    const rows = await this.db
+      .select()
+      .from(agentContextSnapshots)
+      .where(
+        and(eq(agentContextSnapshots.workspace_id, workspaceId), eq(agentContextSnapshots.id, id)),
+      )
+      .limit(1)
+    return rows[0] ? rowToAgentContextSnapshot(rows[0]) : null
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const rows = await this.db
+      .select({ n: count() })
+      .from(agentContextSnapshots)
+      .where(
+        and(
+          eq(agentContextSnapshots.workspace_id, workspaceId),
+          eq(agentContextSnapshots.execution_id, executionId),
+        ),
+      )
+    return Number(rows[0]?.n ?? 0)
+  }
+
   async deleteOlderThan(epochMs: number): Promise<number> {
     const deleted = await this.db
       .delete(agentContextSnapshots)
@@ -514,6 +871,45 @@ export class DrizzleAgentSearchQueryRepository implements AgentSearchQueryReposi
       )
       .orderBy(desc(agentSearchQueries.created_at), desc(agentSearchQueries.id))
     return rows.map(rowToAgentSearchQuery)
+  }
+
+  async listPage(
+    workspaceId: string,
+    query: AgentSearchQueryPageQuery,
+  ): Promise<AgentSearchQuery[]> {
+    const filters = [
+      eq(agentSearchQueries.workspace_id, workspaceId),
+      eq(agentSearchQueries.execution_id, query.executionId),
+    ]
+    if (query.cursor) {
+      const { createdAt, id } = query.cursor
+      filters.push(
+        or(
+          lt(agentSearchQueries.created_at, createdAt),
+          and(eq(agentSearchQueries.created_at, createdAt), lt(agentSearchQueries.id, id)),
+        )!,
+      )
+    }
+    const rows = await this.db
+      .select()
+      .from(agentSearchQueries)
+      .where(and(...filters))
+      .orderBy(desc(agentSearchQueries.created_at), desc(agentSearchQueries.id))
+      .limit(query.limit)
+    return rows.map(rowToAgentSearchQuery)
+  }
+
+  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+    const rows = await this.db
+      .select({ n: count() })
+      .from(agentSearchQueries)
+      .where(
+        and(
+          eq(agentSearchQueries.workspace_id, workspaceId),
+          eq(agentSearchQueries.execution_id, executionId),
+        ),
+      )
+    return Number(rows[0]?.n ?? 0)
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -707,7 +1103,17 @@ export class DrizzleProvisioningLogRepository implements ProvisioningLogReposito
     if (query.subsystem) conditions.push(eq(provisioningLog.subsystem, query.subsystem))
     if (query.executionId) conditions.push(eq(provisioningLog.execution_id, query.executionId))
     if (query.targetId) conditions.push(eq(provisioningLog.target_id, query.targetId))
-    if (query.before != null) conditions.push(lt(provisioningLog.created_at, query.before))
+    if (query.cursor) {
+      // Composite keyset matching the ORDER BY: provisioning attempts are appended in bursts,
+      // so a `created_at`-only bound would silently drop rows sharing a millisecond.
+      const { createdAt, id } = query.cursor
+      conditions.push(
+        or(
+          lt(provisioningLog.created_at, createdAt),
+          and(eq(provisioningLog.created_at, createdAt), lt(provisioningLog.id, id)),
+        )!,
+      )
+    }
     const base = this.db
       .select()
       .from(provisioningLog)
@@ -715,6 +1121,26 @@ export class DrizzleProvisioningLogRepository implements ProvisioningLogReposito
       .orderBy(desc(provisioningLog.created_at), desc(provisioningLog.id))
     const rows = await (query.limit == null ? base : base.limit(query.limit))
     return rows.map(rowToProvisioningLog)
+  }
+
+  async countByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<{ total: number; failures: number }> {
+    // Total + failures in ONE aggregate pass over the run's slice (see the port).
+    const rows = await this.db
+      .select({
+        total: count(),
+        failures: sql<number>`coalesce(sum(case when ${provisioningLog.outcome} = 'failure' then 1 else 0 end), 0)::int`,
+      })
+      .from(provisioningLog)
+      .where(
+        and(
+          eq(provisioningLog.workspace_id, workspaceId),
+          eq(provisioningLog.execution_id, executionId),
+        ),
+      )
+    return { total: Number(rows[0]?.total ?? 0), failures: Number(rows[0]?.failures ?? 0) }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

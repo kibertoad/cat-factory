@@ -52,7 +52,7 @@ export function transportOverheadRatio(upstreamMs: number, overheadMs: number): 
  * is a genuine 0..1 share and needs no clamp — the old form divided by a `promptTokens` that
  * did not contain the cache reads on the Anthropic shape, which is why it could exceed 1.
  */
-function cacheHitRate(
+export function cacheHitRate(
   cacheReadTokens: number,
   cacheWriteTokens: number,
   promptTokens: number,

@@ -17,6 +17,7 @@
 import { LlmObservabilityService } from '../modules/observability/LlmObservabilityService.js'
 import { PlatformObservabilityService } from '../modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from '../modules/reports/ReportsService.js'
+import { RunDebugService } from '../modules/debug/RunDebugService.js'
 import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
@@ -116,6 +117,24 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
           }),
         }
       : undefined,
+  )
+  // The remote debugging reader (`/api/v1/debug/*`). Built UNCONDITIONALLY, unlike every other
+  // module here: its run index and overview need only the execution store, and each telemetry
+  // sink it reads is independently optional. Gating the whole surface on any one of them would
+  // mean a deployment that retains no agent context also loses the ability to list its runs —
+  // and would turn a partially-configured deployment into a 503 the caller cannot interpret,
+  // where an `available: false` sink says exactly what is missing.
+  modules.build(
+    'runDebug',
+    () =>
+      new RunDebugService({
+        executionRepository: dependencies.executionRepository,
+        clock: dependencies.clock,
+        llmCallMetricRepository: dependencies.llmCallMetricRepository,
+        agentContextSnapshotRepository: dependencies.agentContextSnapshotRepository,
+        agentSearchQueryRepository: dependencies.agentSearchQueryRepository,
+        provisioningLogRepository: dependencies.provisioningLogRepository,
+      }),
   )
   // Built before the shared-stacks + environments modules so a compose stack recipe's
   // `prerequisites` (and a shared stack's own prerequisites) are re-run at provision / bring-up
