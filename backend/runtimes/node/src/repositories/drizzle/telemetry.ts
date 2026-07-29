@@ -617,27 +617,37 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     // Aggregate-only: selects no prompt/response text, so it stays cheap on every
     // execution emit (it backs the live board rollups). int sums fit Number's safe
     // range here (per-run call counts/tokens are small), so a plain ::bigint cast
-    // matching the SQLite 64-bit sum is unnecessary — totals are coerced below.
+    // matching the SQLite 64-bit sum is unnecessary — totals are coerced below. The
+    // ONE exception is the carry cost, a product of two sums: it clears int4's 2.1e9
+    // ceiling on any real run, so it is summed as ::bigint (which arrives as a string
+    // from node-postgres and is coerced like the rest).
     const reasons = [...LLM_WARNING_FINISH_REASONS]
-    const rows = await this.db
+    // Each call with its total input and the turns left in ITS conversation after it — the
+    // two factors of the carry-cost proxy. `partition by agent_kind` is the conversation
+    // boundary (the prompt delta chain is keyed by `(workspace, execution, agent_kind)`), and
+    // the ordering avoids `turn_index` because a proxied row's is NULL by design; mirrors the
+    // D1/node:sqlite subquery exactly.
+    const ranked = this.db
       .select({
         agentKind: llmCallMetrics.agent_kind,
-        calls: sql<number>`count(*)::int`,
-        promptTokens: sql<number>`coalesce(sum(${llmCallMetrics.prompt_tokens}), 0)::int`,
-        cacheReadTokens: sql<number>`coalesce(sum(${llmCallMetrics.cache_read_tokens}), 0)::int`,
-        cacheWriteTokens: sql<number>`coalesce(sum(${llmCallMetrics.cache_write_tokens}), 0)::int`,
-        completionTokens: sql<number>`coalesce(sum(${llmCallMetrics.completion_tokens}), 0)::int`,
-        peakCompletionTokens: sql<number>`coalesce(max(${llmCallMetrics.completion_tokens}), 0)::int`,
-        maxOutputTokens: sql<number | null>`max(${llmCallMetrics.request_max_tokens})`,
-        truncatedCalls: sql<number>`coalesce(sum(case when ${llmCallMetrics.finish_reason} = 'length' then 1 else 0 end), 0)::int`,
-        upstreamMs: sql<number>`coalesce(sum(${llmCallMetrics.upstream_ms}), 0)::int`,
-        overheadMs: sql<number>`coalesce(sum(${llmCallMetrics.overhead_ms}), 0)::int`,
-        errors: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 0 then 1 else 0 end), 0)::int`,
-        // `inArray` builds the IN-list membership: idiomatic, type-checked, and tied to
-        // the shared constant. (A raw `${...finish_reason} in ${reasons}` renders the same
-        // `in ($1, $2)` on this drizzle version; inArray just documents intent and can't
-        // silently mis-bind the array.)
-        warnings: sql<number>`coalesce(sum(case when ${llmCallMetrics.ok} = 1 and ${inArray(llmCallMetrics.finish_reason, reasons)} then 1 else 0 end), 0)::int`,
+        phase: llmCallMetrics.phase,
+        completionTokens: llmCallMetrics.completion_tokens,
+        promptTokens: llmCallMetrics.prompt_tokens,
+        cacheReadTokens: llmCallMetrics.cache_read_tokens,
+        cacheWriteTokens: llmCallMetrics.cache_write_tokens,
+        requestMaxTokens: llmCallMetrics.request_max_tokens,
+        finishReason: llmCallMetrics.finish_reason,
+        upstreamMs: llmCallMetrics.upstream_ms,
+        overheadMs: llmCallMetrics.overhead_ms,
+        ok: llmCallMetrics.ok,
+        inputTokens:
+          sql<number>`(${llmCallMetrics.prompt_tokens} + ${llmCallMetrics.cache_read_tokens} + ${llmCallMetrics.cache_write_tokens})`.as(
+            'input_tokens',
+          ),
+        turnsAfter:
+          sql<number>`(count(*) over (partition by ${llmCallMetrics.agent_kind}) - row_number() over (partition by ${llmCallMetrics.agent_kind} order by ${llmCallMetrics.created_at}, ${llmCallMetrics.message_count}, ${llmCallMetrics.id}))`.as(
+            'turns_after',
+          ),
       })
       .from(llmCallMetrics)
       .where(
@@ -646,9 +656,36 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
           eq(llmCallMetrics.execution_id, executionId),
         ),
       )
-      .groupBy(llmCallMetrics.agent_kind)
+      .as('ranked')
+    const rows = await this.db
+      .select({
+        agentKind: ranked.agentKind,
+        phase: ranked.phase,
+        calls: sql<number>`count(*)::int`,
+        promptTokens: sql<number>`coalesce(sum(${ranked.promptTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${ranked.cacheReadTokens}), 0)::int`,
+        cacheWriteTokens: sql<number>`coalesce(sum(${ranked.cacheWriteTokens}), 0)::int`,
+        completionTokens: sql<number>`coalesce(sum(${ranked.completionTokens}), 0)::int`,
+        peakCompletionTokens: sql<number>`coalesce(max(${ranked.completionTokens}), 0)::int`,
+        maxOutputTokens: sql<number | null>`max(${ranked.requestMaxTokens})`,
+        truncatedCalls: sql<number>`coalesce(sum(case when ${ranked.finishReason} = 'length' then 1 else 0 end), 0)::int`,
+        upstreamMs: sql<number>`coalesce(sum(${ranked.upstreamMs}), 0)::int`,
+        overheadMs: sql<number>`coalesce(sum(${ranked.overheadMs}), 0)::int`,
+        errors: sql<number>`coalesce(sum(case when ${ranked.ok} = 0 then 1 else 0 end), 0)::int`,
+        // `inArray` builds the IN-list membership: idiomatic, type-checked, and tied to
+        // the shared constant. (A raw `${...finishReason} in ${reasons}` renders the same
+        // `in ($1, $2)` on this drizzle version; inArray just documents intent and can't
+        // silently mis-bind the array.)
+        warnings: sql<number>`coalesce(sum(case when ${ranked.ok} = 1 and ${inArray(ranked.finishReason, reasons)} then 1 else 0 end), 0)::int`,
+        carryCostTokens: sql<
+          number | string
+        >`coalesce(sum(${ranked.inputTokens}::bigint * ${ranked.turnsAfter}), 0)::bigint`,
+      })
+      .from(ranked)
+      .groupBy(ranked.agentKind, ranked.phase)
     return rows.map((r) => ({
       agentKind: r.agentKind,
+      phase: r.phase,
       calls: Number(r.calls),
       promptTokens: Number(r.promptTokens),
       cacheReadTokens: Number(r.cacheReadTokens),
@@ -661,6 +698,7 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
       overheadMs: Number(r.overheadMs),
       errors: Number(r.errors),
       warnings: Number(r.warnings),
+      carryCostTokens: Number(r.carryCostTokens),
     }))
   }
 

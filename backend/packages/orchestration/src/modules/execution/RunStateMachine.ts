@@ -9,6 +9,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
+  LlmCallMetricSummary,
   PipelineStep,
   SubscriptionActivationRepository,
   WorkRunner,
@@ -16,6 +17,8 @@ import type {
 import {
   assertFound,
   ConflictError,
+  foldRollupTotals,
+  foldRollupsByPhase,
   isAsyncAgentExecutor,
   isInitiativeAgentKind,
   RunContendedError,
@@ -303,16 +306,26 @@ export class RunStateMachine {
    * (not step index), so the aggregate is per-agent-kind within the run; steps
    * sharing a kind get the same rollup. Best-effort and a no-op when the sink is
    * not wired, so it never blocks an emit.
+   *
+   * The store returns the finer `(agentKind, phase)` grain, so the step's headline numbers
+   * are a fold up to the kind and its `byPhase` breakdown is the same cells re-cut — ONE
+   * aggregate for both, since an emit runs this on every step settlement.
    */
   private async attachStepMetrics(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     if (!this.llmObservability) return
     try {
       const summaries = await this.llmObservability.summarizeByExecution(workspaceId, instance.id)
       if (summaries.length === 0) return
-      const byKind = new Map(summaries.map((s) => [s.agentKind, s]))
+      const cellsByKind = new Map<string, LlmCallMetricSummary[]>()
+      for (const cell of summaries) {
+        const bucket = cellsByKind.get(cell.agentKind)
+        if (bucket) bucket.push(cell)
+        else cellsByKind.set(cell.agentKind, [cell])
+      }
       for (const step of instance.steps) {
-        const s = byKind.get(step.agentKind)
-        if (!s) continue
+        const cells = cellsByKind.get(step.agentKind)
+        if (!cells) continue
+        const s = foldRollupTotals(cells)
         step.metrics = {
           calls: s.calls,
           promptTokens: s.promptTokens,
@@ -326,6 +339,21 @@ export class RunStateMachine {
           overheadMs: s.overheadMs,
           errors: s.errors,
           warnings: s.warnings,
+          carryCostTokens: s.carryCostTokens,
+          // Costliest phase first, so the board surface shows the slice worth attacking
+          // rather than whichever one the store happened to return first.
+          byPhase: foldRollupsByPhase(cells)
+            .map((p) => ({
+              phase: p.phase,
+              calls: p.calls,
+              promptTokens: p.promptTokens,
+              cacheReadTokens: p.cacheReadTokens,
+              cacheWriteTokens: p.cacheWriteTokens,
+              completionTokens: p.completionTokens,
+              carryCostTokens: p.carryCostTokens,
+              errors: p.errors,
+            }))
+            .sort((a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls),
         }
       }
     } catch (error) {

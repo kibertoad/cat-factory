@@ -499,6 +499,43 @@ export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
  * detail (prompts + responses) is fetched on demand for the drill-down panel.
  * Absent when the observability sink is not wired.
  */
+/**
+ * One PHASE's slice of a step's model spend — which part of the run's work the tokens went
+ * to (the agent's own edit loop, a pre-PR validation repair round, a reproduction-proof
+ * repair round, …), carried from the producer that owns the phase boundary. See
+ * `docs/initiatives/token-burn-instrumentation.md`.
+ */
+export const stepPhaseMetricsSchema = v.object({
+  /**
+   * The phase label. `''` is the UNATTRIBUTED slice — an older harness image, an inline call,
+   * the un-phased proxy path — and is a real row of the breakdown, never a gap: a run whose
+   * calls are all `''` was metered by a channel with no phase concept, not one that spent
+   * nothing outside the agent.
+   */
+  phase: v.string(),
+  /** Model calls (turns) this phase spent. */
+  calls: v.number(),
+  /** Fresh (uncached) input tokens. */
+  promptTokens: v.number(),
+  /** Input tokens served from the provider's prefix cache. */
+  cacheReadTokens: v.number(),
+  /** Input tokens written INTO the cache. */
+  cacheWriteTokens: v.number(),
+  /** Completion (output) tokens. */
+  completionTokens: v.number(),
+  /**
+   * Carry-cost proxy in token-turns: this phase's context summed against the turns that
+   * still had to re-send it. It separates "this phase read a lot" from "this phase made
+   * everything after it more expensive" — a large load early costs far more than the same
+   * load at the end, and a plain token sum cannot tell the two apart. Comparable BETWEEN a
+   * run's phases; meaningless as an absolute.
+   */
+  carryCostTokens: v.number(),
+  /** Calls that failed (non-2xx / refused / in-process error). */
+  errors: v.number(),
+})
+export type StepPhaseMetrics = v.InferOutput<typeof stepPhaseMetricsSchema>
+
 export const stepMetricsSchema = v.object({
   /** Number of model calls recorded for this step. */
   calls: v.number(),
@@ -536,6 +573,22 @@ export const stepMetricsSchema = v.object({
   errors: v.number(),
   /** Successful calls that warned (truncated or content-filtered). */
   warnings: v.number(),
+  /**
+   * Carry-cost proxy in token-turns (see {@link stepPhaseMetricsSchema}), summed over the
+   * step's phases. Absent ⇒ unknown (a snapshot predating the per-phase rollup).
+   */
+  carryCostTokens: v.optional(v.number()),
+  /**
+   * The step's burn split by the PHASE that spent it — the agent's own edit loop against a
+   * pre-PR validation repair round against a reproduction-proof repair round, and so on. Rolled
+   * up in SQL alongside the totals above (one `GROUP BY (agent_kind, phase)`), so it costs the
+   * emit nothing extra.
+   *
+   * Absent ⇒ the sink is not wired or the snapshot predates the breakdown; EMPTY is
+   * impossible whenever `calls > 0`, since an unattributable call lands in the `''` phase
+   * rather than being dropped.
+   */
+  byPhase: v.optional(v.array(stepPhaseMetricsSchema)),
 })
 export type StepMetrics = v.InferOutput<typeof stepMetricsSchema>
 

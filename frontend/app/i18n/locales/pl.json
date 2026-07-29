@@ -1408,6 +1408,19 @@
       "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
       "cacheWriteHint": "Tokeny wejściowe zapisane do pamięci podręcznej dostawcy (od 1,25 do 2 razy cena świeżego wejścia)"
     },
+    "phase": {
+      "title": "Na co poszły tokeny",
+      "subtitle": "według fazy przebiegu",
+      "columns": {
+        "phase": "Faza",
+        "turns": "Tury",
+        "tokensInOut": "Tokeny (we / wy)",
+        "carryCost": "Koszt przenoszenia"
+      },
+      "carryCostHint": "Jak bardzo każda faza obciążyła kolejne tury: jej kontekst policzony raz za każdą późniejszą turę, która musiała go wysłać ponownie. Porównuj fazy jednego przebiegu ze sobą; sama liczba nic nie znaczy.",
+      "unattributed": "Bez przypisania",
+      "unattributedHint": "zarejestrowane przez kanał, który nie podaje fazy"
+    },
     "metricsBar": {
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
       "inputCompletionTokens": "Łączna liczba tokenów wejścia / wyjscia. Wejście liczy takze tokeny z pamięci podręcznej: nadal zajmują okno kontekstu, dokładnie tak, jak liczy je wskaźnik kontekstu w Claude Code.",

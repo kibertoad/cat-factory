@@ -96,6 +96,7 @@ export type {
   LlmCallMetricSummary,
   LlmCallOutcomeFilter,
   LlmCallPageQuery,
+  LlmCallRollupTotals,
   LlmPromptChainTip,
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'

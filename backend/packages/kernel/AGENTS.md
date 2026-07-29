@@ -43,6 +43,11 @@ else imports its **ports** and domain types from here.
   runner pool's JSON), so every path normalises here before it becomes a grouping key; an
   unrecognisable one becomes the unattributed `''` slice rather than a group of its own. See
   `docs/initiatives/token-burn-instrumentation.md`.
+- `domain/llm-rollup.ts` — `foldRollupTotals` / `foldRollupsByAgentKind` / `foldRollupsByPhase`,
+  the folds over the telemetry stores' ONE `(agentKind, phase)` aggregate. The store computes the
+  finest grain and every coarser view (a step's per-kind rollup, the run's per-phase burn
+  breakdown, the run totals) is derived here, so the numbers on a surface can't disagree with the
+  totals beside them. A new consumer folds; it does not add a second `GROUP BY` on the emit path.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

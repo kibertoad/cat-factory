@@ -3010,6 +3010,19 @@
       "cacheWrite": "{tokens} scritti nella cache",
       "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)"
     },
+    "phase": {
+      "title": "Dove sono finiti i token",
+      "subtitle": "per fase dell'esecuzione",
+      "columns": {
+        "phase": "Fase",
+        "turns": "Turni",
+        "tokensInOut": "Token (in / out)",
+        "carryCost": "Costo di trascinamento"
+      },
+      "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla.",
+      "unattributed": "Non attribuito",
+      "unattributedHint": "registrato da un canale che non riporta la fase"
+    },
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
       "inputCompletionTokens": "Token totali di input / output. L'input conta anche i token in cache: occupano comunque la finestra di contesto, esattamente come li conta l'indicatore di contesto di Claude Code.",

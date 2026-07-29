@@ -1474,6 +1474,19 @@
       "cacheWrite": "{tokens} cache write",
       "cacheWriteHint": "Input tokens written into the provider's cache (1.25x to 2x the price of fresh input)"
     },
+    "phase": {
+      "title": "Where the tokens went",
+      "subtitle": "by phase of the run",
+      "columns": {
+        "phase": "Phase",
+        "turns": "Turns",
+        "tokensInOut": "Tokens (in / out)",
+        "carryCost": "Carry cost"
+      },
+      "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing.",
+      "unattributed": "Unattributed",
+      "unattributedHint": "recorded by a channel that reports no phase"
+    },
     "metricsBar": {
       "calls": "{count} call | {count} calls",
       "inputCompletionTokens": "Total input / completion tokens. Input counts cached tokens too: they still occupy the context window, exactly as Claude Code's own context gauge counts them.",

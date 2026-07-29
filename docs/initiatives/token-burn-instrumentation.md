@@ -1,6 +1,6 @@
 # Initiative: per-run token-burn instrumentation & diagnosis
 
-**Status:** in progress (Slice 3 next) · **Owner:** core · **Started:** 2026-07-28
+**Status:** in progress (Slice 4 next) · **Owner:** core · **Started:** 2026-07-28
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -75,10 +75,13 @@ driver this instrument is meant to rank, not a settled cause:
   The harness already streams per-call metrics with a job-scoped `seq`
   (`RunnerJobView.callMetrics`, minted as `<jobId>-hc-<seq>`); phase is the new axis. A call that
   can't be attributed lands in an explicit `''`/`unknown` phase — a real slice, never dropped.
-- **Slice 3 — per-run rollup, grouped by phase.** One SQL aggregate per execution over
+- **Slice 3 — per-run rollup, grouped by phase. ✅ landed.** One SQL aggregate per execution over
   `llm_call_metrics` (never rows reduced in JS): turns, fresh / cache-read / cache-write / output,
   and a **carry-cost** proxy (each turn's context × turns remaining) per phase. Surfaced in the
-  observability panel and available headless for the baseline runs.
+  observability panel (`step.metrics.byPhase`, folded to the run) and available headless on the
+  debug overview (`llm.byPhase`). The aggregate's grain is `(agentKind, phase)` and every coarser
+  view is a pure fold over it, so Slice 4 can read a per-phase split that provably sums to the
+  totals beside it.
 - **Slice 4 — the baseline & the decision.** Run the same trivial task ("bump pnpm") as (a) an
   interactive Claude Code session and (b) a full pipeline run, and compare the ratio + the
   per-phase breakdown. The breakdown _decides the fix_ rather than us guessing:
@@ -153,6 +156,44 @@ settled, and what a Slice 3 rollup must not undo:
   degrades the handler's contextual typing (an inner `.catch((err) =>` becomes an implicit-any
   error). The handler is a named function registered per path instead.
 
+## Carried out of Slice 3 (read before consuming the rollup)
+
+The rollup landed as ONE aggregate at the `(agentKind, phase)` grain, with kernel folds
+(`domain/llm-rollup.ts`) producing every coarser view. What that settled:
+
+- **One aggregate, folded — never one query per axis.** The store returns the finest grain and
+  `foldRollupsByAgentKind` / `foldRollupsByPhase` / `foldRollupTotals` derive the rest. The
+  alternative (a second `GROUP BY phase` beside the existing `GROUP BY agent_kind`) doubles the
+  cost of an emit — this runs on EVERY step settlement — and, worse, produces two answers to the
+  same question the moment one of them changes. The folds are over a handful of cells, not over
+  the rows they were computed from, so the "push aggregates into SQL" rule still holds.
+- **Carry cost partitions by CONVERSATION, not by run.** `Σ (a call's total input) × (turns left
+after it)` is charged within `partition by agent_kind`, because that is what the prompt delta
+  chain is keyed by: a merger step's turns never re-send a coder step's context, and a run-wide
+  window would have charged the coder's first turn for every later step's turn. The conformance
+  case pins exactly this discrimination (run-wide accounting gives 1000 where the correct answer
+  is 400).
+- **The window orders by `(created_at, message_count, id)`, deliberately NOT `turn_index`.** A
+  proxied row's turn index is NULL by design (Slice 2), so ordering by it would heap every Pi
+  call at one end of its own conversation. `message_count` breaks the same-millisecond ties a
+  streamed burst produces and `id` makes it deterministic across runtimes.
+- **The carry cost is the ONE column that needs a 64-bit sum.** It is a product of two sums, so a
+  real run clears int4's 2.1e9 ceiling routinely; the Postgres aggregate casts `::bigint` (not
+  the `::int` its neighbours use) and coerces on the way out. Getting this wrong is not a rounding
+  error, it is a query that throws mid-emit.
+- **It is a PROXY and says so everywhere it surfaces.** It re-counts tokens the model saw once,
+  per subsequent turn — which is precisely the re-send being measured — so it is comparable
+  BETWEEN a run's phases and meaningless as an absolute. Both surfaces sort by it and neither
+  presents it as a token total.
+- **No migration, no schema change.** The columns Slice 2 added are all it reads, so this is a
+  read-only change on both telemetry stores — which is also why there is no runtime-asymmetry
+  risk beyond the SQL itself (asserted by the conformance suite on real D1 and real Postgres).
+- **The panel folds the per-step rollups, deduplicating by agent kind.** A step's `metrics` is
+  its KIND's rollup for the whole run (the proxy keys a conversation by `(execution, agentKind)`,
+  not by step index), so two steps of one kind carry identical numbers and a naive sum over
+  `steps` doubles them. Folding the rollup rather than the loaded call list also keeps the
+  breakdown honest on a long run, where that list is capped.
+
 ## Target pattern (Slice 2 — the reference implementation)
 
 The instrument rides seams that already exist, so it needs no new sink and stays runtime-symmetric
@@ -181,7 +222,7 @@ conformance suite):
 | 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done | #1430 |
 | 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done |       |
 | 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done | #1455 |
-| 3   | Per-run rollup by phase    | `GROUP BY phase` aggregate + carry-cost proxy; onto `step.metrics`; observability panel + headless               | ⬜ todo |       |
+| 3   | Per-run rollup by phase    | `GROUP BY (agent_kind, phase)` aggregate + carry-cost proxy; onto `step.metrics`; panel + debug overview         | ✅ done |       |
 | 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
 | 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one — see below                     | ⬜ todo |       |
 

@@ -2,7 +2,7 @@
 // rollups + the drill-down panel). Kept here so the components stay declarative and
 // the number-crunching is unit-testable.
 
-import type { StepMetrics } from '~/types/execution'
+import type { PipelineStep, StepMetrics, StepPhaseMetrics } from '~/types/execution'
 
 /** Compact token count: 1234 → "1.2k", 980 → "980", 2_500_000 → "2.5M". */
 export function formatTokens(n: number): string {
@@ -67,6 +67,51 @@ export function headroomRatio(
 export function transportRatio(m: Pick<StepMetrics, 'upstreamMs' | 'overheadMs'>): number | null {
   const total = m.upstreamMs + m.overheadMs
   return total > 0 ? m.overheadMs / total : null
+}
+
+/**
+ * The run's model spend split by the PHASE that spent it, folded from the per-step rollups the
+ * engine already pushes. Rows come back costliest-carry-cost first — the slice worth attacking.
+ *
+ * Two things make this correct rather than a naive sum over `steps`:
+ *
+ * 1. **Deduplicate by agent kind.** A step's `metrics` is the rollup for its AGENT KIND across
+ *    the whole run (the proxy keys a conversation by `(execution, agentKind)`, not by step
+ *    index), so two steps of the same kind carry the SAME numbers. Adding them would double
+ *    every figure on any pipeline with, say, two tester steps.
+ * 2. **Read it off the rollup, not off the loaded calls.** The panel's call list is capped, so
+ *    folding phases client-side from it would silently under-report exactly the long runs this
+ *    breakdown exists for. The rollup is a SQL aggregate over every row.
+ */
+export function foldRunPhaseMetrics(steps: readonly PipelineStep[]): StepPhaseMetrics[] {
+  const seenKinds = new Set<string>()
+  const byPhase = new Map<string, StepPhaseMetrics>()
+  for (const step of steps) {
+    const rows = step.metrics?.byPhase
+    if (!rows?.length || seenKinds.has(step.agentKind)) continue
+    seenKinds.add(step.agentKind)
+    for (const row of rows) {
+      const prev = byPhase.get(row.phase)
+      byPhase.set(
+        row.phase,
+        prev
+          ? {
+              phase: row.phase,
+              calls: prev.calls + row.calls,
+              promptTokens: prev.promptTokens + row.promptTokens,
+              cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
+              cacheWriteTokens: prev.cacheWriteTokens + row.cacheWriteTokens,
+              completionTokens: prev.completionTokens + row.completionTokens,
+              carryCostTokens: prev.carryCostTokens + row.carryCostTokens,
+              errors: prev.errors + row.errors,
+            }
+          : row,
+      )
+    }
+  }
+  return [...byPhase.values()].sort(
+    (a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls,
+  )
 }
 
 /** Tailwind text/bg colour for an output-headroom level (green → amber → red). */

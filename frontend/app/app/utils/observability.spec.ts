@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { totalInputTokens } from './observability'
+import type { PipelineStep, StepPhaseMetrics } from '~/types/execution'
+import { foldRunPhaseMetrics, totalInputTokens } from './observability'
 
 describe('totalInputTokens', () => {
   it('sums all three input classes, so the headline matches Claude Code’s context gauge', () => {
@@ -24,5 +25,53 @@ describe('totalInputTokens', () => {
 
   it('degrades to the fresh count when an older snapshot carries no cache fields', () => {
     expect(totalInputTokens({ promptTokens: 500 })).toBe(500)
+  })
+})
+
+describe('foldRunPhaseMetrics', () => {
+  const phase = (over: Partial<StepPhaseMetrics> & Pick<StepPhaseMetrics, 'phase'>) => ({
+    calls: 1,
+    promptTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    completionTokens: 5,
+    carryCostTokens: 0,
+    errors: 0,
+    ...over,
+  })
+  const step = (agentKind: string, byPhase: StepPhaseMetrics[]) =>
+    ({ agentKind, metrics: { byPhase } }) as unknown as PipelineStep
+
+  it('does NOT double-count two steps that share an agent kind', () => {
+    // A step's rollup covers its agent KIND across the whole run (the proxy keys a conversation
+    // by `(execution, agentKind)`), so two tester steps carry identical numbers. Summing them
+    // would report twice the tokens the run actually spent.
+    const rows = [phase({ phase: 'agent', calls: 3, carryCostTokens: 90 })]
+    const folded = foldRunPhaseMetrics([step('tester', rows), step('tester', rows)])
+    expect(folded).toHaveLength(1)
+    expect(folded[0]).toMatchObject({ phase: 'agent', calls: 3, carryCostTokens: 90 })
+  })
+
+  it('merges a phase across different agent kinds and sorts costliest first', () => {
+    const folded = foldRunPhaseMetrics([
+      step('coder', [
+        phase({ phase: 'agent', calls: 2, carryCostTokens: 10 }),
+        phase({ phase: 'validation-repair', calls: 1, carryCostTokens: 500 }),
+      ]),
+      step('reviewer', [phase({ phase: 'agent', calls: 4, carryCostTokens: 40 })]),
+    ])
+    expect(folded.map((p) => [p.phase, p.calls, p.carryCostTokens])).toEqual([
+      ['validation-repair', 1, 500],
+      ['agent', 6, 50],
+    ])
+  })
+
+  it("keeps the unattributed '' phase rather than hiding it", () => {
+    const folded = foldRunPhaseMetrics([step('coder', [phase({ phase: '', calls: 7 })])])
+    expect(folded.map((p) => p.phase)).toEqual([''])
+  })
+
+  it('is empty when no step carries a rollup, so the section simply does not render', () => {
+    expect(foldRunPhaseMetrics([{ agentKind: 'coder' } as unknown as PipelineStep])).toEqual([])
   })
 })
