@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "Edita las conclusiones del agente; tus cambios se guardan cuando apruebas…",
       "noProseOutput": "Este agente no produjo salida en prosa.",
       "approveWithCorrections": "Aprobar con correcciones",
+      "renderedOutputNote": "Esta salida es una representación de lo que produjo el paso, por lo que no se puede editar aquí. Solicita cambios para que se revise.",
       "reviewAndApprove": "Revisar y aprobar",
       "editHint": "Edita las conclusiones a la izquierda; tus cambios se guardan cuando apruebas.",
       "reviewHint": "Haz clic en cualquier bloque de la salida para comentarlo, o deja comentarios generales abajo.",
@@ -5292,6 +5293,7 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "reviewPlan": "Revisar el plan",
       "planningInProgress": "Planificacion en curso",
       "pause": "Pausar",
       "resume": "Reanudar",

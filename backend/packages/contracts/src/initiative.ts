@@ -636,6 +636,120 @@ export function parseInitiativePlanDraft(value: unknown): InitiativePlanDraft {
   return v.parse(initiativePlanDraftSchema, value)
 }
 
+/** Non-throwing variant: returns the parsed draft or `undefined` when invalid. */
+export function safeParseInitiativePlanDraft(value: unknown): InitiativePlanDraft | undefined {
+  const result = v.safeParse(initiativePlanDraftSchema, value)
+  return result.success ? result.output : undefined
+}
+
+/** One estimate axis rendered as a percentage, so the three read comparably. */
+function estimatePct(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+/** The axes a pipeline rule matches on, as prose ('never' when it declares none). */
+function renderRuleAxes(rule: InitiativePipelineRule): string {
+  const axes = [
+    rule.minComplexity !== undefined ? `complexity ≥ ${estimatePct(rule.minComplexity)}` : null,
+    rule.minRisk !== undefined ? `risk ≥ ${estimatePct(rule.minRisk)}` : null,
+    rule.minImpact !== undefined ? `impact ≥ ${estimatePct(rule.minImpact)}` : null,
+  ].filter((axis): axis is string => axis !== null)
+  return axes.length ? axes.join(' or ') : 'never matches (no thresholds declared)'
+}
+
+/**
+ * Render an {@link InitiativePlanDraft} as readable markdown for HUMAN review — the
+ * planning counterpart of {@link renderSpecForReview} / {@link renderBlueprintForReview},
+ * and the document the `initiative-planner`'s human gate parks on.
+ *
+ * The planner is a container agent that emits the plan as JSON; its own `result.output` is
+ * the raw Pi transcript summary ("Initiative plan drafted."). Parking the gate on THAT gave
+ * the reviewer a one-line proposal: nothing to navigate, nothing to quote a comment against,
+ * and a "request changes" re-run that handed the planner back a sentence instead of the plan
+ * it had just written. Rendering the plan itself is what makes the generic review surface
+ * (ToC + per-block comments + approve / request changes / reject) work for it, exactly as it
+ * already does for the architect's prose.
+ *
+ * HEADINGS ARE LOAD-BEARING, not decoration: the reader's outline parser splits the document
+ * at each heading into the collapsible sections its table of contents navigates, so every
+ * part a reviewer might jump to (each phase, each item, the policy) gets its own heading
+ * rather than being folded into a table. Deterministic and dependency-free.
+ */
+export function renderInitiativePlanForReview(plan: InitiativePlanDraft): string {
+  const lines: string[] = ['# Initiative plan']
+  if (plan.goal) lines.push('', '## Goal', '', plan.goal)
+  if (plan.constraints?.length) {
+    lines.push('', '## Constraints', '', ...plan.constraints.map((c) => `- ${c}`))
+  }
+  if (plan.nonGoals?.length) {
+    lines.push('', '## Non-goals', '', ...plan.nonGoals.map((g) => `- ${g}`))
+  }
+  if (plan.analysisSummary) lines.push('', '## Codebase analysis', '', plan.analysisSummary)
+
+  const items = plan.items ?? []
+  plan.phases.forEach((phase, index) => {
+    lines.push('', `## Phase ${index + 1}: ${phase.title}`)
+    if (phase.goal) lines.push('', phase.goal)
+    if (phase.checkpoint) {
+      lines.push(
+        '',
+        '> Checkpoint — the initiative pauses for human review once this phase settles.',
+      )
+    }
+    if (phase.maxConcurrent !== undefined) {
+      lines.push('', `Concurrency for this phase: ${phase.maxConcurrent}.`)
+    }
+    // Items are matched by `phaseId`; the ingest assigns ids the draft omitted, so a draft
+    // item's id may be absent here and the heading falls back to the title alone.
+    const phaseItems = items.filter((item) => item.phaseId === phase.id)
+    if (phaseItems.length === 0) {
+      lines.push('', '_No items in this phase._')
+      return
+    }
+    for (const item of phaseItems) {
+      lines.push('', `### ${item.title}${item.id ? ` (${item.id})` : ''}`)
+      if (item.description) lines.push('', item.description)
+      const estimate = item.estimate
+      if (estimate) {
+        lines.push(
+          '',
+          `- Complexity: ${estimatePct(estimate.complexity)}`,
+          `- Risk: ${estimatePct(estimate.risk)}`,
+          `- Impact: ${estimatePct(estimate.impact)}`,
+        )
+        if (estimate.rationale) lines.push(`- Rationale: ${estimate.rationale}`)
+      }
+      if (item.dependsOn?.length) {
+        lines.push('', `Depends on: ${item.dependsOn.map((id) => `\`${id}\``).join(', ')}`)
+      }
+      if (item.pipelineId) lines.push('', `Pipeline: \`${item.pipelineId}\``)
+    }
+  })
+
+  const policy = plan.policy
+  lines.push(
+    '',
+    '## Execution policy',
+    '',
+    `- Up to ${policy.maxConcurrent} item${policy.maxConcurrent === 1 ? '' : 's'} run at once.`,
+    `- Default pipeline: \`${policy.defaultPipelineId}\`.`,
+  )
+  for (const rule of policy.rules ?? []) {
+    lines.push(`- \`${rule.pipelineId}\` when ${renderRuleAxes(rule)}.`)
+  }
+
+  if (plan.decisions?.length) {
+    lines.push('', '## Decisions', '')
+    for (const decision of plan.decisions) {
+      lines.push(`- **${decision.title}**${decision.detail ? ` — ${decision.detail}` : ''}`)
+    }
+  }
+  if (plan.caveats?.length) {
+    lines.push('', '## Caveats', '', ...plan.caveats.map((c) => `- ${c}`))
+  }
+  return lines.join('\n')
+}
+
 /** Item statuses that count as settled (nothing left for the loop to drive). */
 export const INITIATIVE_ITEM_TERMINAL_STATUSES: ReadonlySet<InitiativeItemStatus> = new Set([
   'done',

@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",
       "approveWithCorrections": "Düzeltmelerle onayla",
+      "renderedOutputNote": "Bu çıktı, adımın ürettiği yapıtın bir gösterimidir; burada düzenlenemez. Gözden geçirilmesi için değişiklik isteyin.",
       "reviewAndApprove": "İncele ve onayla",
       "editHint": "Soldaki sonuçları düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir.",
       "reviewHint": "Yorum yapmak için çıktıdaki herhangi bir bloğa tıklayın ya da aşağıya genel geri bildirim bırakın.",
@@ -5304,6 +5305,7 @@
     "inspector": {
       "runPlanning": "Planlamayi calistir",
       "answerPlanning": "Planlama sorularini yanitla",
+      "reviewPlan": "Planı incele",
       "planningInProgress": "Planlama suruyor",
       "pause": "Duraklat",
       "resume": "Devam et",

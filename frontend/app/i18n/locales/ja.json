@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "エージェントの結論を編集してください。編集内容は承認時に保存されます…",
       "noProseOutput": "このエージェントは文章出力を生成しませんでした。",
       "approveWithCorrections": "修正して承認",
+      "renderedOutputNote": "この出力はステップが生成した成果物を描画したものであり、ここでは編集できません。修正を依頼してください。",
       "reviewAndApprove": "レビューして承認",
       "editHint": "左側で結論を編集してください。編集内容は承認時に保存されます。",
       "reviewHint": "出力内の任意のブロックをクリックしてコメントするか、下に全体のフィードバックを残してください。",
@@ -5304,6 +5305,7 @@
     "inspector": {
       "runPlanning": "計画を実行",
       "answerPlanning": "計画の質問に回答",
+      "reviewPlan": "計画をレビュー",
       "planningInProgress": "計画を実行中",
       "pause": "一時停止",
       "resume": "再開",

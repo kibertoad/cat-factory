@@ -329,10 +329,11 @@ export interface ParkedApproval {
  * Find a block's currently-PARKED human-approval gate for the given step `agentKind`, or null.
  * A `gate: true` pipeline step parks its run `blocked` with the step `waiting_decision` and a
  * `pending` approval — the same generic gate `approval-gate.spec` drives through the UI. The
- * initiative planner gate rides this exact mechanism, but no SPA surface exposes it for an
- * initiative-level block, so its e2e approves it over REST (a trigger). Reads the run off the
- * workspace snapshot (there is no per-block executions endpoint) and returns the parked run +
- * approval ids to approve.
+ * initiative planner gate rides this exact mechanism, and `initiative-plan-review.spec` is what
+ * drives it through the SPA; the specs below use this to approve it over REST when the gate is
+ * merely SETUP for what they are really asserting (a phase checkpoint, a preset's plan shape).
+ * Reads the run off the workspace snapshot (there is no per-block executions endpoint) and
+ * returns the parked run + approval ids to approve.
  */
 export async function findParkedApproval(
   request: APIRequestContext,

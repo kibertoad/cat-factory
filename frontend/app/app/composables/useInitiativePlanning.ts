@@ -5,6 +5,7 @@ import { useInitiativesStore } from '~/stores/initiative'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { interviewGatePhase } from '~/utils/interviewGate'
+import { parkedPlanReviewStepIndex } from '~/utils/initiative'
 
 /**
  * Shared planning affordances for an `initiative`-level block, used by BOTH the board card
@@ -66,6 +67,37 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
   const interviewing = computed(() => interviewPhase.value === 'working')
 
   /**
+   * The planning run parked on the PLANNER's human approval gate (`gate: true` on
+   * `initiative-planner` in every planning pipeline) — the second thing a planning run asks a
+   * human for, after the interview. Resolved as the run's parked planner step so both surfaces
+   * can offer the review from the board, exactly as {@link awaitingAnswers} offers the interview.
+   *
+   * Without it the gate's only in-SPA route was the global notifications inbox, whose card is
+   * dismissible and block-agnostic — so an initiative whose plan was waiting looked, on the board
+   * and in its own inspector, exactly like one still thinking. Keyed on the planner kind rather
+   * than "any pending approval" because the interviewer parks on `step.approval` too and is
+   * already served by `awaitingAnswers`; routing it here would open the generic reader over an
+   * interview the backend refuses to resolve that way.
+   */
+  const planReview = computed(() => {
+    const instance = execution.getByBlock(toValue(blockId))
+    if (!instance) return null
+    const stepIndex = parkedPlanReviewStepIndex(instance.steps)
+    return stepIndex === null ? null : { instanceId: instance.id, stepIndex }
+  })
+
+  /** Whether the drafted plan is waiting on the human's approve / request-changes / reject. */
+  const awaitingPlanReview = computed(() => planReview.value !== null)
+
+  /** Open the parked planner step's review surface (selecting the block so the inspector follows). */
+  function reviewPlan() {
+    const parked = planReview.value
+    if (!parked) return
+    ui.select(toValue(blockId))
+    ui.openStepDetail(parked.instanceId, parked.stepIndex)
+  }
+
+  /**
    * Optimistic start flag: flip true the instant "Run planning" is clicked, before the stream
    * pushes the block's `executionId` back. Cleared the moment `running` takes over (success) or the
    * start is refused/cancelled — never left dangling, which would otherwise strand the button
@@ -105,9 +137,11 @@ export function useInitiativePlanning(blockId: MaybeRefOrGetter<string>) {
     interviewPhase,
     awaitingAnswers,
     interviewing,
+    awaitingPlanReview,
     starting,
     runPlanning,
     openPlanning,
     openTracker,
+    reviewPlan,
   }
 }

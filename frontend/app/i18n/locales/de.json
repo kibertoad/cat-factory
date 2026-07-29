@@ -1620,6 +1620,7 @@
       "editConclusionsPlaceholder": "Bearbeite die Schlussfolgerungen des Agents; deine Änderungen werden bei der Freigabe gespeichert…",
       "noProseOutput": "Dieser Agent hat keine Prosa-Ausgabe erzeugt.",
       "approveWithCorrections": "Mit Korrekturen freigeben",
+      "renderedOutputNote": "Diese Ausgabe ist eine Darstellung dessen, was der Schritt erzeugt hat, und kann hier nicht bearbeitet werden. Fordere Änderungen an, um sie überarbeiten zu lassen.",
       "reviewAndApprove": "Prüfen & freigeben",
       "editHint": "Bearbeite die Schlussfolgerungen links; deine Änderungen werden bei der Freigabe gespeichert.",
       "reviewHint": "Klicke auf einen beliebigen Block in der Ausgabe, um ihn zu kommentieren, oder hinterlasse unten allgemeines Feedback.",
@@ -4282,6 +4283,7 @@
     "inspector": {
       "runPlanning": "Planung ausführen",
       "answerPlanning": "Planungsfragen beantworten",
+      "reviewPlan": "Plan prüfen",
       "planningInProgress": "Planung läuft",
       "pause": "Pausieren",
       "resume": "Fortsetzen",

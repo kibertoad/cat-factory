@@ -42,6 +42,26 @@ Key shape decisions:
   run) and the Focus view. Only the way a run is STARTED differs — an initiative block accepts
   exactly one pipeline, so it keeps a single "Run planning" control instead of the pipeline picker,
   on all three surfaces (board card, inspector, Focus).
+- **The plan gate is an ORDINARY approval gate too, reviewed on the plan itself.** The planner
+  step is `gate: true`, so it parks on the generic `step.approval` every gated agent step uses —
+  but the planner emits its plan as JSON and returns a transcript summary as its output, and it
+  declared the read-only tracker window as its result view. Between them the gate parked on a
+  one-line proposal and opened on a surface with no approve / request-changes / reject rail, so
+  it was resolvable only over REST. Both halves are fixed generically rather than with an
+  initiative-specific window: the plan joins the spec doc and the blueprint tree on the
+  `reviewableArtifactOutput` seam (so the gate parks on a markdown RENDERING of the ingested
+  plan, which is also what a "request changes" re-run quotes back to the planner), and the
+  planner declares NO result view so it opens the generic reader — outline navigation,
+  per-block comments, feedback, approve / request changes / reject. The tracker stays the
+  analyst's and committer's view and keeps its board-card and inspector entry points; it is the
+  wrong surface at the gate anyway, since at planning time every item is `pending` with no PR and
+  its curation controls require `executing`.
+- **A rendered proposal is NOT editable, and the engine says so.** "Approve with corrections"
+  rewrites `step.output`, which is right when the output is the agent's own prose and silently
+  useless when it is a rendering of state already ingested — the committed artifact would stay
+  the ingested one. Steps in that position carry `outputIsRendered`; `approveStep` refuses an
+  edited proposal (422 `proposal_not_editable`) and the SPA hides the affordance. Requesting
+  changes is the route for a correction.
 - **A re-run re-interviews: the interviewer gate implements the spine's `resetForFreshRun`.** The
   entity outlives any one run, so on a fresh entry it drops the previous run's round bookkeeping and
   still-pending questions, keeping the answered + dismissed digest (which is also where a preset

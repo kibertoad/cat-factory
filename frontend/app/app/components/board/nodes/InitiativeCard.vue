@@ -2,9 +2,11 @@
 // The board card for an `initiative`-level block (a frame child, like a module):
 // title, the initiative's lifecycle status, and — once a plan is ingested — the
 // item-completion progress. Mirrors a task card's on-card "Start" affordance: the
-// initiative's equivalent "Run planning" (and, while parked mid-interview, "Answer
-// planning questions") lives right here on the board — the same actions the
-// inspector offers — so starting an initiative isn't hidden behind selecting it.
+// initiative's equivalent "Run planning" lives right here on the board — the same
+// actions the inspector offers — so starting an initiative isn't hidden behind
+// selecting it. It also carries BOTH things a planning run parks on: "Answer planning
+// questions" mid-interview, and "Review plan" once the planner's approval gate is
+// raised (which had no board affordance at all and was resolvable only over REST).
 // The tracker button opens the dedicated window directly. Draggable within its
 // frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
@@ -33,18 +35,23 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
 
 const selected = computed(() => ui.selectedBlockId === props.blockId)
 
-// The "Run planning" / "Answer planning questions" affordances, shared with the inspector so the
-// board card and inspector can't drift (see {@link useInitiativePlanning}).
+// The "Run planning" / "Answer planning questions" / "Review plan" affordances, shared with the
+// inspector so the board card and inspector can't drift (see {@link useInitiativePlanning}).
 const {
   planningPipeline,
   running,
   awaitingAnswers,
   interviewing,
+  awaitingPlanReview,
   starting,
   runPlanning,
   openPlanning,
   openTracker,
+  reviewPlan,
 } = useInitiativePlanning(() => props.blockId)
+
+/** Either of the two things a planning run parks on, so the card pulses for both. */
+const awaitingHuman = computed(() => awaitingAnswers.value || awaitingPlanReview.value)
 
 function select() {
   ui.select(props.blockId)
@@ -79,7 +86,7 @@ function onHandle(e: PointerEvent) {
       data-testid="initiative-card"
       :data-status="status"
       class="cursor-pointer rounded-b-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
-      :class="[selected ? 'ring-2 ring-indigo-400/60' : '', awaitingAnswers ? 'board-pulse' : '']"
+      :class="[selected ? 'ring-2 ring-indigo-400/60' : '', awaitingHuman ? 'board-pulse' : '']"
       @click.stop="select"
     >
       <div class="flex items-start justify-between gap-2">
@@ -106,8 +113,23 @@ function onHandle(e: PointerEvent) {
         </div>
       </div>
       <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+        <!-- The planner's gate: the run is parked on the human's approve / request-changes /
+             reject over the drafted plan. Listed FIRST because it is the later of the two parks
+             (the interview has converged by the time it is raised), so on the impossible day
+             both read true the card points at the one the run is actually waiting on. -->
         <UButton
-          v-if="awaitingAnswers"
+          v-if="awaitingPlanReview"
+          data-testid="initiative-card-review-plan"
+          size="xs"
+          variant="solid"
+          color="primary"
+          icon="i-lucide-clipboard-check"
+          @click.stop="reviewPlan"
+        >
+          {{ t('initiative.inspector.reviewPlan') }}
+        </UButton>
+        <UButton
+          v-else-if="awaitingAnswers"
           data-testid="initiative-card-answer-planning"
           size="xs"
           variant="solid"

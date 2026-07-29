@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
       "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",
       "approveWithCorrections": "אשר עם תיקונים",
+      "renderedOutputNote": "פלט זה הוא ייצוג של מה שהשלב יצר, ולכן לא ניתן לערוך אותו כאן. בקשו שינויים כדי שיעודכן.",
       "reviewAndApprove": "סקור ואשר",
       "editHint": "ערוך את המסקנות בצד שמאל; העריכות שלך נשמרות כשתאשר.",
       "reviewHint": "לחץ על כל בלוק בפלט כדי להגיב עליו, או השאר משוב כללי למטה.",
@@ -5303,6 +5304,7 @@
     "inspector": {
       "runPlanning": "הרצת תכנון",
       "answerPlanning": "מענה על שאלות התכנון",
+      "reviewPlan": "בדיקת התוכנית",
       "planningInProgress": "התכנון מתבצע",
       "pause": "השהה",
       "resume": "המשך",

@@ -1531,6 +1531,14 @@ export class RunDispatcher {
     // future, which is why this is keyed off the artifact, not a specific agentKind.
     const reviewable = reviewableArtifactOutput(result)
     if (reviewable !== undefined) step.output = reviewable
+    // Record WHICH of the two the step's output now is, because the approval gate below reads
+    // `step.output` as an editable proposal and a rendering is not editable — the artifact it
+    // renders was already ingested, so a correction typed over the render reaches nothing.
+    // Assigned on BOTH branches (not only when a render happened): a re-run that produced no
+    // artifact this time must clear a flag the previous attempt set. The negative branch is
+    // `undefined` rather than `false` so `JSON.stringify` omits the key — every ordinary step
+    // takes it, and the run detail blob carries one per step.
+    step.outputIsRendered = reviewable !== undefined ? true : undefined
 
     // Follow-up companion gate: the future-looking Coder surfaced forward-looking items.
     // Hold the pipeline until every item is decided (an undecided follow-up or an unanswered

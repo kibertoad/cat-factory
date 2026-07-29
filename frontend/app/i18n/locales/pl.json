@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
       "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",
       "approveWithCorrections": "Zatwierdź z poprawkami",
+      "renderedOutputNote": "Ten wynik jest przedstawieniem tego, co wytworzył ten krok, więc nie można go tutaj edytować. Poproś o zmiany, aby został poprawiony.",
       "reviewAndApprove": "Recenzuj i zatwierdź",
       "editHint": "Edytuj wnioski po lewej; Twoje zmiany zostaną zapisane po zatwierdzeniu.",
       "reviewHint": "Kliknij dowolny blok w wyniku, aby go skomentować, lub zostaw ogólną opinię poniżej.",
@@ -5292,6 +5293,7 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
+      "reviewPlan": "Przejrzyj plan",
       "planningInProgress": "Planowanie w toku",
       "pause": "Wstrzymaj",
       "resume": "Wznow",

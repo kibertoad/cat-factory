@@ -166,3 +166,26 @@ export function pendingCheckpointPhase(
   }
   return null
 }
+
+/**
+ * The index of the planning run's step parked on the PLANNER's human approval gate, or null.
+ *
+ * The planner step is `gate: true` in every planning pipeline, so it parks on the generic
+ * `step.approval` — the second and last thing a planning run asks a human for, after the
+ * interview. Both surfaces that offer the review (the board card and the inspector) resolve it
+ * through here so neither can drift on which step the gate is, and so the rule is unit-testable
+ * without standing up five stores.
+ *
+ * Keyed on the planner kind rather than "any pending approval" on purpose: the INTERVIEWER parks
+ * on `step.approval` too, and the backend refuses to resolve that one through the generic approve
+ * resolver (it belongs to the interview window). Matching it here would offer a review that
+ * cannot be given.
+ */
+export function parkedPlanReviewStepIndex(
+  steps: { agentKind: string; approval?: { status: string } | null }[] | undefined,
+): number | null {
+  const index = (steps ?? []).findIndex(
+    (s) => s.agentKind === 'initiative-planner' && s.approval?.status === 'pending',
+  )
+  return index >= 0 ? index : null
+}

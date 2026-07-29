@@ -1620,6 +1620,7 @@
       "editConclusionsPlaceholder": "Modifica le conclusioni dell'agente; le tue modifiche vengono salvate quando approvi…",
       "noProseOutput": "Questo agente non ha prodotto alcun output testuale.",
       "approveWithCorrections": "Approva con correzioni",
+      "renderedOutputNote": "Questo output è una rappresentazione di ciò che il passaggio ha prodotto, quindi non può essere modificato qui. Richiedi modifiche per farlo rivedere.",
       "reviewAndApprove": "Revisiona e approva",
       "editHint": "Modifica le conclusioni a sinistra; le tue modifiche vengono salvate quando approvi.",
       "reviewHint": "Fai clic su un blocco qualsiasi nell'output per commentarlo, oppure lascia un feedback complessivo qui sotto.",
@@ -4282,6 +4283,7 @@
     "inspector": {
       "runPlanning": "Esegui pianificazione",
       "answerPlanning": "Rispondi alle domande di pianificazione",
+      "reviewPlan": "Rivedi il piano",
       "planningInProgress": "Pianificazione in corso",
       "pause": "Pausa",
       "resume": "Riprendi",

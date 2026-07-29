@@ -1,7 +1,9 @@
 import {
   renderBlueprintForReview,
+  renderInitiativePlanForReview,
   renderSpecForReview,
   safeParseBlueprintService,
+  safeParseInitiativePlanDraft,
   safeParseSpecDoc,
 } from '@cat-factory/contracts'
 import type { AgentRunResult } from '@cat-factory/kernel'
@@ -36,6 +38,18 @@ export function reviewableArtifactOutput(result: AgentRunResult): string | undef
   if (result.blueprintService !== undefined) {
     const service = safeParseBlueprintService(result.blueprintService)
     return service ? renderBlueprintForReview(service) : undefined
+  }
+  // The initiative plan. Unlike the two above it is reviewed by a HUMAN rather than a
+  // companion — `pl_initiative` gates the planner step — but the failure mode is identical:
+  // the planner emits JSON and returns "Initiative plan drafted." as its output, so the gate
+  // parked on a one-line proposal with nothing to navigate, nothing to anchor a comment
+  // against, and a "request changes" re-run that quoted that sentence back to the planner
+  // instead of the plan it had written. The ingest into the `initiatives` entity has already
+  // run by the time this is called (the post-completion resolver), so this render is purely
+  // the reviewable view of what was ingested.
+  if (result.initiativePlan !== undefined) {
+    const plan = safeParseInitiativePlanDraft(result.initiativePlan)
+    return plan ? renderInitiativePlanForReview(plan) : undefined
   }
   // `testReport` / `mergeAssessment` carry their own dedicated structured surfaces
   // (the tester result view; the merger is the final step) and no prose companion

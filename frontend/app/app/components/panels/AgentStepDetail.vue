@@ -148,6 +148,14 @@ const {
 
 const approvalPending = computed(() => step.value?.approval?.status === 'pending')
 const approvalId = computed(() => step.value?.approval?.id ?? null)
+// Whether "approve with corrections" applies. A step whose output is a deterministic
+// RENDERING of an artifact it already produced (the initiative plan, the spec doc, the
+// blueprint tree — `step.outputIsRendered`, set by the engine's `reviewableArtifactOutput`
+// seam) has no editable proposal: the artifact was ingested into domain state before the gate
+// was raised, so an edit typed over the rendering would never reach it. The backend refuses
+// such an edit; hiding the affordance is what stops a reviewer typing corrections into a
+// dead end. Their route is "request changes", which re-runs the producer with the correction.
+const proposalEditable = computed(() => step.value?.outputIsRendered !== true)
 // A companion step parked at its automatic-rework cap: instead of the generic
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
@@ -261,6 +269,7 @@ async function copyOutput() {
         <!-- ToC sidebar (only meaningful when there are prose headings) -->
         <aside
           v-if="outline.hasToc"
+          data-testid="step-detail-toc"
           class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
         >
           <div class="border-b border-slate-800 px-4 py-3">
@@ -646,6 +655,7 @@ async function copyOutput() {
               <!-- composer for the block the human just clicked -->
               <div
                 v-if="draftTarget"
+                data-testid="step-review-composer"
                 class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
               >
                 <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
@@ -656,6 +666,7 @@ async function copyOutput() {
                   >{{ draftTarget.quotedSource }}</pre>
                 <UTextarea
                   v-model="draftBody"
+                  data-testid="step-review-comment-body"
                   :rows="3"
                   autoresize
                   size="sm"
@@ -669,6 +680,7 @@ async function copyOutput() {
                   <UButton
                     color="primary"
                     size="xs"
+                    data-testid="step-review-comment-add"
                     :disabled="!draftBody.trim()"
                     @click="addDraftComment"
                   >
@@ -681,6 +693,7 @@ async function copyOutput() {
               <div
                 v-for="(c, idx) in reviewComments"
                 :key="idx"
+                data-testid="step-review-comment"
                 class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
               >
                 <div class="mb-1 flex items-start justify-between gap-2">
@@ -709,6 +722,7 @@ async function copyOutput() {
                 </label>
                 <UTextarea
                   v-model="feedback"
+                  data-testid="step-review-feedback"
                   :rows="3"
                   autoresize
                   size="sm"
@@ -763,6 +777,7 @@ async function copyOutput() {
               {{ t('panels.stepDetail.approveAndProceed') }}
             </UButton>
             <UButton
+              v-if="proposalEditable"
               color="primary"
               variant="soft"
               size="sm"
@@ -773,6 +788,9 @@ async function copyOutput() {
             >
               {{ t('panels.stepDetail.approveWithCorrections') }}
             </UButton>
+            <p v-else class="text-[10px] text-slate-500" data-testid="step-rendered-output-note">
+              {{ t('panels.stepDetail.renderedOutputNote') }}
+            </p>
 
             <!-- destructive: a two-step inline confirm instead of a native dialog -->
             <div
@@ -812,6 +830,7 @@ async function copyOutput() {
                 size="sm"
                 icon="i-lucide-rotate-ccw"
                 class="flex-1"
+                data-testid="step-request-changes"
                 :disabled="!canRequestChanges"
                 :loading="submitting"
                 @click="requestChanges"

@@ -1742,8 +1742,22 @@ export class ExecutionService {
       }
 
       // A human edit to the proposal replaces the agent's text, so the revised
-      // proposal is what downstream steps read (via priorOutputs).
+      // proposal is what downstream steps read (via priorOutputs). That only holds when the
+      // output IS the agent's work product: a step whose output is a RENDERING of an
+      // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan —
+      // see `reviewableArtifactOutput`) would take the edit into `step.output` while the
+      // committed artifact stayed the ingested one, so the correction silently reaches
+      // nothing. Refuse rather than accept-and-drop; the reviewer's route is "request
+      // changes", which re-runs the producer with the correction as feedback.
       if (opts.proposal !== undefined) {
+        if (step.outputIsRendered) {
+          throw new ValidationError(
+            "This step's output is a rendering of the artifact it already produced, so edits " +
+              'to it cannot change that artifact. Request changes instead — the step re-runs ' +
+              'with your feedback.',
+            { reason: 'proposal_not_editable' },
+          )
+        }
         step.output = opts.proposal
         step.approval.proposal = opts.proposal
       }

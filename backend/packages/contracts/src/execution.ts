@@ -901,6 +901,21 @@ export const pipelineStepSchema = v.object({
   /** Text the agent produced for this step (when LLM execution is enabled). */
   output: v.optional(v.string()),
   /**
+   * Whether {@link output} is a DETERMINISTIC RENDERING of a structured artifact the step
+   * produced (the spec doc, the blueprint tree, the initiative plan) rather than the agent's
+   * own prose — see `reviewableArtifactOutput`. The artifact itself was already ingested into
+   * domain state (the spec files, the board frame, the `initiatives` entity), so the rendering
+   * is a VIEW of that state, not its source.
+   *
+   * That makes the difference load-bearing at the approval gate: "approve with corrections"
+   * overwrites `output` and flows it to downstream steps, which is exactly right for prose but
+   * silently discards an edit here — the committed artifact is the ingested one, so the human's
+   * corrections would never reach it. Both the SPA (hides the edit affordance) and
+   * `approveStep` (refuses an edited proposal) read this. Absent/false ⇒ the output IS the
+   * agent's own work product and stays editable.
+   */
+  outputIsRendered: v.optional(v.boolean()),
+  /**
    * The structured JSON a registered CUSTOM kind's agent step returned (the generic
    * manifest-driven `agent` dispatch's `custom` channel). Recorded so the SPA can render
    * it in the `generic-structured` result view (and a post-op already consumed it

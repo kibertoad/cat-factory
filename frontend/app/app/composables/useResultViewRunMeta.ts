@@ -72,8 +72,8 @@ export function useResultViewRunMeta(
  * Precedence, most to least specific:
  *
  * 1. the last step that has actually RUN A MODEL. A window's kind set can span both model-running
- *    steps and bookkeeping ones — the initiative tracker is registered for the analyst and the
- *    planner but also for `initiative-committer`, which runs no model — and anchoring on the last
+ *    steps and bookkeeping ones — the initiative tracker is registered for the analyst but also for
+ *    `initiative-committer`, which runs no model — and anchoring on the last
  *    STARTED step alone would hand a human who opened the window for its telemetry the one step
  *    guaranteed to have none.
  * 2. the last started step, so a run mid-flight (or one whose telemetry sink isn't wired) still

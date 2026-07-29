@@ -1,7 +1,12 @@
 import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import { describe, it, expect } from 'vitest'
 import type { InitiativeItem, InitiativePhase, InitiativeQa } from '~/types/domain'
-import { isPendingQuestion, orderInterviewQuestions, pendingCheckpointPhase } from './initiative'
+import {
+  isPendingQuestion,
+  orderInterviewQuestions,
+  parkedPlanReviewStepIndex,
+  pendingCheckpointPhase,
+} from './initiative'
 
 // `pendingCheckpointPhase` mirrors the backend `pendingCheckpoint` (orchestration
 // `initiative.logic.ts`); these pin the same ordering/edge cases the loop pauses on, so the
@@ -148,5 +153,43 @@ describe('orderInterviewQuestions', () => {
 
   it('handles an empty interview', () => {
     expect(orderInterviewQuestions([])).toEqual([])
+  })
+})
+
+describe('parkedPlanReviewStepIndex', () => {
+  const step = (agentKind: string, approvalStatus?: string) => ({
+    agentKind,
+    ...(approvalStatus ? { approval: { status: approvalStatus } } : {}),
+  })
+
+  it('is null when no run has been started', () => {
+    expect(parkedPlanReviewStepIndex(undefined)).toBeNull()
+  })
+
+  it('is null while the planner is still working', () => {
+    const steps = [step('initiative-analyst'), step('initiative-planner')]
+    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
+  })
+
+  it('finds the planner step parked on its approval gate', () => {
+    const steps = [
+      step('initiative-interviewer'),
+      step('initiative-analyst'),
+      step('initiative-planner', 'pending'),
+      step('initiative-committer'),
+    ]
+    expect(parkedPlanReviewStepIndex(steps)).toBe(2)
+  })
+
+  it('ignores the INTERVIEWER, which parks on `approval` but owns its own window', () => {
+    // The generic approve resolver refuses an interview gate server-side, so offering the plan
+    // review here would open a review that cannot be given.
+    const steps = [step('initiative-interviewer', 'pending'), step('initiative-planner')]
+    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
+  })
+
+  it('ignores a settled planner gate', () => {
+    const steps = [step('initiative-planner', 'approved'), step('initiative-committer')]
+    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
   })
 })

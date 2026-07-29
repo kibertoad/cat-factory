@@ -1342,6 +1342,7 @@
       "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
       "noProseOutput": "This agent produced no prose output.",
       "approveWithCorrections": "Approve with corrections",
+      "renderedOutputNote": "This output is a rendering of what the step produced, so it cannot be edited here. Request changes to have it revised.",
       "reviewAndApprove": "Review & approve",
       "editHint": "Edit the conclusions on the left; your edits are saved when you approve.",
       "reviewHint": "Click any block in the output to comment on it, or leave overall feedback below.",
@@ -5457,6 +5458,7 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "reviewPlan": "Review plan",
       "planningInProgress": "Planning in progress",
       "pause": "Pause",
       "resume": "Resume",

@@ -1279,6 +1279,7 @@
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
       "approveWithCorrections": "Approuver avec corrections",
+      "renderedOutputNote": "Cette sortie est un rendu de ce que l'étape a produit ; elle ne peut pas être modifiée ici. Demandez des modifications pour la faire réviser.",
       "reviewAndApprove": "Réviser et approuver",
       "editHint": "Modifiez les conclusions à gauche ; vos modifications sont enregistrées lorsque vous approuvez.",
       "reviewHint": "Cliquez sur n'importe quel bloc de la sortie pour le commenter, ou laissez un retour global ci-dessous.",
@@ -5292,6 +5293,7 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "reviewPlan": "Examiner le plan",
       "planningInProgress": "Planification en cours",
       "pause": "Mettre en pause",
       "resume": "Reprendre",
