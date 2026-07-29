@@ -474,6 +474,59 @@ describe('validateRegistrations', () => {
       validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
     ).not.toThrow()
   })
+
+  // A `retire()` call that names a still-live pipeline does NOTHING — `retiredPipelines` keeps a
+  // live pipeline over a tombstone for it, so a deployment cannot withdraw the curated built-ins.
+  // That is deliberate; being silent about it is not, and boot is the last point where the author
+  // can act. These pin that the check fires on the inert case and stays quiet on the two valid ones.
+  it('errors on a retirement that names a pipeline the live catalog still ships', () => {
+    const pipelines = defaultPipelineRegistry()
+    pipelines.retire('pl_full')
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+      pipelineRegistry: pipelines,
+    })
+    const problem = problems.find((p) => p.code === 'retirement_of_live_pipeline')
+    expect(problem?.severity).toBe('error')
+    expect(problem?.message).toContain('pl_full')
+    expect(() =>
+      validateRegistrations({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }),
+    ).toThrow()
+  })
+
+  it('accepts a retirement whose id nothing currently defines', () => {
+    // The INTENDED use: a tombstone for a pipeline an older version of the deployment's own package
+    // shipped. Its definition is long gone from their code — reaching the boards that still store
+    // the row is the entire point, so flagging this would refuse the feature's main case.
+    const pipelines = defaultPipelineRegistry()
+    pipelines.retire('pl_org_flow_v1', { replacedBy: 'pl_full' })
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }).some((p) => p.code === 'retirement_of_live_pipeline'),
+    ).toBe(false)
+  })
+
+  it('accepts retiring a pipeline the SAME registry had registered', () => {
+    // `retire` drops the registration, so the id is no longer live and the tombstone stands.
+    const pipelines = defaultPipelineRegistry()
+    pipelines.register({ id: 'pl_org_flow', name: 'Org flow', agentKinds: ['coder'] })
+    pipelines.retire('pl_org_flow')
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      }).some((p) => p.code === 'retirement_of_live_pipeline'),
+    ).toBe(false)
+  })
 })
 
 describe('step-resolver registry', () => {

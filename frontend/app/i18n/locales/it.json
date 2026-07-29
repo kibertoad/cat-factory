@@ -971,6 +971,47 @@
       "saved": "Ambiente di test predefinito salvato.",
       "savedState": "Salvato.",
       "saveFailed": "Impossibile salvare l'ambiente di test predefinito."
+    },
+    "consensusGroups": {
+      "title": "Gruppi di consenso",
+      "intro": "Panel di revisione riutilizzabili a cui un passo della pipeline può salire. Ogni gruppo porta la soglia di stima che un task deve superare, così il lavoro più pesante ottiene un panel più ampio senza una pipeline dedicata.",
+      "new": "Nuovo gruppo",
+      "list": {
+        "empty": "Nessun gruppo di consenso finora.",
+        "always": "Sempre",
+        "bar": "Da {bar}",
+        "editTitle": "Modifica gruppo",
+        "deleteTitle": "Elimina gruppo",
+        "participantCount": "nessun partecipante | un partecipante | {count} partecipanti"
+      },
+      "editor": {
+        "nameLabel": "Nome",
+        "namePlaceholder": "Panel di revisione approfondita",
+        "strategyLabel": "Strategia",
+        "descriptionLabel": "Descrizione",
+        "descriptionPlaceholder": "A cosa serve questo panel",
+        "participantsLabel": "Partecipanti",
+        "participantsHint": "Almeno due. È la diversità di ruolo e di modello a rendere un panel migliore di un singolo modello.",
+        "addParticipant": "Aggiungi partecipante",
+        "framingPlaceholder": "Prospettiva da cui argomenta questo partecipante",
+        "stepModel": "Modello del passo",
+        "synthesizerLabel": "Modello di sintesi",
+        "gatedLabel": "Solo per task sopra una soglia",
+        "gatedHint": "La stima che un task deve raggiungere per meritare questo panel. Lascia disattivato perché il gruppo si applichi sempre.",
+        "complexityThreshold": "Complessità",
+        "gatingIncomplete": "Imposta almeno una soglia oppure disattiva la condizione.",
+        "unnamedRole": "Revisore",
+        "cancel": "Annulla",
+        "save": "Salva gruppo"
+      },
+      "confirmDelete": {
+        "title": "Eliminare il gruppo di consenso?",
+        "body": "I passi che nominano «{name}» ricadranno sui gruppi rimanenti."
+      },
+      "toast": {
+        "saveFailed": "Impossibile salvare il gruppo di consenso",
+        "deleteFailed": "Impossibile eliminare il gruppo di consenso"
+      }
     }
   },
   "inspector": {
@@ -3618,7 +3659,11 @@
       "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
       "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo.",
       "promptEditTooltip": "Modifica il prompt di sistema di questo agente",
-      "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro"
+      "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro",
+      "consensusGroups": "Gruppi di consenso",
+      "consensusGroupsHint": "Scegli i panel riutilizzabili a cui questo passo può salire. Ognuno porta la propria soglia di stima; viene eseguito il più esigente che il task supera.",
+      "consensusGroupsActive": "Questo passo esegue il gruppo selezionato. Deseleziona tutti i gruppi per configurare qui i partecipanti.",
+      "consensusGroupAlways": "sempre"
     },
     "progress": {
       "status": {
@@ -3681,14 +3726,20 @@
       "add": "Aggiungi",
       "reseed": "Ripristina",
       "delete": "Elimina",
+      "remove": "Rimuovi",
       "updatesHeading": "Aggiornamenti disponibili",
       "updatesDescription": "E stata rilasciata una versione piu recente di queste pipeline integrate. Ripristinale per adottarla (le tue etichette e lo stato di archiviazione vengono mantenuti).",
+      "retiredHeading": "Pipeline ritirate",
+      "retiredDescription": "Queste pipeline integrate sono state ritirate dal catalogo, quindi non esiste una versione piu recente da adottare. Rimuovile dalla libreria di questa board.",
+      "retiredNote": "Ritirata dal catalogo.",
+      "retiredReplacedBy": "Ritirata dal catalogo. Usa {name} al suo posto.",
       "reseedAll": "Ripristina tutte ({count})",
       "dismiss": "Ignora",
       "done": "Fatto",
       "toast": {
         "reseedFailed": "Impossibile ripristinare la pipeline",
-        "deleteFailed": "Impossibile eliminare la pipeline"
+        "deleteFailed": "Impossibile eliminare la pipeline",
+        "removeFailed": "Impossibile rimuovere la pipeline"
       }
     }
   },
@@ -3726,6 +3777,17 @@
       "loadFailed": "Impossibile caricare il prompt",
       "conflict": "Qualcun altro ha modificato questo prompt. Ricaricato: riapplica la tua modifica."
     }
+  },
+  "agentTier": {
+    "label": "Livello agenti",
+    "basic": "Base",
+    "intermediate": "Intermedio",
+    "advanced": "Avanzato",
+    "basicHint": "Solo gli agenti di uso quotidiano con cui si costruisce una pipeline.",
+    "intermediateHint": "Aggiunge gli agenti che usi regolarmente.",
+    "advancedHint": "Mostra tutti gli agenti, compresi quelli specialistici.",
+    "tooltip": "Scegli quanta parte del catalogo agenti mostrare",
+    "hidden": "{count} agente nascosto a questo livello. | {count} agenti nascosti a questo livello."
   },
   "requirements": {
     "title": "Revisione dei requisiti",
@@ -4574,7 +4636,10 @@
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
         "env_test_no_vcs": "Provider Git non connesso",
         "env_test_connection_failed": "Connessione all'ambiente non riuscita",
-        "prompt_revision_conflict": "Prompt modificato da qualcun altro"
+        "prompt_revision_conflict": "Prompt modificato da qualcun altro",
+        "pipeline_schedule_attached": "Una pianificazione ricorrente usa questa pipeline",
+        "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
+        "pipeline_schedule_intake_unconfigured": "La pianificazione non ha raccolta ticket"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -4599,7 +4664,10 @@
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
         "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
         "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
-        "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra."
+        "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra.",
+        "pipeline_schedule_attached": "Una pianificazione ricorrente punta ancora a questa pipeline e ogni esecuzione che avvia la risolve tramite id. Scollega o elimina prima quella pianificazione, poi rimuovi la pipeline.",
+        "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",
+        "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -4864,7 +4932,8 @@
       "synthesizing": "Sintesi in corso",
       "done": "Fatto",
       "failed": "Non riuscito"
-    }
+    },
+    "groupTitle": "Il gruppo di consenso a cui è salita questa esecuzione"
   },
   "spec": {
     "title": "Requisiti",

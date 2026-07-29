@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
-import type { PipelinePurpose } from '@cat-factory/contracts'
+import type { PipelinePurpose, RetiredPipelineWire } from '@cat-factory/contracts'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { createDraftStepState, type PipelinesContext } from '~/stores/pipelines/context'
 import { createPipelineDraftActions } from '~/stores/pipelines/draftActions'
@@ -32,6 +32,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * a newer definition available (see `usePipelineHealth`).
    */
   const catalogVersions = ref<Record<string, number>>({})
+  /**
+   * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`), from the workspace
+   * snapshot. A stored pipeline whose id appears here is no longer relevant and can be REMOVED —
+   * the opposite of a reseed, and the only case where deleting a built-in is allowed (see
+   * `usePipelineHealth`). Disjoint from {@link catalogVersions} by construction.
+   */
+  const retiredPipelines = ref<RetiredPipelineWire[]>([])
 
   // The per-step, index-aligned draft arrays (kept in lockstep — see `createDraftStepState`).
   const {
@@ -60,10 +67,20 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /** The id of the pipeline being edited, or null when assembling a brand-new one. */
   const editingId = ref<string | null>(null)
 
-  /** Replace the cached pipelines (and the current built-in catalog versions) from a snapshot. */
-  function hydrate(next: Pipeline[], versions?: Record<string, number>) {
+  /**
+   * Replace the cached pipelines (and the current built-in catalog versions + retirements) from a
+   * snapshot. `retired` is applied even when EMPTY, unlike `versions`: an absent list means the
+   * facade shipped no retirements, and carrying the previous board's forward would offer a delete
+   * for a pipeline this deployment still ships.
+   */
+  function hydrate(
+    next: Pipeline[],
+    versions?: Record<string, number>,
+    retired?: RetiredPipelineWire[],
+  ) {
     pipelines.value = next
     if (versions) catalogVersions.value = versions
+    retiredPipelines.value = retired ?? []
   }
 
   function getPipeline(id: string) {
@@ -99,6 +116,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   return {
     pipelines,
     catalogVersions,
+    retiredPipelines,
     draft,
     draftGates,
     draftEnabled,

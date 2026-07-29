@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
         "env_test_no_vcs": "Dostawca Git nie jest połączony",
         "env_test_connection_failed": "Połączenie ze środowiskiem nie powiodło się",
-        "prompt_revision_conflict": "Prompt zmieniony przez kogoś innego"
+        "prompt_revision_conflict": "Prompt zmieniony przez kogoś innego",
+        "pipeline_schedule_attached": "Harmonogram cykliczny używa tego potoku",
+        "pipeline_schedule_requires_recurring": "Harmonogram cykliczny wymaga tego potoku",
+        "pipeline_schedule_intake_unconfigured": "Harmonogram nie ma pobierania zgłoszeń"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym.",
         "env_test_connection_failed": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
         "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
-        "prompt_revision_conflict": "Inna zmiana tego promptu trafiła pierwsza. Wczytaj go ponownie i nanieś swoją zmianę na wierzch."
+        "prompt_revision_conflict": "Inna zmiana tego promptu trafiła pierwsza. Wczytaj go ponownie i nanieś swoją zmianę na wierzch.",
+        "pipeline_schedule_attached": "Harmonogram cykliczny nadal wskazuje ten potok, a każde uruchomienie odnajduje go po identyfikatorze. Najpierw odłącz lub usuń ten harmonogram, a dopiero potem usuń potok.",
+        "pipeline_schedule_requires_recurring": "Harmonogram cykliczny nadal wskazuje ten potok, więc ograniczenie go do jednorazowego zepsułoby każde przyszłe uruchomienie. Najpierw odłącz ten harmonogram.",
+        "pipeline_schedule_intake_unconfigured": "Krok pobierania błędów czerpie pracę z ustawień pobierania zgłoszeń harmonogramu, a powiązany harmonogram ich nie ma. Najpierw skonfiguruj pobieranie zgłoszeń w harmonogramie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -3167,6 +3173,47 @@
       "saved": "Zapisano domyślne środowisko testowe.",
       "savedState": "Zapisano.",
       "saveFailed": "Nie udało się zapisać domyślnego środowiska testowego."
+    },
+    "consensusGroups": {
+      "title": "Grupy konsensusu",
+      "intro": "Wielokrotnego użytku panele przeglądu, do których może eskalować krok potoku. Każda grupa niesie próg oszacowania, który zadanie musi przekroczyć — cięższa praca dostaje większy panel bez osobnego potoku.",
+      "new": "Nowa grupa",
+      "list": {
+        "empty": "Brak grup konsensusu.",
+        "always": "Zawsze",
+        "bar": "Od {bar}",
+        "editTitle": "Edytuj grupę",
+        "deleteTitle": "Usuń grupę",
+        "participantCount": "brak uczestników | jeden uczestnik | {count} uczestników"
+      },
+      "editor": {
+        "nameLabel": "Nazwa",
+        "namePlaceholder": "Panel dogłębnego przeglądu",
+        "strategyLabel": "Strategia",
+        "descriptionLabel": "Opis",
+        "descriptionPlaceholder": "Do czego służy ten panel",
+        "participantsLabel": "Uczestnicy",
+        "participantsHint": "Co najmniej dwóch. To różnorodność ról i modeli sprawia, że panel bije pojedynczy model.",
+        "addParticipant": "Dodaj uczestnika",
+        "framingPlaceholder": "Perspektywa, z której argumentuje ten uczestnik",
+        "stepModel": "Model kroku",
+        "synthesizerLabel": "Model syntezy",
+        "gatedLabel": "Tylko dla zadań powyżej progu",
+        "gatedHint": "Oszacowanie, które zadanie musi osiągnąć, aby zasłużyć na ten panel. Zostaw wyłączone, aby grupa obowiązywała zawsze.",
+        "complexityThreshold": "Złożoność",
+        "gatingIncomplete": "Ustaw co najmniej jeden próg albo wyłącz warunek.",
+        "unnamedRole": "Recenzent",
+        "cancel": "Anuluj",
+        "save": "Zapisz grupę"
+      },
+      "confirmDelete": {
+        "title": "Usunąć grupę konsensusu?",
+        "body": "Kroki wskazujące „{name}” wrócą do pozostałych grup."
+      },
+      "toast": {
+        "saveFailed": "Nie udało się zapisać grupy konsensusu",
+        "deleteFailed": "Nie udało się usunąć grupy konsensusu"
+      }
     }
   },
   "providers": {
@@ -3934,7 +3981,11 @@
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
       "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
       "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
-      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego"
+      "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego",
+      "consensusGroups": "Grupy konsensusu",
+      "consensusGroupsHint": "Wybierz wielokrotnego użytku panele, do których ten krok może eskalować. Każdy ma własny próg oszacowania; uruchamia się najbardziej wymagający, który zadanie przekroczy.",
+      "consensusGroupsActive": "Ten krok uruchamia wybraną grupę. Odznacz wszystkie grupy, aby skonfigurować uczestników tutaj.",
+      "consensusGroupAlways": "zawsze"
     },
     "progress": {
       "status": {
@@ -3997,14 +4048,20 @@
       "add": "Dodaj",
       "reseed": "Zregeneruj",
       "delete": "Usuń",
+      "remove": "Usuń",
       "updatesHeading": "Dostępne aktualizacje",
       "updatesDescription": "Pojawiła się nowsza wersja tych wbudowanych pipeline'ów. Zregeneruj je, aby ją przyjąć (Twoje etykiety i stan archiwum zostaną zachowane).",
+      "retiredHeading": "Wycofane pipeline’y",
+      "retiredDescription": "Te wbudowane pipeline’y zostały wycofane z katalogu, więc nie ma nowszej wersji do przyjęcia. Usuń je z biblioteki tej tablicy.",
+      "retiredNote": "Wycofany z katalogu.",
+      "retiredReplacedBy": "Wycofany z katalogu. Użyj zamiast niego {name}.",
       "reseedAll": "Zregeneruj wszystkie ({count})",
       "dismiss": "Odrzuć",
       "done": "Gotowe",
       "toast": {
         "reseedFailed": "Nie udało się zregenerować pipeline'u",
-        "deleteFailed": "Nie udało się usunąć pipeline'u"
+        "deleteFailed": "Nie udało się usunąć pipeline'u",
+        "removeFailed": "Nie udało się usunąć pipeline’u"
       }
     }
   },
@@ -4042,6 +4099,17 @@
       "loadFailed": "Nie udało się wczytać promptu",
       "conflict": "Ktoś inny zmienił ten prompt. Wczytano ponownie - zastosuj swoją zmianę jeszcze raz."
     }
+  },
+  "agentTier": {
+    "label": "Poziom agentów",
+    "basic": "Podstawowy",
+    "intermediate": "Średni",
+    "advanced": "Zaawansowany",
+    "basicHint": "Tylko codzienni agenci, z których zwykle buduje się potok.",
+    "intermediateHint": "Dodaje agentów, po których sięgasz regularnie.",
+    "advancedHint": "Pokazuje wszystkich agentów, także tych specjalistycznych.",
+    "tooltip": "Wybierz, jak dużą część katalogu agentów pokazać",
+    "hidden": "{count} agent ukryty na tym poziomie. | {count} agenci ukryci na tym poziomie. | {count} agentów ukrytych na tym poziomie."
   },
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
@@ -4386,7 +4454,8 @@
       "synthesizing": "Synteza",
       "done": "Gotowe",
       "failed": "Niepowodzenie"
-    }
+    },
+    "groupTitle": "Grupa konsensusu, do której eskalowało to uruchomienie"
   },
   "brainstorm": {
     "title": {

@@ -78,10 +78,22 @@ export const stepGatingSchema = v.object({
 })
 export type StepGating = v.InferOutput<typeof stepGatingSchema>
 
+const consensusRoundsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5))
+
 /**
  * The consensus configuration stored on a pipeline step (set in the builder for
  * a step whose agent kind carries a consensus trait). When `enabled` is false
  * the step runs as the standard agent.
+ *
+ * A step declares its panel in one of two ways:
+ *
+ *  - **inline** — `participants` (plus `strategy`/`rounds`/`synthesizerModelId`/`gating`)
+ *    authored on the step itself. One panel, one bar.
+ *  - **by GROUP** — {@link groupIds} naming entries of the workspace's reusable
+ *    {@link consensusGroupSchema} library, each carrying its OWN estimate bar. At dispatch the
+ *    engine picks the most demanding group the task's estimate clears and materialises its
+ *    panel onto this config; none clearing ⇒ the standard single-actor agent runs. That is what
+ *    makes "a light duo above 0.4 risk, the full panel above 0.8" one step rather than three.
  */
 export const consensusStepConfigSchema = v.object({
   enabled: v.boolean(),
@@ -90,11 +102,97 @@ export const consensusStepConfigSchema = v.object({
   /** Model that runs the neutral synthesis / judging pass; absent ⇒ step default. */
   synthesizerModelId: v.optional(v.string()),
   /** Debate rounds (1..5); ignored by non-debate strategies. Default applied by the engine. */
-  rounds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5))),
+  rounds: v.optional(consensusRoundsSchema),
   /** Optional gating of the process on the task estimate; absent ⇒ always run when enabled. */
   gating: v.optional(consensusGatingSchema),
+  /**
+   * Ids of the workspace consensus groups this step may escalate to. Order is NOT precedence —
+   * the engine ranks the candidates by the bar each one sets, so adding a group never depends
+   * on where it lands in the array. Non-empty ⇒ the inline `participants` are ignored and the
+   * selected group's panel is used instead.
+   */
+  groupIds: v.optional(v.array(v.string())),
+  /**
+   * The group the engine SELECTED for this dispatch, stamped onto the run's copy of the config
+   * when {@link groupIds} resolved. Never authored in the builder — it is the record of which
+   * tier fired, carried through to the session transcript so a reviewer can see why five models
+   * ran. Absent on an inline-participant step.
+   */
+  selectedGroup: v.optional(v.object({ id: v.string(), name: v.string() })),
 })
 export type ConsensusStepConfig = v.InferOutput<typeof consensusStepConfigSchema>
+
+// ---- The workspace consensus-group library --------------------------------
+
+/**
+ * A named, reusable consensus panel ("model group") in a workspace's library: the
+ * participants (roles + framings + models), the strategy that runs them, the synthesizer, and
+ * the ESTIMATE BAR a task must clear for this group to be selected.
+ *
+ * The bar is what makes a library of groups more than a snippet store. A step names a SET of
+ * groups; each group's {@link ConsensusGroup.gating} declares how heavy a task has to be before
+ * it is worth that panel's cost, and the engine picks the most demanding one the task clears.
+ * A group whose gating is disabled is the unconditional floor — it applies to every task the
+ * step runs on, which is how "always at least a two-model review" is expressed.
+ */
+export const consensusGroupSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  /** Optional prose note on what this panel is for, shown in the pickers. */
+  description: v.optional(v.string()),
+  strategy: consensusStrategySchema,
+  participants: v.array(consensusParticipantSchema),
+  synthesizerModelId: v.optional(v.string()),
+  rounds: v.optional(consensusRoundsSchema),
+  /**
+   * The estimate bar this group sets. `enabled: false` ⇒ no bar (the group always applies).
+   * Required — a group in a tiered set must state where it sits, and the disabled form says
+   * "at the bottom" explicitly rather than by omission.
+   */
+  gating: consensusGatingSchema,
+  createdAt: v.number(),
+})
+export type ConsensusGroup = v.InferOutput<typeof consensusGroupSchema>
+
+// ---- Request bodies -------------------------------------------------------
+
+const groupNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
+const groupDescriptionSchema = v.pipe(v.string(), v.trim(), v.maxLength(400))
+/**
+ * A panel needs at least two distinct voices to be a panel at all (the executor's own
+ * `participants.length < 2` backstop would otherwise silently degrade the step to the standard
+ * agent — a refusal at the write boundary is the one a user can act on). Capped so one group
+ * cannot fan a single step into an unbounded number of billed model calls.
+ */
+const groupParticipantsSchema = v.pipe(
+  v.array(consensusParticipantSchema),
+  v.minLength(2),
+  v.maxLength(8),
+)
+
+/** Create a consensus group in a workspace's library. */
+export const createConsensusGroupSchema = v.object({
+  name: groupNameSchema,
+  description: v.optional(groupDescriptionSchema),
+  strategy: consensusStrategySchema,
+  participants: groupParticipantsSchema,
+  synthesizerModelId: v.optional(v.string()),
+  rounds: v.optional(consensusRoundsSchema),
+  gating: v.optional(consensusGatingSchema),
+})
+export type CreateConsensusGroupInput = v.InferOutput<typeof createConsensusGroupSchema>
+
+/** Patch a consensus group (all fields optional; arrays/objects replace wholesale). */
+export const updateConsensusGroupSchema = v.object({
+  name: v.optional(groupNameSchema),
+  description: v.optional(groupDescriptionSchema),
+  strategy: v.optional(consensusStrategySchema),
+  participants: v.optional(groupParticipantsSchema),
+  synthesizerModelId: v.optional(v.string()),
+  rounds: v.optional(consensusRoundsSchema),
+  gating: v.optional(consensusGatingSchema),
+})
+export type UpdateConsensusGroupInput = v.InferOutput<typeof updateConsensusGroupSchema>
 
 /**
  * A `task-estimator` agent's structured triage of a task along three axes
@@ -164,6 +262,15 @@ export const consensusSessionSchema = v.object({
   agentKind: v.string(),
   strategy: consensusStrategySchema,
   status: consensusSessionStatusSchema,
+  /**
+   * The workspace consensus group whose panel ran, when the step resolved one from its
+   * {@link ConsensusStepConfig.groupIds} tier set. Null for an inline-participant step. Stored
+   * on the transcript rather than re-derived, because the library entry can be edited or
+   * deleted after the run and the session must still say which panel actually fired.
+   */
+  groupId: v.optional(v.nullable(v.string())),
+  /** The selected group's name AS IT WAS at dispatch (the library row may since have changed). */
+  groupName: v.optional(v.nullable(v.string())),
   participants: v.array(consensusParticipantSchema),
   rounds: v.array(consensusRoundSchema),
   /** The neutral synthesis / winning result; null until the synthesis pass completes. */

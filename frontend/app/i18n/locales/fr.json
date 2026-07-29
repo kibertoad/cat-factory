@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Gestionnaire d'environnement non configuré",
         "env_test_no_vcs": "Fournisseur Git non connecté",
         "env_test_connection_failed": "Échec de la connexion à l'environnement",
-        "prompt_revision_conflict": "Invite modifiée par quelqu'un d'autre"
+        "prompt_revision_conflict": "Invite modifiée par quelqu'un d'autre",
+        "pipeline_schedule_attached": "Une planification récurrente utilise ce pipeline",
+        "pipeline_schedule_requires_recurring": "Une planification récurrente exige ce pipeline",
+        "pipeline_schedule_intake_unconfigured": "La planification n'a pas de collecte de tickets"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun.",
         "env_test_connection_failed": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion.",
         "env_test_connection_failed_detail": "Le gestionnaire d'environnement de ce service a échoué à son test de connexion : {detail}. Vérifiez son point de terminaison, ses identifiants et les paramètres du projet, puis retestez la connexion.",
-        "prompt_revision_conflict": "Une autre modification de cette invite est arrivée en premier. Rechargez-la et réappliquez la vôtre par-dessus."
+        "prompt_revision_conflict": "Une autre modification de cette invite est arrivée en premier. Rechargez-la et réappliquez la vôtre par-dessus.",
+        "pipeline_schedule_attached": "Une planification récurrente pointe encore vers ce pipeline, et chaque exécution qu'elle lance le résout par son identifiant. Détachez ou supprimez d'abord cette planification, puis retirez le pipeline.",
+        "pipeline_schedule_requires_recurring": "Une planification récurrente pointe encore vers ce pipeline. Le limiter à une exécution unique casserait chaque exécution future. Détachez d'abord cette planification.",
+        "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -3167,6 +3173,47 @@
       "saved": "Environnement de test par défaut enregistré.",
       "savedState": "Enregistré.",
       "saveFailed": "Impossible d'enregistrer l'environnement de test par défaut."
+    },
+    "consensusGroups": {
+      "title": "Groupes de consensus",
+      "intro": "Panels de revue réutilisables auxquels une étape de pipeline peut monter. Chaque groupe porte le seuil d'estimation qu'une tâche doit franchir : le travail le plus lourd obtient un panel plus large sans pipeline dédié.",
+      "new": "Nouveau groupe",
+      "list": {
+        "empty": "Aucun groupe de consensus pour le moment.",
+        "always": "Toujours",
+        "bar": "À partir de {bar}",
+        "editTitle": "Modifier le groupe",
+        "deleteTitle": "Supprimer le groupe",
+        "participantCount": "aucun participant | un participant | {count} participants"
+      },
+      "editor": {
+        "nameLabel": "Nom",
+        "namePlaceholder": "Panel de revue approfondie",
+        "strategyLabel": "Stratégie",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "À quoi sert ce panel",
+        "participantsLabel": "Participants",
+        "participantsHint": "Au moins deux. C'est la diversité des rôles et des modèles qui rend un panel meilleur qu'un modèle seul.",
+        "addParticipant": "Ajouter un participant",
+        "framingPlaceholder": "Perspective défendue par ce participant",
+        "stepModel": "Modèle de l'étape",
+        "synthesizerLabel": "Modèle de synthèse",
+        "gatedLabel": "Seulement pour les tâches au-dessus d'un seuil",
+        "gatedHint": "L'estimation qu'une tâche doit atteindre pour mériter ce panel. Laisse désactivé pour que ce groupe s'applique toujours.",
+        "complexityThreshold": "Complexité",
+        "gatingIncomplete": "Définis au moins un seuil, ou désactive la condition.",
+        "unnamedRole": "Relecteur",
+        "cancel": "Annuler",
+        "save": "Enregistrer le groupe"
+      },
+      "confirmDelete": {
+        "title": "Supprimer le groupe de consensus ?",
+        "body": "Les étapes qui nomment « {name} » se rabattront sur leurs groupes restants."
+      },
+      "toast": {
+        "saveFailed": "Impossible d'enregistrer le groupe de consensus",
+        "deleteFailed": "Impossible de supprimer le groupe de consensus"
+      }
     }
   },
   "providers": {
@@ -3934,7 +3981,11 @@
       "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
       "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement.",
       "promptEditTooltip": "Modifier l'invite système de cet agent",
-      "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail"
+      "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail",
+      "consensusGroups": "Groupes de consensus",
+      "consensusGroupsHint": "Choisis les panels réutilisables auxquels cette étape peut monter. Chacun porte son propre seuil d'estimation ; c'est le plus exigeant que la tâche franchit qui s'exécute.",
+      "consensusGroupsActive": "Cette étape exécute le groupe sélectionné. Désélectionne tous les groupes pour configurer les participants ici.",
+      "consensusGroupAlways": "toujours"
     },
     "progress": {
       "status": {
@@ -3997,14 +4048,20 @@
       "add": "Ajouter",
       "reseed": "Régénérer",
       "delete": "Supprimer",
+      "remove": "Retirer",
       "updatesHeading": "Mises à jour disponibles",
       "updatesDescription": "Une version plus récente de ces pipelines intégrés est disponible. Régénérez-les pour l'adopter (vos étiquettes et l'état d'archivage sont conservés).",
+      "retiredHeading": "Pipelines retirés",
+      "retiredDescription": "Ces pipelines intégrés ont été retirés du catalogue, il n’y a donc aucune version plus récente à adopter. Retirez-les de la bibliothèque de ce tableau.",
+      "retiredNote": "Retiré du catalogue.",
+      "retiredReplacedBy": "Retiré du catalogue. Utilisez {name} à la place.",
       "reseedAll": "Tout régénérer ({count})",
       "dismiss": "Ignorer",
       "done": "Terminé",
       "toast": {
         "reseedFailed": "Impossible de régénérer le pipeline",
-        "deleteFailed": "Impossible de supprimer le pipeline"
+        "deleteFailed": "Impossible de supprimer le pipeline",
+        "removeFailed": "Impossible de retirer le pipeline"
       }
     }
   },
@@ -4042,6 +4099,17 @@
       "loadFailed": "Impossible de charger l'invite",
       "conflict": "Quelqu'un d'autre a modifié cette invite. Rechargée : réappliquez votre modification."
     }
+  },
+  "agentTier": {
+    "label": "Niveau d'agents",
+    "basic": "Basique",
+    "intermediate": "Intermédiaire",
+    "advanced": "Avancé",
+    "basicHint": "Uniquement les agents du quotidien avec lesquels on construit un pipeline.",
+    "intermediateHint": "Ajoute les agents que vous utilisez régulièrement.",
+    "advancedHint": "Affiche tous les agents, y compris les plus spécialisés.",
+    "tooltip": "Choisissez quelle part du catalogue d'agents afficher",
+    "hidden": "{count} agent masqué à ce niveau. | {count} agents masqués à ce niveau."
   },
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
@@ -4386,7 +4454,8 @@
       "synthesizing": "Synthèse en cours",
       "done": "Terminé",
       "failed": "Échoué"
-    }
+    },
+    "groupTitle": "Le groupe de consensus vers lequel cette exécution est montée"
   },
   "brainstorm": {
     "title": {

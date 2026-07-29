@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "環境ハンドラーが設定されていません",
         "env_test_no_vcs": "Git プロバイダーが未接続です",
         "env_test_connection_failed": "環境への接続に失敗しました",
-        "prompt_revision_conflict": "別のユーザーがプロンプトを変更しました"
+        "prompt_revision_conflict": "別のユーザーがプロンプトを変更しました",
+        "pipeline_schedule_attached": "定期スケジュールがこのパイプラインを使用しています",
+        "pipeline_schedule_requires_recurring": "定期スケジュールにこのパイプラインが必要です",
+        "pipeline_schedule_intake_unconfigured": "スケジュールに課題取り込み設定がありません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "セルフテストは使い捨てブランチの作成と削除のために Git プロバイダーを必要としますが、このワークスペースはいずれにも接続されていません。",
         "env_test_connection_failed": "このサービスの環境ハンドラーが接続テストに失敗しました。エンドポイント、認証情報、プロジェクト設定を確認してから、接続を再テストしてください。",
         "env_test_connection_failed_detail": "このサービスの環境ハンドラーが接続テストに失敗しました: {detail}。エンドポイント、認証情報、プロジェクト設定を確認してから、接続を再テストしてください。",
-        "prompt_revision_conflict": "このプロンプトへの別の編集が先に反映されました。読み込み直して、その上に変更をやり直してください。"
+        "prompt_revision_conflict": "このプロンプトへの別の編集が先に反映されました。読み込み直して、その上に変更をやり直してください。",
+        "pipeline_schedule_attached": "定期スケジュールがまだこのパイプラインを参照しており、開始する実行はすべて ID でパイプラインを解決します。先にそのスケジュールを解除または削除してから、パイプラインを削除してください。",
+        "pipeline_schedule_requires_recurring": "定期スケジュールがまだこのパイプラインを参照しているため、単発専用にすると今後の実行がすべて失敗します。先にそのスケジュールを解除してください。",
+        "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -3179,6 +3185,47 @@
       "saved": "既定のテスト環境を保存しました。",
       "savedState": "保存済み。",
       "saveFailed": "既定のテスト環境を保存できませんでした。"
+    },
+    "consensusGroups": {
+      "title": "コンセンサスグループ",
+      "intro": "パイプラインのステップが引き上げられる再利用可能なレビューパネルです。各グループはタスクが超えるべき見積もりしきい値を持つため、重い作業には別のパイプラインを作らずに大きなパネルを割り当てられます。",
+      "new": "新しいグループ",
+      "list": {
+        "empty": "コンセンサスグループはまだありません。",
+        "always": "常時",
+        "bar": "{bar} 以上",
+        "editTitle": "グループを編集",
+        "deleteTitle": "グループを削除",
+        "participantCount": "参加者なし | 参加者 1 名 | 参加者 {count} 名"
+      },
+      "editor": {
+        "nameLabel": "名前",
+        "namePlaceholder": "詳細レビューパネル",
+        "strategyLabel": "戦略",
+        "descriptionLabel": "説明",
+        "descriptionPlaceholder": "このパネルの用途",
+        "participantsLabel": "参加者",
+        "participantsHint": "2 名以上。役割とモデルの多様性こそが、単一モデルよりパネルを優れたものにします。",
+        "addParticipant": "参加者を追加",
+        "framingPlaceholder": "この参加者が主張する視点",
+        "stepModel": "ステップのモデル",
+        "synthesizerLabel": "統合モデル",
+        "gatedLabel": "しきい値を超えるタスクのみ",
+        "gatedHint": "このパネルを割り当てるためにタスクが達すべき見積もりです。オフのままにすると、このグループは常に適用されます。",
+        "complexityThreshold": "複雑さ",
+        "gatingIncomplete": "しきい値を 1 つ以上設定するか、条件をオフにしてください。",
+        "unnamedRole": "レビュアー",
+        "cancel": "キャンセル",
+        "save": "グループを保存"
+      },
+      "confirmDelete": {
+        "title": "コンセンサスグループを削除しますか？",
+        "body": "「{name}」を指定しているステップは、残りのグループにフォールバックします。"
+      },
+      "toast": {
+        "saveFailed": "コンセンサスグループを保存できませんでした",
+        "deleteFailed": "コンセンサスグループを削除できませんでした"
+      }
     }
   },
   "providers": {
@@ -3946,7 +3993,11 @@
       "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
       "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。",
       "promptEditTooltip": "このエージェントのシステムプロンプトを編集",
-      "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています"
+      "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています",
+      "consensusGroups": "コンセンサスグループ",
+      "consensusGroupsHint": "このステップが引き上げられる再利用可能なパネルを選びます。各パネルは独自の見積もりしきい値を持ち、タスクが超えたうち最も厳しいものが実行されます。",
+      "consensusGroupsActive": "このステップは選択したグループを実行します。ここで参加者を設定するには、すべてのグループの選択を解除してください。",
+      "consensusGroupAlways": "常時"
     },
     "progress": {
       "status": {
@@ -4009,14 +4060,20 @@
       "add": "追加",
       "reseed": "再シード",
       "delete": "削除",
+      "remove": "削除",
       "updatesHeading": "更新あり",
       "updatesDescription": "これらのビルトインパイプラインの新しいバージョンが提供されました。再シードして取り込んでください(ラベルとアーカイブ状態は維持されます)。",
+      "retiredHeading": "廃止されたパイプライン",
+      "retiredDescription": "これらの組み込みパイプラインはカタログから撤回されたため、取り込める新しいバージョンはありません。このボードのライブラリから削除してください。",
+      "retiredNote": "カタログから廃止されました。",
+      "retiredReplacedBy": "カタログから廃止されました。代わりに{name}を使用してください。",
       "reseedAll": "すべて再シード ({count})",
       "dismiss": "閉じる",
       "done": "完了",
       "toast": {
         "reseedFailed": "パイプラインを再シードできませんでした",
-        "deleteFailed": "パイプラインを削除できませんでした"
+        "deleteFailed": "パイプラインを削除できませんでした",
+        "removeFailed": "パイプラインを削除できませんでした"
       }
     }
   },
@@ -4054,6 +4111,17 @@
       "loadFailed": "プロンプトを読み込めませんでした",
       "conflict": "このプロンプトは別のユーザーが変更しました。再読み込みしました。編集をやり直してください。"
     }
+  },
+  "agentTier": {
+    "label": "エージェント階層",
+    "basic": "基本",
+    "intermediate": "中級",
+    "advanced": "上級",
+    "basicHint": "パイプラインの基本となる日常的なエージェントのみ。",
+    "intermediateHint": "日常的によく使うエージェントを追加します。",
+    "advancedHint": "専門的なものを含め、すべてのエージェントを表示します。",
+    "tooltip": "エージェントカタログの表示範囲を選択します",
+    "hidden": "この階層では {count} 件のエージェントが非表示です。"
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
@@ -4398,7 +4466,8 @@
       "synthesizing": "統合中",
       "done": "完了",
       "failed": "失敗"
-    }
+    },
+    "groupTitle": "この実行が引き上げられたコンセンサスグループ"
   },
   "brainstorm": {
     "title": {

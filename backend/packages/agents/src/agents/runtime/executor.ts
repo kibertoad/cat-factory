@@ -6,7 +6,7 @@ import { standardsVerbosityFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
-import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
+import { composeBlockSystemPrompt } from './fragments.js'
 import {
   type InlineWebSearchOptions,
   providerWebSearchTools,
@@ -186,7 +186,11 @@ export class AiAgentExecutor implements AgentExecutor {
       baseSystem,
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
-      standardsDeliveredAsFiles(context.injectedContextFiles),
+      // An inline call has no filesystem, so a `context-files` kind's standards were never
+      // really delivered as files: fold them into the SYSTEM prompt here, at this kind's
+      // verbosity. `userPromptFor` correspondingly leaves the standards files out of its own
+      // fold, so each standard reaches the model exactly once and at the right length.
+      false,
       standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
     )
 

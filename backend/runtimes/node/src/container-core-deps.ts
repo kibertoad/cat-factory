@@ -295,6 +295,9 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // undefined and there is no external emission.
     llmTraceSink: buildTraceSink(config),
     modelPresetRepository: repos.modelPresetRepository,
+    // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to. Read
+    // by the settings controller AND on the run path (per-dispatch tier resolution).
+    consensusGroupRepository: repos.consensusGroupRepository,
     agentPromptRepository: repos.agentPromptRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects

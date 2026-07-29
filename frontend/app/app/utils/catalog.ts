@@ -30,6 +30,7 @@ export const AGENT_CATEGORIES: { id: AgentCategory; label: string }[] = [
 export const AGENT_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'requirements-review',
+    tier: 'basic',
     label: 'Requirements Reviewer',
     icon: 'i-lucide-clipboard-check',
     color: '#f59e0b',
@@ -42,6 +43,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'clarity-review',
+    tier: 'basic',
     label: 'Clarity Reviewer',
     icon: 'i-lucide-bug',
     color: '#f59e0b',
@@ -58,6 +60,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // structured triage opens in the shared generic viewer; the clarity gate consumes its
     // `clarity`/`questions` server-side.
     kind: 'bug-investigator',
+    tier: 'intermediate',
     label: 'Bug Investigator',
     icon: 'i-lucide-search-code',
     color: '#38bdf8',
@@ -73,6 +76,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // resolves to the findings-selection window on every surface — not just when the manifest
     // is hydrated. Mirrors the backend `presentation` in `pr-reviewer.ts`.
     kind: 'pr-reviewer',
+    tier: 'basic',
     label: 'PR Reviewer',
     icon: 'i-lucide-clipboard-check',
     color: '#6366f1',
@@ -89,6 +93,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // shared generic viewer; the findings document is committed by a backend post-op (delivered
     // as a pull request by default, or straight to base via the direct pipeline).
     kind: 'spike',
+    tier: 'intermediate',
     label: 'Spike',
     icon: 'i-lucide-flask-conical',
     color: '#22d3ee',
@@ -99,6 +104,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'task-estimator',
+    tier: 'intermediate',
     label: 'Task Estimator',
     icon: 'i-lucide-gauge',
     color: '#eab308',
@@ -108,6 +114,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'requirements-brainstorm',
+    tier: 'intermediate',
     label: 'Requirements Brainstorm',
     icon: 'i-lucide-lightbulb',
     color: '#f59e0b',
@@ -120,6 +127,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'architecture-brainstorm',
+    tier: 'advanced',
     label: 'Architecture Brainstorm',
     icon: 'i-lucide-compass',
     color: '#a78bfa',
@@ -130,6 +138,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'architect',
+    tier: 'basic',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',
     color: '#a78bfa',
@@ -138,6 +147,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'researcher',
+    tier: 'intermediate',
     label: 'Researcher',
     icon: 'i-lucide-telescope',
     color: '#38bdf8',
@@ -146,6 +156,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'coder',
+    tier: 'basic',
     label: 'Coder',
     icon: 'i-lucide-code-xml',
     color: '#34d399',
@@ -154,6 +165,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'integrator',
+    tier: 'advanced',
     label: 'Integrator',
     icon: 'i-lucide-plug-zap',
     color: '#fb923c',
@@ -162,6 +174,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'mocker',
+    tier: 'advanced',
     label: 'Mock Builder',
     icon: 'i-lucide-server-cog',
     color: '#fb7185',
@@ -170,6 +183,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'tester-api',
+    tier: 'basic',
     label: 'API Tester',
     icon: 'i-lucide-flask-conical',
     color: '#fbbf24',
@@ -181,6 +195,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'tester-ui',
+    tier: 'intermediate',
     label: 'UI Tester',
     icon: 'i-lucide-camera',
     color: '#fbbf24',
@@ -192,6 +207,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'playwright',
+    tier: 'intermediate',
     label: 'Acceptance Test Author',
     icon: 'i-lucide-theater',
     color: '#e879f9',
@@ -201,6 +217,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'human-test',
+    tier: 'intermediate',
     label: 'Human Testing',
     icon: 'i-lucide-user-check',
     color: '#f59e0b',
@@ -213,6 +230,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'visual-confirmation',
+    tier: 'advanced',
     label: 'Visual Confirmation',
     icon: 'i-lucide-image-play',
     color: '#f59e0b',
@@ -225,6 +243,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'documenter',
+    tier: 'basic',
     label: 'Documenter',
     icon: 'i-lucide-book-open-text',
     color: '#818cf8',
@@ -233,6 +252,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'business-documenter',
+    tier: 'intermediate',
     label: 'Domain Rules Documenter',
     icon: 'i-lucide-scroll-text',
     color: '#84cc16',
@@ -242,6 +262,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'business-reviewer',
+    tier: 'advanced',
     label: 'Domain Rules Reviewer',
     icon: 'i-lucide-shield-alert',
     color: '#ef4444',
@@ -264,6 +285,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
 export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   {
     kind: 'reviewer',
+    tier: 'basic',
     label: 'Reviewer (companion)',
     icon: 'i-lucide-scan-eye',
     color: '#f472b6',
@@ -272,6 +294,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'architect-companion',
+    tier: 'intermediate',
     label: 'Architect Companion',
     icon: 'i-lucide-bug-play',
     color: '#c084fc',
@@ -280,6 +303,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'spec-companion',
+    tier: 'intermediate',
     label: 'Spec Reviewer',
     icon: 'i-lucide-list-checks',
     color: '#2dd4bf',
@@ -288,6 +312,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
   },
   {
     kind: 'doc-reviewer',
+    tier: 'intermediate',
     label: 'Doc Reviewer',
     icon: 'i-lucide-file-search',
     color: '#818cf8',
@@ -366,13 +391,19 @@ export function __resetCustomAgentKindMetaForTest(): void {
  * Agent kinds eligible for the optional consensus mechanism (the pipeline builder shows an
  * "Enable Consensus" toggle for these). Mirrors the backend default-eligible set assigned by
  * `registerConsensusTraits()` in `@cat-factory/consensus` — hand-synced, like the other
- * frontend mirrors. In CONSENSUS mode `architect`/`analysis` reason over the provided context
- * rather than exploring a checkout (a deliberate trade, gated by the task estimate).
+ * frontend mirrors. In CONSENSUS mode a container-backed kind (`architect`/`analysis`, and the
+ * checkout-exploring reviewers) reasons over the provided context rather than exploring a
+ * checkout (a deliberate trade, gated by the task estimate); the review kinds carry the bulk of
+ * the value, since a review is a judgement and a panel judges better than one model.
  */
 export const CONSENSUS_ELIGIBLE_KINDS: ReadonlySet<string> = new Set([
   'architect',
   'analysis',
   'reviewer',
+  'pr-reviewer',
+  'doc-reviewer',
+  'architect-companion',
+  'spec-companion',
   'task-estimator',
 ])
 
@@ -400,6 +431,7 @@ export function isTesterKind(kind: string): boolean {
 export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   'spec-writer': {
     kind: 'spec-writer',
+    tier: 'intermediate',
     label: 'Spec Writer',
     icon: 'i-lucide-clipboard-list',
     color: '#c084fc',
@@ -408,6 +440,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   blueprints: {
     kind: 'blueprints',
+    tier: 'intermediate',
     label: 'Blueprinter',
     icon: 'i-lucide-map',
     color: '#22d3ee',
@@ -420,6 +453,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // different (stronger) model than the reviewer. Its output renders in the pr-review window.
   'challenge-investigator': {
     kind: 'challenge-investigator',
+    tier: 'advanced',
     label: 'Challenge Investigator',
     icon: 'i-lucide-gavel',
     color: '#6366f1',
@@ -433,6 +467,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // built-in pipelines, so it needs display metadata (else it renders as a generic gray "Agent").
   deployer: {
     kind: 'deployer',
+    tier: 'intermediate',
     label: 'Deployer',
     icon: 'i-lucide-cloud-upload',
     color: '#34d399',
@@ -445,6 +480,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // interviewer, so the interview covers only what the code cannot answer.
   'initiative-interviewer': {
     kind: 'initiative-interviewer',
+    tier: 'advanced',
     label: 'Initiative Interviewer',
     icon: 'i-lucide-messages-square',
     color: '#818cf8',
@@ -455,6 +491,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'initiative-analyst': {
     kind: 'initiative-analyst',
+    tier: 'advanced',
     label: 'Initiative Analyst',
     icon: 'i-lucide-microscope',
     color: '#818cf8',
@@ -464,6 +501,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'initiative-planner': {
     kind: 'initiative-planner',
+    tier: 'advanced',
     label: 'Initiative Planner',
     icon: 'i-lucide-milestone',
     color: '#818cf8',
@@ -475,6 +513,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'initiative-committer': {
     kind: 'initiative-committer',
+    tier: 'advanced',
     label: 'Initiative Committer',
     icon: 'i-lucide-git-commit-horizontal',
     color: '#818cf8',
@@ -487,6 +526,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // for run-timeline / saved-pipeline display rather than in AGENT_ARCHETYPES.
   analysis: {
     kind: 'analysis',
+    tier: 'intermediate',
     label: 'Analyst',
     icon: 'i-lucide-search-code',
     color: '#818cf8',
@@ -498,6 +538,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // tech-debt pipeline, so it is a display-metadata system kind, not a palette archetype.
   tracker: {
     kind: 'tracker',
+    tier: 'advanced',
     label: 'Issue Tracker',
     icon: 'i-lucide-ticket',
     color: '#fb923c',
@@ -511,6 +552,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // `tracker`), not a palette archetype.
   'bug-intake': {
     kind: 'bug-intake',
+    tier: 'advanced',
     label: 'Bug Intake',
     icon: 'i-lucide-inbox',
     color: '#fb923c',
@@ -519,6 +561,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   conflicts: {
     kind: 'conflicts',
+    tier: 'intermediate',
     label: 'Conflicts Gate',
     icon: 'i-lucide-git-merge',
     color: '#f97316',
@@ -529,6 +572,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'conflict-resolver': {
     kind: 'conflict-resolver',
+    tier: 'intermediate',
     label: 'Conflict Resolver',
     icon: 'i-lucide-git-merge',
     color: '#f97316',
@@ -536,6 +580,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   ci: {
     kind: 'ci',
+    tier: 'basic',
     label: 'CI Gate',
     icon: 'i-lucide-shield-check',
     color: '#38bdf8',
@@ -550,6 +595,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // is a registered kind, so it arrives via the workspace snapshot's `customAgentKinds`.
   'doc-quality': {
     kind: 'doc-quality',
+    tier: 'intermediate',
     label: 'Doc Quality Gate',
     icon: 'i-lucide-file-check-2',
     color: '#818cf8',
@@ -560,6 +606,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'ci-fixer': {
     kind: 'ci-fixer',
+    tier: 'basic',
     label: 'CI Fixer',
     icon: 'i-lucide-wrench',
     color: '#38bdf8',
@@ -567,6 +614,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   fixer: {
     kind: 'fixer',
+    tier: 'basic',
     label: 'Fixer',
     icon: 'i-lucide-wrench',
     color: '#fbbf24',
@@ -575,6 +623,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   merger: {
     kind: 'merger',
+    tier: 'basic',
     label: 'Merger',
     icon: 'i-lucide-git-pull-request',
     color: '#a3e635',
@@ -585,6 +634,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   },
   'human-review': {
     kind: 'human-review',
+    tier: 'basic',
     label: 'Human Review Gate',
     icon: 'i-lucide-users',
     color: '#c084fc',
@@ -600,6 +650,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // so it needs display metadata here and a per-workspace model in Model Configuration.
   kaizen: {
     kind: 'kaizen',
+    tier: 'advanced',
     label: 'Kaizen',
     icon: 'i-lucide-sparkles',
     color: '#2dd4bf',
@@ -613,6 +664,11 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // but it still needs display metadata here so timelines/saved pipelines render it.
   'post-release-health': {
     kind: 'post-release-health',
+    // Intermediate rather than advanced: the palette already offers this gate ONLY when the
+    // workspace has an observability integration connected, and that connection is a stronger
+    // statement of intent than the tier — burying a gate the operator just wired two levels
+    // down would hide the capability they came for.
+    tier: 'intermediate',
     label: 'Post-Release Health',
     icon: 'i-lucide-activity',
     color: '#f43f5e',

@@ -10,7 +10,7 @@ import {
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
-  isContainerBackedCompanion,
+  runsInContainer,
 } from '@cat-factory/agents'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
@@ -34,64 +34,6 @@ import {
 // Runtime-neutral: both the Cloudflare Worker and the Node service wire this
 // composite (inline `AiAgentExecutor` + a container executor backed by a
 // per-run Cloudflare Container or an org's self-hosted runner pool).
-
-/**
- * Agent kinds that need a real checkout to operate on repo contents (clone,
- * edit/commit files, open a PR) and so run in a container rather than inline:
- * code implementation (`coder`), WireMock mock building (`mocker`), Playwright
- * end-to-end test authoring (`playwright`) and business-logic documentation
- * (`business-documenter`, which reads the code and commits the domain-rules docs).
- */
-const CONTAINER_KINDS = new Set([
-  'coder',
-  'mocker',
-  'playwright',
-  'business-documenter',
-  // The architect explores the repository (read-only) before proposing a design, so
-  // it needs a real checkout. Like `analysis` it makes no edits — the harness produces
-  // no commit and opens no PR — and returns its proposal as prose `output`.
-  'architect',
-  // The CI-fixer clones the PR head branch, runs the failing build/tests, fixes
-  // them and pushes back to the same branch — a real-checkout operation. (The `ci`
-  // step itself is NOT here: it is a special, non-agent gate handled in the engine
-  // that *dispatches* a `ci-fixer` job; only the fixer reaches this executor.)
-  'ci-fixer',
-  // The conflict-resolver clones the PR head branch, merges the base in and resolves
-  // the conflicts on the same branch — a real-checkout operation. (The `conflicts`
-  // gate itself is NOT here: like `ci` it is a non-agent engine gate that *dispatches*
-  // a `conflict-resolver` job; only the resolver reaches this executor.)
-  'conflict-resolver',
-  // The merger clones the PR head branch to assess the diff (complexity/risk/impact)
-  // before the engine decides whether to auto-merge — a real-checkout operation.
-  'merger',
-  // The tech-debt `analysis` agent clones the repo to inspect it and emit a report.
-  // It is read-only (makes no edits) so the coding-agent harness produces no commit
-  // and opens no PR — but it still needs a real checkout, so it runs in a container.
-  'analysis',
-  // The tester clones the PR branch, stands up infra (local docker-compose or an
-  // ephemeral env), runs the suite and returns a structured report — a real-checkout
-  // operation. (The tester step is also a special engine gate that loops a `fixer`
-  // on a withheld greenlight, mirroring `ci`/`ci-fixer`; the engine dispatches both
-  // jobs, which reach this executor.) `tester-api` is the general/API tester;
-  // `tester-ui` is its browser-driven, screenshot-capturing sibling (UI-tester image).
-  'tester-api',
-  'tester-ui',
-  // The fixer clones the PR head branch, applies fixes from the Tester's report and
-  // pushes back to the same branch — a real-checkout operation, like `ci-fixer`.
-  'fixer',
-  // The on-call agent clones the released PR head to correlate its diff with the
-  // Datadog regression evidence and returns a JSON assessment — a real-checkout
-  // operation (makes no commits). (The `post-release-health` gate itself is NOT here:
-  // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
-  // the on-call agent reaches this executor.)
-  'on-call',
-  // NOTE: `blueprints`, `spec-writer`, `initiative-analyst` and `initiative-planner` are NOT
-  // listed here — they are registered agent kinds (`@cat-factory/agents`) whose
-  // `container-explore` surface makes `registry.requiresContainer()` return true, so `pick()`
-  // routes them to the container executor without a hard-coded entry. (The
-  // `initiative-interviewer` / `initiative-committer` steps are neither: they are non-container
-  // engine gates handled entirely in the engine.)
-])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   /** The app-owned agent-kind registry: decides whether a registered custom kind needs a container. */
@@ -117,14 +59,12 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
   private pick(context: AgentRunContext): AgentExecutor {
     // Built-in container kinds, plus any custom kind a deployment registered with
     // `requiresContainer: true` (e.g. a proprietary org package contributing a
-    // repo-operating agent), need a real checkout; everything else runs inline.
-    const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) ||
-      this.registry.requiresContainer(context.agentKind) ||
-      // Container-backed companions (reviewer / doc-reviewer) clone the producer's PR branch
-      // and review the real repository, so they need a checkout exactly like a coding kind.
-      isContainerBackedCompanion(context.agentKind)
-    if (!needsContainer) return this.inline
+    // repo-operating agent) and the container-backed companions, need a real checkout;
+    // everything else runs inline. The predicate lives in the agent CATALOG
+    // (`@cat-factory/agents`) rather than here because the engine asks the same question
+    // when it tells a kind's preOps what shape of context to prepare — an agent with no
+    // checkout must not be handed a manifest telling it to run `git diff`.
+    if (!runsInContainer(context.agentKind, this.registry)) return this.inline
     if (!this.container) {
       throw new Error(
         `Agent kind '${context.agentKind}' needs a real checkout (clone/edit/commit/PR) ` +
@@ -160,11 +100,7 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
    */
   isQuotaBased(context: AgentRunContext): Promise<boolean> {
     if (!this.container) return Promise.resolve(false)
-    const needsContainer =
-      CONTAINER_KINDS.has(context.agentKind) ||
-      this.registry.requiresContainer(context.agentKind) ||
-      isContainerBackedCompanion(context.agentKind)
-    if (!needsContainer) return Promise.resolve(false)
+    if (!runsInContainer(context.agentKind, this.registry)) return Promise.resolve(false)
     return this.container.isQuotaBased?.(context) ?? Promise.resolve(false)
   }
 

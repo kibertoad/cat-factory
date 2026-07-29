@@ -673,6 +673,50 @@ to fold in.
 Each flow below is a cross-file runtime path. Where an ADR or initiative doc exists, it is the
 authority.
 
+### Built-in catalog lifecycle: seed → reseed → RETIRE
+
+A built-in pipeline is COPIED into each workspace at creation (`seedPipelines()` → the
+`WorkspaceService.create` seed loop), so the catalog in code and the rows on a board drift apart the
+moment either changes. Three actions reconcile them, and every one of them keys off the CATALOG, not
+the stored row: a NEW built-in is materialised by `reseed` (the row is inserted), an UPDATED one is
+adopted by `reseed` (bump its `version` — that increment is the whole drift signal), and a WITHDRAWN
+one is removed by `remove`. The SPA's pipeline-health advisory offers all three; the same
+persist + version + reseed lifecycle covers risk policies and model presets.
+
+**Retiring a built-in is TWO edits, and doing only the first is a silent no-op.** Delete its
+definition from the builder in `kernel/src/domain/seed.ts` AND name it in `buildRetiredPipelines()`
+there. The deletion alone changes nothing for anyone who already has the row: `reseed` has nothing
+to resolve and `remove` refuses every built-in, so the obsolete pipeline sits in every existing
+board's library forever, still startable. The tombstone is what flips that row from read-only to
+removable — and it must be a POSITIVE assertion rather than inferred from absence, because
+`seedPipelines` takes a `PipelineRegistry`: "not in the catalog" is also what a deployment's own
+pipelines look like whenever their package isn't wired.
+
+- **The two sets are disjoint by construction.** `retiredPipelines()` filters out anything
+  `seedPipelines()` still yields, so a live built-in can never be offered a delete and a retired one
+  can never be offered a reseed. A kernel unit test guards the hand-authored list against naming a
+  pipeline the builders still ship. Note `seedPipelines()` itself does NOT filter — it does not need
+  to, because a retired built-in's definition is deleted — so do not "fix" it by adding one; that
+  would make the tombstone authoritative over the builders and let a stray id delete a live pipeline
+  from every palette.
+- **A deployment retires its OWN pipelines via `PipelineRegistry.retire(id, { replacedBy })`**, the
+  inverse of `register` (each drops the other's entry for that id). It CANNOT retire a built-in —
+  the live entry wins — and `validateRegistrations` raises `retirement_of_live_pipeline` at boot so
+  that ignored call is never silent. Retiring an id nothing currently defines is legitimate and
+  raises nothing: that is the tombstone for a pipeline an older version of the deployment's own
+  package shipped, and reaching boards that still store the row is the entire point.
+- **`replacedBy` is an ID, never prose** — the backend does not localize copy, so the SPA resolves
+  it to the pipeline's name and writes the sentence. Resolve it against the stored row AND the
+  catalog: the usual retirement is superseded-by-a-newly-shipped-built-in, and a new built-in has no
+  row until someone adds it, so a store-only lookup blanks the replacement in the main case. The WHY
+  of a retirement lives in a comment beside its tombstone.
+- **Deleting a pipeline a recurring SCHEDULE points at is refused (409)**, retired or custom alike,
+  and a PAUSED schedule counts (pausing is not detaching): every future fire resolves it by id, so
+  the breakage would be invisible — the work just stops. A task pinned to a deleted pipeline is fine
+  by contrast: it falls back to the run-time picker. All three schedule refusals (this one plus
+  `update`'s one-off and bug-intake edits) carry a `details.reason`, so the SPA words them from the
+  catalog rather than surfacing the English message.
+
 ### Repo bootstrap (async + observable + board-integrated)
 
 Adapts a reference architecture (or scaffolds) into a pre-created empty repo and force-pushes.
@@ -1127,6 +1171,84 @@ Three rules the surface imposes, none of them optional:
   (GitHub) / PUTs them (GitLab), carrying the managed report region across, and is set ONLY when
   the text is the agent's own briefing: refreshing from the generic fallback would clobber a
   human's edit.
+
+### Consensus panels (tiered, estimate-gated multi-model review)
+
+An eligible step can run as a multi-model PANEL instead of a single agent (`@cat-factory/consensus`,
+`CONSENSUS_ENABLED`). The mechanism itself is old; what a change here must respect is the split
+between the optional package and the core library that feeds it.
+
+- **REVIEW kinds are the point.** `DEFAULT_CONSENSUS_ELIGIBLE_KINDS` carries `reviewer`,
+  `pr-reviewer`, `doc-reviewer`, `architect-companion` and `spec-companion` beside
+  `architect`/`analysis`/`task-estimator`. A review is a JUDGEMENT, which is what a panel of
+  independent models is better at than one model — but what a panel can SEE differs by kind, and
+  that is the axis to reason on before adding another: `pr-reviewer` gets its whole input from
+  preOp-written context files (folded into an inline prompt by `userPromptFor`), while the
+  checkout-exploring companions trade ground-truth depth for judgement diversity. **The frontend
+  mirror (`app/utils/catalog.ts` `CONSENSUS_ELIGIBLE_KINDS`) is hand-synced — extend both.**
+- **A panel participant has NO checkout, and every layer that prepares for it must know.** Most
+  eligible kinds are CONTAINER kinds whose shipped prompt and preOps are written for a real
+  filesystem, so running them inline is where this feature's sharp edge is. Three seams carry the
+  fact, and a new consensus-eligible kind has to answer to all three:
+  - **`dispatchDeliversCheckout` (`@cat-factory/agents`) is the ONE definition** of "does this
+    dispatch hand the agent a checkout", used both by `CompositeAgentExecutor`'s ROUTING and by
+    the engine, which passes it to a kind's hooks as `RepoOpContext.deliversCheckout`. It is
+    deliberately FAIL-SAFE: a consensus-enabled step counts as checkout-less even though the
+    executor may still fall through to the container agent. Being wrong that way hands a
+    container agent an inlined diff it did not need; being wrong the other way hands a panel a
+    file list and tells it to run `git`, and the panel reviews from filenames while sounding
+    confident. Only the first error is recoverable.
+  - **A preOp branches on it rather than assuming a filesystem.** `renderPrDiffContext` is the
+    reference case: with a checkout the patch budget stays all-or-nothing and a large diff becomes
+    a manifest the reviewer slices from (see the measurements in its module header); without one
+    the `git` guidance is never emitted, the budget is larger
+    (`MAX_INLINE_ONLY_DIFF_BYTES`) because un-inlined bytes are simply INVISIBLE rather than
+    fetchable, and whatever still does not fit is NAMED as unreviewable instead of passed off as
+    reviewed.
+  - **`INLINE_PANEL_SURFACE` is appended by the consensus executor** to every participant's system
+    prompt, last, so a workspace prompt override cannot drop it. Without it the kind's own prompt
+    describes a machine the participant is not on, and a model handed instructions it cannot
+    follow narrates the steps it would have taken instead of stopping.
+- **`userPromptFor` folds `injectedContextFiles` for every INLINE caller** and not for the
+  container path (`opts.materialized`), at the wrapper level beside `withRevision`. It has to be
+  the wrapper: `buildBaseUserPrompt` returns early both for a standard phase AND for a kind that
+  authors its own user prompt, and it is exactly those self-authoring kinds whose entire input
+  arrives as context files. Two rules on that fold: it is BUDGETED and states what it dropped (a
+  panel re-sends it per participant per round), and it EXCLUDES the standards files
+  (`isStandardsContextFile`). Standards reach an inline caller through the SYSTEM prompt, where
+  `composeBlockSystemPrompt` folds them at the kind's `standardsVerbosityFor` — so the inline
+  executors pass `standardsDeliveredAsFiles: false` (with no filesystem the files were never
+  really delivered). Folding them in both places would duplicate every standard AND silently
+  restore the full bodies that the `brief` tier exists to avoid.
+- **A step declares its panel ONE of two ways.** Inline `participants` (unchanged), or
+  `consensus.groupIds` — a SET of workspace CONSENSUS GROUPS, each a reusable panel carrying its
+  own estimate bar. The array is a set, not a precedence list.
+- **The tier is chosen by the ENGINE at dispatch, never by the executor.**
+  `AgentContextBuilder.resolveConsensusConfig` reads the named groups in ONE batched `listByIds`
+  (in the same read wave as the rest of the context) and kernel's pure `selectConsensusGroup`
+  picks the most demanding tier the estimate clears — highest bar first, ties broken by panel size
+  then id, so a re-driven durable run re-picks the SAME tier. `applyConsensusGroup` materialises
+  it and **drops the step's `gating`**: selection IS the gate, and leaving it on would have the
+  executor re-decide the same question, where any divergence silently turns a selected tier into a
+  skipped step. Nothing clearing ⇒ no `consensus` on the context ⇒ the standard single-actor agent,
+  the same disposition an un-cleared inline config gets.
+- **This is what keeps the group library OUT of the optional package.** The executor only ever
+  receives an already-decided `ConsensusStepConfig`, so `@cat-factory/consensus` never learns a
+  group store exists, and a deployment running without the package still edits its library.
+- **A group is `remote` in mothership mode** — authored, durable board config — and `listByIds` is
+  on the RUN path, so omitting it from `REMOTE_PERSISTENCE_METHODS` fails an agent step with
+  `unknown_method` rather than dimming a panel.
+- **A gated group MUST name a threshold** (`ConsensusGroupService` refuses one that doesn't): such
+  a group can never be selected on score, so it would sit in a tier set reading as active while
+  doing nothing. "Always applies" is `enabled: false`, which is the floor tier by construction
+  (`consensusGroupBar` returns -1 for it so it can never outrank a gated one).
+- **Deleting a group does NOT rewrite the pipelines naming it.** `listByIds` omits what no longer
+  resolves, so a step degrades to its remaining tiers — the same disposition as a tier whose bar
+  wasn't cleared. Cascading would be a write across the whole library to express what the read
+  already expresses.
+- **The session records the tier by VALUE** (`ConsensusSession.groupId`/`groupName`, stamped from
+  `selectedGroup`), because the library row can be renamed or deleted afterwards and the transcript
+  must still answer "why did five models run on this task".
 
 ### Merge lifecycle (CI gate → CI-fixer → merger → notifications)
 
@@ -1906,6 +2028,27 @@ basic mode always STARTS railed). Full model:
 - **An e2e spec whose subject is not the tier pins it** with `useAdvancedInterfaceMode(page)`
   before `openBoard`; `ui-mode.spec.ts` owns the default, the switch, the rail, and the palette
   route back.
+
+### Agent tiers are a SEPARATE axis from the interface mode
+
+An agent kind declares `presentation.tier` — `basic` / `intermediate` / `advanced` — and the two
+surfaces that enumerate the whole catalog (the pipeline builder's palette, a model preset's
+per-agent overrides) show the selected tier and everything BELOW it, opening on `basic`. The
+vocabulary, the default and the cumulative predicate live in `@cat-factory/contracts`
+(`AGENT_TIERS` / `DEFAULT_AGENT_TIER` / `agentTierVisibleAt`), beside `purposeAllowsAgentCategory`,
+so a deployment-registered kind's tier and the SPA's built-ins are read by ONE rule.
+
+- **Never fold this into `isAdvanced`.** The interface mode decides which SURFACES exist; the tier
+  decides how much of one surface's catalog is LISTED. Conflating them makes both un-tunable —
+  and the tier control must stay visible in basic mode, since it is the only route to what it
+  hides (the "never mark the way BACK as advanced" rule, applied to a catalog).
+- **A new BUILT-IN kind declares its tier** in `utils/catalog.ts` (`catalog.spec.ts` fails
+  otherwise). Only a deployment-registered kind may leave it to the default, which is
+  `intermediate` — installed deliberately, but not part of the everyday loop by omission.
+- **A tier filter over EXISTING settings keeps what is already set**, exactly as
+  `showOverrideField` does for one field: the model-preset list always renders a kind the edited
+  preset pins a model for, whatever the tier, or the user owns a setting they can neither read
+  nor clear. And a narrowed list SAYS how much it is holding back.
 
 ## Internationalization (i18n)
 

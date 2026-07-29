@@ -12,6 +12,7 @@ import { useFragmentsStore } from '~/stores/fragments'
 import { useGitHubStore } from '~/stores/github'
 import { useInitiativesStore } from '~/stores/initiative'
 import { useModelPresetsStore } from '~/stores/modelPresets'
+import { useConsensusGroupsStore } from '~/stores/consensusGroups'
 import { useNotificationsStore } from '~/stores/notifications'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
@@ -61,7 +62,11 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
   useBoardStore().hydrate(snapshot.blocks, boardSince)
   useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
-  usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
+  usePipelinesStore().hydrate(
+    snapshot.pipelines,
+    snapshot.pipelineCatalogVersions,
+    snapshot.retiredPipelines,
+  )
   useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
   useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
   useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
@@ -72,6 +77,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useWorkspaceSettingsStore().hydrate(snapshot.settings)
   useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
   useModelPresetsStore().hydrate(snapshot.modelPresets ?? [], snapshot.modelPresetCatalogVersions)
+  useConsensusGroupsStore().hydrate(snapshot.consensusGroups ?? [])
   useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
   useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
   useInitiativesStore().hydrate(snapshot.initiatives)

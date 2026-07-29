@@ -67,6 +67,18 @@ describe('catalog', () => {
     }
   })
 
+  it('classifies every built-in kind into a tier', () => {
+    // The palette / model-preset surfaces open on `basic`, so a built-in that forgot its tier
+    // would silently fall to the DEFAULT (intermediate) and vanish from the default view for
+    // no stated reason. Only a deployment-registered kind may leave it to the default.
+    for (const a of [...AGENT_ARCHETYPES, ...Object.values(SYSTEM_AGENT_META)]) {
+      expect(a.tier, `${a.kind} declares no tier`).toBeDefined()
+    }
+    // And the everyday delivery loop has to be assemblable without touching the control.
+    const basic = AGENT_ARCHETYPES.filter((a) => a.tier === 'basic').map((a) => a.kind)
+    expect(basic).toEqual(expect.arrayContaining(['architect', 'coder', 'tester-api']))
+  })
+
   it('resolves usable metadata for every kind via agentKindMeta', () => {
     // Palette archetypes resolve to their own entry.
     for (const a of AGENT_ARCHETYPES) {

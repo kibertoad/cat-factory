@@ -7,7 +7,7 @@ import { usePipelinesStore } from '~/stores/pipelines'
 /** Estimate-gating consults a `task-estimator` step (mirrors the backend constant). */
 const TASK_ESTIMATOR_KIND = 'task-estimator'
 
-export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated'
+export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated' | 'retired'
 
 export interface PipelineProblem {
   type: PipelineProblemType
@@ -21,6 +21,30 @@ export interface PipelineHealth {
   invalid: boolean
   /** A built-in whose catalog definition is newer than the stored copy — reseed to update. */
   outdated: boolean
+}
+
+/**
+ * A stored built-in that has been WITHDRAWN from the catalog — no longer relevant, and removable
+ * (the one case where deleting a built-in is allowed).
+ *
+ * It is a list of its own rather than a {@link PipelineProblem} on {@link PipelineHealth} because
+ * every problem there is answered by a RESEED, and a retired pipeline has no catalog definition
+ * left to reseed from. Keeping it separate is what guarantees the advisory can never offer both
+ * fixes for one row — a retired pipeline is skipped by the health scan entirely.
+ */
+export interface RetiredPipelineHealth {
+  pipeline: Pipeline
+  /**
+   * The live pipeline that supersedes it, when the catalog names one — resolved to a display name
+   * so the advisory can write "Use {name} instead".
+   *
+   * Deliberately NOT a {@link Pipeline}: the replacement usually is NOT one this workspace stores.
+   * The canonical retirement is "old flow superseded by a NEWLY SHIPPED built-in", and a new
+   * built-in lives in `catalogVersions` with no row until someone reseeds it — it is literally a
+   * {@link NewPipeline} at that moment. Typing this as a stored `Pipeline` made the replacement
+   * unresolvable in exactly the case `replacedBy` exists for, silently dropping the sentence.
+   */
+  replacement?: { id: string; name: string }
 }
 
 /** A brand-new built-in pipeline that appeared in the catalog but isn't in the workspace yet. */
@@ -117,9 +141,18 @@ function shapeProblem(p: Pipeline): string | null {
 export function usePipelineHealth() {
   const store = usePipelinesStore()
 
+  /** Catalog ids the backend reports as withdrawn, indexed to their (optional) replacement id. */
+  const retiredIds = computed(
+    () => new Map(store.retiredPipelines.map((p) => [p.id, p.replacedBy])),
+  )
+
   const health = computed<PipelineHealth[]>(() => {
     const out: PipelineHealth[] = []
     for (const pipeline of store.pipelines) {
+      // A retired pipeline is reported by `retired` below, never here: every problem this scan
+      // raises is answered by a reseed, and there is no catalog definition left to reseed from.
+      // (An invalid retired pipeline would otherwise get a Reseed button that can only 422.)
+      if (retiredIds.value.has(pipeline.id)) continue
       const problems: PipelineProblem[] = []
 
       const unknown = [...new Set(pipeline.agentKinds.filter((k) => !isKnownAgentKind(k)))]
@@ -158,11 +191,45 @@ export function usePipelineHealth() {
       .map((id) => ({ id, name: builtinPipelineName(id) }))
   })
 
+  // Retired built-ins this workspace still stores: the ones seeded before the withdrawal. A
+  // retirement the board never had a row for is nothing to report — there is no cleanup to do.
+  const retired = computed<RetiredPipelineHealth[]>(() =>
+    store.pipelines
+      .filter((p) => retiredIds.value.has(p.id))
+      .map((pipeline) => {
+        const replacementId = retiredIds.value.get(pipeline.id)
+        const replacement = replacementId ? resolveReplacement(replacementId) : undefined
+        return { pipeline, ...(replacement ? { replacement } : {}) }
+      }),
+  )
+
+  /**
+   * Name the pipeline a retirement points at. Two sources, in order, because a replacement is a
+   * LIVE catalog id and a live catalog id may or may not have been seeded into this workspace yet:
+   * the stored row's authored name when there is one, else the catalog-derived name — the same
+   * `builtinPipelineName` fallback `newPipelines` uses for exactly this "in the catalog, no row
+   * yet" state. Reading only the store would blank the replacement on the most common retirement
+   * (superseded by a newly shipped built-in, which by definition has no row until it is added).
+   *
+   * An id in neither returns undefined and the advisory falls back to the un-named copy: the
+   * backend guards `replacedBy` against naming a non-existent pipeline, but a SPA running against
+   * a newer backend can still be handed one it doesn't know, and inventing a name for it would be
+   * worse than saying nothing.
+   */
+  function resolveReplacement(id: string): { id: string; name: string } | undefined {
+    const stored = store.getPipeline(id)
+    if (stored) return { id, name: stored.name }
+    if (id in store.catalogVersions) return { id, name: builtinPipelineName(id) }
+    return undefined
+  }
+
   // An invalid built-in is reseeded (not deleted) and that also clears any "outdated" flag, so
   // exclude it from the outdated list to avoid offering the same fix twice.
   const invalid = computed(() => health.value.filter((h) => h.invalid))
   const outdated = computed(() => health.value.filter((h) => h.outdated && !h.invalid))
-  const hasIssues = computed(() => health.value.length > 0 || newPipelines.value.length > 0)
+  const hasIssues = computed(
+    () => health.value.length > 0 || newPipelines.value.length > 0 || retired.value.length > 0,
+  )
 
-  return { health, invalid, outdated, newPipelines, hasIssues }
+  return { health, invalid, outdated, newPipelines, retired, hasIssues }
 }

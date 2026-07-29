@@ -1,5 +1,111 @@
 # @cat-factory/kernel
 
+## 0.192.0
+
+### Minor Changes
+
+- 83fd037: Retire built-in pipelines: remove ones that are no longer relevant through the reseed lifecycle
+
+  A built-in pipeline is copied into every workspace at creation, so withdrawing one from the catalog
+  in code did nothing for boards that already had it — `reseed` had no definition left to resolve and
+  `remove` refused every built-in, leaving an obsolete pipeline in each existing library permanently
+  (and still startable). Retirement closes that gap.
+
+  - Kernel gains a tombstone list (`buildRetiredPipelines` in `domain/seed.ts`, exposed as
+    `retiredPipelines()`). Retiring a built-in is TWO edits — delete its definition from the builder
+    AND name its id in the tombstone list — and they do different jobs: the deletion is what takes the
+    pipeline out of `seedPipelines()` (so it stops being seeded into new workspaces, drops out of the
+    catalog versions, and stops being reseedable, with no change at any of its call sites), while the
+    tombstone is the separate positive assertion that the id used to be ours and is now obsolete, which
+    is what reaches a board that already stored it. Doing only the deletion is the silent no-op this
+    release fixes; doing only the tombstone is caught by a kernel unit test and a boot check.
+  - `PipelineRegistry` gains `retire(id, { replacedBy })` / `retired()` / `mergeRetired()`, so a
+    deployment can withdraw its OWN registered pipelines. `register` and `retire` are inverses for an
+    id, and a live catalog entry always wins, so the live and retired sets stay disjoint. A deployment
+    cannot withdraw a BUILT-IN this way (that would be a route to emptying the curated palette), and
+    `validateRegistrations` now raises `retirement_of_live_pipeline` at boot when a `retire()` call
+    names a still-live pipeline, rather than leaving the ignored call to be discovered as a cleanup
+    that never appeared.
+  - `PipelineService.remove` accepts a built-in only while it is retired (a pipeline the catalog still
+    ships stays read-only), and the workspace snapshot ships `retiredPipelines` beside
+    `pipelineCatalogVersions`.
+  - The SPA's pipeline-health advisory grows a "Retired pipelines" section offering a per-row removal,
+    naming the replacement when the catalog declares one — resolved from the stored row when the board
+    has one and from the catalog otherwise, since the usual retirement is superseded-by-a-newly-shipped
+    built-in, which has no row until someone adds it. A retired pipeline is excluded from every reseed
+    offer, including the "new built-ins available" list.
+
+  Also fixes an adjacent gap: deleting a pipeline that a recurring schedule still points at is now
+  refused with a 409 naming the fix, for custom pipelines as much as retired built-ins. Previously the
+  delete succeeded and every subsequent fire of that schedule failed silently. A paused (`enabled:
+false`) schedule blocks the delete too — pausing is not detaching, and the breakage would otherwise
+  surface when someone re-enabled it. That refusal and the two pre-existing schedule refusals on
+  `update` now carry machine-readable `details.reason` codes (`pipeline_schedule_attached` /
+  `pipeline_schedule_requires_recurring` / `pipeline_schedule_intake_unconfigured`), so the SPA words
+  them in the user's language instead of surfacing the raw English message.
+
+### Patch Changes
+
+- Updated dependencies [83fd037]
+  - @cat-factory/contracts@0.196.0
+
+## 0.191.0
+
+### Minor Changes
+
+- 7248b72: Open the consensus mechanism to the review agents, and make the panels a reusable, tiered library.
+
+  A review is a judgement, which is the thing a panel of independent models is measurably better at
+  than one model — but until now only the code `reviewer` among the review kinds could be run as
+  one. The deep PR reviewer and the document/design/spec companions are now eligible too. What a
+  panel can SEE differs by kind and is the reason the set stops where it does: `pr-reviewer` gets its
+  whole input from backend-prepared context files, which the inline prompt builder now folds in, so a
+  panel reads the same diff the container reviewer would; the checkout-exploring companions trade
+  ground-truth depth for judgement diversity, which is why consensus stays opt-in per step and gated
+  on the task estimate.
+
+  The gating is what made the feature hard to actually use: a panel costs several model calls, so
+  "run it only when the work is heavy" was already possible, but the panel itself had to be
+  hand-written onto each step. A workspace now keeps a library of **consensus groups** — named
+  panels (roles, perspective framings, models, strategy, synthesizer) each carrying the estimate bar
+  it is worth paying for. A step names a SET of groups, and at dispatch the engine picks the most
+  demanding tier the task's estimate clears, falling back to the standard single agent when none
+  does. "A two-model review above 0.4 risk, the full panel above 0.8" is one step instead of three
+  conditional pipelines, and the panels are shared across every pipeline in the workspace.
+
+  Two decisions worth knowing when reading the code. The tier is selected in the ENGINE, not in the
+  consensus executor, so the optional `@cat-factory/consensus` package never learns a group store
+  exists and the executor still consumes one already-decided config; and the selected group's gating
+  is deliberately dropped when it is materialised, because selection IS the gate — carrying it
+  forward would have the executor re-decide the same question against the same estimate, where any
+  future divergence silently turns a selected tier into a skipped step.
+
+  Running a container kind as an inline panel is where this feature's sharp edge is, and three
+  seams now carry that fact instead of assuming a filesystem. `dispatchDeliversCheckout` is the one
+  definition of "does this dispatch hand the agent a checkout", shared by the composite executor's
+  routing and by the engine, which passes it to a kind's repo hooks; the `pr-reviewer` diff renderer
+  branches on it, so a panel is never handed the manifest-plus-`git diff` shape it cannot act on and
+  anything that still does not fit its (larger) inline budget is named as unreviewable rather than
+  passed off as reviewed; and the consensus executor appends a directive stating the participant's
+  real surface, since the shipped prompts of most eligible kinds describe a machine the participant
+  is not on. The prompt fold that feeds inline callers is also bounded now, and leaves the standards
+  files to the system prompt, which folds them at the kind's configured verbosity.
+
+  Also fixes a silent pre-existing bug found next door: `ExecutionService` never forwarded
+  `agentPromptRepository` to the context builder, so a workspace's edited agent prompts never reached
+  a dispatch. The forwarding was a hand-maintained list of ~28 field names; it now passes the
+  dependency object it already has, which is why that class of omission can't recur.
+
+  Adds a `consensus_groups` table and two `consensus_sessions` columns (the tier that fired, recorded
+  by value so the transcript survives the library row being renamed or deleted) on both runtimes.
+  A workspace that authors no group is byte-for-byte unaffected.
+
+### Patch Changes
+
+- Updated dependencies [7248b72]
+- Updated dependencies [449d856]
+  - @cat-factory/contracts@0.195.0
+
 ## 0.190.0
 
 ### Minor Changes

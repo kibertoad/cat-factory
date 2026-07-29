@@ -16,6 +16,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
+- [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
 - [Key UI surfaces](#key-ui-surfaces)
 - [Develop & test](#develop--test)
 
@@ -115,6 +116,31 @@ hoc where it can be avoided:
   control, editable, as soon as any value it edits is set (`false` included — a tri-state
   `false` is a choice, not absence), so basic mode can never conceal a setting a run will
   actually use.
+
+## Agent tiers (basic / intermediate / advanced)
+
+A separate, narrower axis: how deep into the **agent catalog** a surface reaches. Every agent
+kind carries a `tier` — `basic` (the everyday delivery loop), `intermediate` (reached for
+regularly) or `advanced` (specialist) — and the two surfaces that enumerate the catalog, the
+**pipeline builder's palette** and the **model preset's per-agent override list**, show the
+selected tier and everything below it. They open on `basic`; the `AgentTierSelect` control on
+each widens them, with `advanced` showing the whole catalog. The choice is one shared,
+persisted preference (the `agentTier` store), because picking the agents a pipeline runs and
+picking what each of them runs on are halves of the same job.
+
+- The vocabulary, the default and the cumulative predicate live in `@cat-factory/contracts`
+  (`AGENT_TIERS` / `DEFAULT_AGENT_TIER` / `agentTierVisibleAt`), beside
+  `purposeAllowsAgentCategory` — so a **deployment-registered kind's** declared tier
+  (`presentation.tier`, carried in the workspace snapshot) and the SPA's own built-ins are
+  read by one rule. A kind that declares no tier is treated as `intermediate`.
+- **This is not the interface mode.** That tier decides which surfaces the whole SPA offers;
+  this one decides how much of one surface's catalog is listed. They are independent — an
+  advanced-mode user still starts on the basic agent tier — and the tier control is present in
+  **both** interface modes, since it is the only route to the kinds it hides.
+- A narrowed catalog states what it is holding back (the "n hidden at this tier" hint), and
+  the model preset list **always keeps a kind the edited preset already pins a model for**,
+  whatever the tier — the same rule `showOverrideField` states for a single field: a row the
+  user can neither read nor clear is worse than a longer list.
 
 ## Extending the layer (consumer modules)
 

@@ -89,11 +89,17 @@ const WELL_FORMED = {
 const ctx = (
   repo: RepoFiles,
   custom: unknown,
-  opts: { opensPr?: boolean; title?: string; taskTypeFields?: Record<string, unknown> } = {},
+  opts: {
+    opensPr?: boolean
+    deliversCheckout?: boolean
+    title?: string
+    taskTypeFields?: Record<string, unknown>
+  } = {},
 ) => ({
   repo,
   branch: 'main',
   opensPr: opts.opensPr ?? false,
+  deliversCheckout: opts.deliversCheckout ?? true,
   logger: noopLogger,
   context: {
     agentKind: SPIKE_AGENT_KIND,

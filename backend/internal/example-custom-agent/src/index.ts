@@ -388,6 +388,10 @@ export const EXAMPLE_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#f59e0b',
       description: "Reviews a change against the company's engineering policies.",
       category: 'review',
+      // How specialist the kind is. `basic` puts it in the palette's DEFAULT view, beside the
+      // everyday kinds — right for a reviewer an org wants on most pipelines. Omit it (as the
+      // auditor below does) and the kind is treated as `intermediate`: shown one level up.
+      tier: 'basic',
     },
   },
   {

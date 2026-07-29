@@ -12,7 +12,13 @@ import type {
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import type { PipelineRegistry } from '@cat-factory/kernel'
-import { assertFound, ConflictError, seedPipelines, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  retiredPipelines,
+  seedPipelines,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
   PipelineRepository,
@@ -289,6 +295,7 @@ export class PipelineService {
       if (schedules.some((s) => s.pipelineId === id)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule, so it cannot be made one-off. Detach the schedule first.',
+          'pipeline_schedule_requires_recurring',
         )
       }
     }
@@ -307,6 +314,7 @@ export class PipelineService {
       if (schedules.some((s) => s.pipelineId === id && !s.issueIntake)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule with no issue-intake configuration, so a bug-intake step cannot be enabled. Configure issue intake on the schedule first.',
+          'pipeline_schedule_intake_unconfigured',
         )
       }
     }
@@ -349,8 +357,15 @@ export class PipelineService {
     await this.requireWorkspace(workspaceId)
     const seed = seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
     if (!seed) {
+      // A RETIRED built-in resolves nothing here (the two sets are disjoint), and its fix is the
+      // opposite one — so name it rather than sending the user to a `remove` they'd have to
+      // discover works. Every other unresolvable id is a custom pipeline (or a deployment
+      // pipeline whose registry isn't wired), which stays a plain delete.
+      const retired = retiredPipelines(this.pipelineRegistry).some((p) => p.id === id)
       throw new ValidationError(
-        `Pipeline '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
+        retired
+          ? `Pipeline '${id}' has been retired from the catalog, so there is nothing to reseed it from. Remove it instead.`
+          : `Pipeline '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
       )
     }
     // A stored copy exists ⇒ it must be the built-in (a custom pipeline sharing a catalog id is
@@ -373,13 +388,46 @@ export class PipelineService {
     return pipeline
   }
 
+  /**
+   * Delete a pipeline. A custom one is always deletable; a BUILT-IN is deletable only once it has
+   * been RETIRED from the catalog — which is how a withdrawn built-in is removed from a workspace
+   * that was seeded with it before the withdrawal.
+   *
+   * Retirement is the deletion's authorization, and it has to be, because the reseed lifecycle
+   * otherwise has no exit: a live built-in is read-only so its palette entry is always present
+   * (clone it to customise), while a stale one used to be unreachable in BOTH directions — reseed
+   * had nothing to resolve and delete refused it as a built-in, so it sat in every board's library
+   * forever. Naming it in kernel's `buildRetiredPipelines` (or a deployment's
+   * `PipelineRegistry.retire`) is what flips the same row from read-only to removable.
+   */
   async remove(workspaceId: string, id: string): Promise<void> {
     await this.requireWorkspace(workspaceId)
     const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
     // Built-in catalog templates are read-only — they can be cloned but never deleted
-    // (matching `update`), so the curated palette is always present. Clone to customise.
-    if (existing.builtin) {
+    // (matching `update`), so the curated palette is always present. Clone to customise. The one
+    // exception is a retirement: the catalog no longer offers it, so keeping the stored row
+    // read-only would preserve a pipeline nothing can restore, repair, or replace.
+    if (existing.builtin && !retiredPipelines(this.pipelineRegistry).some((p) => p.id === id)) {
       throw new ValidationError('Built-in pipelines are read-only and cannot be deleted.')
+    }
+    // Deleting a pipeline a recurring schedule still points at would break every future fire (each
+    // one resolves the pipeline by id and throws), and a recurring failure is invisible until
+    // someone notices the work stopped. Refuse and point at the schedule — the same disposition
+    // `update` takes for the availability/bug-intake edits that would strand a schedule. Applies to
+    // a custom pipeline as much as a retired built-in: the fire path cannot tell them apart.
+    //
+    // A DISABLED schedule blocks the delete too, deliberately: `enabled` is a pause button, so
+    // filtering on it would let a delete strand a schedule whose owner re-enables it next week —
+    // and the breakage would then be attributed to the re-enable, not to this. The cost is that
+    // finishing a retirement cleanup means deleting a paused schedule, which the message names.
+    if (this.pipelineScheduleRepository) {
+      const schedules = await this.pipelineScheduleRepository.list(workspaceId)
+      if (schedules.some((s) => s.pipelineId === id)) {
+        throw new ConflictError(
+          'This pipeline is attached to a recurring schedule, so it cannot be deleted. Detach the schedule first.',
+          'pipeline_schedule_attached',
+        )
+      }
     }
     await this.pipelineRepository.delete(workspaceId, id)
   }

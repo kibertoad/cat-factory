@@ -13,6 +13,10 @@ import type {
   ClarityReview,
   ClarityReviewItem,
   ClarityReviewRepository,
+  ConsensusGating,
+  ConsensusGroup,
+  ConsensusGroupRepository,
+  ConsensusParticipant,
   ConsensusSession,
   ConsensusSessionRepository,
   DocInterviewQa,
@@ -23,11 +27,12 @@ import type {
   RequirementReviewItem,
   RequirementReviewRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   brainstormSessions,
   clarityReviews,
+  consensusGroups,
   consensusSessions,
   docInterviewSessions,
   requirementReviews,
@@ -322,6 +327,8 @@ function rowToConsensusSession(row: ConsensusSessionRow): ConsensusSession {
     agentKind: row.agent_kind,
     strategy: row.strategy as ConsensusSession['strategy'],
     status: row.status as ConsensusSession['status'],
+    groupId: row.group_id,
+    groupName: row.group_name,
     participants: parseJsonArray(row.participants),
     rounds: parseJsonArray(row.rounds),
     synthesis: row.synthesis,
@@ -421,6 +428,8 @@ export class DrizzleConsensusSessionRepository implements ConsensusSessionReposi
       agent_kind: session.agentKind,
       strategy: session.strategy,
       status: session.status,
+      group_id: session.groupId ?? null,
+      group_name: session.groupName ?? null,
       participants: JSON.stringify(session.participants),
       rounds: JSON.stringify(session.rounds),
       synthesis: session.synthesis,
@@ -442,6 +451,8 @@ export class DrizzleConsensusSessionRepository implements ConsensusSessionReposi
           agent_kind: values.agent_kind,
           strategy: values.strategy,
           status: values.status,
+          group_id: values.group_id,
+          group_name: values.group_name,
           participants: values.participants,
           rounds: values.rounds,
           synthesis: values.synthesis,
@@ -754,5 +765,114 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
       })
       .returning({ rev: brainstormSessions.rev })
     session.rev = rows[0]?.rev ?? 0
+  }
+}
+
+type ConsensusGroupRow = typeof consensusGroups.$inferSelect
+
+/** The bar a row falls back to when its JSON is unreadable: none (the group is the floor). */
+const UNGATED_CONSENSUS: ConsensusGating = { enabled: false, onMissingEstimate: 'consensus' }
+
+/**
+ * A malformed gating column degrades to UNGATED rather than to a bar nobody can clear: the tier
+ * selection reads this to decide whether the panel runs at all, and failing closed on unreadable
+ * config would silently downgrade a workspace's reviews with no error anywhere.
+ */
+function parseConsensusGating(raw: string): ConsensusGating {
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (parsed && typeof parsed === 'object') return parsed as ConsensusGating
+  } catch {
+    // fall through to the ungated default
+  }
+  return UNGATED_CONSENSUS
+}
+
+function rowToConsensusGroup(row: ConsensusGroupRow): ConsensusGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    ...(row.description != null ? { description: row.description } : {}),
+    strategy: row.strategy as ConsensusGroup['strategy'],
+    participants: parseJsonArray<ConsensusParticipant>(row.participants),
+    ...(row.synthesizer_model_id != null ? { synthesizerModelId: row.synthesizer_model_id } : {}),
+    ...(row.rounds != null ? { rounds: row.rounds } : {}),
+    gating: parseConsensusGating(row.gating),
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * The workspace consensus-GROUP library over Postgres (the Drizzle mirror of the Worker's
+ * `D1ConsensusGroupRepository`, migration 0070): the reusable, estimate-gated panels a pipeline
+ * step escalates to. `participants` and `gating` are JSON columns and never query predicates —
+ * the tier selection runs in TypeScript over the batch {@link listByIds} returns, which is why
+ * the dispatch path costs ONE query however many tiers a step names.
+ */
+export class DrizzleConsensusGroupRepository implements ConsensusGroupRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<ConsensusGroup | null> {
+    const rows = await this.db
+      .select()
+      .from(consensusGroups)
+      .where(and(eq(consensusGroups.workspace_id, workspaceId), eq(consensusGroups.id, id)))
+      .limit(1)
+    return rows[0] ? rowToConsensusGroup(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<ConsensusGroup[]> {
+    const rows = await this.db
+      .select()
+      .from(consensusGroups)
+      .where(eq(consensusGroups.workspace_id, workspaceId))
+      .orderBy(consensusGroups.created_at)
+    return rows.map(rowToConsensusGroup)
+  }
+
+  async listByIds(workspaceId: string, ids: string[]): Promise<ConsensusGroup[]> {
+    if (!ids.length) return []
+    const rows = await this.db
+      .select()
+      .from(consensusGroups)
+      .where(and(eq(consensusGroups.workspace_id, workspaceId), inArray(consensusGroups.id, ids)))
+      .orderBy(consensusGroups.created_at)
+    return rows.map(rowToConsensusGroup)
+  }
+
+  async upsert(workspaceId: string, group: ConsensusGroup): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: group.id,
+      name: group.name,
+      description: group.description ?? null,
+      strategy: group.strategy,
+      participants: JSON.stringify(group.participants),
+      synthesizer_model_id: group.synthesizerModelId ?? null,
+      rounds: group.rounds ?? null,
+      gating: JSON.stringify(group.gating),
+      created_at: group.createdAt,
+    }
+    await this.db
+      .insert(consensusGroups)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [consensusGroups.workspace_id, consensusGroups.id],
+        set: {
+          name: values.name,
+          description: values.description,
+          strategy: values.strategy,
+          participants: values.participants,
+          synthesizer_model_id: values.synthesizer_model_id,
+          rounds: values.rounds,
+          gating: values.gating,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(consensusGroups)
+      .where(and(eq(consensusGroups.workspace_id, workspaceId), eq(consensusGroups.id, id)))
   }
 }

@@ -26,6 +26,7 @@ import type {
   InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
+  PipelineRegistry,
   PrVerificationReportPublisher,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
@@ -570,6 +571,17 @@ export interface ConformanceAppOptions {
    * build. Absent → the facade's default (empty) task-type registry.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Inject the app-owned pipeline registry, pre-loaded with a registered pipeline and/or a
+   * RETIREMENT, so the suite can drive the pipeline lifecycle end to end on EVERY runtime: a
+   * deployment pipeline seeds into a new workspace, and a withdrawn one is advertised on the
+   * snapshot + deletable from a board that already stored it (a built-in the catalog still ships
+   * stays read-only). Retirement is only ever a POSITIVE assertion on this registry, so it cannot
+   * be exercised through the built-in catalog — which ships no tombstones — without one.
+   * Each facade harness threads the SAME instance into its container build; absent → the facade's
+   * default (empty) pipeline registry.
+   */
+  pipelineRegistry?: PipelineRegistry
   /**
    * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
    * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an

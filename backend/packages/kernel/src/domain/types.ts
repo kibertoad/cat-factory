@@ -436,6 +436,10 @@ export type {
   ConsensusGating,
   StepGating,
   ConsensusStepConfig,
+  // The reusable, estimate-gated panel library a step's `groupIds` escalate to.
+  ConsensusGroup,
+  CreateConsensusGroupInput,
+  UpdateConsensusGroupInput,
   TaskEstimate,
   ConsensusScore,
   ConsensusContribution,

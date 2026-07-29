@@ -514,7 +514,10 @@
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
         "env_test_no_vcs": "Git sağlayıcısı bağlı değil",
         "env_test_connection_failed": "Ortam bağlantısı başarısız",
-        "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi"
+        "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi",
+        "pipeline_schedule_attached": "Yinelenen bir zamanlama bu hattı kullanıyor",
+        "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama bu hatta ihtiyaç duyuyor",
+        "pipeline_schedule_intake_unconfigured": "Zamanlamada sorun alımı yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -539,7 +542,10 @@
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
         "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
         "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
-        "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın."
+        "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın.",
+        "pipeline_schedule_attached": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor ve başlattığı her çalışma hattı kimliğiyle çözümlüyor. Önce o zamanlamayı ayırın veya silin, sonra hattı kaldırın.",
+        "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor, bu yüzden yalnızca tek seferlik yapmak gelecekteki her çalışmayı bozar. Önce o zamanlamayı ayırın.",
+        "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -3179,6 +3185,47 @@
       "saved": "Varsayılan test ortamı kaydedildi.",
       "savedState": "Kaydedildi.",
       "saveFailed": "Varsayılan test ortamı kaydedilemedi."
+    },
+    "consensusGroups": {
+      "title": "Uzlaşı grupları",
+      "intro": "Bir hat adımının yükselebileceği yeniden kullanılabilir inceleme panelleri. Her grup, bir görevin aşması gereken tahmin eşiğini taşır; böylece ağır iş ayrı bir hat gerekmeden daha geniş bir panel alır.",
+      "new": "Yeni grup",
+      "list": {
+        "empty": "Henüz uzlaşı grubu yok.",
+        "always": "Her zaman",
+        "bar": "{bar} ve üzeri",
+        "editTitle": "Grubu düzenle",
+        "deleteTitle": "Grubu sil",
+        "participantCount": "katılımcı yok | bir katılımcı | {count} katılımcı"
+      },
+      "editor": {
+        "nameLabel": "Ad",
+        "namePlaceholder": "Derin inceleme paneli",
+        "strategyLabel": "Strateji",
+        "descriptionLabel": "Açıklama",
+        "descriptionPlaceholder": "Bu panel ne için",
+        "participantsLabel": "Katılımcılar",
+        "participantsHint": "En az iki. Bir paneli tek modelden üstün kılan şey rol ve model çeşitliliğidir.",
+        "addParticipant": "Katılımcı ekle",
+        "framingPlaceholder": "Bu katılımcının savunduğu bakış açısı",
+        "stepModel": "Adımın modeli",
+        "synthesizerLabel": "Sentez modeli",
+        "gatedLabel": "Yalnızca eşiğin üzerindeki görevler için",
+        "gatedHint": "Bir görevin bu paneli hak etmesi için ulaşması gereken tahmin. Grubun her zaman geçerli olması için kapalı bırak.",
+        "complexityThreshold": "Karmaşıklık",
+        "gatingIncomplete": "En az bir eşik belirle ya da koşulu kapat.",
+        "unnamedRole": "İnceleyici",
+        "cancel": "Vazgeç",
+        "save": "Grubu kaydet"
+      },
+      "confirmDelete": {
+        "title": "Uzlaşı grubu silinsin mi?",
+        "body": "\"{name}\" adını taşıyan adımlar kalan gruplarına geri döner."
+      },
+      "toast": {
+        "saveFailed": "Uzlaşı grubu kaydedilemedi",
+        "deleteFailed": "Uzlaşı grubu silinemedi"
+      }
     }
   },
   "providers": {
@@ -3946,7 +3993,11 @@
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
       "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
       "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
-      "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş"
+      "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş",
+      "consensusGroups": "Uzlaşı grupları",
+      "consensusGroupsHint": "Bu adımın yükselebileceği yeniden kullanılabilir panelleri seç. Her birinin kendi tahmin eşiği vardır; görevin aştığı en zorlu olan çalışır.",
+      "consensusGroupsActive": "Bu adım seçili grubu çalıştırır. Katılımcıları burada ayarlamak için tüm grupların seçimini kaldır.",
+      "consensusGroupAlways": "her zaman"
     },
     "progress": {
       "status": {
@@ -4009,14 +4060,20 @@
       "add": "Ekle",
       "reseed": "Yeniden tohumla",
       "delete": "Sil",
+      "remove": "Kaldır",
       "updatesHeading": "Güncellemeler mevcut",
       "updatesDescription": "Bu yerleşik pipeline'ların daha yeni bir sürümü yayınlandı. Benimsemek için yeniden tohumlayın (etiketleriniz ve arşiv durumunuz korunur).",
+      "retiredHeading": "Kullanımdan kaldırılan pipeline’lar",
+      "retiredDescription": "Bu yerleşik pipeline’lar katalogdan çekildi, dolayısıyla benimsenecek daha yeni bir sürüm yok. Bu panonun kütüphanesinden kaldırın.",
+      "retiredNote": "Katalogdan kaldırıldı.",
+      "retiredReplacedBy": "Katalogdan kaldırıldı. Bunun yerine {name} kullanın.",
       "reseedAll": "Tümünü yeniden tohumla ({count})",
       "dismiss": "Yoksay",
       "done": "Tamam",
       "toast": {
         "reseedFailed": "Pipeline yeniden tohumlanamadı",
-        "deleteFailed": "Pipeline silinemedi"
+        "deleteFailed": "Pipeline silinemedi",
+        "removeFailed": "Pipeline kaldırılamadı"
       }
     }
   },
@@ -4054,6 +4111,17 @@
       "loadFailed": "İstem yüklenemedi",
       "conflict": "Bu istemi başka biri değiştirdi. Yeniden yüklendi - düzenlemenizi tekrar uygulayın."
     }
+  },
+  "agentTier": {
+    "label": "Ajan düzeyi",
+    "basic": "Temel",
+    "intermediate": "Orta",
+    "advanced": "İleri",
+    "basicHint": "Yalnızca bir hattın normalde kurulduğu günlük ajanlar.",
+    "intermediateHint": "Düzenli olarak başvurduğunuz ajanları ekler.",
+    "advancedHint": "Uzmanlaşmış olanlar dahil tüm ajanları gösterir.",
+    "tooltip": "Ajan kataloğunun ne kadarının gösterileceğini seçin",
+    "hidden": "Bu düzeyde {count} ajan gizli."
   },
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
@@ -4398,7 +4466,8 @@
       "synthesizing": "Sentezleniyor",
       "done": "Tamamlandı",
       "failed": "Başarısız"
-    }
+    },
+    "groupTitle": "Bu çalışmanın yükseldiği uzlaşı grubu"
   },
   "brainstorm": {
     "title": {

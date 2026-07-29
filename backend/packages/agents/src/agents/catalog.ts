@@ -5,6 +5,7 @@ import {
   testApproachSection,
   e2eTargetSection,
 } from './prompts/acceptance.js'
+import { isStandardsContextFile } from './runtime/fragments.js'
 import { companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets, isCompanionKind } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
@@ -254,7 +255,77 @@ export function userPromptFor(
   registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
-  return withRevision(buildBaseUserPrompt(context, registry, opts), context)
+  return withInjectedContext(
+    withRevision(buildBaseUserPrompt(context, registry, opts), context),
+    context,
+    opts,
+  )
+}
+
+/**
+ * Total budget for the folded context bodies. A panel re-sends this prompt to every participant
+ * on every round, so an unbounded fold multiplies by panel size × rounds; and a preOp's output is
+ * only as bounded as that preOp chose to be. Generous enough for the `pr-reviewer` diff (its own
+ * renderer caps well under this) while keeping a pathological custom kind from filling a context
+ * window with one file.
+ */
+const MAX_INJECTED_CONTEXT_CHARS = 320_000
+
+/**
+ * Fold the backend-prepared context files a preOp produced into the prompt when the caller
+ * has NO filesystem to materialise them onto (every inline caller: the inline executor, the
+ * consensus panel). The container path passes `materialized`, where the same bodies are
+ * written to `.cat-context/` and the agent reads them with tools — folding them here as well
+ * would double the tokens on exactly the kinds whose files are largest.
+ *
+ * Applied at the wrapper level, beside {@link withRevision}, deliberately: `buildBaseUserPrompt`
+ * returns early for a standard phase AND for a kind that supplies its own user prompt, and it
+ * is precisely those self-authoring kinds (`pr-reviewer`, whose preOps inject the diff, the
+ * existing review threads and the standards) whose whole input arrives this way. A fold inside
+ * the generic branch would reach none of them.
+ *
+ * STANDARDS files are deliberately excluded ({@link isStandardsContextFile}). They reach an
+ * inline caller through the SYSTEM prompt instead, where `composeBlockSystemPrompt` folds them at
+ * the kind's {@link StandardsVerbosity} — so an implementer kind gets each standard's condensed
+ * `brief` rather than its full body. Folding them here as well would both duplicate every
+ * standard and silently restore the full bodies, which is the hazard the verbosity tier exists to
+ * prevent. Inline executors therefore pass `standardsDeliveredAsFiles: false`: with no filesystem,
+ * the files were never really delivered.
+ */
+function withInjectedContext(
+  prompt: string,
+  context: AgentRunContext,
+  opts: { materialized?: boolean },
+): string {
+  if (opts.materialized) return prompt
+  const files = (context.injectedContextFiles ?? []).filter((f) => !isStandardsContextFile(f.path))
+  if (!files.length) return prompt
+  const lines = [
+    prompt,
+    '',
+    'Context files prepared for this run (their full contents follow — there is no',
+    'checkout to read them from):',
+  ]
+  // Bounded, and the boundary is STATED. A silently shortened body reads exactly like a complete
+  // one, so a reviewer would report on a file whose tail it never saw without ever knowing.
+  let budget = MAX_INJECTED_CONTEXT_CHARS
+  const dropped: string[] = []
+  for (const file of files) {
+    if (file.content.length > budget) {
+      dropped.push(file.path)
+      continue
+    }
+    budget -= file.content.length
+    lines.push('', `--- ${file.path} ---`, file.content)
+  }
+  if (dropped.length) {
+    lines.push(
+      '',
+      `NOT INCLUDED (over the injected-context budget): ${dropped.join(', ')}. You cannot read ` +
+        'these and must not infer their contents; say so rather than treating them as reviewed.',
+    )
+  }
+  return lines.join('\n')
 }
 
 function buildBaseUserPrompt(

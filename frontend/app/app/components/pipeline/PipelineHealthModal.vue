@@ -3,15 +3,22 @@
 // `usePipelineHealth` reports any issue. Lists:
 //   • new built-in pipelines the workspace doesn't have yet (ADD them);
 //   • invalid pipelines (unknown agent kind / bad shape) — DELETE a custom one, RESEED a built-in;
-//   • outdated built-ins (a newer catalog definition is available) — RESEED to adopt it.
+//   • outdated built-ins (a newer catalog definition is available) — RESEED to adopt it;
+//   • RETIRED built-ins (withdrawn from the catalog) — REMOVE them; there is nothing left to
+//     reseed from, which is why they are the one built-in the backend lets a delete through.
 // Adding a new built-in and reseeding an existing one are the same reseed call (it creates or
 // updates by catalog id). Detection is client-side (see usePipelineHealth); the actions hit the
 // pipelines store.
 const { t } = useI18n()
 const ui = useUiStore()
 const pipelines = usePipelinesStore()
-const { invalid, outdated, newPipelines, hasIssues } = usePipelineHealth()
-const toast = useToast()
+const { invalid, outdated, newPipelines, retired, hasIssues } = usePipelineHealth()
+// Failures go through the shared conflict presenter rather than a raw `toast.add`: the refusals
+// this screen actually provokes are 409s (a recurring schedule still points at the pipeline), and
+// those carry a machine-readable `details.reason` the presenter turns into translated remedy copy.
+// Dumping `error.message` instead would put untranslated backend prose in front of every non-English
+// user — on the one screen whose whole purpose is telling them what to do next.
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.pipelineHealthOpen,
@@ -25,17 +32,14 @@ const busy = ref<Set<string>>(new Set())
 const isBusy = (id: string) => busy.value.has(id)
 const anyBusy = computed(() => busy.value.size > 0)
 
-async function run(id: string, action: () => Promise<unknown>, failTitle: string) {
+/** `failTitleKey` is an i18n KEY (not resolved copy) — `present` uses it only when the failure has
+ *  no mapped conflict reason of its own. */
+async function run(id: string, action: () => Promise<unknown>, failTitleKey: string) {
   busy.value = new Set(busy.value).add(id)
   try {
     await action()
   } catch (e) {
-    toast.add({
-      title: failTitle,
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, failTitleKey)
   } finally {
     const next = new Set(busy.value)
     next.delete(id)
@@ -44,9 +48,19 @@ async function run(id: string, action: () => Promise<unknown>, failTitle: string
 }
 
 const reseed = (id: string) =>
-  run(id, () => pipelines.reseed(id), t('pipeline.health.toast.reseedFailed'))
+  run(id, () => pipelines.reseed(id), 'pipeline.health.toast.reseedFailed')
 const remove = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), t('pipeline.health.toast.deleteFailed'))
+  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.deleteFailed')
+// Same call as `remove`, different failure copy: the retired section says "Remove" (the pipeline is
+// gone from the catalog), so a failure toast reading "could not DELETE" would name an action the
+// user was never offered. This is only the FALLBACK title — the likely failure here is a recurring
+// schedule still pointing at the pipeline, which arrives as a 409 the presenter words itself.
+const removeRetired = (id: string) =>
+  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.removeFailed')
+
+// Removals are deliberately per-row with no bulk twin, unlike the reseeds below: a reseed restores
+// what the catalog says, while a delete is the one irreversible action on this screen (a built-in
+// the catalog no longer defines cannot be reseeded back). One click per pipeline is the point.
 
 /** Reseed every reseedable pipeline (new + outdated built-ins + invalid built-ins) in one go. */
 async function reseedAll() {
@@ -175,6 +189,48 @@ const reseedableCount = computed(
                   {{ t('pipeline.health.delete') }}
                 </UButton>
               </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Retired built-ins: withdrawn from the catalog, so the only action is removal. -->
+        <section v-if="retired.length" class="space-y-2">
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-archive-x" class="h-4 w-4 text-slate-400" />
+            <h3 class="text-sm font-semibold text-slate-200">
+              {{ t('pipeline.health.retiredHeading') }}
+            </h3>
+          </div>
+          <p class="text-[11px] text-slate-500">{{ t('pipeline.health.retiredDescription') }}</p>
+          <ul class="space-y-2">
+            <li
+              v-for="r in retired"
+              :key="r.pipeline.id"
+              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+            >
+              <div class="min-w-0">
+                <span class="truncate text-sm font-medium text-slate-100">{{
+                  r.pipeline.name
+                }}</span>
+                <p class="text-[11px] text-slate-400/80">
+                  {{
+                    r.replacement
+                      ? t('pipeline.health.retiredReplacedBy', { name: r.replacement.name })
+                      : t('pipeline.health.retiredNote')
+                  }}
+                </p>
+              </div>
+              <UButton
+                size="xs"
+                color="error"
+                variant="subtle"
+                icon="i-lucide-trash-2"
+                :loading="isBusy(r.pipeline.id)"
+                :disabled="anyBusy"
+                @click="removeRetired(r.pipeline.id)"
+              >
+                {{ t('pipeline.health.remove') }}
+              </UButton>
             </li>
           </ul>
         </section>

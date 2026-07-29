@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPipelineIdForTaskType, REVIEW_PIPELINE_ID, seedPipelines } from './seed.js'
+import { PipelineRegistry } from './pipeline-registry.js'
+import {
+  defaultPipelineIdForTaskType,
+  retiredPipelines,
+  REVIEW_PIPELINE_ID,
+  seedPipelines,
+} from './seed.js'
 
 // The built-in catalog is authored with the named-step form (`definePipeline`), which lowers to the
 // wire `Pipeline`'s index-aligned `agentKinds`/`gates`/`enabled` arrays. These assertions pin that
@@ -153,5 +159,59 @@ describe('seedPipelines — named-gate lowering', () => {
         firstConsumer,
       )
     }
+  })
+})
+
+describe('retiredPipelines — withdrawn built-ins', () => {
+  it('never names a pipeline the catalog still ships', () => {
+    // The drift guard for the hand-authored tombstone list: retiring a built-in means DELETING its
+    // definition from the builders, so an id in both places is an unfinished retirement. Left
+    // unchecked it reaches a workspace as a pipeline the SPA offers to reseed AND to remove.
+    const live = new Set(seedPipelines().map((p) => p.id))
+    for (const retired of retiredPipelines()) {
+      expect(live.has(retired.id), `${retired.id} is retired but still in the catalog`).toBe(false)
+    }
+  })
+
+  it('points every replacedBy at a pipeline that actually exists', () => {
+    // A replacement the SPA cannot resolve renders an advisory that names nothing, so a `replacedBy`
+    // typo (or a replacement that was itself later retired) has to fail here rather than in the UI.
+    const live = new Set(seedPipelines().map((p) => p.id))
+    for (const retired of retiredPipelines()) {
+      if (!retired.replacedBy) continue
+      expect(live.has(retired.replacedBy), `${retired.id} replacedBy ${retired.replacedBy}`).toBe(
+        true,
+      )
+    }
+  })
+
+  it('retires a deployment-registered pipeline, dropping it from the live catalog', () => {
+    const registry = new PipelineRegistry()
+    registry.register({ id: 'pl_org_legacy', name: 'Legacy org flow', agentKinds: ['coder'] })
+    expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
+
+    registry.retire('pl_org_legacy', { replacedBy: 'pl_simple' })
+    expect(seedPipelines(registry).map((p) => p.id)).not.toContain('pl_org_legacy')
+    expect(retiredPipelines(registry)).toContainEqual({
+      id: 'pl_org_legacy',
+      replacedBy: 'pl_simple',
+    })
+  })
+
+  it('lets a re-registration un-retire an id (the later assertion wins, never both)', () => {
+    const registry = new PipelineRegistry()
+    registry.retire('pl_org_legacy')
+    registry.register({ id: 'pl_org_legacy', name: 'Revived', agentKinds: ['coder'] })
+    expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
+    expect(retiredPipelines(registry).map((p) => p.id)).not.toContain('pl_org_legacy')
+  })
+
+  it('keeps a live built-in out of the retired set even when a registry retires its id', () => {
+    // A deployment can only withdraw its OWN pipelines: retiring a built-in id it did not replace
+    // would otherwise offer every workspace a delete for a pipeline the catalog still ships.
+    const registry = new PipelineRegistry()
+    registry.retire('pl_full')
+    expect(retiredPipelines(registry).map((p) => p.id)).not.toContain('pl_full')
+    expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_full')
   })
 })

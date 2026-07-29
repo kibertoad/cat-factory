@@ -155,6 +155,7 @@ type ConformanceAppOpts = {
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
   appBaseUrl?: string
@@ -259,6 +260,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
+    pipelineRegistry: o.pipelineRegistry,
   })
 }
 

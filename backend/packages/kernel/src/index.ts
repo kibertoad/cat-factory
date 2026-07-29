@@ -121,9 +121,11 @@ export {
   subscriptionQuotaCeiling,
   isSubscriptionVendor,
 } from './domain/subscription-quota.js'
+export type { RetiredPipeline } from './domain/seed.js'
 export {
   seedBlocks,
   seedPipelines,
+  retiredPipelines,
   BLUEPRINT_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
@@ -308,6 +310,14 @@ export {
   describeRegressedSignals,
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
+
+// Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
+export {
+  clearsConsensusBar,
+  consensusGroupBar,
+  selectConsensusGroup,
+  applyConsensusGroup,
+} from './domain/consensus-groups.js'
 
 // The marker-delimited splice that makes the engine's PR verification report idempotent.
 export {

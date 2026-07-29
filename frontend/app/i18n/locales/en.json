@@ -559,7 +559,10 @@
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected",
         "env_test_connection_failed": "Environment connection failed",
-        "prompt_revision_conflict": "Prompt changed by someone else"
+        "prompt_revision_conflict": "Prompt changed by someone else",
+        "pipeline_schedule_attached": "Recurring schedule uses this pipeline",
+        "pipeline_schedule_requires_recurring": "Recurring schedule needs this pipeline",
+        "pipeline_schedule_intake_unconfigured": "Schedule has no issue intake"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -587,7 +590,10 @@
         "@env_test_connection_failed_detail": {
           "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
         },
-        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top."
+        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top.",
+        "pipeline_schedule_attached": "A recurring schedule still points at this pipeline, and every run it starts resolves the pipeline by id. Detach or delete that schedule first, then remove the pipeline.",
+        "pipeline_schedule_requires_recurring": "A recurring schedule still points at this pipeline, so making it one-off only would break every future run it starts. Detach that schedule first.",
+        "pipeline_schedule_intake_unconfigured": "A bug intake step draws its work from the schedule issue intake settings, and the attached schedule has none. Configure issue intake on the schedule first."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -3261,6 +3267,47 @@
       "saved": "Default test environment saved.",
       "savedState": "Saved.",
       "saveFailed": "Could not save the default test environment."
+    },
+    "consensusGroups": {
+      "title": "Consensus groups",
+      "intro": "Reusable review panels a pipeline step can escalate to. Each group carries the estimate bar a task must clear to earn it, so heavier work gets a bigger panel without a separate pipeline.",
+      "new": "New group",
+      "list": {
+        "empty": "No consensus groups yet.",
+        "always": "Always",
+        "bar": "From {bar}",
+        "editTitle": "Edit group",
+        "deleteTitle": "Delete group",
+        "participantCount": "no participants | one participant | {count} participants"
+      },
+      "editor": {
+        "nameLabel": "Name",
+        "namePlaceholder": "Deep review panel",
+        "strategyLabel": "Strategy",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "What this panel is for",
+        "participantsLabel": "Participants",
+        "participantsHint": "At least two. Diversity of role and model is what makes a panel better than one model.",
+        "addParticipant": "Add participant",
+        "framingPlaceholder": "Perspective this participant argues from",
+        "stepModel": "Step's model",
+        "synthesizerLabel": "Synthesizer model",
+        "gatedLabel": "Only for tasks above a threshold",
+        "gatedHint": "The estimate a task must reach to earn this panel. Leave off to make this the group that always applies.",
+        "complexityThreshold": "Complexity",
+        "gatingIncomplete": "Set at least one threshold, or turn the gate off.",
+        "unnamedRole": "Reviewer",
+        "cancel": "Cancel",
+        "save": "Save group"
+      },
+      "confirmDelete": {
+        "title": "Delete consensus group?",
+        "body": "Steps that name \"{name}\" fall back to their remaining groups."
+      },
+      "toast": {
+        "saveFailed": "Could not save the consensus group",
+        "deleteFailed": "Could not delete the consensus group"
+      }
     }
   },
   "providers": {
@@ -4049,7 +4096,11 @@
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
       "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
       "promptEditTooltip": "Edit this agent's system prompt",
-      "promptEditedTooltip": "This agent's system prompt is edited for this workspace"
+      "promptEditedTooltip": "This agent's system prompt is edited for this workspace",
+      "consensusGroups": "Consensus groups",
+      "consensusGroupsHint": "Pick the reusable panels this step may escalate to. Each carries its own estimate bar; the most demanding one the task clears is the one that runs.",
+      "consensusGroupsActive": "This step runs the selected group. Deselect every group to configure participants here instead.",
+      "consensusGroupAlways": "always"
     },
     "progress": {
       "status": {
@@ -4112,14 +4163,20 @@
       "add": "Add",
       "reseed": "Reseed",
       "delete": "Delete",
+      "remove": "Remove",
       "updatesHeading": "Updates available",
       "updatesDescription": "A newer version of these built-in pipelines has shipped. Reseed to adopt it (your labels and archive state are kept).",
+      "retiredHeading": "Retired pipelines",
+      "retiredDescription": "These built-in pipelines have been withdrawn from the catalog, so there is no newer version to adopt. Remove them from this board library.",
+      "retiredNote": "Retired from the catalog.",
+      "retiredReplacedBy": "Retired from the catalog. Use {name} instead.",
       "reseedAll": "Reseed all ({count})",
       "dismiss": "Dismiss",
       "done": "Done",
       "toast": {
         "reseedFailed": "Could not reseed pipeline",
-        "deleteFailed": "Could not delete pipeline"
+        "deleteFailed": "Could not delete pipeline",
+        "removeFailed": "Could not remove pipeline"
       }
     }
   },
@@ -4166,6 +4223,23 @@
       "loadFailed": "Couldn't load the prompt",
       "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
     }
+  },
+  "agentTier": {
+    "label": "Agent tier",
+    "@label": {
+      "description": "Label of the control that chooses how much of the agent catalog is shown. \"Tier\" here means level of depth/specialisation, never a pricing plan."
+    },
+    "basic": "Basic",
+    "intermediate": "Intermediate",
+    "advanced": "Advanced",
+    "@advanced": {
+      "description": "The widest of the three levels: selecting it shows every agent, not only the advanced ones."
+    },
+    "basicHint": "Only the everyday agents a pipeline is normally built from.",
+    "intermediateHint": "Adds the agents you reach for regularly.",
+    "advancedHint": "Shows every agent, including the specialist ones.",
+    "tooltip": "Choose how much of the agent catalog to show",
+    "hidden": "{count} agent hidden at this tier. | {count} agents hidden at this tier."
   },
   "riskPolicy": {
     "health": {
@@ -4582,7 +4656,8 @@
       "synthesizing": "Synthesizing",
       "done": "Done",
       "failed": "Failed"
-    }
+    },
+    "groupTitle": "The consensus group this run escalated to"
   },
   "brainstorm": {
     "title": {

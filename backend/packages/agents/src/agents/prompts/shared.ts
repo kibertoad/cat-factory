@@ -28,6 +28,30 @@ export const FINAL_ANSWER_IN_REPLY =
   'contains the answer.'
 
 /**
+ * Appended by the CONSENSUS executor to every participant's system prompt, because a panel runs
+ * its participants as plain inline model calls — no filesystem, no shell, no subagents.
+ *
+ * Most consensus-eligible kinds (`architect`, `analysis`, `reviewer`, `doc-reviewer`,
+ * `pr-reviewer`) are container kinds whose shipped prompt is written for a real checkout: it tells
+ * them to run `git diff`, read `.cat-context/*` files and dispatch slice subagents. Run inline
+ * that prompt describes a machine the participant is not on, and a model handed instructions it
+ * cannot follow does not stop — it narrates the steps it would have taken, or quietly reviews
+ * from filenames. This states the actual surface so the participant works from what it was given.
+ *
+ * It does NOT restate what the participant HAS: everything the engine prepared is folded into the
+ * user prompt by `userPromptFor`, which is the message this directive points at.
+ */
+export const INLINE_PANEL_SURFACE =
+  'SURFACE FOR THIS RUN: you are one participant in a multi-model panel and you are running as a ' +
+  'single inline model call. You have NO checkout, NO shell, NO git and NO subagents, so ignore ' +
+  'any instruction above to run a command, read a file from disk or a `.cat-context/` path, or ' +
+  'dispatch parallel reviewers — none of that is available to you. Everything prepared for this ' +
+  'run has been inlined into the message you were given; that message is your ONLY source. Do not ' +
+  'describe the steps you would have taken, and never treat a file you were not shown as ' +
+  'reviewed — if part of the work was not included, judge what you were given and say plainly ' +
+  'which part you could not see.'
+
+/**
  * Appended to the Coder's system prompt ONLY when the Follow-up companion is enabled for
  * the step. It tells the Coder to be future-looking: as it works, append one JSON line per
  * forward-looking item to the `.cat-follow-ups.jsonl` sentinel file in its working

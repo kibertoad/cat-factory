@@ -15,6 +15,7 @@ import { notificationSchema } from './notifications.js'
 import { riskPolicySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
+import { consensusGroupSchema } from './consensus.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
 import { pipelineScheduleSchema } from './recurring.js'
 import { serviceSchema, workspaceMountSchema } from './services.js'
@@ -34,6 +35,18 @@ import { workspaceAccessSchema } from './workspace-members.js'
 // It lives in its own module because it references both ./entities and
 // ./bootstrap, and ./bootstrap imports from ./entities — defining it in either
 // would be a circular import.
+
+/**
+ * A built-in pipeline withdrawn from the catalog. Mirrors kernel's `RetiredPipeline`: an id plus,
+ * when one exists, the catalog id that supersedes it. Deliberately not a `pipelineSchema` — a
+ * retired pipeline has no definition left, and a tombstone must never be mistaken for something the
+ * SPA can run or seed.
+ */
+export const retiredPipelineSchema = v.object({
+  id: v.string(),
+  replacedBy: v.optional(v.string()),
+})
+export type RetiredPipelineWire = v.InferOutput<typeof retiredPipelineSchema>
 
 /** A selectable infra backend kind advertised to the SPA's connect form. */
 export const backendKindOptionSchema = v.object({
@@ -139,6 +152,13 @@ export const workspaceSnapshotSchema = v.object({
    */
   modelPresets: v.optional(v.array(modelPresetSchema)),
   /**
+   * The workspace's consensus-GROUP library — the reusable, estimate-gated panels a pipeline
+   * step escalates to. Carried in the snapshot so the pipeline builder's per-step tier picker
+   * and the settings editor have their options on load, exactly like the model presets above.
+   * Attached by the facade, so optional on the wire.
+   */
+  consensusGroups: v.optional(v.array(consensusGroupSchema)),
+  /**
    * The deployment's env-routing defaults as `provider:model` refs: the model an
    * agent kind runs on when neither the task nor the workspace pins one. `default`
    * is the global fallback; `byKind` carries the kinds an operator routed
@@ -228,6 +248,23 @@ export const workspaceSnapshotSchema = v.object({
    * runtimes), but optional on the wire for forward-compatibility.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`) — the complement of
+   * `pipelineCatalogVersions`, and the only signal that a stored built-in is no longer relevant.
+   * A workspace seeded before the withdrawal still holds the row, so the SPA cross-references this
+   * against its library and offers a REMOVAL (`DELETE /pipelines/:id`, which accepts a built-in only
+   * while it is named here) rather than the reseed it offers for a live built-in.
+   *
+   * The two sets are disjoint by construction, so an id here never appears in
+   * `pipelineCatalogVersions` — which is also what stops the SPA's "new built-ins available"
+   * advisory from offering to add back the pipeline it just told the user to remove.
+   *
+   * `replacedBy` names the catalog id that supersedes it, when one does. It carries no prose: the
+   * backend does not localize copy, so the SPA resolves that id to its pipeline name and writes the
+   * sentence itself. Static, workspace-independent; built by the shared `WorkspaceService.snapshot()`
+   * (automatically symmetric across runtimes), optional on the wire for forward-compatibility.
+   */
+  retiredPipelines: v.optional(v.array(retiredPipelineSchema)),
   /**
    * Current built-in merge-preset catalog versions (`seedRiskPolicies()`), keyed by preset id.
    * The SPA compares each persisted built-in's `version` against this to detect a stale copy

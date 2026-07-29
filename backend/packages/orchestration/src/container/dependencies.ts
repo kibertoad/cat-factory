@@ -44,6 +44,7 @@ import type {
   ClarityReviewRepository,
   Clock,
   CommitProjectionRepository,
+  ConsensusGroupRepository,
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
@@ -1018,6 +1019,14 @@ export interface CoreDependencies {
    * task's selected/default preset (the built-in default points everything at Kimi K2.7).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Stores a workspace's consensus-GROUP library — the reusable, estimate-gated panels a
+   * pipeline step escalates to (`ConsensusStepConfig.groupIds`). Optional and default-off:
+   * absent → the `consensusGroups` module isn't assembled, the controller 503s, and a
+   * consensus step runs with the inline participants authored on it. Read on the RUN path
+   * too: `AgentContextBuilder` resolves a step's tier set at dispatch.
+   */
+  consensusGroupRepository?: ConsensusGroupRepository
   /**
    * Stores a workspace's agent system-prompt overrides — an append-only revision log per agent
    * kind, edited from the pipeline builder, whose live entry REPLACES the kind's shipped

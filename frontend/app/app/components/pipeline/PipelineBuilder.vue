@@ -54,6 +54,34 @@ function toggleGating(i: number) {
     ? { ...cfg.gating, enabled: false }
     : { enabled: true, minRisk: 0.6, minImpact: 0.6, onMissingEstimate: 'consensus' }
 }
+
+// ---- The workspace consensus-GROUP tier set -------------------------------
+// A step either authors its panel inline (the participants + gating editor below) or names a
+// SET of workspace groups, each with its own estimate bar, and the engine runs the most
+// demanding tier the task clears. The two are mutually exclusive by design — a non-empty tier
+// set takes over — so the builder shows one editor or the other rather than both at once.
+const consensusGroups = useConsensusGroupsStore()
+
+/** Whether the draft step at `i` has escalated to the group library. */
+function usesGroups(i: number): boolean {
+  return (pipelines.draftConsensus[i]?.groupIds?.length ?? 0) > 0
+}
+
+function isGroupSelected(i: number, groupId: string): boolean {
+  return pipelines.draftConsensus[i]?.groupIds?.includes(groupId) ?? false
+}
+
+/**
+ * The bar a group sets, as display text: its highest named threshold, or the "always" label when
+ * it is ungated. What a reader needs from the tier list is where each panel sits relative to the
+ * others, which is exactly this one number.
+ */
+function groupBarLabel(groupId: string): string {
+  const group = consensusGroups.groups.find((g) => g.id === groupId)
+  if (!group) return ''
+  const bar = consensusGroups.barFor(group)
+  return bar === null ? t('pipeline.builder.consensusGroupAlways') : `≥ ${bar}`
+}
 const agents = useAgentsStore()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
@@ -760,109 +788,155 @@ async function clone(p: Pipeline) {
                 v-if="pipelines.draftConsensus[unit.index]?.enabled"
                 class="ms-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
               >
-                <div class="flex items-center gap-2">
-                  <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
-                  <select
-                    v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                    class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  >
-                    <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
-                      {{ s.label }}
-                    </option>
-                  </select>
-                  <label
-                    v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                    class="ms-2 text-slate-400"
-                    >{{ t('pipeline.builder.rounds') }}</label
-                  >
-                  <input
-                    v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                    v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
-                    type="number"
-                    min="1"
-                    max="5"
-                    placeholder="2"
-                    class="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                  />
+                <!-- The workspace consensus-GROUP tier set: pick which reusable panels this
+                     step may escalate to. Each group carries its own estimate bar; the engine
+                     runs the most demanding one the task clears, and none clearing means the
+                     standard single agent runs. Selecting any group replaces the inline panel
+                     editor below, so the step has exactly one source of truth for its panel. -->
+                <div
+                  v-if="consensusGroups.hasGroups"
+                  class="space-y-1 border-b border-slate-800 pb-2"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-emerald-400" />
+                    <span class="text-slate-300">{{ t('pipeline.builder.consensusGroups') }}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500">
+                    {{ t('pipeline.builder.consensusGroupsHint') }}
+                  </p>
+                  <div class="flex flex-wrap gap-1">
+                    <button
+                      v-for="group in consensusGroups.groups"
+                      :key="group.id"
+                      type="button"
+                      class="rounded border px-1.5 py-0.5 text-[11px]"
+                      :class="
+                        isGroupSelected(unit.index, group.id)
+                          ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
+                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                      "
+                      :title="group.description"
+                      @click="pipelines.toggleDraftConsensusGroup(unit.index, group.id)"
+                    >
+                      {{ group.name }}
+                      <span class="ms-1 text-slate-500">{{ groupBarLabel(group.id) }}</span>
+                    </button>
+                  </div>
                 </div>
 
-                <!-- participants -->
-                <div class="space-y-1">
-                  <div
-                    v-for="(p, pIdx) in pipelines.draftConsensus[unit.index]!.participants"
-                    :key="p.id"
-                    class="flex items-center gap-1.5"
-                  >
+                <div v-if="usesGroups(unit.index)" class="text-[11px] text-slate-500">
+                  {{ t('pipeline.builder.consensusGroupsActive') }}
+                </div>
+
+                <template v-else>
+                  <div class="flex items-center gap-2">
+                    <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
+                    <select
+                      v-model="pipelines.draftConsensus[unit.index]!.strategy"
+                      class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                    >
+                      <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
+                        {{ s.label }}
+                      </option>
+                    </select>
+                    <label
+                      v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
+                      class="ms-2 text-slate-400"
+                      >{{ t('pipeline.builder.rounds') }}</label
+                    >
                     <input
-                      v-model="p.role"
-                      :placeholder="t('pipeline.builder.rolePlaceholder')"
-                      class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
-                    />
-                    <input
-                      v-model="p.modelId"
-                      :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                      class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
-                    />
-                    <UButton
-                      icon="i-lucide-x"
-                      color="error"
-                      variant="ghost"
-                      size="xs"
-                      :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
-                      :title="t('pipeline.builder.removeParticipant')"
-                      @click="removeParticipant(unit.index, pIdx)"
+                      v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
+                      v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
+                      type="number"
+                      min="1"
+                      max="5"
+                      placeholder="2"
+                      class="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                     />
                   </div>
-                  <UButton
-                    icon="i-lucide-plus"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.addParticipant')"
-                    @click="addParticipant(unit.index)"
-                  />
-                </div>
 
-                <!-- gating -->
-                <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
-                  <UButton
-                    :icon="
-                      pipelines.draftConsensus[unit.index]!.gating?.enabled
-                        ? 'i-lucide-toggle-right'
-                        : 'i-lucide-toggle-left'
-                    "
-                    :color="
-                      pipelines.draftConsensus[unit.index]!.gating?.enabled ? 'success' : 'neutral'
-                    "
-                    variant="ghost"
-                    size="xs"
-                    :label="t('pipeline.builder.gateOnEstimate')"
-                    :title="t('pipeline.builder.consensusGateTooltip')"
-                    @click="toggleGating(unit.index)"
-                  />
-                  <template v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled">
-                    <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
-                    <input
-                      v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minRisk"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  <!-- participants -->
+                  <div class="space-y-1">
+                    <div
+                      v-for="(p, pIdx) in pipelines.draftConsensus[unit.index]!.participants"
+                      :key="p.id"
+                      class="flex items-center gap-1.5"
+                    >
+                      <input
+                        v-model="p.role"
+                        :placeholder="t('pipeline.builder.rolePlaceholder')"
+                        class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                      />
+                      <input
+                        v-model="p.modelId"
+                        :placeholder="t('pipeline.builder.modelIdPlaceholder')"
+                        class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
+                      />
+                      <UButton
+                        icon="i-lucide-x"
+                        color="error"
+                        variant="ghost"
+                        size="xs"
+                        :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
+                        :title="t('pipeline.builder.removeParticipant')"
+                        @click="removeParticipant(unit.index, pIdx)"
+                      />
+                    </div>
+                    <UButton
+                      icon="i-lucide-plus"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      :label="t('pipeline.builder.addParticipant')"
+                      @click="addParticipant(unit.index)"
                     />
-                    <label class="text-slate-400">{{
-                      t('pipeline.builder.impactThreshold')
-                    }}</label>
-                    <input
-                      v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minImpact"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  </div>
+
+                  <!-- gating -->
+                  <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
+                    <UButton
+                      :icon="
+                        pipelines.draftConsensus[unit.index]!.gating?.enabled
+                          ? 'i-lucide-toggle-right'
+                          : 'i-lucide-toggle-left'
+                      "
+                      :color="
+                        pipelines.draftConsensus[unit.index]!.gating?.enabled
+                          ? 'success'
+                          : 'neutral'
+                      "
+                      variant="ghost"
+                      size="xs"
+                      :label="t('pipeline.builder.gateOnEstimate')"
+                      :title="t('pipeline.builder.consensusGateTooltip')"
+                      @click="toggleGating(unit.index)"
                     />
-                  </template>
-                </div>
+                    <template v-if="pipelines.draftConsensus[unit.index]!.gating?.enabled">
+                      <label class="text-slate-400">{{
+                        t('pipeline.builder.riskThreshold')
+                      }}</label>
+                      <input
+                        v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minRisk"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                      />
+                      <label class="text-slate-400">{{
+                        t('pipeline.builder.impactThreshold')
+                      }}</label>
+                      <input
+                        v-model.number="pipelines.draftConsensus[unit.index]!.gating!.minImpact"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                      />
+                    </template>
+                  </div>
+                </template>
               </div>
 
               <!-- Test quality-control companion config (shown when QC is enabled on a Tester

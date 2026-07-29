@@ -59,6 +59,7 @@ import { humanTestController } from './modules/humanTest/HumanTestController.js'
 import { visualConfirmationController } from './modules/visualConfirm/VisualConfirmationController.js'
 import { humanReviewController } from './modules/humanReview/HumanReviewController.js'
 import { consensusController } from './modules/consensus/ConsensusController.js'
+import { consensusGroupController } from './modules/consensus/ConsensusGroupController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { brainstormController } from './modules/brainstorm/BrainstormController.js'
 import { initiativeController } from './modules/initiatives/InitiativeController.js'
@@ -249,6 +250,7 @@ function registerWorkspaceRunControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', visualConfirmationController())
   app.route('/workspaces/:workspaceId', humanReviewController())
   app.route('/workspaces/:workspaceId', consensusController())
+  app.route('/workspaces/:workspaceId', consensusGroupController())
   app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', brainstormController())
   app.route('/workspaces/:workspaceId', initiativeController())
