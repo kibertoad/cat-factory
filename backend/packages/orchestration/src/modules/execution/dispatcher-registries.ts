@@ -700,6 +700,13 @@ export function buildStepResolverRegistry(
         if (digest) return { output: digest }
       },
     },
+    // Deliberately does NOT declare `outputIsRendered`, though its output is also a rendering of
+    // something it just persisted. The flag marks an output an edit cannot REACH, and the test is
+    // what CONSUMES the text: the plan and the spec are read back from storage, so a correction
+    // typed over their rendering changes nothing, whereas this summary is itself what downstream
+    // steps read (`priorOutputs` carries `step.output`). Editing it is therefore partially
+    // meaningful — the block's persisted `estimate` stays put, but the text the next step sees
+    // does change — so the affordance is left in place rather than refused.
     {
       kind: TASK_ESTIMATOR_AGENT_KIND,
       phase: 'post-completion',
