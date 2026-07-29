@@ -388,6 +388,7 @@ export {
   redactSecrets,
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
+export { describeProcessExit } from './shared/process-exit.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
   createStoreAgentContextGate,

@@ -649,13 +649,24 @@ function failureBreadcrumb(ctx: FailureContext): string {
  * The silence half of {@link failureBreadcrumb}; empty when silence isn't part of the story —
  * which includes the fast failures (a missing env var, a git auth rejection) where the run was
  * never going to have spoken yet and saying so would be pure noise.
+ *
+ * What it measures is the ACTIVITY channel, which carries the agent's own output plus the
+ * synthetic keep-alive beats the activity-silent phases feed the inactivity watchdog (dependency
+ * install, pre-PR validation, the reproduction proof, the frontend stand-up). So the wording
+ * claims no more than the channel supports — "no activity", not "no agent output": a run whose
+ * install phase beat every 30s and then died has been heard from, even though the agent itself
+ * never spoke. The window's origin is the job start, so it spans the `starting`/`clone` phases
+ * too; the phase breakdown sits beside it in the same `detail` for the reader who needs the
+ * split.
+ *
+ * Making this say "the AGENT last spoke" specifically would mean separating real output from
+ * liveness beats at the {@link RunOptions} seam, which is a change to what the cold-start and
+ * inactivity watchdogs fire on — deliberately not folded into this diagnostic-only fix.
  */
 function silenceClause(ctx: FailureContext, now: number): string {
   if (ctx.killReason === 'inactivity') return ''
   const silentMs = now - (ctx.lastActivityAt ?? ctx.startedAt)
   if (silentMs < SILENCE_BREADCRUMB_MS) return ''
   const secs = Math.round(silentMs / 1000)
-  return ctx.lastActivityAt === undefined
-    ? `no agent output at all in ${secs}s`
-    : `silent for ${secs}s`
+  return ctx.lastActivityAt === undefined ? `no activity at all in ${secs}s` : `silent for ${secs}s`
 }

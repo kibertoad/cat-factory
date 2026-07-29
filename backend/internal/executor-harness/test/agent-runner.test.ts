@@ -767,6 +767,18 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
       ambientAuth: true,
     })
 
+  /**
+   * The message the run failed with. Asserting on a captured string rather than through
+   * `rejects.not.toThrow(pattern)`, whose reading is ambiguous — "rejected with something else"
+   * and "did not reject" both satisfy it, so a negative assertion written that way can pass
+   * for the wrong reason.
+   */
+  const failureMessage = (): Promise<string> =>
+    run().then(
+      () => '(resolved)',
+      (err: Error) => err.message,
+    )
+
   it("folds the CLI's terminal result into a bad exit that left nothing on stderr", async () => {
     failingCli(
       'claude',
@@ -808,5 +820,44 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
         ambientAuth: true,
       }),
     ).rejects.toThrow(/quota exhausted/)
+  })
+
+  // The report is capped, and the cap keeps its HEAD — the opposite bias from the stderr tail
+  // beside it. The failure `subtype` leads the report, so tail-slicing an over-long one would
+  // drop exactly the classification the fold exists to surface.
+  it('keeps the head of an over-long report, marked as cut, not its tail', async () => {
+    failingCli(
+      'claude',
+      [
+        JSON.stringify({
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          result: `upstream refused: ${'x'.repeat(2_000)} TAIL_MARKER`,
+        }),
+      ],
+      1,
+    )
+    const message = await failureMessage()
+    expect(message).toMatch(/error_during_execution: upstream refused/)
+    expect(message).toMatch(/report truncated/)
+    expect(message).not.toMatch(/TAIL_MARKER/)
+  })
+
+  it('scrubs a credential out of the report it folds in', async () => {
+    failingCli(
+      'claude',
+      [
+        JSON.stringify({
+          type: 'result',
+          is_error: true,
+          result: 'push rejected for ghp_0123456789abcdefghijklmnopqrstuvwxyz',
+        }),
+      ],
+      1,
+    )
+    const message = await failureMessage()
+    expect(message).not.toMatch(/ghp_0123456789/)
+    expect(message).toMatch(/push rejected for/)
   })
 })
