@@ -95,6 +95,51 @@ Each command gets its own watchdog (`VALIDATION_COMMAND_TIMEOUT_MS`, default 15 
 default the ralph validation command uses), so one hung `pnpm test` cannot wedge a run. A
 timeout is a FAILURE (exit 124), fed back like any other.
 
+### D6 — Autodetection: a read-only SUGGESTION derived from the repo, never a write
+
+**Decision: a "Detect" button in the inspector calls
+`GET /services/:blockId/validation-checks/detect`, which reads the repo root through the
+existing `resolveRunRepoContext` seam and returns suggested `{ label, command }` pairs. It
+persists NOTHING; the operator reviews the rows and saves them through the same `PUT`.**
+
+The config table (D1) is the right home for the commands, but it starts EMPTY, and an operator
+staring at an empty panel has to remember their repo's package manager, its script names and
+the incantation for a reproducible install. Almost all of that is written down in the repo
+already.
+
+Three constraints shaped it:
+
+- **It suggests, it does not configure.** A detector that wrote the config would be a silent
+  behaviour change on the next run — a service that verified nothing would suddenly start
+  failing PRs on a command nobody chose. Keeping it in the panel's UNSAVED rows means the
+  button is always reversible by walking away, and the merge never rewrites a command the
+  operator hand-tuned (`mergeDetectedChecks`, deduplicated by command).
+- **Prefer the repo's own evidence; gate opinionated checks on their config.** A command is
+  suggested when the repo DECLARES it (an npm script, a Make target) or when it is the
+  ecosystem's canonical, non-opinionated verification (`go test ./...`, `mvn verify`). A
+  formatter check or a `-D warnings` linter is suggested only when its config file is checked
+  in — suggesting `cargo fmt --check` to a repo that never ran rustfmt produces a check that
+  is red on its first run for a reason the coding agent did not cause and cannot legitimately
+  fix.
+- **Degradation is stated.** "No repo linked", "the repo could not be read" and "we read it and
+  recognised nothing" are three different `status` values, because they send an operator to
+  three different places. Collapsing them into an empty list would tell someone whose token
+  had been revoked that their repo is unrecognised.
+
+Where the pieces live: the rules are PURE and in kernel (`domain/validation-detection.ts`
+composes, `domain/validation-detectors.ts` holds one function per ecosystem), so every rule is
+unit-testable against a literal. Reading the surface is `detectValidationChecksFromRepo`
+(integrations), shaped as ONE root listing plus one file read per manifest the listing PROVED
+exists — never a speculative probe per candidate path, which would be a dozen 404s on every
+repo behind an interactive button. Because it reads through the checkout-free `RepoFiles` port
+it is runtime-symmetric by construction; conformance asserts the wiring and the no-repo status
+on both runtimes.
+
+Covered today: node (pnpm/yarn/bun/npm), python (uv/poetry/pdm/pipenv/pip + ruff/black/mypy/
+pyright/pytest/tox), go, rust, maven, gradle, dotnet, ruby, php, elixir, plus make/just/task as
+a FALLBACK tier — consulted only when no language ecosystem matched, since `make test` in a Go
+repo almost always shells out to the command the Go detector already suggested.
+
 ## Target pattern
 
 - **Config**: `validation_configs` table (workspace_id, block_id) ⇒ `ValidationConfigRepository`
@@ -122,6 +167,7 @@ timeout is a FAILURE (exit 124), fed back like any other.
 | Persistence: D1 migration + Drizzle schema/migration + both repos     | done   | runtime-symmetric                      |
 | Frontend (panel, store, result surfacing, i18n ×10, testids)          | done   | `@cat-factory/app`                     |
 | Conformance (config resolution + job-body threading) + unit tests     | done   | both runtimes                          |
+| Autodetection (kernel rules, repo reader, detect route, panel button) | done   | see D6; suggestion only, no write      |
 
 ## Conventions & gotchas carried forward
 
@@ -152,6 +198,9 @@ timeout is a FAILURE (exit 124), fed back like any other.
   validation (it also opens a PR per repo). Mirrors the ralph v1 boundary.
 - **`ci-fixer` / `conflict-resolver` coverage** (see D2).
 - **Workspace-level default checks** (so a new service inherits the org's lint/test commands).
+- **Autodetection below the repo root** (D6 reads the root only, so a monorepo service whose
+  manifest sits in `packages/x/` is unrecognised). The checks themselves already run at the
+  checkout root, so this waits on a per-service directory concept rather than on the detector.
 - **Reusing the report as the PR verification report** (the separate initiative) — the captured
   outcomes are already shaped for it.
 - **Playwright e2e spec** — covered by conformance + unit tests for v1.

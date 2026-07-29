@@ -96,6 +96,60 @@ export const resolvedValidationChecksSchema = v.object({
 })
 export type ResolvedValidationChecks = v.InferOutput<typeof resolvedValidationChecksSchema>
 
+// ---- Autodetection --------------------------------------------------------
+
+/**
+ * The ecosystems the pre-PR validation AUTODETECTOR recognises at a repo's root. The
+ * detection rules live in `@cat-factory/kernel` (`domain/validation-detectors.ts`); this
+ * picklist is the wire vocabulary, so the SPA can label each hit from its own catalog
+ * rather than rendering a backend-authored string.
+ *
+ * Adding a member here is what makes a new detector reachable: the kernel detector's
+ * `ecosystem` id is typed against this union, and the SPA's exhaustive label map fails to
+ * typecheck until the locale key exists.
+ */
+export const VALIDATION_ECOSYSTEMS = [
+  'node',
+  'python',
+  'go',
+  'rust',
+  'maven',
+  'gradle',
+  'dotnet',
+  'ruby',
+  'php',
+  'elixir',
+  'make',
+  'just',
+  'task',
+] as const
+export const validationEcosystemSchema = v.picklist(VALIDATION_ECOSYSTEMS)
+export type ValidationEcosystem = v.InferOutput<typeof validationEcosystemSchema>
+
+/**
+ * How a detection attempt ended. Stated rather than inferred from an empty result: "this
+ * service has no repo linked", "GitHub could not be read" and "we read the repo and
+ * recognised nothing" need three different things from the operator, and collapsing them
+ * into one empty list tells them to go looking in the wrong place.
+ */
+export const validationDetectionStatusSchema = v.picklist(['ok', 'repo_unavailable', 'failed'])
+export type ValidationDetectionStatus = v.InferOutput<typeof validationDetectionStatusSchema>
+
+/**
+ * What `GET .../validation-checks/detect` returns: the checks the repo's own manifests,
+ * scripts and tool configs imply. A SUGGESTION only — the endpoint writes nothing, so the
+ * operator reviews (and edits) the rows before saving them as the service's config.
+ */
+export const detectedValidationChecksSchema = v.object({
+  status: validationDetectionStatusSchema,
+  /** Every ecosystem that contributed a suggestion, in the detector's canonical order. */
+  ecosystems: v.array(validationEcosystemSchema),
+  checks: v.array(validationCheckSchema),
+  /** Whether {@link VALIDATION_MAX_CHECKS} dropped suggestions the detectors produced. */
+  truncated: v.boolean(),
+})
+export type DetectedValidationChecks = v.InferOutput<typeof detectedValidationChecksSchema>
+
 // ---- The harness-produced report ------------------------------------------
 
 /** One command's outcome in a validation attempt. */

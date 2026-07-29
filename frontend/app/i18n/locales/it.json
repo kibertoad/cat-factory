@@ -1445,7 +1445,34 @@
       "save": "Salva controlli",
       "savedToast": "Controlli salvati",
       "saveFailed": "Impossibile salvare i controlli",
-      "clearFailed": "Impossibile svuotare i controlli"
+      "clearFailed": "Impossibile svuotare i controlli",
+      "detect": {
+        "action": "Rileva",
+        "hint": "Suggerisci controlli a partire dal repository di questo servizio",
+        "added": "Aggiunto {count} controllo | Aggiunti {count} controlli",
+        "found": "Riconosciuto: {ecosystems}.",
+        "capped": "Alcuni suggerimenti sono stati esclusi: un servizio accetta al massimo {max} controlli.",
+        "nothingNew": "Niente da aggiungere",
+        "alreadyPresent": "Tutti i comandi rilevati sono già presenti nell'elenco.",
+        "unrecognised": "Nessun ecosistema noto riconosciuto nella radice del repository. Aggiungi i comandi a mano.",
+        "repo_unavailable": "Questo servizio non ha un repository collegato, quindi non c'è nulla da esaminare.",
+        "failed": "Non è stato possibile leggere il repository"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

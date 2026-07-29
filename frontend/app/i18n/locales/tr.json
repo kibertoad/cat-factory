@@ -1104,7 +1104,34 @@
       "save": "Denetimleri kaydet",
       "savedToast": "Denetimler kaydedildi",
       "saveFailed": "Denetimler kaydedilemedi",
-      "clearFailed": "Denetimler temizlenemedi"
+      "clearFailed": "Denetimler temizlenemedi",
+      "detect": {
+        "action": "Algıla",
+        "hint": "Bu hizmetin deposundan denetimler öner",
+        "added": "{count} denetim eklendi | {count} denetim eklendi",
+        "found": "{ecosystems} algılandı.",
+        "capped": "Bazı öneriler dışarıda bırakıldı — bir hizmet en fazla {max} denetim alır.",
+        "nothingNew": "Eklenecek bir şey yok",
+        "alreadyPresent": "Algılanan tüm komutlar zaten listede.",
+        "unrecognised": "Depo kökünde bilinen bir ekosistem algılanmadı. Komutları elle ekleyin.",
+        "repo_unavailable": "Bu hizmete bağlı bir depo yok, bu yüzden incelenecek bir şey yok.",
+        "failed": "Depo okunamadı"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

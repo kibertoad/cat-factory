@@ -1445,7 +1445,34 @@
       "save": "Prüfungen speichern",
       "savedToast": "Prüfungen gespeichert",
       "saveFailed": "Prüfungen konnten nicht gespeichert werden",
-      "clearFailed": "Prüfungen konnten nicht geleert werden"
+      "clearFailed": "Prüfungen konnten nicht geleert werden",
+      "detect": {
+        "action": "Erkennen",
+        "hint": "Prüfungen aus dem Repository dieses Dienstes vorschlagen",
+        "added": "{count} Prüfung hinzugefügt | {count} Prüfungen hinzugefügt",
+        "found": "Erkannt: {ecosystems}.",
+        "capped": "Einige Vorschläge wurden ausgelassen — ein Dienst nimmt höchstens {max} Prüfungen auf.",
+        "nothingNew": "Nichts hinzuzufügen",
+        "alreadyPresent": "Alle erkannten Befehle stehen bereits in der Liste.",
+        "unrecognised": "Im Wurzelverzeichnis des Repositorys wurde kein bekanntes Ökosystem erkannt. Bitte die Befehle von Hand eintragen.",
+        "repo_unavailable": "Diesem Dienst ist kein Repository zugeordnet, es gibt also nichts zu untersuchen.",
+        "failed": "Das Repository konnte nicht gelesen werden"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

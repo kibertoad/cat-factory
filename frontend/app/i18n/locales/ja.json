@@ -1104,7 +1104,34 @@
       "save": "検査を保存",
       "savedToast": "検査を保存しました",
       "saveFailed": "検査を保存できませんでした",
-      "clearFailed": "検査を消去できませんでした"
+      "clearFailed": "検査を消去できませんでした",
+      "detect": {
+        "action": "自動検出",
+        "hint": "このサービスのリポジトリからチェックを提案します",
+        "added": "{count} 件のチェックを追加しました | {count} 件のチェックを追加しました",
+        "found": "{ecosystems} を検出しました。",
+        "capped": "一部の候補は省略されました。1 つのサービスに設定できるチェックは最大 {max} 件です。",
+        "nothingNew": "追加する項目はありません",
+        "alreadyPresent": "検出されたコマンドはすべて既に一覧にあります。",
+        "unrecognised": "リポジトリのルートで既知のエコシステムを認識できませんでした。コマンドを手動で追加してください。",
+        "repo_unavailable": "このサービスにはリポジトリが紐付いていないため、調べる対象がありません。",
+        "failed": "リポジトリを読み取れませんでした"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

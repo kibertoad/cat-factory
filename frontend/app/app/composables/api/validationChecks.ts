@@ -1,5 +1,6 @@
 import {
   deleteServiceValidationConfigContract,
+  detectServiceValidationChecksContract,
   getServiceValidationConfigContract,
   listServiceValidationConfigsContract,
   setServiceValidationConfigContract,
@@ -28,6 +29,13 @@ export function validationChecksApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
         body,
+      }),
+
+    /** Suggest checks from the service repo's manifests — a read; the operator still saves. */
+    detectServiceValidationChecks: (workspaceId: string, blockId: string) =>
+      send(detectServiceValidationChecksContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
       }),
 
     deleteServiceValidationConfig: (workspaceId: string, blockId: string) =>

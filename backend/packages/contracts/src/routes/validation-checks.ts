@@ -1,6 +1,7 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  detectedValidationChecksSchema,
   serviceValidationConfigSchema,
   upsertServiceValidationConfigSchema,
 } from '../validation-checks.js'
@@ -35,6 +36,19 @@ export const deleteServiceValidationConfigContract = defineApiContract({
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/services/${blockId}/validation-checks`,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+/**
+ * Suggest checks for a service frame by reading its repo's root manifests (the inspector's
+ * "Detect" button). A pure READ — it inspects the repo's default branch and returns
+ * suggestions; the operator still saves them through the `put` above. GET, so it stays
+ * available to a reader of the panel and cannot be mistaken for a write.
+ */
+export const detectServiceValidationChecksContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/services/${blockId}/validation-checks/detect`,
+  responsesByStatusCode: { 200: detectedValidationChecksSchema, ...errorResponses },
 })
 
 /** Every configured service's validation checks in the workspace (the store's hydrate read). */

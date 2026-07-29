@@ -1104,7 +1104,34 @@
       "save": "Zapisz sprawdzenia",
       "savedToast": "Sprawdzenia zapisane",
       "saveFailed": "Nie udało się zapisać sprawdzeń",
-      "clearFailed": "Nie udało się wyczyścić sprawdzeń"
+      "clearFailed": "Nie udało się wyczyścić sprawdzeń",
+      "detect": {
+        "action": "Wykryj",
+        "hint": "Zaproponuj testy na podstawie repozytorium tej usługi",
+        "added": "Dodano {count} test | Dodano {count} testy | Dodano {count} testów",
+        "found": "Rozpoznano: {ecosystems}.",
+        "capped": "Część propozycji pominięto — usługa przyjmuje najwyżej {max} testów.",
+        "nothingNew": "Nie ma czego dodać",
+        "alreadyPresent": "Wszystkie wykryte polecenia są już na liście.",
+        "unrecognised": "W katalogu głównym repozytorium nie rozpoznano znanego ekosystemu. Dodaj polecenia ręcznie.",
+        "repo_unavailable": "Do tej usługi nie podpięto repozytorium, więc nie ma czego sprawdzać.",
+        "failed": "Nie udało się odczytać repozytorium"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

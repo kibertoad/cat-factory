@@ -1167,7 +1167,34 @@
       "save": "Save checks",
       "savedToast": "Validation checks saved",
       "saveFailed": "Could not save the validation checks",
-      "clearFailed": "Could not clear the validation checks"
+      "clearFailed": "Could not clear the validation checks",
+      "detect": {
+        "action": "Detect",
+        "hint": "Suggest checks from this service's repository",
+        "added": "Added {count} check | Added {count} checks",
+        "found": "Recognised {ecosystems}.",
+        "capped": "Some suggestions were left out — a service takes at most {max} checks.",
+        "nothingNew": "Nothing to add",
+        "alreadyPresent": "Every detected command is already listed.",
+        "unrecognised": "No known ecosystem was recognised at the repository root. Add the commands by hand.",
+        "repo_unavailable": "This service has no repository linked, so there is nothing to inspect.",
+        "failed": "The repository could not be read"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

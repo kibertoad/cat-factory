@@ -46,6 +46,12 @@ else imports its **ports** and domain types from here.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).
+- `domain/validation-detection.ts` + `domain/validation-detectors.ts` — the pure half of **pre-PR
+  validation AUTODETECTION**: the first composes a repo-root surface into ordered, uniquely
+  labelled suggestions; the second is one detector function per ecosystem (node/python/go/rust/
+  maven/gradle/dotnet/ruby/php/elixir, plus make/just/task as a fallback tier). Reading the
+  surface is `detectValidationChecksFromRepo` in integrations. Adding an ecosystem is a new
+  detector plus a `ValidationEcosystem` member in contracts.
 - `shared/host-markdown.logic.ts` — the **host text boundary** (`hostMarkdown.inline` / `cell` /
   `prose` / `balanceFences` / `capList`): the one place untrusted, mostly model-authored text is
   made safe to send to a VCS/tracker host. It defuses the auto-link triggers that would otherwise

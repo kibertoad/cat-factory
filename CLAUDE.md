@@ -905,6 +905,17 @@ captured output; only a green checkout opens a PR. Design:
 - **Config is per SERVICE FRAME**, resolved up the frame chain (`validation_configs`, D1 ⇄ Drizzle →
   `ValidationConfigRepository` → `ValidationConfigService` → controller → inspector panel).
   `maxAttempts` (default 3) lives on the SAME row as the commands, not the merge preset.
+- **Autodetection SUGGESTS, it never writes.** The panel's "Detect" button reads the repo root
+  through `resolveRunRepoContext` and fills the UNSAVED rows; the operator still saves. Rules are
+  pure kernel (`domain/validation-detection.ts` composes, `validation-detectors.ts` is one function
+  per ecosystem — adding one is a new function plus a `ValidationEcosystem` member), the read is
+  `detectValidationChecksFromRepo` (ONE root listing, then a file read only for a manifest the
+  listing proved exists). A command is suggested only on the repo's own evidence — a declared
+  script/target, or the ecosystem's canonical non-opinionated verification; an opinionated gate
+  (`cargo fmt --check`, `-D warnings`) needs its config file checked in, or the very first run is
+  red for something no agent caused. Task runners (make/just/task) are a FALLBACK tier, never
+  suggested beside a language ecosystem. "No repo", "read failed" and "recognised nothing" are
+  three distinct `status` values, never one empty list.
 - **Threading**: `resolveValidationChecks` → `AgentRunContext.validationChecks` → the job body, only
   when that dispatch OPENS a PR. `AgentContextBuilder` walks the frame ancestry ONCE per dispatch
   and reuses that frame for every frame-scoped resolver. Riding the job body means it works on all

@@ -7,7 +7,9 @@ import {
   VALIDATION_MAX_ATTEMPTS_CEILING,
   VALIDATION_MAX_CHECKS,
   type ValidationCheck,
+  type ValidationEcosystem,
 } from '~/types/validationChecks'
+import { mergeDetectedChecks } from '~/utils/validationDetection'
 
 // Per-service (frame) PRE-PR VALIDATION CHECKS: the shell commands the executor-harness runs
 // against the checkout after the coder settles and BEFORE the PR opens. A failing command's
@@ -18,10 +20,11 @@ const props = defineProps<{ block: Block }>()
 
 const store = useValidationChecksStore()
 const toast = useToast()
-const { t } = useI18n()
+const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const busy = ref(false)
+const detecting = ref(false)
 const rows = ref<ValidationCheck[]>([])
 const maxAttempts = ref(VALIDATION_DEFAULT_MAX_ATTEMPTS)
 
@@ -62,6 +65,88 @@ function notifyError(title: string, e: unknown) {
     icon: 'i-lucide-triangle-alert',
     color: 'error',
   })
+}
+
+// Ecosystem label KEYS, exhaustive over the contracts `ValidationEcosystem` union: a new
+// backend detector fails THIS typecheck until it is mapped (the key is assembled at runtime,
+// so the typed-message-keys check cannot see the `t()` lookup — the map's exhaustiveness is
+// the drift guard, same pattern as `ENV_TEST_STAGE_KEYS`).
+const ECOSYSTEM_KEYS: Record<ValidationEcosystem, string> = {
+  node: 'inspector.validationChecks.ecosystem.node',
+  python: 'inspector.validationChecks.ecosystem.python',
+  go: 'inspector.validationChecks.ecosystem.go',
+  rust: 'inspector.validationChecks.ecosystem.rust',
+  maven: 'inspector.validationChecks.ecosystem.maven',
+  gradle: 'inspector.validationChecks.ecosystem.gradle',
+  dotnet: 'inspector.validationChecks.ecosystem.dotnet',
+  ruby: 'inspector.validationChecks.ecosystem.ruby',
+  php: 'inspector.validationChecks.ecosystem.php',
+  elixir: 'inspector.validationChecks.ecosystem.elixir',
+  make: 'inspector.validationChecks.ecosystem.make',
+  just: 'inspector.validationChecks.ecosystem.just',
+  task: 'inspector.validationChecks.ecosystem.task',
+}
+
+function ecosystemLabel(id: ValidationEcosystem): string {
+  const key = ECOSYSTEM_KEYS[id]
+  // `te`-guarded so a locale missing the key shows the raw id, never a raw message key.
+  return te(key) ? t(key) : id
+}
+
+/**
+ * Fill the rows from what the service's repo declares. The suggestion is NOT saved — it
+ * lands in the same unsaved rows the operator edits by hand, so Detect is always reversible
+ * by walking away from the panel.
+ */
+async function detect() {
+  detecting.value = true
+  try {
+    const result = await store.detect(props.block.id)
+    if (result.status !== 'ok') {
+      // The backend distinguishes "no repo linked" from "the repo could not be read"; say
+      // which, because they send the operator to different places.
+      toast.add({
+        title: t(`inspector.validationChecks.detect.${result.status}`),
+        icon: 'i-lucide-triangle-alert',
+        color: 'warning',
+      })
+      return
+    }
+    const merged = mergeDetectedChecks(rows.value, result.checks, VALIDATION_MAX_CHECKS)
+    rows.value = merged.rows
+    if (merged.added === 0) {
+      toast.add({
+        title: t('inspector.validationChecks.detect.nothingNew'),
+        description:
+          result.checks.length > 0
+            ? t('inspector.validationChecks.detect.alreadyPresent')
+            : t('inspector.validationChecks.detect.unrecognised'),
+        icon: 'i-lucide-info',
+        color: 'neutral',
+      })
+      return
+    }
+    const names = result.ecosystems.map(ecosystemLabel).join(', ')
+    toast.add({
+      title: t('inspector.validationChecks.detect.added', { count: merged.added }, merged.added),
+      // Name what was recognised AND what was left out: a cap that silently swallowed a
+      // suggestion reads as "that is everything your repo has".
+      description: [
+        names ? t('inspector.validationChecks.detect.found', { ecosystems: names }) : '',
+        merged.dropped > 0 || result.truncated
+          ? t('inspector.validationChecks.detect.capped', { max: VALIDATION_MAX_CHECKS })
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      icon: 'i-lucide-wand-sparkles',
+      color: 'success',
+    })
+  } catch (e) {
+    notifyError(t('inspector.validationChecks.detect.failed'), e)
+  } finally {
+    detecting.value = false
+  }
 }
 
 async function save() {
@@ -179,6 +264,19 @@ async function clear() {
           />
         </UFormField>
         <div class="flex gap-2">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="xs"
+            icon="i-lucide-wand-sparkles"
+            :loading="detecting"
+            :disabled="!canAdd"
+            :title="t('inspector.validationChecks.detect.hint')"
+            data-testid="validation-detect"
+            @click="detect"
+          >
+            {{ t('inspector.validationChecks.detect.action') }}
+          </UButton>
           <UButton
             color="neutral"
             variant="soft"

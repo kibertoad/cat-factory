@@ -1104,7 +1104,34 @@
       "save": "Guardar comprobaciones",
       "savedToast": "Comprobaciones guardadas",
       "saveFailed": "No se pudieron guardar las comprobaciones",
-      "clearFailed": "No se pudieron vaciar las comprobaciones"
+      "clearFailed": "No se pudieron vaciar las comprobaciones",
+      "detect": {
+        "action": "Detectar",
+        "hint": "Sugerir comprobaciones a partir del repositorio de este servicio",
+        "added": "Se añadió {count} comprobación | Se añadieron {count} comprobaciones",
+        "found": "Se reconoció {ecosystems}.",
+        "capped": "Se omitieron algunas sugerencias: un servicio admite como máximo {max} comprobaciones.",
+        "nothingNew": "No hay nada que añadir",
+        "alreadyPresent": "Todos los comandos detectados ya están en la lista.",
+        "unrecognised": "No se reconoció ningún ecosistema conocido en la raíz del repositorio. Añade los comandos a mano.",
+        "repo_unavailable": "Este servicio no tiene ningún repositorio vinculado, así que no hay nada que inspeccionar.",
+        "failed": "No se pudo leer el repositorio"
+      },
+      "ecosystem": {
+        "node": "Node.js",
+        "python": "Python",
+        "go": "Go",
+        "rust": "Rust",
+        "maven": "Maven",
+        "gradle": "Gradle",
+        "dotnet": ".NET",
+        "ruby": "Ruby",
+        "php": "PHP",
+        "elixir": "Elixir",
+        "make": "Make",
+        "just": "just",
+        "task": "Task"
+      }
     }
   },
   "panels": {

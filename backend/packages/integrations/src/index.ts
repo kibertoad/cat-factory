@@ -537,6 +537,7 @@ export {
   ValidationConfigService,
   type ValidationConfigServiceDependencies,
 } from './modules/validation/ValidationConfigService.js'
+export { detectValidationChecksFromRepo } from './modules/validation/detectValidationChecksFromRepo.js'
 export {
   LocalSettingsService,
   type LocalSettingsServiceDependencies,
