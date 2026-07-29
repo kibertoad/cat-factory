@@ -4283,12 +4283,20 @@
     "inspector": {
       "runPlanning": "Esegui pianificazione",
       "answerPlanning": "Rispondi alle domande di pianificazione",
-      "reviewPlan": "Rivedi il piano",
+      "resolveDecision": "Risolvi",
       "planningInProgress": "Pianificazione in corso",
       "pause": "Pausa",
       "resume": "Riprendi",
       "cancel": "Annulla iniziativa",
       "hint": "La pipeline di pianificazione esplora il codebase, redige il piano multi-fase per l'approvazione, poi effettua il commit del documento del tracker nel repository."
+    },
+    "planReview": {
+      "title": "Questo piano ti sta aspettando",
+      "body": "Il planner ha redatto le fasi e gli elementi qui sotto. Approvali per confermare il piano e avviare il lavoro, oppure rimanda indietro il piano indicando cosa cambiare.",
+      "approve": "Approva il piano",
+      "requestChanges": "Richiedi modifiche",
+      "feedbackPlaceholder": "Cosa deve cambiare il planner? Ambito, ordine delle fasi, lavoro mancante, un elemento che sta altrove…",
+      "sendBack": "Rimanda al planner"
     },
     "planning": {
       "title": "Pianifica l'iniziativa",

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 // Inspector body for an `initiative`-level block: the entity's status + goal, the
 // "Run planning" control (pinned to the Initiative Planning pipeline — the engine
-// refuses any other on this block), the two parked-run affordances a planning run can
-// raise ("Answer planning questions" mid-interview, "Review plan" at the planner's
-// approval gate), the execution-loop controls (pause / resume / cancel once executing),
-// and the tracker window opener. Plan/policy editing lands with slice 4.
+// refuses any other on this block), the execution-loop controls (pause / resume /
+// cancel once executing), and the tracker window opener. Plan/policy editing lands
+// with slice 4.
 import type { Block, InitiativeStatus } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
-import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
+import {
+  INITIATIVE_ATTENTION_ICONS,
+  INITIATIVE_ATTENTION_LABEL_KEYS,
+  INITIATIVE_STATUS_LABEL_KEYS,
+  initiativeProgress,
+} from '~/utils/initiative'
 
 const props = defineProps<{ block: Block }>()
 
@@ -18,19 +22,18 @@ const initiative = computed(() => initiatives.forBlock(props.block.id))
 
 const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'planning')
 
-// The "Run planning" / "Answer planning questions" / "Review plan" affordances, shared with the
-// board card so the two surfaces can't drift (see {@link useInitiativePlanning}).
+// The "Run planning" / "Answer planning questions" affordances, shared with the board card so the
+// two surfaces can't drift (see {@link useInitiativePlanning}).
 const {
   planningPipeline,
   running,
   awaitingAnswers,
   interviewing,
-  awaitingPlanReview,
+  attention,
   starting,
   runPlanning,
   openPlanning,
   openTracker,
-  reviewPlan,
 } = useInitiativePlanning(() => props.block.id)
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
@@ -59,19 +62,20 @@ function control(action: 'pause' | 'resume' | 'cancel') {
     </p>
 
     <div class="flex flex-wrap items-center gap-2">
-      <!-- The planner's approval gate: the drafted plan is waiting on the human. Opens the
-           step's review surface (outline + per-block comments + approve / request changes /
-           reject) — the same one every other gated agent step opens. -->
+      <!-- Parked for a human (the drafted plan awaits approval, or an agent raised a decision).
+           The same affordance the board card carries, resolved from the same composable — the
+           run's park must not be reachable only through the execution panel's step list. -->
       <UButton
-        v-if="awaitingPlanReview"
-        data-testid="initiative-review-plan"
-        color="primary"
+        v-if="attention"
+        data-testid="initiative-review"
+        :data-attention="attention.kind"
+        color="warning"
         variant="solid"
         size="sm"
-        icon="i-lucide-clipboard-check"
-        @click="reviewPlan"
+        :icon="INITIATIVE_ATTENTION_ICONS[attention.kind]"
+        @click="attention.open()"
       >
-        {{ t('initiative.inspector.reviewPlan') }}
+        {{ t(INITIATIVE_ATTENTION_LABEL_KEYS[attention.kind]) }}
       </UButton>
       <UButton
         v-else-if="awaitingAnswers"

@@ -64,21 +64,23 @@ Key shape decisions:
   the inspector's execution panel (step list, live phases, step-detail drill-down, Stop / Discard
   run) and the Focus view. Only the way a run is STARTED differs — an initiative block accepts
   exactly one pipeline, so it keeps a single "Run planning" control instead of the pipeline picker,
-  on all three surfaces (board card, inspector, Focus).
-- **The plan gate is an ORDINARY approval gate too, reviewed on the plan itself.** The planner
-  step is `gate: true`, so it parks on the generic `step.approval` every gated agent step uses —
-  but the planner emits its plan as JSON and returns a transcript summary as its output, and it
-  declared the read-only tracker window as its result view. Between them the gate parked on a
-  one-line proposal and opened on a surface with no approve / request-changes / reject rail, so
-  it was resolvable only over REST. Both halves are fixed generically rather than with an
-  initiative-specific window: the plan joins the spec doc and the blueprint tree on the
-  `reviewableArtifactOutput` seam (so the gate parks on a markdown RENDERING of the ingested
-  plan, which is also what a "request changes" re-run quotes back to the planner), and the
-  planner declares NO result view so it opens the generic reader — outline navigation,
-  per-block comments, feedback, approve / request changes / reject. The tracker stays the
-  analyst's and committer's view and keeps its board-card and inspector entry points; it is the
-  wrong surface at the gate anyway, since at planning time every item is `pending` with no PR and
-  its curation controls require `executing`.
+  on all three surfaces (board card, inspector, Focus). **That parity governs the run's PARKS too.**
+  The planner step is `gate: true`, so a drafted plan parks the run exactly like any other gate:
+  the card and the inspector carry the same `attention` affordance a task card does (resolved from
+  `useInitiativePlanning`, with the interviewer's own park left to its "Answer planning questions"
+  sibling), and the window that park ROUTES to — the tracker, per the planner's `resultView` —
+  owns the approve / request-changes rail. Both halves are load-bearing: the gate first shipped
+  with neither, so a finished plan sat behind a spinning "Run planning" and could be cleared only
+  by a REST call. A park whose offer or whose resolving surface is missing is not "surfaced as one".
+- **The plan gate parks on the PLAN, not on the planner's chatter.** The rail above can only be as
+  good as what it reviews, and the planner emits its plan as JSON while returning a transcript
+  summary ("Initiative plan drafted.") as `step.output` — so the gate parked on a one-line
+  proposal, and a "request changes" re-run handed the planner that sentence back as its previous
+  proposal rather than the plan it had just written. The plan therefore joins the spec doc and the
+  blueprint tree on the `reviewableArtifactOutput` seam: the gate parks on a deterministic markdown
+  RENDERING of the ingested plan, whose headings are load-bearing because the reader's outline
+  parser splits the document at each one — which is what makes navigation and per-block commenting
+  possible over it at all.
 - **A rendered proposal is NOT editable, and the engine says so.** "Approve with corrections"
   rewrites `step.output`, which is right when the output is the agent's own prose and silently
   useless when it is a rendering of state already ingested — the committed artifact would stay

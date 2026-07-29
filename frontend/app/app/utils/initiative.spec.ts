@@ -4,8 +4,8 @@ import type { InitiativeItem, InitiativePhase, InitiativeQa } from '~/types/doma
 import {
   isPendingQuestion,
   orderInterviewQuestions,
-  parkedPlanReviewStepIndex,
   pendingCheckpointPhase,
+  selectPlanApproval,
 } from './initiative'
 
 // `pendingCheckpointPhase` mirrors the backend `pendingCheckpoint` (orchestration
@@ -156,40 +156,47 @@ describe('orderInterviewQuestions', () => {
   })
 })
 
-describe('parkedPlanReviewStepIndex', () => {
-  const step = (agentKind: string, approvalStatus?: string) => ({
-    agentKind,
-    ...(approvalStatus ? { approval: { status: approvalStatus } } : {}),
+// The plan-review park: which of a block's pending approvals the board card / inspector offer as
+// "Review plan", and which one they must leave alone. Both gates on the planning pipeline park on
+// a `step.approval`, so the interviewer's park (owned by the planning window's "Answer planning
+// questions") is the case this selector exists to keep out — offering it here would give one park
+// two differently-worded buttons, and the tracker window it opened could not resolve it.
+
+/** A pending approval as `execution.approvalsByBlock` carries it (only the fields read here). */
+const parked = (agentKind: string, id: string) => ({ agentKind, approval: { id } })
+
+/** The catalog's result-view resolver, as the composable passes it in. */
+const resultViewOf = (kind: string): string | undefined =>
+  kind === 'initiative-interviewer'
+    ? 'initiative-planning'
+    : kind.startsWith('initiative-')
+      ? 'initiative-tracker'
+      : undefined
+
+describe('selectPlanApproval', () => {
+  it('is undefined when nothing is parked', () => {
+    expect(selectPlanApproval([], resultViewOf)).toBeUndefined()
   })
 
-  it('is null when no run has been started', () => {
-    expect(parkedPlanReviewStepIndex(undefined)).toBeNull()
+  it('picks the planner gate — the plan awaiting approval', () => {
+    const approvals = [parked('initiative-planner', 'ap_1')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_1')
   })
 
-  it('is null while the planner is still working', () => {
-    const steps = [step('initiative-analyst'), step('initiative-planner')]
-    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
+  it('leaves the interviewer park to the planning window', () => {
+    const approvals = [parked('initiative-interviewer', 'ap_interview')]
+    expect(selectPlanApproval(approvals, resultViewOf)).toBeUndefined()
   })
 
-  it('finds the planner step parked on its approval gate', () => {
-    const steps = [
-      step('initiative-interviewer'),
-      step('initiative-analyst'),
-      step('initiative-planner', 'pending'),
-      step('initiative-committer'),
-    ]
-    expect(parkedPlanReviewStepIndex(steps)).toBe(2)
+  it('finds the plan gate past an interview park (a re-run interviewing again)', () => {
+    const approvals = [parked('initiative-interviewer', 'ap_interview'), parked('x', 'ap_plan')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_plan')
   })
 
-  it('ignores the INTERVIEWER, which parks on `approval` but owns its own window', () => {
-    // The generic approve resolver refuses an interview gate server-side, so offering the plan
-    // review here would open a review that cannot be given.
-    const steps = [step('initiative-interviewer', 'pending'), step('initiative-planner')]
-    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
-  })
-
-  it('ignores a settled planner gate', () => {
-    const steps = [step('initiative-planner', 'approved'), step('initiative-committer')]
-    expect(parkedPlanReviewStepIndex(steps)).toBeNull()
+  it('offers a gated step of a custom planning pipeline, whatever window it routes to', () => {
+    // A kind with no dedicated window at all still parks a human; the affordance opens whatever
+    // `dispatchStepView` routes it to (the generic panel), which is exactly what resolves it.
+    const approvals = [parked('some-custom-kind', 'ap_custom')]
+    expect(selectPlanApproval(approvals, resultViewOf)?.approval.id).toBe('ap_custom')
   })
 })

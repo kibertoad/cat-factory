@@ -1,5 +1,23 @@
 # @cat-factory/app
 
+## 0.182.1
+
+### Patch Changes
+
+- 4dd799d: Move the Sandbox and Kaizen sidebar destinations out of the Integrations section and into
+  Models, beside the model providers and per-agent model configuration they exercise. Neither
+  connects to an external system: Sandbox runs prompt versions and models against graded
+  fixtures, and Kaizen grades the prompt+agent+model combinations that shipped.
+- f511799: Surface an initiative's parked plan review on the board, and make the tracker window resolve it.
+
+  A `pl_initiative` run parks on the planner's human gate once the plan is drafted, but the board card
+  kept showing a disabled, spinning "Run planning" and the tracker window (where the planner's park
+  routes) was read-only — so the gate could only be cleared over REST. The card and the inspector now
+  carry the same `attention` affordance a task card does (a parked decision, or the plan review),
+  the interviewer's own park still belonging to "Answer planning questions"; the tracker window gained
+  the approve / request-changes rail beside the plan it judges; and a frame's decision/approval badge
+  now counts its initiative children, not only its tasks.
+
 ## 0.182.0
 
 ### Minor Changes

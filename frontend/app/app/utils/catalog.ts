@@ -469,22 +469,9 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#818cf8',
     description:
       "Explores the codebase and drafts the initiative's multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.",
-    // DELIBERATELY no `resultView`: the planner step opens the GENERIC prose reader.
-    //
-    // It is the one initiative step that parks on a generic human approval gate (`gate: true`
-    // in `pl_initiative`), and the tracker window cannot resolve that gate — it has no
-    // approve / request-changes / reject rail, no comment anchoring and no outline, so
-    // routing here left the run's own review surface with nothing on it and the gate
-    // reachable only over REST. The generic reader supplies all four, and the backend now
-    // parks the gate on a markdown RENDERING of the plan (`renderInitiativePlanForReview`)
-    // rather than the planner's one-line transcript summary, so there is a real document to
-    // navigate and to anchor comments against.
-    //
-    // Nothing is lost by not opening the tracker here: at the planning gate every item is
-    // still `pending` with no PR and curation is disabled (it requires `executing`), while
-    // the plan's descriptions, estimates and dependencies — what a reviewer actually judges —
-    // are not on the tracker at all. The tracker stays one click away on the initiative card
-    // and inspector, and remains the analyst's and committer's result view.
+    // Opens the dedicated tracker window (phases / items / policy) instead of the
+    // generic prose step-detail panel.
+    resultView: 'initiative-tracker',
   },
   'initiative-committer': {
     kind: 'initiative-committer',

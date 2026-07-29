@@ -5295,12 +5295,20 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
-      "reviewPlan": "Przejrzyj plan",
+      "resolveDecision": "Rozwiąż",
       "planningInProgress": "Planowanie w toku",
       "pause": "Wstrzymaj",
       "resume": "Wznow",
       "cancel": "Anuluj inicjatywe",
       "hint": "Pipeline planowania bada kod, przygotowuje wielofazowy plan do zatwierdzenia, a nastepnie zapisuje dokument trackera w repozytorium."
+    },
+    "planReview": {
+      "title": "Ten plan czeka na Ciebie",
+      "body": "Planer przygotował poniższe fazy i elementy. Zatwierdź je, aby zapisać plan i rozpocząć pracę, albo odeślij plan z informacją, co zmienić.",
+      "approve": "Zatwierdź plan",
+      "requestChanges": "Poproś o zmiany",
+      "feedbackPlaceholder": "Co planer ma zmienić? Zakres, kolejność faz, brakująca praca, element, który pasuje gdzie indziej…",
+      "sendBack": "Odeślij do planera"
     },
     "planning": {
       "title": "Zaplanuj inicjatywe",
