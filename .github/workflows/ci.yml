@@ -796,7 +796,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
+      # ONLY on a cache miss, which is what the step above always intended. A hit has
+      # already restored the browser, so all a re-run buys is `--with-deps`' unconditional
+      # apt round trip for OS packages the runner image already carries — and that call is
+      # network-bound with a very long tail: 12s at the median across shards, but 484s on
+      # one run, which was that entire run's wall clock (11m against a ~4m baseline). The
+      # cache key is exact-match (no restore-keys), so a miss means the browser is genuinely
+      # absent and the full install, OS deps included, still runs.
       - name: Install Playwright Chromium
+        if: ${{ steps.pw-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       # TCP probe, not the unix socket — see the `test-db` wait step for why.
