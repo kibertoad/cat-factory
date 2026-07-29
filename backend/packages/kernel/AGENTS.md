@@ -48,6 +48,12 @@ else imports its **ports** and domain types from here.
   finest grain and every coarser view (a step's per-kind rollup, the run's per-phase burn
   breakdown, the run totals) is derived here, so the numbers on a surface can't disagree with the
   totals beside them. A new consumer folds; it does not add a second `GROUP BY` on the emit path.
+- `domain/context-references.ts` — the **"a referenced context document reaches the agent whole, or
+  the run breaks loudly naming it"** invariant: `hasReadableContent` plus the two refusals
+  (`assertContextDocumentsReadable` / `assertContextReferencesFit`) and their `details.reason`
+  codes. Shared because the reference can vanish in two different layers — the engine's
+  `resolveLinkedContext` and the container's `buildContextFiles` — and both must refuse in the same
+  words. See `backend/docs/document-sources.md`.
 - `domain/pr-report.ts` — the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

@@ -1,11 +1,12 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { CONTEXT_DOCUMENTS_OVER_BUDGET, ValidationError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { buildContextFiles } from './contextFiles.js'
 
 // Coverage for the linked-context materialiser (extracted from ContainerAgentExecutor). The
-// load-bearing invariants: the prompt index (`contextDocs`/`contextTasks` returned) stays in
-// lock-step with the files actually written, filenames never collide, and the byte budget
-// drops overflow items from BOTH the files and the index together.
+// load-bearing invariants: every linked item reaches the checkout, filenames never collide, and a
+// corpus that overflows the byte budget REFUSES the dispatch naming what didn't fit — rather than
+// materialising a prefix and leaving the agent (and the human) unable to tell it was partial.
 
 type ContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number]
 
@@ -29,19 +30,15 @@ describe('buildContextFiles', () => {
   it('returns empty results when the block has no linked docs or tasks', () => {
     const out = buildContextFiles(ctx({}))
     expect(out.files).toEqual([])
-    expect(out.contextDocs).toEqual([])
-    expect(out.contextTasks).toEqual([])
   })
 
-  it('materialises a doc with a title + source header and keeps it in the index', () => {
+  it('materialises a doc with a title + source header', () => {
     const out = buildContextFiles(ctx({ contextDocs: [doc()] }))
     expect(out.files).toHaveLength(1)
     expect(out.files[0]?.path).toBe('design-doc.md')
     expect(out.files[0]?.content).toBe(
       '# Design Doc\nSource: https://docs.example/design\n\nthe full body',
     )
-    // The prompt index reports exactly the doc that was written.
-    expect(out.contextDocs).toHaveLength(1)
   })
 
   it('falls back to the excerpt when a doc has no body', () => {
@@ -58,16 +55,49 @@ describe('buildContextFiles', () => {
     expect(out.files.map((f) => f.path)).toEqual(['spec.md', 'spec-2.md'])
   })
 
-  it('drops an over-budget doc from BOTH the files and the prompt index (lock-step)', () => {
+  it('refuses the dispatch when the corpus overflows the byte budget, naming what did not fit', () => {
     // 262_144 is the byte budget; a body past it can't fit once the header is added.
     const huge = 'x'.repeat(262_144)
+    const build = () =>
+      buildContextFiles(
+        ctx({
+          contextDocs: [doc({ title: 'Small', body: 'tiny' }), doc({ title: 'Huge', body: huge })],
+        }),
+      )
+    // The overflow item is NAMED (a human has to decide what to detach), with a machine-readable
+    // cause so the dispatch classifies as a `preflight` rejection rather than a container blip.
+    expect(build).toThrow(/"Huge"/)
+    expect(build).toThrow(/256 KB/)
+    try {
+      build()
+      expect.unreachable('an over-budget corpus must refuse the dispatch')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError)
+      expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENTS_OVER_BUDGET)
+    }
+  })
+
+  it('materialises a corpus that fits, tracker issues included', () => {
     const out = buildContextFiles(
       ctx({
-        contextDocs: [doc({ title: 'Small', body: 'tiny' }), doc({ title: 'Huge', body: huge })],
+        contextDocs: [doc({ title: 'PRD' })],
+        contextTasks: [
+          {
+            key: 'PROJ-7',
+            url: 'https://tracker/PROJ-7',
+            title: 'CSV export',
+            status: 'Open',
+            type: 'Story',
+            assignee: null,
+            priority: null,
+            labels: [],
+            description: 'Customers want CSV.',
+            comments: [],
+            summary: 'Customers want CSV.',
+          },
+        ],
       }),
     )
-    // Only the small doc is materialised, and the index reports only what's on disk.
-    expect(out.files.map((f) => f.path)).toEqual(['small.md'])
-    expect(out.contextDocs.map((d) => d.title)).toEqual(['Small'])
+    expect(out.files.map((f) => f.path)).toEqual(['prd.md', 'proj-7.md'])
   })
 })

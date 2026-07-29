@@ -378,12 +378,22 @@ export function renderLinkedContext(
     for (const task of contextTasks ?? [])
       items.push(`- [${task.key}] ${task.title} (${task.status}) — ${task.summary} (${task.url})`)
     const capped = items.slice(0, CONTEXT_BUDGET.maxItems)
+    // The index is capped, the DIRECTORY is not: every item was materialised (the materialiser
+    // refuses an over-budget corpus rather than writing part of it). Say how many are unlisted, or
+    // an agent reads the list as the complete set and never opens the files past it.
+    const unlisted = items.length - capped.length
     return `\n${[
       '',
       'Linked context (requirements / RFCs / PRDs / tracker issues). The full text of each',
       `is in the \`${CONTEXT_DIR}/\` directory of your checkout — open a file when it is`,
       'relevant. Do not try to reach external systems; everything available is already on disk.',
       ...capped,
+      ...(unlisted > 0
+        ? [
+            `…and ${unlisted} more not listed here: every linked item is on disk, so list`,
+            `\`${CONTEXT_DIR}/\` to see the rest.`,
+          ]
+        : []),
     ].join('\n')}`
   }
 
@@ -393,13 +403,31 @@ export function renderLinkedContext(
   let spent = 0
   if (contextDocs?.length) {
     lines.push('', 'Linked context documents (requirements / RFCs / PRDs):')
+    // An inline caller has no `.cat-context/` to fall back on, so a document the budget can't seat
+    // is genuinely absent from this prompt. A clamped body already marks its own cut; the ones that
+    // got no room at all are named below, because an unmentioned omission reads as "this task has
+    // no other requirements" — which is how an inline reviewer confidently approves against a spec
+    // it never received.
+    const unseated: typeof contextDocs = []
     for (const doc of contextDocs) {
       const remaining = CONTEXT_BUDGET.inlineBodyTokens - spent
-      if (remaining <= 0) break
+      if (remaining <= 0) {
+        unseated.push(doc)
+        continue
+      }
       const slice = clampToTokens(doc.body || doc.excerpt, remaining)
       spent += estimateTokens(slice)
       lines.push(`### ${doc.title} (${doc.url})`, slice)
     }
+    if (unseated.length)
+      lines.push(
+        '',
+        `${unseated.length} further linked document${unseated.length === 1 ? '' : 's'} did not fit ` +
+          `this prompt's context budget and ${unseated.length === 1 ? 'is' : 'are'} NOT included ` +
+          `above: ${unseated.map((d) => `${d.title} (${d.url})`).join(', ')}. Treat what you were ` +
+          `given as incomplete, and say so in your output if the missing text would change your ` +
+          `conclusion.`,
+      )
   }
   if (contextTasks?.length) {
     lines.push('', 'Linked tracker issues (extra context):')

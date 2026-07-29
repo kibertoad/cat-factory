@@ -1009,11 +1009,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
     // container agent can read what it needs on demand; the prompt only lists them. The
     // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
-    const {
-      files: contextFiles,
-      contextDocs: keptDocs,
-      contextTasks: keptTasks,
-    } = buildContextFiles(context)
+    const { files: contextFiles } = buildContextFiles(context)
     // Files a registered kind's preOp prepared for the agent to read up front (e.g. the
     // `pr-reviewer` diff) — materialised into `.cat-context/` alongside the linked-doc files.
     // The preOp already bounded their size; the agent's own prompt names the paths, so they need
@@ -1077,17 +1073,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       },
       this.deps,
     )
-    // Render the prompt's linked-context summary index from exactly the items that were
-    // materialised (some may have been dropped at the byte cap), so the agent is never
-    // pointed at a `.cat-context/` file that doesn't exist.
-    // Also folds in the tool servers resolved above: they are a DISPATCH-level fact (the harness
+    // The prompt's linked-context summary index is rendered from the block's own docs/tasks: every
+    // one of them was materialised, because `buildContextFiles` refuses a corpus that would not fit
+    // rather than writing a prefix of it — so the index can never name a `.cat-context/` file the
+    // agent won't find on disk.
+    // Folds in the tool servers resolved above: they are a DISPATCH-level fact (the harness
     // decides what MCP is possible), so the engine cannot put them on the context — but the prompt
     // and the agent-context snapshot must both see exactly what was wired.
     const promptContext: AgentRunContext = {
       ...context,
-      ...(contextFiles.length
-        ? { block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
-        : {}),
       ...(tools.toolServers.length ? { toolServers: tools.toolServers } : {}),
       ...(tools.unavailableToolServers.length
         ? { unavailableToolServers: tools.unavailableToolServers }
