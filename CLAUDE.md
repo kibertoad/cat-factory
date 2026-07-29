@@ -1139,15 +1139,43 @@ between the optional package and the core library that feeds it.
   `architect`/`analysis`/`task-estimator`. A review is a JUDGEMENT, which is what a panel of
   independent models is better at than one model — but what a panel can SEE differs by kind, and
   that is the axis to reason on before adding another: `pr-reviewer` gets its whole input from
-  preOp-written context files (folded into an inline prompt by `userPromptFor`, so the panel reads
-  the SAME diff the container reviewer would), while the checkout-exploring companions trade
-  ground-truth depth for judgement diversity. **The frontend mirror
-  (`app/utils/catalog.ts` `CONSENSUS_ELIGIBLE_KINDS`) is hand-synced — extend both.**
+  preOp-written context files (folded into an inline prompt by `userPromptFor`), while the
+  checkout-exploring companions trade ground-truth depth for judgement diversity. **The frontend
+  mirror (`app/utils/catalog.ts` `CONSENSUS_ELIGIBLE_KINDS`) is hand-synced — extend both.**
+- **A panel participant has NO checkout, and every layer that prepares for it must know.** Most
+  eligible kinds are CONTAINER kinds whose shipped prompt and preOps are written for a real
+  filesystem, so running them inline is where this feature's sharp edge is. Three seams carry the
+  fact, and a new consensus-eligible kind has to answer to all three:
+  - **`dispatchDeliversCheckout` (`@cat-factory/agents`) is the ONE definition** of "does this
+    dispatch hand the agent a checkout", used both by `CompositeAgentExecutor`'s ROUTING and by
+    the engine, which passes it to a kind's hooks as `RepoOpContext.deliversCheckout`. It is
+    deliberately FAIL-SAFE: a consensus-enabled step counts as checkout-less even though the
+    executor may still fall through to the container agent. Being wrong that way hands a
+    container agent an inlined diff it did not need; being wrong the other way hands a panel a
+    file list and tells it to run `git`, and the panel reviews from filenames while sounding
+    confident. Only the first error is recoverable.
+  - **A preOp branches on it rather than assuming a filesystem.** `renderPrDiffContext` is the
+    reference case: with a checkout the patch budget stays all-or-nothing and a large diff becomes
+    a manifest the reviewer slices from (see the measurements in its module header); without one
+    the `git` guidance is never emitted, the budget is larger
+    (`MAX_INLINE_ONLY_DIFF_BYTES`) because un-inlined bytes are simply INVISIBLE rather than
+    fetchable, and whatever still does not fit is NAMED as unreviewable instead of passed off as
+    reviewed.
+  - **`INLINE_PANEL_SURFACE` is appended by the consensus executor** to every participant's system
+    prompt, last, so a workspace prompt override cannot drop it. Without it the kind's own prompt
+    describes a machine the participant is not on, and a model handed instructions it cannot
+    follow narrates the steps it would have taken instead of stopping.
 - **`userPromptFor` folds `injectedContextFiles` for every INLINE caller** and not for the
   container path (`opts.materialized`), at the wrapper level beside `withRevision`. It has to be
   the wrapper: `buildBaseUserPrompt` returns early both for a standard phase AND for a kind that
   authors its own user prompt, and it is exactly those self-authoring kinds whose entire input
-  arrives as context files.
+  arrives as context files. Two rules on that fold: it is BUDGETED and states what it dropped (a
+  panel re-sends it per participant per round), and it EXCLUDES the standards files
+  (`isStandardsContextFile`). Standards reach an inline caller through the SYSTEM prompt, where
+  `composeBlockSystemPrompt` folds them at the kind's `standardsVerbosityFor` — so the inline
+  executors pass `standardsDeliveredAsFiles: false` (with no filesystem the files were never
+  really delivered). Folding them in both places would duplicate every standard AND silently
+  restore the full bodies that the `brief` tier exists to avoid.
 - **A step declares its panel ONE of two ways.** Inline `participants` (unchanged), or
   `consensus.groupIds` — a SET of workspace CONSENSUS GROUPS, each a reusable panel carrying its
   own estimate bar. The array is a set, not a precedence list.

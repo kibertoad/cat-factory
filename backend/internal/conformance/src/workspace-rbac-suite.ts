@@ -314,6 +314,11 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         { perm: 'settings.manage', method: 'PUT', path: w('/settings') },
         { perm: 'settings.manage', method: 'PUT', path: w('/tracker-settings') },
         { perm: 'settings.manage', method: 'DELETE', path: w('/model-presets/none') },
+        // The consensus-GROUP library. Same permission as the model-preset library above and for
+        // the same reason: a group decides which models review a task and how many of them run,
+        // so editing one changes what every run in the workspace costs and who judges it — the
+        // model mapping's blast radius, not a member-tier pipeline edit.
+        { perm: 'settings.manage', method: 'DELETE', path: w('/consensus-groups/none') },
         // Agent prompt overrides: the pipeline builder itself is member-tier, but an edited
         // system prompt changes how every run in the workspace behaves — the same blast radius
         // as the model mapping above, so the same permission. (The controller has no DELETE:

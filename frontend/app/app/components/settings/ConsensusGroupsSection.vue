@@ -119,6 +119,31 @@ const selectableModelIds = computed(() => {
 })
 
 /**
+ * A threshold field's value as the contract wants it, or undefined when the author left it blank.
+ *
+ * `v-model.number` does NOT yield null for an emptied input: Vue's coercion returns the RAW value
+ * when it cannot parse a number, so clearing a box a user had typed in leaves `''` behind. Read
+ * back with a `!== null` test that empty string passes every guard, reaches the wire as
+ * `minRisk: ''`, and comes back a 422 behind a generic "could not save" toast. Anything that is
+ * not a finite number is therefore treated as absent, at the one place the value crosses out of
+ * the editor.
+ */
+function threshold(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** The thresholds the author actually set, in contract shape. */
+function thresholds(e: EditorState) {
+  return {
+    ...(threshold(e.minComplexity) !== undefined
+      ? { minComplexity: threshold(e.minComplexity) }
+      : {}),
+    ...(threshold(e.minRisk) !== undefined ? { minRisk: threshold(e.minRisk) } : {}),
+    ...(threshold(e.minImpact) !== undefined ? { minImpact: threshold(e.minImpact) } : {}),
+  }
+}
+
+/**
  * The gating payload. A gated group with no threshold is refused by the backend (it could never
  * be selected), so surface that here rather than as a save failure.
  */
@@ -126,19 +151,13 @@ function gatingPayload(e: EditorState) {
   if (!e.gated) return { enabled: false as const, onMissingEstimate: 'consensus' as const }
   return {
     enabled: true as const,
-    ...(e.minComplexity !== null ? { minComplexity: e.minComplexity } : {}),
-    ...(e.minRisk !== null ? { minRisk: e.minRisk } : {}),
-    ...(e.minImpact !== null ? { minImpact: e.minImpact } : {}),
+    ...thresholds(e),
     onMissingEstimate: 'consensus' as const,
   }
 }
 
 const gatingIncomplete = computed(
-  () =>
-    !!editor.value?.gated &&
-    editor.value.minComplexity === null &&
-    editor.value.minRisk === null &&
-    editor.value.minImpact === null,
+  () => !!editor.value?.gated && Object.keys(thresholds(editor.value)).length === 0,
 )
 
 async function save() {

@@ -44,6 +44,14 @@ export function clearsConsensusBar(
  * How demanding a group's bar is: the HIGHEST threshold it names across the three axes. An
  * ungated group scores -1 so it always sorts below every gated one — it is the floor by
  * construction, not by happening to name a low number.
+ *
+ * A group that ENABLES gating but names no threshold also scores -1, and that is deliberate
+ * rather than an oversight to tidy up. `ConsensusGroupService` refuses to write one (it could
+ * never be selected on score, so it would read as an active tier while doing nothing), but a row
+ * predating that check — or one written straight through the persistence RPC — can still exist,
+ * and it must SORT somewhere. -1 puts it beside the floor, where `clearsConsensusBar` will then
+ * decline it on score anyway; any positive score would rank a tier that cannot fire above one
+ * that can.
  */
 export function consensusGroupBar(group: ConsensusGroup): number {
   const g = group.gating

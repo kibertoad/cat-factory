@@ -14,4 +14,13 @@ The reusable, TIERED half of the feature does NOT live here: a workspace's conse
 is core (`ConsensusGroupRepository`, `ConsensusGroupService`), and the engine selects a step's tier
 at dispatch via kernel's `selectConsensusGroup` / `applyConsensusGroup`. The executor only ever
 sees an already-decided `ConsensusStepConfig`, so this package never learns that a group store
-exists. See the "Consensus panels" section of the root `CLAUDE.md`.
+exists. `gating.ts` likewise only NAMES the two outcomes of kernel's `clearsConsensusBar` rather
+than reimplementing the axis comparison — the engine has to rank groups by the same rule before
+any executor exists, and two copies would be two chances for the selected tier and the panel that
+runs to disagree.
+
+Participants run as plain INLINE model calls: no filesystem, no shell, no subagents. Most eligible
+kinds are container kinds whose prompt and preOps assume the opposite, so the executor appends
+`INLINE_PANEL_SURFACE` to every participant's system prompt (last, so a workspace override cannot
+drop it) and the engine tells a kind's preOps via `RepoOpContext.deliversCheckout`. See the
+"Consensus panels" section of the root `CLAUDE.md`.

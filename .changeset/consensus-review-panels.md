@@ -37,6 +37,17 @@ is deliberately dropped when it is materialised, because selection IS the gate â
 forward would have the executor re-decide the same question against the same estimate, where any
 future divergence silently turns a selected tier into a skipped step.
 
+Running a container kind as an inline panel is where this feature's sharp edge is, and three
+seams now carry that fact instead of assuming a filesystem. `dispatchDeliversCheckout` is the one
+definition of "does this dispatch hand the agent a checkout", shared by the composite executor's
+routing and by the engine, which passes it to a kind's repo hooks; the `pr-reviewer` diff renderer
+branches on it, so a panel is never handed the manifest-plus-`git diff` shape it cannot act on and
+anything that still does not fit its (larger) inline budget is named as unreviewable rather than
+passed off as reviewed; and the consensus executor appends a directive stating the participant's
+real surface, since the shipped prompts of most eligible kinds describe a machine the participant
+is not on. The prompt fold that feeds inline callers is also bounded now, and leaves the standards
+files to the system prompt, which folds them at the kind's configured verbosity.
+
 Also fixes a silent pre-existing bug found next door: `ExecutionService` never forwarded
 `agentPromptRepository` to the context builder, so a workspace's edited agent prompts never reached
 a dispatch. The forwarding was a hand-maintained list of ~28 field names; it now passes the

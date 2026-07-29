@@ -257,9 +257,15 @@ export class ExecutionService {
 
   constructor(dependencies: ExecutionServiceDependencies) {
     // Bind the whole deps object, then destructure what this constructor itself reads. The
-    // object is what the sibling factories below are handed, so a field they consume can
-    // never be dropped by a hand-maintained forwarding list — which is how the workspace
-    // agent-prompt override log silently never reached the context builder.
+    // object is what the sibling factories below are handed, so a field they consume can never
+    // be dropped by a hand-maintained forwarding list.
+    //
+    // That is not hypothetical: this list previously omitted `agentPromptRepository`, which is
+    // declared on the deps type and consumed by `buildRunContextAndAdmission`, so every
+    // workspace's agent prompt OVERRIDES silently never reached a dispatch. The two libraries
+    // the context builder reads — the prompt-override log and the consensus-group library —
+    // both fail that way when unforwarded: nothing errors, the feature is just off. Nothing
+    // below may go back to naming them one by one.
     const {
       workspaceRepository,
       blockRepository,
@@ -308,10 +314,6 @@ export class ExecutionService {
       judgeAssessor,
       stepResolverRegistry,
       providerRegistry,
-      // The two context-builder libraries whose absence is SILENT: an unforwarded prompt-override
-      // log leaves every kind on its shipped prompt, and an unforwarded consensus-group library
-      // leaves a tiered step with no panel to escalate to. Both must reach
-      // `buildRunContextAndAdmission` below.
       prVerificationReportPublisher,
       workspaceSettingsRepository,
       appBaseUrl,

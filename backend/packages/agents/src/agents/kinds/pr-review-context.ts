@@ -66,6 +66,16 @@ const MAX_INLINE_DIFF_BYTES = 64 * 1024
 const MAX_SINGLE_PATCH_BYTES = 32 * 1024
 
 /**
+ * The inlined-patch budget when the reviewer has NO checkout (a consensus panel: inline model
+ * calls, no filesystem, no tools). Larger than {@link MAX_INLINE_DIFF_BYTES} because the tradeoff
+ * inverts. With a checkout, declining to inline costs the reviewer a `git diff` it was going to
+ * run per slice anyway; without one, whatever is not inlined is simply INVISIBLE — so the budget
+ * buys the only view of the change the panel will ever get. Still bounded: a panel re-sends this
+ * to every participant on every round, so an unbounded fold would multiply by panel size × rounds.
+ */
+const MAX_INLINE_ONLY_DIFF_BYTES = 192 * 1024
+
+/**
  * Byte budget for the injected existing-comments file. Review threads are short prose, so this is
  * generous; past it, the remaining threads are summarised as a count so the file never dominates
  * the context on a PR with a very long comment history.
@@ -246,29 +256,112 @@ function largePrGuidance(files: number, bytes: number): string {
 }
 
 /**
- * Render the changed-file list, the change shape, a suggested slicing, and — only for a diff
- * small enough to review in one pass — the patches, as the injected `.cat-context/pr-diff.md`.
- * See the module header for why the patch budget is all-or-nothing.
+ * The note closing a checkout-less render whose patches did not all fit. States the boundary of
+ * what was reviewable OUTRIGHT, because the alternative is a reviewer that reads a changed-file
+ * list, sees no diff beside some entries, and reports on them anyway from their names. A cap that
+ * does not announce itself reads exactly like a complete picture.
  */
-export function renderPrDiffContext(number: number, files: GitHubChangedFile[]): string {
+function omittedPatchesNote(omitted: readonly GitHubChangedFile[], total: number): string {
+  return (
+    `\n## Files whose diff is NOT available to you (${omitted.length} of ${total})\n\n` +
+    'You have no checkout and no tools on this run, so these files’ patches could not be included ' +
+    'and you cannot fetch them. Do NOT infer what they contain from their paths, and do not raise ' +
+    'findings against them. Review what you were shown, and say plainly in your verdict that this ' +
+    'part of the change was not visible to you.\n\n' +
+    omitted.map((f) => `- ${f.path} (+${f.additions}/-${f.deletions})`).join('\n') +
+    '\n'
+  )
+}
+
+/** One file's patch section, or the reason it has none. */
+function patchSection(f: GitHubChangedFile, byteLength: (s: string) => number): string {
+  const heading = `\n### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})\n`
+  if (f.patch == null) {
+    return `${heading}(no patch — binary or too large; read the file from the checkout)\n`
+  }
+  if (byteLength(f.patch) > MAX_SINGLE_PATCH_BYTES) {
+    const kib = Math.ceil(byteLength(f.patch) / 1024)
+    return (
+      `${heading}(patch ~${kib} KiB — over the per-file inline budget; read it with ` +
+      '`git show origin/pr-head:<path>`)\n'
+    )
+  }
+  return `${heading}\`\`\`diff\n${f.patch}\n\`\`\`\n`
+}
+
+/**
+ * Render the patches for a reviewer that has NO checkout — a consensus panel, whose participants
+ * are inline model calls with no filesystem and no tools.
+ *
+ * The all-or-nothing rule the container path follows (see the module header) is deliberately NOT
+ * applied here, because the reasoning behind it does not transfer: it trades inlined bytes against
+ * `git` turns the slice subagents were going to spend anyway. A panel has no such fallback, so
+ * bytes not inlined are bytes nobody ever reviews. Patches are therefore taken greedily in the
+ * order the slicing plan suggests reviewing them, up to {@link MAX_INLINE_ONLY_DIFF_BYTES}, and
+ * whatever did not fit is named outright by {@link omittedPatchesNote}.
+ */
+function inlineOnlyPatches(files: GitHubChangedFile[], byteLength: (s: string) => number): string {
+  const included: string[] = []
+  const omitted: GitHubChangedFile[] = []
+  let budget = MAX_INLINE_ONLY_DIFF_BYTES
+  for (const f of files) {
+    const size = f.patch == null ? 0 : byteLength(f.patch)
+    if (f.patch != null && (size > MAX_SINGLE_PATCH_BYTES || size > budget)) {
+      omitted.push(f)
+      continue
+    }
+    budget -= size
+    included.push(patchSection(f, byteLength))
+  }
+  const sections = [`\n## Patches\n`, ...included]
+  if (omitted.length) sections.push(omittedPatchesNote(omitted, files.length))
+  return sections.join('')
+}
+
+/**
+ * Render the changed-file list, the change shape, a suggested slicing and the patches, as the
+ * injected `.cat-context/pr-diff.md`.
+ *
+ * Two shapes, chosen by whether the reviewer will have a CHECKOUT (`opts.deliversCheckout`, which
+ * the engine resolves from the same predicate the executor routes on):
+ *
+ *  - **With a checkout** (the container reviewer) the patch budget is all-or-nothing and a large
+ *    diff becomes a manifest the reviewer slices from, reading each slice's diff from git. See the
+ *    module header for the measurements behind that.
+ *  - **Without one** (a consensus panel — inline calls, no filesystem, no tools) telling the
+ *    reviewer to run `git` would leave it reviewing from filenames while sounding confident. So
+ *    the guidance is never emitted, the budget is larger, and anything that still does not fit is
+ *    named as unreviewable rather than passed off as reviewed.
+ */
+export function renderPrDiffContext(
+  number: number,
+  files: GitHubChangedFile[],
+  opts: { deliversCheckout: boolean },
+): string {
   const enc = new TextEncoder()
+  const byteLength = (value: string) => enc.encode(value).length
   // Oversized single patches never inline, and never count toward the inline decision — one
   // generated blob must not push an otherwise-small PR onto the manifest-only path.
   const inlinable = files.filter(
-    (f) => f.patch != null && enc.encode(f.patch).length <= MAX_SINGLE_PATCH_BYTES,
+    (f) => f.patch != null && byteLength(f.patch) <= MAX_SINGLE_PATCH_BYTES,
   )
-  const inlineBytes = inlinable.reduce((sum, f) => sum + enc.encode(f.patch ?? '').length, 0)
+  const inlineBytes = inlinable.reduce((sum, f) => sum + byteLength(f.patch ?? ''), 0)
   const inlinePatches = inlineBytes <= MAX_INLINE_DIFF_BYTES
   // The manifest-only header reports the WHOLE patch size (incl. over-cap blobs), not just the
   // inlinable slice, so the "~N KiB of patch" figure matches the diff the reviewer is told to
   // read from git rather than understating it by the size of the excluded lockfile/snapshot.
-  const totalPatchBytes = files.reduce((sum, f) => sum + enc.encode(f.patch ?? '').length, 0)
+  const totalPatchBytes = files.reduce((sum, f) => sum + byteLength(f.patch ?? ''), 0)
 
+  // The header must never promise a checkout the reviewer does not have: a panel told it has one
+  // spends its answer describing what it would look at rather than reviewing what it was given.
   const header =
     `# Pull request #${number} — changed files and diff\n\n` +
-    'Prepared from the API so you can plan your review slices WITHOUT reconstructing the diff ' +
-    'yourself. You have the full base checkout AND (usually) the PR head fetched as ' +
-    '`origin/pr-head`.\n'
+    (opts.deliversCheckout
+      ? 'Prepared from the API so you can plan your review slices WITHOUT reconstructing the diff ' +
+        'yourself. You have the full base checkout AND (usually) the PR head fetched as ' +
+        '`origin/pr-head`.\n'
+      : 'Prepared from the API. This file is your ONLY view of the change: you have no checkout ' +
+        'and no tools on this run, so review what is inlined below and nothing beyond it.\n')
 
   const list = [
     `\n## Changed files (${files.length})\n`,
@@ -285,27 +378,17 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
     renderSuggestedSlices(planSlices(files)).join('\n'),
   ]
 
+  if (!opts.deliversCheckout) {
+    sections.push(inlineOnlyPatches(files, byteLength))
+    return `${sections.join('\n')}\n`
+  }
+
   if (!inlinePatches) {
     sections.push(largePrGuidance(files.length, totalPatchBytes))
     return `${sections.join('\n')}\n`
   }
 
-  const patches: string[] = ['\n## Patches\n']
-  for (const f of files) {
-    const heading = `\n### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})\n`
-    if (f.patch == null) {
-      patches.push(`${heading}(no patch — binary or too large; read the file from the checkout)\n`)
-    } else if (enc.encode(f.patch).length > MAX_SINGLE_PATCH_BYTES) {
-      const kib = Math.ceil(enc.encode(f.patch).length / 1024)
-      patches.push(
-        `${heading}(patch ~${kib} KiB — over the per-file inline budget; read it with ` +
-          '`git show origin/pr-head:<path>`)\n',
-      )
-    } else {
-      patches.push(`${heading}\`\`\`diff\n${f.patch}\n\`\`\`\n`)
-    }
-  }
-  sections.push(patches.join(''))
+  sections.push(['\n## Patches\n', ...files.map((f) => patchSection(f, byteLength))].join(''))
   return `${sections.join('\n')}\n`
 }
 
@@ -562,7 +645,15 @@ export const prReviewerDiffPreOp: RepoOp = async (
   const files = await listChangedFiles(number)
   if (!files.length) return
   return {
-    contextFiles: [{ path: PR_DIFF_CONTEXT_FILE, content: renderPrDiffContext(number, files) }],
+    contextFiles: [
+      {
+        path: PR_DIFF_CONTEXT_FILE,
+        // The reviewer this feeds may be a consensus PANEL rather than the container agent, and a
+        // panel has no checkout to read the un-inlined diff from. The engine has already settled
+        // which it is, so the renderer picks the shape that reviewer can actually act on.
+        content: renderPrDiffContext(number, files, { deliversCheckout: ctx.deliversCheckout }),
+      },
+    ],
   }
 }
 

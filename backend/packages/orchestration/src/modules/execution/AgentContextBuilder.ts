@@ -1154,6 +1154,11 @@ export class AgentContextBuilder {
     block: Block,
   ): Promise<{ consensus?: ConsensusStepConfig }> {
     const config = step.consensus
+    // A step with consensus switched OFF carries no consensus at all, rather than passing the
+    // disabled config through for the executor to reject. The executor's own `enabled` check
+    // makes the two equivalent for dispatch, and dropping it is what lets everything downstream
+    // read `context.consensus` as "this dispatch runs a panel" — which the repo-op layer now
+    // does to decide whether the agent it prepares context for will have a checkout.
     if (!config?.enabled) return {}
     const groupIds = config.groupIds ?? []
     if (!groupIds.length) return { consensus: config }

@@ -22,9 +22,9 @@ import {
   type AgentRouting,
   composeBlockSystemPrompt,
   defaultAgentKindRegistry,
+  INLINE_PANEL_SURFACE,
   resolveAgentConfig,
   resolveInlineModelRef,
-  standardsDeliveredAsFiles,
   standardsVerbosityFor,
   systemPromptFor,
   userPromptFor,
@@ -192,7 +192,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const provider = await this.providerFor(context)
     const base = await this.baseRef(context)
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
-    const baseSystem = composeBlockSystemPrompt(
+    const composedSystem = composeBlockSystemPrompt(
       // Same precedence the single-actor inline executor applies: the workspace's own prompt
       // for this kind wins over the deployment-wide `AGENT_ROUTING` system prompt, and
       // `systemPromptFor` re-applies the engine-enforced directives on top of it.
@@ -201,11 +201,20 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         : (config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)),
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
-      standardsDeliveredAsFiles(context.injectedContextFiles),
+      // An inline call has no filesystem, so a `context-files` kind's standards were never
+      // really delivered as files: fold them into the SYSTEM prompt here, at this kind's
+      // verbosity. `userPromptFor` correspondingly leaves the standards files out of its own
+      // fold, so each standard reaches the model exactly once and at the right length.
+      false,
       // Same per-kind verbosity the single-actor executors resolve: a consensus session runs the
       // SAME kind, so an implementer kind must not silently regain the full standards here.
       standardsVerbosityFor(context.agentKind, this.agentKindRegistry),
     )
+    // Most consensus-eligible kinds are CONTAINER kinds whose shipped prompt is written for a
+    // real checkout (run `git diff`, read `.cat-context/*`, dispatch slice subagents). A panel
+    // participant is a plain inline call with none of that, so the surface it is actually on is
+    // stated last — after any workspace override, which must not be able to drop it.
+    const baseSystem = `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
     const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
