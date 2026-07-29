@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
 import { HarnessFailure } from '../src/failure.js'
 import type { HarnessCallMetric } from '../src/pi.js'
@@ -344,6 +344,105 @@ describe('JobRegistry', () => {
     registry.start('exec-1', job())
     await tick(80)
     expect(registry.get('exec-1')?.coldStart).toBeUndefined()
+  })
+})
+
+// An agent CLI that gives up on a failing upstream request exits NON-ZERO with an empty stderr,
+// which is indistinguishable from a crash by exit status alone. What separates them is how long
+// the run had been quiet — evidence the registry holds and used to drop.
+describe('JobRegistry silent-failure evidence', () => {
+  // Only `Date` is faked: the watchdogs' real setTimeout still runs (the tests above depend on
+  // it), while the clock can jump far enough for the silence window to be crossed.
+  afterEach(() => vi.useRealTimers())
+  const fakeClockAt = (iso: string): number => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(iso))
+    return Date.now()
+  }
+
+  it('names how long a run had been silent when it dies on a bare non-zero exit', async () => {
+    const start = fakeClockAt('2026-07-29T00:00:00Z')
+    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 0 }
+    let fail: (err: Error) => void = () => {}
+    const registry = new JobRegistry<TestJob, TestResult>(limits, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      opts.onActivity?.() // one byte of output, then nothing
+      return new Promise<TestResult>((_resolve, reject) => {
+        fail = reject
+      })
+    })
+    registry.start('exec-1', job())
+    await tick()
+
+    // Nine minutes of silence, then the CLI exits 1 having said nothing on stderr.
+    vi.setSystemTime(new Date(start + 564_000))
+    fail(new Error('claude exited with code 1: (no stderr output)'))
+    await tick()
+
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('failed')
+    // The one-line error stays the CLI's own message...
+    expect(view?.error).toBe('claude exited with code 1: (no stderr output)')
+    // ...and the detail carries what the exit code cannot say.
+    expect(view?.detail).toMatch(/silent for 564s/)
+    expect(view?.detail).toMatch(/no tool had completed yet/)
+  })
+
+  it('distinguishes a run that never produced any output, and folds in the cold-start diagnostic', async () => {
+    const start = fakeClockAt('2026-07-29T00:00:00Z')
+    // A cold-start window short enough for its real timer to fire during the test.
+    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 15 }
+    let fail: (err: Error) => void = () => {}
+    const registry = new JobRegistry<TestJob, TestResult>(limits, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      return new Promise<TestResult>((_resolve, reject) => {
+        fail = reject
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(40) // let the cold-start watchdog fire
+    expect(registry.get('exec-1')?.coldStart?.message).toMatch(/no output/)
+
+    vi.setSystemTime(new Date(start + 564_000))
+    fail(new Error('claude exited with code 1: (no stderr output)'))
+    await tick()
+
+    const detail = registry.get('exec-1')?.detail
+    expect(detail).toMatch(/no activity at all in 564s/)
+    // ADR 0026 D4's diagnostic reaches the run here — `detail` is the only one of the three
+    // failure fields the backend carries onto the step.
+    expect(detail).toMatch(/Cold start: agent produced no output/)
+  })
+
+  it('stays quiet about silence on a fast failure that was never going to have spoken', async () => {
+    fakeClockAt('2026-07-29T00:00:00Z')
+    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 0 }
+    const registry = new JobRegistry<TestJob, TestResult>(limits, async () => {
+      throw new HarnessFailure('git', 'fatal: could not read from remote repository')
+    })
+    registry.start('exec-1', job())
+    await tick()
+
+    const view = registry.get('exec-1')
+    expect(view?.failureCause).toBe('git')
+    expect(view?.detail).not.toMatch(/silent|no agent output/)
+  })
+
+  it('leaves the silence clause off an inactivity kill, whose message already states the window', async () => {
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0 }
+    const registry = new JobRegistry<TestJob, TestResult>(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(60)
+
+    const view = registry.get('exec-1')
+    expect(view?.failureCause).toBe('inactivity-timeout')
+    expect(view?.error).toMatch(/no agent activity for 0s/)
+    expect(view?.detail).not.toMatch(/silent for|no activity at all/)
   })
 })
 

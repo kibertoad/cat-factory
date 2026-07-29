@@ -24,6 +24,7 @@ import {
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { killChildProcess, spawnDetached } from './process.js'
+import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher } from './subagents.js'
 import {
@@ -246,7 +247,7 @@ function streamCli(
       opts.signal?.removeEventListener('abort', onAbort)
       reject(err)
     })
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       opts.signal?.removeEventListener('abort', onAbort)
       const stderrTail = redact(stderr, secrets).slice(-700)
       if (lineBuffer.trim()) processLine(lineBuffer.trim(), true)
@@ -258,12 +259,106 @@ function streamCli(
         return
       }
       if (code !== 0) {
-        reject(new Error(`${command} exited with code ${code}: ${stderrTail}`))
+        reject(new CliExitFailure({ command, exitCode: code, signal, stderrTail }))
         return
       }
       resolve({ stderrTail })
     })
   })
+}
+
+/**
+ * A CLI subprocess that ended badly — it exited non-zero, or a signal killed it.
+ *
+ * Its own class (rather than a formatted string) because the message is not final at throw time:
+ * the caller folds in the CLI's terminal report before it surfaces (see {@link withAgentReport}),
+ * and rebuilding from parts beats patching a rendered sentence. Distinct from the watchdog-abort
+ * rejection above, which owns its own diagnostic and must keep it.
+ */
+class CliExitFailure extends Error {
+  readonly parts: CliExit
+  /**
+   * Also exposed flat, matching the watchdog-abort rejection's shape: the guard-trip branch
+   * reads `stderrTail` off whatever it caught to append to its own replacement message.
+   */
+  readonly stderrTail: string
+  constructor(parts: CliExit, report = '') {
+    super(cliExitMessage(parts, report))
+    this.name = 'CliExitFailure'
+    this.parts = parts
+    this.stderrTail = parts.stderrTail
+  }
+}
+
+interface CliExit {
+  command: string
+  /** The exit code, or `null` when a signal killed the CLI instead. */
+  exitCode: number | null
+  signal: NodeJS.Signals | null
+  stderrTail: string
+}
+
+/**
+ * One message shape for a CLI that ended badly, with or without a report to add.
+ *
+ * How it ended is rendered through {@link describeProcessExit}, the shared vocabulary every
+ * process-reporting transport uses, so an externally-killed container job (an OOM kill, a
+ * `docker stop` racing teardown) reads differently from the CLI's own failure exit.
+ */
+function cliExitMessage(exit: CliExit, report: string): string {
+  const how = describeProcessExit(exit.exitCode, exit.signal)
+  const suffix = report ? ` Agent's last report: ${report}` : ''
+  return `${exit.command} ${how}: ${exit.stderrTail || '(no stderr output)'}${suffix}`
+}
+
+/**
+ * Re-throw a bad CLI exit with the CLI's own account of how the run ended folded in.
+ *
+ * Both agent CLIs report a terminal failure on STDOUT, inside their event stream (Claude Code's
+ * `result` event, Codex's last agent message) — never on stderr. So a run the upstream API kept
+ * refusing exits non-zero with an EMPTY stderr tail, and the harness surfaces `claude exited with
+ * code 1:` and nothing else, while the reason it collected sits in a local variable only the
+ * SUCCESS path returns. That failure is indistinguishable from a crash, and the operator has no
+ * next step. Nothing else in the run records it: the CLI's session transcript dies with the
+ * per-run config home, and a local-mode container is removed the moment the job settles.
+ *
+ * Anything that is not a bad-exit rejection passes through untouched — a watchdog abort and a
+ * tripped progress guard carry more specific diagnostics already.
+ */
+function withAgentReport(err: unknown, report: string, secrets: string[]): unknown {
+  if (!(err instanceof CliExitFailure)) return err
+  const folded = capReport(redact(report, secrets).trim())
+  return folded ? new CliExitFailure(err.parts, folded) : err
+}
+
+/** How much of the agent's terminal report the failure message carries. */
+const MAX_AGENT_REPORT_CHARS = 700
+
+/**
+ * Bound the agent's terminal report, keeping its HEAD — the opposite bias from the stderr tail
+ * beside it, and deliberately so. A stderr tail is a log: the cause is whatever it ended on. A
+ * report is a written statement, and its opening is where the answer lives — the failure
+ * `subtype` {@link claudeResultReport} prepends, or the first line of Codex's last agent message.
+ * Tail-slicing it drops exactly the classification the fold exists to surface.
+ *
+ * A cut is marked, because a report that merely stops reads like an agent that trailed off.
+ */
+function capReport(report: string): string {
+  if (report.length <= MAX_AGENT_REPORT_CHARS) return report
+  return `${report.slice(0, MAX_AGENT_REPORT_CHARS)}… (report truncated)`
+}
+
+/**
+ * The CLI's own account of how the run ended, read off its terminal `result` event: the failure
+ * `subtype` it names (`error_during_execution`, `error_max_turns`, …) joined to whatever text it
+ * printed. A headless `-p` run reports an upstream API refusal HERE — on stdout, as JSON — and
+ * nowhere else, so this is what a bad exit has to carry. A clean result yields just its text.
+ */
+function claudeResultReport(event: Record<string, unknown>): string {
+  const subtype = typeof event.subtype === 'string' ? event.subtype : ''
+  const text = typeof event.result === 'string' ? event.result.trim() : ''
+  const failed = event.is_error === true || (subtype !== '' && subtype !== 'success')
+  return failed ? [subtype || 'error', text].filter(Boolean).join(': ') : text
 }
 
 /**
@@ -389,6 +484,8 @@ async function setUpClaudeMcp(
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
+  /** The CLI's own account of how the run ended — see {@link claudeResultReport}. */
+  let terminalReport = ''
   let usage: { inputTokens: number; outputTokens: number } | undefined
 
   // Decide how the composed system prompt is carried up front, so the telemetry seed below
@@ -537,54 +634,12 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
       usage = claudeUsage(event.usage) ?? usage
+      terminalReport = claudeResultReport(event) || terminalReport
     }
   }
 
-  // Native (ambient) mode: run the developer's installed `claude` with its OWN login —
-  // no isolated config home, no injected credential, no onboarding pre-seed. Otherwise,
-  // Claude Code persists user config/credentials under its config dir; point that at an
-  // isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise the
-  // agents that finish with `git add -A` (blueprint/requirements/bootstrap) could stage a
-  // stray `.claude/` directory — and any cached credential in it — into the pushed branch.
-  // Mirrors the Codex CODEX_HOME isolation below; removed in `finally`.
-  if (!opts.ambientAuth && !opts.subscriptionToken) {
-    throw new Error('claude-code harness requires a subscription token (or ambientAuth)')
-  }
-  const configHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-claude-'))
-
-  // The config dir is brand-new every run, so Claude Code would otherwise treat this
-  // as a first launch and BLOCK on the interactive onboarding / "trust this folder" /
-  // bypass-permissions acknowledgement prompts — which never get answered headlessly,
-  // hanging the job until the watchdog kills it. Pre-seed the config that marks those
-  // as already accepted so `-p` starts straight into the run. Best-effort: written
-  // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
-  // (Ambient mode skips this — the developer's own config is already onboarded.)
-  // ADR 0026 D4: assert the pinned onboarding keys landed and log them with the CLI
-  // version, so a future first-run gate this set doesn't cover (which looks identical to
-  // a healthy-but-quiet subagent start) is diffable when the cold-start watchdog fires.
-  if (configHome) {
-    await writeOnboardingPreseed(configHome)
-    await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
-  }
-
-  // Skills: install each as a native skill under the config dir's `skills/<name>/` so the CLI
-  // discovers and can invoke it. ONLY into the isolated per-run config home — never the
-  // developer's own `~/.claude` (ambient/native mode), where it would persist in their personal
-  // setup after the run and two concurrent jobs carrying same-named skills would clobber each
-  // other. An ambient run reads the skills from the checkout instead (`.cat-context/skill/<name>/`,
-  // materialised by the caller). Best-effort: a write failure must not wedge the run — the prompt
-  // still names the skills.
-  if (configHome) {
-    for (const skill of opts.skills ?? []) {
-      await writeNativeSkill(join(configHome, 'skills'), skill).catch(() => {})
-    }
-  }
-
-  // Tool servers (MCP): the CLI is pointed at a per-run config rather than discovering an ambient
-  // one. See `setUpClaudeMcp` for why that matters and what has to be cleaned up afterwards.
-  const mcp = await setUpClaudeMcp(opts.mcpServers, configHome)
-
-  const env = buildClaudeEnv(opts, configHome)
+  const home = await openClaudeRunHome(opts)
+  const { configHome } = home
 
   // ADR 0026 D3 (path corrected by ADR 0027 Defect A): while the run is live, tail the CLI's
   // subagent `*.jsonl` transcripts so a parallel-subagent review keeps the inactivity
@@ -627,13 +682,13 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           'bypassPermissions',
           '--model',
           opts.model,
-          ...mcp.args,
+          ...home.mcpArgs,
           ...appendArgs,
         ],
       },
       prompt,
       { ...opts, signal: runSignal },
-      env,
+      home.env,
       opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
       onEvent,
     )
@@ -659,19 +714,105 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     telemetry.flush()
     publisher.flush()
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
-    // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail
-    // it attached, since that is usually the only evidence of what the CLI was doing when it was
-    // killed. Byte-for-byte the shape `runPi` fails with.
+    // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail it
+    // attached, since that is usually the only evidence of what the CLI was doing when it was
+    // killed. The leading clauses are byte-for-byte the shape `runPi` fails with; a terminal
+    // report is appended after them when the CLI managed to emit one before it was killed, which
+    // is uncommon but is the same evidence a bad exit now carries — a guard trip is no reason to
+    // discard it.
     if (guardReason) {
       const tail = (err as { stderrTail?: string } | undefined)?.stderrTail
-      throw new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason)
+      const report = capReport(redact(terminalReport, secrets).trim())
+      throw new Error(
+        [
+          guardReason,
+          tail ? `Agent stderr: ${tail}` : '',
+          report ? `Agent's last report: ${report}` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      )
     }
-    throw err
+    throw withAgentReport(err, terminalReport, secrets)
   } finally {
     await subagents?.stop()
-    // The ambient-mode MCP config dir (credential-bearing) never outlives the run.
-    await mcp.cleanup()
-    if (configHome) {
+    await home.dispose()
+  }
+}
+
+/**
+ * The isolated, per-run home the `claude` CLI runs against: a temp config dir OUTSIDE the cloned
+ * checkout, pre-seeded past the first-launch prompts, carrying the run's native skills and MCP
+ * config, plus the child env pointing the CLI at it. {@link ClaudeRunHome.dispose} is the other
+ * half of the same concern — the leased credential must never outlive the run — so acquisition
+ * and teardown are defined together rather than split across a `finally` forty lines away.
+ *
+ * Ambient (native) mode has NO home: the developer's installed CLI uses its own `~/.claude`
+ * login, so nothing is created, nothing is pre-seeded, and `dispose` only clears the MCP config.
+ */
+interface ClaudeRunHome {
+  /** The per-run config dir; `undefined` in ambient mode (the developer's own login is used). */
+  configHome: string | undefined
+  /** The CLI argv selecting the run's tool servers; empty when it has none. */
+  mcpArgs: string[]
+  /** The child-process env (see {@link buildClaudeEnv}). */
+  env: Record<string, string>
+  dispose: () => Promise<void>
+}
+
+async function openClaudeRunHome(opts: SubscriptionRunOptions): Promise<ClaudeRunHome> {
+  // Native (ambient) mode: run the developer's installed `claude` with its OWN login —
+  // no isolated config home, no injected credential, no onboarding pre-seed. Otherwise,
+  // Claude Code persists user config/credentials under its config dir; point that at an
+  // isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise the
+  // agents that finish with `git add -A` (blueprint/requirements/bootstrap) could stage a
+  // stray `.claude/` directory — and any cached credential in it — into the pushed branch.
+  // Mirrors the Codex CODEX_HOME isolation below; removed by `dispose`.
+  if (!opts.ambientAuth && !opts.subscriptionToken) {
+    throw new Error('claude-code harness requires a subscription token (or ambientAuth)')
+  }
+  const configHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-claude-'))
+
+  // The config dir is brand-new every run, so Claude Code would otherwise treat this
+  // as a first launch and BLOCK on the interactive onboarding / "trust this folder" /
+  // bypass-permissions acknowledgement prompts — which never get answered headlessly,
+  // hanging the job until the watchdog kills it. Pre-seed the config that marks those
+  // as already accepted so `-p` starts straight into the run. Best-effort: written
+  // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
+  // (Ambient mode skips this — the developer's own config is already onboarded.)
+  // ADR 0026 D4: assert the pinned onboarding keys landed and log them with the CLI
+  // version, so a future first-run gate this set doesn't cover (which looks identical to
+  // a healthy-but-quiet subagent start) is diffable when the cold-start watchdog fires.
+  if (configHome) {
+    await writeOnboardingPreseed(configHome)
+    await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
+  }
+
+  // Skills: install each as a native skill under the config dir's `skills/<name>/` so the CLI
+  // discovers and can invoke it. ONLY into the isolated per-run config home — never the
+  // developer's own `~/.claude` (ambient/native mode), where it would persist in their personal
+  // setup after the run and two concurrent jobs carrying same-named skills would clobber each
+  // other. An ambient run reads the skills from the checkout instead (`.cat-context/skill/<name>/`,
+  // materialised by the caller). Best-effort: a write failure must not wedge the run — the prompt
+  // still names the skills.
+  if (configHome) {
+    for (const skill of opts.skills ?? []) {
+      await writeNativeSkill(join(configHome, 'skills'), skill).catch(() => {})
+    }
+  }
+
+  // Tool servers (MCP): the CLI is pointed at a per-run config rather than discovering an ambient
+  // one. See `setUpClaudeMcp` for why that matters and what has to be cleaned up afterwards.
+  const mcp = await setUpClaudeMcp(opts.mcpServers, configHome)
+
+  return {
+    configHome,
+    mcpArgs: mcp.args,
+    env: buildClaudeEnv(opts, configHome),
+    dispose: async () => {
+      // The ambient-mode MCP config dir (credential-bearing) never outlives the run.
+      await mcp.cleanup()
+      if (!configHome) return
       // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
       // home is deleted — the credential lives at the home root, never in `projects/`, so this
       // keeps the debugging artifact without leaking the token. Best-effort; never throws.
@@ -681,7 +822,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       })
       // Never leave the config dir (and any cached credential) on disk past the run.
       await rm(configHome, { recursive: true, force: true }).catch(() => {})
-    }
+    },
   }
 }
 
@@ -975,6 +1116,10 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       ...(usage ? { usage } : {}),
       ...(calls.length ? { callMetrics: calls } : {}),
     }
+  } catch (err) {
+    // Codex surfaces its terminal failure the same way Claude Code does — in the stdout event
+    // stream, not on stderr — so a bad exit carries the last thing the agent said.
+    throw withAgentReport(err, summary, secrets)
   } finally {
     if (codexHome) {
       // Lift the CLI session transcripts (`sessions/`) out for short-lived retention BEFORE the
