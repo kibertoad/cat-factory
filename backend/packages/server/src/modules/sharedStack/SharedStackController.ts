@@ -14,14 +14,16 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the shared-stacks module or send a 503, returning null when unconfigured. */
 function requireSharedStacks<E extends AppEnv>(c: Context<E>): SharedStacksModule | null {
   return c.get('container').sharedStacks ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Shared stacks are not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Shared stacks are not configured')
+}
 
 /**
  * CRUD + lifecycle for a workspace's shared stacks (long-lived compose infra a consumer
@@ -36,27 +38,27 @@ export function sharedStackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listSharedStacksContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     return c.json(await stacks.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, createSharedStackContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     const stack = await stacks.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(stack, 201)
   })
 
   buildHonoRoute(app, detectSharedStackContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     const recommendation = await stacks.service.detect(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(recommendation, 200)
   })
 
   buildHonoRoute(app, updateSharedStackContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     const stack = await stacks.service.update(
       param(c, 'workspaceId'),
       c.req.valid('param').stackId,
@@ -67,14 +69,14 @@ export function sharedStackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteSharedStackContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     await stacks.service.remove(param(c, 'workspaceId'), c.req.valid('param').stackId)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, ensureSharedStackUpContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     const stack = await stacks.service.ensureUp(
       param(c, 'workspaceId'),
       c.req.valid('param').stackId,
@@ -84,7 +86,7 @@ export function sharedStackController(): Hono<AppEnv> {
 
   buildHonoRoute(app, teardownSharedStackContract, async (c) => {
     const stacks = requireSharedStacks(c)
-    if (!stacks) return unavailable(c)
+    if (!stacks) return unavailable()
     const stack = await stacks.service.teardown(
       param(c, 'workspaceId'),
       c.req.valid('param').stackId,

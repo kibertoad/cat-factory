@@ -25,7 +25,12 @@ import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
+import {
+  ValidationError,
+  type TaskSearchRepoScope,
+  UnavailableError,
+  UnauthorizedError,
+} from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import { LinearOAuth } from '../../auth/LinearOAuth.js'
 import { StateSigner } from '../../github/state.js'
@@ -38,11 +43,9 @@ function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule | null {
   return c.get('container').tasks ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Task-source integration is not configured' } },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Task-source integration is not configured')
+}
 
 /** Read + validate the `:source` path param as a known source kind. */
 function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
@@ -134,7 +137,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // A 503 here is how the frontend learns the integration is off.
   buildHonoRoute(app, listTaskSourcesContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const sources = await tasks.connectionService.listSourceStates(param(c, 'workspaceId'))
     return c.json({ sources }, 200)
   })
@@ -145,7 +148,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // off here when a workspace wants repos without issues.
   buildHonoRoute(app, setTaskSourceEnabledContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     await tasks.connectionService.setEnabled(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -158,14 +161,14 @@ export function taskSourceController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listTaskConnectionsContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const connections = await tasks.connectionService.listConnections(param(c, 'workspaceId'))
     return c.json({ connections }, 200)
   })
 
   buildHonoRoute(app, connectTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const connection = await tasks.connectionService.connect(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -176,7 +179,7 @@ export function taskSourceController(): Hono<AppEnv> {
 
   buildHonoRoute(app, disconnectTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     await tasks.connectionService.disconnect(param(c, 'workspaceId'), sourceParam(c))
     return c.body(null, 204)
   })
@@ -188,7 +191,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // live external call), no body — the source is the path param.
   buildHonoRoute(app, diagnoseTaskSourceContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const diagnostic = await tasks.connectionService.diagnose(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -205,7 +208,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // Where deliveries go and whether a secret is stored. Never echoes the secret back.
   buildHonoRoute(app, getTaskSourceWebhookContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const state = await tasks.connectionService.getWebhookState(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -217,7 +220,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // an operator who loses it rotates rather than retrieves.
   buildHonoRoute(app, configureTaskSourceWebhookContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const minted = await tasks.connectionService.mintWebhookSecret(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -230,7 +233,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // destructive on return, and tightening the allow-list must not cost an outage.
   buildHonoRoute(app, updateTaskSourceWebhookContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const state = await tasks.connectionService.updateWebhookReplyAllow(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -243,7 +246,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // keep working exactly as before.
   buildHonoRoute(app, clearTaskSourceWebhookContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     await tasks.connectionService.clearWebhookSecret(param(c, 'workspaceId'), sourceParam(c))
     return c.body(null, 204)
   })
@@ -254,7 +257,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // team picker instead of a raw team-id paste. 409 when Linear isn't connected.
   buildHonoRoute(app, listLinearTeamsContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const teams = await tasks.connectionService.listLinearTeams(param(c, 'workspaceId'))
     return c.json({ teams }, 200)
   })
@@ -264,16 +267,13 @@ export function taskSourceController(): Hono<AppEnv> {
   // isn't configured (the manual API-key paste is then the way to connect).
   buildHonoRoute(app, getLinearInstallUrlContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const workspaceId = param(c, 'workspaceId')
     // OAuth app creds live in per-account deployment settings (sealed in the DB), resolved
     // dynamically — not env. Absent ⇒ OAuth isn't offered (manual API-key paste still works).
     const oauth = await tasks.connectionService.resolveLinearOAuthConfig(workspaceId)
     if (!oauth) {
-      return c.json(
-        { error: { code: 'unavailable', message: 'Linear OAuth is not configured' } },
-        503,
-      )
+      throw new UnavailableError('Linear OAuth is not configured')
     }
     const signer = new StateSigner(c.get('container').config.auth.sessionSecret)
     const state = await signer.sign({
@@ -292,14 +292,14 @@ export function taskSourceController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listTasksContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const scope = await resolveListScope(c, c.req.valid('query').blockId)
     return c.json(await tasks.importService.listTasks(param(c, 'workspaceId'), scope), 200)
   })
 
   buildHonoRoute(app, importTaskContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const task = await tasks.importService.import(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -312,7 +312,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // the picker can import + link on selection.
   buildHonoRoute(app, searchTasksContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const source = sourceParam(c)
     const { query, blockId } = c.req.valid('json')
     const scope = await resolveSearchScope(c, source, blockId)
@@ -325,7 +325,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // Attach an imported issue to a block as extra agent context.
   buildHonoRoute(app, linkTaskContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const { source, externalId, blockId } = c.req.valid('json')
     const task = await tasks.linkService.linkToBlock(
       param(c, 'workspaceId'),
@@ -340,7 +340,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // the issue to it for context. Returns the created block + the linked issue.
   buildHonoRoute(app, createTaskFromIssueContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const { source, externalId, containerId } = c.req.valid('json')
     const result = await tasks.linkService.createTaskFromIssue(
       param(c, 'workspaceId'),
@@ -357,7 +357,7 @@ export function taskSourceController(): Hono<AppEnv> {
   // the issues' blocked-by/depends-on links. Returns the epic node + the created tasks.
   buildHonoRoute(app, spawnEpicContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const { ref, containerId, position } = c.req.valid('json')
     const result = await tasks.linkService.spawnEpic(
       param(c, 'workspaceId'),
@@ -386,7 +386,7 @@ export function linearOAuthController(): Hono<AppEnv> {
   app.get('/oauth/callback', async (c) => {
     const container = c.get('container')
     const tasks = container.tasks
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
 
     const code = c.req.query('code')
     if (!code) {
@@ -395,13 +395,13 @@ export function linearOAuthController(): Hono<AppEnv> {
     const signer = new StateSigner(container.config.auth.sessionSecret)
     const state = await signer.verify(c.req.query('state') ?? null)
     if (!state) {
-      return c.json({ error: { code: 'unauthorized', message: 'Invalid or expired state' } }, 401)
+      throw new UnauthorizedError('Invalid or expired state')
     }
 
     // Resolve the account's OAuth creds (per-account deployment settings, not env). The
     // redirect_uri must match the install-url + the registered app, so reuse the stored one.
     const oauth = await tasks.connectionService.resolveLinearOAuthConfig(state.workspaceId)
-    if (!oauth) return unavailable(c)
+    if (!oauth) return unavailable()
     const token = await new LinearOAuth({
       clientId: oauth.clientId,
       clientSecret: oauth.clientSecret,

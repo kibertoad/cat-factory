@@ -13,14 +13,16 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /** Resolve the recurring-pipeline module or send a 503, returning null when unconfigured. */
 function requireRecurring<E extends AppEnv>(c: Context<E>): RecurringModule | null {
   return c.get('container').recurring ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Recurring pipelines are not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Recurring pipelines are not configured')
+}
 
 /**
  * CRUD + run history for a workspace's recurring pipelines (schedules that re-run a
@@ -31,20 +33,20 @@ export function recurringPipelineController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listSchedulesContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     return c.json(await recurring.service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, createScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     const schedule = await recurring.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(schedule, 201)
   })
 
   buildHonoRoute(app, updateScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     const schedule = await recurring.service.update(
       param(c, 'workspaceId'),
       c.req.valid('param').scheduleId,
@@ -55,14 +57,14 @@ export function recurringPipelineController(): Hono<AppEnv> {
 
   buildHonoRoute(app, deleteScheduleContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     await recurring.service.remove(param(c, 'workspaceId'), c.req.valid('param').scheduleId)
     return c.body(null, 204)
   })
 
   buildHonoRoute(app, listScheduleRunsContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     return c.json(
       await recurring.service.listRuns(param(c, 'workspaceId'), c.req.valid('param').scheduleId),
       200,
@@ -71,7 +73,7 @@ export function recurringPipelineController(): Hono<AppEnv> {
 
   buildHonoRoute(app, runScheduleNowContract, async (c) => {
     const recurring = requireRecurring(c)
-    if (!recurring) return unavailable(c)
+    if (!recurring) return unavailable()
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const scheduleId = c.req.valid('param').scheduleId

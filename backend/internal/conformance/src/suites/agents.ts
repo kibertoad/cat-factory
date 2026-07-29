@@ -1,5 +1,5 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
+import { ConflictError, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import type {
   AgentRunContext,
   Block,
@@ -447,6 +447,71 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(dispatched?.skills?.[0]?.resources[0]?.body).toBe('# rubric')
         const exec = executions.find((e) => e.blockId === 'task_login')
         expect(exec?.steps[0]?.skillVersions).toBeUndefined()
+      })
+    })
+
+    // B3 (observability-logging-gaps.md): a run that dies on a THROWN error must carry that
+    // error's machine-readable `details.reason` onto `AgentFailure.reason`, on BOTH runtimes.
+    // The SPA's `AgentFailureCard` branches on that field to offer the remedy (connect a
+    // provider, wire the deploy runner); with it dropped the user gets prose to read and no
+    // action to take. The Cloudflare driver dropped it on every path and the shared driver
+    // dropped it on the advance-THROW path specifically, so this drives the throw path — a
+    // pre-op that raises a reasoned `ConflictError` mid-advance — and asserts both the reason
+    // and the message survive the trip through each facade's real store.
+    describe('failure identity', () => {
+      it('propagates a thrown DomainError’s details.reason onto the run’s AgentFailure', async () => {
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
+          kind: 'conformance-reasoned-failure',
+          systemPrompt: 'You never get to run.',
+          agent: { surface: 'container-explore', output: { kind: 'structured' } },
+          preOps: [
+            () => {
+              throw new ConflictError(
+                'This pipeline uses models with no configured provider.',
+                'providers_unconfigured',
+              )
+            },
+          ],
+        })
+
+        // Pre-ops only run once a run-repo context resolves, so wire an inert one — the
+        // hook throws before it touches any of these.
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          deleteBranch: async () => {},
+          commitFiles: async () => ({ sha: 'commit-sha' }),
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+        const app = harness.makeApp(
+          {},
+          {
+            resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }),
+            agentKindRegistry,
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Reasoned failure',
+          agentKinds: ['conformance-reasoned-failure'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+        // The reason is the whole point: it is what a client keys a remedy off, and it has to
+        // survive the driver, `failRun`, and the runtime's own failure column mapping.
+        expect(exec.failure?.reason).toBe('providers_unconfigured')
+        expect(exec.failure?.message ?? '').toContain('no configured provider')
       })
     })
 

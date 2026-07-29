@@ -12,10 +12,10 @@ import {
 import type { ApiKeySummary } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
+import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
 
 // Direct-provider API-key endpoints. Keys (OpenAI/Anthropic/Qwen/DeepSeek/Moonshot)
 // are onboarded here and stored encrypted, replacing deployment-env onboarding. The
@@ -25,11 +25,13 @@ import { param } from '../../http/params.js'
 // and the USER-scoped routes (`/me/api-keys`, the caller's own pool). ACCOUNT-scoped
 // keys are managed by the AccountController, which admin-gates them.
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'API key storage is not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('API key storage is not configured')
+}
 
-const signInRequired = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unauthorized', message: 'Sign in to manage your API keys' } }, 401)
+const signInRequired = (): never => {
+  throw new UnauthorizedError('Sign in to manage your API keys')
+}
 
 /** Project the service summary onto the wire type (already secret-free). */
 export function apiKeyToWire(summary: ApiKeySummary): ApiKey {
@@ -56,21 +58,21 @@ export function workspaceApiKeyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listWorkspaceApiKeysContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const keys = await apiKeys.listKeys('workspace', param(c, 'workspaceId'))
     return c.json({ keys: keys.map(apiKeyToWire) }, 200)
   })
 
   buildHonoRoute(app, addWorkspaceApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const summary = await apiKeys.addKey('workspace', param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
   })
 
   buildHonoRoute(app, updateWorkspaceApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const summary = await apiKeys.updateKey(
       'workspace',
       param(c, 'workspaceId'),
@@ -82,7 +84,7 @@ export function workspaceApiKeyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeWorkspaceApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     await apiKeys.removeKey('workspace', param(c, 'workspaceId'), c.req.valid('param').id)
     return c.body(null, 204)
   })
@@ -96,27 +98,27 @@ export function userApiKeyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listUserApiKeysContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const keys = await apiKeys.listKeys('user', user.id)
     return c.json({ keys: keys.map(apiKeyToWire) }, 200)
   })
 
   buildHonoRoute(app, addUserApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const summary = await apiKeys.addKey('user', user.id, c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
   })
 
   buildHonoRoute(app, updateUserApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const summary = await apiKeys.updateKey(
       'user',
       user.id,
@@ -128,9 +130,9 @@ export function userApiKeyController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeUserApiKeyContract, async (c) => {
     const apiKeys = c.get('container').apiKeys
-    if (!apiKeys) return unavailable(c)
+    if (!apiKeys) return unavailable()
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     await apiKeys.removeKey('user', user.id, c.req.valid('param').id)
     return c.body(null, 204)
   })

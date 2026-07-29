@@ -4,7 +4,12 @@ import {
   removeEnvironmentUserHandlerContract,
   upsertEnvironmentUserHandlerContract,
 } from '@cat-factory/contracts'
-import { ForbiddenError, NotFoundError } from '@cat-factory/kernel'
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnavailableError,
+  UnauthorizedError,
+} from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import * as v from 'valibot'
 import { Hono } from 'hono'
@@ -20,17 +25,13 @@ import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
 // the Worker/Node facades — the local-only behaviour is enforced by container wiring, not a
 // runtime branch here. See docs/initiatives/per-service-provision-types.md.
 
-const signInRequired = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unauthorized', message: 'Sign in to manage environment handler overrides' } },
-    401,
-  )
+const signInRequired = (): never => {
+  throw new UnauthorizedError('Sign in to manage environment handler overrides')
+}
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Per-user environment handlers are not configured' } },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Per-user environment handlers are not configured')
+}
 
 /**
  * Workspace-RBAC (workspace-rbac initiative, slice 7). These routes are mounted at `/`, OUTSIDE
@@ -68,22 +69,22 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listEnvironmentUserHandlersContract, async (c) => {
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const workspaceId = c.req.valid('param').workspaceId
     await requireRunsExecute(c, workspaceId, user.id)
     const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     const handlers = await svc.list(user.id, workspaceId)
     return c.json({ handlers }, 200)
   })
 
   buildHonoRoute(app, upsertEnvironmentUserHandlerContract, async (c) => {
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
     const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     // The provision type comes from the path; the body's value is overridden by it.
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const view = await svc.upsert(user.id, workspaceId, {
@@ -95,11 +96,11 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeEnvironmentUserHandlerContract, async (c) => {
     const user = c.get('user')
-    if (!user) return signInRequired(c)
+    if (!user) return signInRequired()
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
     await requireRunsExecute(c, workspaceId, user.id)
     const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
+    if (!svc) return unavailable()
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const manifestId = c.req.valid('query').manifestId ?? null
     await svc.remove(user.id, workspaceId, provisionType, manifestId)

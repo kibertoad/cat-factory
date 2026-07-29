@@ -9,7 +9,7 @@ import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { BUGFIX_PIPELINE_ID, ValidationError } from '@cat-factory/kernel'
+import { BUGFIX_PIPELINE_ID, ValidationError, UnavailableError } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
@@ -34,11 +34,9 @@ function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule | null {
   return c.get('container').tasks ?? null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Task-source integration is not configured' } },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Task-source integration is not configured')
+}
 
 /** Read + validate the `:source` path param as a known source kind. */
 function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
@@ -57,7 +55,7 @@ export function bugHuntController(): Hono<AppEnv> {
   // board in yourself", which is a usable answer; an empty list would not be.
   buildHonoRoute(app, listTrackerBoardsContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const source = sourceParam(c)
     const boards = await tasks.bugHuntService.listBoards(param(c, 'workspaceId'), source)
     return c.json({ source, boards }, 200)
@@ -68,7 +66,7 @@ export function bugHuntController(): Hono<AppEnv> {
   // the ranked board scan, and the user picks from it.
   buildHonoRoute(app, runBugHuntContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const result = await tasks.bugHuntService.hunt(
       param(c, 'workspaceId'),
       sourceParam(c),
@@ -81,7 +79,7 @@ export function bugHuntController(): Hono<AppEnv> {
   // chosen container with the issue linked for context, then start the run.
   buildHonoRoute(app, adoptBugHuntCandidateContract, async (c) => {
     const tasks = requireTasks(c)
-    if (!tasks) return unavailable(c)
+    if (!tasks) return unavailable()
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const { externalId, containerId, pipelineId: requested } = c.req.valid('json')

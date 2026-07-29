@@ -1,13 +1,14 @@
 import { retryAgentRunContract, stopAgentRunContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { personalGateForRun, readPersonalPassword } from '../providers/personalCredentialGate.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
-const unavailable = <E extends AppEnv>(c: Context<E>, message: string) =>
-  c.json({ error: { code: 'unavailable', message } }, 503)
+const unavailable = (message: string): never => {
+  throw new UnavailableError(message)
+}
 
 /**
  * Cross-cutting endpoints over any "agent run" (bootstrap or execution),
@@ -32,10 +33,9 @@ export function agentRunController(): Hono<AppEnv> {
 
     if (ref.kind === 'bootstrap') {
       const bootstrap = container.bootstrap
-      if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+      if (!bootstrap) return unavailable('Repo bootstrap is not configured')
       if (!bootstrap.service.canBootstrap) {
         return unavailable(
-          c,
           'Repo bootstrapping needs the GitHub App and the implementation container to be configured',
         )
       }
@@ -46,7 +46,7 @@ export function agentRunController(): Hono<AppEnv> {
     if (ref.kind === 'env-config-repair') {
       const repair = container.envConfigRepair
       if (!repair || !repair.service.canRepair) {
-        return unavailable(c, 'Environment config repair is not configured')
+        return unavailable('Environment config repair is not configured')
       }
       // No same-id re-drive (unlike bootstrap/execution): a repair run is a one-shot
       // clone→fix→push, so retry STARTS a fresh run from the failed job's coords (recovering
@@ -87,14 +87,14 @@ export function agentRunController(): Hono<AppEnv> {
 
     if (ref.kind === 'bootstrap') {
       const bootstrap = container.bootstrap
-      if (!bootstrap) return unavailable(c, 'Repo bootstrap is not configured')
+      if (!bootstrap) return unavailable('Repo bootstrap is not configured')
       const run = await bootstrap.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }
 
     if (ref.kind === 'env-config-repair') {
       const repair = container.envConfigRepair
-      if (!repair) return unavailable(c, 'Environment config repair is not configured')
+      if (!repair) return unavailable('Environment config repair is not configured')
       const run = await repair.service.stop(workspaceId, id)
       return c.json({ kind: ref.kind, run }, 200)
     }

@@ -19,9 +19,14 @@ import type {
   ResolveUserGitHubToken,
   SubscriptionActivationRepository,
   WorkspaceRepository,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import { type AppConfig, wrapResolverWithLimiter } from '@cat-factory/server'
+import {
+  type AppConfig,
+  createStoreAgentContextGate,
+  wrapResolverWithLimiter,
+} from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
 import type { DrizzleDb } from './db/client.js'
@@ -50,14 +55,31 @@ function buildModelProviderResolver(
   // The shared inline instrument (one trace sink for the proxied path, the core AND the
   // inline calls) so the OTel SDK exporter isn't rebuilt per wiring site.
   instrument: InlineInstrument | undefined,
+  // The workspace-settings store the inline body gate reads. Passed alongside `instrument`
+  // (rather than only inside it) so the env-fallback path in `createNodeModelProviderResolver`
+  // builds the same gate rather than defaulting to the deployment switch.
+  workspaceSettingsRepository: WorkspaceSettingsRepository | undefined,
 ): ModelProviderResolver {
   // The cache keys on the db handle (one resolver per Drizzle client). Mothership mode has no
   // db, so skip the cache entirely (WeakMap keys must be objects) and build a fresh resolver —
   // a mothership node builds one container, so there is nothing to share it with anyway.
-  if (!db) return createNodeModelProviderResolver(env, apiKeys, localModelEndpoints, instrument)
+  if (!db)
+    return createNodeModelProviderResolver(
+      env,
+      apiKeys,
+      localModelEndpoints,
+      instrument,
+      workspaceSettingsRepository,
+    )
   const cached = modelResolverCache.get(db)
   if (cached) return cached
-  const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints, instrument)
+  const resolver = createNodeModelProviderResolver(
+    env,
+    apiKeys,
+    localModelEndpoints,
+    instrument,
+    workspaceSettingsRepository,
+  )
   modelResolverCache.set(db, resolver)
   return resolver
 }
@@ -88,6 +110,12 @@ export interface NodeModelDepsInput {
   ) => ModelProviderResolver
   cloudflareModelsEnabled?: boolean
   caches?: AppCaches
+  /**
+   * The workspace-settings store, read by the inline LLM path's per-workspace
+   * `storeAgentContext` body gate. Threaded here (like `workspaceRepository`) rather than
+   * rebuilt from `db`, so mothership mode's routed repository is the one consulted.
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
 }
 
 /**
@@ -117,6 +145,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     wrapModelProviderResolver,
     cloudflareModelsEnabled: cloudflareModelsEnabledOverride,
     caches,
+    workspaceSettingsRepository,
   } = input
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
@@ -192,14 +221,26 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
   // The ONE external trace sink for this container (memoised per config): the core, the
   // container executor AND the inline model-provider instrumentation all share this single
   // instance, so the OTel SDK exporter's batch processors/timers exist exactly once (and its
-  // shutdown is wired below). Its `recordPrompts` matches the proxied path's gating.
+  // shutdown is wired below). Its `recordPrompts` matches the proxied path's gating — as
+  // does the per-workspace `storeAgentContext` gate beside it, which is the half the inline
+  // path used to lack entirely (observability-logging-gaps.md, C2).
   const traceSink = buildTraceSink(config)
   const baseModelProviderResolver = buildModelProviderResolver(
     env,
     db,
     apiKeys,
     localModelEndpoints,
-    traceSink ? { traceSink, recordPrompts: config.observability.recordPrompts } : undefined,
+    traceSink
+      ? {
+          traceSink,
+          recordPrompts: config.observability.recordPrompts,
+          workspaceBodiesEnabled: createStoreAgentContextGate({
+            repository: workspaceSettingsRepository,
+            cache: caches?.workspaceSettings,
+          }),
+        }
+      : undefined,
+    workspaceSettingsRepository,
   )
   const wrappedModelProviderResolver = wrapModelProviderResolver
     ? wrapModelProviderResolver(baseModelProviderResolver, {

@@ -11,6 +11,7 @@ import {
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 /**
  * Resolve the binary-artifact store for the request's workspace (its account's configured
@@ -22,11 +23,9 @@ async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArti
   return resolve ? resolve(param(c, 'workspaceId')) : null
 }
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json(
-    { error: { code: 'unavailable', message: 'Binary-artifact storage is not configured' } },
-    503,
-  )
+const unavailable = (): never => {
+  throw new UnavailableError('Binary-artifact storage is not configured')
+}
 
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
 
@@ -53,7 +52,7 @@ export function artifactController(): Hono<AppEnv> {
     }),
     async (c) => {
       const store = await requireStore(c)
-      if (!store) return unavailable(c)
+      if (!store) return unavailable()
       // Refuse a grossly oversized body up-front (from Content-Length) so it is never buffered
       // into memory; the exact per-file ceiling is still enforced after parsing below.
       if (exceedsRequestSizeLimit(c.req.header('content-length'))) {
@@ -119,7 +118,7 @@ export function artifactController(): Hono<AppEnv> {
   // Stream a stored blob's bytes (the metadata names its content type).
   app.get('/artifacts/:id/blob', async (c) => {
     const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    if (!store) return unavailable()
     const workspaceId = param(c, 'workspaceId')
     const id = param(c, 'id')
     // Read metadata + bytes in a SINGLE metadata lookup (the serve path needs both the
@@ -141,7 +140,7 @@ export function artifactController(): Hono<AppEnv> {
   // List a run's artifacts (metadata only; the gate pairs screenshots vs references by view).
   app.get('/executions/:executionId/artifacts', async (c) => {
     const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    if (!store) return unavailable()
     const artifacts = await store.listByExecution(param(c, 'workspaceId'), param(c, 'executionId'))
     return c.json({ artifacts }, 200)
   })
@@ -150,7 +149,7 @@ export function artifactController(): Hono<AppEnv> {
   // executionId because they're attached before any run).
   app.get('/blocks/:blockId/artifacts', async (c) => {
     const store = await requireStore(c)
-    if (!store) return unavailable(c)
+    if (!store) return unavailable()
     const artifacts = await store.listByBlock(param(c, 'workspaceId'), param(c, 'blockId'))
     return c.json({ artifacts }, 200)
   })

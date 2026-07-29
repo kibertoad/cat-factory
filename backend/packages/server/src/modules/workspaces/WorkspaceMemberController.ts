@@ -7,10 +7,10 @@ import {
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requirePermission } from '../../http/workspaceAccess.js'
+import { UnavailableError } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Workspace-membership management (workspace-rbac initiative, slice 5). All routes are
@@ -24,8 +24,9 @@ import { requirePermission } from '../../http/workspaceAccess.js'
 // do); absent ⇒ every route reports 503 rather than 500-ing on an undefined service.
 // ---------------------------------------------------------------------------
 
-const unavailable = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unavailable', message: 'Workspace membership is not configured' } }, 503)
+const unavailable = (): never => {
+  throw new UnavailableError('Workspace membership is not configured')
+}
 
 export function workspaceMemberController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -33,13 +34,13 @@ export function workspaceMemberController(): Hono<AppEnv> {
   // Roster — any resolved role may read it (gate resolution already guaranteed ≥ viewer).
   buildHonoRoute(app, listWorkspaceMembersContract, async (c) => {
     const service = c.get('container').workspaceMemberService
-    if (!service) return unavailable(c)
+    if (!service) return unavailable()
     return c.json(await service.list(param(c, 'workspaceId')), 200)
   })
 
   buildHonoRoute(app, addWorkspaceMemberContract, async (c) => {
     const service = c.get('container').workspaceMemberService
-    if (!service) return unavailable(c)
+    if (!service) return unavailable()
     requirePermission(c, 'members.manage')
     const body = c.req.valid('json')
     const member = await service.add(
@@ -53,7 +54,7 @@ export function workspaceMemberController(): Hono<AppEnv> {
 
   buildHonoRoute(app, setWorkspaceMemberRoleContract, async (c) => {
     const service = c.get('container').workspaceMemberService
-    if (!service) return unavailable(c)
+    if (!service) return unavailable()
     requirePermission(c, 'members.manage')
     const { workspaceId, userId } = c.req.valid('param')
     const member = await service.setRole(workspaceId, userId, c.req.valid('json').role)
@@ -62,7 +63,7 @@ export function workspaceMemberController(): Hono<AppEnv> {
 
   buildHonoRoute(app, removeWorkspaceMemberContract, async (c) => {
     const service = c.get('container').workspaceMemberService
-    if (!service) return unavailable(c)
+    if (!service) return unavailable()
     requirePermission(c, 'members.manage')
     const { workspaceId, userId } = c.req.valid('param')
     await service.remove(workspaceId, userId)
@@ -71,7 +72,7 @@ export function workspaceMemberController(): Hono<AppEnv> {
 
   buildHonoRoute(app, setWorkspaceAccessModeContract, async (c) => {
     const service = c.get('container').workspaceMemberService
-    if (!service) return unavailable(c)
+    if (!service) return unavailable()
     requirePermission(c, 'members.manage')
     const workspace = await service.setAccessMode(
       param(c, 'workspaceId'),

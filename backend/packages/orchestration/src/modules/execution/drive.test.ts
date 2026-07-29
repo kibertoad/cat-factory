@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRecordingLogger } from '@cat-factory/kernel'
+import { ConflictError, createRecordingLogger } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import { type DriveConfig, driveExecution } from './drive.js'
 
@@ -25,7 +25,8 @@ const DONE: AdvanceResult = { kind: 'done' }
  * call counts.
  */
 function harness(script: {
-  advance: AdvanceResult[]
+  /** A queued `Error` is THROWN by `advanceInstance` (a step that raised), not returned. */
+  advance: (AdvanceResult | Error)[]
   /** A queued `Error` is THROWN by the poll (a status read that failed), not returned. */
   pollJob?: (AdvanceResult | Error)[]
   pollGate?: AdvanceResult[]
@@ -54,8 +55,15 @@ function harness(script: {
       events.push('gateExhausted')
       return DONE
     },
-    failRun: async (_ws: string, _id: string, message: string, kind: string) => {
-      events.push(`fail:${kind}:${message}`)
+    failRun: async (
+      _ws: string,
+      _id: string,
+      message: string,
+      kind: string,
+      _detail: string | null,
+      reason: string | null,
+    ) => {
+      events.push(`fail:${kind}:${message}${reason ? `:reason=${reason}` : ''}`)
     },
   } as unknown as Exec
   const sleep = async (ms: number) => {
@@ -139,5 +147,29 @@ describe('driveExecution poll-failure cause recovery', () => {
     expect(h.events.at(-1)).toBe(
       'fail:timeout:Implementation job did not settle within its polling budget',
     )
+  })
+})
+
+describe('driveExecution failure identity', () => {
+  it('lifts a thrown DomainError’s details.reason onto the run failure', async () => {
+    // The step-result path has always forwarded `reason`; the advance-THROW path dropped it,
+    // so the one failure class the SPA can offer a remedy for arrived as prose with no
+    // machine-readable code (observability-logging-gaps.md, B3). `getErrorReason` is the
+    // read-side dual of the `reason` a `ConflictError` carries.
+    const h = harness({
+      advance: [
+        new ConflictError('No configured provider for this model.', 'providers_unconfigured'),
+      ],
+    })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
+    expect(h.events.at(-1)).toBe(
+      'fail:agent:No configured provider for this model.:reason=providers_unconfigured',
+    )
+  })
+
+  it('leaves the reason unset for a plain Error, rather than inventing one', async () => {
+    const h = harness({ advance: [new Error('the container exploded')] })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
+    expect(h.events.at(-1)).toBe('fail:agent:the container exploded')
   })
 })
