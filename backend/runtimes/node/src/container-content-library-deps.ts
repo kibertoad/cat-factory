@@ -9,6 +9,7 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { AppConfig } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
 import {
+  DrizzleFragmentBriefRepository,
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
 } from './repositories/fragments.js'
@@ -47,6 +48,7 @@ export function selectNodeFragmentLibraryDeps(opts: {
   const resolvers = createTierInstallationResolvers({ installations, workspaces })
   return {
     promptFragmentRepository: new DrizzlePromptFragmentRepository(db),
+    fragmentBriefRepository: new DrizzleFragmentBriefRepository(db),
     fragmentSourceRepository: new DrizzleFragmentSourceRepository(db),
     // Repo-sourced fragments read guideline files through the workspace's App
     // installation; only wired when a real GitHub client is available (parity with

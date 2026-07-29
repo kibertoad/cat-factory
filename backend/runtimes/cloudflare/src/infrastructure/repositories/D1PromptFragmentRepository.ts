@@ -16,6 +16,7 @@ interface PromptFragmentRow {
   category: string | null
   summary: string
   body: string
+  brief: string | null
   applies_to: string | null
   tags: string | null
   source_id: string | null
@@ -49,6 +50,7 @@ function rowToRecord(row: PromptFragmentRow): PromptFragmentRecord {
     category: row.category,
     summary: row.summary,
     body: row.body,
+    brief: row.brief,
     appliesTo: parseJson<FragmentAppliesTo>(row.applies_to),
     tags: parseJson<string[]>(row.tags),
     sourceId: row.source_id,
@@ -105,17 +107,18 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
     await this.db
       .prepare(
         `INSERT INTO prompt_fragments
-          (fragment_id, owner_kind, owner_id, version, title, category, summary, body,
+          (fragment_id, owner_kind, owner_id, version, title, category, summary, body, brief,
            applies_to, tags, source_id, source_path, source_sha,
            doc_source, doc_external_id, doc_via_workspace_id, resolved_at,
            created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (owner_kind, owner_id, fragment_id) DO UPDATE SET
            version = excluded.version,
            title = excluded.title,
            category = excluded.category,
            summary = excluded.summary,
            body = excluded.body,
+           brief = excluded.brief,
            applies_to = excluded.applies_to,
            tags = excluded.tags,
            source_id = excluded.source_id,
@@ -137,6 +140,7 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
         record.category,
         record.summary,
         record.body,
+        record.brief,
         record.appliesTo ? JSON.stringify(record.appliesTo) : null,
         record.tags ? JSON.stringify(record.tags) : null,
         record.sourceId,

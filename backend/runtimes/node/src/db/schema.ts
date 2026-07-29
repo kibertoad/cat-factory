@@ -648,6 +648,10 @@ export const promptFragments = pgTable(
     category: text('category'),
     summary: text('summary').notNull(),
     body: text('body').notNull(),
+    // The short version this tier LINKED (hand-authored, or a sourced file's `brief:`
+    // frontmatter), folded for implementer kinds in place of `body`. Null ⇒ a long body is
+    // condensed automatically into `fragment_briefs`.
+    brief: text('brief'),
     applies_to: text('applies_to'),
     tags: text('tags'),
     source_id: text('source_id'),
@@ -670,6 +674,31 @@ export const promptFragments = pgTable(
       .on(t.source_id)
       .where(sql`${t.deleted_at} IS NULL`),
   ],
+)
+
+// Model-GENERATED condensed briefs for long best-practice standards that link none of their
+// own (mirror of D1 migration 0069). Derived data with its own lifecycle — regenerated when
+// `body_fingerprint` stops matching the body resolved at run time, dropped with its fragment —
+// which is why it is a table of its own rather than more columns on `prompt_fragments`: it must
+// also cover a BUILT-IN fragment, which has no managed row, and stay clear of the tier merge's
+// shadow/tombstone semantics. Scoped by the owner of the tier that won the merge (a builtin-tier
+// entry is scoped to the resolving workspace's account), so a row is bound to a tenant exactly
+// like the fragment it condenses. The PK leads with the owner pair, which is the only read shape.
+// An EMPTY `brief` is a real state — "this body was condensed and the result was unusable" — kept
+// so a standard that cannot be usefully shortened is not re-condensed on every dispatch forever;
+// it self-clears when `body_fingerprint` stops matching. See the D1 0069 header for the full rule.
+export const fragmentBriefs = pgTable(
+  'fragment_briefs',
+  {
+    owner_kind: text('owner_kind').notNull(),
+    owner_id: text('owner_id').notNull(),
+    fragment_id: text('fragment_id').notNull(),
+    body_fingerprint: text('body_fingerprint').notNull(),
+    brief: text('brief').notNull(),
+    model: text('model').notNull(),
+    generated_at: bigint('generated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.owner_kind, t.owner_id, t.fragment_id] })],
 )
 
 // A repo directory linked as a source of Markdown guideline files (ADR 0006 §3;

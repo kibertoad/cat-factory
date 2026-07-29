@@ -4007,6 +4007,8 @@
       "titlePlaceholder": "Titel",
       "summaryPlaceholder": "Einzeilige Zusammenfassung (vom Selektor verwendet)",
       "bodyPlaceholder": "Richtlinientext (in den Prompt injiziert)",
+      "briefPlaceholder": "Kurzfassung, die Coding-Agents erhalten (optional)",
+      "briefHint": "Lange Standards werden für Coding-Agents automatisch verdichtet, da diese sie in jedem Zug erneut lesen. Verlinke hier deine eigene Kurzfassung, um sie stattdessen zu verwenden; leere das Feld, um zur automatischen zurückzukehren.",
       "tagsPlaceholder": "Tags, kommagetrennt (z. B. backend, db)",
       "add": "Fragment hinzufügen",
       "generateTitle": "Generieren",

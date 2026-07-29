@@ -24,6 +24,7 @@ function entry(id: string): ResolvedCatalogEntry {
     summary: `${id} summary`,
     body: `${id} body`,
     brief: null,
+    briefScope: { ownerKind: 'workspace' as const, ownerId: 'ws1' },
     appliesTo: null,
     tags: null,
     source: null,

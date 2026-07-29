@@ -438,6 +438,13 @@ function makeRegistry(): {
       softDelete: async () => undefined,
       listBySource: async () => [],
     },
+    // The generated-brief store: owner-keyed list + record-based upsert + owner-keyed delete.
+    // Same (ownerKind, ownerId) pair as the fragments it condenses, so the same rules bind it.
+    fragmentBriefRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      upsert: async () => undefined,
+      delete: async () => undefined,
+    },
     // The fragment-source library: owner-keyed list + record-based upsert. `get` is wired but
     // sourceId-keyed (absent from the allow-list — the repo-sync management the mothership owns).
     fragmentSourceRepository: {
@@ -2024,6 +2031,7 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
     { repo: 'promptFragmentRepository', method: 'listByOwner', args: [] },
     { repo: 'promptFragmentRepository', method: 'get', args: ['frag_1'] },
     { repo: 'fragmentSourceRepository', method: 'listByOwner', args: [] },
+    { repo: 'fragmentBriefRepository', method: 'listByOwner', args: [] },
   ]
 
   for (const { repo, method, args } of OWNER_READS) {
@@ -2073,9 +2081,26 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
+  // The generated brief's owner-keyed delete (dropping a removed fragment's derived text).
+  it('forwards fragmentBriefRepository.delete for an in-scope owner', async () => {
+    await expect(
+      remoteRegistry().fragmentBriefRepository!.delete!('account', ACCOUNT, 'frag_1'),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects fragmentBriefRepository.delete for an out-of-scope owner (404)', async () => {
+    await expect(
+      remoteRegistry().fragmentBriefRepository!.delete!('workspace', 'ws_out', 'frag_1'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
   // The record-based `upsert(record)` binds on the record's `(ownerKind, ownerId)` FIELDS (the
   // `ownerField` rule): a fragment/source row can only ever land under an in-scope owner.
-  const UPSERTS = ['promptFragmentRepository', 'fragmentSourceRepository']
+  const UPSERTS = [
+    'promptFragmentRepository',
+    'fragmentSourceRepository',
+    'fragmentBriefRepository',
+  ]
 
   for (const repo of UPSERTS) {
     it(`forwards ${repo}.upsert when the record targets an in-scope workspace owner`, async () => {

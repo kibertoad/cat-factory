@@ -103,6 +103,9 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
       bugHuntAssessor: o.bugHuntAssessor,
+      // - fragmentBriefGenerator: a deterministic condensation model, so the generated-brief
+      //   store's generate / reuse / regenerate-on-change loop is asserted against real D1.
+      fragmentBriefGenerator: o.fragmentBriefGenerator,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       agentKindRegistry: o.agentKindRegistry,

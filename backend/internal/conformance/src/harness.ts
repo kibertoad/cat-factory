@@ -19,6 +19,7 @@ import type {
   GateRegistry,
   JudgeAssessor,
   BugHuntAssessor,
+  FragmentBriefGenerator,
   JudgeRegistry,
   InitiativePresetRegistry,
   StepResolverRegistry,
@@ -544,6 +545,15 @@ export interface ConformanceAppOptions {
    * model-derived assessor, which is disabled with no model wired.
    */
   bugHuntAssessor?: BugHuntAssessor
+  /**
+   * Inject the fragment-BRIEF condensation model (a deterministic fake), so the suite can drive
+   * the generated-brief store end to end — condense on first dispatch, reuse on the next,
+   * REGENERATE once the standard's body moves — on EVERY runtime with no model. Each facade
+   * harness threads it into its core overrides exactly where a real facade builds the inline
+   * `LlmFragmentBriefGenerator`. Absent → the facade's own (unwired in tests) generator, so a
+   * long standard folds in full.
+   */
+  fragmentBriefGenerator?: FragmentBriefGenerator
   /**
    * Inject the app-owned initiative-preset registry, pre-loaded with a CUSTOM preset, so the suite
    * can assert a deployment-registered preset resolves identically on EVERY runtime (its snapshot

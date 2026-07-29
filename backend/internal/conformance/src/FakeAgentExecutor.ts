@@ -87,6 +87,14 @@ export interface FakeAgentOptions {
    */
   echoFragments?: boolean
   /**
+   * When set, the (generic-kind) agent echoes each resolved fragment's CONDENSED variant as
+   * `[briefs]id=brief;id=brief[/briefs]` (a fragment resolved without one contributes
+   * `id=`), so a test can assert WHICH short version the engine resolved for an implementer
+   * kind — a linked one, a generated one, or none. The fold itself is unit-tested; what
+   * needs asserting on every runtime is that the stores round-trip the brief at all.
+   */
+  echoFragmentBriefs?: boolean
+  /**
    * When set, the (generic-kind) agent echoes the initiative-preset steering it was handed
    * as `[preset]label|promptAddition[/preset]`, so a test can assert the engine resolved the
    * preset's per-kind methodology onto a SPAWNED run's context (D1). Empty `[preset][/preset]`
@@ -481,12 +489,17 @@ export class FakeAgentExecutor implements AgentExecutor {
     const fragSuffix = this.options.echoFragments
       ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
       : ''
+    const briefSuffix = this.options.echoFragmentBriefs
+      ? ` [briefs]${(context.block.resolvedFragments ?? [])
+          .map((f) => `${f.id}=${f.brief ?? ''}`)
+          .join(';')}[/briefs]`
+      : ''
     const preset = context.initiative?.preset
     const presetSuffix = this.options.echoPreset
       ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
       : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${briefSuffix}${presetSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       ...this.usageFields(),

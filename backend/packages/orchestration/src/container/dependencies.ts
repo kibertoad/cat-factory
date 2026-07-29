@@ -64,6 +64,8 @@ import type {
   EnvironmentUserHandlerRepository,
   ExecutionEventPublisher,
   ExecutionRepository,
+  FragmentBriefGenerator,
+  FragmentBriefRepository,
   FragmentSelector,
   FragmentSourceRepository,
   GateRegistry,
@@ -829,6 +831,19 @@ export interface CoreDependencies {
   fragmentSourceRepository?: FragmentSourceRepository
   fragmentSelector?: FragmentSelector
   resolveFragmentInstallationId?: ResolveFragmentInstallationId
+  /**
+   * Persisted store for MODEL-GENERATED condensed briefs — the short variant an implementer
+   * kind folds when a long standard has no linked one. Absent ⇒ only authored/linked briefs
+   * are folded and every other long standard is sent in full (the pre-feature behaviour).
+   */
+  fragmentBriefRepository?: FragmentBriefRepository
+  /**
+   * The condensation model behind those generated briefs. A facade leaves this unset and
+   * gets the inline `LlmFragmentBriefGenerator` built from its own model provider; a
+   * test/conformance harness injects a deterministic one instead (the same
+   * "explicitly-injected wins" seam `documentContentResolver` uses).
+   */
+  fragmentBriefGenerator?: FragmentBriefGenerator
   /**
    * Live document reader for **document-backed** fragments (Confluence/Notion/
    * GitHub files linked as living best-practice fragments). Wired by a facade

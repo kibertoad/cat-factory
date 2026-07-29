@@ -234,9 +234,12 @@ export interface AgentRunContext {
      * static resolution. Absent when the library module is not configured. Each
      * carries the fragment's human `title` (when it has one) so the prompt composer
      * can render each standard as its own labelled block and a reviewer can cite it
-     * by title.
+     * by title, plus the condensed `brief` an implementer kind folds INSTEAD of the body
+     * (the winning tier's linked one, or a generated condensation of it) when the
+     * resolver produced one — resolved alongside the body it condenses, never looked up
+     * by id here.
      */
-    resolvedFragments?: { id: string; title?: string; body: string }[]
+    resolvedFragments?: { id: string; title?: string; body: string; brief?: string }[]
     /**
      * The task's resolved BUSINESS-vs-TECHNICAL label, when determined. `true` ⇒ purely
      * TECHNICAL (a refactor / non-functional / internal change): the implementer treats the

@@ -4944,6 +4944,8 @@
       "titlePlaceholder": "タイトル",
       "summaryPlaceholder": "1行の要約 (セレクターで使用)",
       "bodyPlaceholder": "ガイダンス本文 (プロンプトに挿入)",
+      "briefPlaceholder": "コーディングエージェントに渡す短縮版 (任意)",
+      "briefHint": "長い基準は、毎ターン読み直すコーディングエージェント向けに自動で要約されます。独自の短縮版をここにリンクするとそちらが使われ、空にすると自動要約に戻ります。",
       "tagsPlaceholder": "タグ、カンマ区切り (例: backend, db)",
       "add": "フラグメントを追加",
       "generateTitle": "生成",

@@ -4007,6 +4007,8 @@
       "titlePlaceholder": "Titolo",
       "summaryPlaceholder": "Riepilogo su una riga (usato dal selettore)",
       "bodyPlaceholder": "Corpo delle indicazioni (iniettato nel prompt)",
+      "briefPlaceholder": "Versione breve fornita agli agenti di codice (facoltativo)",
+      "briefHint": "Gli standard lunghi vengono condensati automaticamente per gli agenti di codice, che li rileggono a ogni turno. Collega qui la tua versione breve per usarla al suo posto; svuota il campo per tornare a quella automatica.",
       "tagsPlaceholder": "Tag, separati da virgola (es. backend, db)",
       "add": "Aggiungi frammento",
       "generateTitle": "Genera",

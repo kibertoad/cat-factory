@@ -823,11 +823,12 @@ export function createRequirementsModule(
         // the body resolution (which would otherwise re-resolve the same catalog).
         const catalog = await fragmentLibrary.libraryService.resolveCatalog(workspaceId)
         const titles = new Map(catalog.map((e) => [e.id, e.title]))
-        const bodies = await fragmentLibrary.libraryService.resolveBodiesForRun(
-          workspaceId,
-          ids,
+        // Reviewer grounding reads the FULL standards (the default verbosity): a review
+        // judges built work against what the standard actually says, which is the same
+        // reason reviewer kinds never fold a brief.
+        const bodies = await fragmentLibrary.libraryService.resolveBodiesForRun(workspaceId, ids, {
           catalog,
-        )
+        })
         return bodies.map(({ id, body }) => ({ id, title: titles.get(id) ?? id, body }))
       }
       const out: { id: string; title: string; body: string }[] = []

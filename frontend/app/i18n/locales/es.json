@@ -4932,6 +4932,8 @@
       "titlePlaceholder": "Título",
       "summaryPlaceholder": "Resumen de una línea (usado por el selector)",
       "bodyPlaceholder": "Cuerpo de la guía (inyectado en el prompt)",
+      "briefPlaceholder": "Versión corta que reciben los agentes de código (opcional)",
+      "briefHint": "Los estándares largos se condensan automáticamente para los agentes de código, que los releen en cada turno. Enlaza aquí tu propia versión corta para usarla en su lugar; vacíalo para volver a la automática.",
       "tagsPlaceholder": "Etiquetas, separadas por comas (p. ej., backend, db)",
       "add": "Añadir fragmento",
       "generateTitle": "Generar",

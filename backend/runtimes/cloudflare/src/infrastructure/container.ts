@@ -245,6 +245,7 @@ import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepos
 import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
 import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { D1TrackerCommentIngestRepository } from './repositories/D1TrackerCommentIngestRepository'
+import { D1FragmentBriefRepository } from './repositories/D1FragmentBriefRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
 import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
@@ -1819,6 +1820,7 @@ export function selectFragmentLibraryDeps(
   })
   return {
     promptFragmentRepository: new D1PromptFragmentRepository({ db }),
+    fragmentBriefRepository: new D1FragmentBriefRepository({ db }),
     fragmentSourceRepository: new D1FragmentSourceRepository({ db }),
     resolveFragmentInstallationId: resolvers.forOwner,
     ...(config.fragmentLibrary.selector === 'llm'

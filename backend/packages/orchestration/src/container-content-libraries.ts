@@ -1,6 +1,8 @@
 import {
+  FragmentBriefService,
   FragmentLibraryService,
   FragmentSourceService,
+  LlmFragmentBriefGenerator,
   SkillCatalogService,
   SkillRunResolver,
   SkillSourceService,
@@ -33,6 +35,12 @@ export interface FragmentLibraryModule {
    * when a model provider + routing-default ref are wired. Absent ⇒ the endpoint returns 503.
    */
   titleService?: FragmentTitleService
+  /**
+   * Resolves (and generates + persists) the condensed brief an implementer kind folds in
+   * place of a long standard's body. Present only when `fragmentBriefRepository` is wired;
+   * the library service consumes it internally, so nothing outside this module calls it.
+   */
+  briefService?: FragmentBriefService
 }
 
 /**
@@ -69,11 +77,35 @@ export function createFragmentLibraryModule(
   const { promptFragmentRepository } = deps
   if (!promptFragmentRepository) return undefined
 
+  // Condensed briefs for implementer kinds: assembled only when the store is wired, so a
+  // deployment without it folds authored briefs and full bodies exactly as before. The
+  // GENERATOR is separately optional within it — an unwired model means a long standard with
+  // no linked short version keeps being folded in full rather than failing a dispatch.
+  const briefService = deps.fragmentBriefRepository
+    ? new FragmentBriefService({
+        repository: deps.fragmentBriefRepository,
+        // An explicitly-injected generator (tests/conformance) wins; otherwise the inline
+        // LLM one built from this deployment's providers, reusing the same small-completion
+        // default refs the title generator does — a condensation is one cheap call, not an
+        // agent turn.
+        generator:
+          deps.fragmentBriefGenerator ??
+          new LlmFragmentBriefGenerator({
+            modelProviderResolver: deps.modelProviderResolver,
+            modelProvider: deps.modelProvider,
+            modelRef: deps.documentPlannerModel ?? deps.requirementReviewModel,
+          }),
+        clock: deps.clock,
+        logger: deps.logger,
+      })
+    : undefined
+
   const libraryService = new FragmentLibraryService({
     promptFragmentRepository,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     selector: deps.fragmentSelector,
+    briefService,
     // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
@@ -106,7 +138,7 @@ export function createFragmentLibraryModule(
     modelRef: deps.documentPlannerModel ?? deps.requirementReviewModel,
   })
 
-  return { libraryService, sourceService, titleService }
+  return { libraryService, sourceService, titleService, briefService }
 }
 
 /**

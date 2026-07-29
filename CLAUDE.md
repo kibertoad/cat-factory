@@ -1990,6 +1990,24 @@ auth-enabled or it passes vacuously.
   (`buildKindBody`), the inline `AiAgentExecutor`, and `ConsensusAgentExecutor`. A new compose site
   that forgets it silently restores the full bodies. Authoring guidance:
   [`backend/packages/prompt-fragments/README.md`](./backend/packages/prompt-fragments/README.md).
+  - **A brief has THREE sources, in order: the winning tier's LINKED `brief` → a model-GENERATED
+    condensation → nothing (fold the full body).** Generation fires only for a body over
+    `FRAGMENT_BRIEF_MIN_BODY_CHARS` with no linked brief, and only on a `brief`-verbosity dispatch,
+    so a reviewer never pays for text it discards. Design:
+    [`docs/initiatives/auto-generated-fragment-briefs.md`](./docs/initiatives/auto-generated-fragment-briefs.md).
+  - **Resolution lives on the RUN path (`resolveBodiesForRun`), never the write path**, because a
+    document-backed standard's body is re-resolved at dispatch and has no write to hook. That one
+    seam therefore covers all three ways a body moves (library edit, repo resync, living document),
+    and makes generation demand-driven.
+  - **Staleness is a FINGERPRINT of the condensed body, not a change feed.** A `fragment_briefs`
+    row stores the digest of the body it condensed; a mismatch regenerates. Generated briefs are a
+    SEPARATE table from `prompt_fragments` on purpose: they are derived (regenerated, never
+    authored, safe to drop), they must also cover a built-in / deployment-registered fragment that
+    owns no managed row, and they must stay clear of the tier merge's shadow/tombstone semantics.
+  - **Every failure on that path folds the FULL BODY** — no model, an unreadable store, a refused
+    or over-long condensation. A brief is an optimisation of how a standard is STATED; nothing
+    there may change what it REQUIRES. For the same reason an over-long generation is REFUSED
+    rather than truncated (a brief cut mid-sentence is a standard whose last rule trails off).
 - **A dispatch records what the poll site cannot re-derive** (`recordDispatchAttribution`). An async
   container job settles on the durable poll path, which rebuilds the job handle from the STEP alone
   — so the resolved `model`, the leased `subscriptionTokenId` and the run's `initiatedByUserId` are

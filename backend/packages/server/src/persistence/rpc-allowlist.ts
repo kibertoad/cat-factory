@@ -875,6 +875,21 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
     softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
   },
+  // Model-GENERATED condensed briefs for long standards (`FragmentBriefService`), read and
+  // written on the RUN path: a mothership-mode implementer dispatch resolves them alongside the
+  // fragment bodies above, so leaving them off would silently fold full standards on every turn
+  // of every local loop — the exact cost this feature exists to remove. `remote`, not
+  // `local-first`: they are org-durable derived state (a condensation an account paid a model
+  // for, reused by every board in it), not per-user runner telemetry. The rows hold model output
+  // condensing a standard the same token already reads in full through `promptFragmentRepository`,
+  // so they widen no exposure, and every method is keyed by the same `(ownerKind, ownerId)` pair —
+  // bound by the `owner` rule (positional) / `ownerField` rule (the record's fields on `upsert`),
+  // so a token scoped to one account can neither read nor overwrite another tenant's briefs.
+  fragmentBriefRepository: {
+    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    delete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+  },
   // The fragment-source (repo-linkage) library the SPA lists + links (`FragmentSourceService`), owner
   // scoped exactly like the fragments above. `listByOwner` (the sources list) is bound by the `owner`
   // rule; the record-based `upsert(record)` by `ownerField`. The `sourceId`-keyed reads/writes

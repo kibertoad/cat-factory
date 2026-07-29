@@ -151,6 +151,7 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -232,6 +233,9 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      // The fragment-brief condensation model: a deterministic fake, so the generate /
+      // reuse / regenerate-on-change loop drives against real Postgres with no model.
+      fragmentBriefGenerator: o.fragmentBriefGenerator,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,

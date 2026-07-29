@@ -33,6 +33,14 @@ export interface PromptFragmentRecord {
   summary: string
   /** The guidance folded into the system prompt. */
   body: string
+  /**
+   * The tenant-LINKED condensed variant of {@link body}, folded instead of it for
+   * implementer kinds (the `brief-standards` trait). Null when the tier authored none, in
+   * which case a body over `FRAGMENT_BRIEF_MIN_BODY_CHARS` gets a GENERATED one
+   * (`FragmentBriefRepository`) and a shorter body folds in full. Repo-sourced rows carry
+   * whatever the file's `brief:` frontmatter key supplied.
+   */
+  brief: string | null
   appliesTo: FragmentAppliesTo | null
   tags: string[] | null
   /** Provenance, when sourced from a repo (null for hand-authored). */
@@ -104,12 +112,21 @@ export interface ResolvedCatalogEntry {
   summary: string
   body: string
   /**
-   * The condensed variant of {@link body} folded for implementer kinds, when the winning tier
-   * defines one. Only the built-in tier does today (managed rows have no `brief` column), so a
-   * tenant row that OVERRIDES a built-in id resolves with none — which is the correct outcome:
-   * the override's own full body is folded rather than the built-in's condensed text.
+   * The AUTHORED condensed variant of {@link body} folded for implementer kinds, when the
+   * winning tier defines one — a built-in's `brief`, or the one a tenant linked on its own
+   * row. Always the brief of the body that WON the tier merge, never a built-in's text
+   * pasted over an override. Null ⇒ a body over `FRAGMENT_BRIEF_MIN_BODY_CHARS` resolves a
+   * GENERATED brief through {@link briefScope}, and a shorter one folds in full.
    */
   brief: string | null
+  /**
+   * Where a GENERATED brief for this entry is stored: the winning tier's owner, or the
+   * resolving workspace's account for a `builtin`-tier entry (which owns no row of its
+   * own). Computed during the merge because only there is the winning tier known — a
+   * consumer that re-derived it would key an account fragment's brief under a workspace
+   * and regenerate it once per board.
+   */
+  briefScope: { ownerKind: FragmentOwnerKind; ownerId: string }
   appliesTo: FragmentAppliesTo | null
   tags: string[] | null
   source: { sourceId: string; path: string; sha: string } | null

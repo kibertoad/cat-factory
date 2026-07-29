@@ -308,6 +308,13 @@ export type {
   ResolvedCatalogEntry,
 } from './fragment-repositories.js'
 export type {
+  FragmentBriefRecord,
+  FragmentBriefRepository,
+  FragmentBriefGeneration,
+  FragmentBriefGenerator,
+  FragmentBriefGeneratorInput,
+} from './fragment-brief.js'
+export type {
   SkillResource,
   AccountSkillRecord,
   AccountSkillRepository,
