@@ -1279,6 +1279,86 @@ LLM-over-a-checkout runner; all deterministic work is backend TypeScript. Full m
   in the harness. Converting them one at a time (parity-gated, image-bumped) is the remaining
   strangler work.
 
+## Per-workspace agent prompt overrides (edited from the pipeline builder)
+
+A workspace can replace any agent kind's system prompt from the pipeline builder — the surface
+where its step is chosen — and switch back through the full history of what it has run.
+
+- **The store is an APPEND-ONLY revision log** (`agent_prompt_revisions`, D1 ⇄ Drizzle, keyed
+  `(workspace, agent_kind, revision)`), and the HIGHEST revision is live. There is no update and
+  no delete: restoring an older prompt appends a copy of it (tagged `restoredFrom`), and going
+  back to what the product ships appends a revision whose `text` is **NULL**. That null is a real
+  state, distinct from a kind nobody ever edited — it keeps the workspace tracking the shipped
+  prompt as it is bumped instead of pinning a stale copy of today's wording, and it records that
+  someone reverted deliberately.
+- **The composite key is the concurrency control, not hygiene.** The next revision number comes
+  from a read, so a second editor's insert COLLIDES; `AgentPromptService` re-reads the head to tell
+  that apart from a store failure (the two runtimes report the violation differently) and raises
+  `prompt_revision_conflict`. **Never turn that insert into an upsert** — last-write-wins would
+  silently discard one of two people's prompts.
+- **An override replaces the SHIPPED TRACK PROMPT, never the whole system prompt.**
+  `systemPromptFor(kind, registry, override?)` re-applies the surface directives and trait guidance
+  on top, because those are invariants of how the platform runs a kind (a read-only kind must not
+  edit; a reasoning kind's answer must land in its visible reply) rather than editorial content. So
+  the editor shows — and an override supplies — `baseSystemPromptFor`, not `systemPromptFor`.
+- **An invariant reaches a shipped prompt by TWO routes, and only one survives an override.**
+  `applySurfaceDirectives` APPENDS; a built-in track prompt carries the same rule INLINE (which is
+  why that function gates its final-answer append on the base being the registry's prompt — a
+  double-append guard). Replace the track prompt and the guard reads "already has it" about a
+  string that no longer exists, so **every kind whose deliverable IS its reply** — spec-writer,
+  the testers, the reviewers, merger, on-call — silently loses the rule and comes back with an
+  empty visible reply the harness fails the run on. `restoreShippedInvariants` (catalog.ts) closes
+  that by diffing the overridden composition against the fully composed SHIPPED prompt and putting
+  back any member of `OVERRIDE_PRESERVED_FRAGMENTS` it lacks. **A new engine-enforced fragment
+  belongs in that list**, or an override can delete it.
+- **`builtInDirectivesFor` MEASURES what gets appended; it never restates it.** It composes the
+  real prompt around a probe and returns the tail, which is what lets the editor SHOW the
+  non-editable text (`AgentPromptDetail.appendedText`) instead of describing it in copy that goes
+  stale the moment a directive is added. Adding a directive needs no change in the controller or
+  the SPA.
+- **The engine resolves it ONCE per dispatch** (`AgentContextBuilder`, in the same read wave as the
+  rest of the context) onto `AgentRunContext.systemPromptOverride`, so the container, inline and
+  consensus paths cannot disagree about which prompt a step ran under. **A new prompt-assembly site
+  must honour it** — the same hazard `standardsVerbosityFor` has. Container dispatch rides
+  `dispatchSystemPromptFor` (`@cat-factory/server`'s `agents/promptOverrides.ts`); the inline and
+  consensus executors pass the override to `systemPromptFor` directly, where it wins over the
+  deployment-wide `AGENT_ROUTING` system prompt (the workspace's edit is the more specific of the two).
+- **`BESPOKE_CONTAINER_SYSTEM_PROMPTS` exists so the editor and the dispatch agree**, and it is
+  SPLIT for the same reason the point above exists. `merger` and `on-call` dispatch a bespoke
+  constant instead of their role prompt, so an editor built on `systemPromptFor` would show a
+  baseline those kinds never run — and "restore the built-in" would restore something that was
+  never running. Each entry is `{ role, directives }`: the role is editable, the directives (the
+  JSON contract the engine parses, on-call's read-only guardrail, the answer-in-your-reply rule)
+  are re-appended on top of an override. Those kinds bypass `applySurfaceDirectives` entirely, so
+  this map IS their equivalent of it. **Adding another such kind means adding it there, split** —
+  one added with its directives inside `role` compiles and dispatches fine, and fails only later
+  as a workspace that edited it losing its guardrail.
+- **The sandbox is the other half of this feature, and they share ONE unit of text.** A stored
+  sandbox `systemText` and a stored prompt override are both the BASE (track) prompt: the sandbox
+  composes the directives at RUN time through the same `systemPromptFor(kind, registry, text)`
+  override path production dispatch uses, so a candidate is graded on what would actually be sent
+  AND a promoted candidate behaves like the graded one. Storing the composed text on either side
+  would double the trait guidance the moment it crossed over.
+  - **The workspace's own prompts are PROJECTED into the sandbox** (`workspacePromptVersions`,
+    `origin: 'workspace'`, synthesized per request from the revision log — never synced, so
+    nothing can fall behind). Without them the sandbox's only control is what the PRODUCT ships,
+    so on a workspace that edited a kind every experiment measures its candidate against text
+    nobody there runs. Read with the batched `listRevisionsByKinds` — a point read per catalog
+    kind would be the banned N+1.
+  - **Promote is `POST /agent-prompts/:kind/promote`, NOT a sandbox route.** It writes the live
+    agent prompt, so it must answer to `settings.manage` rather than the sandbox controller's
+    `integrations.manage`, or the sandbox becomes a way around the gate on editing a prompt. It
+    is an ordinary append: revertible, visible in the history, a no-op when already live, and the
+    TEXT is read server-side from the version so what runs is what was graded.
+- **A step records the prompt revision it ran under** (`PipelineStep.promptRevision`, pinned at
+  dispatch beside `skillVersions`, absent ⇒ the shipped prompt). The log is append-only, so
+  re-reading it later answers about whatever landed since. Kaizen keys its `(prompt, agent, model)`
+  combo off it, or an edited prompt would inherit a verification the shipped one earned.
+- **Writes are `settings.manage`, reads pass through.** The builder is member-tier, but an edited
+  prompt changes every run in the workspace — the same blast radius as the model mapping.
+- **The SPA affordance is an OVERRIDE control**, so it is gated on `showOverrideField`: hidden in
+  basic mode while the kind runs the shipped prompt, revealed as soon as the workspace carries one.
+
 ## Unified agent runs (failure + retry surface)
 
 Both container-backed flows (task `execution`, repo `bootstrap`) persist to one `agent_runs` table

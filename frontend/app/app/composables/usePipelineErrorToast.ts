@@ -187,6 +187,14 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.reviewFriction.blockedTitle',
     descriptionKey: 'errors.reviewFriction.blockedToast',
   },
+  // Reachable from this generic lookup only if a prompt save is ever driven from a run-start
+  // path; the prompt editor words it itself (it also has to re-seed its textarea from what
+  // landed). Mapped regardless — the exhaustive Record is the drift guard, not a hint that
+  // every reason arrives here.
+  prompt_revision_conflict: {
+    titleKey: 'errors.conflict.title.prompt_revision_conflict',
+    descriptionKey: 'errors.conflict.description.prompt_revision_conflict',
+  },
 }
 
 /**

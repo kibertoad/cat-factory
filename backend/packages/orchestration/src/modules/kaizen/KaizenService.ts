@@ -108,7 +108,11 @@ export class KaizenService {
       if (!step || !this.isGradeable(step) || !step.model) continue
       const model = step.model
       const promptVersion = promptVersionForKind(step.agentKind)
-      const comboKey = comboKeyFor(step.agentKind, model, promptVersion)
+      // `promptRevision` is the workspace's own prompt for this kind, pinned onto the step at
+      // dispatch (absent ⇒ it ran the shipped prompt). Read off the STEP rather than the prompt
+      // log, which is append-only: a later revision would otherwise re-key gradings of text the
+      // step never saw.
+      const comboKey = comboKeyFor(step.agentKind, model, promptVersion, step.promptRevision)
       const combo = await this.deps.kaizenVerifiedComboRepository.getByKey(workspaceId, comboKey)
       if (isVerified(combo)) continue
       const existing = await this.deps.kaizenGradingRepository.getByStep(

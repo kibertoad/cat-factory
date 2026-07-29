@@ -11,6 +11,7 @@ import {
   createPackageRegistriesModule,
   createPreviewModule,
   createIncidentEnrichmentModule,
+  createAgentPromptsModule,
   createModelPresetsModule,
   createServiceFragmentDefaultsModule,
 } from './container/modules.js'
@@ -204,6 +205,7 @@ interface EnvConfigRepairModule {
 // that module directly, which also drops its type-import back-edge onto this file.
 import type {
   AccountSettingsModule,
+  AgentPromptsModule,
   BrainstormModule,
   ClarityModule,
   IncidentEnrichmentModule,
@@ -230,6 +232,7 @@ import type {
 } from './container/module-shapes.js'
 export type {
   AccountSettingsModule,
+  AgentPromptsModule,
   BrainstormModule,
   ClarityModule,
   IncidentEnrichmentModule,
@@ -433,6 +436,8 @@ export interface OptionalCoreModules {
   userSettings?: UserSettingsModule
   /** Present only when the model-preset repository is wired (see CoreDependencies). */
   modelPresets?: ModelPresetsModule
+  /** Present only when the agent-prompt-override repository is wired (see CoreDependencies). */
+  agentPrompts?: AgentPromptsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
@@ -479,6 +484,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('preview', () => createPreviewModule(dependencies))
   modules.build('incidentEnrichmentSettings', () => createIncidentEnrichmentModule(dependencies))
   modules.build('modelPresets', () => createModelPresetsModule(dependencies))
+  modules.build('agentPrompts', () => createAgentPromptsModule(dependencies))
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }
 

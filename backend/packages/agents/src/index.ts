@@ -16,7 +16,12 @@ export {
   resolveStepModelRef,
   resolveInlineModelRef,
 } from './agents/runtime/routing.js'
-export { systemPromptFor, userPromptFor } from './agents/catalog.js'
+export {
+  appendedDirectivesFor,
+  baseSystemPromptFor,
+  systemPromptFor,
+  userPromptFor,
+} from './agents/catalog.js'
 export { TASK_ESTIMATOR_AGENT_KIND } from './agents/prompts/roles.js'
 // App-owned agent-kind registry (mirrors the backend-registries pilot): the composition
 // root news ONE `AgentKindRegistry` (pre-loaded with the built-ins by
@@ -123,6 +128,7 @@ export {
   promptVersion,
   promptVersionLabel,
   promptVersionForKind,
+  promptIdForKind,
 } from './agents/kinds/versions.js'
 export { KAIZEN_SYSTEM_PROMPT } from './agents/prompts/kaizen.js'
 export {

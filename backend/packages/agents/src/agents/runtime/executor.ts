@@ -175,7 +175,13 @@ export class AiAgentExecutor implements AgentExecutor {
 
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
-    const baseSystem = config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)
+    // The workspace's own prompt for this kind (resolved once per dispatch by the engine)
+    // replaces the shipped track prompt; `systemPromptFor` still layers the engine-enforced
+    // directives on top. It wins over the deployment-wide `AGENT_ROUTING` system prompt: the
+    // workspace's edit is the more specific of the two.
+    const baseSystem = context.systemPromptOverride
+      ? systemPromptFor(context.agentKind, this.agentKindRegistry, context.systemPromptOverride)
+      : (config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry))
     const composed = composeBlockSystemPrompt(
       baseSystem,
       context.block,

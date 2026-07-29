@@ -84,6 +84,18 @@ export interface AgentRunContext {
    */
   followUpCompanion?: boolean
   /**
+   * The workspace's own system prompt for the kind being dispatched, when it has edited one
+   * from the pipeline builder. Replaces the SHIPPED track prompt; the engine-enforced surface
+   * directives and trait guidance are still layered on top by `systemPromptFor`, so an
+   * override cannot delete the read-only guardrail or the answer-in-the-reply rule.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`) rather than by each
+   * executor, so the container, inline and consensus paths cannot disagree about which prompt
+   * a step ran under — and so a step's telemetry records the prompt that was actually sent.
+   * Absent ⇒ the kind's shipped prompt.
+   */
+  systemPromptOverride?: string
+  /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
    * Read ONLY by the optional consensus executor (`@cat-factory/consensus`), which

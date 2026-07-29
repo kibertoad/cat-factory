@@ -556,7 +556,8 @@
         "env_test_infraless": "Nothing to test",
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected",
-        "env_test_connection_failed": "Environment connection failed"
+        "env_test_connection_failed": "Environment connection failed",
+        "prompt_revision_conflict": "Prompt changed by someone else"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -583,7 +584,8 @@
         "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
         "@env_test_connection_failed_detail": {
           "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
-        }
+        },
+        "prompt_revision_conflict": "Another edit to this prompt landed first. Reload it and re-apply your change on top."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -4032,7 +4034,9 @@
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
-      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build."
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
+      "promptEditTooltip": "Edit this agent's system prompt",
+      "promptEditedTooltip": "This agent's system prompt is edited for this workspace"
     },
     "progress": {
       "status": {
@@ -4104,6 +4108,50 @@
         "reseedFailed": "Could not reseed pipeline",
         "deleteFailed": "Could not delete pipeline"
       }
+    }
+  },
+  "agentPrompt": {
+    "title": "System prompt: {agent}",
+    "description": "Replace what this agent is told to do, for every run in this workspace.",
+    "customized": "Edited",
+    "usingBuiltin": "Built-in",
+    "@usingBuiltin": {
+      "description": "Badge meaning this agent runs the prompt the product ships. \"Built-in\" refers to that shipped prompt specifically, not to a user-set default."
+    },
+    "managedNotice": "The platform appends its own non-editable rules to whatever you save here.",
+    "showAppended": "Show what gets appended",
+    "hideAppended": "Hide what gets appended",
+    "appendedHeading": "Appended by the platform (not editable)",
+    "placeholder": "Describe what this agent should do.",
+    "save": "Save as new version",
+    "revert": "Back to built-in",
+    "loadBuiltin": "Load built-in text",
+    "showBuiltin": "Compare with built-in",
+    "hideBuiltin": "Hide built-in",
+    "restoringFrom": "Loaded from version {n}. Save to make it live again.",
+    "builtinHeading": "Built-in prompt",
+    "historyHeading": "Version history",
+    "historyEmpty": "This agent has never been edited in this workspace.",
+    "live": "Live",
+    "@live": {
+      "description": "Adjective, not a verb: labels the revision that is currently in effect."
+    },
+    "restore": "Load",
+    "@restore": {
+      "description": "Verb, imperative: loads the chosen revision into the editor. It does NOT save it - the user still presses Save."
+    },
+    "restoreTooltip": "Load this version into the editor",
+    "revision": {
+      "edit": "Version {n} (edited)",
+      "restored": "Version {n} (restored from version {from})",
+      "builtin": "Version {n} (back to built-in)"
+    },
+    "toast": {
+      "saved": "Prompt saved",
+      "reverted": "Back to the built-in prompt",
+      "saveFailed": "Couldn't save the prompt",
+      "loadFailed": "Couldn't load the prompt",
+      "conflict": "Someone else changed this prompt. Reloaded - re-apply your edit."
     }
   },
   "riskPolicy": {
@@ -5239,7 +5287,18 @@
       "forkOf": "Fork · {name}",
       "newVersionOf": "New version of · {name}",
       "saveVersion": "Save new version",
-      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test."
+      "hint": "Pick a prompt to fork a shipped baseline or version a candidate. Each save appends an immutable version you can put under test.",
+      "liveInWorkspace": "Live",
+      "@liveInWorkspace": {
+        "description": "Adjective, not a verb: badges the prompt version this workspace is currently running."
+      },
+      "fromWorkspace": "Your workspace",
+      "@fromWorkspace": {
+        "description": "Badge on a prompt version that came from this workspace's own edits, as opposed to one the product ships."
+      },
+      "promoteTitle": "Make this the live prompt for this agent",
+      "promoted": "Now the live prompt for {agent}",
+      "promoteFailed": "Couldn't promote this prompt"
     },
     "fixtureKind": {
       "requirements": "requirements",

@@ -15,6 +15,12 @@
     tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
     them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server
     prompt section (available servers + the ones this run could NOT wire). See ADR 0029.
+    `catalog.ts` exports `baseSystemPromptFor` (the SHIPPED track prompt) beside `systemPromptFor`
+    (that prompt plus the engine-enforced surface directives and trait guidance). The split is what
+    a per-workspace **prompt override** replaces: an override supplies the base and the directives
+    are re-applied on top, so a workspace cannot edit away the read-only guardrail or the
+    answer-in-your-reply rule. `systemPromptFor`'s third argument is that override; the dispatch
+    side of the seam lives in `@cat-factory/server`'s `agents/promptOverrides.ts`.
 - `providers/` — the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy), and
