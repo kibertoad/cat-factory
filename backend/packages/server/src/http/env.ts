@@ -5,6 +5,7 @@ import type {
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  Logger,
   SealedSecretInventory,
   UserRepoAccessRepository,
   VcsIdentityRegistry,
@@ -367,5 +368,23 @@ export type AppEnv = {
     user?: SessionPayload
     /** The caller's resolved workspace access, set by the gate — see {@link WorkspaceAccessContext}. */
     workspaceAccess?: WorkspaceAccessContext
+    /**
+     * The request's correlation id, minted or adopted by `mountRequestLogging` and echoed on
+     * the response + in every error envelope. Optional because a unit test may build a bare
+     * `new Hono()` with no middleware; read it through `requestIdOf(c)`.
+     */
+    requestId?: string
+    /**
+     * The request-scoped child logger (bound `requestId` / `method` / `path`), set by
+     * `mountRequestLogging`. Read it through `requestLogger(c)`, which falls back to the
+     * process-wide logger when the middleware isn't mounted.
+     */
+    log?: Logger
+    /**
+     * The wire error code `handleError` mapped this request's failure to, stashed so the
+     * request-log line can name it. Set ONLY on the throw path — a controller returning a 4xx
+     * envelope directly leaves it unset.
+     */
+    errorCode?: string
   }
 }

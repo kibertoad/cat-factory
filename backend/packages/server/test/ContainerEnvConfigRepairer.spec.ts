@@ -108,6 +108,11 @@ describe('ContainerEnvConfigRepairer', () => {
     )
     // The user prompt is the provider's repair prompt.
     expect(spec.userPrompt).toContain('.kargo.yml')
+    // A repair dispatches the same `agent` kind as an execution step, so it carries the same
+    // correlation ids — otherwise its container's log lines join to nothing. A repair has no
+    // separate execution row, so its job id IS its run id.
+    expect(spec.workspaceId).toBe('ws_1')
+    expect(spec.executionId).toBe('job_1')
   })
 
   it('pollRepair maps a running view to a progress update', async () => {

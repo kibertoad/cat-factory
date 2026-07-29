@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createMisconfiguredApp } from '../src/config/misconfiguredApp.js'
+import { REQUEST_ID_HEADER } from '../src/http/requestLogging.js'
 import {
   ConfigValidationError,
   ENV_HELP,
@@ -247,6 +248,18 @@ describe('createMisconfiguredApp', () => {
     const body = (await res.json()) as { error: { code: string; problems: typeof PROBLEMS } }
     expect(body.error.code).toBe('backend_misconfigured')
     expect(body.error.problems).toEqual(PROBLEMS)
+  })
+
+  it('correlates its responses like the real facades do', async () => {
+    // The Worker serves the fallback from INSIDE `createApp`, so it inherits the request
+    // middleware; Node/local swap in THIS whole app instead. Without the mount here, the one
+    // deployment shape an operator is actively debugging would be the only one serving requests
+    // with no id — and the SPA could not read it back without the expose-header.
+    const res = await app.request('http://x/workspaces', {
+      headers: { origin: 'http://localhost:3000', 'X-Request-Id': 'upstream-7' },
+    })
+    expect(res.headers.get(REQUEST_ID_HEADER)).toBe('upstream-7')
+    expect(res.headers.get('access-control-expose-headers')).toContain(REQUEST_ID_HEADER)
   })
 
   it('a problem exposes ONLY the non-secret key/summary/remedy/docsUrl fields (never a secret value)', () => {

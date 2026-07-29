@@ -90,7 +90,9 @@ const LEGACY_ALLOWANCES = new Map([
   // `agents/repoTargeting.ts`, and the poll site's pure runner-view → engine-update shaping
   // (`buildRunningUpdate` / `buildFailureMeta`) now lives with the rest of the output-boundary
   // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1520],
+  // Ratcheted 1520 → 1450 by extracting `agentContextRecord.ts` (the observability snapshot's
+  // allow-list projection) alongside `containerAgentLogging.ts`.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1450],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

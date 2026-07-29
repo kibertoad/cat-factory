@@ -82,6 +82,11 @@ function defineKind<TJob extends { jobId: string }, TResult extends JobResultBas
 // image carries no runtime deps.
 const KINDS: Record<string, KindEntry> = {
   agent: defineKind(parseAgentJob, handleAgent, (job) => ({
+    // The backend's correlation ids first, so EVERY line this job emits joins to the run in the
+    // backend's own logs. Absent on a body from a backend older than the field — the rest of the
+    // description is unaffected.
+    ...(job.workspaceId ? { workspaceId: job.workspaceId } : {}),
+    ...(job.executionId ? { executionId: job.executionId } : {}),
     mode: job.mode,
     repo: `${job.repo.owner}/${job.repo.name}`,
     branch: job.branch,

@@ -37,13 +37,25 @@ export function corsReflectsWhenUnset(environment: string | undefined): boolean 
  * - `X-Personal-Password` — the ambient personal-subscription unlock password.
  * - `X-Connection-Id` — the per-tab connection id used for real-time self-echo
  *   suppression (see the SPA's `connectionId()` / `BoardController`).
+ * - `X-Request-Id` — the correlation id (`mountRequestLogging`). Allowed INBOUND so a
+ *   caller that already has one (a load balancer, another service) can propagate it
+ *   rather than have the backend mint a second, unrelated id for the same request.
  */
 export const CORS_ALLOWED_HEADERS = [
   'Content-Type',
   'Authorization',
   'X-Personal-Password',
   'X-Connection-Id',
+  'X-Request-Id',
 ]
+
+/**
+ * The response headers a cross-origin browser client may READ. Without an explicit
+ * `Access-Control-Expose-Headers` a browser exposes only the CORS-safelisted set, so the
+ * correlation id would be present on the wire and invisible to the SPA — which is the one
+ * client whose users are the people quoting an id back in a bug report.
+ */
+export const CORS_EXPOSED_HEADERS = ['X-Request-Id']
 
 /** Parse a comma-separated allowed-origins string into trimmed entries. */
 export function parseAllowedOrigins(configured: string | undefined): string[] {
