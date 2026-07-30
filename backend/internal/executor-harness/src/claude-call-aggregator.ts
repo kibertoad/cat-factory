@@ -12,6 +12,19 @@ import type { HarnessCallMetric } from './pi.js'
 // This aggregator folds every envelope sharing a `message.id` back into the one call it belongs to,
 // and buffers that call's tool_result turns so the reconstructed prompt chain keeps the shape the
 // model was actually sent: one assistant turn holding all its blocks, then the results.
+//
+// TWO CONSUMERS, and a change here reaches both. The container/host harness drives it from a
+// coding job's stdout (`agent-runner.ts`), and the BACKEND drives it from the host `claude` an
+// inline step runs on (`runtimes/local/src/harnessInline.ts`, importing this module through the
+// package's `./claude-call-aggregator` subpath). Both parse the SAME `stream-json`, and the second
+// used to carry its own lesser fold — which is how the inline path came to report one lumped call
+// per step while the container path reported every turn. Keep this the only implementation; it is
+// also the one place the per-block over-count above is fixed.
+//
+// The second consumer is why the transcript is BOUNDED and body assembly is OPTIONAL (see
+// {@link MAX_TRANSCRIPT_CHARS} and `bodies`). Inside a container the reconstruction is one job's
+// worth of memory in a box sized for it; in the backend it runs per concurrent inline step, in the
+// orchestrator process, on precisely the long tool loops worth diagnosing.
 
 /** One model call, assembled from every stream envelope that carried a piece of it. */
 export interface AggregatedClaudeCall {
@@ -134,6 +147,128 @@ interface TranscriptTurn {
   content: unknown
 }
 
+/**
+ * How much reconstructed transcript ONE conversation may retain.
+ *
+ * The stream feeds this without limit — a tool loop that reads large files grows the history by
+ * every one of them — and the reconstruction is held in the driver's own process. In the container
+ * that is a box sized for one job; in the BACKEND it is the orchestrator, where `streamCli` already
+ * refuses to retain the raw stream for exactly this reason (`harnessInline.ts` →
+ * `OUTPUT_TAIL_RETAIN_CHARS`: "a stalled tool-using run would otherwise park hundreds of MB in the
+ * orchestrator process — precisely on the runs worth diagnosing").
+ *
+ * 512 KiB because that is `LlmObservabilityService.MAX_BODY_CHARS`, the point past which the store
+ * truncates a body anyway: retaining more can only ever be thrown away. Deliberately NOT a
+ * per-deployment knob — it bounds a memory fault, and a number an operator can raise is one an
+ * operator can raise until the process dies.
+ */
+export const MAX_TRANSCRIPT_CHARS = 512 * 1024
+
+/**
+ * The role a turn carries when it is not a turn at all, but the note saying what stopped being
+ * retained. A distinct namespaced role rather than `system`, so nothing downstream can read it as a
+ * message that was actually sent — the same reason `seed` exists.
+ */
+const ELIDED_ROLE = 'cat-factory:elided'
+
+/** The growing request transcript behind a conversation's `promptText`. */
+interface Transcript {
+  /** The history as of NOW: what the call starting at this moment was sent. */
+  snapshot(): { text: string; messageCount: number }
+  /** Add a turn the conversation has now completed. */
+  append(turn: TranscriptTurn): void
+}
+
+/**
+ * Retain the transcript up to {@link MAX_TRANSCRIPT_CHARS} and then STOP, stating what it stopped
+ * retaining rather than silently ending mid-conversation.
+ *
+ * Freezing the tail (rather than evicting the head) keeps the seed and the early history — the
+ * task, and the turns that explain what the loop is doing — and keeps each call's `promptText` a
+ * stable PREFIX plus a changing note, so the backend's chain delta-compresses right up to the bound
+ * and only then degrades to storing the (now capped) array. Evicting the head would drop the task
+ * itself and break the prefix property from the first eviction on.
+ *
+ * The seed is never dropped: it is what the CALLER sent, so it is bounded by the caller's own
+ * prompt rather than by the stream, and it is the half a reader cannot reconstruct from anything
+ * else.
+ */
+function createBoundedTranscript(
+  seed: TranscriptTurn[],
+  secrets: string[],
+  maxChars: number,
+): Transcript {
+  const turns: TranscriptTurn[] = [...seed]
+  const sizeOf = (turn: TranscriptTurn): number => {
+    try {
+      return JSON.stringify(turn)?.length ?? 0
+    } catch {
+      // An un-serialisable turn cannot be retained at all, so charge it nothing and let the
+      // append below drop it on its own terms.
+      return Number.POSITIVE_INFINITY
+    }
+  }
+  let retained = turns.reduce((n, turn) => n + sizeOf(turn), 0)
+  const dropped = { turns: 0, chars: 0 }
+  return {
+    append(turn) {
+      const size = sizeOf(turn)
+      if (retained + size > maxChars) {
+        dropped.turns += 1
+        dropped.chars += Number.isFinite(size) ? size : 0
+        return
+      }
+      turns.push(turn)
+      retained += size
+    },
+    snapshot() {
+      const encoded = dropped.turns
+        ? [
+            ...turns,
+            {
+              role: ELIDED_ROLE,
+              content:
+                `${dropped.turns} later turn(s), ${dropped.chars} chars, were not retained: ` +
+                `this conversation reached the ${maxChars}-char reconstruction bound`,
+            },
+          ]
+        : turns
+      return {
+        text: redactBody(safeSerialise(encoded), secrets),
+        messageCount: encoded.length,
+      }
+    },
+  }
+}
+
+/**
+ * Count the turns and assemble NO bodies — for a driver that has nowhere to put them (the backend
+ * with `LLM_RECORD_PROMPTS` off, where the store drops every body it is handed).
+ *
+ * `messageCount` stays real, because it is a COUNT rather than a body and every consumer of the
+ * metric wants it. The point is not to omit data the gate would keep; it is that serialising a
+ * transcript the gate is about to drop is pure cost, and the whole reason bodies travel to the
+ * recorder as thunks (`CLAUDE.md` → "Telemetry & agent-context observability").
+ */
+function createCountingTranscript(seed: TranscriptTurn[]): Transcript {
+  let messageCount = seed.length
+  return {
+    append() {
+      messageCount += 1
+    },
+    snapshot: () => ({ text: '', messageCount }),
+  }
+}
+
+/** Serialise a transcript for the store, never throwing into the stream that produced it. */
+function safeSerialise(turns: TranscriptTurn[]): string {
+  try {
+    return JSON.stringify(turns) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 /** The per-call telemetry the Claude Code stream yields, assembled behind one small surface. */
 export interface ClaudeStreamTelemetry {
   /** Fold an `assistant` envelope in (parent-loop turns only — see {@link isSubagentEvent}). */
@@ -155,20 +290,26 @@ export interface ClaudeStreamTelemetry {
  * was not sent. A subagent's conversation seeds EMPTY — its prompt was minted by the CLI and never
  * crosses this stream — which is also why its first call carries `messageCount: 0` (the backend's
  * `latestChainTip` skips those on purpose: there is no re-sendable chain to delta against).
- * Bodies are credential-scrubbed; they can echo the leased token.
+ * Bodies are credential-scrubbed; they can echo the leased token — and assembled at all only when
+ * {@link ClaudeStreamTelemetryOptions.bodies} says a driver has somewhere to put them. The
+ * transcript is bounded either way ({@link MAX_TRANSCRIPT_CHARS}).
  *
  * Deliberately does NOT touch {@link PiRunStats}: the run's tool/output counters describe whether
  * the agent ACTED at all (`agentNeverActed`), which is true of a subagent's turns whichever channel
  * ends up owning their telemetry rows. The caller accumulates them off the raw stream instead.
  */
-export function createClaudeStreamTelemetry(opts: {
-  seed: TranscriptTurn[]
-  secrets: string[]
-  publish: (metric: HarnessCallMetric) => void
-}): ClaudeStreamTelemetry {
-  const messages: TranscriptTurn[] = [...opts.seed]
-  let callPrompt = ''
-  let callMessageCount = 0
+export function createClaudeStreamTelemetry(
+  opts: ClaudeStreamTelemetryOptions,
+): ClaudeStreamTelemetry {
+  const bodies = opts.bodies ?? true
+  const transcript = bodies
+    ? createBoundedTranscript(
+        opts.seed,
+        opts.secrets,
+        opts.maxTranscriptChars ?? MAX_TRANSCRIPT_CHARS,
+      )
+    : createCountingTranscript(opts.seed)
+  let sent = { text: '', messageCount: 0 }
 
   // The aggregator IS the surface: the transcript and metric work happens in its callbacks, so
   // there is nothing to wrap it in.
@@ -177,16 +318,15 @@ export function createClaudeStreamTelemetry(opts: {
     // produced the response, and later envelopes of the same call must not see the turns it
     // went on to add.
     onCallStart: () => {
-      callPrompt = redactBody(JSON.stringify(messages), opts.secrets)
-      callMessageCount = messages.length
+      sent = transcript.snapshot()
     },
     onCall: (call) => {
       opts.publish({
         ...(call.model ? { model: call.model } : {}),
-        promptText: callPrompt,
-        messageCount: callMessageCount,
-        responseText: redactBody(call.text, opts.secrets),
-        reasoningText: redactBody(call.reasoning, opts.secrets),
+        promptText: sent.text,
+        messageCount: sent.messageCount,
+        responseText: bodies ? redactBody(call.text, opts.secrets) : '',
+        reasoningText: bodies ? redactBody(call.reasoning, opts.secrets) : '',
         inputTokens: call.inputTokens,
         cacheReadTokens: call.cacheReadTokens,
         cacheWriteTokens: call.cacheWriteTokens,
@@ -195,10 +335,28 @@ export function createClaudeStreamTelemetry(opts: {
       })
       // Appended only now, so each call's prompt stays a strict prefix of the next and the
       // backend's telemetry chain delta-compresses cleanly.
-      messages.push({ role: 'assistant', content: call.content })
-      for (const result of call.toolResults) messages.push({ role: 'tool', content: result })
+      transcript.append({ role: 'assistant', content: call.content })
+      for (const result of call.toolResults) transcript.append({ role: 'tool', content: result })
     },
   })
+}
+
+/** How one conversation's per-call telemetry is assembled. */
+export interface ClaudeStreamTelemetryOptions {
+  seed: TranscriptTurn[]
+  secrets: string[]
+  publish: (metric: HarnessCallMetric) => void
+  /**
+   * Whether to assemble the prompt/response BODIES at all. Absent ⇒ true (the container harness,
+   * whose job result carries them).
+   *
+   * `false` for a driver whose store will drop them — the backend with `LLM_RECORD_PROMPTS` off —
+   * where reconstructing a transcript per call is pure cost. Token counts, `messageCount` and
+   * finish reasons are unaffected: only the bodies go.
+   */
+  bodies?: boolean
+  /** Retention bound override (tests). Absent ⇒ {@link MAX_TRANSCRIPT_CHARS}. */
+  maxTranscriptChars?: number
 }
 
 /**
@@ -238,10 +396,7 @@ export function isSubagentEvent(event: Record<string, unknown>): boolean {
  * one stream: folding them into a single chain is exactly the defect this whole module removes,
  * one level down.
  */
-function createSubagentStreamTelemetry(opts: {
-  secrets: string[]
-  publish: (metric: HarnessCallMetric) => void
-}): {
+function createSubagentStreamTelemetry(opts: Omit<ClaudeStreamTelemetryOptions, 'seed'>): {
   onAssistant(dispatchId: string, message: Record<string, unknown>): void
   onToolResult(dispatchId: string, content: unknown[]): void
   flush(): void
@@ -251,11 +406,8 @@ function createSubagentStreamTelemetry(opts: {
     let telemetry = perDispatch.get(dispatchId)
     if (!telemetry) {
       // Seeded EMPTY: the CLI minted this subagent's prompt and it never crossed the stream.
-      telemetry = createClaudeStreamTelemetry({
-        seed: [],
-        secrets: opts.secrets,
-        publish: opts.publish,
-      })
+      // Each dispatch gets its OWN retention bound, since each is its own conversation.
+      telemetry = createClaudeStreamTelemetry({ ...opts, seed: [] })
       perDispatch.set(dispatchId, telemetry)
     }
     return telemetry
@@ -301,12 +453,9 @@ export interface ClaudeRunTelemetry {
  * instead, on per-dispatch transcripts of their own. Dropping them in that case would leave the run
  * billed by neither channel, and an under-count reads as a cheap run rather than as an error.
  */
-export function createClaudeRunTelemetry(opts: {
-  seed: TranscriptTurn[]
-  secrets: string[]
-  watcherOwnsSubagents: boolean
-  publish: (metric: HarnessCallMetric) => void
-}): ClaudeRunTelemetry {
+export function createClaudeRunTelemetry(
+  opts: ClaudeStreamTelemetryOptions & { watcherOwnsSubagents: boolean },
+): ClaudeRunTelemetry {
   const parent = createClaudeStreamTelemetry(opts)
   const subagents = opts.watcherOwnsSubagents ? undefined : createSubagentStreamTelemetry(opts)
   let sawSubagentTurn = false

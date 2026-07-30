@@ -2,9 +2,12 @@ export { CompositeModelProvider, type ModelResolver, type ProviderRegistry } fro
 export { MODEL_SUPPORT_DOCS } from './docs.js'
 export {
   CliInlineLanguageModel,
+  reportsOwnLlmCalls,
   type InlineCliRequest,
   type InlineCliResult,
   type InlineCliRunner,
+  type InlineCliTelemetry,
+  type SelfReportingLanguageModel,
 } from './cli-inline.js'
 export {
   InstrumentedModelProvider,

@@ -716,6 +716,77 @@ behaviour changes.
 | 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there (its FAILURE-path legibility already landed via the `detail` fold — what's left is the running view). | D2, D2.1, A5 (harness half) | P1  |        |
 | 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs.                                                                                                                                                                                                                                                                          | C2 (coverage half)          | P2  | ✅     |
 | 5.7 | Close the two attribution holes 5.6 left: apply the instrumentation OUTSIDE any facade wrap that substitutes a resolved model (local mode's subscription-inline harness), through one composer that owns the order, and fall back to the credential scope's `executionId` — narrowed to a LIVE run — for a call whose tag names no run.                                                                                                                                                                    | C2 (coverage half)          | P1  | ✅     |
+| 5.8 | Make an inline step served by a harness CLI report PER CALL and LIVE: the model takes the facade's recorder, publishes each call off the CLI's `stream-json` as it arrives (reusing the container harness's own fold), and stands the instrumentation middleware down. Closes the three things 5.7 structurally could not — one lumped row for a whole tool loop, nothing at all until the subprocess exits, and zeros whenever it was killed.                                                             | C2 (coverage half)          | P1  | ✅     |
+
+#### What 5.8 shipped
+
+An inline step on a harness CLI is not one model call. `doc-researcher` on a host `claude` login
+runs a tool loop — a measured run made 16 calls over 8 minutes — behind ONE `doGenerate`. The
+middleware wrapped around that boundary is therefore structurally unable to tell the truth about it,
+in three different ways at once, all of which 5.7's attribution fix left in place:
+
+- **One row for sixteen calls.** `message_count` 2 and `tool_count` 0 on a row whose loop used tools
+  all the way through; `total_ms` 497316 for "one call"; the fifteen intermediate turns' bodies
+  nowhere. The container transport threw its `callMetrics` away for the same reason — nothing on
+  `InlineCliResult` could carry them.
+- **Nothing until the subprocess exits.** `wrapGenerate` is a post-hoc hook with no `wrapStream`
+  sibling, and `spawnCliExec` settles only in `child.on('close')`. So a run reported zero calls for
+  its entire 8 minutes, which is exactly when someone is looking.
+- **Zeros on a kill.** The error path passes `result: undefined` to `emit`, so `readUsage(undefined)`
+  returns all-zero and the burn survives only in the free-text `error_message` (through the lossy
+  `formatTokens`, so `896.7k` is not even recoverable as an integer). 5.6's row for a killed
+  `doc-researcher` read `total_tokens 0` beside a message saying it had burned 896.7k.
+
+The fix inverts who reports: `CliInlineLanguageModel` takes the facade's `InlineLlmCallRecorder` and
+files each call the CLI reports, as it arrives, then declares `reportsOwnLlmCalls` so
+`InstrumentedModelProvider` returns it unwrapped instead of adding a duplicate. Notes:
+
+- **The per-call fold is IMPORTED, not re-written.** Claude Code emits one envelope per content
+  BLOCK, each repeating that call's usage, so folding by `message.id` first is the difference between
+  31 calls and 117 (1.47M tokens inflated to 5.53M). The container harness had solved that, plus the
+  prompt-transcript reconstruction and the routing of subagent turns off the parent's chain; local
+  carried a lesser copy of just the usage half. It now drives `createClaudeRunTelemetry` through the
+  new `@cat-factory/executor-harness/claude-call-aggregator` subpath, so there is one implementation
+  and both transports agree on what a call is.
+- **Sharing it made the backend a second DRIVER of that reconstruction, which had only ever run in a
+  container.** In a box sized for one job, holding the growing history and re-serialising it per call
+  costs nothing anyone notices; in the orchestrator process it is per concurrent inline step, on
+  exactly the long tool loops this work exists for — the fault `OUTPUT_TAIL_RETAIN_CHARS` already
+  refuses one screen away in the same file. So the transcript is retained only to
+  `MAX_TRANSCRIPT_CHARS` (512 KiB, the store's own `MAX_BODY_CHARS`: past that, retention could only
+  ever be thrown away), freezing the tail and STATING what it stopped retaining rather than ending
+  mid-conversation; and assembling bodies at all is a switch, off when `LLM_RECORD_PROMPTS` is. These
+  bodies are the one kind that is BUILT rather than passed as a thunk, so the usual "let the gate drop
+  it" answer does not apply — the refusal has to happen at the source.
+- **The step-level row carries the SHORTFALL, not a lump.** Terminal cumulative usage minus what the
+  per-call rows accounted for, per input class, which is one rule for three cases: `codex exec`
+  narrates nothing ⇒ the whole step, as the single row the SDK boundary knows; a fully-narrated step ⇒
+  nothing (a row there would double every token); a PART-narrated step ⇒ the remainder. That third
+  case is the one an "aggregate only when nothing was costed" rule got wrong — an older CLI build, or a
+  turn that errored before reporting usage, left its spend recorded by nothing at all. The container
+  harness answers the same case differently (`attributeCumulativeUsage` pins the run total onto the
+  last call, keeping a row per turn), so this is stated as its own row and the inconsistent narration
+  is logged rather than described as mirroring it. An uncosted turn is never filed as a zero-token row,
+  and that rule lives with the MODEL, so it holds for the host CLI's stream and a container inline
+  job's terminal `callMetrics` alike.
+- **A killed step still gets a failure row**, at the ordinal after the last completed call, with zero
+  tokens — which is now TRUE of it (it stands for the interrupted call, and everything the run did
+  spend is already recorded call by call) rather than a claim about the whole step. Every fold step is
+  isolated for the same reason: the reader runs inside the spawn's `stdout` listener, and its flush on
+  the killed path runs BEFORE the failure is enriched with the burn clause, so a throw there would
+  replace the CLI's own failure with a telemetry error.
+- **Each row names the model that SERVED the call** (`call.model ?? requested`), matching
+  `makeHarnessCallRecorder`. Cost is derived per row from `(model, token classes)` and a CLI serves
+  some calls with a cheaper model of its own, so filing them all under the requested id misprices them.
+
+**Deliberately still open: the spend LEDGER.** `token_usage` is written from the agent result's
+`usage` on the success path only (`RunDispatcher`), so a failed step still writes no ledger row on
+either transport and the budget rollups stay blind to what it burned. Closing that needs the
+failure-path recording seam in orchestration that 5.6's predecessor already scoped, covering the
+container path in the same change — not a fourth pass over the inline provider. Related and separate:
+an inline call served by the developer's own AMBIENT login is currently ledgered
+`billing: 'metered'` with no vendor, so it charges the workspace's monetary budget for tokens that
+cost nothing; the container path tags such a step `'subscription'` and the inline executor does not.
 
 #### What 5.6 shipped
 

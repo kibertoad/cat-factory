@@ -281,3 +281,76 @@ describe('createClaudeRunTelemetry', () => {
     expect(published).toEqual([])
   })
 })
+
+/**
+ * The transcript is retained in the DRIVER's own process, and the backend is one of the two drivers
+ * — so a tool loop that reads large files must not be able to grow it without limit. These pin the
+ * two ways that is bounded.
+ */
+describe('createClaudeStreamTelemetry retention', () => {
+  /** One costed turn whose response text is `size` chars of filler. */
+  function bulkyTurn(id: string, size: number, tokens: number) {
+    return envelope(id, [{ type: 'text', text: 'x'.repeat(size) }], {
+      input_tokens: tokens,
+      output_tokens: 1,
+    })
+  }
+
+  function bounded(maxTranscriptChars: number, bodies = true) {
+    const published: HarnessCallMetric[] = []
+    const telemetry = createClaudeRunTelemetry({
+      seed: [{ role: 'user', content: 'GO' }],
+      secrets: [],
+      watcherOwnsSubagents: false,
+      bodies,
+      maxTranscriptChars,
+      publish: (metric) => published.push(metric),
+    })
+    return { published, telemetry }
+  }
+
+  it('stops retaining at the bound and says what it stopped retaining', () => {
+    const { published, telemetry } = bounded(2_000)
+    // Three turns of ~1.5k each: the first fits, and the rest cannot.
+    for (const [i, id] of ['msg_1', 'msg_2', 'msg_3', 'msg_4'].entries()) {
+      telemetry.onAssistant(undefined, bulkyTurn(id, 1_500, 10 * (i + 1)))
+    }
+    telemetry.flush()
+
+    expect(published).toHaveLength(4)
+    // Every prompt stays within the bound, plus the note's own length — the point being that it
+    // does not grow with the loop.
+    for (const call of published) expect(call.promptText.length).toBeLessThan(4_000)
+    // Not silently truncated: the last call's prompt names what is missing from it, and the token
+    // counts are untouched by any of this.
+    const last = published.at(-1)!
+    expect(last.promptText).toContain('were not retained')
+    expect(last.promptText).toContain('cat-factory:elided')
+    expect(published.map((c) => c.inputTokens)).toEqual([10, 20, 30, 40])
+  })
+
+  it('keeps the seed and the early history rather than the recent turns', () => {
+    const { published, telemetry } = bounded(2_000)
+    telemetry.onAssistant(undefined, bulkyTurn('msg_1', 1_500, 10))
+    telemetry.onAssistant(undefined, bulkyTurn('msg_2', 1_500, 20))
+    telemetry.flush()
+    // Freezing the tail (rather than evicting the head) keeps what the caller actually sent — the
+    // half no later turn can be reconstructed from — and keeps each prompt a stable prefix.
+    expect(published.at(-1)!.promptText).toContain('GO')
+  })
+
+  it('assembles no bodies at all when the driver retains none', () => {
+    const { published, telemetry } = bounded(1_000_000, false)
+    telemetry.onAssistant(undefined, bulkyTurn('msg_1', 5_000, 10))
+    telemetry.onToolResult(undefined, [{ type: 'tool_result', content: 'y'.repeat(5_000) }])
+    telemetry.onAssistant(undefined, bulkyTurn('msg_2', 5_000, 20))
+    telemetry.flush()
+
+    // Bodies gone, because the store would drop them; everything a rollup reads is still here.
+    expect(published.map((c) => c.promptText)).toEqual(['', ''])
+    expect(published.map((c) => c.responseText)).toEqual(['', ''])
+    expect(published.map((c) => c.inputTokens)).toEqual([10, 20])
+    // `messageCount` is a COUNT, not a body: the seed, then the turns the loop added.
+    expect(published.map((c) => c.messageCount)).toEqual([1, 3])
+  })
+})

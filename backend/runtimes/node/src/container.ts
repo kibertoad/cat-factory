@@ -7,6 +7,7 @@ import { type NotificationWebhookService } from '@cat-factory/integrations'
 import {
   type Clock,
   type GitHubInstallationRepository,
+  type InlineLlmCallRecorder,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
@@ -152,12 +153,13 @@ function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
 }
 
 /**
- * The subscription-credential lease seams `buildNodeContainer` hands to
- * {@link NodeContainerOptions.wrapModelProviderResolver}. Present only when the corresponding
- * subscription service is configured (ENCRYPTION_KEY + a token store). The local facade's
- * inline-harness wrap uses them to lease a credential for an inline subscription call run in a
- * warm container — the personal per-run activation for an individual vendor, the pooled token
- * otherwise — mirroring `ContainerAgentExecutor.resolveAuth`.
+ * The seams `buildNodeContainer` hands to
+ * {@link NodeContainerOptions.wrapModelProviderResolver}: the subscription-credential leases,
+ * present only when the corresponding subscription service is configured (ENCRYPTION_KEY + a token
+ * store), plus the inline metric recorder. The local facade's inline-harness wrap uses the leases
+ * to lease a credential for an inline subscription call run in a warm container — the personal
+ * per-run activation for an individual vendor, the pooled token otherwise — mirroring
+ * `ContainerAgentExecutor.resolveAuth`.
  */
 export interface ModelProviderResolverWrapDeps {
   leasePersonalSubscriptionToken?: (
@@ -169,6 +171,37 @@ export interface ModelProviderResolverWrapDeps {
     workspaceId: string,
     vendor: SubscriptionVendor,
   ) => Promise<{ secret: string }>
+  /**
+   * The facade's `llm_call_metrics` recorder, for a wrap whose model SUBSTITUTION can report its
+   * own per-call telemetry — local mode's inline harness, where one `generateText` is a whole CLI
+   * tool loop and so the instrumentation middleware around it can only ever see one lumped call,
+   * after the fact. Such a model files its own rows and stands the middleware down
+   * (`reportsOwnLlmCalls` in `@cat-factory/agents`); a wrap that substitutes nothing ignores this.
+   *
+   * The SAME recorder the instrumentation is built with (`createInlineInstrumentation`), never a
+   * second one: the service behind it owns the external trace-sink fan-out, so two instances would
+   * split one run's trace.
+   *
+   * REQUIRED but nullable, unlike the leases above: `undefined` is the real answer for a facade
+   * that retains no metrics (the middleware then keeps doing what it can), but a facade that
+   * FORGOT to pass it looks identical — and the symptom would be the one this whole seam exists to
+   * remove, a run reporting no model activity while it spends millions of tokens. An omitted
+   * optional field fails silently; an omitted required one fails at typecheck. Same argument as
+   * `InstrumentedModelProvider`'s `workspaceBodiesEnabled`.
+   */
+  recordInlineCall: InlineLlmCallRecorder | undefined
+  /**
+   * The deployment's `LLM_RECORD_PROMPTS` switch, for the same wrap.
+   *
+   * A harness CLI's per-call bodies are not handed to us, they are RECONSTRUCTED: the growing
+   * request transcript, re-serialised at every call, retained in this process. So unlike a body that
+   * merely travels as a thunk, one nobody will keep has to be refused at the SOURCE — hence a flag
+   * beside the recorder rather than a gate further down.
+   *
+   * REQUIRED for the same reason as {@link recordInlineCall}: `false` is a real answer, an omission
+   * is a wiring mistake, and only a required field tells them apart.
+   */
+  recordInlineBodies: boolean
 }
 
 // The composition-root options surface lives beside this builder in `container-options.ts` (a

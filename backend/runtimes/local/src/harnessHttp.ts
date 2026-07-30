@@ -1,6 +1,7 @@
 import {
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
+  type HarnessCallMetric,
   type RunnerJobView,
 } from '@cat-factory/kernel'
 
@@ -146,6 +147,15 @@ export interface InlineJobResult {
     cacheWriteTokens?: number
     outputTokens?: number
   }
+  /**
+   * Every model call the harness's CLI made, lifted off its event stream — the same per-call
+   * telemetry a CODING job returns, which the harness already assembles for an inline job and
+   * this shape simply had nowhere to put. An inline job is one `generateText` to its caller but a
+   * whole tool loop to the CLI, so without these the step's spend collapses into the lumped
+   * {@link usage} above: right in total, silent about how many turns produced it and what each
+   * one carried. Absent on a harness image that reports none, which degrades to that lumped row.
+   */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /** The harness `/jobs/{id}` view for an `inline` job (its own result shape, not RunnerJobView). */

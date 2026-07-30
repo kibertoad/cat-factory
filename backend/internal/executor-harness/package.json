@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.80.0",
+  "version": "1.81.0",
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
   "repository": {
     "type": "git",
@@ -15,7 +15,11 @@
   "main": "./dist/server.js",
   "exports": {
     ".": "./dist/server.js",
-    "./embed": "./src/embed.ts"
+    "./embed": "./src/embed.ts",
+    "./claude-call-aggregator": {
+      "types": "./dist/claude-call-aggregator.d.ts",
+      "default": "./dist/claude-call-aggregator.js"
+    }
   },
   "publishConfig": {
     "access": "public"

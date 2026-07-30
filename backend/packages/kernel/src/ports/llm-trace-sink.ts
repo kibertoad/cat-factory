@@ -228,3 +228,50 @@ export function readInlineObservabilityContext(params: unknown): InlineObservabi
   const executionId = typeof raw?.executionId === 'string' ? raw.executionId : undefined
   return { agentKind, workspaceId, executionId }
 }
+
+/**
+ * Where an inline call's row is FILED when the per-call tag doesn't say: the credential scope
+ * the provider was built for. Both halves are optional because both are genuinely absent on
+ * some scopes — one built outside a run has no `executionId`, one built outside a workspace
+ * (a platform-level call) has no `workspaceId`.
+ */
+export interface InlineAttributionScope {
+  workspaceId?: string
+  executionId?: string
+}
+
+/** Which workspace + run one inline call's telemetry is filed under, and what to label it. */
+export interface InlineAttribution {
+  workspaceId: string | null
+  executionId: string | null
+  agentKind: string
+}
+
+/**
+ * Resolve which workspace and run an inline call's telemetry belongs to: the call's OWN
+ * `catFactoryObservability` tag first, then the credential scope its provider was built for.
+ *
+ * ONE function because there are now TWO producers of inline rows and the precedence is
+ * load-bearing for both: `InstrumentedModelProvider`'s middleware records the call it wrapped,
+ * and a model that reports its own per-call telemetry (`reportsOwnLlmCalls` in
+ * `@cat-factory/agents`) records from inside the model, where the middleware has stood down. A
+ * row filed under a DIFFERENT run than its siblings is worse than an unrecorded one — it is in
+ * the store and absent from every run-scoped read (`listByExecution`, a step's rollup,
+ * `/api/v1/debug/runs/*`), which reads as a step that spent nothing — so the two producers must
+ * not each restate this.
+ *
+ * The TAG wins where present: a scope is per-provider while a tag is per-call, so a caller that
+ * fans one scope out across participants (consensus) has to be able to say so. Absent on both ⇒
+ * null, the honest answer for a genuinely un-run-scoped call, never guessed at from anything else.
+ */
+export function resolveInlineAttribution(
+  params: unknown,
+  scope: InlineAttributionScope | undefined,
+): InlineAttribution {
+  const context = readInlineObservabilityContext(params)
+  return {
+    workspaceId: context.workspaceId ?? scope?.workspaceId ?? null,
+    executionId: context.executionId ?? scope?.executionId ?? null,
+    agentKind: context.agentKind,
+  }
+}

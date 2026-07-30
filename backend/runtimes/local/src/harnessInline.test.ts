@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  HarnessCallMetric,
   InlineLlmCall,
   InlineObservabilityContext,
   ModelProvider,
@@ -11,6 +12,7 @@ import { catFactoryObservability } from '@cat-factory/kernel'
 import {
   CliInlineLanguageModel,
   type InlineCliRequest,
+  reportsOwnLlmCalls,
   vendorConcurrencyLimiterFromEnv,
 } from '@cat-factory/agents'
 import { MAX_TIMER_DELAY_MS, wrapResolverWithTelemetry } from '@cat-factory/server'
@@ -177,6 +179,78 @@ describe('wrapResolverWithInlineHarness', () => {
     )
   })
 
+  // The recorder is what makes the substituted model own its rows instead of leaving them to the
+  // instrumentation middleware — which, around a CLI that runs a whole tool loop per generate, can
+  // only ever report one lumped call, after the fact. Absent, nothing changes: the middleware keeps
+  // doing what it can on a deployment that retains no metrics.
+  it('hands the substituted model the inline recorder, so it claims its own calls', async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const withRecorder = await wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(['claude']),
+      recordInlineCall: async () => {},
+    })(innerResolver(inner)).forScope({ workspaceId: 'ws' })
+    expect(reportsOwnLlmCalls(withRecorder.resolve(CLAUDE_SUB))).toBe(true)
+
+    const withoutRecorder = await wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(['claude']),
+    })(innerResolver(inner)).forScope({ workspaceId: 'ws' })
+    expect(reportsOwnLlmCalls(withoutRecorder.resolve(CLAUDE_SUB))).toBe(false)
+  })
+
+  // Both transports file through the same seam, so the CONTAINER path must forward the per-call
+  // telemetry its harness returns rather than letting it collapse into the job's lumped `usage`.
+  it("forwards a container inline job's per-call metrics to the reporter", async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const runInline = async (): Promise<InlineJobResult> => ({
+      text: 'done',
+      usage: { inputTokens: 30, outputTokens: 4 },
+      callMetrics: [
+        {
+          promptText: '[]',
+          messageCount: 2,
+          responseText: 'first',
+          reasoningText: '',
+          inputTokens: 10,
+          cacheReadTokens: 1,
+          cacheWriteTokens: 0,
+          outputTokens: 2,
+          finishReason: 'tool_use',
+        },
+        {
+          promptText: '[]',
+          messageCount: 3,
+          responseText: 'second',
+          reasoningText: '',
+          inputTokens: 20,
+          cacheReadTokens: 2,
+          cacheWriteTokens: 0,
+          outputTokens: 2,
+          finishReason: 'end_turn',
+        },
+      ],
+    })
+    const provider = await wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(), // no host CLI → container path
+      runInline,
+      leaseSubscriptionToken: async () => ({ secret: 'tok' }),
+    })(innerResolver(inner)).forScope({ workspaceId: 'ws' })
+    const runner = (
+      provider.resolve(KIMI_SUB) as unknown as { run: (r: InlineCliRequest) => Promise<unknown> }
+    ).run
+
+    const reported: HarnessCallMetric[] = []
+    await runner({
+      model: 'kimi-k2.6',
+      system: 's',
+      prompt: 'go',
+      reportCall: (c) => reported.push(c),
+    })
+    expect(reported.map((c) => c.responseText)).toEqual(['first', 'second'])
+  })
+
   it('is a passthrough when no inline harnesses are enabled', async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
     const wrap = wrapResolverWithInlineHarness({ inlineHarnesses: [], hostCliVendors: new Set() })
@@ -295,9 +369,127 @@ describe('runnerForVendor', () => {
       expect(result.text).toBe('plain text answer')
     })
 
-    // The point of streaming rather than taking the one-shot `json` object: a killed run has no
-    // terminal event, so without the partial stream it could report nothing about what it spent —
-    // and nothing else records it either (a failed step writes no `token_usage` row).
+    // The reason the whole telemetry story hangs off the stream: a step that works for eight
+    // minutes must be observable WHILE it works. Each call is published the moment the CLI
+    // finishes it — before the exec resolves — so a run's spend is on record turn by turn instead
+    // of arriving as one lumped row at exit (or, on a kill, not at all).
+    it('publishes each model call as the stream yields it, not at the end', async () => {
+      const seenAtCallTime: number[] = []
+      const reported: HarnessCallMetric[] = []
+      // Delivers two calls, checking after each what the reporter has already been told.
+      const exec: CliExec = async (_command, _args, _stdin, opts) => {
+        opts?.onLine?.(envelope('msg_1', { input_tokens: 10, output_tokens: 2 }))
+        // msg_1 only completes when a DIFFERENT id arrives — that is what makes it one call rather
+        // than one per content block.
+        opts?.onLine?.(envelope('msg_2', { input_tokens: 20, output_tokens: 3 }))
+        seenAtCallTime.push(reported.length)
+        opts?.onLine?.(
+          event({
+            type: 'result',
+            subtype: 'success',
+            result: 'DONE',
+            usage: { input_tokens: 30 },
+          }),
+        )
+        return ''
+      }
+      const result = await runnerForVendor(
+        'claude',
+        exec,
+      )({
+        ...req,
+        reportCall: (call) => reported.push(call),
+        reportBodies: true,
+      })
+
+      // One call was already published mid-stream; the second only on close (nothing else had
+      // arrived to complete it).
+      expect(seenAtCallTime).toEqual([1])
+      expect(result.text).toBe('DONE')
+      expect(reported).toHaveLength(2)
+      expect(reported.map((c) => c.inputTokens)).toEqual([10, 20])
+      // The prompt is reconstructed as the model was actually sent it: the seeded system + user
+      // turns, then the turns the loop added. So the SECOND call's prompt is longer than the first's.
+      expect(reported[0]!.messageCount).toBe(2)
+      expect(reported[0]!.promptText).toContain('You are a reviewer.')
+      expect(reported[1]!.messageCount).toBeGreaterThan(reported[0]!.messageCount)
+    })
+
+    // A killed run's interrupted turn is only published on flush, and it is exactly the one whose
+    // spend would otherwise die with the subprocess.
+    it('publishes the turn the kill interrupted, alongside the ones that completed', async () => {
+      const reported: HarnessCallMetric[] = []
+      const exec = dyingExec(
+        [
+          envelope('msg_1', { input_tokens: 10, output_tokens: 2 }),
+          envelope('msg_2', { input_tokens: 20, output_tokens: 3 }),
+        ].join('\n'),
+        new CliExecFailure('claude timed out after 300000ms', 'timeout'),
+      )
+      await expect(
+        runnerForVendor('claude', exec)({ ...req, reportCall: (call) => reported.push(call) }),
+      ).rejects.toThrow(/timed out/)
+      expect(reported.map((c) => c.inputTokens)).toEqual([10, 20])
+    })
+
+    // Reconstructing the request transcript means holding the loop's growing history in THIS
+    // process. A deployment whose store drops bodies must not pay for that, and `reportBodies` is
+    // how the model says so — the counts a rollup reads arrive either way.
+    it('reconstructs no transcript when the caller retains no bodies', async () => {
+      const reported: HarnessCallMetric[] = []
+      const { exec } = fakeExec(
+        [
+          envelope('msg_1', { input_tokens: 10, output_tokens: 2 }),
+          envelope('msg_2', { input_tokens: 20, output_tokens: 3 }),
+          event({
+            type: 'result',
+            subtype: 'success',
+            result: 'DONE',
+            usage: { input_tokens: 30 },
+          }),
+        ].join('\n'),
+      )
+      // `reportBodies` deliberately absent: a runner must not assemble bodies nobody asked for.
+      await runnerForVendor('claude', exec)({ ...req, reportCall: (call) => reported.push(call) })
+
+      expect(reported.map((c) => c.promptText)).toEqual(['', ''])
+      expect(reported.map((c) => c.inputTokens)).toEqual([10, 20])
+      expect(reported.map((c) => c.messageCount)).toEqual([2, 3])
+    })
+
+    // The fold runs inside the spawn's stdout listener (`onLine`), so anything it throws escapes
+    // into that listener and leaves the run unsettled — and on the killed path it runs BEFORE the
+    // failure is enriched, so a throw there replaces a `CliExecFailure` (losing its reason and its
+    // burn clause) with an unrelated telemetry error. A publish that throws is the reachable case:
+    // the reporter is caller-supplied, and the serialisation the fold does can exceed the engine's
+    // string limit on exactly the long loops this telemetry exists for.
+    it('survives a reporter that throws, on both the streaming and the killed path', async () => {
+      const boom = (): never => {
+        throw new Error('Invalid string length')
+      }
+      const stream = [
+        envelope('msg_1', { input_tokens: 10, output_tokens: 2 }),
+        envelope('msg_2', { input_tokens: 20, output_tokens: 3 }),
+      ]
+
+      const { exec } = fakeExec(
+        [...stream, event({ type: 'result', subtype: 'success', result: 'DONE' })].join('\n'),
+      )
+      // The LLM work still lands: telemetry may never break the call it observes.
+      const result = await runnerForVendor('claude', exec)({ ...req, reportCall: boom })
+      expect(result.text).toBe('DONE')
+
+      const dying = dyingExec(stream.join('\n'), new CliExecFailure('claude timed out', 'timeout'))
+      // Still the CLI's own failure — with its reason AND the burn clause folded from the same
+      // stream, which is what a masked telemetry throw would have cost.
+      await expect(runnerForVendor('claude', dying)({ ...req, reportCall: boom })).rejects.toThrow(
+        /timed out.*35 tokens.*across 2 model calls/,
+      )
+    })
+
+    // The breadcrumb is the HUMAN account of the same stream: a reader of the failure message gets
+    // the totals without going to the store. It is folded from the published calls, so it can never
+    // disagree with the rows.
     it('reports what a TIMED-OUT run had already burned, from its partial stream', async () => {
       const partial = [
         envelope('msg_1', {

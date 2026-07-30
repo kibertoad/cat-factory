@@ -465,8 +465,11 @@ export function makeHarnessCallRecorder(
  * - `phase` is left absent ⇒ the unattributed `''` slice. Phases are boundaries the HARNESS
  *   owns inside a container run; an inline call sits outside all of them, and stamping one
  *   would file it under a loop it never ran in.
- * - `turnIndex` is null, like the proxy's. There is no job-scoped counter here either, so these
- *   rows order by `createdAt`.
+ * - `turnIndex` is null for a plain `generateText`, like the proxy's: there is no job-scoped
+ *   counter there either, so those rows order by `createdAt`. An inline step served by a HARNESS
+ *   CLI does have one — the CLI runs a tool loop behind the single SDK call and reports each
+ *   model call it made — and passes it, so a run's inline turns order by turn like a container
+ *   step's do.
  * - `httpStatus` is null: the AI SDK owns the transport, so a failure arrives as an exception
  *   whose message is already on `errorMessage` (scrubbed by the service) rather than a status.
  * - `upstreamMs` is the whole `durationMs`, which makes the derived overhead 0 — honestly so.
@@ -496,7 +499,7 @@ export function makeInlineCallRecorder(
       provider: call.provider,
       model: call.model,
       streaming: false,
-      turnIndex: null,
+      turnIndex: call.turnIndex ?? null,
       messageCount: call.messageCount,
       toolCount: call.toolCount,
       requestMaxTokens: call.requestMaxTokens,

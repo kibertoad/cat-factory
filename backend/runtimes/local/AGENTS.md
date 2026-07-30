@@ -40,5 +40,21 @@ transport + the GitHub token/client seams differ.
   resolving a remote proxy the allow-list will only answer `unknown_method`.
 - `harnessImage.ts` — `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
   boot (must stay a matched set with the backend — `CLAUDE.md` → "Releases & changesets").
+- `harnessInline.ts` — serving an enabled subscription harness ref as an INLINE call: the
+  developer's host `claude`/`codex` (ambient login, unmetered) when its binary is present, else a
+  warm container on a leased credential. Also the host-CLI supervision budget
+  (`LOCAL_INLINE_CLI_*`) and the `stream-json` reader. That reader publishes each model call the CLI
+  makes AS IT ARRIVES, through the container harness's own fold
+  (`@cat-factory/executor-harness/claude-call-aggregator`) rather than a second one — an inline
+  `doc-researcher` here is 16+ calls over 8 minutes, so per-call-and-live is the difference between
+  a step that is observable while it works and one that reports nothing until it exits. The rows are
+  filed by the MODEL (`CliInlineLanguageModel`, handed the facade's recorder through the wrap deps),
+  not by the instrumentation middleware around it — `CLAUDE.md` → "Telemetry & agent-context
+  observability". Two things about that reader are memory rules, not niceties: the reconstruction it
+  drives is retained in THIS process, so it is bounded (`MAX_TRANSCRIPT_CHARS`) and skipped entirely
+  when the deployment retains no prompts (`recordInlineBodies`) — see `OUTPUT_TAIL_RETAIN_CHARS` in
+  the same file for the fault they avoid. And every fold step is isolated, because `onLine` runs
+  inside the spawn's `stdout` listener and the flush on the killed path runs before the failure is
+  enriched with what the run had burned.
 
 **See also:** `deploy/local/README.md`, `CLAUDE.md` → "Multi-runtime facades".

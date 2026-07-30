@@ -6,10 +6,21 @@ import {
   type InlineCliRequest,
   type InlineCliResult,
   type InlineCliRunner,
+  type InlineCliTelemetry,
 } from '@cat-factory/agents'
+// The ONE Claude Code `stream-json` per-call fold, shared with the container harness that owns it.
+// See its header for why there must not be a second one.
 import {
+  createClaudeRunTelemetry,
+  subagentDispatchId,
+  type ClaudeRunTelemetry,
+} from '@cat-factory/executor-harness/claude-call-aggregator'
+import {
+  describeError,
   describeProcessExit,
+  type HarnessCallMetric,
   type HarnessKind,
+  type InlineLlmCallRecorder,
   isAmbientNativeVendor,
   isIndividualVendor,
   type ModelProvider,
@@ -22,7 +33,7 @@ import {
   type SubscriptionVendor,
   subscriptionVendorForRef,
 } from '@cat-factory/kernel'
-import { parseTimerEnvMs } from '@cat-factory/server'
+import { logger, parseTimerEnvMs } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
 import type { InlineJobResult } from './harnessHttp.js'
 import { sanitizedChildEnv } from './childEnv.js'
@@ -443,31 +454,95 @@ const CLAUDE_ERROR_SUBTYPES = new Set(['error_max_turns', 'error_during_executio
 const FALLBACK_BODY_MAX_CHARS = 64 * 1024
 
 /**
- * Folds Claude Code's `stream-json` output AS IT ARRIVES into the two things the runner needs: the
- * run's terminal `result` event, and the cumulative telemetry of the calls that got as far as
- * reporting usage. Fed line-by-line through {@link CliExecOptions.onLine}, so it holds a bounded
- * summary instead of the stream — and it is readable after a REJECTION, which is what lets a
- * killed run still say what it spent.
+ * Reads Claude Code's `stream-json` output AS IT ARRIVES, routing it to the two things that need
+ * it: the SHARED per-call aggregator (which publishes each model call the moment the CLI finishes
+ * it), and this class's own account of the run — the terminal `result` event, the raw-text
+ * fallback, and a running total for the failure breadcrumb.
  *
- * Envelopes are keyed by `message.id` BEFORE summing, because the stream emits one envelope per
+ * Fed line-by-line through {@link CliExecOptions.onLine}, so it never holds the stream, and it stays
+ * readable after a REJECTION — which is what lets a killed run say what it spent.
+ *
+ * What it DOES retain is the aggregator's reconstructed request transcript, and that is retained in
+ * THIS process, so it is bounded on two axes rather than left to grow with the loop: the
+ * aggregator's own `MAX_TRANSCRIPT_CHARS` (which states what it stopped retaining), and the
+ * `bodies` switch, which skips the reconstruction entirely when the deployment retains no prompts.
+ * Without both, a stalled tool-using run parks the same hundreds of MB here that
+ * {@link OUTPUT_TAIL_RETAIN_CHARS} exists to refuse.
+ *
+ * The per-call fold is DELIBERATELY not implemented here. The stream emits one envelope per
  * CONTENT BLOCK of a response, each repeating that ONE call's `usage` — a turn that answers with
- * text and then fires five tool calls arrives as six envelopes. Summing per envelope therefore
- * multiplies the burn: on the run that motivated this change, 117 envelopes carried 31 real calls
- * and the naive sum inflated 1.47M tokens to 5.53M (3.8x). The container harness hit exactly this
- * trap and fixed it the same way — see `claude-call-aggregator.ts` and
- * docs/initiatives/token-burn-instrumentation.md.
+ * text then fires five tool calls arrives as six envelopes — so folding by `message.id` before
+ * summing is the difference between 31 calls and 117 (a measured 1.47M tokens inflated to 5.53M,
+ * 3.8x). `createClaudeRunTelemetry` is where that is solved, along with the prompt-transcript
+ * reconstruction and the routing of subagent turns off the parent's chain; this module used to
+ * carry a lesser copy of the same fold, which is exactly why the two paths disagreed about how
+ * many calls a step had made. See docs/initiatives/token-burn-instrumentation.md.
  *
- * {@link line} is TOTAL: it parses defensively and returns rather than throwing, which is the
- * contract {@link CliExecOptions.onLine} demands of an observer running inside a stream handler.
+ * {@link line} and {@link end} are TOTAL: they parse defensively, and every fold step runs through
+ * {@link ClaudeStreamFold.fold}, which is the contract {@link CliExecOptions.onLine} demands of an
+ * observer running inside a stream handler.
  */
 class ClaudeStreamFold {
-  /** Usage per CALL, keyed by `message.id` — a response's repeated per-block usage counts once. */
-  private readonly usageByCall = new Map<string, NonNullable<InlineCliResult['usage']>>()
-  /** Envelopes with no id can't be folded, so each stands alone instead of colliding. */
-  private anonCalls = 0
+  private readonly telemetryStream: ClaudeRunTelemetry
   private terminal: Record<string, unknown> | undefined
   private nonEventText = ''
   private sawEvent = false
+  private calls = 0
+  private readonly total = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+  private readonly log = logger.child({ scope: 'claudeStreamFold' })
+  /** Whether a fold failure has already been reported — one line per run, not per line. */
+  private foldFailed = false
+
+  /**
+   * @param seed the turns the harness supplied and the stream therefore never shows (system +
+   *   user), so a reconstructed prompt never claims a turn that was not sent.
+   * @param reportCall where each model call the CLI reports goes. Absent ⇒ the calls are still
+   *   counted for the breadcrumb, but nothing is published.
+   * @param bodies whether the published metrics' bodies will be retained anywhere. False ⇒ the
+   *   transcript is not reconstructed at all (counts only), because assembling a body the store is
+   *   about to drop is pure cost in THIS process.
+   */
+  constructor(
+    seed: { role: string; content: unknown }[],
+    private readonly reportCall?: (call: HarnessCallMetric) => void,
+    bodies = false,
+  ) {
+    this.telemetryStream = createClaudeRunTelemetry({
+      seed,
+      // The host-CLI path runs on the developer's own AMBIENT login: no credential was injected
+      // into this subprocess, so no secret of ours can be echoed back in a body. (The container
+      // inline path leases one, and redacts inside the harness where the lease is known.)
+      secrets: [],
+      // No `subagents/*.jsonl` watcher runs against an ambient CLI — it has no isolated config
+      // home to watch — so any subagent turns are billed HERE, on transcripts of their own.
+      watcherOwnsSubagents: false,
+      bodies,
+      publish: (metric) => {
+        // Only the calls that got as far as reporting a burn count toward the breadcrumb, so a
+        // stream of empty ones can't read as "burned 0 tokens across 3 model calls" and contradict
+        // the `no model call completed` branch. Every metric is still PUBLISHED: whether an
+        // uncosted turn is fileable is one rule for both transports, and it lives with the model
+        // that files them.
+        if (
+          metric.inputTokens ||
+          metric.cacheReadTokens ||
+          metric.cacheWriteTokens ||
+          metric.outputTokens
+        ) {
+          this.calls += 1
+          this.total.input += metric.inputTokens
+          this.total.cacheRead += metric.cacheReadTokens
+          this.total.cacheWrite += metric.cacheWriteTokens
+          this.total.output += metric.outputTokens
+        }
+        // Isolated, because this is a CALLER's callback running in the middle of the aggregator's
+        // own state transition (a call completes when the next one's first envelope arrives). Left
+        // to propagate, one throwing report would abandon that transition and cost the telemetry of
+        // the call that was just starting — on top of escaping into the stream handler.
+        this.fold('publish', () => this.reportCall?.(metric))
+      },
+    })
+  }
 
   line(raw: string): void {
     if (!raw.trim()) return
@@ -493,15 +568,61 @@ class ClaudeStreamFold {
       this.terminal = e
       return
     }
+    // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them; the
+    // telemetry keeps them off the parent's chain (interleaving several conversations produces a
+    // `promptText` matching no request that was ever sent).
+    const dispatchId = subagentDispatchId(e)
     const message = e.message
     if (typeof message !== 'object' || message === null) return
     const m = message as Record<string, unknown>
-    // Store the PARSED usage, so `calls` counts calls that actually reported a burn rather than
-    // envelopes that merely carried a `usage` key — otherwise a stream of empty ones reads as
-    // "burned 0 tokens across 3 model calls", contradicting the `no model call completed` branch.
-    const usage = claudeUsage(m.usage)
-    if (!usage) return
-    this.usageByCall.set(typeof m.id === 'string' ? m.id : `anon:${this.anonCalls++}`, usage)
+    if (e.type === 'assistant') {
+      this.fold('assistant', () => this.telemetryStream.onAssistant(dispatchId, m))
+      return
+    }
+    if (e.type === 'user') {
+      // The tool_result blocks fed back to the model — part of the NEXT call's prompt.
+      const content = m.content
+      if (Array.isArray(content)) {
+        this.fold('toolResult', () => this.telemetryStream.onToolResult(dispatchId, content))
+      }
+    }
+  }
+
+  /**
+   * Publish the call still in flight. Called once the stream has ended, on BOTH the clean and the
+   * killed path — on a kill it is what puts the interrupted turn's spend on record instead of
+   * losing it with the subprocess.
+   */
+  end(): void {
+    this.fold('flush', () => this.telemetryStream.flush())
+  }
+
+  /**
+   * Run one fold step, absorbing anything it throws.
+   *
+   * This is what keeps {@link line} TOTAL — the contract {@link CliExecOptions.onLine} demands of an
+   * observer running inside a stream handler, since a throw there escapes into the spawn's `stdout`
+   * listener. The fold is not trivially total: it serialises the reconstructed transcript, which can
+   * exceed the engine's string limit on exactly the long tool loops this telemetry exists for.
+   *
+   * It also keeps {@link end} total, which matters on the KILLED path: `end()` runs there before the
+   * failure is enriched with what the run had burned, so a throw would replace a `CliExecFailure`
+   * (losing its `reason` and its burn clause) with an unrelated telemetry error.
+   *
+   * Reported ONCE per run — a broken fold breaks on every line, and this observer must not turn a
+   * telemetry defect into thousands of log lines during a live run.
+   */
+  private fold(step: string, apply: () => void): void {
+    try {
+      apply()
+    } catch (error) {
+      if (this.foldFailed) return
+      this.foldFailed = true
+      this.log.warn('claude stream telemetry fold failed; per-call rows may be incomplete', {
+        step,
+        ...describeError(error),
+      })
+    }
   }
 
   private retainNonEvent(raw: string): void {
@@ -519,23 +640,19 @@ class ClaudeStreamFold {
     return this.nonEventText.trim()
   }
 
-  /** Cumulative burn across the calls that got as far as reporting usage. */
+  /** Cumulative burn across the calls published so far — the failure breadcrumb's numbers. */
   telemetry(): { calls: number; usage: InlineCliResult['usage'] } {
-    let inputTokens = 0
-    let cacheReadTokens = 0
-    let cacheWriteTokens = 0
-    let outputTokens = 0
-    for (const one of this.usageByCall.values()) {
-      inputTokens += one.inputTokens ?? 0
-      cacheReadTokens += one.cacheReadTokens ?? 0
-      cacheWriteTokens += one.cacheWriteTokens ?? 0
-      outputTokens += one.outputTokens ?? 0
-    }
-    const calls = this.usageByCall.size
     return {
-      calls,
+      calls: this.calls,
       usage:
-        calls === 0 ? undefined : { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens },
+        this.calls === 0
+          ? undefined
+          : {
+              inputTokens: this.total.input,
+              cacheReadTokens: this.total.cacheRead,
+              cacheWriteTokens: this.total.cacheWrite,
+              outputTokens: this.total.output,
+            },
     }
   }
 }
@@ -643,16 +760,18 @@ export function inlineCliBudgetFromEnv(
  *
  * Streams `--output-format stream-json --verbose` rather than taking the single-object `json`: that
  * lone result object exists ONLY if the CLI reaches the end, so a run the watchdog killed reported
- * nothing whatsoever about what it had already spent — and nothing else recorded it either, because
- * a failed step writes no `token_usage` row on either transport. The terminal event carries the same
- * fields the single object did (`-p --output-format json` prints exactly that event), so the success
- * path is unchanged; the difference is that a killed run now still has a stream to account for
- * itself with.
+ * nothing whatsoever about what it had already spent. The terminal event carries the same fields
+ * the single object did (`-p --output-format json` prints exactly that event), so the success path
+ * is unchanged; the difference is that the run's spend is now on record turn by turn, published
+ * through `reportCall` as the CLI yields each call rather than assembled at the end. A step that
+ * works for eight minutes is therefore observable WHILE it works, and one killed at minute five has
+ * every completed turn recorded — where before it produced a single row of zeros, and only once the
+ * subprocess had exited.
  *
  * The stream is consumed through {@link ClaudeStreamFold} rather than buffered — see
  * {@link OUTPUT_TAIL_RETAIN_CHARS} for why holding it would be a memory fault on exactly the runs
- * this exists to diagnose. The fold is declared OUTSIDE the try so it is still readable when the
- * run is killed, which is the whole mechanism.
+ * this exists to diagnose. The fold is declared OUTSIDE the try so it is still readable (and
+ * flushable) when the run is killed, which is the whole mechanism.
  */
 function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCliRunner {
   return async (req: InlineCliRequest): Promise<InlineCliResult> => {
@@ -667,7 +786,16 @@ function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCl
     ]
     if (req.system.trim()) args.push('--append-system-prompt', req.system)
     args.push('--model', req.model)
-    const fold = new ClaudeStreamFold()
+    // Seeded with what we sent and the stream therefore never echoes. `--append-system-prompt`
+    // means the role really was a system turn, so the reconstruction says so.
+    const fold = new ClaudeStreamFold(
+      [
+        ...(req.system.trim() ? [{ role: 'system', content: req.system }] : []),
+        { role: 'user', content: req.prompt },
+      ],
+      req.reportCall,
+      req.reportBodies ?? false,
+    )
     try {
       await exec('claude', args, req.prompt, {
         onLine: (line) => fold.line(line),
@@ -675,9 +803,13 @@ function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCl
         ...(req.signal ? { signal: req.signal } : {}),
       })
     } catch (error) {
+      // BEFORE enriching: the turn cut off by the kill is only published on flush, and it is the
+      // one whose spend would otherwise die with the subprocess.
+      fold.end()
       if (error instanceof CliExecFailure) throw withBurnClause(error, fold)
       throw error
     }
+    fold.end()
     const result = fold.result
     if (!result) {
       // No terminal event (an older CLI, or a wrapper that swallowed the stream) — fall back to the
@@ -842,6 +974,21 @@ export interface InlineHarnessResolverDeps extends InlineLeaseDeps {
    * the transport's own `requestTimeoutMs`.
    */
   cliBudget?: InlineCliBudget
+  /**
+   * Where the calls an inline harness CLI reports are filed — the facade's `llm_call_metrics`
+   * recorder, threaded in from `buildNodeModelDeps` (which owns the ONE inline instrumentation).
+   *
+   * Present ⇒ the model this wrap substitutes files its own per-call rows and the instrumentation
+   * middleware around it stands down (`reportsOwnLlmCalls`). Absent ⇒ nothing changes: a
+   * deployment that retains no metrics keeps the middleware's single aggregate generation per step.
+   */
+  recordInlineCall?: InlineLlmCallRecorder
+  /**
+   * The deployment's `LLM_RECORD_PROMPTS` switch, threaded from the same instrumentation as
+   * {@link recordInlineCall}. Absent ⇒ false: the host-CLI reader then reports its calls' counts
+   * without reconstructing the request transcripts nothing will keep.
+   */
+  recordInlineBodies?: boolean
 }
 
 /**
@@ -900,6 +1047,12 @@ function makeContainerRunner(
       ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
       ...(req.signal ? { signal: req.signal } : {}),
     })
+    // Terminally, not live: a container inline job is awaited over one HTTP call, so its CLI's
+    // per-call telemetry only reaches us when the job finishes. Still every turn rather than one
+    // lumped row, and the model files them exactly as it files the host CLI's.
+    if (req.reportCall) {
+      for (const call of result.callMetrics ?? []) req.reportCall(call)
+    }
     return {
       text: result.text,
       ...(result.finishReason ? { finishReason: result.finishReason } : {}),
@@ -957,6 +1110,7 @@ class SubscriptionInlineModelProvider implements ModelProvider {
         ref.provider,
         ref.model,
         runnerForVendor(nativeVendor, this.deps.exec ?? spawnCliExec, this.deps.cliBudget ?? {}),
+        ...this.telemetry(),
       )
     }
     // Otherwise run it in a warm container on a leased credential (the compatibility path — no
@@ -965,7 +1119,34 @@ class SubscriptionInlineModelProvider implements ModelProvider {
       ref.provider,
       ref.model,
       makeContainerRunner(vendor, ref, this.scope, this.deps),
+      ...this.telemetry(),
     )
+  }
+
+  /**
+   * The per-call telemetry both transports file through, or nothing when the facade retains no
+   * metrics (in which case the model leaves its rows to the instrumentation middleware).
+   *
+   * The SCOPE is what makes attribution work without a per-call tag: this provider is built per
+   * `ModelScope`, so the run and workspace are already resolved here — which is the same fallback
+   * the middleware applies, through the same `resolveInlineAttribution`.
+   *
+   * A spread-able tuple rather than a nullable argument so the two construction sites cannot
+   * disagree about whether telemetry is wired.
+   */
+  private telemetry(): [InlineCliTelemetry] | [] {
+    if (!this.deps.recordInlineCall) return []
+    return [
+      {
+        recordCall: this.deps.recordInlineCall,
+        scope: {
+          workspaceId: this.scope.workspaceId,
+          ...(this.scope.executionId ? { executionId: this.scope.executionId } : {}),
+        },
+        recordBodies: this.deps.recordInlineBodies ?? false,
+        logger,
+      },
+    ]
   }
 }
 

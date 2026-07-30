@@ -14,9 +14,10 @@ import {
   catFactoryObservability,
   describeError,
   noopLogger,
-  readInlineObservabilityContext,
+  resolveInlineAttribution,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { reportsOwnLlmCalls } from './cli-inline.js'
 
 /**
  * Whether prompt/response BODIES may leave this workspace for a trace sink — the
@@ -283,6 +284,11 @@ export class InstrumentedModelProvider implements ModelProvider {
     // base resolvers return current-spec (v3) models; the cast bridges the broader
     // `LanguageModel` union to wrapLanguageModel's exact model param.
     if (typeof model === 'string') return model
+    // A model that files its own per-call rows is left UNWRAPPED: it is behind a harness CLI
+    // that runs a whole tool loop per `doGenerate`, so it knows the calls this middleware
+    // cannot see, and wrapping it too would add one lumped duplicate to every step's rollup.
+    // See `reportsOwnLlmCalls` for why the model is asked rather than the facade told.
+    if (reportsOwnLlmCalls(model)) return model
     return wrapLanguageModel({
       model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
       middleware: this.middlewareFor(ref),
@@ -315,12 +321,16 @@ export class InstrumentedModelProvider implements ModelProvider {
     errMessage: string | null,
   ): void {
     const endedAt = this.now()
-    const context = readInlineObservabilityContext(params)
+    // The call's own tag first, then the credential scope this provider was built for — the ONE
+    // shared precedence, because a self-reporting model files rows through the same rule (see
+    // `resolveInlineAttribution`). Only the RUN half of the scope is offered: an untagged call
+    // deliberately falls through to the sink below rather than being filed under the scope's
+    // workspace, which is a reason for a caller to tag its call and not for this to guess.
+    const { workspaceId, executionId, agentKind } = resolveInlineAttribution(
+      params,
+      this.scopeExecutionId ? { executionId: this.scopeExecutionId } : {},
+    )
     const usage = readUsage((result as { usage?: unknown })?.usage)
-    const workspaceId = context.workspaceId ?? null
-    // The call's own tag first, then the credential scope this provider was built for. See
-    // `scopeExecutionId` for why the scope is the better default than a null.
-    const executionId = context.executionId ?? this.scopeExecutionId
     const finishReason = ok ? readFinishReason(result) : null
     // The recorder is the richer exit AND owns the sink fan-out, so a workspace-scoped call
     // takes it and stops. An un-tagged call (`workspaceId: null`) has no workspace to file a
@@ -330,7 +340,7 @@ export class InstrumentedModelProvider implements ModelProvider {
       this.record(this.recordCall, {
         workspaceId,
         executionId,
-        agentKind: context.agentKind,
+        agentKind,
         ref,
         params,
         result,
@@ -349,7 +359,7 @@ export class InstrumentedModelProvider implements ModelProvider {
     const event: Omit<LlmGenerationEvent, 'input' | 'output'> = {
       workspaceId,
       executionId,
-      agentKind: context.agentKind,
+      agentKind,
       provider: ref.provider,
       model: ref.model,
       startedAt,

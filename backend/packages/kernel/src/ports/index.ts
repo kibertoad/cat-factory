@@ -144,6 +144,8 @@ export type {
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
+  InlineAttribution,
+  InlineAttributionScope,
   InlineObservabilityContext,
 } from './llm-trace-sink.js'
 export {
@@ -152,6 +154,7 @@ export {
   catFactoryObservability,
   composeTraceSinks,
   readInlineObservabilityContext,
+  resolveInlineAttribution,
 } from './llm-trace-sink.js'
 export type {
   AgentDecisionRequest,
