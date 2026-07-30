@@ -354,3 +354,80 @@ export const publicNotificationListSchema = v.object({
   notifications: v.array(notificationSchema),
 })
 export type PublicNotificationList = v.InferOutput<typeof publicNotificationListSchema>
+
+// ---------------------------------------------------------------------------
+// Usage & spend (the external dashboard read).
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the current period's usage, aggregated in SQL over
+ * `(billing, vendor, provider, model)`. A projection of the internal `UsageBreakdownRow`
+ * with the same fields — it already carries no per-user, per-account or credential
+ * dimension, and a usage dashboard is meaningless without the provider/model it spent on.
+ */
+export const publicUsageRowSchema = v.object({
+  /**
+   * How this usage is paid for. `metered` is real per-token cost and is what the spend
+   * budget counts; `subscription` is flat-rate harness usage against a vendor plan. The two
+   * are deliberately NOT summed into one number: adding an illustrative subscription figure
+   * to real metered spend would report money nobody is billed for.
+   */
+  billing: v.picklist(['metered', 'subscription']),
+  /** The subscription vendor (e.g. `claude`, `codex`) for a subscription row; null for metered. */
+  vendor: v.nullable(v.string()),
+  provider: v.string(),
+  model: v.string(),
+  /** Input tokens: fresh prompt + cache reads + cache writes, as the platform records them. */
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  /**
+   * Estimated cost in the report's `currency`. ILLUSTRATIVE on a `subscription` row (a
+   * flat-rate plan bills nothing per token) — read it as "what this would have cost metered",
+   * never as spend. Branch on `billing` before adding it to anything.
+   */
+  costEstimate: v.number(),
+  /** Recorded LLM calls in this group. */
+  calls: v.number(),
+})
+export type PublicUsageRow = v.InferOutput<typeof publicUsageRowSchema>
+
+/**
+ * The METERED spend of the current period against the workspace's budget — the numbers the
+ * spend safeguard itself acts on, so an external dashboard can show the same "runs are paused"
+ * state the SPA does rather than inferring it from a token count.
+ *
+ * Deliberately the WORKSPACE tier only. The account- and user-tier budgets
+ * (`SpendService.accountStatus` / `userStatus`) are cross-workspace and per-user, so they are
+ * not the key's to read: a workspace-scoped key must never learn a sibling workspace's spend.
+ */
+export const publicUsageBudgetSchema = v.object({
+  /** Metered input tokens this period (the budgeted ones; subscription rows are excluded). */
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  /** Estimated metered cost so far this period, in the report's `currency`. */
+  costSpent: v.number(),
+  /** The workspace's configured budget for one period, in the report's `currency`. */
+  costLimit: v.number(),
+  /** True once `costSpent >= costLimit`: runs are PAUSED until the period rolls over. */
+  exceeded: v.boolean(),
+})
+export type PublicUsageBudget = v.InferOutput<typeof publicUsageBudgetSchema>
+
+/**
+ * The workspace's usage for the current billing period: the metered budget position plus the
+ * per-model breakdown behind it. One resource rather than two endpoints because a dashboard
+ * needs both together, and splitting them would let a caller render a breakdown against a
+ * budget read a period-roll apart.
+ *
+ * `rows` is naturally bounded (distinct `(billing, vendor, provider, model)` groups within one
+ * month), so it is unpaginated like the pipeline and notification lists.
+ */
+export const publicUsageSchema = v.object({
+  /** Start of the current billing period (epoch ms; calendar month, UTC). */
+  periodStart: v.number(),
+  /** ISO 4217 currency every cost on this resource is expressed in. */
+  currency: v.string(),
+  budget: publicUsageBudgetSchema,
+  rows: v.array(publicUsageRowSchema),
+})
+export type PublicUsage = v.InferOutput<typeof publicUsageSchema>

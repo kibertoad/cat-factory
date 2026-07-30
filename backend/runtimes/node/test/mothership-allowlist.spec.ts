@@ -39,6 +39,7 @@ import {
   DrizzlePromptFragmentRepository,
 } from '../src/repositories/fragments.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
+import { DrizzleNotificationWebhookRepository } from '../src/repositories/drizzle/settings.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -682,6 +683,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     fragmentSourceRepository: DrizzleFragmentSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,
     notificationRepository: DrizzleNotificationRepository,
+    notificationWebhookRepository: DrizzleNotificationWebhookRepository,
     slackConnectionRepository: DrizzleSlackConnectionRepository,
     slackSettingsRepository: DrizzleSlackSettingsRepository,
     slackMemberMappingRepository: DrizzleSlackMemberMappingRepository,

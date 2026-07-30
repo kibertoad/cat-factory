@@ -1,4 +1,5 @@
-import type { BlockPatch } from '@cat-factory/kernel'
+import type { BlockPatch, RunLifecycleEventKind } from '@cat-factory/kernel'
+import { isRunLifecycleEventKind } from '@cat-factory/kernel'
 import type {
   AgentFailure,
   Block,
@@ -800,6 +801,24 @@ export function parseNotificationWebhookTypes(
     const parsed: unknown = JSON.parse(value)
     if (!Array.isArray(parsed)) return []
     return parsed.filter((entry): entry is NotificationType => is(notificationTypeSchema, entry))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a `notification_webhooks.run_events` JSON column onto the record's run-lifecycle filter.
+ * Lenient in exactly the same way as {@link parseNotificationWebhookTypes} — NULL, malformed JSON
+ * or unknown members read as an EMPTY filter — but note what empty MEANS differs: for run events
+ * it is "deliver none", so a corrupted column degrades to the pre-feature behaviour rather than to
+ * an unexpected firehose. Shared by both runtimes' repos so the column can't drift.
+ */
+export function parseRunLifecycleEvents(value: string | null | undefined): RunLifecycleEventKind[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isRunLifecycleEventKind)
   } catch {
     return []
   }

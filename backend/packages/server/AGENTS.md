@@ -22,7 +22,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   definition of a run's sort key so a cursor can never name a different value than the query
   orders by). See
   `docs/initiatives/headless-clarification-loop.md` and
-  `docs/initiatives/public-api-expansion.md`.
+  `backend/docs/adr/0030-public-api-surface.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/` — the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,

@@ -129,6 +129,15 @@ A caller should not have to poll to learn its run parked. Both shapes ride exist
 The channel is type-filtered per workspace (default: the parking types), so enabling it does
 not fire-hose every notification at an integration that only cares about parks.
 
+**The same endpoint later grew a second event family** — run-lifecycle events (`run.started` /
+`run.completed` / `run.failed`), delivered through the kernel `RunLifecycleSink` port over the
+shared `signedDelivery.ts` core. That closes the other half of the polling problem: a parked run is
+what a notification announces, but the HAPPY path raises no card at all (a pipeline whose `merger`
+merges its own PR settles with an empty inbox). Its `runEvents` filter is opt-in — empty means NONE,
+deliberately the opposite of the `types` filter above, so an endpoint registered for parked
+decisions never starts receiving an event per run. See
+[ADR 0030](../../backend/docs/adr/0030-public-api-surface.md).
+
 Three properties of the delivery path are load-bearing and easy to regress:
 
 - **Signing is a DETACHED HMAC, not the server's `HmacSigner`.** That primitive mints
@@ -312,7 +321,8 @@ registry the `headlessStartable` flag is computed against.
 - No SPA UI for the notification webhook: it is managed over
   `GET|PUT|DELETE /workspaces/:ws/notification-webhook` (behind `integrations.manage`). The
   consumer of this feature is a headless integration whose operator is already using the API; a
-  settings panel is worth adding when a human-facing deployment wants it.
+  settings panel is worth adding when a human-facing deployment wants it (it would now carry the
+  `runEvents` selector too).
 - The fork-decision CHAT is not exposed publicly — it is an interactive deliberation affordance,
   and a headless caller already receives each fork's full approach/trade-offs/risk text.
 

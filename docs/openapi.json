@@ -1394,6 +1394,109 @@
         ],
         "type": "object"
       },
+      "PublicUsage": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/PublicUsageBudget"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "periodStart": {
+            "type": "number"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PublicUsageRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "periodStart",
+          "currency",
+          "budget",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "PublicUsageBudget": {
+        "properties": {
+          "costLimit": {
+            "type": "number"
+          },
+          "costSpent": {
+            "type": "number"
+          },
+          "exceeded": {
+            "type": "boolean"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "outputTokens": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "costSpent",
+          "costLimit",
+          "exceeded"
+        ],
+        "type": "object"
+      },
+      "PublicUsageRow": {
+        "properties": {
+          "billing": {
+            "enum": [
+              "metered",
+              "subscription"
+            ],
+            "type": "string"
+          },
+          "calls": {
+            "type": "number"
+          },
+          "costEstimate": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "outputTokens": {
+            "type": "number"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "billing",
+          "vendor",
+          "provider",
+          "model",
+          "inputTokens",
+          "outputTokens",
+          "costEstimate",
+          "calls"
+        ],
+        "type": "object"
+      },
       "StartPublicTask": {
         "properties": {
           "pipelineId": {
@@ -2871,6 +2974,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -4621,6 +4827,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -6541,6 +6850,109 @@
                       ],
                       "type": "object"
                     },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
+                      ],
+                      "type": "object"
+                    },
                     "StartPublicTask": {
                       "properties": {
                         "pipelineId": {
@@ -8201,6 +8613,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -10526,6 +11041,109 @@
                       ],
                       "type": "object"
                     },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
+                      ],
+                      "type": "object"
+                    },
                     "StartPublicTask": {
                       "properties": {
                         "pipelineId": {
@@ -12161,6 +12779,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -14086,6 +14807,109 @@
                       ],
                       "type": "object"
                     },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
+                      ],
+                      "type": "object"
+                    },
                     "StartPublicTask": {
                       "properties": {
                         "pipelineId": {
@@ -15709,6 +16533,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -17338,6 +18265,109 @@
                       "required": [
                         "tasks",
                         "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsage": {
+                      "properties": {
+                        "budget": {
+                          "$ref": "#/components/schemas/PublicUsageBudget"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "periodStart": {
+                          "type": "number"
+                        },
+                        "rows": {
+                          "items": {
+                            "$ref": "#/components/schemas/PublicUsageRow"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "periodStart",
+                        "currency",
+                        "budget",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageBudget": {
+                      "properties": {
+                        "costLimit": {
+                          "type": "number"
+                        },
+                        "costSpent": {
+                          "type": "number"
+                        },
+                        "exceeded": {
+                          "type": "boolean"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costSpent",
+                        "costLimit",
+                        "exceeded"
+                      ],
+                      "type": "object"
+                    },
+                    "PublicUsageRow": {
+                      "properties": {
+                        "billing": {
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ],
+                          "type": "string"
+                        },
+                        "calls": {
+                          "type": "number"
+                        },
+                        "costEstimate": {
+                          "type": "number"
+                        },
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "billing",
+                        "vendor",
+                        "provider",
+                        "model",
+                        "inputTokens",
+                        "outputTokens",
+                        "costEstimate",
+                        "calls"
                       ],
                       "type": "object"
                     },
@@ -19282,6 +20312,109 @@
                     ],
                     "type": "object"
                   },
+                  "PublicUsage": {
+                    "properties": {
+                      "budget": {
+                        "$ref": "#/components/schemas/PublicUsageBudget"
+                      },
+                      "currency": {
+                        "type": "string"
+                      },
+                      "periodStart": {
+                        "type": "number"
+                      },
+                      "rows": {
+                        "items": {
+                          "$ref": "#/components/schemas/PublicUsageRow"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "periodStart",
+                      "currency",
+                      "budget",
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  "PublicUsageBudget": {
+                    "properties": {
+                      "costLimit": {
+                        "type": "number"
+                      },
+                      "costSpent": {
+                        "type": "number"
+                      },
+                      "exceeded": {
+                        "type": "boolean"
+                      },
+                      "inputTokens": {
+                        "type": "number"
+                      },
+                      "outputTokens": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "inputTokens",
+                      "outputTokens",
+                      "costSpent",
+                      "costLimit",
+                      "exceeded"
+                    ],
+                    "type": "object"
+                  },
+                  "PublicUsageRow": {
+                    "properties": {
+                      "billing": {
+                        "enum": [
+                          "metered",
+                          "subscription"
+                        ],
+                        "type": "string"
+                      },
+                      "calls": {
+                        "type": "number"
+                      },
+                      "costEstimate": {
+                        "type": "number"
+                      },
+                      "inputTokens": {
+                        "type": "number"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "outputTokens": {
+                        "type": "number"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "vendor": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "billing",
+                      "vendor",
+                      "provider",
+                      "model",
+                      "inputTokens",
+                      "outputTokens",
+                      "costEstimate",
+                      "calls"
+                    ],
+                    "type": "object"
+                  },
                   "StartPublicTask": {
                     "properties": {
                       "pipelineId": {
@@ -20349,6 +21482,48 @@
           "Tasks"
         ]
       }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "description": "Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.",
+        "operationId": "getPublicUsage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicUsage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the workspace's usage for the current period",
+        "tags": [
+          "Usage"
+        ]
+      }
     }
   },
   "security": [
@@ -20389,6 +21564,9 @@
     {
       "description": "Board tasks under a service (create, list, read, edit, start, stop, retry, stream).",
       "name": "Tasks"
+    },
+    {
+      "name": "Usage"
     }
   ]
 }

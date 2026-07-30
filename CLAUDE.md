@@ -876,6 +876,17 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   the seam for other channels. `WebhookNotificationChannel` (per-workspace HTTPS, HMAC-signed with a sealed
   secret through the SSRF-guarded `safeFetch`) exists because a headless caller has no in-app inbox; being
   EXTERNAL, it composes into that set on both facades.
+- **A notification is NOT the run's lifecycle**, and the happy path raises none — a pipeline whose `merger`
+  merges its own PR settles with an empty inbox. So the same registered endpoint also carries run-lifecycle
+  events through the kernel `RunLifecycleSink` port (`run.started` / `run.completed` / `run.failed`), built
+  beside the channel by `buildNotificationWebhookSupport` from the SAME row and cipher so a facade cannot
+  wire one and forget the other, and driven through the ONE `signedDelivery.ts` retry/SSRF/signature core —
+  those are properties of the ENDPOINT, not of the payload, and a second copy is a second place to get the
+  SSRF guard wrong. **The started edge hooks the atomic claim (`insertLiveRunOrConflict`) and is exactly
+  once; the terminal edges hook the emit funnel and are AT-LEAST-ONCE by design**, carrying a
+  `<runId>:<event>` dedupe id — a run reaches `done` from four sites, and a claim table would buy
+  exactly-once for an effect whose repeat is byte-identical. Doc:
+  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **PR verification report** — the ENGINE, not the agent, keeps a report of captured facts on every run's
 PR, as a managed section of the PR BODY delimited by `<!-- cat-factory:verification-report:start -->` /

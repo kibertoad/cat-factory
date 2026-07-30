@@ -125,6 +125,7 @@ import type {
   ResolveRunRepoContext,
   RiskPolicyRepository,
   RunInitiatorScope,
+  RunLifecycleSink,
   RunRepoContext,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
@@ -894,6 +895,14 @@ export interface CoreDependencies {
   // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
   notificationRepository?: NotificationRepository
   notificationChannel?: NotificationChannel
+  /**
+   * The outbound RUN-LIFECYCLE push (`run.started` / `run.completed` / `run.failed`) — the other
+   * half of what a headless integration needs, since the happy path (a pipeline whose `merger`
+   * merges its own PR) raises no notification at all and so travels down no channel. Built by
+   * `buildNotificationWebhookSupport` alongside the notification channel, from the same row and
+   * cipher, so a facade cannot wire one and forget the other. Absent ⇒ nothing is pushed.
+   */
+  runLifecycleSink?: RunLifecycleSink
 
   // ---- Slack integration (optional; an extra notification transport) ----
   // The Slack module (per-account connect + per-workspace routing + member map)

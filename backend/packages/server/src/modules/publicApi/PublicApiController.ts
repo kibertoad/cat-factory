@@ -9,6 +9,7 @@ import {
   getPublicJobContract,
   getPublicRunContract,
   getPublicTaskContract,
+  getPublicUsageContract,
   listPublicJobsContract,
   listPublicNotificationsContract,
   listPublicPipelinesContract,
@@ -269,7 +270,62 @@ export function publicApiController(): Hono<AppEnv> {
   registerTaskRoutes(app)
   registerPipelineRoutes(app)
   registerNotificationRoutes(app)
+  registerUsageRoutes(app)
   return app
+}
+
+function registerUsageRoutes(app: Hono<AppEnv>): void {
+  // --- Usage & spend ---------------------------------------------------------
+  // The read an external dashboard needs to answer "how much has this workspace spent this
+  // period, on what, and is it paused?". Two aggregates served as ONE resource: splitting them
+  // would let a caller render a breakdown against a budget read a period-roll apart.
+  //
+  // Both halves are workspace-scoped IN SQL and name no resource ids, no per-user dimension and
+  // no credential, so the double-scope rule is satisfied by construction and `read` is the whole
+  // scope story. The account/user budget tiers are deliberately NOT reachable here: they are
+  // cross-workspace, and a workspace-scoped key must never learn a sibling workspace's spend.
+  buildHonoRoute(app, getPublicUsageContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { spendService } = c.get('container')
+    // Independent aggregates over the same table — issued concurrently so the read costs one
+    // round trip's latency rather than two.
+    const [status, breakdown] = await Promise.all([
+      spendService.status(gate.auth.workspaceId),
+      spendService.usageBreakdown(gate.auth.workspaceId),
+    ])
+    return c.json(
+      {
+        // Both halves stamp the period from the same clock-derived month start, so either is the
+        // same value; the breakdown's is used because `rows` are the thing it bounds.
+        periodStart: breakdown.periodStart,
+        currency: breakdown.currency,
+        budget: {
+          inputTokens: status.inputTokens,
+          outputTokens: status.outputTokens,
+          costSpent: status.costSpent,
+          costLimit: status.costLimit,
+          exceeded: status.exceeded,
+        },
+        rows: breakdown.rows.map((row) => ({
+          billing: row.billing,
+          vendor: row.vendor,
+          provider: row.provider,
+          model: row.model,
+          inputTokens: row.inputTokens,
+          outputTokens: row.outputTokens,
+          costEstimate: row.costEstimate,
+          calls: row.calls,
+        })),
+      },
+      200,
+    )
+  })
 }
 
 function registerJobRoutes(app: Hono<AppEnv>): void {

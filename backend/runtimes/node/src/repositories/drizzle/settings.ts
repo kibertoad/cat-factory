@@ -36,7 +36,7 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { parseNotificationWebhookTypes } from '@cat-factory/server'
+import { parseNotificationWebhookTypes, parseRunLifecycleEvents } from '@cat-factory/server'
 import { and, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
@@ -293,6 +293,7 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
       workspaceId: row.workspace_id,
       url: row.url,
       types: parseNotificationWebhookTypes(row.types),
+      runEvents: parseRunLifecycleEvents(row.run_events),
       enabled: row.enabled === 1,
       secretSealed: row.secret_sealed,
       updatedAt: row.updated_at,
@@ -303,6 +304,7 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
     const values = {
       url: record.url,
       types: JSON.stringify(record.types),
+      run_events: JSON.stringify(record.runEvents),
       enabled: record.enabled ? 1 : 0,
       secret_sealed: record.secretSealed,
       updated_at: record.updatedAt,

@@ -52,6 +52,9 @@ const COMPONENT_SCHEMAS = {
   PublicPipelineList: 'publicPipelineListSchema',
   Notification: 'notificationSchema',
   PublicNotificationList: 'publicNotificationListSchema',
+  PublicUsageRow: 'publicUsageRowSchema',
+  PublicUsageBudget: 'publicUsageBudgetSchema',
+  PublicUsage: 'publicUsageSchema',
   // Parked decisions. `PublicDecisionList` is the response of ALL eight decision routes, and it
   // transitively carries the full finding + fork-option shapes — hoisting it (and the members of
   // its variant) keeps the spec from inlining ~21KB per operation.
@@ -157,6 +160,12 @@ const OPERATION_DOCS = {
     tag: 'Notifications',
     summary: 'Dismiss a notification',
     description: 'Dismiss a notification without acting on it.',
+  },
+  getPublicUsage: {
+    tag: 'Usage',
+    summary: "Read the workspace's usage for the current period",
+    description:
+      'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
   },
   cancelPublicJob: {
     tag: 'Initiatives',

@@ -293,6 +293,7 @@ export class ExecutionService {
       initiativeService,
       initiativeInterviewService,
       notificationService,
+      runLifecycleSink,
       resolveBinaryArtifactStore,
       llmObservability,
       pullRequestMerger,
@@ -347,6 +348,7 @@ export class ExecutionService {
       clock,
       stepGraph: this.stepGraph,
       notificationService,
+      runLifecycleSink,
       mergeTrackRecord,
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
@@ -2146,6 +2148,13 @@ export class ExecutionService {
       // ConflictReason + exhaustive-Record/i18n cascade for a transient race).
       throw new ConflictError('A run is already active for this block.')
     }
+    // Push `run.started` outward from the funnel that OWNS the claim, rather than from each of
+    // `start` / `retry` / `restartFrom`: the insert above is what makes this run the block's live
+    // one, so the event fires exactly once per run and a fourth start path inherits it. A retry
+    // and a restart each mint a FRESH run id, so they are genuinely new runs a receiver must hear
+    // start — otherwise it sees a `run.failed` for one id and later a `run.completed` for another
+    // it never learned about. Best-effort by the sink's contract.
+    await this.runStateMachine.publishRunStarted(workspaceId, instance)
   }
 
   /**
