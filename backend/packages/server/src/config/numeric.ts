@@ -51,3 +51,53 @@ export function parseNumericEnv(name: string, value: string | undefined): number
   })
   return undefined
 }
+
+/**
+ * The largest delay `setTimeout` can actually hold. Past this the delay does NOT saturate — Node
+ * truncates it to a 32-bit signed int, warns `TimeoutOverflowWarning`, and substitutes **1ms**, so
+ * the timer fires on the next tick. For a watchdog that inverts the operator's intent completely:
+ * the value someone types to mean "effectively no limit" is the one that kills every run at once.
+ */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647
+
+/**
+ * A timer budget read from the environment: the milliseconds, or WHY the value is unusable.
+ *
+ * Rejection carries the finished operator message rather than a code, so the one classification
+ * lives with the one wording — a caller reports it through whatever seam it has (a `logger`, an
+ * injected `onWarn`) without re-deriving which rule the value broke.
+ */
+export type TimerEnvParse = { readonly ms: number } | { readonly rejected: string }
+
+/**
+ * Parse an env var that becomes a `setTimeout` delay, into a whole positive number of milliseconds
+ * {@link MAX_TIMER_DELAY_MS} or below.
+ *
+ * Deliberately STRICTER than {@link parseNumericEnv}, which accepts any finite number and is right
+ * to: as a count or a ratio, `0` / `-1` / `1.5` are ordinary values. As a timer delay every one of
+ * them is worse than the typo it came from — a non-positive delay fires on the next tick, a
+ * fractional one rounds, and an over-large one is truncated to 1ms (see {@link MAX_TIMER_DELAY_MS}).
+ * All four spellings therefore share one outcome: report it and let the caller's default stand,
+ * rather than arming a watchdog that fires immediately on a deployment-wide basis.
+ *
+ * An unset or blank value is the CALLER's to interpret (it means "inherit the default", which is
+ * not a rejection), so this takes a value it can assume is present.
+ */
+export function parseTimerEnvMs(name: string, value: string, fallbackMs: number): TimerEnvParse {
+  const trimmed = value.trim()
+  const n = Number(trimmed)
+  if (Number.isInteger(n) && n > 0 && n <= MAX_TIMER_DELAY_MS) return { ms: n }
+  // `Number.isInteger` already excludes NaN and both infinities, so the only way past the first
+  // clause with an integer in hand is a genuinely over-large one.
+  const fault = Number.isInteger(n)
+    ? n <= 0
+      ? 'must be greater than zero (a zero or negative delay fires immediately)'
+      : `exceeds the ${MAX_TIMER_DELAY_MS}ms a timer can hold, which would truncate it to 1ms ` +
+        'and fire immediately'
+    : 'is not a whole number of milliseconds'
+  return {
+    rejected:
+      `${name}="${value}" ${fault} — using the default ${fallbackMs}ms. ` +
+      `See ${DOCS.envVars()}.`,
+  }
+}
