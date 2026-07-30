@@ -30,16 +30,20 @@ export const usePrReviewStore = defineStore('prReview', () => {
   const error = ref<string | null>(null)
 
   /**
-   * Reflect an authoritative PR-review state onto the run's `pr-reviewer` step. A pipeline could
+   * Apply an authoritative PR-review state to the run's `pr-reviewer` step. A pipeline could
    * carry more than one such step, so target the step this review is about: prefer the step that
    * is still awaiting a selection, then the current step, and only then the first step carrying
-   * review state. The stream corrects any mismatch; this keeps the immediate optimistic echo on
-   * the right step.
+   * review state.
+   *
+   * Only ever called through {@link ExecutionStore.echoAfter}, which drops the echo when the event
+   * stream already delivered a newer revision. `resume` needs that guard most: it returns a
+   * `reviewing` state and then the re-dispatched reviewer starts publishing slice reviews, so an
+   * unguarded echo could put the freshly-captured reports back to what the resume saw.
    */
-  function reflect(executionId: string, state: PrReviewStepState | null): void {
-    if (!state) return
-    const instance = execution.getInstance(executionId)
-    if (!instance) return
+  function assign(
+    instance: ReturnType<typeof execution.getInstance> & object,
+    state: PrReviewStepState,
+  ): void {
     const isLive = (s: (typeof instance.steps)[number]) =>
       s.agentKind === 'pr-reviewer' && s.prReview?.status === 'awaiting_selection'
     const current = instance.steps[instance.currentStep]
@@ -54,8 +58,13 @@ export const usePrReviewStore = defineStore('prReview', () => {
   async function load(executionId: string): Promise<void> {
     error.value = null
     try {
-      const state = await api.getPrReview(workspace.requireId(), executionId)
-      reflect(executionId, state as PrReviewStepState | null)
+      await execution.echoAfter(
+        executionId,
+        () => api.getPrReview(workspace.requireId(), executionId),
+        (state, instance) => {
+          if (state) assign(instance, state as PrReviewStepState)
+        },
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
     }
@@ -75,11 +84,11 @@ export const usePrReviewStore = defineStore('prReview', () => {
     error.value = null
     resolving.value = true
     try {
-      const state = await api.resolvePrReview(workspace.requireId(), executionId, {
-        action,
-        findingIds,
-      })
-      reflect(executionId, state as PrReviewStepState)
+      await execution.echoAfter(
+        executionId,
+        () => api.resolvePrReview(workspace.requireId(), executionId, { action, findingIds }),
+        (state, instance) => assign(instance, state as PrReviewStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to resolve review'
       throw e
@@ -97,8 +106,11 @@ export const usePrReviewStore = defineStore('prReview', () => {
     error.value = null
     resuming.value = true
     try {
-      const state = await api.resumePrReview(workspace.requireId(), executionId)
-      reflect(executionId, state as PrReviewStepState)
+      await execution.echoAfter(
+        executionId,
+        () => api.resumePrReview(workspace.requireId(), executionId),
+        (state, instance) => assign(instance, state as PrReviewStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to resume review'
       throw e
@@ -112,8 +124,11 @@ export const usePrReviewStore = defineStore('prReview', () => {
     error.value = null
     resolving.value = true
     try {
-      const state = await api.dismissPrReviewFinding(workspace.requireId(), executionId, findingId)
-      reflect(executionId, state as PrReviewStepState)
+      await execution.echoAfter(
+        executionId,
+        () => api.dismissPrReviewFinding(workspace.requireId(), executionId, findingId),
+        (state, instance) => assign(instance, state as PrReviewStepState),
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to dismiss finding'
       throw e
@@ -135,15 +150,14 @@ export const usePrReviewStore = defineStore('prReview', () => {
     error.value = null
     resolving.value = true
     try {
-      const state = await api.challengePrReviewFinding(
-        workspace.requireId(),
+      await execution.echoAfter(
         executionId,
-        findingId,
-        {
-          question,
-        },
+        () =>
+          api.challengePrReviewFinding(workspace.requireId(), executionId, findingId, {
+            question,
+          }),
+        (state, instance) => assign(instance, state as PrReviewStepState),
       )
-      reflect(executionId, state as PrReviewStepState)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to challenge finding'
       throw e
